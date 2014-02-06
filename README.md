@@ -21,10 +21,10 @@ more cockroach servers. Ranges are defined by start and end
 keys. Ranges are merged and split to maintain total byte size within a
 globally configurable min/max size interval. Range sizes default to
 target 64M in order to facilitate quick splits and merges and to
-distribute load at hotspots along contiguous key ranges. Range
-replicas are intended to be located in disparate datacenters for
-survivability (e.g. { US-East, US-West, Japan }, { Ireland, US-East,
-US-West}, { Ireland, US-East, US-West, Japan, Australia }).
+distribute load at hotspots within a key range. Range replicas are
+intended to be located in disparate datacenters for survivability
+(e.g. { US-East, US-West, Japan }, { Ireland, US-East, US-West}, {
+Ireland, US-East, US-West, Japan, Australia }).
 
 Single mutations to ranges are mediated via an instance of a
 distributed consensus algorithm to ensure consistency. We’ve chosen to
@@ -56,10 +56,10 @@ performance and/or availability. Unlike Spanner, zones are monolithic
 and don’t allow movement of fine grained data on the level of entity
 groups.
 
-A Megastore-like message queue mechanism is also provided to
-efficiently sideline updates which can tolerate asynchronous
-execution. Updates added to the message queue are guaranteed to be
-executed exactly once.
+A Megastore-like message queue mechanism is also provided to 1)
+efficiently sideline updates which can tolerate asynchronous execution
+and 2) provide an integrated message queuing system for asynchronous
+communication between distributed system components.
 
 -----------------
 
