@@ -21,28 +21,28 @@ const (
 // MIN_GROUP, MAX_GROUP: maintain only minimum/maximum values added
 // to group respectively.
 type Group struct {
-	prefix      string    // Key prefix for Info items in group
-	limit       int       // Maximum number of keys in group
-	typeOf      GroupType // Minimums or maximums of all values encountered
-	minTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
-	gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
-	infos       InfoMap   // Map of infos in group
+	Prefix      string    // Key prefix for Info items in group
+	Limit       int       // Maximum number of keys in group
+	TypeOf      GroupType // Minimums or maximums of all values encountered
+	MinTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
+	Gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
+	Infos       InfoMap   // Map of infos in group
 }
 type GroupMap map[string]*Group // Group map is from group prefix => *Group
 
 // Returns true if the specified info should belong in the group
 // according to the group type and the value.
 func (group *Group) shouldInclude(info *Info) bool {
-	if group.gatekeeper == nil {
+	if group.Gatekeeper == nil {
 		return true
 	}
-	switch group.typeOf {
+	switch group.TypeOf {
 	case MIN_GROUP:
-		return info.Val.Less(group.gatekeeper.Val)
+		return info.Val.Less(group.Gatekeeper.Val)
 	case MAX_GROUP:
-		return !info.Val.Less(group.gatekeeper.Val)
+		return !info.Val.Less(group.Gatekeeper.Val)
 	default:
-		panic(fmt.Errorf("unknown group type %d", group.typeOf))
+		panic(fmt.Errorf("unknown group type %d", group.TypeOf))
 	}
 }
 
@@ -51,22 +51,22 @@ func (group *Group) shouldInclude(info *Info) bool {
 // possible), and updates gatekeeper (used to decide when to add to
 // group).
 func (group *Group) updateIncremental(info *Info) {
-	if info.TTLStamp < group.minTTLStamp {
-		group.minTTLStamp = info.TTLStamp
+	if info.TTLStamp < group.MinTTLStamp {
+		group.MinTTLStamp = info.TTLStamp
 	}
 	// Update gatekeeper if it's currently nil --or-- if info shouldn't
 	// be included in group (i.e. it's the most extreme min/max).
-	if group.gatekeeper == nil || !group.shouldInclude(info) {
-		group.gatekeeper = info
+	if group.Gatekeeper == nil || !group.shouldInclude(info) {
+		group.Gatekeeper = info
 	}
 }
 
 // Iterates through group infos and updates stats.
 func (group *Group) update() {
-	group.minTTLStamp = math.MaxInt64
-	group.gatekeeper = nil
+	group.MinTTLStamp = math.MaxInt64
+	group.Gatekeeper = nil
 
-	for _, info := range group.infos {
+	for _, info := range group.Infos {
 		group.updateIncremental(info)
 	}
 }
@@ -75,55 +75,58 @@ func (group *Group) update() {
 // Returns true if compaction occurred and space is free.
 func (group *Group) compact() bool {
 	now := time.Now().UnixNano()
-	if group.minTTLStamp > now {
+	if group.MinTTLStamp > now {
 		return false
 	}
 
 	// Delete expired entries && update group stats.
-	group.minTTLStamp = math.MaxInt64
-	group.gatekeeper = nil
-	for key, info := range group.infos {
+	group.MinTTLStamp = math.MaxInt64
+	group.Gatekeeper = nil
+	for key, info := range group.Infos {
 		if info.TTLStamp <= now {
-			delete(group.infos, key)
+			delete(group.Infos, key)
 		} else {
 			group.updateIncremental(info)
 		}
 	}
 
-	return len(group.infos) < group.limit
+	return len(group.Infos) < group.Limit
 }
 
 // Adds info to group, incrementally updating group stats.
 func (group *Group) addInternal(info *Info) {
-	group.infos[info.Key] = info
+	group.Infos[info.Key] = info
 	group.updateIncremental(info)
 }
 
 // Removes info from group, updating group stats wholesale if necessary.
 func (group *Group) removeInternal(info *Info) {
-	delete(group.infos, info.Key)
-	if group.gatekeeper == info || group.minTTLStamp == info.TTLStamp {
+	delete(group.Infos, info.Key)
+	if group.Gatekeeper == info || group.MinTTLStamp == info.TTLStamp {
 		group.update()
 	}
 }
 
 // Creates a new group with prefix, limit and type.
-func NewGroup(prefix string, limit int, typeOf GroupType) *Group {
-	return &Group{prefix, limit, typeOf, math.MaxInt64, nil, make(InfoMap)}
+func NewGroup(prefix string, limit int, typeOf GroupType) (*Group, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("group size limit must be a positive number (%d <= 0)", limit)
+	}
+	return &Group{prefix, limit, typeOf, math.MaxInt64, nil, make(InfoMap)}, nil
 }
 
 // Returns an info by key.
 func (group *Group) GetInfo(key string) *Info {
-	if info, ok := group.infos[key]; ok {
+	if info, ok := group.Infos[key]; ok {
 		return info
 	}
 	return nil
 }
 
 // Returns array of infos from group.
-func (group *Group) Infos() InfoArray {
-	infos := make(InfoArray, 0, len(group.infos))
-	for _, info := range group.infos {
+func (group *Group) InfosAsArray() InfoArray {
+	infos := make(InfoArray, 0, len(group.Infos))
+	for _, info := range group.Infos {
 		infos = append(infos, info)
 	}
 	return infos
@@ -137,8 +140,13 @@ func (group *Group) Infos() InfoArray {
 func (group *Group) AddInfo(info *Info) bool {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info.
-	if existingInfo, ok := group.infos[info.Key]; ok {
-		if existingInfo.Timestamp <= info.Timestamp {
+	if existingInfo, ok := group.Infos[info.Key]; ok {
+		if existingInfo.Timestamp < info.Timestamp {
+			// Take the minimum of the two Hops values; see comments
+			// in InfoStore.AddInfo.
+			if existingInfo.Hops < info.Hops {
+				info.Hops = existingInfo.Hops
+			}
 			group.removeInternal(info)
 		} else {
 			return false // The info being added is older than what we have; skip
@@ -146,7 +154,7 @@ func (group *Group) AddInfo(info *Info) bool {
 	}
 
 	// If there's free space or we successfully compacted, add info.
-	if len(group.infos) < group.limit || group.compact() {
+	if len(group.Infos) < group.Limit || group.compact() {
 		group.addInternal(info)
 		return true // Successfully appended to group
 	}
@@ -154,7 +162,7 @@ func (group *Group) AddInfo(info *Info) bool {
 	// Group limit is reached. Check gatekeeper; if we should include,
 	// it means we toss current gatekeeper and add info.
 	if group.shouldInclude(info) {
-		group.removeInternal(group.gatekeeper)
+		group.removeInternal(group.Gatekeeper)
 		group.addInternal(info)
 		return true
 	}
@@ -165,13 +173,16 @@ func (group *Group) AddInfo(info *Info) bool {
 // Returns a delta of the group since the specified sequence number.
 // Returns an error if the delta is empty.
 func (group *Group) Delta(seq int32) (*Group, error) {
-	delta := NewGroup(group.prefix, group.limit, group.typeOf)
-	for _, info := range group.infos {
+	delta, err := NewGroup(group.Prefix, group.Limit, group.TypeOf)
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range group.Infos {
 		if info.Seq > seq {
 			delta.addInternal(info)
 		}
 	}
-	if len(delta.infos) == 0 {
+	if len(delta.Infos) == 0 {
 		return nil, fmt.Errorf("no deltas to group since sequence number %d", seq)
 	}
 	return delta, nil

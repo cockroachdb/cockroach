@@ -14,9 +14,27 @@ func newInfo(key string, val float64) *Info {
 	return &Info{key, Float64Value(val), now, ttl, 0, "", 0}
 }
 
+func newGroup(prefix string, limit int, typeOf GroupType, t *testing.T) *Group {
+	group, err := NewGroup(prefix, limit, typeOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return group
+}
+
+// Verify NewGroup behavior.
+func TestNewGroup(t *testing.T) {
+	if _, err := NewGroup("a", 0, MIN_GROUP); err == nil {
+		t.Error("new group with limit=0 should be illegal")
+	}
+	if _, err := NewGroup("a", -1, MIN_GROUP); err == nil {
+		t.Error("new group with limit=-1 should be illegal")
+	}
+}
+
 // MIN_GROUP type groups and group.shouldInclude() behavior.
 func TestMinGroupShouldInclude(t *testing.T) {
-	group := NewGroup("a", 2, MIN_GROUP)
+	group := newGroup("a", 2, MIN_GROUP, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -43,7 +61,7 @@ func TestMinGroupShouldInclude(t *testing.T) {
 
 // MAX_GROUP type groups and group.shouldInclude() behavior.
 func TestMaxGroupShouldInclude(t *testing.T) {
-	group := NewGroup("a", 2, MAX_GROUP)
+	group := newGroup("a", 2, MAX_GROUP, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -71,7 +89,7 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 // Insert same key into group and verify earlier timestamps are
 // ignored and later timestamps always replace.
 func TestSameKeyInserts(t *testing.T) {
-	group := NewGroup("a", 1, MIN_GROUP)
+	group := newGroup("a", 1, MIN_GROUP, t)
 	info1 := newInfo("a.a", 1)
 	if !group.AddInfo(info1) {
 		t.Error("could not insert")
@@ -100,7 +118,7 @@ func TestSameKeyInserts(t *testing.T) {
 // Verify group compaction after TTL by waiting and verifying a full
 // group can be inserted into again.
 func TestGroupCompactAfterTTL(t *testing.T) {
-	group := NewGroup("a", 2, MIN_GROUP)
+	group := newGroup("a", 2, MIN_GROUP, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -149,20 +167,20 @@ func insertRandomInfos(group *Group, count int) InfoArray {
 // after inserting 1000.
 func TestGroups100Keys(t *testing.T) {
 	// Start by adding random infos to min group.
-	minGroup := NewGroup("a", 100, MIN_GROUP)
+	minGroup := newGroup("a", 100, MIN_GROUP, t)
 	infos := insertRandomInfos(minGroup, 1000)
 
 	// Insert same infos into the max group.
-	maxGroup := NewGroup("a", 100, MAX_GROUP)
+	maxGroup := newGroup("a", 100, MAX_GROUP, t)
 	for _, info := range infos {
 		maxGroup.AddInfo(info)
 	}
 	sort.Sort(infos)
 
-	minInfos := minGroup.Infos()
+	minInfos := minGroup.InfosAsArray()
 	sort.Sort(minInfos)
 
-	maxInfos := maxGroup.Infos()
+	maxInfos := maxGroup.InfosAsArray()
 	sort.Sort(maxInfos)
 
 	for i := 0; i < 100; i++ {
@@ -175,9 +193,54 @@ func TestGroups100Keys(t *testing.T) {
 	}
 }
 
+// Verify that adding two infos with identical timestamps don't update
+// group. This is a common occurence when updating gossip info from
+// multiple independent peers passing along overlapping information.
+// We don't want each new update with overlap to generate unnecessary
+// delta info.
+func TestSameKeySameTimestamp(t *testing.T) {
+	group := newGroup("a", 2, MIN_GROUP, t)
+	info1 := newInfo("a.a", 1.0)
+	info2 := newInfo("a.a", 1.0)
+	info2.Timestamp = info1.Timestamp
+	if !group.AddInfo(info1) {
+		t.Error("failed first insert")
+	}
+	if group.AddInfo(info2) {
+		t.Error("second insert with identical key & timestamp should have failed")
+	}
+}
+
+// Verify that adding two infos with the same key and different Hops
+// values preserves the lower Hops count.
+func TestSameKeyDifferentHops(t *testing.T) {
+	info1 := newInfo("a.a", 1.0)
+	info2 := newInfo("a.a", 1.0)
+	info1.Hops = 1
+	info2.Hops = 2
+
+	// Add info1 first, then info2.
+	group1 := newGroup("a", 1, MIN_GROUP, t)
+	if !group1.AddInfo(info1) || !group1.AddInfo(info2) {
+		t.Error("failed insertions")
+	}
+	if info := group1.GetInfo("a.a"); info == nil || info.Hops != 1 {
+		t.Error("info nil or info.Hops != 1:", info)
+	}
+
+	// Add info1 first, then info2.
+	group2 := newGroup("a", 1, MIN_GROUP, t)
+	if !group2.AddInfo(info1) || !group2.AddInfo(info2) {
+		t.Error("failed insertions")
+	}
+	if info := group2.GetInfo("a.a"); info == nil || info.Hops != 1 {
+		t.Error("info nil or info.Hops != 1:", info)
+	}
+}
+
 // Verify info selection by key.
 func TestGetInfo(t *testing.T) {
-	group := NewGroup("a", 10, MIN_GROUP)
+	group := newGroup("a", 10, MIN_GROUP, t)
 	infos := insertRandomInfos(group, 10)
 	for _, info := range infos {
 		if info != group.GetInfo(info.Key) {
@@ -188,5 +251,40 @@ func TestGetInfo(t *testing.T) {
 	// Test non-existent key.
 	if group.GetInfo("b.a") != nil {
 		t.Error("fetched something for non-existing key \"b.a\"")
+	}
+}
+
+// Check delta groups based on info sequence numbers.
+func TestGroupDelta(t *testing.T) {
+	group := newGroup("a", 10, MIN_GROUP, t)
+
+	// Insert keys with sequence numbers 1..10.
+	for i := 0; i < 10; i++ {
+		info := newInfo(fmt.Sprintf("a.%d", i), float64(i))
+		info.Seq = int32(i + 1)
+		group.AddInfo(info)
+	}
+
+	// Verify deltas with successive sequence numbers.
+	for i := 0; i < 10; i++ {
+		delta, err := group.Delta(int32(i))
+		if err != nil {
+			t.Error("delta failed at sequence number", i)
+		}
+		infos := delta.InfosAsArray()
+		if len(infos) != 10-i {
+			t.Errorf("expected %d infos, not %d", 10-i, len(infos))
+		}
+		sort.Sort(infos)
+		for j := 0; j < 10-i; j++ {
+			expKey := fmt.Sprintf("a.%d", j+i)
+			if infos[j].Key != expKey {
+				t.Errorf("run %d: key mismatch at index %d: %s != %s", i, j, infos[j].Key, expKey)
+			}
+		}
+	}
+
+	if _, err := group.Delta(int32(10)); err == nil {
+		t.Error("fetching delta of group at maximum sequence number should return error")
 	}
 }

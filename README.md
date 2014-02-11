@@ -40,10 +40,10 @@ ranges.
 
 Cockroach provides snapshot isolation (SI) and serializable snapshot
 isolation (SSI) semantics, allowing externally consistent, lock-free
-reads--both from an historical snapshot timestamp and from the current
-wall clock time. SI provides wait-free reads and writes but still
-allows write skew. SSI eliminates write skew, but introduces a
-performance hit in the case of a contentious system. SSI is the
+reads and writes--both from an historical snapshot timestamp and from
+the current wall clock time. SI provides wait-free reads and writes
+but still allows write skew. SSI eliminates write skew, but introduces
+a performance hit in the case of a contentious system. SSI is the
 default isolation; clients must consciously decide to trade
 correctness for performance. Cockroach implements a limited form of
 linearalizability, providing ordering for any observer or chain of
