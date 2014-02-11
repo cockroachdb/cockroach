@@ -157,8 +157,8 @@ func (is *InfoStore) Delta(seq int32) (*InfoStore, error) {
 
 	// Delta of group maps.
 	for _, group := range is.groups {
-		if delta_group, err := group.Delta(seq); err != nil {
-			delta.RegisterGroup(delta_group)
+		if deltaGroup, err := group.Delta(seq); err != nil {
+			delta.RegisterGroup(deltaGroup)
 		}
 	}
 

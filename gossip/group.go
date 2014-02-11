@@ -33,7 +33,7 @@ type GroupMap map[string]*Group // Group map is from group prefix => *Group
 // Returns true if the specified info should belong in the group
 // according to the group type and the value.
 func (group *Group) shouldInclude(info *Info) bool {
-	if group.gatekeeper == nil || len(group.infos) < group.limit {
+	if group.gatekeeper == nil {
 		return true
 	}
 	switch group.typeOf {
@@ -102,7 +102,7 @@ func (group *Group) addInternal(info *Info) {
 // Removes info from group, updating group stats wholesale if necessary.
 func (group *Group) removeInternal(info *Info) {
 	delete(group.infos, info.Key)
-	if (group.gatekeeper == info) || (group.minTTLStamp == info.TTLStamp) {
+	if group.gatekeeper == info || group.minTTLStamp == info.TTLStamp {
 		group.update()
 	}
 }
@@ -122,7 +122,7 @@ func (group *Group) GetInfo(key string) *Info {
 
 // Returns array of infos from group.
 func (group *Group) Infos() InfoArray {
-	infos := make(InfoArray, len(group.infos))
+	infos := make(InfoArray, 0, len(group.infos))
 	for _, info := range group.infos {
 		infos = append(infos, info)
 	}
@@ -145,7 +145,7 @@ func (group *Group) AddInfo(info *Info) bool {
 		}
 	}
 
-	// If there's free space or we successfully compact, add info.
+	// If there's free space or we successfully compacted, add info.
 	if len(group.infos) < group.limit || group.compact() {
 		group.addInternal(info)
 		return true // Successfully appended to group
