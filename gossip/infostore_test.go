@@ -128,3 +128,70 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 		t.Error("failed to properly combine hops and value", info)
 	}
 }
+
+// Register groups, add and fetch group infos from min/max groups and
+// verify ordering. Add an additional non-group info and fetch that as
+// well.
+func TestAddGroupInfos(t *testing.T) {
+	is := NewInfoStore()
+
+	group := newGroup("a", 10, MIN_GROUP, t)
+	if is.RegisterGroup(group) != nil {
+		t.Error("could not register group")
+	}
+
+	info1 := is.NewInfo("a.a", Float64Value(1), time.Second)
+	info2 := is.NewInfo("a.b", Float64Value(2), time.Second)
+	if !is.AddInfo(info1) || !is.AddInfo(info2) {
+		t.Error("unable to add info1 or info2")
+	}
+	if is.MaxSeq != info2.Seq {
+		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.Seq)
+	}
+
+	infos := is.GetGroupInfos("a")
+	if infos == nil {
+		t.Error("unable to fetch group infos")
+	}
+	if infos[0].Key != "a.a" || infos[1].Key != "a.b" {
+		t.Error("fetch group infos have incorrect order:", infos)
+	}
+
+	// Try with a max group.
+	maxGroup := newGroup("b", 10, MAX_GROUP, t)
+	if is.RegisterGroup(maxGroup) != nil {
+		t.Error("could not register group")
+	}
+	info3 := is.NewInfo("b.a", Float64Value(1), time.Second)
+	info4 := is.NewInfo("b.b", Float64Value(2), time.Second)
+	if !is.AddInfo(info3) || !is.AddInfo(info4) {
+		t.Error("unable to add info1 or info2")
+	}
+	if is.MaxSeq != info4.Seq {
+		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.Seq)
+	}
+
+	infos = is.GetGroupInfos("b")
+	if infos == nil {
+		t.Error("unable to fetch group infos")
+	}
+	if infos[0].Key != "b.b" || infos[1].Key != "b.a" {
+		t.Error("fetch group infos have incorrect order:", infos)
+	}
+
+	// Finally, add a non-group info and verify it cannot be fetched
+	// by group, but can be fetched solo.
+	info5 := is.NewInfo("c.a", Float64Value(3), time.Second)
+	if !is.AddInfo(info5) {
+		t.Error("unable to add info5")
+	}
+	if is.GetGroupInfos("c") != nil {
+		t.Error("shouldn't be able to fetch non-existent group c")
+	}
+	if is.GetInfo("c.a") != info5 {
+		t.Error("unable to fetch info5 by key")
+	}
+	if is.MaxSeq != info5.Seq {
+		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.Seq)
+	}
+}
