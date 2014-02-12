@@ -239,7 +239,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 }
 
 // Verify info selection by key.
-func TestGetInfo(t *testing.T) {
+func TestGroupGetInfo(t *testing.T) {
 	group := newGroup("a", 10, MIN_GROUP, t)
 	infos := insertRandomInfos(group, 10)
 	for _, info := range infos {

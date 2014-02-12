@@ -30,6 +30,11 @@ func (is *InfoStore) belongsToGroup(key string) *Group {
 	return nil
 }
 
+// Create a new InfoStore.
+func NewInfoStore() *InfoStore {
+	return &InfoStore{make(InfoMap), make(GroupMap), 0, 0}
+}
+
 // Returns a new info object using specified key, value, and
 // time-to-live.
 func (is *InfoStore) NewInfo(key string, val Value, ttl time.Duration) *Info {
@@ -74,7 +79,7 @@ func (is *InfoStore) GetGroupInfos(prefix string) InfoArray {
 //
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *InfoStore) RegisterGroup(group *Group) error {
-	if _, ok := is.Groups[group.Prefix]; !ok {
+	if _, ok := is.Groups[group.Prefix]; ok {
 		return fmt.Errorf("group \"%s\" already in group map", group.Prefix)
 	}
 	is.Groups[group.Prefix] = group
