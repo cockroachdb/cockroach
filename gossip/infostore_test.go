@@ -195,3 +195,5 @@ func TestAddGroupInfos(t *testing.T) {
 		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.Seq)
 	}
 }
+
+//
