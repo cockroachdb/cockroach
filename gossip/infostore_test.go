@@ -196,4 +196,70 @@ func TestAddGroupInfos(t *testing.T) {
 	}
 }
 
-//
+// Verify infostore combination with overlapping group and non-group
+// infos.
+func TestCombine(t *testing.T) {
+	is1 := NewInfoStore()
+
+	group1 := newGroup("a", 10, MIN_GROUP, t)
+	group1Overlap := newGroup("b", 10, MIN_GROUP, t)
+	if is1.RegisterGroup(group1) != nil || is1.RegisterGroup(group1Overlap) != nil {
+		t.Error("could not register group1 or group1Overlap")
+	}
+
+	info1a := is1.NewInfo("a.a", Float64Value(1), time.Second)
+	info1b := is1.NewInfo("a.b", Float64Value(2), time.Second)
+	info1c := is1.NewInfo("a", Float64Value(3), time.Second) // non-group info
+	if !is1.AddInfo(info1a) || !is1.AddInfo(info1b) || !is1.AddInfo(info1c) {
+		t.Error("unable to add infos")
+	}
+	info1Overlap := is1.NewInfo("b.a", Float64Value(3), time.Second)
+	if !is1.AddInfo(info1Overlap) {
+		t.Error("unable to add info1Overlap")
+	}
+
+	is2 := NewInfoStore()
+
+	group2 := newGroup("c", 10, MIN_GROUP, t)
+	group2Overlap := newGroup("b", 10, MIN_GROUP, t)
+	if is2.RegisterGroup(group2) != nil || is2.RegisterGroup(group2Overlap) != nil {
+		t.Error("could not register group2 or group2Overlap")
+	}
+
+	info2a := is2.NewInfo("c.a", Float64Value(1), time.Second)
+	info2b := is2.NewInfo("c.b", Float64Value(2), time.Second)
+	info2c := is2.NewInfo("c", Float64Value(3), time.Second)
+	if !is2.AddInfo(info2a) || !is2.AddInfo(info2b) || !is2.AddInfo(info2c) {
+		t.Error("unable to add infos")
+	}
+	info2Overlap := is2.NewInfo("b.a", Float64Value(4), time.Second)
+	if !is2.AddInfo(info2Overlap) {
+		t.Error("unable to add info2Overlap")
+	}
+
+	if err := is1.Combine(is2); err != nil {
+		t.Error(err)
+	}
+
+	infosA := is1.GetGroupInfos("a")
+	if len(infosA) != 2 || infosA[0].Key != "a.a" || infosA[1].Key != "a.b" {
+		t.Error("group a missing", infosA)
+	}
+
+	infosB := is1.GetGroupInfos("b")
+	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].Val != info2Overlap.Val {
+		t.Error("group b missing", infosB)
+	}
+
+	infosC := is1.GetGroupInfos("c")
+	if len(infosC) != 2 || infosC[0].Key != "c.a" || infosC[1].Key != "c.b" {
+		t.Error("group c missing", infosC)
+	}
+
+	if is1.GetInfo("a") == nil {
+		t.Error("non-group a info missing")
+	}
+	if is1.GetInfo("c") == nil {
+		t.Error("non-group c info missing")
+	}
+}

@@ -129,12 +129,19 @@ func (is *InfoStore) AddInfo(info *Info) bool {
 // info store's sequence generator. All hop distances on infos
 // are incremented to indicate they've arrived from an external
 // source.
-func (is *InfoStore) Combine(delta *InfoStore) {
-	// Combine group info. We extract the infos from the group
-	// and combine them one-by-one using AddInfo. This accounts
-	// for any potential differences in info store configurations
-	// between nodes.
+func (is *InfoStore) Combine(delta *InfoStore) error {
+	// Combine group info. If the group doesn't yet exist, register
+	// it. Extract the infos from the group and combine them
+	// one-by-one using AddInfo.
 	for _, group := range delta.Groups {
+		if _, ok := is.Groups[group.Prefix]; !ok {
+			// Make a copy of the group.
+			groupCopy, err := NewGroup(group.Prefix, group.Limit, group.TypeOf)
+			if err != nil {
+				return err
+			}
+			is.RegisterGroup(groupCopy)
+		}
 		for _, info := range group.Infos {
 			is.SeqGen++
 			info.Seq = is.SeqGen
@@ -150,6 +157,8 @@ func (is *InfoStore) Combine(delta *InfoStore) {
 		info.Hops++
 		is.AddInfo(info)
 	}
+
+	return nil
 }
 
 // Returns an incremental delta of infos added to the info store since
