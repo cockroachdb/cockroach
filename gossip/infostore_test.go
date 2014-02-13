@@ -1,6 +1,7 @@
 package gossip
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -261,5 +262,65 @@ func TestCombine(t *testing.T) {
 	}
 	if is1.GetInfo("c") == nil {
 		t.Error("non-group c info missing")
+	}
+}
+
+// Check infostore delta (both group and non-group infos) based on
+// info sequence numbers.
+func TestInfoStoreDelta(t *testing.T) {
+	is := NewInfoStore()
+
+	groupA := newGroup("a", 10, MIN_GROUP, t)
+	groupB := newGroup("b", 10, MIN_GROUP, t)
+	if is.RegisterGroup(groupA) != nil || is.RegisterGroup(groupB) != nil {
+		t.Error("unable to register groups")
+	}
+
+	// Insert 10 keys each for groupA, groupB and non-group successively.
+	for i := 0; i < 10; i++ {
+		infoA := is.NewInfo(fmt.Sprintf("a.%d", i), Float64Value(i), time.Second)
+		is.AddInfo(infoA)
+
+		infoB := is.NewInfo(fmt.Sprintf("b.%d", i), Float64Value(i+1), time.Second)
+		is.AddInfo(infoB)
+
+		infoC := is.NewInfo(fmt.Sprintf("c.%d", i), Float64Value(i+2), time.Second)
+		is.AddInfo(infoC)
+	}
+
+	// Verify deltas with successive sequence numbers.
+	for i := 0; i < 10; i++ {
+		delta, err := is.Delta(int64(i * 3))
+		if err != nil {
+			t.Errorf("delta failed at sequence number %d: %s", i, err)
+		}
+		infosA := delta.GetGroupInfos("a")
+		infosB := delta.GetGroupInfos("b")
+		if len(infosA) != 10-i || len(infosB) != 10-i {
+			t.Errorf("expected %d infos, not %d, %d", 10-i, len(infosA), len(infosB))
+		}
+		for j := 0; j < 10-i; j++ {
+			expAKey := fmt.Sprintf("a.%d", j+i)
+			expBKey := fmt.Sprintf("b.%d", j+i)
+			if infosA[j].Key != expAKey || infosB[j].Key != expBKey {
+				t.Errorf("run %d: key mismatch at index %d: %s != %s, %s != %s",
+					i, j, infosA[j].Key, expAKey, infosB[j].Key, expBKey)
+			}
+
+			infoC := delta.GetInfo(fmt.Sprintf("c.%d", j+i))
+			if infoC == nil {
+				t.Errorf("unable to fetch non-group info %d", j+i)
+			}
+			if i > 0 {
+				infoC = delta.GetInfo(fmt.Sprintf("c.%d", 0))
+				if infoC != nil {
+					t.Errorf("erroneously fetched non-group info %d", j+i+1)
+				}
+			}
+		}
+	}
+
+	if _, err := is.Delta(int64(30)); err == nil {
+		t.Error("fetching delta of infostore at maximum sequence number should return error")
 	}
 }

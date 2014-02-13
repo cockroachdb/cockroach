@@ -172,7 +172,7 @@ func (group *Group) AddInfo(info *Info) bool {
 
 // Returns a delta of the group since the specified sequence number.
 // Returns an error if the delta is empty.
-func (group *Group) Delta(seq int32) (*Group, error) {
+func (group *Group) Delta(seq int64) (*Group, error) {
 	delta, err := NewGroup(group.Prefix, group.Limit, group.TypeOf)
 	if err != nil {
 		return nil, err

@@ -16,20 +16,21 @@ Cockroach implements a single, monolithic sorted map from key to value
 where both keys and values are byte strings (not unicode). Cockroach
 scales linearly (theoretically up to 4 exabytes (4E) of logical
 data). The map is composed of one or more ranges and each range is
-backed by data stored in leveldb and replicated to a total of three or
-more cockroach servers. Ranges are defined by start and end
-keys. Ranges are merged and split to maintain total byte size within a
-globally configurable min/max size interval. Range sizes default to
-target 64M in order to facilitate quick splits and merges and to
-distribute load at hotspots within a key range. Range replicas are
-intended to be located in disparate datacenters for survivability
-(e.g. { US-East, US-West, Japan }, { Ireland, US-East, US-West}, {
-Ireland, US-East, US-West, Japan, Australia }).
+backed by data stored in rocksDB (a variant of leveldb), and is
+replicated to a total of three or more cockroach servers. Ranges are
+defined by start and end keys. Ranges are merged and split to maintain
+total byte size within a globally configurable min/max size
+interval. Range sizes default to target 64M in order to facilitate
+quick splits and merges and to distribute load at hotspots within a
+key range. Range replicas are intended to be located in disparate
+datacenters for survivability (e.g. { US-East, US-West, Japan }, {
+Ireland, US-East, US-West}, { Ireland, US-East, US-West, Japan,
+Australia }).
 
 Single mutations to ranges are mediated via an instance of a
 distributed consensus algorithm to ensure consistency. We’ve chosen to
 use the Raft consensus algorithm. All consensus state is stored in
-leveldb.
+rocksDB.
 
 A single logical mutation may affect multiple key/value pairs. Logical
 mutations have ACID transactional semantics. If all keys affected by a

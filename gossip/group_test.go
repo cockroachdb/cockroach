@@ -9,7 +9,7 @@ import (
 )
 
 func newInfo(key string, val float64) *Info {
-	now := time.Now().UnixNano()
+	now := MonotonicUnixNano()
 	ttl := now + int64(time.Minute)
 	return &Info{key, Float64Value(val), now, ttl, 0, "", 0}
 }
@@ -222,7 +222,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 	// Add info1 first, then info2.
 	group1 := newGroup("a", 1, MIN_GROUP, t)
 	if !group1.AddInfo(info1) || !group1.AddInfo(info2) {
-		t.Error("failed insertions")
+		t.Error("failed insertions", info1, info2)
 	}
 	if info := group1.GetInfo("a.a"); info == nil || info.Hops != 1 {
 		t.Error("info nil or info.Hops != 1:", info)
@@ -261,13 +261,13 @@ func TestGroupDelta(t *testing.T) {
 	// Insert keys with sequence numbers 1..10.
 	for i := 0; i < 10; i++ {
 		info := newInfo(fmt.Sprintf("a.%d", i), float64(i))
-		info.Seq = int32(i + 1)
+		info.Seq = int64(i + 1)
 		group.AddInfo(info)
 	}
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
-		delta, err := group.Delta(int32(i))
+		delta, err := group.Delta(int64(i))
 		if err != nil {
 			t.Error("delta failed at sequence number", i)
 		}
@@ -284,7 +284,7 @@ func TestGroupDelta(t *testing.T) {
 		}
 	}
 
-	if _, err := group.Delta(int32(10)); err == nil {
+	if _, err := group.Delta(int64(10)); err == nil {
 		t.Error("fetching delta of group at maximum sequence number should return error")
 	}
 }

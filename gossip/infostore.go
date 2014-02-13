@@ -3,6 +3,7 @@ package gossip
 import (
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,8 +18,8 @@ import (
 type InfoStore struct {
 	Infos  InfoMap  // Map from key to info
 	Groups GroupMap // Map from key prefix to groups of infos
-	MaxSeq int32    // Maximum sequence number inserted
-	SeqGen int32    // Sequence generator incremented each time info is added
+	MaxSeq int64    // Maximum sequence number inserted
+	SeqGen int64    // Sequence generator incremented each time info is added
 }
 
 // Returns true if the info belongs to a group registered with
@@ -30,6 +31,20 @@ func (is *InfoStore) belongsToGroup(key string) *Group {
 	return nil
 }
 
+// Returns a monotonically increasing value for nanoseconds in Unix
+// time. Since equal times are ignored with updates to infos, we're
+// careful to avoid incorrectly ignoring one.
+var lastTime int64
+
+func MonotonicUnixNano() int64 {
+	now := time.Now().UnixNano()
+	if now == lastTime {
+		now = lastTime + 1
+	}
+	lastTime = now
+	return now
+}
+
 // Create a new InfoStore.
 func NewInfoStore() *InfoStore {
 	return &InfoStore{make(InfoMap), make(GroupMap), 0, 0}
@@ -38,10 +53,10 @@ func NewInfoStore() *InfoStore {
 // Returns a new info object using specified key, value, and
 // time-to-live.
 func (is *InfoStore) NewInfo(key string, val Value, ttl time.Duration) *Info {
-	is.SeqGen++
-	now := time.Now().UnixNano()
+	seq := atomic.AddInt64(&is.SeqGen, 1)
+	now := MonotonicUnixNano()
 	node := "localhost" // TODO(spencer): fix this
-	return &Info{key, val, now, now + int64(ttl), is.SeqGen, node, 0}
+	return &Info{key, val, now, now + int64(ttl), seq, node, 0}
 }
 
 // Returns an Info object by key or nil if it doesn't exist.
@@ -143,8 +158,8 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 			is.RegisterGroup(groupCopy)
 		}
 		for _, info := range group.Infos {
-			is.SeqGen++
-			info.Seq = is.SeqGen
+			seq := atomic.AddInt64(&is.SeqGen, 1)
+			info.Seq = seq
 			info.Hops++
 			is.AddInfo(info)
 		}
@@ -152,8 +167,8 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 
 	// Combine non-group info.
 	for _, info := range delta.Infos {
-		is.SeqGen++
-		info.Seq = is.SeqGen
+		seq := atomic.AddInt64(&is.SeqGen, 1)
+		info.Seq = seq
 		info.Hops++
 		is.AddInfo(info)
 	}
@@ -166,19 +181,21 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 // intended for efficiently updating peer nodes.
 //
 // Returns an error if there are no deltas.
-func (is *InfoStore) Delta(seq int32) (*InfoStore, error) {
+func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 	if seq >= is.MaxSeq {
 		return nil, fmt.Errorf("no deltas to info store since sequence number %d", seq)
 	}
 
-	delta := new(InfoStore)
+	delta := NewInfoStore()
 	delta.SeqGen = is.SeqGen
 
 	// Delta of group maps.
 	for _, group := range is.Groups {
-		if deltaGroup, err := group.Delta(seq); err != nil {
-			delta.RegisterGroup(deltaGroup)
+		deltaGroup, err := group.Delta(seq)
+		if err != nil {
+			return nil, err
 		}
+		delta.RegisterGroup(deltaGroup)
 	}
 
 	// Delta of info map.
