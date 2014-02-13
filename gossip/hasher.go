@@ -16,6 +16,7 @@
 package gossip
 
 import (
+	"fmt"
 	"github.com/spaolacci/murmur3"
 	"hash"
 	"io"
@@ -41,21 +42,20 @@ func NewHasher() *Hasher {
 	return &Hasher{murmur3.New64(), false, 0, 0}
 }
 
-func (h *Hasher) HashKey(key string) error {
+func (h *Hasher) HashKey(key string) {
 	h.mmh3.Reset() // clear current hash state
 	if _, err := io.WriteString(h.mmh3, key); err != nil {
-		return err
+		panic(fmt.Sprintf("unable to write string to hasher: %s", key))
 	}
 	h.hashed = true
 	sum := h.mmh3.Sum64()
 	h.h1 = uint32(sum & 0xffffffff)
 	h.h2 = uint32((sum >> 32) & 0xffffffff)
-	return nil
 }
 
-func (h *Hasher) GetHash(i int) uint32 {
+func (h *Hasher) GetHash(i uint32) uint32 {
 	if !h.hashed {
 		panic("hasher must be initialized first with a call to HashKey(key)")
 	}
-	return h.h1 + uint32(i)*h.h2
+	return h.h1 + i*h.h2
 }

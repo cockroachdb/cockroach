@@ -27,11 +27,8 @@ func TestHashing(t *testing.T) {
 
 	seen := make(map[uint32]bool) // set of all hash values seen
 	for _, key := range keys {
-		if err := h.HashKey(key); err != nil {
-			t.Error("failed to hash", err)
-		}
-
-		for i := 0; i < 10; i++ {
+		h.HashKey(key)
+		for i := uint32(0); i < uint32(10); i++ {
 			val := h.GetHash(i)
 			if _, ok := seen[val]; ok {
 				t.Error("already hashed to value", val)
