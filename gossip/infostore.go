@@ -3,7 +3,7 @@ package gossip
 import (
 	"fmt"
 	"sort"
-	"sync/atomic"
+	"sync"
 	"time"
 )
 
@@ -34,9 +34,13 @@ func (is *InfoStore) belongsToGroup(key string) *Group {
 // Returns a monotonically increasing value for nanoseconds in Unix
 // time. Since equal times are ignored with updates to infos, we're
 // careful to avoid incorrectly ignoring one.
+var monoTimeMu sync.Mutex
 var lastTime int64
 
 func MonotonicUnixNano() int64 {
+	monoTimeMu.Lock()
+	defer monoTimeMu.Unlock()
+
 	now := time.Now().UnixNano()
 	if now == lastTime {
 		now = lastTime + 1
@@ -53,10 +57,10 @@ func NewInfoStore() *InfoStore {
 // Returns a new info object using specified key, value, and
 // time-to-live.
 func (is *InfoStore) NewInfo(key string, val Value, ttl time.Duration) *Info {
-	seq := atomic.AddInt64(&is.SeqGen, 1)
+	is.SeqGen++
 	now := MonotonicUnixNano()
 	node := "localhost" // TODO(spencer): fix this
-	return &Info{key, val, now, now + int64(ttl), seq, node, 0}
+	return &Info{key, val, now, now + int64(ttl), is.SeqGen, node, 0}
 }
 
 // Returns an Info object by key or nil if it doesn't exist.
@@ -158,8 +162,8 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 			is.RegisterGroup(groupCopy)
 		}
 		for _, info := range group.Infos {
-			seq := atomic.AddInt64(&is.SeqGen, 1)
-			info.Seq = seq
+			is.SeqGen++
+			info.Seq = is.SeqGen
 			info.Hops++
 			is.AddInfo(info)
 		}
@@ -167,8 +171,8 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 
 	// Combine non-group info.
 	for _, info := range delta.Infos {
-		seq := atomic.AddInt64(&is.SeqGen, 1)
-		info.Seq = seq
+		is.SeqGen++
+		info.Seq = is.SeqGen
 		info.Hops++
 		is.AddInfo(info)
 	}
