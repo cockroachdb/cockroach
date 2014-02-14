@@ -51,7 +51,7 @@ func TestSort(t *testing.T) {
 	last := Float64Value(-math.MaxFloat64)
 	for _, info := range infos {
 		if info.Val.Less(last) {
-			t.Errorf("info val %f not increasing", info.Val)
+			t.Errorf("info val %v not increasing", info.Val)
 		}
 		last = info.Val.(Float64Value)
 	}
@@ -61,7 +61,7 @@ func TestSort(t *testing.T) {
 	last = Float64Value(math.MaxFloat64)
 	for _, info := range infos {
 		if !info.Val.Less(last) {
-			t.Errorf("info val %f not decreasing", info.Val)
+			t.Errorf("info val %v not decreasing", info.Val)
 		}
 		last = info.Val.(Float64Value)
 	}

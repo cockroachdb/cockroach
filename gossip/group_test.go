@@ -200,10 +200,10 @@ func TestGroups100Keys(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		if infos[i].Key != minInfos[i].Key {
-			t.Errorf("key %d (%f != %f)", i, infos[i].Val, minInfos[i].Val)
+			t.Errorf("key %d (%s != %s)", i, infos[i].Key, minInfos[i].Key)
 		}
 		if infos[1000-100+i].Key != maxInfos[i].Key {
-			t.Errorf("key %d (%f != %f)", i, infos[1000-100+i].Val, maxInfos[i].Val)
+			t.Errorf("key %d (%s != %s)", i, infos[1000-100+i].Key, maxInfos[i].Key)
 		}
 	}
 }
