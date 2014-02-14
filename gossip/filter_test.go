@@ -104,22 +104,22 @@ func TestSlots(t *testing.T) {
 	// Increment a slot and verify.
 	f.incrementSlot(0, 1)
 	if f.getSlot(0) != 1 {
-		t.Error("slot value %d != 1", f.getSlot(0))
+		t.Errorf("slot value %d != 1", f.getSlot(0))
 	}
 	// Increment past max count.
 	f.incrementSlot(0, int32(f.MaxCount))
 	if f.getSlot(0) != f.MaxCount {
-		t.Error("slot value should be max %d != %d", f.getSlot(0), f.MaxCount)
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount)
 	}
 	// Decrement once.
 	f.incrementSlot(0, -1)
 	if f.getSlot(0) != f.MaxCount-1 {
-		t.Error("slot value should be max %d != %d", f.getSlot(0), f.MaxCount-1)
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount-1)
 	}
 	// Decrement past 0.
 	f.incrementSlot(0, -int32(f.MaxCount))
 	if f.getSlot(0) != 0 {
-		t.Error("slot value should be max %d != 0", f.getSlot(0))
+		t.Errorf("slot value should be max %d != 0", f.getSlot(0))
 	}
 }
 
@@ -181,7 +181,7 @@ func TestFalsePositives(t *testing.T) {
 	empFP := float64(countFP) / float64(1000)
 	diff := math.Abs(probFP - empFP)
 	if diff/probFP > 0.50 {
-		t.Errorf("measured P(FP) > 50% different from expected %f vs. %f", diff, empFP)
+		t.Errorf("measured P(FP) > 50%% different from expected %f vs. %f", diff, empFP)
 	}
 }
 

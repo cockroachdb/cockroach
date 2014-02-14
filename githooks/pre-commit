@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e -x
+
+go vet ./...
+go test ./...
+gofmt -w .
