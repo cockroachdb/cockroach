@@ -47,7 +47,7 @@ func probFalsePositive(N uint32, K uint32, M uint32) float64 {
 // Math from: http://en.wikipedia.org/wiki/Bloom_filter
 func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 	logN2 := math.Log(2)
-	M := uint32(math.Ceil(float64(-N) * math.Log(maxFP) / (logN2 * logN2)))
+	M := uint32(math.Ceil(-float64(N) * math.Log(maxFP) / (logN2 * logN2)))
 	K1 := uint32(math.Ceil((float64(M) / float64(N)) * logN2))
 	K2 := uint32(math.Floor((float64(M) / float64(N)) * logN2))
 	if probFalsePositive(N, K1, M) < probFalsePositive(N, K2, M) {
@@ -63,6 +63,9 @@ func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	if B != 1 && B != 2 && B != 4 && B != 8 {
 		return nil, fmt.Errorf("number of bits (%d) must be a divisor of 8", B)
+	}
+	if maxFP <= 0 || maxFP >= 1 {
+		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1:", maxFP)
 	}
 	M, K := computeOptimalValues(N, maxFP)
 	maxCount := uint32((1 << B) - 1)
