@@ -73,6 +73,9 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if !is.AddInfo(info) {
 		t.Error("unable to add info")
 	}
+	if is.InfoCount() != 1 {
+		t.Errorf("infostore count incorrect %d != 1", is.InfoCount())
+	}
 	if is.MaxSeq != info.Seq {
 		t.Error("max seq value wasn't updated")
 	}
@@ -175,6 +178,9 @@ func TestAddGroupInfos(t *testing.T) {
 	if !is.AddInfo(info1) || !is.AddInfo(info2) {
 		t.Error("unable to add info1 or info2")
 	}
+	if is.InfoCount() != 2 {
+		t.Errorf("infostore count incorrect %d != 2", is.InfoCount())
+	}
 	if is.MaxSeq != info2.Seq {
 		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.Seq)
 	}
@@ -196,6 +202,9 @@ func TestAddGroupInfos(t *testing.T) {
 	info4 := is.NewInfo("b.b", Float64Value(2), time.Second)
 	if !is.AddInfo(info3) || !is.AddInfo(info4) {
 		t.Error("unable to add info1 or info2")
+	}
+	if is.InfoCount() != 4 {
+		t.Errorf("infostore count incorrect %d != 4", is.InfoCount())
 	}
 	if is.MaxSeq != info4.Seq {
 		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.Seq)
@@ -220,6 +229,9 @@ func TestAddGroupInfos(t *testing.T) {
 	}
 	if is.GetInfo("c.a") != info5 {
 		t.Error("unable to fetch info5 by key")
+	}
+	if is.InfoCount() != 5 {
+		t.Errorf("infostore count incorrect %d != 5", is.InfoCount())
 	}
 	if is.MaxSeq != info5.Seq {
 		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.Seq)
@@ -294,9 +306,9 @@ func TestCombine(t *testing.T) {
 	}
 }
 
-// Check infostore delta (both group and non-group infos) based on
-// info sequence numbers.
-func TestInfoStoreDelta(t *testing.T) {
+// Helper method creates an infostore with two groups with 10
+// infos each and 10 non-group infos.
+func createTestInfoStore(t *testing.T) *InfoStore {
 	is := NewInfoStore()
 
 	groupA := newGroup("a", 10, MIN_GROUP, t)
@@ -316,6 +328,14 @@ func TestInfoStoreDelta(t *testing.T) {
 		infoC := is.NewInfo(fmt.Sprintf("c.%d", i), Float64Value(i+2), time.Second)
 		is.AddInfo(infoC)
 	}
+
+	return is
+}
+
+// Check infostore delta (both group and non-group infos) based on
+// info sequence numbers.
+func TestInfoStoreDelta(t *testing.T) {
+	is := createTestInfoStore(t)
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
@@ -351,5 +371,69 @@ func TestInfoStoreDelta(t *testing.T) {
 
 	if _, err := is.Delta(int64(30)); err == nil {
 		t.Error("fetching delta of infostore at maximum sequence number should return error")
+	}
+}
+
+// Build a filter representing the info store and verify
+// keys are represented.
+func TestBuildFilter(t *testing.T) {
+	is := createTestInfoStore(t)
+	f, err := is.BuildFilter(1)
+	if err != nil {
+		t.Error("unable to build filter", err)
+	}
+
+	for i := 0; i < 10; i++ {
+		if !f.HasKey(fmt.Sprintf("a.%d", i)) {
+			t.Error("filter should contain key a.", i)
+		}
+		if !f.HasKey(fmt.Sprintf("b.%d", i)) {
+			t.Error("filter should contain key b.", i)
+		}
+		if !f.HasKey(fmt.Sprintf("c.%d", i)) {
+			t.Error("filter should contain key c.", i)
+		}
+	}
+
+	// Verify non-keys are not present.
+	if f.HasKey("d.1") || f.HasKey("d.2") {
+		t.Error("filter should not contain d.1 or d.2")
+	}
+}
+
+// Build a filter where maximum hops matter. Make
+// sure keys with too-high hops are not present.
+func TestFilterMaxHops(t *testing.T) {
+	is := NewInfoStore()
+
+	group := newGroup("a", 10, MIN_GROUP, t)
+	if is.RegisterGroup(group) != nil {
+		t.Error("unable to register group")
+	}
+
+	// Insert 2 keys each for group and non-group respectively.
+	// First key get 0 hops, second 1 hop.
+	gInfo1 := is.NewInfo("a.1", Float64Value(1), time.Second)
+	is.AddInfo(gInfo1)
+	gInfo2 := is.NewInfo("a.2", Float64Value(2), time.Second)
+	gInfo2.Hops = 2
+	is.AddInfo(gInfo2)
+
+	info1 := is.NewInfo("b.1", Float64Value(1), time.Second)
+	is.AddInfo(info1)
+	info2 := is.NewInfo("b.2", Float64Value(2), time.Second)
+	info2.Hops = 2
+	is.AddInfo(info2)
+
+	f, err := is.BuildFilter(1) // max hops set to 1
+	if err != nil {
+		t.Error("unable to build filter", err)
+	}
+
+	if !f.HasKey("a.1") || !f.HasKey("b.1") {
+		t.Error("filter should have low-hops keys for a and b")
+	}
+	if f.HasKey("a.2") || f.HasKey("b.2") {
+		t.Error("filter shouldn't have high-hops keys for a and b")
 	}
 }

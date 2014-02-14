@@ -37,6 +37,10 @@ type InfoStore struct {
 	SeqGen int64    // Sequence generator incremented each time info is added
 }
 
+// Parameters to tune bloom filters returned by the store.
+const FilterBits = 4
+const FilterMaxFP = 0.025
+
 // Returns true if the info belongs to a group registered with
 // the info store; false otherwise.
 func (is *InfoStore) belongsToGroup(key string) *Group {
@@ -69,6 +73,17 @@ func MonotonicUnixNano() int64 {
 // Create a new InfoStore.
 func NewInfoStore() *InfoStore {
 	return &InfoStore{make(InfoMap), make(GroupMap), 0, 0}
+}
+
+// Returns the count of infos stored in groups and the non-group infos
+// map. This is really just an approximation as we don't check whether
+// infos are expired.
+func (is *InfoStore) InfoCount() uint32 {
+	count := uint32(len(is.Infos))
+	for _, group := range is.Groups {
+		count += uint32(len(group.Infos))
+	}
+	return count
 }
 
 // Returns a new info object using specified key, value, and
@@ -233,4 +248,31 @@ func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 	}
 
 	return delta, nil
+}
+
+// Builds a bloom filter containing the keys held in the store which
+// arrived within the specified number of maximum hops. Filters are
+// passed to peer nodes in order to evaluate gossip candidates.
+func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
+	f, err := NewFilter(is.InfoCount(), FilterBits, FilterMaxFP)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, group := range is.Groups {
+		for _, info := range group.Infos {
+			if info.Hops <= maxHops {
+				f.AddKey(info.Key)
+			}
+		}
+	}
+
+	// Combine non-group info.
+	for _, info := range is.Infos {
+		if info.Hops <= maxHops {
+			f.AddKey(info.Key)
+		}
+	}
+
+	return f, nil
 }
