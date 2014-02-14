@@ -48,7 +48,9 @@ func (is *InfoStore) belongsToGroup(key string) *Group {
 
 // Returns a monotonically increasing value for nanoseconds in Unix
 // time. Since equal times are ignored with updates to infos, we're
-// careful to avoid incorrectly ignoring one.
+// careful to avoid incorrectly ignoring a newly created value in the
+// event one is created within the same nanosecond. Really unlikely
+// except for the case of unittests, but better safe than sorry.
 var monoTimeMu sync.Mutex
 var lastTime int64
 
@@ -84,6 +86,12 @@ func (is *InfoStore) GetInfo(key string) *Info {
 		return group.GetInfo(key)
 	}
 	if info, ok := is.Infos[key]; ok {
+		// Check TTL and discard if too old.
+		now := time.Now().UnixNano()
+		if info.TTLStamp <= now {
+			delete(is.Infos, key)
+			return nil
+		}
 		return info
 	}
 	return nil

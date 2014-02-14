@@ -84,6 +84,20 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	}
 }
 
+// Verify TTL is respected on info fetched by key
+// and group.
+func TestInfoStoreGetInfoTTL(t *testing.T) {
+	is := NewInfoStore()
+	info := is.NewInfo("a", Float64Value(1), time.Nanosecond)
+	if !is.AddInfo(info) {
+		t.Error("unable to add info")
+	}
+	time.Sleep(time.Nanosecond)
+	if is.GetInfo("a") != nil {
+		t.Error("shouldn't be able to get info with short TTL")
+	}
+}
+
 // Add infos using same key, same and lesser timestamp; verify no
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {

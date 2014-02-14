@@ -269,6 +269,32 @@ func TestGroupGetInfo(t *testing.T) {
 	}
 }
 
+// Verify GetInfo with a short TTL.
+func TestGroupGetInfoTTL(t *testing.T) {
+	group := newGroup("a", 10, MIN_GROUP, t)
+	info := newInfo("a.a", 1)
+	info.TTLStamp = info.Timestamp + int64(time.Nanosecond)
+	group.AddInfo(info)
+	time.Sleep(time.Nanosecond)
+	if group.GetInfo(info.Key) != nil {
+		t.Error("shouldn't have been able to fetch key with short TTL")
+	}
+
+	// Try 2 infos, one with short TTL and one with long TTL and
+	// verify operation of InfosAsArray.
+	info1 := newInfo("a.1", 1)
+	info2 := newInfo("a.2", 2)
+	info2.TTLStamp = info.Timestamp + int64(time.Nanosecond)
+	group.AddInfo(info1)
+	group.AddInfo(info2)
+
+	time.Sleep(time.Nanosecond)
+	infos := group.InfosAsArray()
+	if len(infos) != 1 || infos[0].Val != info1.Val {
+		t.Error("only one info should be returned", infos)
+	}
+}
+
 // Check delta groups based on info sequence numbers.
 func TestGroupDelta(t *testing.T) {
 	group := newGroup("a", 10, MIN_GROUP, t)

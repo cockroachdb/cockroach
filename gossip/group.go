@@ -133,6 +133,12 @@ func NewGroup(prefix string, limit int, typeOf GroupType) (*Group, error) {
 // Returns an info by key.
 func (group *Group) GetInfo(key string) *Info {
 	if info, ok := group.Infos[key]; ok {
+		// Check TTL and discard if too old.
+		now := time.Now().UnixNano()
+		if info.TTLStamp <= now {
+			delete(group.Infos, key)
+			return nil
+		}
 		return info
 	}
 	return nil
@@ -140,9 +146,15 @@ func (group *Group) GetInfo(key string) *Info {
 
 // Returns array of infos from group.
 func (group *Group) InfosAsArray() InfoArray {
+	now := time.Now().UnixNano()
 	infos := make(InfoArray, 0, len(group.Infos))
 	for _, info := range group.Infos {
-		infos = append(infos, info)
+		// Check TTL and discard if too old.
+		if info.TTLStamp <= now {
+			delete(group.Infos, info.Key)
+		} else {
+			infos = append(infos, info)
+		}
 	}
 	return infos
 }

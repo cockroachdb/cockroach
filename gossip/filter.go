@@ -61,6 +61,10 @@ func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 // Number of bits per slot B, and expected value of a false
 // positive < maxFP.
 func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
+	// TODO(spencer): we probably would be well-served using a 3-bit
+	// filter, so we should relax the following constraint and get a
+	// little bit fancier with the bit arithmetic to handle cross-byte
+	// slot values.
 	if B != 1 && B != 2 && B != 4 && B != 8 {
 		return nil, fmt.Errorf("number of bits (%d) must be a divisor of 8", B)
 	}
