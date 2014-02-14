@@ -69,7 +69,7 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 		return nil, fmt.Errorf("number of bits (%d) must be a divisor of 8", B)
 	}
 	if maxFP <= 0 || maxFP >= 1 {
-		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1:", maxFP)
+		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1: %f", maxFP)
 	}
 	M, K := computeOptimalValues(N, maxFP)
 	maxCount := uint32((1 << B) - 1)
