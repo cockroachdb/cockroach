@@ -23,7 +23,8 @@ import (
 
 // newGroup and newInfo are defined in group_test.go
 
-// Register two groups and verify operation of belongsToGroup.
+// TestRegisterGroup registers two groups and verify operation of
+// belongsToGroup.
 func TestRegisterGroup(t *testing.T) {
 	is := NewInfoStore()
 
@@ -55,7 +56,7 @@ func TestRegisterGroup(t *testing.T) {
 	}
 }
 
-// Create new info objects. Verify sequence increments.
+// TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
 	is := NewInfoStore()
 	info1 := is.NewInfo("a", Float64Value(1), time.Second)
@@ -332,6 +333,34 @@ func createTestInfoStore(t *testing.T) *InfoStore {
 	return is
 }
 
+// Helper method creates an infostore with one group containing
+// two infos a.1 with 0 hops, and a.2 with 2 hops. Also two
+// non-group infos b.1 with 0 hops, and b.2 with 2 hops.
+func createTestInfoStoreWithHops(t *testing.T) *InfoStore {
+	is := NewInfoStore()
+
+	group := newGroup("a", 10, MIN_GROUP, t)
+	if is.RegisterGroup(group) != nil {
+		t.Fatal("unable to register group:", group)
+	}
+
+	// Insert 2 keys each for group and non-group respectively.
+	// First key get 0 hops, second 1 hop.
+	gInfo1 := is.NewInfo("a.1", Float64Value(1), time.Second)
+	is.AddInfo(gInfo1)
+	gInfo2 := is.NewInfo("a.2", Float64Value(2), time.Second)
+	gInfo2.Hops = 2
+	is.AddInfo(gInfo2)
+
+	info1 := is.NewInfo("b.1", Float64Value(1), time.Second)
+	is.AddInfo(info1)
+	info2 := is.NewInfo("b.2", Float64Value(2), time.Second)
+	info2.Hops = 2
+	is.AddInfo(info2)
+
+	return is
+}
+
 // Check infostore delta (both group and non-group infos) based on
 // info sequence numbers.
 func TestInfoStoreDelta(t *testing.T) {
@@ -380,7 +409,7 @@ func TestBuildFilter(t *testing.T) {
 	is := createTestInfoStore(t)
 	f, err := is.BuildFilter(1)
 	if err != nil {
-		t.Error("unable to build filter", err)
+		t.Fatal("unable to build filter:", err)
 	}
 
 	for i := 0; i < 10; i++ {
@@ -404,30 +433,11 @@ func TestBuildFilter(t *testing.T) {
 // Build a filter where maximum hops matter. Make
 // sure keys with too-high hops are not present.
 func TestFilterMaxHops(t *testing.T) {
-	is := NewInfoStore()
-
-	group := newGroup("a", 10, minGroup, t)
-	if is.RegisterGroup(group) != nil {
-		t.Error("unable to register group")
-	}
-
-	// Insert 2 keys each for group and non-group respectively.
-	// First key get 0 hops, second 1 hop.
-	gInfo1 := is.NewInfo("a.1", Float64Value(1), time.Second)
-	is.AddInfo(gInfo1)
-	gInfo2 := is.NewInfo("a.2", Float64Value(2), time.Second)
-	gInfo2.Hops = 2
-	is.AddInfo(gInfo2)
-
-	info1 := is.NewInfo("b.1", Float64Value(1), time.Second)
-	is.AddInfo(info1)
-	info2 := is.NewInfo("b.2", Float64Value(2), time.Second)
-	info2.Hops = 2
-	is.AddInfo(info2)
+	is := createTestInfoStoreWithHops(t)
 
 	f, err := is.BuildFilter(1) // max hops set to 1
 	if err != nil {
-		t.Error("unable to build filter", err)
+		t.Fatal("unable to build filter:", err)
 	}
 
 	if !f.HasKey("a.1") || !f.HasKey("b.1") {
@@ -435,5 +445,91 @@ func TestFilterMaxHops(t *testing.T) {
 	}
 	if f.HasKey("a.2") || f.HasKey("b.2") {
 		t.Error("filter shouldn't have high-hops keys for a and b")
+	}
+}
+
+// TestDiff verifies behavior of DiffFilter, which approximates the
+// differences between an info store and a remote info store as
+// described by a filter.
+func TestDiff(t *testing.T) {
+	is := createTestInfoStore(t)
+
+	// First build a filter with everything and diff (should be empty).
+	f, err := is.BuildFilter(1)
+	if err != nil {
+		t.Fatal("unable to build filter:", err)
+	}
+	diff, err := is.DiffFilter(f, 1)
+	if diff != 0 || err != nil {
+		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
+	}
+
+	// An empty infostore returns full count.
+	is2 := NewInfoStore()
+	f, err = is.BuildFilter(1)
+	if err != nil {
+		t.Fatal("could not create filter")
+	}
+	diff, err = is2.DiffFilter(f, 1)
+	if diff != is.InfoCount() || err != nil {
+		t.Errorf("diff should be %d, not %d, err: %s", is.InfoCount(), diff, err)
+	}
+
+	// An empty filter returns 0 diff.
+	f, err = NewFilter(10, 2, 0.01)
+	if err != nil {
+		t.Fatal("could not create filter:", err)
+	}
+	diff, err = is.DiffFilter(f, 1)
+	if diff != 0 || err != nil {
+		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
+	}
+
+	// Create a filter with just the non-group items of the infostore
+	// and diff: expect empty as infostore contains everything.
+	f, err = NewFilter(10, 2, 0.01)
+	if err != nil {
+		t.Fatal("could not create filter:", err)
+	}
+	for _, info := range is.Infos {
+		f.AddKey(info.Key)
+	}
+	diff, err = is.DiffFilter(f, 1)
+	if diff != 0 || err != nil {
+		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
+	}
+
+	// Now create a new infostore with just non-group items and diff
+	// with filter from original infostore.
+	for _, info := range is.Infos {
+		is2.AddInfo(info)
+	}
+	f, err = is.BuildFilter(1)
+	if err != nil {
+		t.Fatal("could not create filter:", err)
+	}
+	expDiff := is.InfoCount() - uint32(len(is.Infos))
+	diff, err = is2.DiffFilter(f, 1)
+	if diff != expDiff || err != nil {
+		t.Errorf("diff should be %d, not %d, err: %s", expDiff, diff, err)
+	}
+}
+
+// TestDiffMaxHops does an InfoStore to filter diff where maximum hops
+// are taken into consideration.
+func TestDiffMaxHops(t *testing.T) {
+	is := createTestInfoStoreWithHops(t)
+
+	// Build the filter such that it accepts all infos, regardless of hops.
+	f, err := is.BuildFilter(10)
+	if err != nil {
+		t.Fatal("unable to build filter:", err)
+	}
+
+	// Diff the filter with maxHops = 1 to ignore Hops = 2 infos.
+	// We should be left with the two Hops = 2 still in the filter.
+	diff, err := is.DiffFilter(f, 1)
+	if diff != 2 || err != nil {
+		t.Errorf("diff should be 2, not %d, err: %s", diff, err)
 	}
 }

@@ -297,38 +297,3 @@ func TestGroupGetInfoTTL(t *testing.T) {
 		t.Error("only one info should be returned", infos)
 	}
 }
-
-// TestGroupDelta checks delta groups based on info sequence numbers.
-func TestGroupDelta(t *testing.T) {
-	group := newGroup("a", 10, minGroup, t)
-
-	// Insert keys with sequence numbers 1..10.
-	for i := 0; i < 10; i++ {
-		info := newInfo(fmt.Sprintf("a.%d", i), float64(i))
-		info.Seq = int64(i + 1)
-		group.AddInfo(info)
-	}
-
-	// Verify deltas with successive sequence numbers.
-	for i := 0; i < 10; i++ {
-		delta, err := group.Delta(int64(i))
-		if err != nil {
-			t.Error("delta failed at sequence number", i)
-		}
-		infos := delta.InfosAsArray()
-		if len(infos) != 10-i {
-			t.Errorf("expected %d infos, not %d", 10-i, len(infos))
-		}
-		sort.Sort(infos)
-		for j := 0; j < 10-i; j++ {
-			expKey := fmt.Sprintf("a.%d", j+i)
-			if infos[j].Key != expKey {
-				t.Errorf("run %d: key mismatch at index %d: %s != %s", i, j, infos[j].Key, expKey)
-			}
-		}
-	}
-
-	if _, err := group.Delta(int64(10)); err == nil {
-		t.Error("fetching delta of group at maximum sequence number should return error")
-	}
-}

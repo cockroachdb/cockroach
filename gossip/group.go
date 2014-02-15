@@ -199,21 +199,3 @@ func (g *Group) AddInfo(info *Info) bool {
 
 	return false
 }
-
-// Delta returns a delta of the group since the specified sequence number.
-// Returns an error if the delta is empty.
-func (g *Group) Delta(seq int64) (*Group, error) {
-	delta, err := NewGroup(g.Prefix, g.Limit, g.TypeOf)
-	if err != nil {
-		return nil, err
-	}
-	for _, info := range g.Infos {
-		if info.Seq > seq {
-			delta.addInternal(info)
-		}
-	}
-	if len(delta.Infos) == 0 {
-		return nil, fmt.Errorf("no deltas to group since sequence number %d", seq)
-	}
-	return delta, nil
-}

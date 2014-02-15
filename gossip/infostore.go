@@ -188,16 +188,49 @@ func (is *InfoStore) AddInfo(info *Info) bool {
 	return true
 }
 
+// visitInfos implements a visitor pattern to run two methods in the
+// course of visiting all groups, all group infos, and all non-group
+// infos. The visitGroup function is run against each group in
+// turn. After each group is visited, the visitInfo function is run
+// against each of its infos.  Finally, after all groups have been
+// visitied, the visitInfo function is run against each non-group info
+// in turn.
+func (is *InfoStore) visitInfos(visitGroup func(*Group) error, visitInfo func(*Info) error) error {
+	for _, group := range is.Groups {
+		if visitGroup != nil {
+			if err := visitGroup(group); err != nil {
+				return err
+			}
+		}
+		if visitInfo != nil {
+			for _, info := range group.Infos {
+				if err := visitInfo(info); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if visitInfo != nil {
+		for _, info := range is.Infos {
+			if err := visitInfo(info); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // Combine combines an incremental delta with the current info store.
-// The sequence numbers on all info objects are reset using the
-// info store's sequence generator. All hop distances on infos
-// are incremented to indicate they've arrived from an external
-// source.
+// The sequence numbers on all info objects are reset using the info
+// store's sequence generator. All hop distances on infos are
+// incremented to indicate they've arrived from an external source.
 func (is *InfoStore) Combine(delta *InfoStore) error {
 	// Combine group info. If the group doesn't yet exist, register
 	// it. Extract the infos from the group and combine them
 	// one-by-one using AddInfo.
-	for _, group := range delta.Groups {
+	return delta.visitInfos(func(group *Group) error {
 		if _, ok := is.Groups[group.Prefix]; !ok {
 			// Make a copy of the group.
 			groupCopy, err := NewGroup(group.Prefix, group.Limit, group.TypeOf)
@@ -206,23 +239,14 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 			}
 			is.RegisterGroup(groupCopy)
 		}
-		for _, info := range group.Infos {
-			is.SeqGen++
-			info.Seq = is.SeqGen
-			info.Hops++
-			is.AddInfo(info)
-		}
-	}
-
-	// Combine non-group info.
-	for _, info := range delta.Infos {
+		return nil
+	}, func(info *Info) error {
 		is.SeqGen++
 		info.Seq = is.SeqGen
 		info.Hops++
 		is.AddInfo(info)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // Delta returns an incremental delta of infos added to the info store since
@@ -238,23 +262,22 @@ func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 	delta := NewInfoStore()
 	delta.SeqGen = is.SeqGen
 
-	// Delta of group maps.
-	for _, group := range is.Groups {
-		deltaGroup, err := group.Delta(seq)
+	// Compute delta of groups and infos.
+	err := is.visitInfos(func(group *Group) error {
+		deltaGroup, err := NewGroup(group.Prefix, group.Limit, group.TypeOf)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		delta.RegisterGroup(deltaGroup)
-	}
-
-	// Delta of info map.
-	for _, info := range is.Infos {
+		return nil
+	}, func(info *Info) error {
 		if info.Seq > seq {
-			delta.Infos[info.Key] = info
+			delta.AddInfo(info)
 		}
-	}
+		return nil
+	})
 
-	return delta, nil
+	return delta, err
 }
 
 // BuildFilter builds a bloom filter containing the keys held in the
@@ -266,20 +289,26 @@ func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
 		return nil, err
 	}
 
-	for _, group := range is.Groups {
-		for _, info := range group.Infos {
-			if info.Hops <= maxHops {
-				f.AddKey(info.Key)
-			}
-		}
-	}
-
-	// Combine non-group info.
-	for _, info := range is.Infos {
+	err = is.visitInfos(nil, func(info *Info) error {
 		if info.Hops <= maxHops {
 			f.AddKey(info.Key)
 		}
-	}
+		return nil
+	})
 
-	return f, nil
+	return f, err
+}
+
+// DiffFilter compares the supplied filter with the contents of this
+// infostore. Each key from the infostore is "removed" from the
+// filter, to yield a filter with remains approximately equal to the
+// keys contained in the filter but not present in the infostore.
+func (is *InfoStore) DiffFilter(f *Filter, maxHops uint32) (uint32, error) {
+	err := is.visitInfos(nil, func(info *Info) error {
+		if info.Hops <= maxHops {
+			f.RemoveKey(info.Key)
+		}
+		return nil
+	})
+	return f.ApproximateInsertions(), err
 }
