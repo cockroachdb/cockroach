@@ -130,7 +130,13 @@ func NewGroup(prefix string, limit int, typeOf GroupType) (*Group, error) {
 	if limit <= 0 {
 		return nil, fmt.Errorf("group size limit must be a positive number (%d <= 0)", limit)
 	}
-	return &Group{prefix, limit, typeOf, math.MaxInt64, nil, make(InfoMap)}, nil
+	return &Group{
+		Prefix:      prefix,
+		Limit:       limit,
+		TypeOf:      typeOf,
+		MinTTLStamp: math.MaxInt64,
+		Infos:       make(InfoMap),
+	}, nil
 }
 
 // GetInfo returns an info by key.

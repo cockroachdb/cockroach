@@ -26,7 +26,12 @@ import (
 func newInfo(key string, val float64) *Info {
 	now := MonotonicUnixNano()
 	ttl := now + int64(time.Minute)
-	return &Info{key, Float64Value(val), now, ttl, 0, "", 0}
+	return &Info{
+		Key:       key,
+		Val:       Float64Value(val),
+		Timestamp: now,
+		TTLStamp:  ttl,
+	}
 }
 
 func newGroup(prefix string, limit int, typeOf GroupType, t *testing.T) *Group {

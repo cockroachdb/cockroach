@@ -74,7 +74,14 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	maxCount := uint32((1 << B) - 1)
 	numBytes := (M*B + 7) / 8
 	bytes := make([]byte, numBytes, numBytes)
-	return &Filter{K, 0, 0, B, M, maxCount, bytes, NewHasher()}, nil
+	return &Filter{
+		K:        K,
+		B:        B,
+		M:        M,
+		MaxCount: maxCount,
+		Data:     bytes,
+		hasher:   NewHasher(),
+	}, nil
 }
 
 // incrementSlot increments slot value by the specified amount, bounding at
