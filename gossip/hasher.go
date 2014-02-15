@@ -17,20 +17,19 @@ package gossip
 
 import (
 	"fmt"
-	"github.com/spaolacci/murmur3"
 	"hash"
 	"io"
+
+	"github.com/spaolacci/murmur3"
 )
 
-// To make running k hash functions performant, use Kirsch and
-// Mitzenmacher method to determine k hashed values using formula:
+// Hasher utilizes a 64 bit variant of MurmurHash3 to support
+// the use of the Kirsch and MitzenMacher method to determine k
+// hashed values using this formula:
 //
 // H[i](x) = hash[0:4] + i*hash[4:8]
 //
 // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/rsa.pdf
-//
-// We use the 64 bit variant of MurmurHash3 for the 8 bytes of hashed
-// values.
 type Hasher struct {
 	mmh3   hash.Hash64
 	hashed bool   // true if we've hashed a key
@@ -38,10 +37,12 @@ type Hasher struct {
 	h2     uint32 // last 4 bytes of key hash
 }
 
+// NewHasher allocates and return a new Hasher.
 func NewHasher() *Hasher {
 	return &Hasher{murmur3.New64(), false, 0, 0}
 }
 
+// HashKey writes the given key string to the hasher.
 func (h *Hasher) HashKey(key string) {
 	h.mmh3.Reset() // clear current hash state
 	if _, err := io.WriteString(h.mmh3, key); err != nil {
@@ -53,6 +54,7 @@ func (h *Hasher) HashKey(key string) {
 	h.h2 = uint32((sum >> 32) & 0xffffffff)
 }
 
+// GetHash returns the hash value at the given offset.
 func (h *Hasher) GetHash(i uint32) uint32 {
 	if !h.hashed {
 		panic("hasher must be initialized first with a call to HashKey(key)")

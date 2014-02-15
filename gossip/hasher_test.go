@@ -19,8 +19,8 @@ import (
 	"testing"
 )
 
-// Verify similar keys hash to different values for arbitrary numbers
-// of hash functions.
+// TestHashing verifies similar keys hash to different values for an
+// arbitrary number of hash functions.
 func TestHashing(t *testing.T) {
 	h := NewHasher()
 	keys := []string{"test1", "test2", "1", "2"}

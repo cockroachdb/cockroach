@@ -21,8 +21,8 @@ import (
 	"testing"
 )
 
-// Verify some basic expectations of false positive
-// computations.
+// TestProbFalsePositive verifies some basic expectations
+// of false positive computations.
 func TestProbFalsePositive(t *testing.T) {
 	// Simple cases.
 	if probFalsePositive(0, 1, 1) != 0 {
@@ -39,7 +39,7 @@ func TestProbFalsePositive(t *testing.T) {
 	}
 }
 
-// Verify optimal values make sense.
+// TestOptimalValues verifies optimal values make sense.
 func TestOptimalValues(t *testing.T) {
 	// Compute optimal values for 1000 insertions and various probabilities.
 	M10, _ := computeOptimalValues(1000, 0.10)
@@ -51,7 +51,7 @@ func TestOptimalValues(t *testing.T) {
 	}
 }
 
-// Verify bad inputs, optimal values, size of slots data.
+// TestNewFilter verifies bad inputs, optimal values, size of slots data.
 func TestNewFilter(t *testing.T) {
 	if _, err := NewFilter(1, 3, 0.10); err == nil {
 		t.Error("NewFilter should not accept bits B which are non-divisor of 8")
@@ -89,7 +89,7 @@ func TestNewFilter(t *testing.T) {
 	}
 }
 
-// Test slot increment and slot count fetching.
+// TestSlots tests slot increment and slot count fetching.
 func TestSlots(t *testing.T) {
 	f, err := NewFilter(1000, 4, 0.01)
 	if err != nil {
@@ -123,7 +123,7 @@ func TestSlots(t *testing.T) {
 	}
 }
 
-// Add keys, test existence, and remove keys.
+// TestKeys adds keys, tests existence, and removes keys.
 func TestKeys(t *testing.T) {
 	f, err := NewFilter(1000, 4, 0.01)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestKeys(t *testing.T) {
 	}
 }
 
-// Add many keys, verify false positive probability.
+// TestFalsePositives adds many keys and verifies false positive probability.
 func TestFalsePositives(t *testing.T) {
 	f, err := NewFilter(1000, 4, 0.01)
 	if err != nil {
@@ -185,8 +185,8 @@ func TestFalsePositives(t *testing.T) {
 	}
 }
 
-// Add many keys with overloaded filter and verify approximation
-// degrades gracefully.
+// TestApproximateInsertions adds many keys with an overloaded filter and
+// verifies that approximation degrades gracefully.
 func TestApproximateInsertions(t *testing.T) {
 	f, err := NewFilter(10, 4, 0.10)
 	if err != nil {

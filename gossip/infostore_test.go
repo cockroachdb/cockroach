@@ -27,11 +27,11 @@ import (
 func TestRegisterGroup(t *testing.T) {
 	is := NewInfoStore()
 
-	groupA := newGroup("a", 1, MIN_GROUP, t)
+	groupA := newGroup("a", 1, minGroup, t)
 	if is.RegisterGroup(groupA) != nil {
 		t.Error("could not register group A")
 	}
-	groupB := newGroup("b", 1, MIN_GROUP, t)
+	groupB := newGroup("b", 1, minGroup, t)
 	if is.RegisterGroup(groupB) != nil {
 		t.Error("could not register group B")
 	}
@@ -168,7 +168,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 func TestAddGroupInfos(t *testing.T) {
 	is := NewInfoStore()
 
-	group := newGroup("a", 10, MIN_GROUP, t)
+	group := newGroup("a", 10, minGroup, t)
 	if is.RegisterGroup(group) != nil {
 		t.Error("could not register group")
 	}
@@ -194,7 +194,7 @@ func TestAddGroupInfos(t *testing.T) {
 	}
 
 	// Try with a max group.
-	maxGroup := newGroup("b", 10, MAX_GROUP, t)
+	maxGroup := newGroup("b", 10, maxGroup, t)
 	if is.RegisterGroup(maxGroup) != nil {
 		t.Error("could not register group")
 	}
@@ -243,8 +243,8 @@ func TestAddGroupInfos(t *testing.T) {
 func TestCombine(t *testing.T) {
 	is1 := NewInfoStore()
 
-	group1 := newGroup("a", 10, MIN_GROUP, t)
-	group1Overlap := newGroup("b", 10, MIN_GROUP, t)
+	group1 := newGroup("a", 10, minGroup, t)
+	group1Overlap := newGroup("b", 10, minGroup, t)
 	if is1.RegisterGroup(group1) != nil || is1.RegisterGroup(group1Overlap) != nil {
 		t.Error("could not register group1 or group1Overlap")
 	}
@@ -262,8 +262,8 @@ func TestCombine(t *testing.T) {
 
 	is2 := NewInfoStore()
 
-	group2 := newGroup("c", 10, MIN_GROUP, t)
-	group2Overlap := newGroup("b", 10, MIN_GROUP, t)
+	group2 := newGroup("c", 10, minGroup, t)
+	group2Overlap := newGroup("b", 10, minGroup, t)
 	if is2.RegisterGroup(group2) != nil || is2.RegisterGroup(group2Overlap) != nil {
 		t.Error("could not register group2 or group2Overlap")
 	}
@@ -311,8 +311,8 @@ func TestCombine(t *testing.T) {
 func createTestInfoStore(t *testing.T) *InfoStore {
 	is := NewInfoStore()
 
-	groupA := newGroup("a", 10, MIN_GROUP, t)
-	groupB := newGroup("b", 10, MIN_GROUP, t)
+	groupA := newGroup("a", 10, minGroup, t)
+	groupB := newGroup("b", 10, minGroup, t)
 	if is.RegisterGroup(groupA) != nil || is.RegisterGroup(groupB) != nil {
 		t.Error("unable to register groups")
 	}
@@ -406,7 +406,7 @@ func TestBuildFilter(t *testing.T) {
 func TestFilterMaxHops(t *testing.T) {
 	is := NewInfoStore()
 
-	group := newGroup("a", 10, MIN_GROUP, t)
+	group := newGroup("a", 10, minGroup, t)
 	if is.RegisterGroup(group) != nil {
 		t.Error("unable to register group")
 	}
