@@ -39,18 +39,18 @@ func newGroup(prefix string, limit int, typeOf GroupType, t *testing.T) *Group {
 
 // TestNewGroup verifies NewGroup behavior.
 func TestNewGroup(t *testing.T) {
-	if _, err := NewGroup("a", 0, minGroup); err == nil {
+	if _, err := NewGroup("a", 0, MinGroup); err == nil {
 		t.Error("new group with limit=0 should be illegal")
 	}
-	if _, err := NewGroup("a", -1, minGroup); err == nil {
+	if _, err := NewGroup("a", -1, MinGroup); err == nil {
 		t.Error("new group with limit=-1 should be illegal")
 	}
 }
 
-// TestMinGroupShouldInclude tests minGroup type groups
+// TestMinGroupShouldInclude tests MinGroup type groups
 // and group.shouldInclude() behavior.
 func TestMinGroupShouldInclude(t *testing.T) {
-	group := newGroup("a", 2, minGroup, t)
+	group := newGroup("a", 2, MinGroup, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -75,10 +75,10 @@ func TestMinGroupShouldInclude(t *testing.T) {
 	}
 }
 
-// TestMaxGroupShouldInclude tests maxGroup type groups and
+// TestMaxGroupShouldInclude tests MaxGroup type groups and
 // group.shouldInclude() behavior.
 func TestMaxGroupShouldInclude(t *testing.T) {
-	group := newGroup("a", 2, maxGroup, t)
+	group := newGroup("a", 2, MaxGroup, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -106,7 +106,7 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 // TestSameKeyInserts inserts the same key into group and verifies
 // earlier timestamps are ignored and later timestamps always replace it.
 func TestSameKeyInserts(t *testing.T) {
-	group := newGroup("a", 1, minGroup, t)
+	group := newGroup("a", 1, MinGroup, t)
 	info1 := newInfo("a.a", 1)
 	if !group.AddInfo(info1) {
 		t.Error("could not insert")
@@ -135,7 +135,7 @@ func TestSameKeyInserts(t *testing.T) {
 // TestGroupCompactAfterTTL verifies group compaction after TTL by
 // waiting and verifying a full group can be inserted into again.
 func TestGroupCompactAfterTTL(t *testing.T) {
-	group := newGroup("a", 2, minGroup, t)
+	group := newGroup("a", 2, MinGroup, t)
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
@@ -181,24 +181,24 @@ func insertRandomInfos(group *Group, count int) InfoArray {
 	return infos
 }
 
-// TestGroups100Keys verifies behavior of minGroup and maxGroup with a
+// TestGroups100Keys verifies behavior of MinGroup and MaxGroup with a
 // limit of 100 keys after inserting 1000.
 func TestGroups100Keys(t *testing.T) {
 	// Start by adding random infos to min group.
-	minGroup := newGroup("a", 100, minGroup, t)
-	infos := insertRandomInfos(minGroup, 1000)
+	MinGroup := newGroup("a", 100, MinGroup, t)
+	infos := insertRandomInfos(MinGroup, 1000)
 
 	// Insert same infos into the max group.
-	maxGroup := newGroup("a", 100, maxGroup, t)
+	MaxGroup := newGroup("a", 100, MaxGroup, t)
 	for _, info := range infos {
-		maxGroup.AddInfo(info)
+		MaxGroup.AddInfo(info)
 	}
 	sort.Sort(infos)
 
-	minInfos := minGroup.InfosAsArray()
+	minInfos := MinGroup.InfosAsArray()
 	sort.Sort(minInfos)
 
-	maxInfos := maxGroup.InfosAsArray()
+	maxInfos := MaxGroup.InfosAsArray()
 	sort.Sort(maxInfos)
 
 	for i := 0; i < 100; i++ {
@@ -217,7 +217,7 @@ func TestGroups100Keys(t *testing.T) {
 // information. We don't want each new update with overlap to generate
 // unnecessary delta info.
 func TestSameKeySameTimestamp(t *testing.T) {
-	group := newGroup("a", 2, minGroup, t)
+	group := newGroup("a", 2, MinGroup, t)
 	info1 := newInfo("a.a", 1.0)
 	info2 := newInfo("a.a", 1.0)
 	info2.Timestamp = info1.Timestamp
@@ -238,7 +238,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 	info2.Hops = 2
 
 	// Add info1 first, then info2.
-	group1 := newGroup("a", 1, minGroup, t)
+	group1 := newGroup("a", 1, MinGroup, t)
 	if !group1.AddInfo(info1) || !group1.AddInfo(info2) {
 		t.Error("failed insertions", info1, info2)
 	}
@@ -247,7 +247,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 	}
 
 	// Add info1 first, then info2.
-	group2 := newGroup("a", 1, minGroup, t)
+	group2 := newGroup("a", 1, MinGroup, t)
 	if !group2.AddInfo(info1) || !group2.AddInfo(info2) {
 		t.Error("failed insertions")
 	}
@@ -258,7 +258,7 @@ func TestSameKeyDifferentHops(t *testing.T) {
 
 // TestGroupGetInfo verifies info selection by key.
 func TestGroupGetInfo(t *testing.T) {
-	group := newGroup("a", 10, minGroup, t)
+	group := newGroup("a", 10, MinGroup, t)
 	infos := insertRandomInfos(group, 10)
 	for _, info := range infos {
 		if info != group.GetInfo(info.Key) {
@@ -274,7 +274,7 @@ func TestGroupGetInfo(t *testing.T) {
 
 // TestGroupGetInfoTTL verifies GetInfo with a short TTL.
 func TestGroupGetInfoTTL(t *testing.T) {
-	group := newGroup("a", 10, minGroup, t)
+	group := newGroup("a", 10, MinGroup, t)
 	info := newInfo("a.a", 1)
 	info.TTLStamp = info.Timestamp + int64(time.Nanosecond)
 	group.AddInfo(info)

@@ -25,8 +25,10 @@ import (
 type GroupType int
 
 const (
-	minGroup GroupType = iota
-	maxGroup
+	// MinGroup maintains minimum values for keys matching group prefix.
+	MinGroup GroupType = iota
+	// MaxGroup maintains maximum values for keys matching group prefix.
+	MaxGroup
 )
 
 // Group organizes a collection of Info objects sharing a common key
@@ -34,7 +36,7 @@ const (
 // Groups maintain a limited-size set of Info objects with set
 // inclusion determined by group type. Two types are implemented here:
 //
-// minGroup, maxGroup: maintain only minimum/maximum values added
+// MinGroup, MaxGroup: maintain only minimum/maximum values added
 // to group respectively.
 type Group struct {
 	Prefix      string    // Key prefix for Info items in group
@@ -55,9 +57,9 @@ func (g *Group) shouldInclude(info *Info) bool {
 		return true
 	}
 	switch g.TypeOf {
-	case minGroup:
+	case MinGroup:
 		return info.Val.Less(g.Gatekeeper.Val)
-	case maxGroup:
+	case MaxGroup:
 		return !info.Val.Less(g.Gatekeeper.Val)
 	default:
 		panic(fmt.Errorf("unknown group type %d", g.TypeOf))

@@ -121,15 +121,15 @@ func (is *InfoStore) GetInfo(key string) *Info {
 
 // GetGroupInfos returns an array of info objects from specified group,
 // sorted by value; sort order is dependent on group type
-// (minGroup: ascending, maxGroup: descending).
+// (MinGroup: ascending, MaxGroup: descending).
 // Returns nil if group is not registered.
 func (is *InfoStore) GetGroupInfos(prefix string) InfoArray {
 	if group, ok := is.Groups[prefix]; ok {
 		infos := group.InfosAsArray()
 		switch group.TypeOf {
-		case minGroup:
+		case MinGroup:
 			sort.Sort(infos)
-		case maxGroup:
+		case MaxGroup:
 			sort.Sort(sort.Reverse(infos))
 		}
 		return infos
