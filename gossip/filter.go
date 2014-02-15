@@ -20,7 +20,7 @@ import (
 	"math"
 )
 
-// Filters are counting bloom filters, used to approximate the number
+// Filter is a counting bloom filter, used to approximate the number
 // of differences between InfoStores from different nodes, with
 // minimal network overhead.
 type Filter struct {
@@ -34,15 +34,15 @@ type Filter struct {
 	hasher   *Hasher // Provides independent hashes
 }
 
-// Computes the probability of a false positive.
+// probFalsePositive computes the probability of a false positive.
 func probFalsePositive(N uint32, K uint32, M uint32) float64 {
 	pSet := 1.0 - math.Pow(float64(M-1)/float64(M), float64(N*K))
 	return math.Pow(pSet, float64(K))
 }
 
-// Computes minimum number of slots such that the maximum false
-// positive probability (maxFP) is guaranteed. Returns the number
-// of slots (M) as well as optimal number of hashes (K).
+// computeOptimalValues computes minimum number of slots such that
+// the maximum false positive probability (maxFP) is guaranteed.
+// Returns the number of slots (M) as well as optimal number of hashes (K).
 //
 // Math from: http://en.wikipedia.org/wiki/Bloom_filter
 func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
@@ -52,13 +52,12 @@ func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 	K2 := uint32(math.Floor((float64(M) / float64(N)) * logN2))
 	if probFalsePositive(N, K1, M) < probFalsePositive(N, K2, M) {
 		return M, K1
-	} else {
-		return M, K2
 	}
+	return M, K2
 }
 
-// Creates a new filter with expected number of insertions N,
-// Number of bits per slot B, and expected value of a false
+// NewFilter allocates and returns a new filter with expected number of
+// insertions N, Number of bits per slot B, and expected value of a false
 // positive < maxFP.
 func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	// TODO(spencer): we probably would be well-served using a 3-bit
@@ -78,7 +77,7 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	return &Filter{K, 0, 0, B, M, maxCount, bytes, NewHasher()}, nil
 }
 
-// Increments slot value by the specified amount, bounding at
+// incrementSlot increments slot value by the specified amount, bounding at
 // maximum slot value.
 func (f *Filter) incrementSlot(slot uint32, incr int32) {
 	val := int32(f.getSlot(slot)) + incr
@@ -94,7 +93,7 @@ func (f *Filter) incrementSlot(slot uint32, incr int32) {
 	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | uint32(val)<<byteOffset)
 }
 
-// Returns the slot value.
+// getSlot returns the slot value.
 func (f *Filter) getSlot(slot uint32) uint32 {
 	bitIndex := slot * f.B
 	byteIndex := bitIndex / 8
@@ -102,7 +101,7 @@ func (f *Filter) getSlot(slot uint32) uint32 {
 	return (uint32(f.Data[byteIndex]) & (f.MaxCount << byteOffset)) >> byteOffset
 }
 
-// Adds the key to the filter.
+// AddKey adds the key to the filter.
 func (f *Filter) AddKey(key string) {
 	f.hasher.HashKey(key)
 	for i := uint32(0); i < f.K; i++ {
@@ -112,7 +111,7 @@ func (f *Filter) AddKey(key string) {
 	f.N++
 }
 
-// Checks whether key has been added to the filter. The chance this
+// HasKey checks whether key has been added to the filter. The chance this
 // method returns an incorrect value is given by ProbFalsePositive().
 func (f *Filter) HasKey(key string) bool {
 	f.hasher.HashKey(key)
@@ -125,9 +124,9 @@ func (f *Filter) HasKey(key string) bool {
 	return true
 }
 
-// Removes a key by first verifying it's likely been seen and then
-// decrementing each of the slots it hashes to. Returns true if
-// the key was "removed"; false otherwise.
+// RemoveKey removes a key by first verifying it's likely been seen and then
+// decrementing each of the slots it hashes to. Returns true if the key was
+// "removed"; false otherwise.
 func (f *Filter) RemoveKey(key string) bool {
 	if f.HasKey(key) {
 		f.hasher.HashKey(key)
@@ -141,17 +140,17 @@ func (f *Filter) RemoveKey(key string) bool {
 	return false
 }
 
-// Returns the probability the filter returns a false positive.
+// ProbFalsePositive returns the probability the filter returns a false
+// positive.
 func (f *Filter) ProbFalsePositive() float64 {
 	if f.R != 0 {
 		return probFalsePositive(f.ApproximateInsertions(), f.K, f.M)
-	} else {
-		return probFalsePositive(f.N, f.K, f.M)
 	}
+	return probFalsePositive(f.N, f.K, f.M)
 }
 
-// Determines the approximate number of items inserted into the
-// Filter after removals.
+// ApproximateInsertions determines the approximate number of items
+// inserted into the Filter after removals.
 func (f *Filter) ApproximateInsertions() uint32 {
 	count := uint32(0)
 	for i := uint32(0); i < f.M; i++ {

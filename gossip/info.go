@@ -17,12 +17,16 @@ package gossip
 
 import "strings"
 
+// Value is satisfied by objects used within an InfoArray
+// to support sorting.
 type Value interface {
 	Less(b Value) bool
 }
 
+// Float64Value is a float64 that satisfies the Value interface.
 type Float64Value float64
 
+// Less returns true if the receiver is less than the given Value.
 func (a Float64Value) Less(b Value) bool {
 	return a < b.(Float64Value)
 }
@@ -39,6 +43,8 @@ type Info struct {
 	Hops      uint32 // Number of hops from originator
 }
 
+// InfoPrefix returns the text preceding the last period within
+// the given key.
 func InfoPrefix(key string) string {
 	if index := strings.LastIndex(key, "."); index != -1 {
 		return key[:index]
@@ -46,7 +52,10 @@ func InfoPrefix(key string) string {
 	return ""
 }
 
+// InfoMap is a map of keys to Info object pointers.
 type InfoMap map[string]*Info
+
+// InfoArray is a slice of Info object pointers.
 type InfoArray []*Info
 
 // Implement sort.Interface for InfoArray.
