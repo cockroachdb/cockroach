@@ -3,6 +3,6 @@
 set -e -x
 
 go vet ./...
-gofmt -w .
+goimports -w .
 golint .
 go test ./...
