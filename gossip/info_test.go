@@ -31,19 +31,19 @@ func TestPrefix(t *testing.T) {
 	}
 
 	for _, pi := range prefixes {
-		if p := InfoPrefix(pi.Key); p != pi.Prefix {
-			t.Errorf("InfoPrefix(%s) = %s != %s", pi.Key, p, pi.Prefix)
+		if p := infoPrefix(pi.Key); p != pi.Prefix {
+			t.Errorf("infoPrefix(%s) = %s != %s", pi.Key, p, pi.Prefix)
 		}
 	}
 }
 
 func TestSort(t *testing.T) {
 	infos := InfoArray{
-		{"a", Float64Value(3.0), 0, 0, 0, "", 0},
-		{"b", Float64Value(1.0), 0, 0, 0, "", 0},
-		{"c", Float64Value(2.1), 0, 0, 0, "", 0},
-		{"d", Float64Value(2.0), 0, 0, 0, "", 0},
-		{"e", Float64Value(-1.0), 0, 0, 0, "", 0},
+		{"a", Float64Value(3.0), 0, 0, 0, 0},
+		{"b", Float64Value(1.0), 0, 0, 0, 0},
+		{"c", Float64Value(2.1), 0, 0, 0, 0},
+		{"d", Float64Value(2.0), 0, 0, 0, 0},
+		{"e", Float64Value(-1.0), 0, 0, 0, 0},
 	}
 
 	// Verify forward sort.
