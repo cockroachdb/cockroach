@@ -4,12 +4,19 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Contributing
 
+We use [GerritHub](http://gerrithub.io/) for code reviews. GerritHub uses your
+GitHub credentials, just click on the "First Time Sign In" button. Note that
+the Gerrit development model is a bit different than the GitHub pull request
+model. Small changes can be easily developed on `master`. When a change is
+uploaded to GerritHub (via `git review`), it is not merged with master until
+the review is complete and submitted.
+
 + Make sure your [Go environment is set up](http://golang.org/doc/code.html).
-+ [Fork cockroach](https://github.com/spencerkimball/cockroach/fork).
-+ Check out your version into `$GOPATH/src/`.
-+ Within `$GOPATH/src/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
++ Retrieve the code: `go get github.com/spencerkimball/cockroach`
++ Within `$GOPATH/src/github.com/spencerkimball/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
 + Hack away...
-+ Send a pull request (preferablly with all commits squashed into one).
++ Commit your changes locally using `git add` and `git commit`.
++ Upload your change for review using `git review'.
 
 ## Design
 
