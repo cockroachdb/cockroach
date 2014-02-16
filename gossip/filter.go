@@ -31,7 +31,7 @@ type Filter struct {
 	M        uint32  // Number of slots in filter
 	MaxCount uint32  // Maximum count for a slot
 	Data     []byte  // Slot data
-	hasher   *Hasher // Provides independent hashes
+	hasher   *hasher // Provides independent hashes
 }
 
 // probFalsePositive computes the probability of a false positive.
@@ -83,7 +83,7 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 		M:        M,
 		MaxCount: maxCount,
 		Data:     bytes,
-		hasher:   NewHasher(),
+		hasher:   newHasher(),
 	}, nil
 }
 
@@ -113,9 +113,9 @@ func (f *Filter) getSlot(slot uint32) uint32 {
 
 // AddKey adds the key to the filter.
 func (f *Filter) AddKey(key string) {
-	f.hasher.HashKey(key)
+	f.hasher.hashKey(key)
 	for i := uint32(0); i < f.K; i++ {
-		slot := f.hasher.GetHash(i) % f.M
+		slot := f.hasher.getHash(i) % f.M
 		f.incrementSlot(slot, 1)
 	}
 	f.N++
@@ -124,9 +124,9 @@ func (f *Filter) AddKey(key string) {
 // HasKey checks whether key has been added to the filter. The chance this
 // method returns an incorrect value is given by ProbFalsePositive().
 func (f *Filter) HasKey(key string) bool {
-	f.hasher.HashKey(key)
+	f.hasher.hashKey(key)
 	for i := uint32(0); i < f.K; i++ {
-		slot := f.hasher.GetHash(i) % f.M
+		slot := f.hasher.getHash(i) % f.M
 		if f.getSlot(slot) == 0 {
 			return false
 		}
@@ -139,9 +139,9 @@ func (f *Filter) HasKey(key string) bool {
 // "removed"; false otherwise.
 func (f *Filter) RemoveKey(key string) bool {
 	if f.HasKey(key) {
-		f.hasher.HashKey(key)
+		f.hasher.hashKey(key)
 		for i := uint32(0); i < f.K; i++ {
-			slot := f.hasher.GetHash(i) % f.M
+			slot := f.hasher.getHash(i) % f.M
 			f.incrementSlot(slot, -1)
 		}
 		f.R++

@@ -30,20 +30,20 @@ import (
 // H[i](x) = hash[0:4] + i*hash[4:8]
 //
 // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/rsa.pdf
-type Hasher struct {
+type hasher struct {
 	mmh3   hash.Hash64
 	hashed bool   // true if we've hashed a key
 	h1     uint32 // first 4 bytes of key hash
 	h2     uint32 // last 4 bytes of key hash
 }
 
-// NewHasher allocates and return a new Hasher.
-func NewHasher() *Hasher {
-	return &Hasher{mmh3: murmur3.New64()}
+// newHasher allocates and return a new Hasher.
+func newHasher() *hasher {
+	return &hasher{mmh3: murmur3.New64()}
 }
 
 // HashKey writes the given key string to the hasher.
-func (h *Hasher) HashKey(key string) {
+func (h *hasher) hashKey(key string) {
 	h.mmh3.Reset() // clear current hash state
 	if _, err := io.WriteString(h.mmh3, key); err != nil {
 		panic(fmt.Sprintf("unable to write string to hasher: %s", key))
@@ -55,9 +55,9 @@ func (h *Hasher) HashKey(key string) {
 }
 
 // GetHash returns the hash value at the given offset.
-func (h *Hasher) GetHash(i uint32) uint32 {
+func (h *hasher) getHash(i uint32) uint32 {
 	if !h.hashed {
-		panic("hasher must be initialized first with a call to HashKey(key)")
+		panic("hasher must be initialized first with a call to hashKey(key)")
 	}
 	return h.h1 + i*h.h2
 }

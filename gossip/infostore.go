@@ -142,7 +142,7 @@ func (is *InfoStore) GetGroupInfos(prefix string) InfoArray {
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *InfoStore) RegisterGroup(group *Group) error {
 	if _, ok := is.Groups[group.Prefix]; ok {
-		return fmt.Errorf("group \"%s\" already in group map", group.Prefix)
+		return fmt.Errorf("group %q already in group map", group.Prefix)
 	}
 	is.Groups[group.Prefix] = group
 	return nil
