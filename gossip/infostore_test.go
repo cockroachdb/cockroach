@@ -413,19 +413,19 @@ func TestBuildFilter(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		if !f.HasKey(fmt.Sprintf("a.%d", i)) {
-			t.Error("filter should contain key a.", i)
+		if !f.hasKey(fmt.Sprintf("a.%d", i)) {
+			t.Errorf("filter should contain key a.%d", i)
 		}
-		if !f.HasKey(fmt.Sprintf("b.%d", i)) {
-			t.Error("filter should contain key b.", i)
+		if !f.hasKey(fmt.Sprintf("b.%d", i)) {
+			t.Errorf("filter should contain key b.%d", i)
 		}
-		if !f.HasKey(fmt.Sprintf("c.%d", i)) {
-			t.Error("filter should contain key c.", i)
+		if !f.hasKey(fmt.Sprintf("c.%d", i)) {
+			t.Errorf("filter should contain key c.%d", i)
 		}
 	}
 
 	// Verify non-keys are not present.
-	if f.HasKey("d.1") || f.HasKey("d.2") {
+	if f.hasKey("d.1") || f.hasKey("d.2") {
 		t.Error("filter should not contain d.1 or d.2")
 	}
 }
@@ -440,10 +440,10 @@ func TestFilterMaxHops(t *testing.T) {
 		t.Fatal("unable to build filter:", err)
 	}
 
-	if !f.HasKey("a.1") || !f.HasKey("b.1") {
+	if !f.hasKey("a.1") || !f.hasKey("b.1") {
 		t.Error("filter should have low-hops keys for a and b")
 	}
-	if f.HasKey("a.2") || f.HasKey("b.2") {
+	if f.hasKey("a.2") || f.hasKey("b.2") {
 		t.Error("filter shouldn't have high-hops keys for a and b")
 	}
 }
@@ -476,7 +476,7 @@ func TestDiff(t *testing.T) {
 	}
 
 	// An empty filter returns 0 diff.
-	f, err = NewFilter(10, 2, 0.01)
+	f, err = newFilter(10, 2, 0.01)
 	if err != nil {
 		t.Fatal("could not create filter:", err)
 	}
@@ -487,12 +487,12 @@ func TestDiff(t *testing.T) {
 
 	// Create a filter with just the non-group items of the infostore
 	// and diff: expect empty as infostore contains everything.
-	f, err = NewFilter(10, 2, 0.01)
+	f, err = newFilter(10, 2, 0.01)
 	if err != nil {
 		t.Fatal("could not create filter:", err)
 	}
 	for _, info := range is.Infos {
-		f.AddKey(info.Key)
+		f.addKey(info.Key)
 	}
 	diff, err = is.diffFilter(f, 1)
 	if diff != 0 || err != nil {

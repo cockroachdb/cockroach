@@ -20,10 +20,10 @@ import (
 	"math"
 )
 
-// Filter is a counting bloom filter, used to approximate the number
+// filter is a counting bloom filter, used to approximate the number
 // of differences between InfoStores from different nodes, with
 // minimal network overhead.
-type Filter struct {
+type filter struct {
 	K        uint32  // Number of hashes
 	N        uint32  // Number of insertions
 	R        uint32  // Number of putative removals
@@ -56,19 +56,15 @@ func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 	return M, K2
 }
 
-// NewFilter allocates and returns a new filter with expected number of
+// newFilter allocates and returns a new filter with expected number of
 // insertions N, Number of bits per slot B, and expected value of a false
-// positive < maxFP.
-func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
+// positive < maxFP. Number of bits must be 0 < B <= 8.
+func newFilter(N uint32, B uint32, maxFP float64) (*filter, error) {
 	if N == 0 {
 		return nil, fmt.Errorf("number of insertions (N) must be > 0")
 	}
-	// TODO(spencer): we probably would be well-served using a 3-bit
-	// filter, so we should relax the following constraint and get a
-	// little bit fancier with the bit arithmetic to handle cross-byte
-	// slot values.
-	if B != 1 && B != 2 && B != 4 && B != 8 {
-		return nil, fmt.Errorf("number of bits (%d) must be a divisor of 8", B)
+	if B == 0 || B > 8 {
+		return nil, fmt.Errorf("number of bits (%d) must be 0 < B <= 8", B)
 	}
 	if maxFP <= 0 || maxFP >= 1 {
 		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1: %f", maxFP)
@@ -77,7 +73,7 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	maxCount := uint32((1 << B) - 1)
 	numBytes := (M*B + 7) / 8
 	bytes := make([]byte, numBytes, numBytes)
-	return &Filter{
+	return &filter{
 		K:        K,
 		B:        B,
 		M:        M,
@@ -87,32 +83,60 @@ func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
 	}, nil
 }
 
+// visitSlotBytes visits each byte (either one or two) that make up
+// the bits in the specified slot. "fn" is invoked on each byte in
+// turn, with values supplied for byteIndex, byteOffset, bitMask,
+// and valBitOffset.
+func (f *filter) visitSlotBytes(slot uint32, fn func(uint32, uint32, uint32, uint32)) {
+	bitIndex := slot * f.B
+	byteIndex := bitIndex / 8
+	byteOffset := bitIndex % 8
+
+	// Things are tricky here because we deal with crossing byte boundaries.
+	lastBit := byteOffset + f.B
+	valBitOffset := uint32(0)
+	for bit := byteOffset; bit < lastBit; {
+		b := lastBit - bit
+		if b > 8-byteOffset {
+			b = 8 - byteOffset
+		}
+		bitMask := uint32((1 << b) - 1)
+
+		fn(byteIndex, byteOffset, bitMask, valBitOffset) // call supplied method
+
+		bit += b
+		valBitOffset += b
+		byteIndex++
+		byteOffset = (byteOffset + b) % 8
+	}
+}
+
 // incrementSlot increments slot value by the specified amount, bounding at
 // maximum slot value.
-func (f *Filter) incrementSlot(slot uint32, incr int32) {
+func (f *filter) incrementSlot(slot uint32, incr int32) {
 	val := int32(f.getSlot(slot)) + incr
 	if val > int32(f.MaxCount) {
 		val = int32(f.MaxCount)
 	} else if val < 0 {
 		val = 0
 	}
-	bitIndex := slot * f.B
-	byteIndex := bitIndex / 8
-	byteOffset := bitIndex % 8
-	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) & ^(f.MaxCount << byteOffset))
-	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | uint32(val)<<byteOffset)
+	f.visitSlotBytes(slot, func(byteIndex uint32, byteOffset uint32, bitMask uint32, valBitOffset uint32) {
+		f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) & ^(bitMask << byteOffset))
+		f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | (uint32(val>>valBitOffset)&bitMask)<<byteOffset)
+	})
 }
 
 // getSlot returns the slot value.
-func (f *Filter) getSlot(slot uint32) uint32 {
-	bitIndex := slot * f.B
-	byteIndex := bitIndex / 8
-	byteOffset := bitIndex % 8
-	return (uint32(f.Data[byteIndex]) & (f.MaxCount << byteOffset)) >> byteOffset
+func (f *filter) getSlot(slot uint32) uint32 {
+	val := uint32(0)
+	f.visitSlotBytes(slot, func(byteIndex uint32, byteOffset uint32, bitMask uint32, valBitOffset uint32) {
+		val |= ((uint32(f.Data[byteIndex]) & (bitMask << byteOffset)) >> byteOffset) << valBitOffset
+	})
+	return val
 }
 
-// AddKey adds the key to the filter.
-func (f *Filter) AddKey(key string) {
+// addKey adds the key to the filter.
+func (f *filter) addKey(key string) {
 	f.hasher.hashKey(key)
 	for i := uint32(0); i < f.K; i++ {
 		slot := f.hasher.getHash(i) % f.M
@@ -121,9 +145,9 @@ func (f *Filter) AddKey(key string) {
 	f.N++
 }
 
-// HasKey checks whether key has been added to the filter. The chance this
+// hasKey checks whether key has been added to the filter. The chance this
 // method returns an incorrect value is given by ProbFalsePositive().
-func (f *Filter) HasKey(key string) bool {
+func (f *filter) hasKey(key string) bool {
 	f.hasher.hashKey(key)
 	for i := uint32(0); i < f.K; i++ {
 		slot := f.hasher.getHash(i) % f.M
@@ -134,11 +158,11 @@ func (f *Filter) HasKey(key string) bool {
 	return true
 }
 
-// RemoveKey removes a key by first verifying it's likely been seen and then
+// removeKey removes a key by first verifying it's likely been seen and then
 // decrementing each of the slots it hashes to. Returns true if the key was
 // "removed"; false otherwise.
-func (f *Filter) RemoveKey(key string) bool {
-	if f.HasKey(key) {
+func (f *filter) removeKey(key string) bool {
+	if f.hasKey(key) {
 		f.hasher.hashKey(key)
 		for i := uint32(0); i < f.K; i++ {
 			slot := f.hasher.getHash(i) % f.M
@@ -150,18 +174,18 @@ func (f *Filter) RemoveKey(key string) bool {
 	return false
 }
 
-// ProbFalsePositive returns the probability the filter returns a false
+// probFalsePositive returns the probability the filter returns a false
 // positive.
-func (f *Filter) ProbFalsePositive() float64 {
+func (f *filter) probFalsePositive() float64 {
 	if f.R != 0 {
-		return probFalsePositive(f.ApproximateInsertions(), f.K, f.M)
+		return probFalsePositive(f.approximateInsertions(), f.K, f.M)
 	}
 	return probFalsePositive(f.N, f.K, f.M)
 }
 
-// ApproximateInsertions determines the approximate number of items
-// inserted into the Filter after removals.
-func (f *Filter) ApproximateInsertions() uint32 {
+// approximateInsertions determines the approximate number of items
+// inserted into the filter after removals.
+func (f *filter) approximateInsertions() uint32 {
 	count := uint32(0)
 	for i := uint32(0); i < f.M; i++ {
 		count += f.getSlot(i)
