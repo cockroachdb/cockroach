@@ -71,14 +71,14 @@ func newFilter(N uint32, B uint32, maxFP float64) (*filter, error) {
 		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1: %f", maxFP)
 	}
 	M, K := computeOptimalValues(N, maxFP)
-	MaxCount := uint32((1 << B) - 1)
+	maxCount := uint32((1 << B) - 1)
 	numBytes := (M*B + 7) / 8
 	bytes := make([]byte, numBytes, numBytes)
 	return &filter{
 		K:        K,
 		B:        B,
 		M:        M,
-		MaxCount: MaxCount,
+		MaxCount: maxCount,
 		Data:     bytes,
 		hasher:   newHasher(),
 	}, nil
