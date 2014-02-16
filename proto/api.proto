@@ -1,7 +1,7 @@
 // Supplied with every request.
 message RequestHeader {
   // Specify snapshot_timestamp for snapshot reads.
-  // In microseconds since the epoch.
+  // In nanoseconds since the epoch.
   // This value cannot be specified with tx_id.
   optional uint64 snapshot_timestamp = 1;
   // Set if a transaction is underway. Specify as ‘0’
@@ -36,9 +36,9 @@ message ResponseHeader {
 // based on timestamp.
 message Value {
   optional string value = 1;
-  // Timestamp of value in microseconds since epoch.
+  // Timestamp of value in nanoeconds since epoch.
   optional uint64 timestamp = 2;
-  // Expiration in microseconds.
+  // Expiration in nanoseconds.
   optional uint64 expiration = 3;
 }
 
@@ -174,7 +174,7 @@ message AccountingRequest {
   }
   optional AccountingType type = 2;
   optional string key = 3;
-  optional int64 timestamp = 4;  // floor(walltime, HOUR)
+  optional uint64 timestamp = 4;  // floor(walltime, HOUR)
   repeated int64 count = 5; // one per minute
 }
 

@@ -741,7 +741,7 @@ type AccountingRequest struct {
 	Header           *RequestHeader                    `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
 	Type             *AccountingRequest_AccountingType `protobuf:"varint,2,opt,name=type,enum=AccountingRequest_AccountingType" json:"type,omitempty"`
 	Key              *string                           `protobuf:"bytes,3,opt,name=key" json:"key,omitempty"`
-	Timestamp        *int64                            `protobuf:"varint,4,opt,name=timestamp" json:"timestamp,omitempty"`
+	Timestamp        *uint64                           `protobuf:"varint,4,opt,name=timestamp" json:"timestamp,omitempty"`
 	Count            []int64                           `protobuf:"varint,5,rep,name=count" json:"count,omitempty"`
 	XXX_unrecognized []byte                            `json:"-"`
 }
@@ -771,7 +771,7 @@ func (m *AccountingRequest) GetKey() string {
 	return ""
 }
 
-func (m *AccountingRequest) GetTimestamp() int64 {
+func (m *AccountingRequest) GetTimestamp() uint64 {
 	if m != nil && m.Timestamp != nil {
 		return *m.Timestamp
 	}
