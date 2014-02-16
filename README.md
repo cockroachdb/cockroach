@@ -1,7 +1,17 @@
-Cockroach
-=========
+# Cockroach
 
 A Scalable, Geo-Replicated, Transactional Datastore
+
+## Contributing
+
++ Make sure your [Go environment is set up](http://golang.org/doc/code.html).
++ [Fork cockroach](https://github.com/spencerkimball/cockroach/fork).
++ Check out your version into `$GOPATH/src/`.
++ Within `$GOPATH/src/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
++ Hack away...
++ Send a pull request (preferablly with all commits squashed into one).
+
+## Design
 
 Cockroach is a distributed key:value datastore which supports ACID
 transactional semantics and versioned values as first-class
