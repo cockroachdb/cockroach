@@ -4,5 +4,5 @@ set -e -x
 
 go vet ./...
 goimports -w .
-find . -path ./proto -prune -o -name '*.go' -print | golint
+find . -path ./proto -prune -o -name '*.go' -print | xargs golint
 go test ./...
