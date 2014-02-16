@@ -40,7 +40,7 @@ type InfoStore struct {
 // Parameters to tune bloom filters returned by the store.
 const (
 	// filterBits is the default number of bits per byte slot.
-	filterBits = 4
+	filterBits = 3
 	// filterMaxFP is the default upper bound for a false positive's value.
 	filterMaxFP = 0.025
 )
@@ -291,15 +291,15 @@ func (is *InfoStore) delta(seq int64) (*InfoStore, error) {
 // buildFilter builds a bloom filter containing the keys held in the
 // store which arrived within the specified number of maximum hops.
 // Filters are passed to peer nodes in order to evaluate gossip candidates.
-func (is *InfoStore) buildFilter(maxHops uint32) (*Filter, error) {
-	f, err := NewFilter(is.infoCount(), filterBits, filterMaxFP)
+func (is *InfoStore) buildFilter(maxHops uint32) (*filter, error) {
+	f, err := newFilter(is.infoCount(), filterBits, filterMaxFP)
 	if err != nil {
 		return nil, err
 	}
 
 	err = is.visitInfos(nil, func(info *Info) error {
 		if info.Hops <= maxHops {
-			f.AddKey(info.Key)
+			f.addKey(info.Key)
 		}
 		return nil
 	})
@@ -311,12 +311,12 @@ func (is *InfoStore) buildFilter(maxHops uint32) (*Filter, error) {
 // infostore. Each key from the infostore is "removed" from the
 // filter, to yield a filter with remains approximately equal to the
 // keys contained in the filter but not present in the infostore.
-func (is *InfoStore) diffFilter(f *Filter, maxHops uint32) (uint32, error) {
+func (is *InfoStore) diffFilter(f *filter, maxHops uint32) (uint32, error) {
 	err := is.visitInfos(nil, func(info *Info) error {
 		if info.Hops <= maxHops {
-			f.RemoveKey(info.Key)
+			f.removeKey(info.Key)
 		}
 		return nil
 	})
-	return f.ApproximateInsertions(), err
+	return f.approximateInsertions(), err
 }
