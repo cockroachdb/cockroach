@@ -22,14 +22,14 @@ import (
 // TestHashing verifies similar keys hash to different values for an
 // arbitrary number of hash functions.
 func TestHashing(t *testing.T) {
-	h := NewHasher()
+	h := newHasher()
 	keys := []string{"test1", "test2", "1", "2"}
 
 	seen := make(map[uint32]bool) // set of all hash values seen
 	for _, key := range keys {
-		h.HashKey(key)
+		h.hashKey(key)
 		for i := uint32(0); i < uint32(10); i++ {
-			val := h.GetHash(i)
+			val := h.getHash(i)
 			if _, ok := seen[val]; ok {
 				t.Error("already hashed to value", val)
 			}
