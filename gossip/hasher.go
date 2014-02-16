@@ -31,13 +31,10 @@ import (
 //
 // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/rsa.pdf
 type hasher struct {
-	mmh3 hash.Hash64
-	// hashed is true if a key has been hashed.
-	hashed bool
-	// h1 is the first 4 bytes of the key hash.
-	h1 uint32
-	// h2 is the last 4 bytes of the key hash.
-	h2 uint32
+	mmh3   hash.Hash64
+	hashed bool   // true if we've hashed a key
+	h1     uint32 // first 4 bytes of key hash
+	h2     uint32 // last 4 bytes of key hash
 }
 
 // newHasher allocates and returns a new hasher.

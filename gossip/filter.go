@@ -24,22 +24,14 @@ import (
 // of differences between InfoStores from different nodes, with
 // minimal network overhead.
 type filter struct {
-	// k is the number of hashes.
-	k uint32
-	// n is the number of insertions.
-	n uint32
-	// r is the number of putative removals.
-	r uint32
-	// b is the number of bits in each slot.
-	b uint32
-	// m is the number of slots in the filter.
-	m uint32
-	// maxCount is the maximum count for a slot.
-	maxCount uint32
-	// data contains the slot data.
-	data []byte
-	// hasher provides independent hashes.
-	hasher *hasher
+	K        uint32  // Number of hashes
+	N        uint32  // Number of insertions
+	R        uint32  // Number of putative removals
+	B        uint32  // Number of bits in each slot
+	M        uint32  // Number of slots in filter
+	MaxCount uint32  // Maximum count for a slot
+	Data     []byte  // Slot data
+	hasher   *hasher // Provides independent hashes
 }
 
 // probFalsePositive computes the probability of a false positive.
@@ -79,15 +71,15 @@ func newFilter(N uint32, B uint32, maxFP float64) (*filter, error) {
 		return nil, fmt.Errorf("max false positives must be 0 <= maxFP < 1: %f", maxFP)
 	}
 	M, K := computeOptimalValues(N, maxFP)
-	maxCount := uint32((1 << B) - 1)
+	MaxCount := uint32((1 << B) - 1)
 	numBytes := (M*B + 7) / 8
 	bytes := make([]byte, numBytes, numBytes)
 	return &filter{
-		k:        K,
-		b:        B,
-		m:        M,
-		maxCount: maxCount,
-		data:     bytes,
+		K:        K,
+		B:        B,
+		M:        M,
+		MaxCount: MaxCount,
+		Data:     bytes,
 		hasher:   newHasher(),
 	}, nil
 }
@@ -96,42 +88,42 @@ func newFilter(N uint32, B uint32, maxFP float64) (*filter, error) {
 // maximum slot value.
 func (f *filter) incrementSlot(slot uint32, incr int32) {
 	val := int32(f.getSlot(slot)) + incr
-	if val > int32(f.maxCount) {
-		val = int32(f.maxCount)
+	if val > int32(f.MaxCount) {
+		val = int32(f.MaxCount)
 	} else if val < 0 {
 		val = 0
 	}
-	bitIndex := slot * f.b
+	bitIndex := slot * f.B
 	byteIndex := bitIndex / 8
 	byteOffset := bitIndex % 8
-	f.data[byteIndex] = byte(uint32(f.data[byteIndex]) & ^(f.maxCount << byteOffset))
-	f.data[byteIndex] = byte(uint32(f.data[byteIndex]) | uint32(val)<<byteOffset)
+	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) & ^(f.MaxCount << byteOffset))
+	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | uint32(val)<<byteOffset)
 }
 
 // getSlot returns the slot value.
 func (f *filter) getSlot(slot uint32) uint32 {
-	bitIndex := slot * f.b
+	bitIndex := slot * f.B
 	byteIndex := bitIndex / 8
 	byteOffset := bitIndex % 8
-	return (uint32(f.data[byteIndex]) & (f.maxCount << byteOffset)) >> byteOffset
+	return (uint32(f.Data[byteIndex]) & (f.MaxCount << byteOffset)) >> byteOffset
 }
 
 // addKey adds the key to the filter.
 func (f *filter) addKey(key string) {
 	f.hasher.hashKey(key)
-	for i := uint32(0); i < f.k; i++ {
-		slot := f.hasher.getHash(i) % f.m
+	for i := uint32(0); i < f.K; i++ {
+		slot := f.hasher.getHash(i) % f.M
 		f.incrementSlot(slot, 1)
 	}
-	f.n++
+	f.N++
 }
 
 // hasKey checks whether key has been added to the filter. The chance this
 // method returns an incorrect value is given by probFalsePositive().
 func (f *filter) hasKey(key string) bool {
 	f.hasher.hashKey(key)
-	for i := uint32(0); i < f.k; i++ {
-		slot := f.hasher.getHash(i) % f.m
+	for i := uint32(0); i < f.K; i++ {
+		slot := f.hasher.getHash(i) % f.M
 		if f.getSlot(slot) == 0 {
 			return false
 		}
@@ -145,11 +137,11 @@ func (f *filter) hasKey(key string) bool {
 func (f *filter) removeKey(key string) bool {
 	if f.hasKey(key) {
 		f.hasher.hashKey(key)
-		for i := uint32(0); i < f.k; i++ {
-			slot := f.hasher.getHash(i) % f.m
+		for i := uint32(0); i < f.K; i++ {
+			slot := f.hasher.getHash(i) % f.M
 			f.incrementSlot(slot, -1)
 		}
-		f.r++
+		f.R++
 		return true
 	}
 	return false
@@ -158,18 +150,18 @@ func (f *filter) removeKey(key string) bool {
 // probFalsePositive returns the probability the filter returns a false
 // positive.
 func (f *filter) probFalsePositive() float64 {
-	if f.r != 0 {
-		return probFalsePositive(f.approximateInsertions(), f.k, f.m)
+	if f.R != 0 {
+		return probFalsePositive(f.approximateInsertions(), f.K, f.M)
 	}
-	return probFalsePositive(f.n, f.k, f.m)
+	return probFalsePositive(f.N, f.K, f.M)
 }
 
 // approximateInsertions determines the approximate number of items
 // inserted into the Filter after removals.
 func (f *filter) approximateInsertions() uint32 {
 	count := uint32(0)
-	for i := uint32(0); i < f.m; i++ {
+	for i := uint32(0); i < f.M; i++ {
 		count += f.getSlot(i)
 	}
-	return count / f.k
+	return count / f.K
 }

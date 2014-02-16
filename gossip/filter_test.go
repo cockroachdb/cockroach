@@ -64,10 +64,10 @@ func TestnewFilter(t *testing.T) {
 		t.Error("unable to create a filter")
 	}
 	M, K := computeOptimalValues(1000, 0.01)
-	if M != f.m || K != f.k {
+	if M != f.M || K != f.K {
 		t.Error("optimal values not used", M, K, f)
 	}
-	if len(f.data) != int(M) {
+	if len(f.Data) != int(M) {
 		t.Error("slots data should require M bytes")
 	}
 
@@ -80,11 +80,11 @@ func TestnewFilter(t *testing.T) {
 		}
 		slotsPerByte := 8 / B
 		expSize := int((M + slotsPerByte - 1) / slotsPerByte)
-		if len(f.data) != expSize {
-			t.Error("slot sizes don't match", len(f.data), expSize)
+		if len(f.Data) != expSize {
+			t.Error("slot sizes don't match", len(f.Data), expSize)
 		}
-		if f.maxCount != 1<<B-1 {
-			t.Error("max count incorrect", f.maxCount, 1<<B-1)
+		if f.MaxCount != 1<<B-1 {
+			t.Error("max count incorrect", f.MaxCount, 1<<B-1)
 		}
 	}
 }
@@ -96,8 +96,8 @@ func TestSlots(t *testing.T) {
 		t.Error("unable to create a filter")
 	}
 	// Verify all slots empty.
-	for i := 0; i < len(f.data); i++ {
-		if f.data[i] != 0 {
+	for i := 0; i < len(f.Data); i++ {
+		if f.Data[i] != 0 {
 			t.Errorf("slot %d not empty", i)
 		}
 	}
@@ -107,17 +107,17 @@ func TestSlots(t *testing.T) {
 		t.Errorf("slot value %d != 1", f.getSlot(0))
 	}
 	// Increment past max count.
-	f.incrementSlot(0, int32(f.maxCount))
-	if f.getSlot(0) != f.maxCount {
-		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.maxCount)
+	f.incrementSlot(0, int32(f.MaxCount))
+	if f.getSlot(0) != f.MaxCount {
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount)
 	}
 	// Decrement once.
 	f.incrementSlot(0, -1)
-	if f.getSlot(0) != f.maxCount-1 {
-		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.maxCount-1)
+	if f.getSlot(0) != f.MaxCount-1 {
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount-1)
 	}
 	// Decrement past 0.
-	f.incrementSlot(0, -int32(f.maxCount))
+	f.incrementSlot(0, -int32(f.MaxCount))
 	if f.getSlot(0) != 0 {
 		t.Errorf("slot value should be max %d != 0", f.getSlot(0))
 	}
