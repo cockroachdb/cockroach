@@ -25,8 +25,10 @@ import (
 type GroupType int
 
 const (
-	minGroup GroupType = iota
-	maxGroup
+	// MinGroup maintains minimum values for keys matching group prefix.
+	MinGroup GroupType = iota
+	// MaxGroup maintains maximum values for keys matching group prefix.
+	MaxGroup
 )
 
 // Group organizes a collection of Info objects sharing a common key
@@ -34,7 +36,7 @@ const (
 // Groups maintain a limited-size set of Info objects with set
 // inclusion determined by group type. Two types are implemented here:
 //
-// minGroup, maxGroup: maintain only minimum/maximum values added
+// MinGroup, MaxGroup: maintain only minimum/maximum values added
 // to group respectively.
 type Group struct {
 	Prefix      string    // Key prefix for Info items in group
@@ -55,9 +57,9 @@ func (g *Group) shouldInclude(info *Info) bool {
 		return true
 	}
 	switch g.TypeOf {
-	case minGroup:
+	case MinGroup:
 		return info.Val.Less(g.Gatekeeper.Val)
-	case maxGroup:
+	case MaxGroup:
 		return !info.Val.Less(g.Gatekeeper.Val)
 	default:
 		panic(fmt.Errorf("unknown group type %d", g.TypeOf))
@@ -204,22 +206,4 @@ func (g *Group) AddInfo(info *Info) bool {
 	}
 
 	return false
-}
-
-// Delta returns a delta of the group since the specified sequence number.
-// Returns an error if the delta is empty.
-func (g *Group) Delta(seq int64) (*Group, error) {
-	delta, err := NewGroup(g.Prefix, g.Limit, g.TypeOf)
-	if err != nil {
-		return nil, err
-	}
-	for _, info := range g.Infos {
-		if info.Seq > seq {
-			delta.addInternal(info)
-		}
-	}
-	if len(delta.Infos) == 0 {
-		return nil, fmt.Errorf("no deltas to group since sequence number %d", seq)
-	}
-	return delta, nil
 }

@@ -60,6 +60,9 @@ func computeOptimalValues(N uint32, maxFP float64) (uint32, uint32) {
 // insertions N, Number of bits per slot B, and expected value of a false
 // positive < maxFP.
 func NewFilter(N uint32, B uint32, maxFP float64) (*Filter, error) {
+	if N == 0 {
+		return nil, fmt.Errorf("number of insertions (N) must be > 0")
+	}
 	// TODO(spencer): we probably would be well-served using a 3-bit
 	// filter, so we should relax the following constraint and get a
 	// little bit fancier with the bit arithmetic to handle cross-byte

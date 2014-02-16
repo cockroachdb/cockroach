@@ -53,6 +53,9 @@ func TestOptimalValues(t *testing.T) {
 
 // TestNewFilter verifies bad inputs, optimal values, size of slots data.
 func TestNewFilter(t *testing.T) {
+	if _, err := NewFilter(0, 3, 0.10); err == nil {
+		t.Error("NewFilter should not accept N == 0")
+	}
 	if _, err := NewFilter(1, 3, 0.10); err == nil {
 		t.Error("NewFilter should not accept bits B which are non-divisor of 8")
 	}
