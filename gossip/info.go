@@ -38,22 +38,21 @@ type Info struct {
 	Val       Value  // Info value
 	Timestamp int64  // Wall time at origination (Unix-nanos)
 	TTLStamp  int64  // Wall time before info is discarded (Unix-nanos)
-	Seq       int64  // Sequence number for incremental updates
-	Node      string // Originating node name
 	Hops      uint32 // Number of hops from originator
+	seq       int64  // Sequence number for incremental updates
 }
 
-// InfoPrefix returns the text preceding the last period within
+// infoPrefix returns the text preceding the last period within
 // the given key.
-func InfoPrefix(key string) string {
+func infoPrefix(key string) string {
 	if index := strings.LastIndex(key, "."); index != -1 {
 		return key[:index]
 	}
 	return ""
 }
 
-// InfoMap is a map of keys to Info object pointers.
-type InfoMap map[string]*Info
+// infoMap is a map of keys to Info object pointers.
+type infoMap map[string]*Info
 
 // InfoArray is a slice of Info object pointers.
 type InfoArray []*Info
