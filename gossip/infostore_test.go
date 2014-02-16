@@ -241,7 +241,7 @@ func TestAddGroupInfos(t *testing.T) {
 
 // Verify infostore combination with overlapping group and non-group
 // infos.
-func Testcombine(t *testing.T) {
+func TestCombine(t *testing.T) {
 	is1 := NewInfoStore()
 
 	group1 := newGroup("a", 10, MinGroup, t)
@@ -405,7 +405,7 @@ func TestInfoStoreDelta(t *testing.T) {
 
 // Build a filter representing the info store and verify
 // keys are represented.
-func TestbuildFilter(t *testing.T) {
+func TestBuildFilter(t *testing.T) {
 	is := createTestInfoStore(t)
 	f, err := is.buildFilter(1)
 	if err != nil {
