@@ -83,56 +83,50 @@ func newFilter(N uint32, B uint32, maxFP float64) (*filter, error) {
 	}, nil
 }
 
-// visitSlotBytes visits each byte (either one or two) that make up
-// the bits in the specified slot. "fn" is invoked on each byte in
-// turn, with values supplied for byteIndex, byteOffset, bitMask,
-// and valBitOffset.
-func (f *filter) visitSlotBytes(slot uint32, fn func(uint32, uint32, uint32, uint32)) {
-	bitIndex := slot * f.B
-	byteIndex := bitIndex / 8
-	byteOffset := bitIndex % 8
-
-	// Things are tricky here because we deal with crossing byte boundaries.
-	lastBit := byteOffset + f.B
-	valBitOffset := uint32(0)
-	for bit := byteOffset; bit < lastBit; {
-		b := lastBit - bit
-		if b > 8-byteOffset {
-			b = 8 - byteOffset
-		}
-		bitMask := uint32((1 << b) - 1)
-
-		fn(byteIndex, byteOffset, bitMask, valBitOffset) // call supplied method
-
-		bit += b
-		valBitOffset += b
-		byteIndex++
-		byteOffset = (byteOffset + b) % 8
+// getBits gets the specified bits by bit offset and bit length.
+func (f *filter) getBits(bitOff uint32, bitLen uint32) uint32 {
+	byteIndex := bitOff / 8
+	byteOffset := bitOff % 8
+	// Recurse if we're crossing a byte boundary.
+	if byteOffset+bitLen > 8 {
+		rem := 8 - byteOffset
+		return f.getBits(bitOff, rem) | (f.getBits(bitOff+rem, bitLen-rem) << rem)
 	}
+	bitMask := uint32((1 << bitLen) - 1)
+	return (uint32(f.Data[byteIndex]) & (bitMask << byteOffset)) >> byteOffset
+}
+
+// setBits sets the specified bits.
+func (f *filter) setBits(bitOff uint32, bitLen uint32, bits uint32) {
+	byteIndex := bitOff / 8
+	byteOffset := bitOff % 8
+	// Recurse if we're crossing a byte boundary.
+	if byteOffset+bitLen > 8 {
+		rem := 8 - byteOffset
+		f.setBits(bitOff, rem, bits)
+		f.setBits(bitOff+rem, bitLen-rem, bits>>rem)
+		return
+	}
+	bitMask := uint32((1 << bitLen) - 1)
+	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) & ^(bitMask << byteOffset))
+	f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | ((bits & bitMask) << byteOffset))
 }
 
 // incrementSlot increments slot value by the specified amount, bounding at
 // maximum slot value.
 func (f *filter) incrementSlot(slot uint32, incr int32) {
-	val := int32(f.getSlot(slot)) + incr
+	val := int32(f.getBits(slot*f.B, f.B)) + incr
 	if val > int32(f.MaxCount) {
 		val = int32(f.MaxCount)
 	} else if val < 0 {
 		val = 0
 	}
-	f.visitSlotBytes(slot, func(byteIndex uint32, byteOffset uint32, bitMask uint32, valBitOffset uint32) {
-		f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) & ^(bitMask << byteOffset))
-		f.Data[byteIndex] = byte(uint32(f.Data[byteIndex]) | (uint32(val>>valBitOffset)&bitMask)<<byteOffset)
-	})
+	f.setBits(slot*f.B, f.B, uint32(val))
 }
 
 // getSlot returns the slot value.
 func (f *filter) getSlot(slot uint32) uint32 {
-	val := uint32(0)
-	f.visitSlotBytes(slot, func(byteIndex uint32, byteOffset uint32, bitMask uint32, valBitOffset uint32) {
-		val |= ((uint32(f.Data[byteIndex]) & (bitMask << byteOffset)) >> byteOffset) << valBitOffset
-	})
-	return val
+	return f.getBits(slot*f.B, f.B)
 }
 
 // addKey adds the key to the filter.
