@@ -79,7 +79,10 @@ func MonotonicUnixNano() int64 {
 
 // NewInfoStore allocates and returns a new InfoStore.
 func NewInfoStore() *InfoStore {
-	return &InfoStore{make(InfoMap), make(GroupMap), 0, 0}
+	return &InfoStore{
+		Infos:  InfoMap{},
+		Groups: GroupMap{},
+	}
 }
 
 // InfoCount returns the count of infos stored in groups and the
@@ -99,7 +102,14 @@ func (is *InfoStore) NewInfo(key string, val Value, ttl time.Duration) *Info {
 	is.SeqGen++
 	now := MonotonicUnixNano()
 	node := "localhost" // TODO(spencer): fix this
-	return &Info{key, val, now, now + int64(ttl), is.SeqGen, node, 0}
+	return &Info{
+		Key:       key,
+		Val:       val,
+		Timestamp: now,
+		TTLStamp:  now + int64(ttl),
+		Seq:       is.SeqGen,
+		Node:      node,
+	}
 }
 
 // GetInfo returns an Info object by key or nil if it doesn't exist.

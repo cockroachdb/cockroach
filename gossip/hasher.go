@@ -39,7 +39,7 @@ type Hasher struct {
 
 // NewHasher allocates and return a new Hasher.
 func NewHasher() *Hasher {
-	return &Hasher{murmur3.New64(), false, 0, 0}
+	return &Hasher{mmh3: murmur3.New64()}
 }
 
 // HashKey writes the given key string to the hasher.
