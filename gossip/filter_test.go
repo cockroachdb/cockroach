@@ -21,9 +21,9 @@ import (
 	"testing"
 )
 
-// TestprobFalsePositive verifies some basic expectations
+// TestProbFalsePositive verifies some basic expectations
 // of false positive computations.
-func TestprobFalsePositive(t *testing.T) {
+func TestProbFalsePositive(t *testing.T) {
 	// Simple cases.
 	if probFalsePositive(0, 1, 1) != 0 {
 		t.Error("P(FP) with no insertions != 0")
@@ -51,8 +51,8 @@ func TestOptimalValues(t *testing.T) {
 	}
 }
 
-// TestnewFilter verifies bad inputs, optimal values, size of slots data.
-func TestnewFilter(t *testing.T) {
+// TestNewFilter verifies bad inputs, optimal values, size of slots data.
+func TestNewFilter(t *testing.T) {
 	if _, err := newFilter(1, 3, 0.10); err == nil {
 		t.Error("newFilter should not accept bits B which are non-divisor of 8")
 	}
@@ -185,9 +185,9 @@ func TestFalsePositives(t *testing.T) {
 	}
 }
 
-// TestapproximateInsertions adds many keys with an overloaded filter and
+// TestApproximateInsertions adds many keys with an overloaded filter and
 // verifies that approximation degrades gracefully.
-func TestapproximateInsertions(t *testing.T) {
+func TestApproximateInsertions(t *testing.T) {
 	f, err := newFilter(10, 4, 0.10)
 	if err != nil {
 		t.Error("unable to create a filter")
