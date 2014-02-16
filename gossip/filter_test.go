@@ -21,9 +21,9 @@ import (
 	"testing"
 )
 
-// TestProbFalsePositive verifies some basic expectations
+// TestprobFalsePositive verifies some basic expectations
 // of false positive computations.
-func TestProbFalsePositive(t *testing.T) {
+func TestprobFalsePositive(t *testing.T) {
 	// Simple cases.
 	if probFalsePositive(0, 1, 1) != 0 {
 		t.Error("P(FP) with no insertions != 0")
@@ -51,53 +51,53 @@ func TestOptimalValues(t *testing.T) {
 	}
 }
 
-// TestNewFilter verifies bad inputs, optimal values, size of slots data.
-func TestNewFilter(t *testing.T) {
-	if _, err := NewFilter(1, 3, 0.10); err == nil {
-		t.Error("NewFilter should not accept bits B which are non-divisor of 8")
+// TestnewFilter verifies bad inputs, optimal values, size of slots data.
+func TestnewFilter(t *testing.T) {
+	if _, err := newFilter(1, 3, 0.10); err == nil {
+		t.Error("newFilter should not accept bits B which are non-divisor of 8")
 	}
-	if _, err := NewFilter(1, 16, 0.10); err == nil {
-		t.Error("NewFilter should not accept bits B which are > 8")
+	if _, err := newFilter(1, 16, 0.10); err == nil {
+		t.Error("newFilter should not accept bits B which are > 8")
 	}
-	f, err := NewFilter(1000, 8, 0.01)
+	f, err := newFilter(1000, 8, 0.01)
 	if err != nil {
 		t.Error("unable to create a filter")
 	}
 	M, K := computeOptimalValues(1000, 0.01)
-	if M != f.M || K != f.K {
+	if M != f.m || K != f.k {
 		t.Error("optimal values not used", M, K, f)
 	}
-	if len(f.Data) != int(M) {
+	if len(f.data) != int(M) {
 		t.Error("slots data should require M bytes")
 	}
 
 	// Try some fractional byte slot sizes.
 	bits := []uint32{1, 2, 4}
 	for _, B := range bits {
-		f, err := NewFilter(1000, B, 0.01)
+		f, err := newFilter(1000, B, 0.01)
 		if err != nil {
 			t.Error("unable to create a filter")
 		}
 		slotsPerByte := 8 / B
 		expSize := int((M + slotsPerByte - 1) / slotsPerByte)
-		if len(f.Data) != expSize {
-			t.Error("slot sizes don't match", len(f.Data), expSize)
+		if len(f.data) != expSize {
+			t.Error("slot sizes don't match", len(f.data), expSize)
 		}
-		if f.MaxCount != 1<<B-1 {
-			t.Error("max count incorrect", f.MaxCount, 1<<B-1)
+		if f.maxCount != 1<<B-1 {
+			t.Error("max count incorrect", f.maxCount, 1<<B-1)
 		}
 	}
 }
 
 // TestSlots tests slot increment and slot count fetching.
 func TestSlots(t *testing.T) {
-	f, err := NewFilter(1000, 4, 0.01)
+	f, err := newFilter(1000, 4, 0.01)
 	if err != nil {
 		t.Error("unable to create a filter")
 	}
 	// Verify all slots empty.
-	for i := 0; i < len(f.Data); i++ {
-		if f.Data[i] != 0 {
+	for i := 0; i < len(f.data); i++ {
+		if f.data[i] != 0 {
 			t.Errorf("slot %d not empty", i)
 		}
 	}
@@ -107,17 +107,17 @@ func TestSlots(t *testing.T) {
 		t.Errorf("slot value %d != 1", f.getSlot(0))
 	}
 	// Increment past max count.
-	f.incrementSlot(0, int32(f.MaxCount))
-	if f.getSlot(0) != f.MaxCount {
-		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount)
+	f.incrementSlot(0, int32(f.maxCount))
+	if f.getSlot(0) != f.maxCount {
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.maxCount)
 	}
 	// Decrement once.
 	f.incrementSlot(0, -1)
-	if f.getSlot(0) != f.MaxCount-1 {
-		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.MaxCount-1)
+	if f.getSlot(0) != f.maxCount-1 {
+		t.Errorf("slot value should be max %d != %d", f.getSlot(0), f.maxCount-1)
 	}
 	// Decrement past 0.
-	f.incrementSlot(0, -int32(f.MaxCount))
+	f.incrementSlot(0, -int32(f.maxCount))
 	if f.getSlot(0) != 0 {
 		t.Errorf("slot value should be max %d != 0", f.getSlot(0))
 	}
@@ -125,56 +125,56 @@ func TestSlots(t *testing.T) {
 
 // TestKeys adds keys, tests existence, and removes keys.
 func TestKeys(t *testing.T) {
-	f, err := NewFilter(1000, 4, 0.01)
+	f, err := newFilter(1000, 4, 0.01)
 	if err != nil {
 		t.Error("unable to create a filter")
 	}
-	if f.HasKey("a") {
+	if f.hasKey("a") {
 		t.Error("filter shouldn't contain key a")
 	}
-	if f.AddKey("a"); !f.HasKey("a") {
+	if f.addKey("a"); !f.hasKey("a") {
 		t.Error("filter should contain key a")
 	}
-	if f.HasKey("b") {
+	if f.hasKey("b") {
 		t.Error("filter should contain key b")
 	}
-	if f.RemoveKey("a"); f.HasKey("a") {
+	if f.removeKey("a"); f.hasKey("a") {
 		t.Error("filter shouldn't contain key a after removal")
 	}
 	// Add key twice, verify it still exists after one removal.
-	f.AddKey("a")
-	f.AddKey("a")
-	f.RemoveKey("a")
-	if !f.HasKey("a") {
+	f.addKey("a")
+	f.addKey("a")
+	f.removeKey("a")
+	if !f.hasKey("a") {
 		t.Error("filter should still contain key a")
 	}
 }
 
 // TestFalsePositives adds many keys and verifies false positive probability.
 func TestFalsePositives(t *testing.T) {
-	f, err := NewFilter(1000, 4, 0.01)
+	f, err := newFilter(1000, 4, 0.01)
 	if err != nil {
 		t.Error("unable to create a filter")
 	}
 	lastFP := float64(0)
 	for i := 0; i < 1000; i++ {
-		f.AddKey(fmt.Sprintf("key-%d", i))
-		if f.ProbFalsePositive() < lastFP {
+		f.addKey(fmt.Sprintf("key-%d", i))
+		if f.probFalsePositive() < lastFP {
 			t.Error("P(FP) should increase")
 		}
-		lastFP = f.ProbFalsePositive()
+		lastFP = f.probFalsePositive()
 	}
 	for i := 0; i < 1000; i++ {
-		if !f.HasKey(fmt.Sprintf("key-%d", i)) {
+		if !f.hasKey(fmt.Sprintf("key-%d", i)) {
 			t.Error("could not find key-", i)
 		}
 	}
 	// Measure false positive rate empirically and verify
 	// against filter's math.
-	probFP := f.ProbFalsePositive()
+	probFP := f.probFalsePositive()
 	countFP := 0
 	for i := 0; i < 1000; i++ {
-		if f.HasKey(fmt.Sprintf("nonkey-%d", i)) {
+		if f.hasKey(fmt.Sprintf("nonkey-%d", i)) {
 			countFP++
 		}
 	}
@@ -185,16 +185,16 @@ func TestFalsePositives(t *testing.T) {
 	}
 }
 
-// TestApproximateInsertions adds many keys with an overloaded filter and
+// TestapproximateInsertions adds many keys with an overloaded filter and
 // verifies that approximation degrades gracefully.
-func TestApproximateInsertions(t *testing.T) {
-	f, err := NewFilter(10, 4, 0.10)
+func TestapproximateInsertions(t *testing.T) {
+	f, err := newFilter(10, 4, 0.10)
 	if err != nil {
 		t.Error("unable to create a filter")
 	}
 	for i := 0; i <= 200; i++ {
-		f.AddKey(fmt.Sprintf("key-%d", i))
-		diff := i + 1 - int(f.ApproximateInsertions())
+		f.addKey(fmt.Sprintf("key-%d", i))
+		diff := i + 1 - int(f.approximateInsertions())
 		if i > 150 && diff == 0 {
 			t.Error("expected some approximation error at 150 insertions")
 		}

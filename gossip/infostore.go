@@ -155,7 +155,7 @@ func (is *InfoStore) GetGroupInfos(prefix string) InfoArray {
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *InfoStore) RegisterGroup(group *Group) error {
 	if _, ok := is.Groups[group.Prefix]; ok {
-		return fmt.Errorf("group \"%s\" already in group map", group.Prefix)
+		return fmt.Errorf("group %q already in group map", group.Prefix)
 	}
 	is.Groups[group.Prefix] = group
 	return nil
@@ -270,8 +270,8 @@ func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 // BuildFilter builds a bloom filter containing the keys held in the
 // store which arrived within the specified number of maximum hops.
 // Filters are passed to peer nodes in order to evaluate gossip candidates.
-func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
-	f, err := NewFilter(is.InfoCount(), FilterBits, FilterMaxFP)
+func (is *InfoStore) BuildFilter(maxHops uint32) (*filter, error) {
+	f, err := newFilter(is.InfoCount(), FilterBits, FilterMaxFP)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
 	for _, group := range is.Groups {
 		for _, info := range group.Infos {
 			if info.Hops <= maxHops {
-				f.AddKey(info.Key)
+				f.addKey(info.Key)
 			}
 		}
 	}
@@ -287,7 +287,7 @@ func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
 	// Combine non-group info.
 	for _, info := range is.Infos {
 		if info.Hops <= maxHops {
-			f.AddKey(info.Key)
+			f.addKey(info.Key)
 		}
 	}
 
