@@ -31,41 +31,27 @@ import (
 //
 // InfoStores can be combined using deltas from peer nodes.
 type InfoStore struct {
-	Infos  InfoMap  // Map from key to info
-	Groups GroupMap // Map from key prefix to groups of infos
-	MaxSeq int64    // Maximum sequence number inserted
-	SeqGen int64    // Sequence generator incremented each time info is added
+	Infos  infoMap  // Map from key to info
+	Groups groupMap // Map from key prefix to groups of infos
+	maxSeq int64    // Maximum sequence number inserted
+	seqGen int64    // Sequence generator incremented each time info is added
 }
 
 // Parameters to tune bloom filters returned by the store.
 const (
-	// FilterBits is the default number of bits per byte slot.
-	FilterBits = 4
-	// FilterMaxFP is the default upper bound for a false positive's value.
-	FilterMaxFP = 0.025
+	// filterBits is the default number of bits per byte slot.
+	filterBits = 4
+	// filterMaxFP is the default upper bound for a false positive's value.
+	filterMaxFP = 0.025
 )
 
-// Returns true if the info belongs to a group registered with
-// the info store; false otherwise.
-func (is *InfoStore) belongsToGroup(key string) *Group {
-	if group, ok := is.Groups[InfoPrefix(key)]; ok {
-		return group
-	}
-	return nil
-}
-
-var (
-	monoTimeMu sync.Mutex
-	lastTime   int64
-)
-
-// MonotonicUnixNano returns a monotonically increasing value for
+// monotonicUnixNano returns a monotonically increasing value for
 // nanoseconds in Unix time. Since equal times are ignored with
 // updates to infos, we're careful to avoid incorrectly ignoring a
 // newly created value in the event one is created within the same
 // nanosecond. Really unlikely except for the case of unittests, but
 // better safe than sorry.
-func MonotonicUnixNano() int64 {
+func monotonicUnixNano() int64 {
 	monoTimeMu.Lock()
 	defer monoTimeMu.Unlock()
 
@@ -77,45 +63,46 @@ func MonotonicUnixNano() int64 {
 	return now
 }
 
+// Returns true if the info belongs to a group registered with
+// the info store; false otherwise.
+func (is *InfoStore) belongsToGroup(key string) *Group {
+	if group, ok := is.Groups[infoPrefix(key)]; ok {
+		return group
+	}
+	return nil
+}
+
+var (
+	monoTimeMu sync.Mutex
+	lastTime   int64
+)
+
 // NewInfoStore allocates and returns a new InfoStore.
 func NewInfoStore() *InfoStore {
 	return &InfoStore{
-		Infos:  InfoMap{},
-		Groups: GroupMap{},
+		Infos:  infoMap{},
+		Groups: groupMap{},
 	}
-}
-
-// InfoCount returns the count of infos stored in groups and the
-// non-group infos map. This is really just an approximation as
-// we don't check whether infos are expired.
-func (is *InfoStore) InfoCount() uint32 {
-	count := uint32(len(is.Infos))
-	for _, group := range is.Groups {
-		count += uint32(len(group.Infos))
-	}
-	return count
 }
 
 // NewInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
 func (is *InfoStore) NewInfo(key string, val Value, ttl time.Duration) *Info {
-	is.SeqGen++
-	now := MonotonicUnixNano()
-	node := "localhost" // TODO(spencer): fix this
+	is.seqGen++
+	now := monotonicUnixNano()
 	return &Info{
 		Key:       key,
 		Val:       val,
 		Timestamp: now,
 		TTLStamp:  now + int64(ttl),
-		Seq:       is.SeqGen,
-		Node:      node,
+		seq:       is.seqGen,
 	}
 }
 
 // GetInfo returns an Info object by key or nil if it doesn't exist.
 func (is *InfoStore) GetInfo(key string) *Info {
 	if group := is.belongsToGroup(key); group != nil {
-		return group.GetInfo(key)
+		return group.getInfo(key)
 	}
 	if info, ok := is.Infos[key]; ok {
 		// Check TTL and discard if too old.
@@ -135,7 +122,7 @@ func (is *InfoStore) GetInfo(key string) *Info {
 // Returns nil if group is not registered.
 func (is *InfoStore) GetGroupInfos(prefix string) InfoArray {
 	if group, ok := is.Groups[prefix]; ok {
-		infos := group.InfosAsArray()
+		infos := group.infosAsArray()
 		switch group.TypeOf {
 		case MinGroup:
 			sort.Sort(infos)
@@ -170,9 +157,9 @@ func (is *InfoStore) RegisterGroup(group *Group) error {
 func (is *InfoStore) AddInfo(info *Info) bool {
 	// If the prefix matches a group, add to group.
 	if group := is.belongsToGroup(info.Key); group != nil {
-		if group.AddInfo(info) {
-			if info.Seq > is.MaxSeq {
-				is.MaxSeq = info.Seq
+		if group.addInfo(info) {
+			if info.seq > is.maxSeq {
+				is.maxSeq = info.seq
 			}
 			return true
 		}
@@ -192,10 +179,21 @@ func (is *InfoStore) AddInfo(info *Info) bool {
 	}
 	// Update info map.
 	is.Infos[info.Key] = info
-	if info.Seq > is.MaxSeq {
-		is.MaxSeq = info.Seq
+	if info.seq > is.maxSeq {
+		is.maxSeq = info.seq
 	}
 	return true
+}
+
+// infoCount returns the count of infos stored in groups and the
+// non-group infos map. This is really just an approximation as
+// we don't check whether infos are expired.
+func (is *InfoStore) infoCount() uint32 {
+	count := uint32(len(is.Infos))
+	for _, group := range is.Groups {
+		count += uint32(len(group.Infos))
+	}
+	return count
 }
 
 // visitInfos implements a visitor pattern to run two methods in the
@@ -232,12 +230,12 @@ func (is *InfoStore) visitInfos(visitGroup func(*Group) error, visitInfo func(*I
 	return nil
 }
 
-// Combine combines an incremental delta with the current info store.
+// combine combines an incremental delta with the current info store.
 // The sequence numbers on all info objects are reset using the info
 // store's sequence generator. All hop distances on infos are
 // incremented to indicate they've arrived from an external source.
-func (is *InfoStore) Combine(delta *InfoStore) error {
-	// Combine group info. If the group doesn't yet exist, register
+func (is *InfoStore) combine(delta *InfoStore) error {
+	// combine group info. If the group doesn't yet exist, register
 	// it. Extract the infos from the group and combine them
 	// one-by-one using AddInfo.
 	return delta.visitInfos(func(group *Group) error {
@@ -251,26 +249,26 @@ func (is *InfoStore) Combine(delta *InfoStore) error {
 		}
 		return nil
 	}, func(info *Info) error {
-		is.SeqGen++
-		info.Seq = is.SeqGen
+		is.seqGen++
+		info.seq = is.seqGen
 		info.Hops++
 		is.AddInfo(info)
 		return nil
 	})
 }
 
-// Delta returns an incremental delta of infos added to the info store since
+// delta returns an incremental delta of infos added to the info store since
 // (not including) the specified sequence number. These deltas are
 // intended for efficiently updating peer nodes.
 //
 // Returns an error if there are no deltas.
-func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
-	if seq >= is.MaxSeq {
+func (is *InfoStore) delta(seq int64) (*InfoStore, error) {
+	if seq >= is.maxSeq {
 		return nil, fmt.Errorf("no deltas to info store since sequence number %d", seq)
 	}
 
 	delta := NewInfoStore()
-	delta.SeqGen = is.SeqGen
+	delta.seqGen = is.seqGen
 
 	// Compute delta of groups and infos.
 	err := is.visitInfos(func(group *Group) error {
@@ -281,7 +279,7 @@ func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 		delta.RegisterGroup(deltaGroup)
 		return nil
 	}, func(info *Info) error {
-		if info.Seq > seq {
+		if info.seq > seq {
 			delta.AddInfo(info)
 		}
 		return nil
@@ -290,11 +288,11 @@ func (is *InfoStore) Delta(seq int64) (*InfoStore, error) {
 	return delta, err
 }
 
-// BuildFilter builds a bloom filter containing the keys held in the
+// buildFilter builds a bloom filter containing the keys held in the
 // store which arrived within the specified number of maximum hops.
 // Filters are passed to peer nodes in order to evaluate gossip candidates.
-func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
-	f, err := NewFilter(is.InfoCount(), FilterBits, FilterMaxFP)
+func (is *InfoStore) buildFilter(maxHops uint32) (*Filter, error) {
+	f, err := NewFilter(is.infoCount(), filterBits, filterMaxFP)
 	if err != nil {
 		return nil, err
 	}
@@ -309,11 +307,11 @@ func (is *InfoStore) BuildFilter(maxHops uint32) (*Filter, error) {
 	return f, err
 }
 
-// DiffFilter compares the supplied filter with the contents of this
+// diffFilter compares the supplied filter with the contents of this
 // infostore. Each key from the infostore is "removed" from the
 // filter, to yield a filter with remains approximately equal to the
 // keys contained in the filter but not present in the infostore.
-func (is *InfoStore) DiffFilter(f *Filter, maxHops uint32) (uint32, error) {
+func (is *InfoStore) diffFilter(f *Filter, maxHops uint32) (uint32, error) {
 	err := is.visitInfos(nil, func(info *Info) error {
 		if info.Hops <= maxHops {
 			f.RemoveKey(info.Key)

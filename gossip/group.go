@@ -42,25 +42,25 @@ type Group struct {
 	Prefix      string    // Key prefix for Info items in group
 	Limit       int       // Maximum number of keys in group
 	TypeOf      GroupType // Minimums or maximums of all values encountered
-	MinTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
-	Gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
-	Infos       InfoMap   // Map of infos in group
+	Infos       infoMap   // Map of infos in group
+	minTTLStamp int64     // Minimum of all infos' TTLs (Unix nanos)
+	gatekeeper  *Info     // Minimum or maximum value in infos map, depending on type
 }
 
-// GroupMap is a map of group prefixes => *Group.
-type GroupMap map[string]*Group
+// groupMap is a map of group prefixes => *Group.
+type groupMap map[string]*Group
 
 // shouldInclude returns true if the specified info should belong
 // in the group according to the group type and the value.
 func (g *Group) shouldInclude(info *Info) bool {
-	if g.Gatekeeper == nil {
+	if g.gatekeeper == nil {
 		return true
 	}
 	switch g.TypeOf {
 	case MinGroup:
-		return info.Val.Less(g.Gatekeeper.Val)
+		return info.Val.Less(g.gatekeeper.Val)
 	case MaxGroup:
-		return !info.Val.Less(g.Gatekeeper.Val)
+		return !info.Val.Less(g.gatekeeper.Val)
 	default:
 		panic(fmt.Errorf("unknown group type %d", g.TypeOf))
 	}
@@ -71,20 +71,20 @@ func (g *Group) shouldInclude(info *Info) bool {
 // when compaction is possible), and updates gatekeeper (used to
 // decide when to add to group).
 func (g *Group) updateIncremental(info *Info) {
-	if info.TTLStamp < g.MinTTLStamp {
-		g.MinTTLStamp = info.TTLStamp
+	if info.TTLStamp < g.minTTLStamp {
+		g.minTTLStamp = info.TTLStamp
 	}
 	// Update gatekeeper if it's currently nil --or-- if info shouldn't
 	// be included in group (i.e. it's the most extreme min/max).
-	if g.Gatekeeper == nil || !g.shouldInclude(info) {
-		g.Gatekeeper = info
+	if g.gatekeeper == nil || !g.shouldInclude(info) {
+		g.gatekeeper = info
 	}
 }
 
 // update iterates through group infos and updates stats.
 func (g *Group) update() {
-	g.MinTTLStamp = math.MaxInt64
-	g.Gatekeeper = nil
+	g.minTTLStamp = math.MaxInt64
+	g.gatekeeper = nil
 
 	for _, info := range g.Infos {
 		g.updateIncremental(info)
@@ -95,13 +95,13 @@ func (g *Group) update() {
 // Returns true if compaction occurred and space is free.
 func (g *Group) compact() bool {
 	now := time.Now().UnixNano()
-	if g.MinTTLStamp > now {
+	if g.minTTLStamp > now {
 		return false
 	}
 
 	// Delete expired entries && update group stats.
-	g.MinTTLStamp = math.MaxInt64
-	g.Gatekeeper = nil
+	g.minTTLStamp = math.MaxInt64
+	g.gatekeeper = nil
 	for key, info := range g.Infos {
 		if info.TTLStamp <= now {
 			delete(g.Infos, key)
@@ -122,27 +122,13 @@ func (g *Group) addInternal(info *Info) {
 // removeInternal removes info from group, updating group stats wholesale if necessary.
 func (g *Group) removeInternal(info *Info) {
 	delete(g.Infos, info.Key)
-	if g.Gatekeeper == info || g.MinTTLStamp == info.TTLStamp {
+	if g.gatekeeper == info || g.minTTLStamp == info.TTLStamp {
 		g.update()
 	}
 }
 
-// NewGroup allocates and returns a new group with prefix, limit and type.
-func NewGroup(prefix string, limit int, typeOf GroupType) (*Group, error) {
-	if limit <= 0 {
-		return nil, fmt.Errorf("group size limit must be a positive number (%d <= 0)", limit)
-	}
-	return &Group{
-		Prefix:      prefix,
-		Limit:       limit,
-		TypeOf:      typeOf,
-		MinTTLStamp: math.MaxInt64,
-		Infos:       make(InfoMap),
-	}, nil
-}
-
-// GetInfo returns an info by key.
-func (g *Group) GetInfo(key string) *Info {
+// getInfo returns an info by key.
+func (g *Group) getInfo(key string) *Info {
 	if info, ok := g.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		now := time.Now().UnixNano()
@@ -155,8 +141,8 @@ func (g *Group) GetInfo(key string) *Info {
 	return nil
 }
 
-// InfosAsArray returns an array of infos from group.
-func (g *Group) InfosAsArray() InfoArray {
+// infosAsArray returns an array of infos from group.
+func (g *Group) infosAsArray() InfoArray {
 	now := time.Now().UnixNano()
 	infos := make(InfoArray, 0, len(g.Infos))
 	for _, info := range g.Infos {
@@ -170,18 +156,18 @@ func (g *Group) InfosAsArray() InfoArray {
 	return infos
 }
 
-// AddInfo adds the info to the group if there is sufficient space
+// addInfo adds the info to the group if there is sufficient space
 // or if the info has a value which guarantees it a spot within the
 // group according to the group type.
 //
 // Returns true if the info was added; false otherwise.
-func (g *Group) AddInfo(info *Info) bool {
+func (g *Group) addInfo(info *Info) bool {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info.
 	if existingInfo, ok := g.Infos[info.Key]; ok {
 		if existingInfo.Timestamp < info.Timestamp {
 			// Take the minimum of the two Hops values; see comments
-			// in InfoStore.AddInfo.
+			// in InfoStore.addInfo.
 			if existingInfo.Hops < info.Hops {
 				info.Hops = existingInfo.Hops
 			}
@@ -200,10 +186,24 @@ func (g *Group) AddInfo(info *Info) bool {
 	// Group limit is reached. Check gatekeeper; if we should include,
 	// it means we toss current gatekeeper and add info.
 	if g.shouldInclude(info) {
-		g.removeInternal(g.Gatekeeper)
+		g.removeInternal(g.gatekeeper)
 		g.addInternal(info)
 		return true
 	}
 
 	return false
+}
+
+// NewGroup allocates and returns a new group with prefix, limit and type.
+func NewGroup(prefix string, limit int, typeOf GroupType) (*Group, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("group size limit must be a positive number (%d <= 0)", limit)
+	}
+	return &Group{
+		Prefix:      prefix,
+		Limit:       limit,
+		TypeOf:      typeOf,
+		minTTLStamp: math.MaxInt64,
+		Infos:       make(infoMap),
+	}, nil
 }

@@ -61,8 +61,8 @@ func TestNewInfo(t *testing.T) {
 	is := NewInfoStore()
 	info1 := is.NewInfo("a", Float64Value(1), time.Second)
 	info2 := is.NewInfo("a", Float64Value(1), time.Second)
-	if info1.Seq != info2.Seq-1 {
-		t.Errorf("sequence numbers should increment %d, %d", info1.Seq, info2.Seq)
+	if info1.seq != info2.seq-1 {
+		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
 	}
 }
 
@@ -74,10 +74,10 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	if !is.AddInfo(info) {
 		t.Error("unable to add info")
 	}
-	if is.InfoCount() != 1 {
-		t.Errorf("infostore count incorrect %d != 1", is.InfoCount())
+	if is.infoCount() != 1 {
+		t.Errorf("infostore count incorrect %d != 1", is.infoCount())
 	}
-	if is.MaxSeq != info.Seq {
+	if is.maxSeq != info.seq {
 		t.Error("max seq value wasn't updated")
 	}
 	if is.GetInfo("a") != info {
@@ -179,11 +179,11 @@ func TestAddGroupInfos(t *testing.T) {
 	if !is.AddInfo(info1) || !is.AddInfo(info2) {
 		t.Error("unable to add info1 or info2")
 	}
-	if is.InfoCount() != 2 {
-		t.Errorf("infostore count incorrect %d != 2", is.InfoCount())
+	if is.infoCount() != 2 {
+		t.Errorf("infostore count incorrect %d != 2", is.infoCount())
 	}
-	if is.MaxSeq != info2.Seq {
-		t.Errorf("store max seq info2 seq %d != %d", is.MaxSeq, info2.Seq)
+	if is.maxSeq != info2.seq {
+		t.Errorf("store max seq info2 seq %d != %d", is.maxSeq, info2.seq)
 	}
 
 	infos := is.GetGroupInfos("a")
@@ -204,11 +204,11 @@ func TestAddGroupInfos(t *testing.T) {
 	if !is.AddInfo(info3) || !is.AddInfo(info4) {
 		t.Error("unable to add info1 or info2")
 	}
-	if is.InfoCount() != 4 {
-		t.Errorf("infostore count incorrect %d != 4", is.InfoCount())
+	if is.infoCount() != 4 {
+		t.Errorf("infostore count incorrect %d != 4", is.infoCount())
 	}
-	if is.MaxSeq != info4.Seq {
-		t.Errorf("store max seq info4 seq %d != %d", is.MaxSeq, info4.Seq)
+	if is.maxSeq != info4.seq {
+		t.Errorf("store max seq info4 seq %d != %d", is.maxSeq, info4.seq)
 	}
 
 	infos = is.GetGroupInfos("b")
@@ -231,11 +231,11 @@ func TestAddGroupInfos(t *testing.T) {
 	if is.GetInfo("c.a") != info5 {
 		t.Error("unable to fetch info5 by key")
 	}
-	if is.InfoCount() != 5 {
-		t.Errorf("infostore count incorrect %d != 5", is.InfoCount())
+	if is.infoCount() != 5 {
+		t.Errorf("infostore count incorrect %d != 5", is.infoCount())
 	}
-	if is.MaxSeq != info5.Seq {
-		t.Errorf("store max seq info5 seq %d != %d", is.MaxSeq, info5.Seq)
+	if is.maxSeq != info5.seq {
+		t.Errorf("store max seq info5 seq %d != %d", is.maxSeq, info5.seq)
 	}
 }
 
@@ -280,7 +280,7 @@ func TestCombine(t *testing.T) {
 		t.Error("unable to add info2Overlap")
 	}
 
-	if err := is1.Combine(is2); err != nil {
+	if err := is1.combine(is2); err != nil {
 		t.Error(err)
 	}
 
@@ -368,7 +368,7 @@ func TestInfoStoreDelta(t *testing.T) {
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
-		delta, err := is.Delta(int64(i * 3))
+		delta, err := is.delta(int64(i * 3))
 		if err != nil {
 			t.Errorf("delta failed at sequence number %d: %s", i, err)
 		}
@@ -398,7 +398,7 @@ func TestInfoStoreDelta(t *testing.T) {
 		}
 	}
 
-	if _, err := is.Delta(int64(30)); err == nil {
+	if _, err := is.delta(int64(30)); err == nil {
 		t.Error("fetching delta of infostore at maximum sequence number should return error")
 	}
 }
@@ -407,7 +407,7 @@ func TestInfoStoreDelta(t *testing.T) {
 // keys are represented.
 func TestBuildFilter(t *testing.T) {
 	is := createTestInfoStore(t)
-	f, err := is.BuildFilter(1)
+	f, err := is.buildFilter(1)
 	if err != nil {
 		t.Fatal("unable to build filter:", err)
 	}
@@ -435,7 +435,7 @@ func TestBuildFilter(t *testing.T) {
 func TestFilterMaxHops(t *testing.T) {
 	is := createTestInfoStoreWithHops(t)
 
-	f, err := is.BuildFilter(1) // max hops set to 1
+	f, err := is.buildFilter(1) // max hops set to 1
 	if err != nil {
 		t.Fatal("unable to build filter:", err)
 	}
@@ -448,31 +448,31 @@ func TestFilterMaxHops(t *testing.T) {
 	}
 }
 
-// TestDiff verifies behavior of DiffFilter, which approximates the
+// TestDiff verifies behavior of diffFilter, which approximates the
 // differences between an info store and a remote info store as
 // described by a filter.
 func TestDiff(t *testing.T) {
 	is := createTestInfoStore(t)
 
 	// First build a filter with everything and diff (should be empty).
-	f, err := is.BuildFilter(1)
+	f, err := is.buildFilter(1)
 	if err != nil {
 		t.Fatal("unable to build filter:", err)
 	}
-	diff, err := is.DiffFilter(f, 1)
+	diff, err := is.diffFilter(f, 1)
 	if diff != 0 || err != nil {
 		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
 	}
 
 	// An empty infostore returns full count.
 	is2 := NewInfoStore()
-	f, err = is.BuildFilter(1)
+	f, err = is.buildFilter(1)
 	if err != nil {
 		t.Fatal("could not create filter")
 	}
-	diff, err = is2.DiffFilter(f, 1)
-	if diff != is.InfoCount() || err != nil {
-		t.Errorf("diff should be %d, not %d, err: %s", is.InfoCount(), diff, err)
+	diff, err = is2.diffFilter(f, 1)
+	if diff != is.infoCount() || err != nil {
+		t.Errorf("diff should be %d, not %d, err: %s", is.infoCount(), diff, err)
 	}
 
 	// An empty filter returns 0 diff.
@@ -480,7 +480,7 @@ func TestDiff(t *testing.T) {
 	if err != nil {
 		t.Fatal("could not create filter:", err)
 	}
-	diff, err = is.DiffFilter(f, 1)
+	diff, err = is.diffFilter(f, 1)
 	if diff != 0 || err != nil {
 		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
 	}
@@ -494,7 +494,7 @@ func TestDiff(t *testing.T) {
 	for _, info := range is.Infos {
 		f.AddKey(info.Key)
 	}
-	diff, err = is.DiffFilter(f, 1)
+	diff, err = is.diffFilter(f, 1)
 	if diff != 0 || err != nil {
 		t.Errorf("diff should be 0, not %d, err: %s", diff, err)
 	}
@@ -504,12 +504,12 @@ func TestDiff(t *testing.T) {
 	for _, info := range is.Infos {
 		is2.AddInfo(info)
 	}
-	f, err = is.BuildFilter(1)
+	f, err = is.buildFilter(1)
 	if err != nil {
 		t.Fatal("could not create filter:", err)
 	}
-	expDiff := is.InfoCount() - uint32(len(is.Infos))
-	diff, err = is2.DiffFilter(f, 1)
+	expDiff := is.infoCount() - uint32(len(is.Infos))
+	diff, err = is2.diffFilter(f, 1)
 	if diff != expDiff || err != nil {
 		t.Errorf("diff should be %d, not %d, err: %s", expDiff, diff, err)
 	}
@@ -521,14 +521,14 @@ func TestDiffMaxHops(t *testing.T) {
 	is := createTestInfoStoreWithHops(t)
 
 	// Build the filter such that it accepts all infos, regardless of hops.
-	f, err := is.BuildFilter(10)
+	f, err := is.buildFilter(10)
 	if err != nil {
 		t.Fatal("unable to build filter:", err)
 	}
 
 	// Diff the filter with maxHops = 1 to ignore Hops = 2 infos.
 	// We should be left with the two Hops = 2 still in the filter.
-	diff, err := is.DiffFilter(f, 1)
+	diff, err := is.diffFilter(f, 1)
 	if diff != 2 || err != nil {
 		t.Errorf("diff should be 2, not %d, err: %s", diff, err)
 	}

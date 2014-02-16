@@ -24,7 +24,7 @@ import (
 )
 
 func newInfo(key string, val float64) *Info {
-	now := MonotonicUnixNano()
+	now := monotonicUnixNano()
 	ttl := now + int64(time.Minute)
 	return &Info{
 		Key:       key,
@@ -59,23 +59,23 @@ func TestMinGroupShouldInclude(t *testing.T) {
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
-	if !group.AddInfo(info1) {
+	if !group.addInfo(info1) {
 		t.Error("could not insert")
 	}
 	info2 := newInfo("a.b", 2)
-	if !group.AddInfo(info2) {
+	if !group.addInfo(info2) {
 		t.Error("could not insert")
 	}
 
 	// A smaller insert should include fine.
 	info3 := newInfo("a.c", 0)
-	if !group.shouldInclude(info3) || !group.AddInfo(info3) {
+	if !group.shouldInclude(info3) || !group.addInfo(info3) {
 		t.Error("could not insert")
 	}
 
 	// A larger insert shouldn't include.
 	info4 := newInfo("a.d", 3)
-	if group.shouldInclude(info4) || group.AddInfo(info4) {
+	if group.shouldInclude(info4) || group.addInfo(info4) {
 		t.Error("shouldn't have been able to insert")
 	}
 }
@@ -87,23 +87,23 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
-	if !group.AddInfo(info1) {
+	if !group.addInfo(info1) {
 		t.Error("could not insert")
 	}
 	info2 := newInfo("a.b", 2)
-	if !group.AddInfo(info2) {
+	if !group.addInfo(info2) {
 		t.Error("could not insert")
 	}
 
 	// A larger insert should include fine.
 	info3 := newInfo("a.c", 3)
-	if !group.shouldInclude(info3) || !group.AddInfo(info3) {
+	if !group.shouldInclude(info3) || !group.addInfo(info3) {
 		t.Error("could not insert")
 	}
 
 	// A smaller insert shouldn't include.
 	info4 := newInfo("a.d", 0)
-	if group.shouldInclude(info4) || group.AddInfo(info4) {
+	if group.shouldInclude(info4) || group.addInfo(info4) {
 		t.Error("shouldn't have been able to insert")
 	}
 }
@@ -113,26 +113,26 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 func TestSameKeyInserts(t *testing.T) {
 	group := newGroup("a", 1, MinGroup, t)
 	info1 := newInfo("a.a", 1)
-	if !group.AddInfo(info1) {
+	if !group.addInfo(info1) {
 		t.Error("could not insert")
 	}
 
 	// Smaller timestamp should be ignored.
 	info2 := newInfo("a.a", 1)
 	info2.Timestamp = info1.Timestamp - 1
-	if group.AddInfo(info2) {
+	if group.addInfo(info2) {
 		t.Error("should not allow insert")
 	}
 
 	// Two successively larger timestamps always win.
 	info3 := newInfo("a.a", 1)
 	info3.Timestamp = info1.Timestamp + 1
-	if !group.AddInfo(info3) {
+	if !group.addInfo(info3) {
 		t.Error("could not insert")
 	}
 	info4 := newInfo("a.a", 1)
 	info4.Timestamp = info1.Timestamp + 2
-	if !group.AddInfo(info4) {
+	if !group.addInfo(info4) {
 		t.Error("could not insert")
 	}
 }
@@ -145,30 +145,30 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 	// First two inserts work fine.
 	info1 := newInfo("a.a", 1)
 	info1.TTLStamp = info1.Timestamp + int64(time.Millisecond)
-	if !group.AddInfo(info1) {
+	if !group.addInfo(info1) {
 		t.Error("could not insert")
 	}
 	info2 := newInfo("a.b", 2)
 	info2.TTLStamp = info2.Timestamp + int64(time.Millisecond)
-	if !group.AddInfo(info2) {
+	if !group.addInfo(info2) {
 		t.Error("could not insert")
 	}
 
 	// A larger insert shouldn't yet insert as we haven't surprassed TTL.
 	info3 := newInfo("a.c", 3)
-	if group.AddInfo(info3) {
+	if group.addInfo(info3) {
 		t.Error("shouldn't be able to insert")
 	}
 
 	// Now, wait a millisecond and try again.
 	time.Sleep(time.Millisecond)
-	if !group.AddInfo(info3) {
+	if !group.addInfo(info3) {
 		t.Error("could not insert")
 	}
 
 	// Next value should also insert.
 	info4 := newInfo("a.d", 4)
-	if !group.AddInfo(info4) {
+	if !group.addInfo(info4) {
 		t.Error("could not insert")
 	}
 }
@@ -180,7 +180,7 @@ func insertRandomInfos(group *Group, count int) InfoArray {
 
 	for i := 0; i < count; i++ {
 		infos[i] = newInfo(fmt.Sprintf("a.%d", i), rand.Float64())
-		group.AddInfo(infos[i])
+		group.addInfo(infos[i])
 	}
 
 	return infos
@@ -190,20 +190,20 @@ func insertRandomInfos(group *Group, count int) InfoArray {
 // limit of 100 keys after inserting 1000.
 func TestGroups100Keys(t *testing.T) {
 	// Start by adding random infos to min group.
-	MinGroup := newGroup("a", 100, MinGroup, t)
-	infos := insertRandomInfos(MinGroup, 1000)
+	minGroup := newGroup("a", 100, MinGroup, t)
+	infos := insertRandomInfos(minGroup, 1000)
 
 	// Insert same infos into the max group.
-	MaxGroup := newGroup("a", 100, MaxGroup, t)
+	maxGroup := newGroup("a", 100, MaxGroup, t)
 	for _, info := range infos {
-		MaxGroup.AddInfo(info)
+		maxGroup.addInfo(info)
 	}
 	sort.Sort(infos)
 
-	minInfos := MinGroup.InfosAsArray()
+	minInfos := minGroup.infosAsArray()
 	sort.Sort(minInfos)
 
-	maxInfos := MaxGroup.InfosAsArray()
+	maxInfos := maxGroup.infosAsArray()
 	sort.Sort(maxInfos)
 
 	for i := 0; i < 100; i++ {
@@ -226,10 +226,10 @@ func TestSameKeySameTimestamp(t *testing.T) {
 	info1 := newInfo("a.a", 1.0)
 	info2 := newInfo("a.a", 1.0)
 	info2.Timestamp = info1.Timestamp
-	if !group.AddInfo(info1) {
+	if !group.addInfo(info1) {
 		t.Error("failed first insert")
 	}
-	if group.AddInfo(info2) {
+	if group.addInfo(info2) {
 		t.Error("second insert with identical key & timestamp should have failed")
 	}
 }
@@ -244,19 +244,19 @@ func TestSameKeyDifferentHops(t *testing.T) {
 
 	// Add info1 first, then info2.
 	group1 := newGroup("a", 1, MinGroup, t)
-	if !group1.AddInfo(info1) || !group1.AddInfo(info2) {
+	if !group1.addInfo(info1) || !group1.addInfo(info2) {
 		t.Error("failed insertions", info1, info2)
 	}
-	if info := group1.GetInfo("a.a"); info == nil || info.Hops != 1 {
+	if info := group1.getInfo("a.a"); info == nil || info.Hops != 1 {
 		t.Error("info nil or info.Hops != 1:", info)
 	}
 
 	// Add info1 first, then info2.
 	group2 := newGroup("a", 1, MinGroup, t)
-	if !group2.AddInfo(info1) || !group2.AddInfo(info2) {
+	if !group2.addInfo(info1) || !group2.addInfo(info2) {
 		t.Error("failed insertions")
 	}
-	if info := group2.GetInfo("a.a"); info == nil || info.Hops != 1 {
+	if info := group2.getInfo("a.a"); info == nil || info.Hops != 1 {
 		t.Error("info nil or info.Hops != 1:", info)
 	}
 }
@@ -266,13 +266,13 @@ func TestGroupGetInfo(t *testing.T) {
 	group := newGroup("a", 10, MinGroup, t)
 	infos := insertRandomInfos(group, 10)
 	for _, info := range infos {
-		if info != group.GetInfo(info.Key) {
+		if info != group.getInfo(info.Key) {
 			t.Error("could not fetch info", info)
 		}
 	}
 
 	// Test non-existent key.
-	if group.GetInfo("b.a") != nil {
+	if group.getInfo("b.a") != nil {
 		t.Error("fetched something for non-existing key \"b.a\"")
 	}
 }
@@ -282,22 +282,22 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	group := newGroup("a", 10, MinGroup, t)
 	info := newInfo("a.a", 1)
 	info.TTLStamp = info.Timestamp + int64(time.Nanosecond)
-	group.AddInfo(info)
+	group.addInfo(info)
 	time.Sleep(time.Nanosecond)
-	if group.GetInfo(info.Key) != nil {
+	if group.getInfo(info.Key) != nil {
 		t.Error("shouldn't have been able to fetch key with short TTL")
 	}
 
 	// Try 2 infos, one with short TTL and one with long TTL and
-	// verify operation of InfosAsArray.
+	// verify operation of infosAsArray.
 	info1 := newInfo("a.1", 1)
 	info2 := newInfo("a.2", 2)
 	info2.TTLStamp = info.Timestamp + int64(time.Nanosecond)
-	group.AddInfo(info1)
-	group.AddInfo(info2)
+	group.addInfo(info1)
+	group.addInfo(info2)
 
 	time.Sleep(time.Nanosecond)
-	infos := group.InfosAsArray()
+	infos := group.infosAsArray()
 	if len(infos) != 1 || infos[0].Val != info1.Val {
 		t.Error("only one info should be returned", infos)
 	}
