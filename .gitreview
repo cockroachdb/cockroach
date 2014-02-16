@@ -1,0 +1,5 @@
+[gerrit]
+host=review.gerrithub.io
+port=29418
+project=spencerkimball/cockroach.git
+defaultbranch=master
