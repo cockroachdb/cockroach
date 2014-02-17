@@ -158,13 +158,17 @@ func (is *InfoStore) AddInfo(info *Info) bool {
 	// If the prefix matches a group, add to group.
 	if group := is.belongsToGroup(info.Key); group != nil {
 		if group.addInfo(info) {
-			if info.seq > is.maxSeq {
+			if is.maxSeq < info.seq {
 				is.maxSeq = info.seq
 			}
 			return true
 		}
 		return false
 	}
+
+	// TODO(spencer): The following code is very similar to Group.addInfo. Can we
+	// eliminate it by always adding a group for the empty prefix?
+
 	// Only replace an existing info if new timestamp is greater.
 	if existingInfo, ok := is.Infos[info.Key]; ok {
 		if info.Timestamp <= existingInfo.Timestamp {
@@ -173,13 +177,13 @@ func (is *InfoStore) AddInfo(info *Info) bool {
 		// Take the minimum of the two Hops values, as that represents
 		// our closest connection to the source of the info and we should
 		// get credit for that when comparing peers.
-		if existingInfo.Hops < info.Hops {
+		if info.Hops > existingInfo.Hops {
 			info.Hops = existingInfo.Hops
 		}
 	}
 	// Update info map.
 	is.Infos[info.Key] = info
-	if info.seq > is.maxSeq {
+	if is.maxSeq < info.seq {
 		is.maxSeq = info.seq
 	}
 	return true
@@ -201,8 +205,11 @@ func (is *InfoStore) infoCount() uint32 {
 // infos. The visitGroup function is run against each group in
 // turn. After each group is visited, the visitInfo function is run
 // against each of its infos.  Finally, after all groups have been
-// visitied, the visitInfo function is run against each non-group info
+// visited, the visitInfo function is run against each non-group info
 // in turn.
+//
+// TODO(spencer): I feel this pattern is overly confusing rather than just
+// looping over the groups and infos.
 func (is *InfoStore) visitInfos(visitGroup func(*Group) error, visitInfo func(*Info) error) error {
 	for _, group := range is.Groups {
 		if visitGroup != nil {

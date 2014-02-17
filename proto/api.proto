@@ -1,21 +1,22 @@
 // Supplied with every request.
 message RequestHeader {
-  // Specify snapshot_timestamp for snapshot reads.
-  // In nanoseconds since the epoch.
-  // This value cannot be specified with tx_id.
+  // Specify snapshot_timestamp for snapshot reads. In nanoseconds since the
+  // epoch. This value is mutually exclusive with tx_id.
   optional uint64 snapshot_timestamp = 1;
-  // Set if a transaction is underway. Specify as ‘0’
-  // to start a new transaction.
+  // Set if a transaction is underway. Specify as the empty string to start a
+  // new transaction. This value is mutually exlusive with snapshot_timestamp.
   optional string tx_id = 2;
-  // The maximum wall time seen by the client to
-  // date. This should be supplied with successive
-  // transactions for linearalizability for this client.
+  // The maximum wall time seen by the client to date (in nanoseconds since the
+  // epoch). This should be supplied with successive transactions for
+  // linearalizability for this client.
   optional uint64 max_wall_time = 3;
 }
 
 // Supplied with every response.
 message ResponseHeader {
   // Error/Success result.
+  // TODO(shawn): Why is this a message? Why not just put the Error message
+  // directly in ResponseHeader.
   message Result {
     message Error {
       optional int32 code = 1;
@@ -32,8 +33,7 @@ message ResponseHeader {
   optional string tx_id = 2;
 }
 
-// Multiple values at the same key are supported
-// based on timestamp.
+// Multiple values at the same key are supported based on timestamp.
 message Value {
   optional string value = 1;
   // Timestamp of value in nanoeconds since epoch.
@@ -75,7 +75,7 @@ message PutRequest {
   optional RequestHeader header = 1;
   optional string key = 2;  // must be non-empty
   optional Value value = 3;  // empty to test for non-existence
-  optional Value exp_value = 4;  // omit to verify 
+  optional Value exp_value = 4;  // omit to verify
 }
 
 message PutResponse {
@@ -209,14 +209,18 @@ message QueueResponse {
 
 // Sends a batch of updates.
 message BatchRequest {
-  optional PutRequest put_request = 1;
-  optional IncrementRequest increment_request = 2;
-  optional DeleteRequest delete_request = 3;
-  optional DeleteRangeRequest delete_range_request = 4;
-  optional ReapQueueRequest reap_queue_request = 5;
-  optional EndTransactionRequest end_transactionRequest = 6;
-  optional AccountingRequest accounting_request = 7;
-  optional QueueRequest queue_request = 8;
+  message Request {
+    optional PutRequest put_request = 1;
+    optional IncrementRequest increment_request = 2;
+    optional DeleteRequest delete_request = 3;
+    optional DeleteRangeRequest delete_range_request = 4;
+    optional ReapQueueRequest reap_queue_request = 5;
+    optional EndTransactionRequest end_transactionRequest = 6;
+    optional AccountingRequest accounting_request = 7;
+    optional QueueRequest queue_request = 8;
+  }
+
+  repeated Request request = 1;
 }
 
 message BatchResponse {

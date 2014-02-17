@@ -46,7 +46,7 @@ times the slot was incremented on key insertion. Counting bloom
 filters also allow keys to be removed. An estimate of the difference
 between key sets can be determined by "subtracting" one filter from
 another. See "Approximating the number of differences between remote
-// sets" Agarwal & Trachtenberg, 2006.
+sets" Agarwal & Trachtenberg, 2006.
 */
 
 package gossip

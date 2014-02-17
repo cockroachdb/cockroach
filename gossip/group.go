@@ -71,7 +71,7 @@ func (g *Group) shouldInclude(info *Info) bool {
 // when compaction is possible), and updates gatekeeper (used to
 // decide when to add to group).
 func (g *Group) updateIncremental(info *Info) {
-	if info.TTLStamp < g.minTTLStamp {
+	if g.minTTLStamp > info.TTLStamp {
 		g.minTTLStamp = info.TTLStamp
 	}
 	// Update gatekeeper if it's currently nil --or-- if info shouldn't
@@ -168,7 +168,7 @@ func (g *Group) addInfo(info *Info) bool {
 		if existingInfo.Timestamp < info.Timestamp {
 			// Take the minimum of the two Hops values; see comments
 			// in InfoStore.addInfo.
-			if existingInfo.Hops < info.Hops {
+			if info.Hops > existingInfo.Hops {
 				info.Hops = existingInfo.Hops
 			}
 			g.removeInternal(info)
