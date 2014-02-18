@@ -1,8 +1,39 @@
 #!/usr/bin/env bash
 
-set -e -x
+go test ./... || exit 1
 
-go vet ./...
-goimports -w .
-find . -path ./proto -prune -o -name '*.go' -print | xargs golint
-go test ./...
+# Find the .go files that are being modified by this change. Exclude the
+# auto-generated .pb.go files.
+gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$' | grep -v '.pb.go$')
+if [ -n "${gofiles}" ]; then
+  # Check for formatting errors.
+  unformatted=$(goimports -l ${gofiles})
+  if [ -n "${unformatted}" ]; then
+    # Some files are not gofmt'd. Print message and fail.
+    echo -e >&2 "\nGo files must be formatted with goimports. Please run:"
+    for fn in ${unformatted}; do
+      echo >&2 "  goimports -w $fn"
+    done
+    exit 1
+  fi
+
+  # Check for lint errors.
+  unlinted=$(golint ${gofiles} | awk -F: '{print $1}' | uniq)
+  if [ -n "${unlinted}" ]; then
+    echo -e >&2 "\nGo files with lint errors:"
+    for fn in ${unlinted}; do
+      echo >&2 "  golint $fn"
+    done
+    exit 1
+  fi
+
+  # Check for vet errors.
+  unvetted=$(go vet ${gofiles} | awk -F: '{print $1}' | uniq)
+  if [ -n "${unvetted}" ]; then
+    echo -e >&2 "\nGo files with vet errors:"
+    for fn in ${unvetted}; do
+      echo >&2 "  go vet $fn"
+    done
+    exit 1
+  fi
+fi
