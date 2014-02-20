@@ -36,7 +36,7 @@ func startServer() {
 	log.Println("Test server listening on", serverAddr)
 }
 
-// TestHealthz verfies that /healthz does, in fact, return "ok"
+// TestHealthz verifies that /healthz does, in fact, return "ok"
 // as expected. It also implicitly tests gzipping since http.Get
 // uses http.DefaultClient which accepts gzip-compressed responses
 // transparently.
