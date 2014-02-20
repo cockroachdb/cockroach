@@ -16,6 +16,7 @@
 package server
 
 import (
+	"compress/gzip"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -37,9 +38,7 @@ func startServer() {
 }
 
 // TestHealthz verifies that /healthz does, in fact, return "ok"
-// as expected. It also implicitly tests gzipping since http.Get
-// uses http.DefaultClient which accepts gzip-compressed responses
-// transparently.
+// as expected.
 func TestHealthz(t *testing.T) {
 	once.Do(startServer)
 	addr := "http://" + serverAddr + "/healthz"
@@ -58,21 +57,20 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-// TestNoGzip hits the /healthz endpoint while explicitly disabling
-// compression via the Accept-Encoding header. A custom client needs
-// to be created because http.DefaultClient has compression turned on
-// by default.
-func TestNoGzip(t *testing.T) {
+// TestGzip hits the /healthz endpoint while explicitly disabling
+// decompression on a custom client’s Transport and setting it
+// conditionally via the request’s Accept-Encoding headers.
+func TestGzip(t *testing.T) {
 	once.Do(startServer)
-	req, err := http.NewRequest("GET", "http://"+serverAddr+"/healthz", nil)
-	if err != nil {
-		t.Fatalf("could not create request: %s", err)
-	}
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
 		},
+	}
+	req, err := http.NewRequest("GET", "http://"+serverAddr+"/healthz", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %s", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -84,6 +82,24 @@ func TestNoGzip(t *testing.T) {
 		t.Fatalf("could not read response body: %s", err)
 	}
 	expected := "ok"
+	if !strings.Contains(string(b), expected) {
+		t.Errorf("expected body to contain %q, got %q", expected, string(b))
+	}
+	// Test for gzip explicitly.
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("could not make request to %s: %s", req.URL, err)
+	}
+	defer resp.Body.Close()
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		t.Fatalf("could not create new gzip reader: %s", err)
+	}
+	b, err = ioutil.ReadAll(gz)
+	if err != nil {
+		t.Fatalf("could not read gzipped response body: %s", err)
+	}
 	if !strings.Contains(string(b), expected) {
 		t.Errorf("expected body to contain %q, got %q", expected, string(b))
 	}

@@ -40,12 +40,17 @@ func (s *server) init() {
 }
 
 type gzipResponseWriter struct {
-	io.Writer
+	io.WriteCloser
 	http.ResponseWriter
 }
 
+func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
+	gz := gzip.NewWriter(w)
+	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
+}
+
 func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
+	return w.WriteCloser.Write(b)
 }
 
 // ServeHTTP is necessary to implement the http.Handler interface. It
@@ -56,9 +61,9 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Encoding", "gzip")
-	gz := gzip.NewWriter(w)
-	defer gz.Close()
-	s.mux.ServeHTTP(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	gzw := newGzipResponseWriter(w)
+	defer gzw.Close()
+	s.mux.ServeHTTP(gzw, r)
 }
 
 func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
