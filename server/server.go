@@ -20,7 +20,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -52,7 +51,6 @@ func (w gzipResponseWriter) Write(b []byte) (int, error) {
 // ServeHTTP is neccesary to implement the http.Handler interface. It
 // will gzip a response if the appropriate request headers are set.
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println("Headers:", r.Header)
 	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		s.mux.ServeHTTP(w, r)
 		return
