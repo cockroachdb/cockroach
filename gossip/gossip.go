@@ -50,11 +50,3 @@ another. See "Approximating the number of differences between remote
 */
 
 package gossip
-
-import (
-	"fmt"
-)
-
-func main() {
-	fmt.Println("gossip!")
-}
