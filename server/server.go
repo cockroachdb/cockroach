@@ -48,7 +48,7 @@ func (w gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// ServeHTTP is neccesary to implement the http.Handler interface. It
+// ServeHTTP is necessary to implement the http.Handler interface. It
 // will gzip a response if the appropriate request headers are set.
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
