@@ -1,4 +1,4 @@
-# Cockroach
+# Cockroach [![Build Status](https://secure.travis-ci.org/cockroachdb/cockroach.png)](http://travis-ci.org/cockroachdb/cockroach)
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
