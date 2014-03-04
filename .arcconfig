@@ -1,0 +1,4 @@
+{
+  "project_id" : "cockroach",
+  "conduit_uri" : "http://phabricator.andybons.com/"
+}

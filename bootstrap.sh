@@ -1,21 +1,12 @@
 #!/bin/bash
 
-# Verify "git review" is installed.
-if [ ! -x /usr/local/bin/git-review ]; then
+# Verify arcanist is installed.
+command -v arc &> /dev/null
+if [ $? -eq 1 ]; then
   cat <<EOF
-Please install git-review:
+Please install Arcanist (part of Phabricator):
 
-  sudo pip install git-review
-EOF
-  exit 1
-fi
-
-# Verify "git config gitreview.username" is set.
-if [ -z "$(git config gitreview.username)" ]; then
-  cat <<EOF
-Please set gitreview username:
-
-  git config --add gitreview.username <username>
+  http://www.phabricator.com/docs/phabricator/article/Arcanist_User_Guide.html
 EOF
   exit 1
 fi

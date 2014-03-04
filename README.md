@@ -4,11 +4,11 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Contributing
 
-We use [GerritHub](http://gerrithub.io/) for code reviews. GerritHub uses your
-GitHub credentials, just click on the "First Time Sign In" button. Note that
-the Gerrit development model is a bit different than the GitHub pull request
-model. Small changes can be easily developed on `master`. When a change is
-uploaded to GerritHub (via `git review`), it is not merged with master until
+We use [Phabricator](http://phabricator.andybons.com/) for code reviews. Phabricator
+uses your GitHub credentials, just click on the "Login or Register" button. The Phabricator
+development model is similar to the GitHub pull request model in that changes are
+typically developed on their own branch and then uploaded for review. When a change is
+uploaded to Phabricator (via `arc diff`), it is not merged with master until
 the review is complete and submitted.
 
 + Make sure your [Go environment is set up](http://golang.org/doc/code.html).
@@ -16,7 +16,48 @@ the review is complete and submitted.
 + Within `$GOPATH/src/github.com/spencerkimball/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
 + Hack away...
 + Commit your changes locally using `git add` and `git commit`.
-+ Upload your change for review using `git review'.
++ Upload your change for review using `arc diff`.
+
+## Installing Arcanist
+To install Arcanist (the code review tool)...
+
+Create a dir that will hold the two repos required.
+
+`$ mkdir somewhere`
+
+then clone the required repos into that folder:
+
+```
+somewhere/ $ git clone git://github.com/facebook/libphutil.git
+somewhere/ $ git clone git://github.com/facebook/arcanist.git
+```
+
+Then add somewhere/arcanist/bin/ to your $PATH
+
+Now within the cockroach directory...
+
+```
+$ git checkout -b newbranch
+... make changes ...
+$ git commit -a -m 'my awesome changes'
+$ arc diff
+```
+
+Say you’ve updated your diff to account for some suggestions, you just commit those on the same branch and do:
+
+```
+$ arc diff
+```
+
+again and it will take care of uploading things.
+
+Once you’re ready to land a change (it has been approved).
+
+```
+$ arc land
+```
+
+it will squash all commits, update the commit message with the original headline and description, and have a link back to the review. It will also clean up (delete) your feature branch.
 
 ## Design
 
