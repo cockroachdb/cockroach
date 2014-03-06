@@ -12,8 +12,8 @@ uploaded to Phabricator (via `arc diff`), it is not merged with master until
 the review is complete and submitted.
 
 + Make sure your [Go environment is set up](http://golang.org/doc/code.html).
-+ Retrieve the code: `go get github.com/spencerkimball/cockroach`
-+ Within `$GOPATH/src/github.com/spencerkimball/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
++ Retrieve the code: `go get github.com/cockroachdb/cockroach`
++ Within `$GOPATH/src/github.com/cockroachdb/cockroach/`, run `./bootstrap.sh`. This will install the git hooks and any prerequisite binaries for them.
 + Hack away...
 + Commit your changes locally using `git add` and `git commit`.
 + Upload your change for review using `arc diff`.
