@@ -12,17 +12,18 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
+//
+// Author: Andrew Bonventre (andybons@gmail.com)
 
-package main
+// Package db provides an interface and implementations for key-value stores.
+package db
 
-import (
-	"flag"
-	"log"
-
-	"github.com/cockroachdb/cockroach/server"
-)
-
-func main() {
-	flag.Parse()
-	log.Fatal(server.ListenAndServe())
+// DB is the interface that wraps the core operations of a key/value store.
+type DB interface {
+	// Put sets the given key to the value provided.
+	Put(string, interface{})
+	// Get returns the value for the given key, nil otherwise.
+	Get(string) interface{}
+	// Delete removes the item from the db with the given key.
+	Delete(key string)
 }
