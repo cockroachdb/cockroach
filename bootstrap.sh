@@ -18,6 +18,9 @@ go get github.com/golang/lint/golint
 go get code.google.com/p/go.tools/cmd/vet
 go get code.google.com/p/go.tools/cmd/goimports
 
+# Grab protobuf package for protoc-gen-go.
+go install code.google.com/p/goprotobuf/proto
+
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
   rm .git/hooks/$(basename $f)
