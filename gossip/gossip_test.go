@@ -18,6 +18,8 @@
 package gossip
 
 import (
+	"fmt"
+	"log"
 	"testing"
 	"time"
 )
@@ -32,7 +34,9 @@ const (
 func isNetworkConnected(nodes map[string]*Gossip) bool {
 	for _, node := range nodes {
 		for infoKey := range nodes {
-			if node.GetInfo(infoKey) == nil {
+			_, err := node.GetInt64Info(infoKey)
+			if err != nil {
+				log.Printf("error: %v", err)
 				return false
 			}
 		}
@@ -47,7 +51,7 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 	SimulateNetwork(numNodes, "unix", testGossipInterval, func(cycle int, nodes map[string]*Gossip) bool {
 		// Every node should gossip.
 		for addr, node := range nodes {
-			node.AddInfo(addr, Int64Value(cycle), time.Hour)
+			node.AddInt64Info(addr, int64(cycle), time.Hour)
 		}
 		if isNetworkConnected(nodes) {
 			connectedAtCycle = cycle
@@ -65,4 +69,93 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 // converges within 5 cycles.
 func TestConvergence(t *testing.T) {
 	verifyConvergence(10, 5, t)
+}
+
+// TestGossipInfoStore verifies operation of gossip instance infostore.
+func TestGossipInfoStore(t *testing.T) {
+	g := New(testAddr("<test-addr:0>"))
+	g.AddInt64Info("i", int64(1), time.Hour)
+	if val, err := g.GetInt64Info("i"); val != int64(1) || err != nil {
+		t.Errorf("error fetching int64: %v", err)
+	}
+	if _, err := g.GetInt64Info("i2"); err == nil {
+		t.Errorf("expected error fetching nonexistent key \"i2\"")
+	}
+	g.AddFloat64Info("f", float64(3.14), time.Hour)
+	if val, err := g.GetFloat64Info("f"); val != float64(3.14) || err != nil {
+		t.Errorf("error fetching float64: %v", err)
+	}
+	if _, err := g.GetFloat64Info("f2"); err == nil {
+		t.Errorf("expected error fetching nonexistent key \"f2\"")
+	}
+	g.AddStringInfo("s", "b", time.Hour)
+	if val, err := g.GetStringInfo("s"); val != "b" || err != nil {
+		t.Errorf("error fetching string: %v", err)
+	}
+	if _, err := g.GetStringInfo("s2"); err == nil {
+		t.Errorf("expected error fetching nonexistent key \"s2\"")
+	}
+}
+
+// TestGossipGroupsInfoStore verifies gossiping of groups via the
+// gossip instance infostore.
+func TestGossipGroupsInfoStore(t *testing.T) {
+	g := New(testAddr("<test-addr:0>"))
+
+	// For int64.
+	g.RegisterGroup("i", 3, MinGroup)
+	for i := 0; i < 3; i++ {
+		g.AddInt64Info(fmt.Sprintf("i.%d", i), int64(i), time.Hour)
+	}
+	int64Values, err := g.GetGroupInt64Infos("i")
+	if err != nil {
+		t.Errorf("error fetching int64 group: %v", err)
+	}
+	if len(int64Values) != 3 {
+		t.Errorf("incorrect number of values in group: %v", int64Values)
+	}
+	for i := 0; i < 3; i++ {
+		if int64Values[i] != int64(i) {
+			t.Errorf("index %d has incorrect value: %d, expected %d", i, int64Values[i], i)
+		}
+	}
+	if _, err := g.GetGroupInt64Infos("i2"); err == nil {
+		t.Errorf("expected error fetching nonexistent key \"i2\"")
+	}
+
+	// For float64.
+	g.RegisterGroup("f", 3, MinGroup)
+	for i := 0; i < 3; i++ {
+		g.AddFloat64Info(fmt.Sprintf("f.%d", i), float64(i), time.Hour)
+	}
+	float64Values, err := g.GetGroupFloat64Infos("f")
+	if err != nil {
+		t.Errorf("error fetching float64 group: %v", err)
+	}
+	if len(float64Values) != 3 {
+		t.Errorf("incorrect number of values in group: %v", float64Values)
+	}
+	for i := 0; i < 3; i++ {
+		if float64Values[i] != float64(i) {
+			t.Errorf("index %d has incorrect value: %d, expected %d", i, float64Values[i], i)
+		}
+	}
+
+	// For string.
+	g.RegisterGroup("s", 3, MinGroup)
+	for i := 0; i < 3; i++ {
+		g.AddStringInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour)
+	}
+	stringValues, err := g.GetGroupStringInfos("s")
+	if err != nil {
+		t.Errorf("error fetching string group: %v", err)
+	}
+	if len(stringValues) != 3 {
+		t.Errorf("incorrect number of values in group: %v", stringValues)
+	}
+	for i := 0; i < 3; i++ {
+		if stringValues[i] != fmt.Sprintf("%d", i) {
+			t.Errorf("index %d has incorrect value: %d, expected %d", i, stringValues[i], fmt.Sprintf("%d", i))
+		}
+	}
 }

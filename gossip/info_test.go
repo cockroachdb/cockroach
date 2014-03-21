@@ -54,37 +54,37 @@ func TestPrefix(t *testing.T) {
 
 func TestSort(t *testing.T) {
 	infos := infoArray{
-		{"a", Float64Value(3.0), 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"b", Float64Value(1.0), 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"c", Float64Value(2.1), 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"d", Float64Value(2.0), 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"e", Float64Value(-1.0), 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"a", 3.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"b", 1.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"c", 2.1, 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"d", 2.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"e", -1.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
 	}
 
 	// Verify forward sort.
 	sort.Sort(infos)
-	last := Float64Value(-math.MaxFloat64)
+	last := &info{"last", -math.MaxFloat64, 0, 0, 0, emptyAddr, emptyAddr, 0}
 	for _, i := range infos {
-		if i.Val.Less(last) {
+		if i.less(last) {
 			t.Errorf("info val %v not increasing", i.Val)
 		}
-		last = i.Val.(Float64Value)
+		last.Val = i.Val
 	}
 
 	// Verify reverse sort.
 	sort.Sort(sort.Reverse(infos))
-	last = Float64Value(math.MaxFloat64)
+	last = &info{"last", math.MaxFloat64, 0, 0, 0, emptyAddr, emptyAddr, 0}
 	for _, i := range infos {
-		if !i.Val.Less(last) {
+		if !i.less(last) {
 			t.Errorf("info val %v not decreasing", i.Val)
 		}
-		last = i.Val.(Float64Value)
+		last.Val = i.Val
 	}
 }
 
 func TestExpired(t *testing.T) {
 	now := time.Now().UnixNano()
-	i := info{"a", Float64Value(1), now, now + int64(time.Millisecond), 0, emptyAddr, emptyAddr, 0}
+	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, emptyAddr, emptyAddr, 0}
 	if i.expired(now) {
 		t.Error("premature expiration")
 	}
@@ -99,7 +99,7 @@ func TestIsFresh(t *testing.T) {
 	addr1 := testAddr("<test-addr1>")
 	addr2 := testAddr("<test-addr2>")
 	addr3 := testAddr("<test-addr3>")
-	i := info{"a", Float64Value(1), now, now + int64(time.Millisecond), 0, addr1, addr2, seq}
+	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, addr1, addr2, seq}
 	if !i.isFresh(addr3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}

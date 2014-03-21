@@ -53,6 +53,7 @@ type client struct {
 	forwardAddr net.Addr // Set if disconnected with an alternate addr
 	lastFresh   int64    // Last wall time client received fresh info
 	err         error    // Set if client experienced an error
+	maxAttempts int      // Maximum number of attempts to connect
 }
 
 // newClient creates and returns a client struct.
@@ -73,7 +74,7 @@ func (c *client) start(g *Gossip, done chan *client) {
 		Backoff:     250 * time.Millisecond, // first backoff at 250ms
 		MaxBackoff:  2 * time.Second,        // max backoff is 2s
 		Constant:    2,                      // doubles
-		MaxAttempts: 3,
+		MaxAttempts: c.maxAttempts,
 	}
 	util.RetryWithBackoffOptions(opts, func() bool {
 		cl, err := c.dial()

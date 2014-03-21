@@ -30,7 +30,7 @@ func newTestInfo(key string, val float64) *info {
 	ttl := now + int64(time.Minute)
 	return &info{
 		Key:       key,
-		Val:       Float64Value(val),
+		Val:       val,
 		Timestamp: now,
 		TTLStamp:  ttl,
 	}
@@ -43,23 +43,23 @@ func TestMinGroupShouldInclude(t *testing.T) {
 
 	// First two inserts work fine.
 	info1 := newTestInfo("a.a", 1)
-	if !group.addInfo(info1) {
-		t.Error("could not insert")
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
 	}
 	info2 := newTestInfo("a.b", 2)
-	if !group.addInfo(info2) {
-		t.Error("could not insert")
+	if err := group.addInfo(info2); err != nil {
+		t.Error(err)
 	}
 
 	// A smaller insert should include fine.
 	info3 := newTestInfo("a.c", 0)
-	if !group.shouldInclude(info3) || !group.addInfo(info3) {
+	if !group.shouldInclude(info3) || group.addInfo(info3) != nil {
 		t.Error("could not insert")
 	}
 
 	// A larger insert shouldn't include.
 	info4 := newTestInfo("a.d", 3)
-	if group.shouldInclude(info4) || group.addInfo(info4) {
+	if group.shouldInclude(info4) || group.addInfo(info4) == nil {
 		t.Error("shouldn't have been able to insert")
 	}
 }
@@ -71,24 +71,43 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 
 	// First two inserts work fine.
 	info1 := newTestInfo("a.a", 1)
-	if !group.addInfo(info1) {
-		t.Error("could not insert")
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
 	}
 	info2 := newTestInfo("a.b", 2)
-	if !group.addInfo(info2) {
-		t.Error("could not insert")
+	if err := group.addInfo(info2); err != nil {
+		t.Error(err)
 	}
 
 	// A larger insert should include fine.
 	info3 := newTestInfo("a.c", 3)
-	if !group.shouldInclude(info3) || !group.addInfo(info3) {
-		t.Error("could not insert")
+	if !group.shouldInclude(info3) || group.addInfo(info3) != nil {
+		t.Errorf("could not insert")
 	}
 
 	// A smaller insert shouldn't include.
 	info4 := newTestInfo("a.d", 0)
-	if group.shouldInclude(info4) || group.addInfo(info4) {
+	if group.shouldInclude(info4) || group.addInfo(info4) == nil {
 		t.Error("shouldn't have been able to insert")
+	}
+}
+
+// TestTypeMismatch inserts two infos of different types into a group
+// and verifies error response.
+func TestTypeMismatch(t *testing.T) {
+	group := newGroup("a", 1, MinGroup)
+	info1 := newTestInfo("a.a", 1)
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
+	}
+	info2 := &info{
+		Key:       "a.b",
+		Val:       "foo",
+		Timestamp: info1.Timestamp,
+		TTLStamp:  info1.TTLStamp,
+	}
+	if err := group.addInfo(info2); err == nil {
+		t.Error("expected error inserting string info into float64 group")
 	}
 }
 
@@ -97,27 +116,27 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 func TestSameKeyInserts(t *testing.T) {
 	group := newGroup("a", 1, MinGroup)
 	info1 := newTestInfo("a.a", 1)
-	if !group.addInfo(info1) {
-		t.Error("could not insert")
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
 	}
 
 	// Smaller timestamp should be ignored.
 	info2 := newTestInfo("a.a", 1)
 	info2.Timestamp = info1.Timestamp - 1
-	if group.addInfo(info2) {
+	if err := group.addInfo(info2); err == nil {
 		t.Error("should not allow insert")
 	}
 
 	// Two successively larger timestamps always win.
 	info3 := newTestInfo("a.a", 1)
 	info3.Timestamp = info1.Timestamp + 1
-	if !group.addInfo(info3) {
-		t.Error("could not insert")
+	if err := group.addInfo(info3); err != nil {
+		t.Error(err)
 	}
 	info4 := newTestInfo("a.a", 1)
 	info4.Timestamp = info1.Timestamp + 2
-	if !group.addInfo(info4) {
-		t.Error("could not insert")
+	if err := group.addInfo(info4); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -129,31 +148,31 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 	// First two inserts work fine.
 	info1 := newTestInfo("a.a", 1)
 	info1.TTLStamp = info1.Timestamp + int64(time.Millisecond)
-	if !group.addInfo(info1) {
-		t.Error("could not insert")
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
 	}
 	info2 := newTestInfo("a.b", 2)
 	info2.TTLStamp = info2.Timestamp + int64(time.Millisecond)
-	if !group.addInfo(info2) {
-		t.Error("could not insert")
+	if err := group.addInfo(info2); err != nil {
+		t.Error(err)
 	}
 
 	// A larger insert shouldn't yet insert as we haven't surprassed TTL.
 	info3 := newTestInfo("a.c", 3)
-	if group.addInfo(info3) {
+	if err := group.addInfo(info3); err == nil {
 		t.Error("shouldn't be able to insert")
 	}
 
 	// Now, wait a millisecond and try again.
 	time.Sleep(time.Millisecond)
-	if !group.addInfo(info3) {
-		t.Error("could not insert")
+	if err := group.addInfo(info3); err != nil {
+		t.Error(err)
 	}
 
 	// Next value should also insert.
 	info4 := newTestInfo("a.d", 4)
-	if !group.addInfo(info4) {
-		t.Error("could not insert")
+	if err := group.addInfo(info4); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -206,14 +225,14 @@ func TestGroups100Keys(t *testing.T) {
 // information. We don't want each new update with overlap to generate
 // unnecessary delta info.
 func TestSameKeySameTimestamp(t *testing.T) {
-	g := newGroup("a", 2, MinGroup)
+	group := newGroup("a", 2, MinGroup)
 	info1 := newTestInfo("a.a", 1.0)
 	info2 := newTestInfo("a.a", 1.0)
 	info2.Timestamp = info1.Timestamp
-	if !g.addInfo(info1) {
-		t.Error("failed first insert")
+	if err := group.addInfo(info1); err != nil {
+		t.Error(err)
 	}
-	if g.addInfo(info2) {
+	if err := group.addInfo(info2); err == nil {
 		t.Error("second insert with identical key & timestamp should have failed")
 	}
 }
@@ -229,17 +248,21 @@ func TestSameKeyDifferentHops(t *testing.T) {
 
 	// Add info1 first, then info2.
 	group1 := newGroup("a", 1, MinGroup)
-	if !group1.addInfo(info1) || group1.addInfo(info2) {
-		t.Error("failed insertions", info1, info2)
+	if err := group1.addInfo(info1); err != nil {
+		t.Errorf("failed insert: %s", err)
 	}
+	if err := group1.addInfo(info2); err == nil {
+		t.Errorf("shouldn't have inserted info 2: %s", err)
+	}
+
 	if i := group1.getInfo("a.a"); i == nil || i.Hops != 1 {
 		t.Error("info nil or info.Hops != 1:", i)
 	}
 
 	// Add info2 first, then info1.
 	group2 := newGroup("a", 1, MinGroup)
-	if !group2.addInfo(info2) || !group2.addInfo(info1) {
-		t.Error("failed insertions")
+	if err1, err2 := group2.addInfo(info2), group2.addInfo(info1); err1 != nil || err2 != nil {
+		t.Errorf("failed insertions: %s, %s", err1, err2)
 	}
 	if i := group2.getInfo("a.a"); i == nil || i.Hops != 1 {
 		t.Error("info nil or info.Hops != 1:", i)

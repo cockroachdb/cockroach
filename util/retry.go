@@ -28,7 +28,7 @@ type Options struct {
 	Backoff     time.Duration // Default retry backoff interval
 	MaxBackoff  time.Duration // Maximum retry backoff interval
 	Constant    float64       // Default backoff constant
-	MaxAttempts int           // Maximum number of retries (0 for infinite)
+	MaxAttempts int           // Maximum number of attempts (0 for infinite)
 }
 
 // RetryWithBackoff is uses default retry constants to implement an
@@ -48,9 +48,12 @@ func RetryWithBackoff(fn func() bool) error {
 // using the supplied options as parameters.
 func RetryWithBackoffOptions(opts Options, fn func() bool) error {
 	backoff := opts.Backoff
-	for count := 0; opts.MaxAttempts == 0 || count < opts.MaxAttempts; count++ {
+	for count := 1; true; count++ {
 		if fn() {
 			return nil
+		}
+		if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
+			return fmt.Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
 		}
 		select {
 		case <-time.After(backoff):
@@ -61,6 +64,5 @@ func RetryWithBackoffOptions(opts Options, fn func() bool) error {
 			}
 		}
 	}
-
-	return fmt.Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
+	return nil
 }

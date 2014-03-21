@@ -119,7 +119,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 		node.SetInterval(gossipInterval)
 		// Node 0 gossips node count.
 		if i == 0 {
-			node.AddInfo(NodeCountGossip, Int64Value(nodeCount), time.Hour)
+			node.AddInt64Info(NodeCountGossip, int64(nodeCount), time.Hour)
 		}
 		node.Start()
 		nodes[addrs[i].String()] = node
@@ -131,7 +131,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 		select {
 		case <-gossipTimeout:
 			// Node 0 gossips sentinel every cycle.
-			nodes[addrs[0].String()].AddInfo(SentinelGossip, Int64Value(cycle), time.Hour)
+			nodes[addrs[0].String()].AddInt64Info(SentinelGossip, int64(cycle), time.Hour)
 			if !simCallback(cycle, nodes) {
 				complete = true
 			}

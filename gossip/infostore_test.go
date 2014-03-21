@@ -61,8 +61,8 @@ func TestRegisterGroup(t *testing.T) {
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	info1 := is.newInfo("a", Float64Value(1), time.Second)
-	info2 := is.newInfo("a", Float64Value(1), time.Second)
+	info1 := is.newInfo("a", float64(1), time.Second)
+	info2 := is.newInfo("a", float64(1), time.Second)
 	if info1.seq != info2.seq-1 {
 		t.Errorf("sequence numbers should increment %d, %d", info1.seq, info2.seq)
 	}
@@ -72,9 +72,9 @@ func TestNewInfo(t *testing.T) {
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	i := is.newInfo("a", Float64Value(1), time.Second)
-	if !is.addInfo(i) {
-		t.Error("unable to add info")
+	i := is.newInfo("a", float64(1), time.Second)
+	if err := is.addInfo(i); err != nil {
+		t.Error(err)
 	}
 	if is.infoCount() != 1 {
 		t.Errorf("infostore count incorrect %d != 1", is.infoCount())
@@ -94,9 +94,9 @@ func TestInfoStoreGetInfo(t *testing.T) {
 // and group.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	i := is.newInfo("a", Float64Value(1), time.Nanosecond)
-	if !is.addInfo(i) {
-		t.Error("unable to add info")
+	i := is.newInfo("a", float64(1), time.Nanosecond)
+	if err := is.addInfo(i); err != nil {
+		t.Error(err)
 	}
 	time.Sleep(time.Nanosecond)
 	if is.getInfo("a") != nil {
@@ -108,17 +108,17 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	info1 := is.newInfo("a", Float64Value(1), time.Second)
-	if !is.addInfo(info1) {
-		t.Error("unable to add info1")
+	info1 := is.newInfo("a", float64(1), time.Second)
+	if err := is.addInfo(info1); err != nil {
+		t.Error(err)
 	}
-	info2 := is.newInfo("a", Float64Value(2), time.Second)
+	info2 := is.newInfo("a", float64(2), time.Second)
 	info2.Timestamp = info1.Timestamp
-	if is.addInfo(info2) {
+	if err := is.addInfo(info2); err == nil {
 		t.Error("able to add info2 with same timestamp")
 	}
 	info2.Timestamp--
-	if is.addInfo(info2) {
+	if err := is.addInfo(info2); err == nil {
 		t.Error("able to add info2 with lesser timestamp")
 	}
 	// Verify info2 did not replace info1.
@@ -130,10 +130,10 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	info1 := is.newInfo("a", Float64Value(1), time.Second)
-	info2 := is.newInfo("a", Float64Value(2), time.Second)
-	if !is.addInfo(info1) || !is.addInfo(info2) {
-		t.Error("unable to add info1 or info2")
+	info1 := is.newInfo("a", float64(1), time.Second)
+	info2 := is.newInfo("a", float64(2), time.Second)
+	if err1, err2 := is.addInfo(info1), is.addInfo(info2); err1 != nil || err2 != nil {
+		t.Error(err1, err2)
 	}
 }
 
@@ -141,13 +141,16 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	info1 := is.newInfo("a", Float64Value(1), time.Second)
+	info1 := is.newInfo("a", float64(1), time.Second)
 	info1.Hops = 1
-	info2 := is.newInfo("a", Float64Value(2), time.Second)
+	info2 := is.newInfo("a", float64(2), time.Second)
 	info2.Timestamp = info1.Timestamp
 	info2.Hops = 2
-	if !is.addInfo(info1) || is.addInfo(info2) {
-		t.Error("unable to add info1 or able to add info2")
+	if err := is.addInfo(info1); err != nil {
+		t.Errorf("failed insert: %s", err)
+	}
+	if err := is.addInfo(info2); err == nil {
+		t.Errorf("shouldn't have inserted info 2: %s", err)
 	}
 
 	i := is.getInfo("a")
@@ -156,9 +159,9 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 	}
 
 	// Try yet another info, with lower hops yet (0).
-	info3 := is.newInfo("a", Float64Value(3), time.Second)
-	if !is.addInfo(info3) {
-		t.Error("unable to add info3")
+	info3 := is.newInfo("a", float64(3), time.Second)
+	if err := is.addInfo(info3); err != nil {
+		t.Error(err)
 	}
 	i = is.getInfo("a")
 	if i.Hops != info3.Hops || i.Val != info3.Val {
@@ -177,10 +180,10 @@ func TestAddGroupInfos(t *testing.T) {
 		t.Error("could not register group")
 	}
 
-	info1 := is.newInfo("a.a", Float64Value(1), time.Second)
-	info2 := is.newInfo("a.b", Float64Value(2), time.Second)
-	if !is.addInfo(info1) || !is.addInfo(info2) {
-		t.Error("unable to add info1 or info2")
+	info1 := is.newInfo("a.a", float64(1), time.Second)
+	info2 := is.newInfo("a.b", float64(2), time.Second)
+	if err1, err2 := is.addInfo(info1), is.addInfo(info2); err1 != nil || err2 != nil {
+		t.Error(err1, err2)
 	}
 	if is.infoCount() != 2 {
 		t.Errorf("infostore count incorrect %d != 2", is.infoCount())
@@ -202,10 +205,10 @@ func TestAddGroupInfos(t *testing.T) {
 	if is.registerGroup(MaxGroup) != nil {
 		t.Error("could not register group")
 	}
-	info3 := is.newInfo("b.a", Float64Value(1), time.Second)
-	info4 := is.newInfo("b.b", Float64Value(2), time.Second)
-	if !is.addInfo(info3) || !is.addInfo(info4) {
-		t.Error("unable to add info1 or info2")
+	info3 := is.newInfo("b.a", float64(1), time.Second)
+	info4 := is.newInfo("b.b", float64(2), time.Second)
+	if err1, err2 := is.addInfo(info3), is.addInfo(info4); err1 != nil || err2 != nil {
+		t.Error(err1, err2)
 	}
 	if is.infoCount() != 4 {
 		t.Errorf("infostore count incorrect %d != 4", is.infoCount())
@@ -224,9 +227,9 @@ func TestAddGroupInfos(t *testing.T) {
 
 	// Finally, add a non-group info and verify it cannot be fetched
 	// by group, but can be fetched solo.
-	info5 := is.newInfo("c.a", Float64Value(3), time.Second)
-	if !is.addInfo(info5) {
-		t.Error("unable to add info5")
+	info5 := is.newInfo("c.a", float64(3), time.Second)
+	if err := is.addInfo(info5); err != nil {
+		t.Error(err)
 	}
 	if is.getGroupInfos("c") != nil {
 		t.Error("shouldn't be able to fetch non-existent group c")
@@ -253,15 +256,15 @@ func TestCombine(t *testing.T) {
 		t.Error("could not register group1 or group1Overlap")
 	}
 
-	info1a := is1.newInfo("a.a", Float64Value(1), time.Second)
-	info1b := is1.newInfo("a.b", Float64Value(2), time.Second)
-	info1c := is1.newInfo("a", Float64Value(3), time.Second) // non-group info
-	if !is1.addInfo(info1a) || !is1.addInfo(info1b) || !is1.addInfo(info1c) {
+	info1a := is1.newInfo("a.a", float64(1), time.Second)
+	info1b := is1.newInfo("a.b", float64(2), time.Second)
+	info1c := is1.newInfo("a", float64(3), time.Second) // non-group info
+	if is1.addInfo(info1a) != nil || is1.addInfo(info1b) != nil || is1.addInfo(info1c) != nil {
 		t.Error("unable to add infos")
 	}
-	info1Overlap := is1.newInfo("b.a", Float64Value(3), time.Second)
-	if !is1.addInfo(info1Overlap) {
-		t.Error("unable to add info1Overlap")
+	info1Overlap := is1.newInfo("b.a", float64(3), time.Second)
+	if err := is1.addInfo(info1Overlap); err != nil {
+		t.Error("unable to add info1Overlap:", err)
 	}
 
 	is2 := newInfoStore(testAddr("peer"))
@@ -272,15 +275,15 @@ func TestCombine(t *testing.T) {
 		t.Error("could not register group2 or group2Overlap")
 	}
 
-	info2a := is2.newInfo("c.a", Float64Value(1), time.Second)
-	info2b := is2.newInfo("c.b", Float64Value(2), time.Second)
-	info2c := is2.newInfo("c", Float64Value(3), time.Second)
-	if !is2.addInfo(info2a) || !is2.addInfo(info2b) || !is2.addInfo(info2c) {
+	info2a := is2.newInfo("c.a", float64(1), time.Second)
+	info2b := is2.newInfo("c.b", float64(2), time.Second)
+	info2c := is2.newInfo("c", float64(3), time.Second)
+	if is2.addInfo(info2a) != nil || is2.addInfo(info2b) != nil || is2.addInfo(info2c) != nil {
 		t.Error("unable to add infos")
 	}
-	info2Overlap := is2.newInfo("b.a", Float64Value(4), time.Second)
-	if !is2.addInfo(info2Overlap) {
-		t.Error("unable to add info2Overlap")
+	info2Overlap := is2.newInfo("b.a", float64(4), time.Second)
+	if err := is2.addInfo(info2Overlap); err != nil {
+		t.Error("unable to add info2Overlap:", err)
 	}
 
 	if freshCount := is1.combine(is2); freshCount != 4 {
@@ -337,13 +340,13 @@ func createTestInfoStore(t *testing.T) *infoStore {
 
 	// Insert 10 keys each for groupA, groupB and non-group successively.
 	for i := 0; i < 10; i++ {
-		infoA := is.newInfo(fmt.Sprintf("a.%d", i), Float64Value(i), time.Second)
+		infoA := is.newInfo(fmt.Sprintf("a.%d", i), float64(i), time.Second)
 		is.addInfo(infoA)
 
-		infoB := is.newInfo(fmt.Sprintf("b.%d", i), Float64Value(i+1), time.Second)
+		infoB := is.newInfo(fmt.Sprintf("b.%d", i), float64(i+1), time.Second)
 		is.addInfo(infoB)
 
-		infoC := is.newInfo(fmt.Sprintf("c.%d", i), Float64Value(i+2), time.Second)
+		infoC := is.newInfo(fmt.Sprintf("c.%d", i), float64(i+2), time.Second)
 		is.addInfo(infoC)
 	}
 
@@ -400,7 +403,7 @@ func TestInfoStoreDistant(t *testing.T) {
 	is := newInfoStore(emptyAddr)
 	// Add info from each address, with hop count equal to index+1.
 	for i := 0; i < len(addrs); i++ {
-		inf := is.newInfo(fmt.Sprintf("b.%d", i), Float64Value(i), time.Second)
+		inf := is.newInfo(fmt.Sprintf("b.%d", i), float64(i), time.Second)
 		inf.Hops = uint32(i + 1)
 		inf.NodeAddr = addrs[i]
 		is.addInfo(inf)
@@ -428,7 +431,7 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("not expecting an address from an empty set")
 	}
 
-	inf1 := is.newInfo("a1", Float64Value(1), time.Second)
+	inf1 := is.newInfo("a1", float64(1), time.Second)
 	inf1.peerAddr = addrs[0]
 	is.addInfo(inf1)
 	if is.leastUseful(set) != nil {
@@ -440,7 +443,7 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("expecting addrs[0] as least useful")
 	}
 
-	inf2 := is.newInfo("a2", Float64Value(2), time.Second)
+	inf2 := is.newInfo("a2", float64(2), time.Second)
 	inf2.peerAddr = addrs[0]
 	is.addInfo(inf2)
 	if is.leastUseful(set) != addrs[0] {
@@ -452,7 +455,7 @@ func TestLeastUseful(t *testing.T) {
 		t.Error("expecting addrs[1] as least useful")
 	}
 
-	inf3 := is.newInfo("a3", Float64Value(3), time.Second)
+	inf3 := is.newInfo("a3", float64(3), time.Second)
 	inf3.peerAddr = addrs[1]
 	is.addInfo(inf3)
 	if is.leastUseful(set) != addrs[1] {

@@ -18,8 +18,10 @@
 package gossip
 
 import (
+	"fmt"
 	"log"
 	"math"
+	"reflect"
 	"time"
 )
 
@@ -74,9 +76,9 @@ func (g *group) shouldInclude(i *info) bool {
 	}
 	switch g.TypeOf {
 	case MinGroup:
-		return i.Val.Less(g.gatekeeper.Val)
+		return i.less(g.gatekeeper)
 	case MaxGroup:
-		return !i.Val.Less(g.gatekeeper.Val)
+		return !i.less(g.gatekeeper)
 	default:
 		log.Fatalf("unknown group type %d", g.TypeOf)
 		return false
@@ -177,8 +179,10 @@ func (g *group) infosAsArray() infoArray {
 // or if the info has a value which guarantees it a spot within the
 // group according to the group type.
 //
-// Returns true if the info was added; false otherwise.
-func (g *group) addInfo(i *info) bool {
+// Returns nil if the info was added; an error if the info types don't
+// match an existing group or the info was older than what we
+// currently have.
+func (g *group) addInfo(i *info) error {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info.  If the
 	// timestamps are equal (i.e. this is the same info), but hops
@@ -189,14 +193,24 @@ func (g *group) addInfo(i *info) bool {
 			(existingInfo.Timestamp == i.Timestamp && existingInfo.Hops > i.Hops) {
 			g.removeInternal(i)
 		} else {
-			return false // The info being added is older than what we have; skip
+			return fmt.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
+		}
+	}
+
+	// If the group is not empty, verify types match by comparing to
+	// gatekeeper.
+	if g.gatekeeper != nil {
+		t1 := reflect.TypeOf(i.Val).Kind()
+		t2 := reflect.TypeOf(g.gatekeeper.Val).Kind()
+		if t1 != t2 {
+			return fmt.Errorf("info %+v has type %s whereas group has type %s", t1, t2)
 		}
 	}
 
 	// If there's free space or we successfully compacted, add info.
 	if len(g.Infos) < g.Limit || g.compact() {
 		g.addInternal(i)
-		return true // Successfully appended to group
+		return nil // Successfully appended to group
 	}
 
 	// Group limit is reached. Check gatekeeper; if we should include,
@@ -204,8 +218,8 @@ func (g *group) addInfo(i *info) bool {
 	if g.shouldInclude(i) {
 		g.removeInternal(g.gatekeeper)
 		g.addInternal(i)
-		return true
+		return nil
 	}
 
-	return false
+	return fmt.Errorf("info %+v not added to group", i)
 }

@@ -89,7 +89,7 @@ func newInfoStore(nodeAddr net.Addr) *infoStore {
 
 // newInfo allocates and returns a new info object using specified key,
 // value, and time-to-live.
-func (is *infoStore) newInfo(key string, val Comparable, ttl time.Duration) *info {
+func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *info {
 	is.seqGen++
 	now := monotonicUnixNano()
 	return &info{
@@ -156,24 +156,24 @@ func (is *infoStore) registerGroup(g *group) error {
 // info is added to that group (prefix is defined by prefix of string up
 // until last period '.'). Otherwise, the info is added to the infos map.
 //
-// Returns true if info was added; false otherwise.
-func (is *infoStore) addInfo(i *info) bool {
+// Returns nil if info was added; error otherwise.
+func (is *infoStore) addInfo(i *info) error {
 	// If the prefix matches a group, add to group.
 	if group := is.belongsToGroup(i.Key); group != nil {
-		if group.addInfo(i) {
-			if i.seq > is.MaxSeq {
-				is.MaxSeq = i.seq
-			}
-			return true
+		if err := group.addInfo(i); err != nil {
+			return err
 		}
-		return false
+		if i.seq > is.MaxSeq {
+			is.MaxSeq = i.seq
+		}
+		return nil
 	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
 	if existingInfo, ok := is.Infos[i.Key]; ok {
 		if i.Timestamp < existingInfo.Timestamp ||
 			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
-			return false // Skip update, we already have newer value
+			return fmt.Errorf("info %+v older than current group info %+v", i, existingInfo)
 		}
 	}
 	// Update info map.
@@ -181,7 +181,7 @@ func (is *infoStore) addInfo(i *info) bool {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	return true
+	return nil
 }
 
 // infoCount returns the count of infos stored in groups and the
@@ -274,7 +274,7 @@ func (is *infoStore) combine(delta *infoStore) int {
 		i.seq = is.seqGen
 		i.Hops++
 		i.peerAddr = delta.NodeAddr
-		if is.addInfo(i) {
+		if is.addInfo(i) == nil {
 			freshCount++
 		}
 		return nil

@@ -18,6 +18,7 @@
 package gossip
 
 import (
+	"log"
 	"net"
 	"testing"
 	"time"
@@ -50,18 +51,22 @@ func startGossip(t *testing.T) (local, remote *Gossip) {
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
 	local, remote := startGossip(t)
-	local.AddInfo("local-key", StringValue("local value"), time.Second)
-	remote.AddInfo("remote-key", StringValue("remote value"), time.Second)
+	local.AddStringInfo("local-key", "local value", time.Second)
+	remote.AddStringInfo("remote-key", "remote value", time.Second)
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
+	client.maxAttempts = 1
 	go client.start(local, disconnected)
 
 	waitFor(func() bool {
-		return remote.GetInfo("local-key") != nil && local.GetInfo("remote-key") != nil
+		_, lerr := remote.GetStringInfo("local-key")
+		_, rerr := local.GetStringInfo("remote-key")
+		return lerr == nil && rerr == nil
 	}, "gossip exchange", t)
 
 	remote.stopServing()
+	log.Printf("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")
 	}

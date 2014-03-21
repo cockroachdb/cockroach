@@ -16,12 +16,12 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-Package gossip implements a protocol for sharing information
-between Cockroach nodes using an ad-hoc, peer-to-peer network. The
-self-assembled network aims to minimize time for new information
-to reach each node, and minimize network traffic required.
+Package gossip implements a protocol for sharing information between
+Cockroach nodes using an ad-hoc, peer-to-peer network. The
+self-assembled network aims to minimize time for new information to
+reach each node, and minimize network traffic required.
 
-Gossipped information is identified by key. Gossip information
+Gossiped information is identified by key. Gossip information
 is captured by info objects.
 
 Groups are used to logically group related gossip values and maintain
@@ -71,11 +71,11 @@ the system with minimal total hops. The algorithm is as follows:
    Node periodically returns empty gossip responses to prevent client
    timeouts. Node receives delta from gossiping client in turn.
 */
-
 package gossip
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"net"
@@ -94,7 +94,7 @@ var (
 )
 
 const (
-	// SentinelGossip is gossipped info which must not expire or node
+	// SentinelGossip is gossiped info which must not expire or node
 	// considers itself partitioned and will retry with bootstrap
 	// hosts.
 	SentinelGossip = "meta0"
@@ -164,36 +164,155 @@ func (g *Gossip) SetInterval(interval time.Duration) {
 	g.interval = interval
 }
 
-// AddInfo adds or updates an info. Returns true if info was added;
-// false otherwise.
-func (g *Gossip) AddInfo(key string, val Comparable, ttl time.Duration) bool {
+// AddInt64Info adds or updates an int64-valued info. Returns nil if
+// info was added; error otherwise.
+func (g *Gossip) AddInt64Info(key string, val int64, ttl time.Duration) error {
+	return g.addInfo(key, val, ttl)
+}
+
+// AddFloat64Info adds or updates a float64-valued info. Returns nil if
+// info was added; error otherwise.
+func (g *Gossip) AddFloat64Info(key string, val float64, ttl time.Duration) error {
+	return g.addInfo(key, val, ttl)
+}
+
+// AddStringInfo adds or updates a string-valued info. Returns nil if
+// info was added; error otherwise.
+func (g *Gossip) AddStringInfo(key string, val string, ttl time.Duration) error {
+	return g.addInfo(key, val, ttl)
+}
+
+// addInfo adds or updates an info by key. Returns nil if
+// info was added; error otherwise.
+func (g *Gossip) addInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.is.addInfo(g.is.newInfo(key, val, ttl))
 }
 
-// GetInfo returns a Comparable object by key or nil if specified key
-// does not exist or has expired.
-func (g *Gossip) GetInfo(key string) Comparable {
+// GetInt64Info returns an int64 value by key or an error if specified
+// key does not exist, is of another type, or has expired.
+func (g *Gossip) GetInt64Info(key string) (int64, error) {
+	v, err := g.getInfo(key)
+	if err != nil {
+		return 0, err
+	}
+	switch t := v.(type) {
+	case int64:
+		return t, nil
+	default:
+		return 0, fmt.Errorf("key %q is of type %s", key, t)
+	}
+}
+
+// GetFloat64Info returns a float64 value by key or an error if
+// specified key does not exist, is of another type, or has expired.
+func (g *Gossip) GetFloat64Info(key string) (float64, error) {
+	v, err := g.getInfo(key)
+	if err != nil {
+		return 0, err
+	}
+	switch t := v.(type) {
+	case float64:
+		return t, nil
+	default:
+		return 0, fmt.Errorf("key %q is of type %s", key, t)
+	}
+}
+
+// GetStringInfo returns a string value by key or an error if specified
+// key does not exist, is of another type, or has expired.
+func (g *Gossip) GetStringInfo(key string) (string, error) {
+	v, err := g.getInfo(key)
+	if err != nil {
+		return "", err
+	}
+	switch t := v.(type) {
+	case string:
+		return t, nil
+	default:
+		return "", fmt.Errorf("key %q is of type %s", key, t)
+	}
+}
+
+// getInfo returns an info value by key or an error if it doesn't
+// exist or has expired.
+func (g *Gossip) getInfo(key string) (interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if i := g.is.getInfo(key); i != nil {
-		return i.Val
+		return i.Val, nil
 	}
-	return nil
+	return nil, fmt.Errorf("key %q does not exist or has expired", key)
 }
 
-// GetGroupInfos returns a slice of info objects from specified group,
+// GetGroupInt64Infos returns a slice of int64 info values from
+// specified group, or an error if group is not registered.
+func (g *Gossip) GetGroupInt64Infos(prefix string) ([]int64, error) {
+	infos, err := g.getGroupInfos(prefix)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]int64, len(infos))
+	for i, info := range infos {
+		switch t := info.Val.(type) {
+		default:
+			return nil, fmt.Errorf("value type not int64: %v", t)
+		case int64:
+			values[i] = t
+		}
+	}
+	return values, nil
+}
+
+// GetGroupFloat64Infos returns a slice of float64 info values from
+// specified group, or an error if group is not registered.
+func (g *Gossip) GetGroupFloat64Infos(prefix string) ([]float64, error) {
+	infos, err := g.getGroupInfos(prefix)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]float64, len(infos))
+	for i, info := range infos {
+		switch t := info.Val.(type) {
+		default:
+			return nil, fmt.Errorf("value type not float64: %v", t)
+		case float64:
+			values[i] = t
+		}
+	}
+	return values, nil
+}
+
+// GetGroupStringInfos returns a slice of string info values from
+// specified group, or an error if group is not registered.
+func (g *Gossip) GetGroupStringInfos(prefix string) ([]string, error) {
+	infos, err := g.getGroupInfos(prefix)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]string, len(infos))
+	for i, info := range infos {
+		switch t := info.Val.(type) {
+		default:
+			return nil, fmt.Errorf("value type not string: %v", t)
+		case string:
+			values[i] = t
+		}
+	}
+	return values, nil
+}
+
+// getGroupInfos returns a slice of info objects from specified group,
 // Returns nil if group is not registered.
-func (g *Gossip) GetGroupInfos(prefix string) []Comparable {
+func (g *Gossip) getGroupInfos(prefix string) ([]*info, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	infos := g.is.getGroupInfos(prefix)
-	values := make([]Comparable, len(infos))
-	for idx, i := range infos {
-		values[idx] = i.Val
+	if infos == nil {
+		return nil, fmt.Errorf("group %q doesn't exist", prefix)
 	}
-	return values
+	return infos, nil
 }
 
 // RegisterGroup registers a new group with info store. Returns an
@@ -205,7 +324,7 @@ func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error
 }
 
 // MaxHops returns the maximum number of hops to reach the furthest
-// gossipped information currently in the network.
+// gossiped information currently in the network.
 func (g *Gossip) MaxHops() uint32 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -260,11 +379,10 @@ func (g *Gossip) Close() <-chan error {
 // on the level of fanout (MaxPeers) and the count of nodes in the
 // cluster.
 func (g *Gossip) maxToleratedHops() uint32 {
-	var nodeCount int64
+	// Get info directly as we have mutex held here.
+	var nodeCount int64 = defaultNodeCount
 	if info := g.is.getInfo(NodeCountGossip); info != nil {
-		nodeCount = int64(info.Val.(Int64Value))
-	} else {
-		nodeCount = defaultNodeCount
+		nodeCount = info.Val.(int64)
 	}
 	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
 }
