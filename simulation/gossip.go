@@ -133,10 +133,10 @@ func (em edgeMap) addEdge(addr string, e edge) {
 //        node5 -> node2
 //        node5 -> node3
 //   }
-func OutputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edgeSet map[string]edge) string {
+func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edgeSet map[string]edge) string {
 	f, err := os.Create(dotFN)
 	if err != nil {
-		log.Fatalf("unable to create temp file:", err)
+		log.Fatalf("unable to create temp file: %s", err)
 	}
 	defer f.Close()
 
@@ -177,16 +177,19 @@ func OutputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 			if infoKey == addr {
 				continue // skip the node's own info
 			}
-			if val := node.GetInfo(infoKey); val != nil {
-				totalAge += int64(cycle) - int64(val.(gossip.Int64Value))
-			} else {
+			if val, err := node.GetInt64Info(infoKey); err != nil {
+				log.Printf("error getting info for key %q: %s", infoKey, err)
 				incomplete++
+			} else {
+				totalAge += int64(cycle) - val
 			}
 		}
 
 		var sentinelAge int64
-		if val := node.GetInfo(gossip.SentinelGossip); val != nil {
-			sentinelAge = int64(cycle) - int64(val.(gossip.Int64Value))
+		if val, err := node.GetInt64Info(gossip.SentinelGossip); err != nil {
+			log.Printf("error getting info for sentinel gossip key %q: %s", gossip.SentinelGossip, err)
+		} else {
+			sentinelAge = int64(cycle) - val
 		}
 
 		var age, nodeColor string
@@ -264,19 +267,21 @@ func main() {
 	edgeSet := make(map[string]edge)
 	fns := make([]string, 0, numCycles/outputEvery)
 
-	gossip.SimulateNetwork(nodeCount, gossipInterval, func(cycle int, nodes map[string]*gossip.Gossip) bool {
+	gossip.SimulateNetwork(nodeCount, *network, gossipInterval, func(cycle int, nodes map[string]*gossip.Gossip) bool {
 		if cycle == numCycles {
 			return false
 		}
 		// Update infos.
 		for addr, node := range nodes {
-			node.AddInfo(addr, gossip.Int64Value(cycle), time.Hour)
+			if err := node.AddInt64Info(addr, int64(cycle), time.Hour); err != nil {
+				log.Printf("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
+			}
 		}
 		// Output dot graph periodically.
 		if (cycle+1)%outputEvery == 0 {
 			dotFN := fmt.Sprintf("%s/sim-cycle-%d.dot", dirName, cycle)
 			fns = append(fns, dotFN)
-			OutputDotFile(dotFN, cycle, nodes, edgeSet)
+			outputDotFile(dotFN, cycle, nodes, edgeSet)
 		}
 
 		return true
