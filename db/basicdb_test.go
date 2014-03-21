@@ -30,16 +30,34 @@ func TestBasicDBPutGetDelete(t *testing.T) {
 		{"server", 42},
 	}
 	for _, c := range testCases {
-		if store.Get(c.key) != nil {
-			t.Errorf("expected key value %s to be nil: got %+v", c.key, store.Get(c.key))
+		val, err := store.Get(c.key)
+		if err != nil {
+			t.Errorf("get: expected no error, but got %s", err)
 		}
-		store.Put(c.key, c.value)
-		if store.Get(c.key) != c.value {
-			t.Errorf("expected key value %s to be %+v: got %+v", store.Get(c.key))
+		if val != nil {
+			t.Errorf("expected key value %s to be nil: got %+v", c.key, val)
 		}
-		store.Delete(c.key)
-		if store.Get(c.key) != nil {
-			t.Errorf("expected key value %s to be nil: got %+v", c.key, store.Get(c.key))
+		err = store.Put(c.key, c.value)
+		if err != nil {
+			t.Errorf("put: expected no error, but got %s", err)
+		}
+		val, err = store.Get(c.key)
+		if err != nil {
+			t.Errorf("get: expected no error, but got %s", err)
+		}
+		if val != c.value {
+			t.Errorf("expected key value %s to be %+v: got %+v", val)
+		}
+		err = store.Delete(c.key)
+		if err != nil {
+			t.Errorf("delete: expected no error, but got %s", err)
+		}
+		val, err = store.Get(c.key)
+		if err != nil {
+			t.Errorf("get: expected no error, but got %s", err)
+		}
+		if val != nil {
+			t.Errorf("expected key value %s to be nil: got %+v", c.key, val)
 		}
 	}
 }

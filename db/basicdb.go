@@ -31,22 +31,24 @@ func NewBasicDB() *BasicDB {
 }
 
 // Put sets the given key to the value provided.
-func (b *BasicDB) Put(key string, val interface{}) {
+func (b *BasicDB) Put(key string, val interface{}) error {
 	b.Lock()
 	defer b.Unlock()
 	b.data[key] = val
+	return nil
 }
 
 // Get returns the value for the given key, nil otherwise.
-func (b *BasicDB) Get(key string) interface{} {
+func (b *BasicDB) Get(key string) (interface{}, error) {
 	b.RLock()
 	defer b.RUnlock()
-	return b.data[key]
+	return b.data[key], nil
 }
 
 // Delete removes the item from the db with the given key.
-func (b *BasicDB) Delete(key string) {
+func (b *BasicDB) Delete(key string) error {
 	b.Lock()
 	defer b.Unlock()
 	delete(b.data, key)
+	return nil
 }

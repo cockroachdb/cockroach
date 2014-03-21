@@ -19,7 +19,9 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -27,6 +29,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/db"
@@ -43,16 +46,19 @@ const (
 )
 
 var (
-	addr        = flag.String("addr", "localhost:8080", "TCP network address to bind to.")
-	raftLogPath = flag.String("raft_log_path", "./raft", "Path to write consensus state logs to.")
-	raftName    = flag.String("name", "raftServer", "Name of the server to be used by raft.")
+	addr         = flag.String("addr", "localhost:8080", "TCP network address to bind to.")
+	raftDataPath = flag.String("raft_data_path", "./node.1", "Path to write consensus state logs to.")
+	raftName     = flag.String("name", "raftServer", "Name of the server to be used by raft.")
+	raftLeader   = flag.String("raft_leader", "", "The raft leader (host:port) to join.")
 )
 
 // ListenAndServe listens on the TCP network address specified by the
 // addr flag and then calls ServeHTTP on a cockroach server to handle
 // requests on incoming connections.
 func ListenAndServe() error {
-	return http.ListenAndServe(*addr, new())
+	s := newServer()
+	s.init()
+	return http.ListenAndServe(*addr, s)
 }
 
 type server struct {
@@ -61,32 +67,80 @@ type server struct {
 	raftServer raft.Server
 }
 
-func new() *server {
-	s := &server{
+func newServer() *server {
+	return &server{
 		mux: http.NewServeMux(),
 		db:  db.NewBasicDB(),
 	}
-	s.init()
-	return s
 }
 
 func (s *server) init() {
+	log.Println("Starting HTTP server at", *addr)
+	s.mux.HandleFunc("/join", s.handleRaftJoin)
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
 	s.mux.HandleFunc(dbKeyPrefix, s.handleDBAction)
 	s.setupRaftServer()
-	log.Println("Started HTTP server at", *addr)
 }
 
 func (s *server) setupRaftServer() {
+	if err := os.MkdirAll(*raftDataPath, 0744); err != nil {
+		log.Fatalf("raft: unable to create path: %v", err)
+	}
 	transporter := raft.NewHTTPTransporter(raftBasePath)
 	var err error
 	// TODO: Pass a non-nil StateMachine to enable snapshotting and log compaction.
-	s.raftServer, err = raft.NewServer(*raftName, *raftLogPath, transporter, nil, s.db, *addr)
+	s.raftServer, err = raft.NewServer(*raftName, *raftDataPath, transporter, nil, s.db, *addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	transporter.Install(s.raftServer, s.mux)
+	log.Println("raft: starting server...")
 	s.raftServer.Start()
+	if s.raftServer.IsLogEmpty() {
+		leader := *raftLeader
+		if len(leader) == 0 {
+			// Join self to create a new cluster.
+			leader = *addr
+		}
+		if err := s.joinRaftLeader(leader); err != nil {
+			log.Printf("raft: Unable to join leader %s: %s", leader, err)
+		}
+	} else {
+		log.Println("raft: recovering from log...")
+	}
+}
+
+func (s *server) joinRaftLeader(leader string) error {
+	log.Println("raft: joining leader", leader)
+	cmd := &raft.DefaultJoinCommand{
+		Name:             s.raftServer.Name(),
+		ConnectionString: "http://" + *addr, // TODO(andybons): TLS.
+	}
+	if leader == *addr {
+		log.Println("raft: starting a new cluster...")
+		if _, err := s.raftServer.Do(cmd); err != nil {
+			log.Fatal(err)
+		}
+		return nil
+	}
+	b := &bytes.Buffer{}
+	if err := json.NewEncoder(b).Encode(cmd); err != nil {
+		return err
+	}
+	log.Println("Attempting to join leader via HTTP:", fmt.Sprintf("http://%s/join", leader))
+	resp, err := http.Post(fmt.Sprintf("http://%s/join", leader), "application/json", b)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("raft: got non-200 status code: %d. response: %s", resp.StatusCode, string(b))
+	}
+	return nil
 }
 
 type gzipResponseWriter struct {
@@ -150,24 +204,31 @@ func (s *server) handleDBPutAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	s.db.Put(key, string(b))
+	// Execute the command against the Raft server.
+	if _, err := s.raftServer.Do(db.NewPutCommand(key, string(b))); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *server) handleDBGetAction(w http.ResponseWriter, r *http.Request) {
 	key, err := dbKey(r.URL.Path)
-	log.Println("Key:", key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	val := s.db.Get(key)
+	val, err := s.db.Get(key)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if val == nil {
 		http.Error(w, "key not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(w, "%+v", s.db.Get(key))
+	fmt.Fprintf(w, "%+v", val)
 }
 
 func (s *server) handleDBDeleteAction(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +237,22 @@ func (s *server) handleDBDeleteAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.db.Delete(key)
+	// Execute the command against the Raft server.
+	if _, err := s.raftServer.Do(db.NewDeleteCommand(key)); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *server) handleRaftJoin(w http.ResponseWriter, r *http.Request) {
+	cmd := &raft.DefaultJoinCommand{}
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := s.raftServer.Do(cmd); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }

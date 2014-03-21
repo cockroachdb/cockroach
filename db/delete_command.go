@@ -15,15 +15,32 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-// Package db provides an interface and implementations for key-value stores.
 package db
 
-// DB is the interface that wraps the core operations of a key/value store.
-type DB interface {
-	// Put sets the given key to the value provided.
-	Put(string, interface{}) error
-	// Get returns the value for the given key, nil otherwise.
-	Get(string) (interface{}, error)
-	// Delete removes the item from the db with the given key.
-	Delete(key string) error
+import (
+	"github.com/goraft/raft"
+)
+
+func init() {
+	raft.RegisterCommand(&deleteCommand{})
+}
+
+type deleteCommand struct {
+	Key string `json:"key"`
+}
+
+// NewDeleteCommand allocates and returns a new delete command.
+func NewDeleteCommand(key string) raft.Command {
+	return &deleteCommand{Key: key}
+}
+
+// CommandName returns the name of the command in the log.
+func (c *deleteCommand) CommandName() string {
+	return "cockroach:delete"
+}
+
+// Apply writes a value to a key.
+func (c *deleteCommand) Apply(server raft.Server) (interface{}, error) {
+	db := server.Context().(DB)
+	return nil, db.Delete(c.Key)
 }

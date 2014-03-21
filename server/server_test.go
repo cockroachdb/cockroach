@@ -18,35 +18,49 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
 
 var (
-	serverAddr string
-	once       sync.Once
+	s    *server
+	once sync.Once
 )
 
 func startServer() {
-	server := httptest.NewServer(new())
-	serverAddr = server.Listener.Addr().String()
-	log.Println("Test server listening on", serverAddr)
+	s = newServer()
+	*addr = httptest.NewServer(s).Listener.Addr().String()
+	*raftDataPath = "./testdata/node.1"
+	resetTestData()
+	s.init()
+	log.Println("Test server listening on", *addr)
+}
+
+func resetTestData() {
+	if err := os.RemoveAll(filepath.Dir(*raftDataPath)); err != nil && err != os.ErrNotExist {
+		log.Fatalf("could not reset testdata dir: %s", err)
+	}
 }
 
 // TestHealthz verifies that /healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
 	once.Do(startServer)
-	addr := "http://" + serverAddr + "/healthz"
-	resp, err := http.Get(addr)
+	defer resetTestData()
+	url := "http://" + *addr + "/healthz"
+	resp, err := http.Get(url)
 	if err != nil {
-		t.Fatalf("error requesting healthz at %s: %s", addr, err)
+		t.Fatalf("error requesting healthz at %s: %s", url, err)
 	}
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
@@ -64,13 +78,14 @@ func TestHealthz(t *testing.T) {
 // conditionally via the request’s Accept-Encoding headers.
 func TestGzip(t *testing.T) {
 	once.Do(startServer)
+	defer resetTestData()
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+serverAddr+"/healthz", nil)
+	req, err := http.NewRequest("GET", "http://"+*addr+"/healthz", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %s", err)
 	}
@@ -110,6 +125,8 @@ func TestGzip(t *testing.T) {
 // TestRESTEndpoints tests that the exposed endpoints for modifying keyspace
 // are working properly.
 func TestRESTEndpoints(t *testing.T) {
+	once.Do(startServer)
+	defer resetTestData()
 	testCases := []struct {
 		method, key, payload, response string
 		status                         int
@@ -132,7 +149,7 @@ func TestRESTEndpoints(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		req, err := http.NewRequest(c.method, "http://"+serverAddr+dbKeyPrefix+c.key, strings.NewReader(c.payload))
+		req, err := http.NewRequest(c.method, "http://"+*addr+dbKeyPrefix+c.key, strings.NewReader(c.payload))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,5 +180,38 @@ func TestKeyUnescape(t *testing.T) {
 		if key != expected {
 			t.Errorf("expected key value %q, got %q", expected, key)
 		}
+	}
+}
+
+// TestRaftJoin verifies that the HTTP endpoint for joining a node is working properly.
+func TestRaftJoin(t *testing.T) {
+	once.Do(startServer)
+	defer resetTestData()
+	errCases := []struct {
+		mimeType string
+		reader   io.Reader
+	}{
+		{"", nil},
+		{"application/json", bytes.NewBufferString(`{"name":"testnode", connectionString:"127.0.0.1:502271"}`)},
+	}
+	for _, c := range errCases {
+		resetTestData()
+		resp, err := http.Post("http://"+*addr+"/join", c.mimeType, c.reader)
+		if err != nil {
+			t.Fatalf("could not make request to /join endpoint: %s", err)
+		}
+		defer resp.Body.Close()
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("could not read response body: %s", err)
+		}
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("expected non-200 status code. got %d: body: %s", resp.StatusCode, string(b))
+		}
+	}
+
+	// Attempt to join a raft server with an invalid port.
+	if err := s.joinRaftLeader("127.0.0.1:502271"); err == nil {
+		t.Error("expected error from attempt to join a raft server with an invalid port.")
 	}
 }
