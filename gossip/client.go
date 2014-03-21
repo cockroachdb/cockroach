@@ -19,7 +19,6 @@ package gossip
 
 import (
 	"encoding/gob"
-	"fmt"
 	"log"
 	"net"
 	"net/rpc"
@@ -86,7 +85,7 @@ func (c *client) start(g *Gossip, done chan *client) {
 		return true
 	})
 	if c.Client == nil {
-		c.err = fmt.Errorf("failed to dial remote server %+v", c.addr)
+		c.err = util.Errorf("failed to dial remote server %+v", c.addr)
 		done <- c
 		return
 	}
@@ -96,7 +95,7 @@ func (c *client) start(g *Gossip, done chan *client) {
 	err := c.gossip(g)
 	c.Close() // in all cases, close old client connection
 	if err != nil {
-		c.err = fmt.Errorf("gossip client: %s", err)
+		c.err = util.Errorf("gossip client: %s", err)
 	}
 	done <- c
 }
@@ -123,7 +122,7 @@ func (c *client) gossip(g *Gossip) error {
 		// To avoid mutual shutdown, we only shutdown our client if our
 		// server address is lexicographically less than the other.
 		if g.hasIncoming(c.addr) && g.is.NodeAddr.String() < c.addr.String() {
-			return fmt.Errorf("stopping outgoing client %s; already have incoming", c.addr)
+			return util.Errorf("stopping outgoing client %s; already have incoming", c.addr)
 		}
 
 		// Compute the delta of local node's infostore to send with request.
@@ -150,7 +149,7 @@ func (c *client) gossip(g *Gossip) error {
 				return gossipCall.Error
 			}
 		case <-gossipTimeout:
-			return fmt.Errorf("timeout after: %v", *gossipInterval*2)
+			return util.Errorf("timeout after: %v", *gossipInterval*2)
 		}
 
 		// Handle remote forwarding.
@@ -173,7 +172,7 @@ func (c *client) gossip(g *Gossip) error {
 		}
 		// Check whether peer node is too boring--disconnect if yes.
 		if (now - c.lastFresh) > int64(maxWaitForNewGossip) {
-			return fmt.Errorf("peer is too boring")
+			return util.Errorf("peer is too boring")
 		}
 	}
 }

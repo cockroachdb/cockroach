@@ -18,12 +18,13 @@
 package gossip
 
 import (
-	"fmt"
 	"math"
 	"net"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // infoStore objects manage maps of Info and maps of Info Group
@@ -145,7 +146,7 @@ func (is *infoStore) getGroupInfos(prefix string) infoArray {
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *infoStore) registerGroup(g *group) error {
 	if _, ok := is.Groups[g.Prefix]; ok {
-		return fmt.Errorf("group %q already in group map", g.Prefix)
+		return util.Errorf("group %q already in group map", g.Prefix)
 	}
 	is.Groups[g.Prefix] = g
 	return nil
@@ -173,7 +174,7 @@ func (is *infoStore) addInfo(i *info) error {
 	if existingInfo, ok := is.Infos[i.Key]; ok {
 		if i.Timestamp < existingInfo.Timestamp ||
 			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
-			return fmt.Errorf("info %+v older than current group info %+v", i, existingInfo)
+			return util.Errorf("info %+v older than current group info %+v", i, existingInfo)
 		}
 	}
 	// Update info map.

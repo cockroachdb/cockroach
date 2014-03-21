@@ -75,13 +75,14 @@ package gossip
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"math"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var (
@@ -201,7 +202,7 @@ func (g *Gossip) GetInt64Info(key string) (int64, error) {
 	case int64:
 		return t, nil
 	default:
-		return 0, fmt.Errorf("key %q is of type %s", key, t)
+		return 0, util.Errorf("key %q is of type %s", key, t)
 	}
 }
 
@@ -216,7 +217,7 @@ func (g *Gossip) GetFloat64Info(key string) (float64, error) {
 	case float64:
 		return t, nil
 	default:
-		return 0, fmt.Errorf("key %q is of type %s", key, t)
+		return 0, util.Errorf("key %q is of type %s", key, t)
 	}
 }
 
@@ -231,7 +232,7 @@ func (g *Gossip) GetStringInfo(key string) (string, error) {
 	case string:
 		return t, nil
 	default:
-		return "", fmt.Errorf("key %q is of type %s", key, t)
+		return "", util.Errorf("key %q is of type %s", key, t)
 	}
 }
 
@@ -243,7 +244,7 @@ func (g *Gossip) getInfo(key string) (interface{}, error) {
 	if i := g.is.getInfo(key); i != nil {
 		return i.Val, nil
 	}
-	return nil, fmt.Errorf("key %q does not exist or has expired", key)
+	return nil, util.Errorf("key %q does not exist or has expired", key)
 }
 
 // GetGroupInt64Infos returns a slice of int64 info values from
@@ -257,7 +258,7 @@ func (g *Gossip) GetGroupInt64Infos(prefix string) ([]int64, error) {
 	for i, info := range infos {
 		switch t := info.Val.(type) {
 		default:
-			return nil, fmt.Errorf("value type not int64: %v", t)
+			return nil, util.Errorf("value type not int64: %v", t)
 		case int64:
 			values[i] = t
 		}
@@ -276,7 +277,7 @@ func (g *Gossip) GetGroupFloat64Infos(prefix string) ([]float64, error) {
 	for i, info := range infos {
 		switch t := info.Val.(type) {
 		default:
-			return nil, fmt.Errorf("value type not float64: %v", t)
+			return nil, util.Errorf("value type not float64: %v", t)
 		case float64:
 			values[i] = t
 		}
@@ -295,7 +296,7 @@ func (g *Gossip) GetGroupStringInfos(prefix string) ([]string, error) {
 	for i, info := range infos {
 		switch t := info.Val.(type) {
 		default:
-			return nil, fmt.Errorf("value type not string: %v", t)
+			return nil, util.Errorf("value type not string: %v", t)
 		case string:
 			values[i] = t
 		}
@@ -310,7 +311,7 @@ func (g *Gossip) getGroupInfos(prefix string) ([]*info, error) {
 	defer g.mu.Unlock()
 	infos := g.is.getGroupInfos(prefix)
 	if infos == nil {
-		return nil, fmt.Errorf("group %q doesn't exist", prefix)
+		return nil, util.Errorf("group %q doesn't exist", prefix)
 	}
 	return infos, nil
 }

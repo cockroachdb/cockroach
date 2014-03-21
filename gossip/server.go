@@ -18,13 +18,14 @@
 package gossip
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"net/rpc"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // server maintains an array of connected peers to which it gossips
@@ -84,7 +85,7 @@ func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
 	}
 	// The exit condition for waiting clients.
 	if s.closed {
-		return fmt.Errorf("gossip server shutdown")
+		return util.Errorf("gossip server shutdown")
 	}
 	// Return reciprocal delta.
 	delta := s.is.delta(args.Addr, args.MaxSeq)

@@ -17,10 +17,7 @@
 
 package util
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 // Options provides control of retry loop logic via the
 // RetryWithBackoffOptions method.
@@ -53,7 +50,7 @@ func RetryWithBackoffOptions(opts Options, fn func() bool) error {
 			return nil
 		}
 		if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
-			return fmt.Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
+			return Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
 		}
 		select {
 		case <-time.After(backoff):

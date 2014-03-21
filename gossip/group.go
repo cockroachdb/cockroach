@@ -18,11 +18,12 @@
 package gossip
 
 import (
-	"fmt"
 	"log"
 	"math"
 	"reflect"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // GroupType indicates the bounds of the values encountered within the group.
@@ -193,7 +194,7 @@ func (g *group) addInfo(i *info) error {
 			(existingInfo.Timestamp == i.Timestamp && existingInfo.Hops > i.Hops) {
 			g.removeInternal(i)
 		} else {
-			return fmt.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
+			return util.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
 		}
 	}
 
@@ -203,7 +204,7 @@ func (g *group) addInfo(i *info) error {
 		t1 := reflect.TypeOf(i.Val).Kind()
 		t2 := reflect.TypeOf(g.gatekeeper.Val).Kind()
 		if t1 != t2 {
-			return fmt.Errorf("info %+v has type %s whereas group has type %s", t1, t2)
+			return util.Errorf("info %+v has type %s whereas group has type %s", t1, t2)
 		}
 	}
 
@@ -221,5 +222,5 @@ func (g *group) addInfo(i *info) error {
 		return nil
 	}
 
-	return fmt.Errorf("info %+v not added to group", i)
+	return util.Errorf("info %+v not added to group", i)
 }

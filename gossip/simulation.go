@@ -25,6 +25,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 const (
@@ -71,7 +73,7 @@ func createSimAddr(network string) (net.Addr, error) {
 	case "unix":
 		return net.ResolveUnixAddr("unix", tempUnixFile())
 	}
-	return nil, fmt.Errorf("unknown network type: %s", network)
+	return nil, util.Errorf("unknown network type: %s", network)
 }
 
 // SimulateNetwork creates nodeCount gossip nodes. The network should
