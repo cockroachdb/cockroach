@@ -26,14 +26,22 @@ is captured by info objects.
 
 Groups are used to logically group related gossip values and maintain
 limits on total set size. Groups organize info objects by key
-prefix. An example is load and capacity characteristics for nodes. In
+prefix. Groups come in two types: MinGroup groups keep only the
+minimum values seen; MaxGroup groups keep only the maximum values
+seen. An example is load or disk capacity values for nodes. In
 a cluster with thousands of nodes, groups force the gossip network to
-limit itself to only a portion of total data volume.
+limit itself to only a portion of total data volume (e.g. the 100
+least loaded nodes or the 100 disks with most unused capacity).
 
-A map of info objects and a map of Group objects are kept by an
-infoStore. New info objects should be created via infoStore.newInfo.
-Groups are registered via: infoStore.RegisterGroup. Info objects are
-added to an infoStore using infoStore.AddInfo.
+A map of info objects and a map of Group objects are kept by the
+Gossip instance. New info objects should be created via
+Gossip.AddInt64Info, Gossip.AddFloat64Info and Gossip.AddStringInfo.
+Groups are registered via Gossip.RegisterGroup. Info objects are
+added to groups automatically if their key shares the group's key
+prefix. Info can be queried from the gossip network via the
+Gossip.GetInt64Info, Gossip.GetFloat64Info and Gossip.GetStringInfo.
+Sorted values for groups are queried via Gossip.GetGroupInt64Infos,
+Gossip.GetGroupFloat64Infos and Gossip.GetGroupStringInfos.
 
 Each node attempts to contact peer nodes to gather all infos in
 the system with minimal total hops. The algorithm is as follows:
