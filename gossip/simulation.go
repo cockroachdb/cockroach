@@ -140,8 +140,8 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 		}
 	}
 
-	// Close all nodes.
+	// Stop all nodes.
 	for _, node := range nodes {
-		node.Close()
+		node.Stop()
 	}
 }

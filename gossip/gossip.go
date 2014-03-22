@@ -373,10 +373,10 @@ func (g *Gossip) Start() {
 	go g.manage()    // manage gossip clients
 }
 
-// Close shuts down the gossip server. Returns a channel which signals
+// Stop shuts down the gossip server. Returns a channel which signals
 // exit once all outgoing clients are closed and the management loop
 // for the gossip instance is finished.
-func (g *Gossip) Close() <-chan error {
+func (g *Gossip) Stop() <-chan error {
 	g.stopServing()                             // set server's closed boolean and exits server
 	g.stalled.Signal()                          // wake up bootstrap goroutine so it can exit
 	for _, addr := range g.outgoing.asSlice() { // close all outgoing clients.
