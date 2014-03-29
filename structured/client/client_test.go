@@ -42,9 +42,9 @@ type Identity struct {
 // a single user, they are then shared and accessible to any number of
 // other users. See notes on scatter option for User.ID.
 type Photo struct {
-	ID       int64   `roach:"id,pk,seq=PhotoID,scatter"`
-	UserID   int64   `roach:"ui,fk=User.ID,ondelete=setnull"`
-	Location LatLong `roach:"lo,locationindex"`
+	ID       int64          `roach:"id,pk,seq=PhotoID,scatter"`
+	UserID   int64          `roach:"ui,fk=User.ID,ondelete=setnull"`
+	Location schema.LatLong `roach:"lo,locationindex"`
 }
 
 // PhotoStream is a top-level table as streams are shared by multiple
@@ -98,7 +98,7 @@ func ExampleGoSchema() {
 	//   columns:
 	//   - column: ID
 	//     column_key: id
-	//     type: int64
+	//     type: integer
 	//   - column: Name
 	//     column_key: na
 	//     type: string
@@ -110,28 +110,28 @@ func ExampleGoSchema() {
 	//     type: string
 	//   - column: UserID
 	//     column_key: ui
-	//     type: int64
+	//     type: integer
 	// - table: Photo
 	//   table_key: ph
 	//   columns:
 	//   - column: ID
 	//     column_key: id
-	//     type: int64
+	//     type: integer
 	//   - column: UserID
 	//     column_key: ui
-	//     type: int64
+	//     type: integer
 	//   - column: Location
 	//     column_key: lo
-	//     type: LatLong
+	//     type: latlong
 	// - table: PhotoStream
 	//   table_key: ps
 	//   columns:
 	//   - column: ID
 	//     column_key: id
-	//     type: int64
+	//     type: integer
 	//   - column: UserID
 	//     column_key: ui
-	//     type: int64
+	//     type: integer
 	//   - column: Title
 	//     column_key: ti
 	//     type: string
@@ -140,26 +140,26 @@ func ExampleGoSchema() {
 	//   columns:
 	//   - column: PhotoStreamID
 	//     column_key: si
-	//     type: int64
+	//     type: integer
 	//   - column: PhotoID
 	//     column_key: pi
-	//     type: int64
+	//     type: integer
 	//   - column: Timestamp
 	//     column_key: ti
-	//     type: int64
+	//     type: integer
 	// - table: Comment
 	//   table_key: co
 	//   columns:
 	//   - column: PhotoStreamID
 	//     column_key: si
-	//     type: int64
+	//     type: integer
 	//   - column: ID
 	//     column_key: id
-	//     type: int64
+	//     type: integer
 	//   - column: Message
 	//     column_key: me
 	//     type: string
 	//   - column: Timestamp
 	//     column_key: ti
-	//     type: int64
+	//     type: integer
 }
