@@ -42,7 +42,7 @@ external access; the key is used internally for storing keys and
 values efficiently. Both are specified in the schema declaration; each
 (name, key) pair for a schema, table or column should be chosen to
 correspond; the key should be reminiscent of the name in order to aid
-when debugging. Keys should be short; you should limit them to 1-3
+when debugging. Keys should be short; they are limited to 1-3
 characters and may not contain the '/' or ':' characters. Both names
 and keys must be unique according to the following rules: schemas must
 be unique in a Cockroach cluster; tables must be unique in a schema;
@@ -63,30 +63,35 @@ Tables are specified as follows:
 
   - table:     <Table Name>
     table_key: <Table Key>
-    columns: [<Column>, <Column>, ...]
+    columns:   [<Column>, <Column>, ...]
 
 Columns are specified as follows:
 
-    - column:       <Column Name>
-      column_key:   <Column Key>
-      type:         <{integer,
-                      float,
-                      string,
-                      blob,
-                      time,
-                      latlong,
-                      numberset,
-                      stringset,
-                      numbermap,
-                      stringmap}>
-      [primary_key: true]
-      [foreign_key: <Table>.<Column>]
-      [index:       <{secondary,
-                      uniquesecondary,
-                      location,
-                      fulltext}>]
+    - column:          <Column Name>
+      column_key:      <Column Key>
+      type:            (integer |
+                        float |
+                        string |
+                        blob |
+                        time |
+                        latlong |
+                        numberset |
+                        stringset |
+                        numbermap |
+                        stringmap)>
+      auto_increment:  <start-value>
+      foreign_key:     <Table>.<Column>
+      index:           (secondary |
+                        unique |
+                        location |
+                        fulltext)
+      interleave       true
+      on_delete:       (cascade |
+                        setnul)
+      primary_key:     true
+      scatter:         true
 
-YAML configuration files are specified as follows:
+An example YAML schema configuration file:
 
   db:     PhotoDB
   db_key: pdb

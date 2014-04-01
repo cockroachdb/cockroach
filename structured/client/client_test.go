@@ -19,6 +19,7 @@ package client
 
 import (
 	"fmt"
+	"log"
 
 	schema "github.com/cockroachdb/cockroach/structured/schema"
 )
@@ -27,7 +28,7 @@ import (
 // byte hash of the ID from the UserID sequence is prepended to yield
 // a randomly distributed keyspace.
 type User struct {
-	ID   int64  `roach:"id,pk,seq=UserID,scatter"`
+	ID   int64  `roach:"id,pk,auto,scatter"`
 	Name string `roach:"na"`
 }
 
@@ -42,7 +43,7 @@ type Identity struct {
 // a single user, they are then shared and accessible to any number of
 // other users. See notes on scatter option for User.ID.
 type Photo struct {
-	ID       int64          `roach:"id,pk,seq=PhotoID,scatter"`
+	ID       int64          `roach:"id,pk,auto=10000,scatter"`
 	UserID   int64          `roach:"ui,fk=User.ID,ondelete=setnull"`
 	Location schema.LatLong `roach:"lo,locationindex"`
 }
@@ -52,8 +53,8 @@ type Photo struct {
 // photo streams for a user may be easily queried. Photo stream titles
 // are full-text indexed for public searching.
 type PhotoStream struct {
-	ID     int64  `roach:"id,pk,seq=PhotoStreamID,scatter"`
-	UserID int64  `roach:"ui,fk=User.ID,index"`
+	ID     int64  `roach:"id,pk,auto,scatter"`
+	UserID int64  `roach:"ui,fk=User.ID"`
 	Title  string `roach:"ti,fulltextindex"`
 }
 
@@ -70,8 +71,9 @@ type StreamPost struct {
 // Comment is an interleaved table (on PhotoStream), as comments are
 // scoped to a single PhotoStream.
 type Comment struct {
-	PhotoStreamID int64  `roach:"si,pk,fk=PhotoStream,interleave"`
-	ID            int64  `roach:"id,pk,seq=CommentID"`
+	PhotoStreamID int64  `roach:"si,pk,fk=PhotoStream.ID,interleave"`
+	ID            int64  `roach:"id,pk,auto"`
+	UserID        int64  `roach:"ui,fk=User.ID"`
 	Message       string `roach:"me,fulltextindex"`
 	Timestamp     int64  `roach:"ti"`
 }
@@ -85,9 +87,15 @@ func ExampleGoSchema() {
 		"sp": StreamPost{},
 		"co": Comment{},
 	}
-	s, _ := schema.NewGoSchema("PhotoDB", "pdb", sm)
+	s, err := schema.NewGoSchema("PhotoDB", "pdb", sm)
+	if err != nil {
+		log.Fatalf("failed building schema: %s", err)
+	}
 
-	yaml, _ := s.ToYAML()
+	yaml, err := s.ToYAML()
+	if err != nil {
+		log.Fatalf("failed converting to yaml: %s", err)
+	}
 	fmt.Println(string(yaml))
 	// Output:
 	// db: PhotoDB
@@ -99,6 +107,9 @@ func ExampleGoSchema() {
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
+	//     primary_key: true
+	//     scatter: true
+	//     auto_increment: 1
 	//   - column: Name
 	//     column_key: na
 	//     type: string
@@ -108,42 +119,61 @@ func ExampleGoSchema() {
 	//   - column: Key
 	//     column_key: ke
 	//     type: string
+	//     primary_key: true
+	//     scatter: true
 	//   - column: UserID
 	//     column_key: ui
 	//     type: integer
+	//     foreign_key: User.ID
+	//     ondelete: setnull
 	// - table: Photo
 	//   table_key: ph
 	//   columns:
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
+	//     primary_key: true
+	//     scatter: true
+	//     auto_increment: 10000
 	//   - column: UserID
 	//     column_key: ui
 	//     type: integer
+	//     foreign_key: User.ID
+	//     ondelete: setnull
 	//   - column: Location
 	//     column_key: lo
 	//     type: latlong
+	//     index: location
 	// - table: PhotoStream
 	//   table_key: ps
 	//   columns:
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
+	//     primary_key: true
+	//     scatter: true
+	//     auto_increment: 1
 	//   - column: UserID
 	//     column_key: ui
 	//     type: integer
+	//     foreign_key: User.ID
 	//   - column: Title
 	//     column_key: ti
 	//     type: string
+	//     index: fulltext
 	// - table: StreamPost
 	//   table_key: sp
 	//   columns:
 	//   - column: PhotoStreamID
 	//     column_key: si
 	//     type: integer
+	//     foreign_key: PhotoStream.ID
+	//     primary_key: true
 	//   - column: PhotoID
 	//     column_key: pi
 	//     type: integer
+	//     foreign_key: Photo.ID
+	//     primary_key: true
 	//   - column: Timestamp
 	//     column_key: ti
 	//     type: integer
@@ -153,12 +183,21 @@ func ExampleGoSchema() {
 	//   - column: PhotoStreamID
 	//     column_key: si
 	//     type: integer
+	//     foreign_key: PhotoStream.ID
+	//     primary_key: true
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
+	//     primary_key: true
+	//     auto_increment: 1
+	//   - column: UserID
+	//     column_key: ui
+	//     type: integer
+	//     foreign_key: User.ID
 	//   - column: Message
 	//     column_key: me
 	//     type: string
+	//     index: fulltext
 	//   - column: Timestamp
 	//     column_key: ti
 	//     type: integer

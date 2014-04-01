@@ -66,6 +66,7 @@ func ExampleKitchenSink() {
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
+	//     primary_key: true
 	//   - column: Bool
 	//     column_key: bo
 	//     type: integer

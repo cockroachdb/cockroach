@@ -17,10 +17,11 @@
 
 package schema
 
-// LatLong specifies a (latitude, longitude, accuracy) triplet with
-// 64-bit floating point precision.
+// LatLong specifies a (latitude, longitude, altitude, accuracy)
+// quadruplet with 64-bit floating point precision. Altitude and
+// accuracy are in meters.
 type LatLong struct {
-	latitude, longitude, accuracy float64
+	latitude, longitude, altitude, accuracy float64
 }
 
 // NumberSet is a set of int64 integer values.

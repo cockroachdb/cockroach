@@ -19,6 +19,7 @@ package schema
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,12 +30,79 @@ import (
 // Column contains the schema for a column. The Key should be a
 // shortened identifier related to Name. The Column Key is stored
 // within the row value itself and is used to maintain human
-// readability for debugging, as well as a stable indicator of
-// Column type. Column Keys must be unique within a Table.
+// readability for debugging, as well as a stable identifier for
+// column data. Column Keys must be unique within a Table.
 type Column struct {
+	// Name is used externally (i.e. in JSON or Go structs) to refer to
+	// this column value.
 	Name string `yaml:"column"`
-	Key  string `yaml:"column_key"`
-	Type string
+	// Key should be a 1-3 character abbreviation of the Name. The key is
+	// used internally for efficiency.
+	Key string `yaml:"column_key"`
+	// Type is one of "integer", "float", "string", "blob", "time",
+	// "latlong", "numberset", "stringset", "numbermap", or "stringmap".
+	// Integers are int64s. Floats are float64s. Strings must be UTF8
+	// encoded. Blobs are arbitrary byte arrays. If sending over JSON,
+	// they should be base64 encoded. Latlong are (latitude, longitude,
+	// altitude, accuracy) quadruplets, each a float64 (altitude and
+	// accuracy are in meters). Numbersets are a set of int64
+	// values. Numbermaps are map[string]int64. Stringsets and
+	// stringmaps are similar, but with string values.
+	Type string `yaml:"type"`
+	// ForeignKey is a foreign key reference specified as
+	// <table>[.<column>]. The column suffix is optional in the event
+	// that the table has a non-composite primary key. Foreign keys
+	// presuppose a secondary index, so specifying one isn't necessary
+	// unless the foreign key is a one-to-one relation, in which case
+	// a unique index should be specified.
+	ForeignKey string `yaml:"foreign_key,omitempty"`
+	// Index specifies that this column generates an index. The index
+	// type is one of "fulltext", "location", "secondary", or "unique".
+	// "fulltext" is valid only for "string"-type columns. It generates
+	// a full text index by segmenting the text from a UTF8 string
+	// column and indexing each word as a separate term. Full text
+	// indexes support phrase searches. "location" is valid only for
+	// "latlong"-type columns. It generates S2 geometry patches to
+	// canvas the specified latitude/longitude location. "secondary"
+	// creates an index with terms equal to this column value.
+	// Secondary indexes are created automatically for foreign keys, in
+	// which case their terms may be a concatenation of foreign key
+	// values in the event the foreign key references a table with a
+	// composite primary key. "unique" indexes are the same as
+	// "secondary", except a one-to-one relation is enforced; that is,
+	// only a single instance of a particular value for this column (or
+	// values if part of a composite foreign key) is allowed.
+	Index string `yaml:"index,omitempty"`
+	// Interleave is specified with foreign keys to co-locate dependent
+	// data. Interleaved data is physically proximate to data referenced
+	// by this foreign key for faster lookups when querying complete
+	// sets of data (e.g. a merchant and all of its inventory), and for
+	// faster transactional writes in certain common cases.
+	Interleave bool `yaml:"interleave,omitempty"`
+	// OnDelete is specified with foreign keys to dictate database
+	// behavior in the event the object which the foreign key column
+	// references is deleted. The two supported values are "cascade" and
+	// "setnull". "cascade" deletes the object with the foreign key
+	// reference. "setnull" is less destructive, merely setting the
+	// foreign key column to nil. If "interleave" was specified for this
+	// foreign key, then "cascade" is the mandatory default value;
+	// specifying setnull result in a schema validation error.
+	OnDelete string `yaml:"ondelete,omitempty"`
+	// PrimaryKey specifies this column is the primary key for the table
+	// or part of a composite primary key. If part of a composite
+	// primary key the order in which the columns are declared dictates
+	// the order in which their values are concatenated to form the key.
+	// This has obvious implications for range queries.
+	PrimaryKey bool `yaml:"primary_key,omitempty"`
+	// Scatter is specified with primary keys to effectively randomize
+	// the placement of the data within the table's keyspace. This is
+	// accomplished by prepending a two-byte has of the entire primary
+	// key to the actual key used to store the value.
+	Scatter bool `yaml:"scatter,omitempty"`
+	// Auto specifies that the value of this column auto-increments from
+	// a monotonically-increasing sequence starting at this field's
+	// value. If Auto is nil, the column does not auto-increment.
+	Auto *int64 `yaml:"auto_increment,omitempty"`
 }
 
 // Table contains the schema for a table. The Key should be a
@@ -132,7 +200,7 @@ func getColumnSchema(sf reflect.StructField, keys map[string]struct{}) (*Column,
 		}
 		key, value := keyValueSplit[0], keyValueSplit[1]
 		if i == 0 {
-			if value != "" {
+			if value != "" || len(value) > 3 {
 				return nil, util.Errorf("roach tag for field %s must begin with column key, a short (1-3) character designation related to column name: %s", c.Name, spec)
 			}
 			if _, ok := keys[key]; ok {
@@ -140,7 +208,14 @@ func getColumnSchema(sf reflect.StructField, keys map[string]struct{}) (*Column,
 			}
 			keys[key] = struct{}{}
 			c.Key = key
+		} else {
+			if err := setColumnOption(c, key, value); err != nil {
+				return nil, err
+			}
 		}
+	}
+	if c.Key == "" {
+		return nil, util.Errorf("roach tag must include a column key")
 	}
 	return c, nil
 }
@@ -173,4 +248,56 @@ func getSchemaType(field reflect.StructField) (string, error) {
 	default:
 		return "", util.Errorf("invalid type %v; only integer, float, string, time, latlong, numberset, stringset, numbermap, stringmap are allowed", t)
 	}
+}
+
+// setColumnOption sets column options based on the key/value pair.
+// An error is returned if the option key or value is invalid.
+func setColumnOption(c *Column, key, value string) error {
+	switch key {
+	case "auto":
+		c.Auto = new(int64)
+		if value != "" {
+			start, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return util.Errorf("auto-increment start value: %v", err)
+			}
+			*c.Auto = start
+		} else {
+			*c.Auto = 1
+		}
+	case "fk":
+		if value == "" {
+			return util.Errorf("foreign key must specify reference as <Table>[.<Column>]")
+		}
+		c.ForeignKey = value
+	case "fulltextindex":
+		c.Index = "fulltext"
+	case "interleave":
+	case "locationindex":
+		c.Index = "location"
+	case "ondelete":
+		switch value {
+		case "cascade", "setnull":
+			c.OnDelete = value
+		default:
+			return util.Errorf("column option %q must specify either %q or %q", key, "cascade", "setnull")
+		}
+	case "pk":
+		if value != "" {
+			return util.Errorf("column option %q should not specify a value", key)
+		}
+		c.PrimaryKey = true
+	case "scatter":
+		if value != "" {
+			return util.Errorf("column option %q should not specify a value", key)
+		}
+		c.Scatter = true
+	case "secondaryindex":
+		c.Index = "secondary"
+	case "unqieindex":
+		c.Index = "unique"
+	default:
+		return util.Errorf("unrecognized column option: %q", key)
+	}
+	return nil
 }
