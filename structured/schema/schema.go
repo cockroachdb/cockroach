@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/go-yaml/go-yaml-v1"
+	"gopkg.in/yaml.v1"
 )
 
 // Column contains the schema for a column. The Key should be a
