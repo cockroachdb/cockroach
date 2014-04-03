@@ -28,8 +28,8 @@ cluster may contain multiple schemas (or "databases"). Schemas are
 comprised of tables. Tables are comprised of columns. Columns store
 values corresponding to basic types including integer (int64), float
 (float64), string (utf8), blob ([]byte). Columns also store certain
-composite types including Time and LatLong (for location), NumberSet
-(map[int64]struct{}), StringSet (map[string]struct{}), NumberMap
+composite types including Time and LatLong (for location), IntegerSet
+(map[int64]struct{}), StringSet (map[string]struct{}), IntegerMap
 (map[string]int64) and StringMap (map[string]string).
 
 Columns can be designated to form an index. Indexes include secondary
@@ -75,9 +75,9 @@ Columns are specified as follows:
                         blob |
                         time |
                         latlong |
-                        numberset |
+                        integerset |
                         stringset |
-                        numbermap |
+                        integermap |
                         stringmap)>
       auto_increment:  <start-value>
       foreign_key:     <Table>.<Column>

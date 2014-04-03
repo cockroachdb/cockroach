@@ -18,7 +18,10 @@
 package schema
 
 import (
+	"fmt"
 	"reflect"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -40,13 +43,13 @@ type Column struct {
 	// used internally for efficiency.
 	Key string `yaml:"column_key"`
 	// Type is one of "integer", "float", "string", "blob", "time",
-	// "latlong", "numberset", "stringset", "numbermap", or "stringmap".
+	// "latlong", "integerset", "stringset", "integermap", or "stringmap".
 	// Integers are int64s. Floats are float64s. Strings must be UTF8
 	// encoded. Blobs are arbitrary byte arrays. If sending over JSON,
 	// they should be base64 encoded. Latlong are (latitude, longitude,
 	// altitude, accuracy) quadruplets, each a float64 (altitude and
-	// accuracy are in meters). Numbersets are a set of int64
-	// values. Numbermaps are map[string]int64. Stringsets and
+	// accuracy are in meters). Integersets are a set of int64
+	// values. Integermaps are map[string]int64. Stringsets and
 	// stringmaps are similar, but with string values.
 	Type string `yaml:"type"`
 	// ForeignKey is a foreign key reference specified as
@@ -89,14 +92,14 @@ type Column struct {
 	// specifying setnull result in a schema validation error.
 	OnDelete string `yaml:"ondelete,omitempty"`
 	// PrimaryKey specifies this column is the primary key for the table
-	// or part of a composite primary key. If part of a composite
-	// primary key the order in which the columns are declared dictates
-	// the order in which their values are concatenated to form the key.
-	// This has obvious implications for range queries.
+	// or part of a composite primary key. The order in which primary
+	// key columns are declared dictates the order in which their values
+	// are concatenated to form the key.  This has obvious implications
+	// for range queries.
 	PrimaryKey bool `yaml:"primary_key,omitempty"`
 	// Scatter is specified with primary keys to effectively randomize
 	// the placement of the data within the table's keyspace. This is
-	// accomplished by prepending a two-byte has of the entire primary
+	// accomplished by prepending a two-byte hash of the entire primary
 	// key to the actual key used to store the value.
 	Scatter bool `yaml:"scatter,omitempty"`
 	// Auto specifies that the value of this column auto-increments from
@@ -113,6 +116,18 @@ type Table struct {
 	Name    string    `yaml:"table"`
 	Key     string    `yaml:"table_key"`
 	Columns []*Column `yaml:",omitempty"`
+
+	// byName is a map from column name to *Column.
+	byName map[string]*Column
+	// byKey is a map from column key to *Column.
+	byKey map[string]*Column
+	// primaryKey is a slice of columns which make up primary key.
+	// There must be one or more columns.
+	primaryKey []*Column
+	// foreignKeys is a map from referenced table name to a map from
+	// referenced column name to the local (i.e. this table's) foreign
+	// key column.
+	foreignKeys map[string]map[string]*Column
 }
 
 // Schema contains a named sequence of Table schemas. The Key should
@@ -124,13 +139,44 @@ type Schema struct {
 	Name   string   `yaml:"db"`
 	Key    string   `yaml:"db_key"`
 	Tables []*Table `yaml:",omitempty"`
+
+	// byName is a map from table name to *Table.
+	byName map[string]*Table
+	// byKey is a map from table key to *Table.
+	byKey map[string]*Table
+}
+
+// Regular expression for capturing foreign key declarations. Valid
+// declarations include "Table.Column" or just "Table".
+var foreignKeyRE = regexp.MustCompile(`^([^\.]*)(?:\.([^\.]*))?$`)
+
+// Set containing all valid schema column types.
+var ValidTypes map[string]struct{} = map[string]struct{}{
+	"integer":    struct{}{},
+	"float":      struct{}{},
+	"string":     struct{}{},
+	"blob":       struct{}{},
+	"time":       struct{}{},
+	"latlong":    struct{}{},
+	"integerset": struct{}{},
+	"stringset":  struct{}{},
+	"integermap": struct{}{},
+	"stringmap":  struct{}{},
+}
+
+// Set containing all valid index types.
+var ValidIndexTypes map[string]struct{} = map[string]struct{}{
+	"fulltext":  struct{}{},
+	"location":  struct{}{},
+	"secondary": struct{}{},
+	"unique":    struct{}{},
 }
 
 // NewGoSchema returns a schema using name and key and a map from
 // Table Key to an instance of a Go struct corresponding to the
 // Table (the Table name is derived from the Go struct name).
 func NewGoSchema(name, key string, schemaMap map[string]interface{}) (*Schema, error) {
-	schema := &Schema{
+	s := &Schema{
 		Name: name,
 		Key:  key,
 	}
@@ -139,9 +185,12 @@ func NewGoSchema(name, key string, schemaMap map[string]interface{}) (*Schema, e
 		if err != nil {
 			return nil, err
 		}
-		schema.Tables = append(schema.Tables, table)
+		s.Tables = append(s.Tables, table)
 	}
-	return schema, nil
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // NewYAMLSchema returns a schema based on the YAML input string.
@@ -150,12 +199,285 @@ func NewYAMLSchema(in []byte) (*Schema, error) {
 	if err := yaml.Unmarshal(in, s); err != nil {
 		return nil, err
 	}
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 // ToYAML marshals the Schema into YAML.
 func (s *Schema) ToYAML() ([]byte, error) {
 	return yaml.Marshal(s)
+}
+
+// Validate validates the schema for consistency, correctness and
+// completeness. Foreign keys are matched to their respective
+// tables. Parameters are verified as valid (e.g. OnDelete can only
+// be "cascade" or "setnull"). Refer to the source for the complete
+// list of checks.
+func (s *Schema) Validate() error {
+	s.byName = make(map[string]*Table)
+	s.byKey = make(map[string]*Table)
+
+	// First pass through validation validates all tables. This establishes
+	// primary keys, necessary to validate columns in second pass.
+	for _, t := range s.Tables {
+		// Check for duplicate table names.
+		if _, ok := s.byName[t.Name]; ok {
+			return fmt.Errorf("table %q: duplicate name", t.Name)
+		}
+		s.byName[t.Name] = t
+
+		// Check for duplicate table keys.
+		if _, ok := s.byKey[t.Key]; ok {
+			return fmt.Errorf("table %q: duplicate key %q", t.Name, t.Key)
+		}
+		s.byKey[t.Key] = t
+
+		// Verify table key length.
+		if len(t.Key) > 3 {
+			return fmt.Errorf("table %q: key %q is limited to 1-3 characters", t.Name, t.Key)
+		}
+
+		// Init table data structures.
+		t.primaryKey = make([]*Column, 0, 1)
+		t.foreignKeys = make(map[string]map[string]*Column)
+
+		// Validate table.
+		if err := s.validateTable(t); err != nil {
+			return fmt.Errorf("table %q: %v", t.Name, err)
+		}
+
+		if len(t.primaryKey) == 0 {
+			return fmt.Errorf("table %q: no primary key(s)", t.Name)
+		}
+	}
+
+	// Second pass: validate columns of each table.
+	for _, t := range s.Tables {
+		for _, c := range t.Columns {
+			if err := s.validateColumn(c, t); err != nil {
+				return fmt.Errorf("table %q, column %q: %v", t.Name, c.Name, err)
+			}
+		}
+	}
+
+	// Third pass: validate foreign keys (need all columns validated first).
+	for _, t := range s.Tables {
+		for fkTable, _ := range t.foreignKeys {
+			if err := s.validateForeignKey(t, fkTable); err != nil {
+				return fmt.Errorf("table %q, foreign key %q: %v", t.Name, fkTable, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateTable validates the table for consistency, correctness and
+// completeness.
+func (s *Schema) validateTable(t *Table) error {
+	t.byName = make(map[string]*Column)
+	t.byKey = make(map[string]*Column)
+
+	for _, c := range t.Columns {
+		// Check for duplicate column names.
+		if _, ok := t.byName[c.Name]; ok {
+			return fmt.Errorf("column %q: duplicate name", c.Name)
+		}
+		t.byName[c.Name] = c
+
+		// Check for duplicate column keys.
+		if _, ok := t.byKey[c.Key]; ok {
+			return fmt.Errorf("column %q: duplicate key %q", c.Name, c.Key)
+		}
+		t.byKey[c.Key] = c
+
+		// Verify column key length.
+		if len(c.Key) > 3 {
+			return fmt.Errorf("column %q: key %q is limited to 1-3 characters", c.Name, c.Key)
+		}
+
+		// Add to table's primary key.
+		if c.PrimaryKey {
+			t.primaryKey = append(t.primaryKey, c)
+		}
+	}
+
+	return nil
+}
+
+// validateColumn validates the column options.
+func (s *Schema) validateColumn(c *Column, t *Table) error {
+	if _, ok := ValidTypes[c.Type]; !ok {
+		return fmt.Errorf("invalid type %q", c.Type)
+	}
+
+	// Verify primary key options. Scatter is only valid on first
+	// component of primary key.
+	if c.Scatter {
+		if c != t.primaryKey[0] {
+			return fmt.Errorf("scatter may only be specified on first column of primary key")
+		}
+	}
+
+	// Auto-increment columns must be type integer!
+	if c.Auto != nil && c.Type != "integer" {
+		return fmt.Errorf("auto may only be specified with columns of type integer")
+	}
+
+	// Verify foreign key & associated options.
+	if c.ForeignKey != "" {
+		fkTable, fkColumn, err := s.parseForeignKey(c)
+		if err != nil {
+			return err
+		}
+		if fkMap, ok := t.foreignKeys[fkTable]; ok {
+			fkMap[fkColumn] = c
+		} else {
+			t.foreignKeys[fkTable] = map[string]*Column{fkColumn: c}
+		}
+
+		// Check OnDelete spec (only valid for foreign keys).
+		switch c.OnDelete {
+		case "":
+			// Set default values.
+			if c.Interleave {
+				c.OnDelete = "cascade"
+			} else {
+				c.OnDelete = "setnull"
+			}
+		case "cascade":
+			// Do nothing, always a valid specification.
+		case "setnull":
+			if c.Interleave {
+				return fmt.Errorf("interleaved tables must specify ondelete=%q", "cascade")
+			}
+		default:
+			return fmt.Errorf("invalid ondelete value %q; must be one of (%q | %q)", c.OnDelete, "cascade", "setnull")
+		}
+	} else {
+		if c.OnDelete != "" {
+			return fmt.Errorf("ondelete cannot be specified outside foreign key column")
+		}
+		if c.Interleave {
+			return fmt.Errorf("interleave cannot be specified outside foreign key column")
+		}
+	}
+
+	if c.Index != "" {
+		if _, ok := ValidIndexTypes[c.Index]; !ok {
+			return fmt.Errorf("invalid index type %q", c.Index)
+		}
+		switch c.Index {
+		case "fulltext":
+			if c.Type != "string" {
+				return fmt.Errorf("fulltext index only valid for string columns")
+			}
+		case "location":
+			if c.Type != "latlong" {
+				return fmt.Errorf("location index only valid for latlong columns")
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateForeignKey verifies that foreign key references are
+// complete. This means that each component of the referenced table's
+// primary key is represented by the foreign key. When this method is
+// invoked, we have already verified that "fkTable" is a valid table
+// name.
+func (s *Schema) validateForeignKey(t *Table, fkTable string) error {
+	ft := s.byName[fkTable]
+	// Verify number of components matches.
+	if len(t.foreignKeys[fkTable]) != len(ft.primaryKey) {
+		return fmt.Errorf("foreign key to table %q has %d components, expect %d", fkTable,
+			len(t.foreignKeys[fkTable]), len(ft.primaryKey))
+	}
+
+	// Verify all columns in foreign key have same ondelete, interleave specs.
+	var lastCol *Column
+	for _, c := range t.foreignKeys[fkTable] {
+		if lastCol != nil {
+			if lastCol.OnDelete != c.OnDelete {
+				return fmt.Errorf("inconsistent specification of ondelete between columns %q and %q", lastCol.Name, c.Name)
+			}
+			if lastCol.Interleave != c.Interleave {
+				return fmt.Errorf("inconsistent specification of interleave between columns %q and %q", lastCol.Name, c.Name)
+			}
+		}
+		lastCol = c
+	}
+
+	// Get two sorted lists of column names: for foreign key reference, and...
+	fkColNames := make([]string, 0, len(t.foreignKeys[fkTable]))
+	for key, _ := range t.foreignKeys[fkTable] {
+		fkColNames = append(fkColNames, key)
+	}
+	sort.Strings(fkColNames)
+
+	// ...and for referenced table's primary key.
+	ftPKColNames := make([]string, len(ft.primaryKey))
+	for i, c := range ft.primaryKey {
+		ftPKColNames[i] = c.Name
+	}
+	sort.Strings(ftPKColNames)
+
+	// Verify two lists match exactly.
+	if !reflect.DeepEqual(fkColNames, ftPKColNames) {
+		return fmt.Errorf("component mismatch: foreign key has %s; primary key of ref'd table has %s", fkColNames, ftPKColNames)
+	}
+	return nil
+}
+
+// parseForeignKey parses a foreign key declaration of the form:
+// <Table Name>.<Column Name> and returns table name and column
+// name on success or empty strings and an error otherwise.
+func (s *Schema) parseForeignKey(c *Column) (table, column string, err error) {
+	matches := foreignKeyRE.FindStringSubmatch(c.ForeignKey)
+	if matches == nil {
+		err = fmt.Errorf("invalid foreign key format %q", c.ForeignKey)
+		return
+	}
+	switch len(matches) {
+	default:
+		err = fmt.Errorf("invalid foreign key format %q", c.ForeignKey)
+		return
+	case 2:
+		table = matches[1]
+	case 3:
+		table, column = matches[1], matches[2]
+	}
+	t, ok := s.byName[table]
+	if !ok {
+		err = fmt.Errorf("foreign key %q references non-existent table %q", c.ForeignKey, table)
+		return
+	}
+	// If column is missing from regexp, use primary key of referenced
+	// table if not composite.
+	if column == "" {
+		if len(t.primaryKey) != 1 {
+			err = fmt.Errorf("foreign key %q references table %q with composite primary key; foreign key must specify <Table>.<Column>", c.ForeignKey, table)
+			return
+		}
+		column = t.primaryKey[0].Name
+	}
+	// Verify that foreign key column is part of foreign key table's
+	// primary key. Once found, also verify types match exactly.
+	for _, fkColumn := range t.primaryKey {
+		if column == fkColumn.Name {
+			if c.Type == fkColumn.Type {
+				return
+			} else {
+				err = fmt.Errorf("foreign key %q has type mismatch %q != %q", c.ForeignKey, fkColumn.Type, c.Type)
+				return
+			}
+		}
+	}
+	err = fmt.Errorf("foreign key %q does not reference a valid column", c.ForeignKey)
+	return
 }
 
 // getTableSchema returns a table schema based on the fields within
@@ -169,10 +491,9 @@ func getTableSchema(key string, table interface{}) (*Table, error) {
 		Key:     key,
 		Columns: make([]*Column, 0, 1),
 	}
-	keys := make(map[string]struct{})
 	for i := 0; i < typ.NumField(); i++ {
 		sf := typ.Field(i)
-		c, err := getColumnSchema(sf, keys)
+		c, err := getColumnSchema(sf)
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +504,7 @@ func getTableSchema(key string, table interface{}) (*Table, error) {
 
 // getColumnSchema unpacks the struct field into name and cockroach-
 // specific schema directives via the struct field tag.
-func getColumnSchema(sf reflect.StructField, keys map[string]struct{}) (*Column, error) {
+func getColumnSchema(sf reflect.StructField) (*Column, error) {
 	schemaType, err := getSchemaType(sf)
 	if err != nil {
 		return nil, err
@@ -200,13 +521,9 @@ func getColumnSchema(sf reflect.StructField, keys map[string]struct{}) (*Column,
 		}
 		key, value := keyValueSplit[0], keyValueSplit[1]
 		if i == 0 {
-			if value != "" || len(value) > 3 {
+			if value != "" {
 				return nil, util.Errorf("roach tag for field %s must begin with column key, a short (1-3) character designation related to column name: %s", c.Name, spec)
 			}
-			if _, ok := keys[key]; ok {
-				return nil, util.Errorf("column key %s, specified for column %s not unique in table schema", key, c.Name)
-			}
-			keys[key] = struct{}{}
 			c.Key = key
 		} else {
 			if err := setColumnOption(c, key, value); err != nil {
@@ -222,7 +539,7 @@ func getColumnSchema(sf reflect.StructField, keys map[string]struct{}) (*Column,
 
 // getSchemaType returns the schema type depending on the reflect.Type type.
 // The schema type is one of: (integer, float, string, blob, time, latlong,
-// numberset, stringset, numbermap, stringmap).
+// integerset, stringset, integermap, stringmap).
 func getSchemaType(field reflect.StructField) (string, error) {
 	switch t := reflect.New(field.Type).Interface().(type) {
 	case *bool, *int, *int8, *int16, *int32, *int64:
@@ -237,16 +554,16 @@ func getSchemaType(field reflect.StructField) (string, error) {
 		return "time", nil
 	case *LatLong:
 		return "latlong", nil
-	case *NumberSet:
-		return "numberset", nil
+	case *IntegerSet:
+		return "integerset", nil
 	case *StringSet:
 		return "stringset", nil
-	case *NumberMap:
-		return "numbermap", nil
+	case *IntegerMap:
+		return "integermap", nil
 	case *StringMap:
 		return "stringmap", nil
 	default:
-		return "", util.Errorf("invalid type %v; only integer, float, string, time, latlong, numberset, stringset, numbermap, stringmap are allowed", t)
+		return "", util.Errorf("invalid type %v; only integer, float, string, time, latlong, integerset, stringset, integermap, stringmap are allowed", t)
 	}
 }
 

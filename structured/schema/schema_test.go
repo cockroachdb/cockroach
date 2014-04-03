@@ -20,40 +20,42 @@ package schema
 import (
 	"fmt"
 	"log"
+	"reflect"
+	"testing"
 	"time"
 )
 
 // A struct with every structured schema data type.
 type KitchenSink struct {
-	ID       int64     `roach:"id,pk"`
-	Bool     bool      `roach:"bo"`
-	Int      int       `roach:"i"`
-	Int8     int8      `roach:"i8"`
-	Int16    int16     `roach:"i16"`
-	Int32    int32     `roach:"i32"`
-	Int64    int64     `roach:"i64"`
-	String   string    `roach:"str"`
-	Blob     []byte    `roach:"bl"`
-	Time     time.Time `roach:"ti"`
-	Location LatLong   `roach:"lo"`
-	NS       NumberSet `roach:"ns"`
-	SS       StringSet `roach:"ss"`
-	NM       NumberMap `roach:"nm"`
-	SM       StringMap `roach:"sm"`
+	ID       int64      `roach:"id,pk"`
+	Bool     bool       `roach:"bo"`
+	Int      int        `roach:"i"`
+	Int8     int8       `roach:"i8"`
+	Int16    int16      `roach:"i16"`
+	Int32    int32      `roach:"i32"`
+	Int64    int64      `roach:"i64"`
+	String   string     `roach:"str"`
+	Blob     []byte     `roach:"bl"`
+	Time     time.Time  `roach:"ti"`
+	Location LatLong    `roach:"lo"`
+	IS       IntegerSet `roach:"is"`
+	SS       StringSet  `roach:"ss"`
+	IM       IntegerMap `roach:"im"`
+	SM       StringMap  `roach:"sm"`
 }
 
-func ExampleKitchenSink() {
+func ExampleToYAML() {
 	sm := map[string]interface{}{
 		"ks": KitchenSink{},
 	}
 	s, err := NewGoSchema("Test", "t", sm)
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		log.Fatalf("failed building schema: %v", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %s", err)
+		log.Fatalf("failed converting to yaml: %v", err)
 	}
 	fmt.Println(string(yaml))
 	// Output:
@@ -97,16 +99,100 @@ func ExampleKitchenSink() {
 	//   - column: Location
 	//     column_key: lo
 	//     type: latlong
-	//   - column: NS
-	//     column_key: ns
-	//     type: numberset
+	//   - column: IS
+	//     column_key: is
+	//     type: integerset
 	//   - column: SS
 	//     column_key: ss
 	//     type: stringset
-	//   - column: NM
-	//     column_key: nm
-	//     type: numbermap
+	//   - column: IM
+	//     column_key: im
+	//     type: integermap
 	//   - column: SM
 	//     column_key: sm
 	//     type: stringmap
+}
+
+// TestYAMLRoundTrip converts from YAML directly back into a schema
+// and do a deep-equality comparison.
+func TestYAMLRoundTrip(t *testing.T) {
+	sm := map[string]interface{}{
+		"ks": KitchenSink{},
+	}
+	s, err := NewGoSchema("Test", "t", sm)
+	if err != nil {
+		log.Fatalf("failed building schema: %v", err)
+	}
+
+	yaml, err := s.ToYAML()
+	if err != nil {
+		log.Fatalf("failed converting to yaml: %v", err)
+	}
+	s2, err := NewYAMLSchema([]byte(yaml))
+	if err != nil {
+		log.Fatalf("failed to convert from yaml to a schema: %v", err)
+	}
+	if !reflect.DeepEqual(s, s2) {
+		log.Fatal("yaml round trip schemas differ")
+	}
+}
+
+// TestDuplicateTables verifies that duplicate table names and table
+// keys are disallowed within a single schema.
+func TestDuplicateTables(t *testing.T) {
+	badYAML := []string{
+		`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+- table: A
+  table_key: b`,
+
+		`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+- table: B
+  table_key: a`,
+	}
+
+	for i, yaml := range badYAML {
+		if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
+			t.Errorf("%d: expected failure on duplicate table names", i)
+		}
+	}
+}
+
+// TestDuplicateColumns verifies that duplicate column names and column
+// keys are disallowed within a single schema.
+func TestDuplicateColumns(t *testing.T) {
+	badYAML := []string{
+		`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+  - column: A
+    column_key: a
+  - column: A
+    column_key: b`,
+
+		`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+  - column: A
+    column_key: a
+  - column: B
+    column_key: a`,
+	}
+
+	for i, yaml := range badYAML {
+		if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
+			t.Errorf("%d: expected failure on duplicate column names", i)
+		}
+	}
 }

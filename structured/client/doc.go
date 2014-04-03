@@ -70,6 +70,8 @@ significant difference in storage efficiency.
 
 Tag Specifications
 
+"roach" tag specifications are as follows:
+
   fk=<table[.column]>: (Foreign Key) specifies the field is a foreign
   key. <table.column> specifies which table and column the foreign key
   references. If a foreign key references an object with a composite

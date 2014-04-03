@@ -24,14 +24,14 @@ type LatLong struct {
 	latitude, longitude, altitude, accuracy float64
 }
 
-// NumberSet is a set of int64 integer values.
-type NumberSet map[int64]struct{}
+// IntegerSet is a set of int64 integer values.
+type IntegerSet map[int64]struct{}
 
 // StringSet is a set of string values.
 type StringSet map[string]struct{}
 
-// NumberMap is a map from string key to int64 integer value.
-type NumberMap map[string]int64
+// IntegerMap is a map from string key to int64 integer value.
+type IntegerMap map[string]int64
 
 // StringMap is a map from string key to string value.
 type StringMap map[string]string

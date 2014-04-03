@@ -78,7 +78,7 @@ type Comment struct {
 	Timestamp     int64  `roach:"ti"`
 }
 
-func ExampleGoSchema() {
+func ExampleNewGoSchema() {
 	sm := map[string]interface{}{
 		"us": User{},
 		"id": Identity{},
@@ -157,6 +157,7 @@ func ExampleGoSchema() {
 	//     column_key: ui
 	//     type: integer
 	//     foreign_key: User.ID
+	//     ondelete: setnull
 	//   - column: Title
 	//     column_key: ti
 	//     type: string
@@ -168,11 +169,13 @@ func ExampleGoSchema() {
 	//     column_key: si
 	//     type: integer
 	//     foreign_key: PhotoStream.ID
+	//     ondelete: setnull
 	//     primary_key: true
 	//   - column: PhotoID
 	//     column_key: pi
 	//     type: integer
 	//     foreign_key: Photo.ID
+	//     ondelete: setnull
 	//     primary_key: true
 	//   - column: Timestamp
 	//     column_key: ti
@@ -184,6 +187,7 @@ func ExampleGoSchema() {
 	//     column_key: si
 	//     type: integer
 	//     foreign_key: PhotoStream.ID
+	//     ondelete: setnull
 	//     primary_key: true
 	//   - column: ID
 	//     column_key: id
@@ -194,6 +198,7 @@ func ExampleGoSchema() {
 	//     column_key: ui
 	//     type: integer
 	//     foreign_key: User.ID
+	//     ondelete: setnull
 	//   - column: Message
 	//     column_key: me
 	//     type: string
