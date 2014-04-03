@@ -16,7 +16,13 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-Gossip Network Simulation
+Package simulation provides tools meant to visualize or test aspects
+of a Cockroach cluster on a single host.
+
+Gossip
+
+Gossip creates a gossip network of up to 250 nodes and outputs
+successive visualization of the gossip network graph via dot.
 
 Uses unix domain or tcp sockets for connecting 3, 10, 25, 50, 100 or
 250 nodes. Generates .dot graph output files for each cycle of the
