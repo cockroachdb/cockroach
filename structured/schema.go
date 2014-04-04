@@ -485,7 +485,7 @@ func (s *Schema) parseForeignKey(c *Column) (table, column string, err error) {
 			}
 		}
 	}
-	err = fmt.Errorf("foreign key %q does not reference a valid column", c.ForeignKey)
+	err = fmt.Errorf("foreign key %q does not reference a primary key column", c.ForeignKey)
 	return
 }
 
@@ -599,6 +599,7 @@ func setColumnOption(c *Column, key, value string) error {
 	case "fulltextindex":
 		c.Index = "fulltext"
 	case "interleave":
+		c.Interleave = true
 	case "locationindex":
 		c.Index = "location"
 	case "ondelete":

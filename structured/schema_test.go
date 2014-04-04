@@ -18,122 +18,89 @@
 package structured
 
 import (
-	"fmt"
 	"log"
-	"reflect"
 	"testing"
-	"time"
 )
 
-// A struct with every structured schema data type.
-type KitchenSink struct {
-	ID       int64      `roach:"id,pk"`
-	Bool     bool       `roach:"bo"`
-	Int      int        `roach:"i"`
-	Int8     int8       `roach:"i8"`
-	Int16    int16      `roach:"i16"`
-	Int32    int32      `roach:"i32"`
-	Int64    int64      `roach:"i64"`
-	String   string     `roach:"str"`
-	Blob     []byte     `roach:"bl"`
-	Time     time.Time  `roach:"ti"`
-	Location LatLong    `roach:"lo"`
-	IS       IntegerSet `roach:"is"`
-	SS       StringSet  `roach:"ss"`
-	IM       IntegerMap `roach:"im"`
-	SM       StringMap  `roach:"sm"`
+// User is a top-level table. User IDs are scattered, meaning a two
+// byte hash of the ID from the UserID sequence is prepended to yield
+// a randomly distributed keyspace.
+type User struct {
+	ID   int64  `roach:"id,pk,auto,scatter"`
+	Name string `roach:"na"`
 }
 
-func ExampleToYAML() {
-	sm := map[string]interface{}{
-		"ks": KitchenSink{},
-	}
-	s, err := NewGoSchema("Test", "t", sm)
-	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
-	}
-
-	yaml, err := s.ToYAML()
-	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
-	}
-	fmt.Println(string(yaml))
-	// Output:
-	// db: Test
-	// db_key: t
-	// tables:
-	// - table: KitchenSink
-	//   table_key: ks
-	//   columns:
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//   - column: Bool
-	//     column_key: bo
-	//     type: integer
-	//   - column: Int
-	//     column_key: i
-	//     type: integer
-	//   - column: Int8
-	//     column_key: i8
-	//     type: integer
-	//   - column: Int16
-	//     column_key: i16
-	//     type: integer
-	//   - column: Int32
-	//     column_key: i32
-	//     type: integer
-	//   - column: Int64
-	//     column_key: i64
-	//     type: integer
-	//   - column: String
-	//     column_key: str
-	//     type: string
-	//   - column: Blob
-	//     column_key: bl
-	//     type: blob
-	//   - column: Time
-	//     column_key: ti
-	//     type: time
-	//   - column: Location
-	//     column_key: lo
-	//     type: latlong
-	//   - column: IS
-	//     column_key: is
-	//     type: integerset
-	//   - column: SS
-	//     column_key: ss
-	//     type: stringset
-	//   - column: IM
-	//     column_key: im
-	//     type: integermap
-	//   - column: SM
-	//     column_key: sm
-	//     type: stringmap
+// Identity is a top-level table as identities must be queried by key
+// at login.
+type Identity struct {
+	Key    string `roach:"ke,pk,scatter"` // (e.g. email:spencer.kimball@gmail.com, phone:6464174337)
+	UserID int64  `roach:"ui,fk=User.ID,ondelete=setnull"`
 }
 
-// TestYAMLRoundTrip converts from YAML directly back into a schema
-// and do a deep-equality comparison.
-func TestYAMLRoundTrip(t *testing.T) {
-	sm := map[string]interface{}{
-		"ks": KitchenSink{},
-	}
-	s, err := NewGoSchema("Test", "t", sm)
-	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
-	}
+// Photo is a top-level table. While photos can only be contributed by
+// a single user, they are then shared and accessible to any number of
+// other users. See notes on scatter option for User.ID.
+type Photo struct {
+	ID       int64   `roach:"id,pk,auto=10000,scatter"`
+	UserID   int64   `roach:"ui,fk=User.ID,ondelete=setnull"`
+	Location LatLong `roach:"lo,locationindex"`
+}
 
-	yaml, err := s.ToYAML()
-	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+// PhotoStream is a top-level table as streams are shared by multiple
+// users. The user ID for a photo stream has an index so that all
+// photo streams for a user may be easily queried. Photo stream titles
+// are full-text indexed for public searching.
+type PhotoStream struct {
+	ID     int64  `roach:"id,pk,auto,scatter"`
+	UserID int64  `roach:"ui,fk=User.ID"`
+	Title  string `roach:"ti,fulltextindex"`
+}
+
+// StreamPost is an interleaved join table (on PhotoStream), as the
+// posts which link a Photo to a PhotoStream are scoped to a single
+// PhotoStream. With interleaved tables, it's not necessary to specify
+// the "ondelete" roach option, as it is always set to "cascade".
+type StreamPost struct {
+	PhotoStreamID int64 `roach:"si,pk,fk=PhotoStream.ID,interleave"`
+	PhotoID       int64 `roach:"pi,pk,fk=Photo.ID"`
+	Timestamp     int64 `roach:"ti"`
+}
+
+// Comment is an interleaved table (on PhotoStream), as comments are
+// scoped to a single PhotoStream.
+type Comment struct {
+	PhotoStreamID int64  `roach:"si,pk,fk=PhotoStream.ID,interleave"`
+	ID            int64  `roach:"id,pk,auto"`
+	UserID        int64  `roach:"ui,fk=User.ID"`
+	Message       string `roach:"me,fulltextindex"`
+	Timestamp     int64  `roach:"ti"`
+}
+
+func createTestSchema() (*Schema, error) {
+	sm := map[string]interface{}{
+		"us": User{},
+		"id": Identity{},
+		"ph": Photo{},
+		"ps": PhotoStream{},
+		"sp": StreamPost{},
+		"co": Comment{},
 	}
-	s2, err := NewYAMLSchema([]byte(yaml))
+	s, err := NewGoSchema("PhotoDB", "pdb", sm)
 	if err != nil {
-		log.Fatalf("failed to convert from yaml to a schema: %v", err)
+		return nil, err
 	}
-	if !reflect.DeepEqual(s, s2) {
-		log.Fatal("yaml round trip schemas differ")
+	return s, nil
+}
+
+// TestNoPrimaryKey verifies a missing primary key is an error.
+func TestNoPrimaryKey(t *testing.T) {
+	yaml := `db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a`
+	if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
+		t.Errorf("expected failure on missing primary key")
 	}
 }
 
@@ -146,16 +113,32 @@ db_key: t
 tables:
 - table: A
   table_key: a
+  columns:
+  - column: A
+    column_key: a
+    primary_key: true
 - table: A
-  table_key: b`,
+  table_key: b
+  columns:
+  - column: A
+    column_key: a
+    primary_key: true`,
 
 		`db: Test
 db_key: t
 tables:
 - table: A
   table_key: a
+  columns:
+  - column: A
+    column_key: a
+    primary_key: true
 - table: B
-  table_key: a`,
+  table_key: a
+  columns:
+  - column: A
+    column_key: a
+    primary_key: true`,
 	}
 
 	for i, yaml := range badYAML {
@@ -174,8 +157,10 @@ db_key: t
 tables:
 - table: A
   table_key: a
+  columns:
   - column: A
     column_key: a
+    primary_key: true
   - column: A
     column_key: b`,
 
@@ -184,8 +169,10 @@ db_key: t
 tables:
 - table: A
   table_key: a
+  columns:
   - column: A
     column_key: a
+    primary_key: true
   - column: B
     column_key: a`,
 	}
@@ -194,5 +181,83 @@ tables:
 		if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
 			t.Errorf("%d: expected failure on duplicate column names", i)
 		}
+	}
+}
+
+// TestForeignKeys verifies correct foreign keys.
+func TestForeignKeys(t *testing.T) {
+	s, err := createTestSchema()
+	if err != nil {
+		log.Fatalf("failed building schema: %s", err)
+	}
+	spT := s.byName["StreamPost"]
+	if spT.foreignKeys["PhotoStream"]["ID"] != spT.byName["PhotoStreamID"] {
+		t.Errorf("missing expected foreign key from StreamPost.PhotoStreamID to PhotoStream.ID")
+	}
+	if spT.foreignKeys["Photo"]["ID"] != spT.byName["PhotoID"] {
+		t.Errorf("missing expected foreign key from StreamPost.PhotoID to Photo.ID")
+	}
+
+	// Modify Identity.UserID's foreign key specification to be just "User"
+	// to verify the default is to use the referenced table's primary key.
+	s.byName["Identity"].byName["UserID"].ForeignKey = "User"
+	if err := s.Validate(); err != nil {
+		t.Errorf("error validating default foreign key specification: %v", err)
+	}
+}
+
+// TestInvalidForeignKeys verifies error conditions in foreign keys.
+func TestBadForeignKeys(t *testing.T) {
+	s, err := createTestSchema()
+	if err != nil {
+		log.Fatalf("failed building schema: %s", err)
+	}
+
+	badForeignKeys := []string{
+		"Foo",
+		"User.Name",
+		"User.NOID",
+	}
+	for i, badFK := range badForeignKeys {
+		s.byName["Identity"].byName["UserID"].ForeignKey = badFK
+		if err := s.Validate(); err == nil {
+			t.Errorf("%d: expected error validating bad foreign key %s", i, badFK)
+		}
+	}
+}
+
+// TestColumnOptions verifies settings of trivial column options
+// (e.g. "scatter").
+func TestColumnOptions(t *testing.T) {
+	s, err := createTestSchema()
+	if err != nil {
+		log.Fatalf("failed building schema: %s", err)
+	}
+	if !s.byName["User"].byName["ID"].PrimaryKey {
+		t.Errorf("expected User.ID to be primary key")
+	}
+	if !s.byName["User"].byName["ID"].Scatter {
+		t.Errorf("expected scatter option set on User.ID")
+	}
+	if *s.byName["Photo"].byName["ID"].Auto != 10000 {
+		t.Errorf("expected auto option starting at 10000 on Photo.ID")
+	}
+	if s.byName["Identity"].byName["UserID"].OnDelete != "setnull" {
+		t.Errorf("expected ondelete=setnull for Identity.UserID")
+	}
+	if !s.byName["Comment"].byName["PhotoStreamID"].Interleave {
+		t.Errorf("expected interleave for Comment.PhotoStreamID")
+	}
+	if s.byName["Comment"].byName["PhotoStreamID"].OnDelete != "cascade" {
+		t.Errorf("expected ondelete=cascade for Comment.PhotoStreamID")
+	}
+	if s.byName["Photo"].byName["Location"].Index != "location" {
+		t.Errorf("expected location index on Photo.Location")
+	}
+	if s.byName["Photo"].byName["Location"].Index != "location" {
+		t.Errorf("expected location index on Photo.Location")
+	}
+	if s.byName["PhotoStream"].byName["Title"].Index != "fulltext" {
+		t.Errorf("expected full text index on PhotoStream.Title")
 	}
 }

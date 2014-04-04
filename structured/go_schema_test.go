@@ -20,72 +20,13 @@ package structured
 import (
 	"fmt"
 	"log"
+	"reflect"
+	"testing"
+	"time"
 )
 
-// User is a top-level table. User IDs are scattered, meaning a two
-// byte hash of the ID from the UserID sequence is prepended to yield
-// a randomly distributed keyspace.
-type User struct {
-	ID   int64  `roach:"id,pk,auto,scatter"`
-	Name string `roach:"na"`
-}
-
-// Identity is a top-level table as identities must be queried by key
-// at login.
-type Identity struct {
-	Key    string `roach:"ke,pk,scatter"` // (e.g. email:spencer.kimball@gmail.com, phone:6464174337)
-	UserID int64  `roach:"ui,fk=User.ID,ondelete=setnull"`
-}
-
-// Photo is a top-level table. While photos can only be contributed by
-// a single user, they are then shared and accessible to any number of
-// other users. See notes on scatter option for User.ID.
-type Photo struct {
-	ID       int64   `roach:"id,pk,auto=10000,scatter"`
-	UserID   int64   `roach:"ui,fk=User.ID,ondelete=setnull"`
-	Location LatLong `roach:"lo,locationindex"`
-}
-
-// PhotoStream is a top-level table as streams are shared by multiple
-// users. The user ID for a photo stream has an index so that all
-// photo streams for a user may be easily queried. Photo stream titles
-// are full-text indexed for public searching.
-type PhotoStream struct {
-	ID     int64  `roach:"id,pk,auto,scatter"`
-	UserID int64  `roach:"ui,fk=User.ID"`
-	Title  string `roach:"ti,fulltextindex"`
-}
-
-// StreamPost is an interleaved join table (on PhotoStream), as the
-// posts which link a Photo to a PhotoStream are scoped to a single
-// PhotoStream. With interleaved tables, it's not necessary to specify
-// the "ondelete" roach option, as it is always set to "cascade".
-type StreamPost struct {
-	PhotoStreamID int64 `roach:"si,pk,fk=PhotoStream.ID,interleave"`
-	PhotoID       int64 `roach:"pi,pk,fk=Photo.ID"`
-	Timestamp     int64 `roach:"ti"`
-}
-
-// Comment is an interleaved table (on PhotoStream), as comments are
-// scoped to a single PhotoStream.
-type Comment struct {
-	PhotoStreamID int64  `roach:"si,pk,fk=PhotoStream.ID,interleave"`
-	ID            int64  `roach:"id,pk,auto"`
-	UserID        int64  `roach:"ui,fk=User.ID"`
-	Message       string `roach:"me,fulltextindex"`
-	Timestamp     int64  `roach:"ti"`
-}
-
 func ExampleNewGoSchema() {
-	sm := map[string]interface{}{
-		"us": User{},
-		"id": Identity{},
-		"ph": Photo{},
-		"ps": PhotoStream{},
-		"sp": StreamPost{},
-		"co": Comment{},
-	}
-	s, err := NewGoSchema("PhotoDB", "pdb", sm)
+	s, err := createTestSchema()
 	if err != nil {
 		log.Fatalf("failed building schema: %s", err)
 	}
@@ -167,7 +108,8 @@ func ExampleNewGoSchema() {
 	//     column_key: si
 	//     type: integer
 	//     foreign_key: PhotoStream.ID
-	//     ondelete: setnull
+	//     interleave: true
+	//     ondelete: cascade
 	//     primary_key: true
 	//   - column: PhotoID
 	//     column_key: pi
@@ -185,7 +127,8 @@ func ExampleNewGoSchema() {
 	//     column_key: si
 	//     type: integer
 	//     foreign_key: PhotoStream.ID
-	//     ondelete: setnull
+	//     interleave: true
+	//     ondelete: cascade
 	//     primary_key: true
 	//   - column: ID
 	//     column_key: id
@@ -204,4 +147,116 @@ func ExampleNewGoSchema() {
 	//   - column: Timestamp
 	//     column_key: ti
 	//     type: integer
+}
+
+// A struct with every structured schema data type.
+type KitchenSink struct {
+	ID       int64      `roach:"id,pk"`
+	Bool     bool       `roach:"bo"`
+	Int      int        `roach:"i"`
+	Int8     int8       `roach:"i8"`
+	Int16    int16      `roach:"i16"`
+	Int32    int32      `roach:"i32"`
+	Int64    int64      `roach:"i64"`
+	String   string     `roach:"str"`
+	Blob     []byte     `roach:"bl"`
+	Time     time.Time  `roach:"ti"`
+	Location LatLong    `roach:"lo"`
+	IS       IntegerSet `roach:"is"`
+	SS       StringSet  `roach:"ss"`
+	IM       IntegerMap `roach:"im"`
+	SM       StringMap  `roach:"sm"`
+}
+
+func ExampleToYAML() {
+	sm := map[string]interface{}{
+		"ks": KitchenSink{},
+	}
+	s, err := NewGoSchema("Test", "t", sm)
+	if err != nil {
+		log.Fatalf("failed building schema: %v", err)
+	}
+
+	yaml, err := s.ToYAML()
+	if err != nil {
+		log.Fatalf("failed converting to yaml: %v", err)
+	}
+	fmt.Println(string(yaml))
+	// Output:
+	// db: Test
+	// db_key: t
+	// tables:
+	// - table: KitchenSink
+	//   table_key: ks
+	//   columns:
+	//   - column: ID
+	//     column_key: id
+	//     type: integer
+	//     primary_key: true
+	//   - column: Bool
+	//     column_key: bo
+	//     type: integer
+	//   - column: Int
+	//     column_key: i
+	//     type: integer
+	//   - column: Int8
+	//     column_key: i8
+	//     type: integer
+	//   - column: Int16
+	//     column_key: i16
+	//     type: integer
+	//   - column: Int32
+	//     column_key: i32
+	//     type: integer
+	//   - column: Int64
+	//     column_key: i64
+	//     type: integer
+	//   - column: String
+	//     column_key: str
+	//     type: string
+	//   - column: Blob
+	//     column_key: bl
+	//     type: blob
+	//   - column: Time
+	//     column_key: ti
+	//     type: time
+	//   - column: Location
+	//     column_key: lo
+	//     type: latlong
+	//   - column: IS
+	//     column_key: is
+	//     type: integerset
+	//   - column: SS
+	//     column_key: ss
+	//     type: stringset
+	//   - column: IM
+	//     column_key: im
+	//     type: integermap
+	//   - column: SM
+	//     column_key: sm
+	//     type: stringmap
+}
+
+// TestYAMLRoundTrip converts from YAML directly back into a schema
+// and do a deep-equality comparison.
+func TestYAMLRoundTrip(t *testing.T) {
+	sm := map[string]interface{}{
+		"ks": KitchenSink{},
+	}
+	s, err := NewGoSchema("Test", "t", sm)
+	if err != nil {
+		log.Fatalf("failed building schema: %v", err)
+	}
+
+	yaml, err := s.ToYAML()
+	if err != nil {
+		log.Fatalf("failed converting to yaml: %v", err)
+	}
+	s2, err := NewYAMLSchema([]byte(yaml))
+	if err != nil {
+		log.Fatalf("failed to convert from yaml to a schema: %v", err)
+	}
+	if !reflect.DeepEqual(s, s2) {
+		log.Fatal("yaml round trip schemas differ")
+	}
 }
