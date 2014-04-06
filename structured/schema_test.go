@@ -198,6 +198,16 @@ func TestForeignKeys(t *testing.T) {
 		t.Errorf("missing expected foreign key from StreamPost.PhotoID to Photo.ID")
 	}
 
+	// Test incoming foreign keys.
+	psT := s.byName["PhotoStream"]
+	if psT.incomingForeignKeys["StreamPost"]["PhotoStreamID"] != spT.byName["PhotoStreamID"] {
+		t.Errorf("PhotoStream table missing expected incoming foreign key from StreamPost.PhotoStreamID")
+	}
+	phT := s.byName["Photo"]
+	if phT.incomingForeignKeys["StreamPost"]["PhotoID"] != spT.byName["PhotoID"] {
+		t.Errorf("Photo table missing expected incoming foreign key from StreamPost.PhotoID")
+	}
+
 	// Modify Identity.UserID's foreign key specification to be just "User"
 	// to verify the default is to use the referenced table's primary key.
 	s.byName["Identity"].byName["UserID"].ForeignKey = "User"

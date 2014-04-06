@@ -133,10 +133,20 @@ type Table struct {
 	// primaryKey is a slice of columns which make up primary key.
 	// There must be one or more columns.
 	primaryKey []*Column
-	// foreignKeys is a map from referenced table name to a map from
-	// referenced column name to the local (i.e. this table's) foreign
-	// key column.
+	// foreignKeys is a map of outgoing foreign keys from this table.
+	// The outer map is keyed by referenced table name. The inner map
+	// is keyed by referenced column name and points to the local
+	// (i.e. this table's) foreign key column.
 	foreignKeys map[string]map[string]*Column
+	// incomingForeignKeys is a map of incoming foreign keys
+	// referencing this table. The outer map is keyed by referencing
+	// table name. The inner map is keyed by referencing column name
+	// and points to the referencing column. Note that this column is
+	// from the other table! This map is used to implement the
+	// ondelete policy specified in the referencing column to either
+	// delete the referencing object ("cascade") or set the columns
+	// null ("setnull").
+	incomingForeignKeys map[string]map[string]*Column
 }
 
 // Schema contains a named sequence of Table schemas. The Key should
@@ -251,6 +261,7 @@ func (s *Schema) Validate() error {
 		// Init table data structures.
 		t.primaryKey = make([]*Column, 0, 1)
 		t.foreignKeys = make(map[string]map[string]*Column)
+		t.incomingForeignKeys = make(map[string]map[string]*Column)
 
 		// Validate table.
 		if err := s.validateTable(t); err != nil {
@@ -341,10 +352,19 @@ func (s *Schema) validateColumn(c *Column, t *Table) error {
 		if err != nil {
 			return err
 		}
+
+		// Set outgoing foreign key reference.
 		if fkMap, ok := t.foreignKeys[fkTable]; ok {
 			fkMap[fkColumn] = c
 		} else {
 			t.foreignKeys[fkTable] = map[string]*Column{fkColumn: c}
+		}
+
+		// Set incoming foreign key on referenced table.
+		if incomingMap, ok := s.byName[fkTable].incomingForeignKeys[t.Name]; ok {
+			incomingMap[c.Name] = c
+		} else {
+			s.byName[fkTable].incomingForeignKeys[t.Name] = map[string]*Column{c.Name: c}
 		}
 
 		// Check OnDelete spec (only valid for foreign keys).
