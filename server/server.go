@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/db"
 	"github.com/goraft/raft"
@@ -86,7 +87,7 @@ func (s *server) setupRaftServer() {
 	if err := os.MkdirAll(*raftDataPath, 0744); err != nil {
 		log.Fatalf("raft: unable to create path: %v", err)
 	}
-	transporter := raft.NewHTTPTransporter(raftBasePath)
+	transporter := raft.NewHTTPTransporter(raftBasePath, 150*time.Millisecond)
 	var err error
 	// TODO: Pass a non-nil StateMachine to enable snapshotting and log compaction.
 	s.raftServer, err = raft.NewServer(*raftName, *raftDataPath, transporter, nil, s.db, *addr)
