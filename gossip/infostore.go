@@ -20,7 +20,6 @@ package gossip
 import (
 	"math"
 	"net"
-	"sort"
 	"sync"
 	"time"
 
@@ -120,20 +119,11 @@ func (is *infoStore) getInfo(key string) *info {
 	return nil
 }
 
-// getGroupInfos returns an array of info objects from specified group,
-// sorted by value; sort order is dependent on group type
-// (MinGroup: ascending, MaxGroup: descending).
+// getGroupInfos returns an array of info objects from specified group.
 // Returns nil if group is not registered.
 func (is *infoStore) getGroupInfos(prefix string) infoArray {
 	if group, ok := is.Groups[prefix]; ok {
-		infos := group.infosAsArray()
-		switch group.TypeOf {
-		case MinGroup:
-			sort.Sort(infos)
-		case MaxGroup:
-			sort.Sort(sort.Reverse(infos))
-		}
-		return infos
+		return group.infosAsArray()
 	}
 	return nil
 }

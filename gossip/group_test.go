@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-func newTestInfo(key string, val float64) *info {
+func newTestInfo(key string, val interface{}) *info {
 	now := monotonicUnixNano()
 	ttl := now + int64(time.Minute)
 	return &info{
@@ -42,23 +42,23 @@ func TestMinGroupShouldInclude(t *testing.T) {
 	group := newGroup("a", 2, MinGroup)
 
 	// First two inserts work fine.
-	info1 := newTestInfo("a.a", 1)
+	info1 := newTestInfo("a.a", int64(1))
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
-	info2 := newTestInfo("a.b", 2)
+	info2 := newTestInfo("a.b", int64(2))
 	if err := group.addInfo(info2); err != nil {
 		t.Error(err)
 	}
 
 	// A smaller insert should include fine.
-	info3 := newTestInfo("a.c", 0)
+	info3 := newTestInfo("a.c", int64(0))
 	if !group.shouldInclude(info3) || group.addInfo(info3) != nil {
 		t.Error("could not insert")
 	}
 
 	// A larger insert shouldn't include.
-	info4 := newTestInfo("a.d", 3)
+	info4 := newTestInfo("a.d", int64(3))
 	if group.shouldInclude(info4) || group.addInfo(info4) == nil {
 		t.Error("shouldn't have been able to insert")
 	}
@@ -70,23 +70,23 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 	group := newGroup("a", 2, MaxGroup)
 
 	// First two inserts work fine.
-	info1 := newTestInfo("a.a", 1)
+	info1 := newTestInfo("a.a", int64(1))
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
-	info2 := newTestInfo("a.b", 2)
+	info2 := newTestInfo("a.b", int64(2))
 	if err := group.addInfo(info2); err != nil {
 		t.Error(err)
 	}
 
 	// A larger insert should include fine.
-	info3 := newTestInfo("a.c", 3)
+	info3 := newTestInfo("a.c", int64(3))
 	if !group.shouldInclude(info3) || group.addInfo(info3) != nil {
 		t.Errorf("could not insert")
 	}
 
 	// A smaller insert shouldn't include.
-	info4 := newTestInfo("a.d", 0)
+	info4 := newTestInfo("a.d", int64(0))
 	if group.shouldInclude(info4) || group.addInfo(info4) == nil {
 		t.Error("shouldn't have been able to insert")
 	}
@@ -96,7 +96,7 @@ func TestMaxGroupShouldInclude(t *testing.T) {
 // and verifies error response.
 func TestTypeMismatch(t *testing.T) {
 	group := newGroup("a", 1, MinGroup)
-	info1 := newTestInfo("a.a", 1)
+	info1 := newTestInfo("a.a", int64(1))
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
@@ -115,25 +115,25 @@ func TestTypeMismatch(t *testing.T) {
 // earlier timestamps are ignored and later timestamps always replace it.
 func TestSameKeyInserts(t *testing.T) {
 	group := newGroup("a", 1, MinGroup)
-	info1 := newTestInfo("a.a", 1)
+	info1 := newTestInfo("a.a", int64(1))
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
 
 	// Smaller timestamp should be ignored.
-	info2 := newTestInfo("a.a", 1)
+	info2 := newTestInfo("a.a", int64(1))
 	info2.Timestamp = info1.Timestamp - 1
 	if err := group.addInfo(info2); err == nil {
 		t.Error("should not allow insert")
 	}
 
 	// Two successively larger timestamps always win.
-	info3 := newTestInfo("a.a", 1)
+	info3 := newTestInfo("a.a", int64(1))
 	info3.Timestamp = info1.Timestamp + 1
 	if err := group.addInfo(info3); err != nil {
 		t.Error(err)
 	}
-	info4 := newTestInfo("a.a", 1)
+	info4 := newTestInfo("a.a", int64(1))
 	info4.Timestamp = info1.Timestamp + 2
 	if err := group.addInfo(info4); err != nil {
 		t.Error(err)
@@ -146,19 +146,19 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 	group := newGroup("a", 2, MinGroup)
 
 	// First two inserts work fine.
-	info1 := newTestInfo("a.a", 1)
+	info1 := newTestInfo("a.a", int64(1))
 	info1.TTLStamp = info1.Timestamp + int64(time.Millisecond)
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
-	info2 := newTestInfo("a.b", 2)
+	info2 := newTestInfo("a.b", int64(2))
 	info2.TTLStamp = info2.Timestamp + int64(time.Millisecond)
 	if err := group.addInfo(info2); err != nil {
 		t.Error(err)
 	}
 
 	// A larger insert shouldn't yet insert as we haven't surprassed TTL.
-	info3 := newTestInfo("a.c", 3)
+	info3 := newTestInfo("a.c", int64(3))
 	if err := group.addInfo(info3); err == nil {
 		t.Error("shouldn't be able to insert")
 	}
@@ -170,7 +170,7 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 	}
 
 	// Next value should also insert.
-	info4 := newTestInfo("a.d", 4)
+	info4 := newTestInfo("a.d", int64(4))
 	if err := group.addInfo(info4); err != nil {
 		t.Error(err)
 	}
@@ -226,8 +226,8 @@ func TestGroups100Keys(t *testing.T) {
 // unnecessary delta info.
 func TestSameKeySameTimestamp(t *testing.T) {
 	group := newGroup("a", 2, MinGroup)
-	info1 := newTestInfo("a.a", 1.0)
-	info2 := newTestInfo("a.a", 1.0)
+	info1 := newTestInfo("a.a", float64(1.0))
+	info2 := newTestInfo("a.a", float64(1.0))
 	info2.Timestamp = info1.Timestamp
 	if err := group.addInfo(info1); err != nil {
 		t.Error(err)
@@ -240,8 +240,8 @@ func TestSameKeySameTimestamp(t *testing.T) {
 // TestSameKeyDifferentHops verifies that adding two infos with the
 // same key and different Hops values preserves the lower Hops count.
 func TestSameKeyDifferentHops(t *testing.T) {
-	info1 := newTestInfo("a.a", 1.0)
-	info2 := newTestInfo("a.a", 1.0)
+	info1 := newTestInfo("a.a", float64(1.0))
+	info2 := newTestInfo("a.a", float64(1.0))
 	info1.Hops = 1
 	info2.Timestamp = info1.Timestamp
 	info2.Hops = 2
@@ -288,7 +288,7 @@ func TestGroupGetInfo(t *testing.T) {
 // TestGroupGetInfoTTL verifies GetInfo with a short TTL.
 func TestGroupGetInfoTTL(t *testing.T) {
 	g := newGroup("a", 10, MinGroup)
-	i := newTestInfo("a.a", 1)
+	i := newTestInfo("a.a", int64(1))
 	i.TTLStamp = i.Timestamp + int64(time.Nanosecond)
 	g.addInfo(i)
 	time.Sleep(time.Nanosecond)
@@ -298,8 +298,8 @@ func TestGroupGetInfoTTL(t *testing.T) {
 
 	// Try 2 infos, one with short TTL and one with long TTL and
 	// verify operation of infosAsArray.
-	info1 := newTestInfo("a.1", 1)
-	info2 := newTestInfo("a.2", 2)
+	info1 := newTestInfo("a.1", int64(1))
+	info2 := newTestInfo("a.2", int64(2))
 	info2.TTLStamp = i.Timestamp + int64(time.Nanosecond)
 	g.addInfo(info1)
 	g.addInfo(info2)
@@ -308,5 +308,31 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	infos := g.infosAsArray()
 	if len(infos) != 1 || infos[0].Val != info1.Val {
 		t.Error("only one info should be returned", infos)
+	}
+}
+
+type testValue struct {
+	intVal    int64
+	stringVal string
+}
+
+func (t *testValue) Less(o Ordered) bool {
+	return t.intVal < o.(*testValue).intVal
+}
+
+// TestGroupWithStructVal verifies group operation with a value which
+// is not a basic supported type.
+func TestGroupWithStructVal(t *testing.T) {
+	g := newGroup("a", 10, MinGroup)
+	i1 := newTestInfo("a.a", &testValue{3, "a"})
+	i2 := newTestInfo("a.b", &testValue{1, "b"})
+	i3 := newTestInfo("a.c", &testValue{2, "c"})
+	g.addInfo(i1)
+	g.addInfo(i2)
+	g.addInfo(i3)
+
+	infos := g.infosAsArray()
+	if infos[0].Val != i2.Val || infos[1].Val != i3.Val || infos[2].Val != i1.Val {
+		t.Error("Ordered interface not working properly with groups")
 	}
 }

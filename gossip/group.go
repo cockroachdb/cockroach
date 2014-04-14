@@ -21,6 +21,7 @@ import (
 	"log"
 	"math"
 	"reflect"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -161,7 +162,9 @@ func (g *group) getInfo(key string) *info {
 	return nil
 }
 
-// infosAsArray returns an array of infos from group.
+// infosAsArray returns an array of infos from group, sorted by value;
+// sort order is dependent on group type (MinGroup: ascending,
+// MaxGroup: descending).
 func (g *group) infosAsArray() infoArray {
 	now := time.Now().UnixNano()
 	infos := make(infoArray, 0, len(g.Infos))
@@ -172,6 +175,12 @@ func (g *group) infosAsArray() infoArray {
 		} else {
 			infos = append(infos, i)
 		}
+	}
+	switch g.TypeOf {
+	case MinGroup:
+		sort.Sort(infos)
+	case MaxGroup:
+		sort.Sort(sort.Reverse(infos))
 	}
 	return infos
 }

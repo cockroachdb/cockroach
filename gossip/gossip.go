@@ -147,80 +147,17 @@ func (g *Gossip) SetInterval(interval time.Duration) {
 	g.interval = interval
 }
 
-// AddInt64Info adds or updates an int64-valued info. Returns nil if
-// info was added; error otherwise.
-func (g *Gossip) AddInt64Info(key string, val int64, ttl time.Duration) error {
-	return g.addInfo(key, val, ttl)
-}
-
-// AddFloat64Info adds or updates a float64-valued info. Returns nil if
-// info was added; error otherwise.
-func (g *Gossip) AddFloat64Info(key string, val float64, ttl time.Duration) error {
-	return g.addInfo(key, val, ttl)
-}
-
-// AddStringInfo adds or updates a string-valued info. Returns nil if
-// info was added; error otherwise.
-func (g *Gossip) AddStringInfo(key string, val string, ttl time.Duration) error {
-	return g.addInfo(key, val, ttl)
-}
-
-// addInfo adds or updates an info by key. Returns nil if
-// info was added; error otherwise.
-func (g *Gossip) addInfo(key string, val interface{}, ttl time.Duration) error {
+// AddInfo adds or updates an info object. Returns an error if info
+// couldn't be added.
+func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.is.addInfo(g.is.newInfo(key, val, ttl))
 }
 
-// GetInt64Info returns an int64 value by key or an error if specified
-// key does not exist, is of another type, or has expired.
-func (g *Gossip) GetInt64Info(key string) (int64, error) {
-	v, err := g.getInfo(key)
-	if err != nil {
-		return 0, err
-	}
-	switch t := v.(type) {
-	case int64:
-		return t, nil
-	default:
-		return 0, util.Errorf("key %q is of type %s", key, t)
-	}
-}
-
-// GetFloat64Info returns a float64 value by key or an error if
-// specified key does not exist, is of another type, or has expired.
-func (g *Gossip) GetFloat64Info(key string) (float64, error) {
-	v, err := g.getInfo(key)
-	if err != nil {
-		return 0, err
-	}
-	switch t := v.(type) {
-	case float64:
-		return t, nil
-	default:
-		return 0, util.Errorf("key %q is of type %s", key, t)
-	}
-}
-
-// GetStringInfo returns a string value by key or an error if specified
-// key does not exist, is of another type, or has expired.
-func (g *Gossip) GetStringInfo(key string) (string, error) {
-	v, err := g.getInfo(key)
-	if err != nil {
-		return "", err
-	}
-	switch t := v.(type) {
-	case string:
-		return t, nil
-	default:
-		return "", util.Errorf("key %q is of type %s", key, t)
-	}
-}
-
-// getInfo returns an info value by key or an error if it doesn't
-// exist or has expired.
-func (g *Gossip) getInfo(key string) (interface{}, error) {
+// GetInfo returns an info value by key or an error if specified
+// key does not exist or has expired.
+func (g *Gossip) GetInfo(key string) (interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if i := g.is.getInfo(key); i != nil {
@@ -229,73 +166,20 @@ func (g *Gossip) getInfo(key string) (interface{}, error) {
 	return nil, util.Errorf("key %q does not exist or has expired", key)
 }
 
-// GetGroupInt64Infos returns a slice of int64 info values from
-// specified group, or an error if group is not registered.
-func (g *Gossip) GetGroupInt64Infos(prefix string) ([]int64, error) {
-	infos, err := g.getGroupInfos(prefix)
-	if err != nil {
-		return nil, err
-	}
-	values := make([]int64, len(infos))
-	for i, info := range infos {
-		switch t := info.Val.(type) {
-		default:
-			return nil, util.Errorf("value type not int64: %v", t)
-		case int64:
-			values[i] = t
-		}
-	}
-	return values, nil
-}
-
-// GetGroupFloat64Infos returns a slice of float64 info values from
-// specified group, or an error if group is not registered.
-func (g *Gossip) GetGroupFloat64Infos(prefix string) ([]float64, error) {
-	infos, err := g.getGroupInfos(prefix)
-	if err != nil {
-		return nil, err
-	}
-	values := make([]float64, len(infos))
-	for i, info := range infos {
-		switch t := info.Val.(type) {
-		default:
-			return nil, util.Errorf("value type not float64: %v", t)
-		case float64:
-			values[i] = t
-		}
-	}
-	return values, nil
-}
-
-// GetGroupStringInfos returns a slice of string info values from
-// specified group, or an error if group is not registered.
-func (g *Gossip) GetGroupStringInfos(prefix string) ([]string, error) {
-	infos, err := g.getGroupInfos(prefix)
-	if err != nil {
-		return nil, err
-	}
-	values := make([]string, len(infos))
-	for i, info := range infos {
-		switch t := info.Val.(type) {
-		default:
-			return nil, util.Errorf("value type not string: %v", t)
-		case string:
-			values[i] = t
-		}
-	}
-	return values, nil
-}
-
-// getGroupInfos returns a slice of info objects from specified group,
-// Returns nil if group is not registered.
-func (g *Gossip) getGroupInfos(prefix string) ([]*info, error) {
+// GetGroupInfos returns a slice of info values from specified group,
+// or an error if group is not registered.
+func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	infos := g.is.getGroupInfos(prefix)
 	if infos == nil {
 		return nil, util.Errorf("group %q doesn't exist", prefix)
 	}
-	return infos, nil
+	values := make([]interface{}, len(infos))
+	for i, info := range infos {
+		values[i] = info.Val
+	}
+	return values, nil
 }
 
 // RegisterGroup registers a new group with info store. Returns an

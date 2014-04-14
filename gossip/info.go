@@ -23,6 +23,15 @@ import (
 	"strings"
 )
 
+// Ordered is used to compare info values when managing info groups.
+// Info values which are not int64, float64 or string must implement
+// this interface to be used with groups.
+type Ordered interface {
+	// Returns true if the supplied Ordered value is less than this
+	// object.
+	Less(b Ordered) bool
+}
+
 // info is the basic unit of information traded over the gossip
 // network.
 type info struct {
@@ -56,7 +65,11 @@ func (i *info) less(b *info) bool {
 	case string:
 		return t < b.Val.(string)
 	default:
-		log.Fatalf("unhandled info value type: %s", t)
+		if ord, ok := i.Val.(Ordered); ok {
+			return ord.Less(b.Val.(Ordered))
+		} else {
+			log.Fatalf("unhandled info value type: %s", t)
+		}
 	}
 	return false
 }

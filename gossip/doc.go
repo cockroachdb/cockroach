@@ -27,22 +27,24 @@ captured by info objects. Info objects may be stored individually
 groups (e.g. multiple values of the same type from different
 originators).
 
-Groups organize info objects by key prefix. Groups come in two types:
-MinGroup groups keep only the minimum values seen; MaxGroup groups
-keep only the maximum values seen. An example is load or disk capacity
-values for nodes. In a cluster with thousands of nodes, groups force
-the gossip network to limit itself to only a portion of total data
-volume (e.g. the 100 least loaded nodes or the 100 disks with most
-unused capacity).
+Groups organize multiple instance of info for the same key
+prefix. Groups come in two types: MinGroup groups keep only the
+minimum values seen; MaxGroup groups keep only the maximum values
+seen. An example is load or disk capacity values for nodes. In a
+cluster with thousands of nodes, groups force the gossip network to
+limit itself to only a portion of total data volume (e.g. the 100
+least loaded nodes or the 100 disks with most unused capacity).
 
-A map of info objects and a map of Group objects are kept by the
-Gossip instance. New info objects should be created via
-Gossip.AddInt64Info, Gossip.AddFloat64Info and Gossip.AddStringInfo.
-Groups are registered via Gossip.RegisterGroup. Info objects are
-added to groups automatically if their key shares the group's key
-prefix. Info can be queried from the gossip network via the
-Gossip.GetInt64Info, Gossip.GetFloat64Info and Gossip.GetStringInfo.
-Sorted values for groups are queried via Gossip.GetGroupInt64Infos,
-Gossip.GetGroupFloat64Infos and Gossip.GetGroupStringInfos.
+Single-valued info values can have any type. Values to be used with
+groups must either be of type int64, float64, string or implement the
+gossip.Ordered interface.
+
+A map of info objects and a map of Group objects are kept by a Gossip
+instance. Single-valued info objects can be added via
+Gossip.AddInfo(). Groups must be registered via
+Gossip.RegisterGroup(). Info objects are added to groups if their key
+matches. Info can be queried for single-valued keys via
+Gossip.GetInfo. Sorted values for groups are queried via
+Gossip.GetGroupInfos().
 */
 package gossip
