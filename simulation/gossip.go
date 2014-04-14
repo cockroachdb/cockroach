@@ -183,19 +183,19 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 			if infoKey == addr {
 				continue // skip the node's own info
 			}
-			if val, err := node.GetInt64Info(infoKey); err != nil {
+			if val, err := node.GetInfo(infoKey); err != nil {
 				log.Printf("error getting info for key %q: %s", infoKey, err)
 				incomplete++
 			} else {
-				totalAge += int64(cycle) - val
+				totalAge += int64(cycle) - val.(int64)
 			}
 		}
 
 		var sentinelAge int64
-		if val, err := node.GetInt64Info(gossip.SentinelGossip); err != nil {
+		if val, err := node.GetInfo(gossip.SentinelGossip); err != nil {
 			log.Printf("error getting info for sentinel gossip key %q: %s", gossip.SentinelGossip, err)
 		} else {
-			sentinelAge = int64(cycle) - val
+			sentinelAge = int64(cycle) - val.(int64)
 		}
 
 		var age, nodeColor string
@@ -279,7 +279,7 @@ func main() {
 		}
 		// Update infos.
 		for addr, node := range nodes {
-			if err := node.AddInt64Info(addr, int64(cycle), time.Hour); err != nil {
+			if err := node.AddInfo(addr, int64(cycle), time.Hour); err != nil {
 				log.Printf("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
 			}
 		}
