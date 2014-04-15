@@ -19,12 +19,12 @@ package gossip
 
 import (
 	"encoding/gob"
-	"log"
 	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 const (
@@ -137,7 +137,7 @@ func (c *client) gossip(g *Gossip) error {
 
 		// Handle remote forwarding.
 		if reply.Alternate != nil {
-			log.Printf("received forward from %+v to %+v", c.addr, reply.Alternate)
+			glog.Infof("received forward from %+v to %+v", c.addr, reply.Alternate)
 			c.forwardAddr = reply.Alternate
 			return nil
 		}

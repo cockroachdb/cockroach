@@ -24,7 +24,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/golang/glog"
 )
 
 var (
@@ -86,10 +86,10 @@ func newServer() (*server, error) {
 }
 
 func (s *server) start() error {
-	log.Println("Starting RPC server at", *rpcAddr)
+	glog.Infoln("Starting RPC server at", *rpcAddr)
 	go s.rpc.ListenAndServe() // blocks, so launch in a goroutine
 
-	log.Println("Starting gossip instance")
+	glog.Infoln("Starting gossip instance")
 	s.gossip.Start()
 
 	s.initHTTP()
@@ -97,7 +97,7 @@ func (s *server) start() error {
 }
 
 func (s *server) initHTTP() {
-	log.Println("Starting HTTP server at", *httpAddr)
+	glog.Infoln("Starting HTTP server at", *httpAddr)
 	s.mux.HandleFunc("/healthz", s.handleHealthz)
 	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)

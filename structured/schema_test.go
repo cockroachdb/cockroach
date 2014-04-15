@@ -18,8 +18,9 @@
 package structured
 
 import (
-	"log"
 	"testing"
+
+	"github.com/golang/glog"
 )
 
 // User is a top-level table. User IDs are scattered, meaning a two
@@ -188,7 +189,7 @@ tables:
 func TestForeignKeys(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		glog.Fatalf("failed building schema: %s", err)
 	}
 	spT := s.byName["StreamPost"]
 	if spT.foreignKeys["PhotoStream"]["ID"] != spT.byName["PhotoStreamID"] {
@@ -220,7 +221,7 @@ func TestForeignKeys(t *testing.T) {
 func TestBadForeignKeys(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		glog.Fatalf("failed building schema: %s", err)
 	}
 
 	badForeignKeys := []string{
@@ -241,7 +242,7 @@ func TestBadForeignKeys(t *testing.T) {
 func TestColumnOptions(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		glog.Fatalf("failed building schema: %s", err)
 	}
 	if !s.byName["User"].byName["ID"].PrimaryKey {
 		t.Errorf("expected User.ID to be primary key")

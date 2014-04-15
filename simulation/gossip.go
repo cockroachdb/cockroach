@@ -63,7 +63,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math"
 	"os"
 	"strconv"
@@ -71,6 +70,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/golang/glog"
 )
 
 const (
@@ -142,7 +142,7 @@ func (em edgeMap) addEdge(addr string, e edge) {
 func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edgeSet map[string]edge) string {
 	f, err := os.Create(dotFN)
 	if err != nil {
-		log.Fatalf("unable to create temp file: %s", err)
+		glog.Fatalf("unable to create temp file: %s", err)
 	}
 	defer f.Close()
 
@@ -184,7 +184,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 				continue // skip the node's own info
 			}
 			if val, err := node.GetInfo(infoKey); err != nil {
-				log.Printf("error getting info for key %q: %s", infoKey, err)
+				glog.Infof("error getting info for key %q: %s", infoKey, err)
 				incomplete++
 			} else {
 				totalAge += int64(cycle) - val.(int64)
@@ -193,7 +193,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 
 		var sentinelAge int64
 		if val, err := node.GetInfo(gossip.SentinelGossip); err != nil {
-			log.Printf("error getting info for sentinel gossip key %q: %s", gossip.SentinelGossip, err)
+			glog.Infof("error getting info for sentinel gossip key %q: %s", gossip.SentinelGossip, err)
 		} else {
 			sentinelAge = int64(cycle) - val.(int64)
 		}
@@ -236,7 +236,7 @@ func main() {
 
 	dirName, err := ioutil.TempDir("", "gossip-simulation-")
 	if err != nil {
-		log.Fatalf("could not create temporary directory for gossip simulation output: %s", err)
+		glog.Fatalf("could not create temporary directory for gossip simulation output: %s", err)
 	}
 
 	// Simulation callbacks to run the simulation for cycleCount
@@ -267,7 +267,7 @@ func main() {
 		numCycles = 20
 		outputEvery = 2
 	default:
-		log.Fatalf("unknown simulation size: %s", *size)
+		glog.Fatalf("unknown simulation size: %s", *size)
 	}
 
 	edgeSet := make(map[string]edge)
@@ -280,7 +280,7 @@ func main() {
 		// Update infos.
 		for addr, node := range nodes {
 			if err := node.AddInfo(addr, int64(cycle), time.Hour); err != nil {
-				log.Printf("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
+				glog.Infof("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
 			}
 		}
 		// Output dot graph periodically.
@@ -295,5 +295,5 @@ func main() {
 
 	// Output instructions for viewing graphs.
 	fileList := strings.Join(fns, " ")
-	log.Printf("To view simulation graph output run (you must install graphviz):\nfor f in %s ; do dot $f -Tpng -o $f.png ; done ; open `for f in %s ; do echo $f.png; done`", fileList, fileList)
+	glog.Infof("To view simulation graph output run (you must install graphviz):\nfor f in %s ; do dot $f -Tpng -o $f.png ; done ; open `for f in %s ; do echo $f.png; done`", fileList, fileList)
 }

@@ -18,10 +18,10 @@
 package kv
 
 import (
-	"log"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/golang/glog"
 )
 
 // A LocalDB provides methods to access only a local, in-memory key
@@ -37,7 +37,7 @@ func NewLocalDB() DB {
 	ldb := &LocalDB{}
 	rng, err := storage.NewRange([]byte{}, storage.NewInMem(1<<30), nil)
 	if err != nil {
-		log.Fatal(err)
+		glog.Fatal(err)
 	}
 	ldb.rng = rng
 	return ldb
@@ -62,61 +62,73 @@ func (db *LocalDB) invokeMethod(method string, args, reply interface{}) interfac
 	return chanVal.Interface()
 }
 
+// Contains .
 func (db *LocalDB) Contains(args *storage.ContainsRequest) <-chan *storage.ContainsResponse {
 	return db.invokeMethod("Contains",
 		args, &storage.ContainsResponse{}).(chan *storage.ContainsResponse)
 }
 
+// Get .
 func (db *LocalDB) Get(args *storage.GetRequest) <-chan *storage.GetResponse {
 	return db.invokeMethod("Get",
 		args, &storage.GetResponse{}).(chan *storage.GetResponse)
 }
 
+// Put .
 func (db *LocalDB) Put(args *storage.PutRequest) <-chan *storage.PutResponse {
 	return db.invokeMethod("Put",
 		args, &storage.PutResponse{}).(chan *storage.PutResponse)
 }
 
+// Increment .
 func (db *LocalDB) Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse {
 	return db.invokeMethod("Increment",
 		args, &storage.IncrementResponse{}).(chan *storage.IncrementResponse)
 }
 
+// Delete .
 func (db *LocalDB) Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse {
 	return db.invokeMethod("Delete",
 		args, &storage.DeleteResponse{}).(chan *storage.DeleteResponse)
 }
 
+// DeleteRange .
 func (db *LocalDB) DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse {
 	return db.invokeMethod("DeleteRange",
 		args, &storage.DeleteRangeResponse{}).(chan *storage.DeleteRangeResponse)
 }
 
+// Scan .
 func (db *LocalDB) Scan(args *storage.ScanRequest) <-chan *storage.ScanResponse {
 	return db.invokeMethod("Scan",
 		args, &storage.ScanResponse{}).(chan *storage.ScanResponse)
 }
 
+// EndTransaction .
 func (db *LocalDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *storage.EndTransactionResponse {
 	return db.invokeMethod("EndTransaction",
 		args, &storage.EndTransactionResponse{}).(chan *storage.EndTransactionResponse)
 }
 
+// AccumulateTS .
 func (db *LocalDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storage.AccumulateTSResponse {
 	return db.invokeMethod("AccumulateTS",
 		args, &storage.AccumulateTSResponse{}).(chan *storage.AccumulateTSResponse)
 }
 
+// ReapQueue .
 func (db *LocalDB) ReapQueue(args *storage.ReapQueueRequest) <-chan *storage.ReapQueueResponse {
 	return db.invokeMethod("ReapQueue",
 		args, &storage.ReapQueueResponse{}).(chan *storage.ReapQueueResponse)
 }
 
+// EnqueueUpdate .
 func (db *LocalDB) EnqueueUpdate(args *storage.EnqueueUpdateRequest) <-chan *storage.EnqueueUpdateResponse {
 	return db.invokeMethod("EnqueueUpdate",
 		args, &storage.EnqueueUpdateResponse{}).(chan *storage.EnqueueUpdateResponse)
 }
 
+// EnqueueMessage .
 func (db *LocalDB) EnqueueMessage(args *storage.EnqueueMessageRequest) <-chan *storage.EnqueueMessageResponse {
 	return db.invokeMethod("EnqueueMessage",
 		args, &storage.EnqueueMessageResponse{}).(chan *storage.EnqueueMessageResponse)

@@ -19,11 +19,11 @@ package gossip
 
 import (
 	"fmt"
-	"log"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/golang/glog"
 )
 
 const (
@@ -38,7 +38,7 @@ func isNetworkConnected(nodes map[string]*Gossip) bool {
 		for infoKey := range nodes {
 			_, err := node.GetInfo(infoKey)
 			if err != nil {
-				log.Printf("error: %v", err)
+				glog.Infof("error: %v", err)
 				return false
 			}
 		}

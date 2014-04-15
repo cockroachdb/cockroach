@@ -20,12 +20,13 @@ package server
 import (
 	"compress/gzip"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -38,12 +39,12 @@ func startServer() *server {
 		resetTestData()
 		s, err := newServer()
 		if err != nil {
-			log.Fatal(err)
+			glog.Fatal(err)
 		}
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr})
 		//s.node.InitCluster()
 		go s.start() // TODO(spencer): should shutdown server.
-		log.Printf("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
+		glog.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
 	})
 	return s
 }

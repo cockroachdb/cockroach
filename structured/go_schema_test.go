@@ -19,21 +19,22 @@ package structured
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 func ExampleNewGoSchema() {
 	s, err := createTestSchema()
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		glog.Fatalf("failed building schema: %s", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %s", err)
+		glog.Fatalf("failed converting to yaml: %s", err)
 	}
 	fmt.Println(string(yaml))
 	// Output:
@@ -174,12 +175,12 @@ func ExampleToYAML() {
 	}
 	s, err := NewGoSchema("Test", "t", sm)
 	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
+		glog.Fatalf("failed building schema: %v", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+		glog.Fatalf("failed converting to yaml: %v", err)
 	}
 	fmt.Println(string(yaml))
 	// Output:
@@ -245,18 +246,18 @@ func TestYAMLRoundTrip(t *testing.T) {
 	}
 	s, err := NewGoSchema("Test", "t", sm)
 	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
+		glog.Fatalf("failed building schema: %v", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+		glog.Fatalf("failed converting to yaml: %v", err)
 	}
 	s2, err := NewYAMLSchema([]byte(yaml))
 	if err != nil {
-		log.Fatalf("failed to convert from yaml to a schema: %v", err)
+		glog.Fatalf("failed to convert from yaml to a schema: %v", err)
 	}
 	if !reflect.DeepEqual(s, s2) {
-		log.Fatal("yaml round trip schemas differ")
+		glog.Fatal("yaml round trip schemas differ")
 	}
 }

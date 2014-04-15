@@ -18,12 +18,12 @@
 package multiraft
 
 import (
-	"log"
 	"math"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 // Config contains the parameters necessary to construct a MultiRaft object.
@@ -226,7 +226,7 @@ func (s *state) start() {
 				if s.Strict {
 					panic(util.Errorf("unknown op: %#v", op))
 				}
-				log.Printf("unknown op: %#v", op)
+				glog.Errorf("unknown op: %#v", op)
 			}
 
 		case now := <-electionTimer.C:

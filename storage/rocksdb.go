@@ -18,8 +18,9 @@
 package storage
 
 import (
-	"log"
 	"syscall"
+
+	"github.com/golang/glog"
 )
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -28,7 +29,7 @@ type RocksDB struct {
 	name string // The device name
 }
 
-// NewRocksDb allocates and returns a new InMem object.
+// NewRocksDB allocates and returns a new InMem object.
 func NewRocksDB(dir string) (*RocksDB, error) {
 	r := &RocksDB{
 		dir: dir,
@@ -61,7 +62,7 @@ func (r *RocksDB) capacity() (*DiskCapacity, error) {
 	if err := syscall.Statfs(r.dir, &fs); err != nil {
 		return nil, err
 	}
-	log.Println("stat filesystem: %v", fs)
+	glog.Infof("stat filesystem: %v", fs)
 	if r.name == "" {
 		// TODO(spencer): set name.
 	}

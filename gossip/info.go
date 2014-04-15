@@ -18,9 +18,10 @@
 package gossip
 
 import (
-	"log"
 	"net"
 	"strings"
+
+	"github.com/golang/glog"
 )
 
 // Ordered is used to compare info values when managing info groups.
@@ -67,9 +68,8 @@ func (i *info) less(b *info) bool {
 	default:
 		if ord, ok := i.Val.(Ordered); ok {
 			return ord.Less(b.Val.(Ordered))
-		} else {
-			log.Fatalf("unhandled info value type: %s", t)
 		}
+		glog.Fatalf("unhandled info value type: %s", t)
 	}
 	return false
 }

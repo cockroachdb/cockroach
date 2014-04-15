@@ -17,7 +17,7 @@
 
 package multiraft
 
-import "log"
+import "github.com/golang/glog"
 
 // The Transport interface is supplied by the application to manage communication with
 // other nodes.  It is responsible for mapping from IDs to some communication channel
@@ -163,7 +163,7 @@ func (a *asyncClient) appendEntries(req *AppendEntriesRequest) {
 
 func (a *asyncClient) handleRPCResponse(name string, op interface{}, err error) {
 	if err != nil {
-		log.Printf("%s error: %s", name, err)
+		glog.Errorf("%s error: %s", name, err)
 		return
 	}
 	a.ch <- op

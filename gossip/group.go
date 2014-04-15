@@ -18,13 +18,13 @@
 package gossip
 
 import (
-	"log"
 	"math"
 	"reflect"
 	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 // GroupType indicates the bounds of the values encountered within the group.
@@ -59,7 +59,7 @@ type groupMap map[string]*group
 // newGroup allocates and returns a new group with prefix, limit and type.
 func newGroup(prefix string, limit int, typeOf GroupType) *group {
 	if limit <= 0 {
-		log.Fatalf("group size limit must be a positive number (%d <= 0)", limit)
+		glog.Fatalf("group size limit must be a positive number (%d <= 0)", limit)
 	}
 	return &group{
 		Prefix:      prefix,
@@ -82,7 +82,7 @@ func (g *group) shouldInclude(i *info) bool {
 	case MaxGroup:
 		return !i.less(g.gatekeeper)
 	default:
-		log.Fatalf("unknown group type %d", g.TypeOf)
+		glog.Fatalf("unknown group type %d", g.TypeOf)
 		return false
 	}
 }

@@ -18,13 +18,13 @@
 package rpc
 
 import (
-	"log"
 	"net"
 	"net/rpc"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 const (
@@ -83,12 +83,12 @@ func NewClient(addr net.Addr) *Client {
 		// TODO(spencer): use crypto.tls.
 		conn, err := net.Dial(addr.Network(), addr.String())
 		if err != nil {
-			log.Print(err)
+			glog.Info(err)
 			return false
 		}
 		c.Client = rpc.NewClient(conn)
 		c.LAddr = conn.LocalAddr()
-		log.Printf("client connected: %s", addr)
+		glog.Infof("client connected: %s", addr)
 		close(c.Ready)
 
 		// Launch heartbeat.
@@ -105,7 +105,7 @@ func NewClient(addr net.Addr) *Client {
 // is encountered.
 func (c *Client) heartbeat() {
 	for {
-		log.Println(c)
+		glog.Info(c)
 		call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
 		select {
 		case <-call.Done:
@@ -113,7 +113,7 @@ func (c *Client) heartbeat() {
 			// client to this address will be created on the next call to
 			// NewClient().
 			if call.Error != nil {
-				log.Printf("heartbeat failed: %v; recycling client", call.Error)
+				glog.Infof("heartbeat failed: %v; recycling client", call.Error)
 				clientMu.Lock()
 				delete(clients, c.Addr.String())
 				clientMu.Unlock()
@@ -123,7 +123,7 @@ func (c *Client) heartbeat() {
 			time.Sleep(heartbeatInterval)
 		case <-time.After(heartbeatInterval * 2):
 			// Allowed twice gossip interval.
-			log.Printf("client %s unhealthy after %v", c.Addr, heartbeatInterval*2)
+			glog.Infof("client %s unhealthy after %v", c.Addr, heartbeatInterval*2)
 		}
 	}
 }

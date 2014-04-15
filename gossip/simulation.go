@@ -20,7 +20,6 @@ package gossip
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 const (
@@ -50,7 +50,7 @@ func init() {
 func tempUnixFile() string {
 	f, err := ioutil.TempFile("", "unix-socket")
 	if err != nil {
-		log.Fatalf("unable to create temp file: %s", err)
+		glog.Fatalf("unable to create temp file: %s", err)
 	}
 	f.Close()
 	os.Remove(f.Name())
@@ -98,13 +98,13 @@ func createSimAddr(network string) (net.Addr, error) {
 func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration,
 	simCallback func(cycle int, nodes map[string]*Gossip) bool) {
 
-	log.Printf("simulating network with %d nodes", nodeCount)
+	glog.Infof("simulating network with %d nodes", nodeCount)
 	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		addr, err := createSimAddr(network)
 		if err != nil {
-			log.Fatalf("failed to create address: %s", err)
+			glog.Fatalf("failed to create address: %s", err)
 		}
 		servers[i] = rpc.NewServer(addr)
 		go servers[i].ListenAndServe()

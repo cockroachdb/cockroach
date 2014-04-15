@@ -18,12 +18,12 @@
 package gossip
 
 import (
-	"log"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/golang/glog"
 )
 
 func waitFor(cond func() bool, desc string, t *testing.T) {
@@ -73,7 +73,7 @@ func TestClientGossip(t *testing.T) {
 	remote.stopServing()
 	lserver.Close()
 	rserver.Close()
-	log.Printf("done serving")
+	glog.Info("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")
 	}

@@ -19,10 +19,11 @@ package kv
 
 import (
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/golang/glog"
 )
 
 // TestKVRESTEndpoints tests that the REST endpoints for modifying KV
@@ -57,7 +58,7 @@ func TestRESTEndpoints(t *testing.T) {
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			log.Fatal(err)
+			glog.Fatal(err)
 		}
 		defer resp.Body.Close()
 		b, err := ioutil.ReadAll(resp.Body)

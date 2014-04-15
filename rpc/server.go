@@ -18,10 +18,11 @@
 package rpc
 
 import (
-	"log"
 	"net"
 	"net/rpc"
 	"sync"
+
+	"github.com/golang/glog"
 )
 
 // Server is a Cockroach-specific RPC server with an embedded go RPC
@@ -63,21 +64,21 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 func (s *Server) ListenAndServe() {
 	ln, err := net.Listen(s.Addr.Network(), s.Addr.String())
 	if err != nil {
-		log.Fatalf("unable to start gossip node: %s", err)
+		glog.Fatalf("unable to start gossip node: %s", err)
 	}
 	s.listening <- struct{}{} // signal that we are now listening.
 	s.listener = ln
 	s.Addr = ln.Addr()
 
 	// Start serving gossip protocol in a loop until listener is closed.
-	log.Printf("serving on %+v...", s.Addr)
+	glog.Infof("serving on %+v...", s.Addr)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			s.mu.Lock()
 			defer s.mu.Unlock()
 			if !s.closed {
-				log.Fatalf("gossip server terminated: %s", err)
+				glog.Fatalf("gossip server terminated: %s", err)
 			}
 			break
 		}

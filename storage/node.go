@@ -19,12 +19,12 @@ package storage
 
 import (
 	"flag"
-	"log"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 const (
@@ -69,13 +69,13 @@ func NewNode(rpcServer *rpc.Server, gossip *gossip.Gossip) *Node {
 		for _, dir := range strings.Split(*dataDirs, ",") {
 			rocksdb, err := NewRocksDB(dir)
 			if err != nil {
-				log.Printf("unable to stat data directory %s; skipping...will not serve data", dir)
+				glog.Infof("unable to stat data directory %s; skipping...will not serve data", dir)
 				continue
 			}
 			n.storeMap[rocksdb.name] = newStore(rocksdb, allocator)
 		}
 		// TODO(spencer): set cache sizes on successfully created stores.
-		log.Fatal("rocksdb stores unsupported")
+		glog.Fatal("rocksdb stores unsupported")
 	}
 	return n
 }
@@ -100,7 +100,7 @@ func (n *Node) getRange(r *Replica) (*Range, error) {
 // sent along to the range via either Range.readOnlyCmd() or
 // Range.readWriteCmd().
 
-// Contains.
+// Contains .
 func (n *Node) Contains(args *ContainsRequest, reply *ContainsResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -109,7 +109,7 @@ func (n *Node) Contains(args *ContainsRequest, reply *ContainsResponse) error {
 	return rng.readOnlyCmd("Contains", args, reply)
 }
 
-// Get.
+// Get .
 func (n *Node) Get(args *GetRequest, reply *GetResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -118,7 +118,7 @@ func (n *Node) Get(args *GetRequest, reply *GetResponse) error {
 	return rng.readOnlyCmd("Get", args, reply)
 }
 
-// Put.
+// Put .
 func (n *Node) Put(args *PutRequest, reply *PutResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -127,7 +127,7 @@ func (n *Node) Put(args *PutRequest, reply *PutResponse) error {
 	return <-rng.readWriteCmd("Put", args, reply)
 }
 
-// Increment.
+// Increment .
 func (n *Node) Increment(args *IncrementRequest, reply *IncrementResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -136,7 +136,7 @@ func (n *Node) Increment(args *IncrementRequest, reply *IncrementResponse) error
 	return <-rng.readWriteCmd("Increment", args, reply)
 }
 
-// Delete.
+// Delete .
 func (n *Node) Delete(args *DeleteRequest, reply *DeleteResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -145,7 +145,7 @@ func (n *Node) Delete(args *DeleteRequest, reply *DeleteResponse) error {
 	return <-rng.readWriteCmd("Delete", args, reply)
 }
 
-// DeleteRange.
+// DeleteRange .
 func (n *Node) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -154,7 +154,7 @@ func (n *Node) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse)
 	return <-rng.readWriteCmd("DeleteRange", args, reply)
 }
 
-// Scan.
+// Scan .
 func (n *Node) Scan(args *ScanRequest, reply *ScanResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -163,7 +163,7 @@ func (n *Node) Scan(args *ScanRequest, reply *ScanResponse) error {
 	return rng.readOnlyCmd("Scan", args, reply)
 }
 
-// EndTransaction.
+// EndTransaction .
 func (n *Node) EndTransaction(args *EndTransactionRequest, reply *EndTransactionResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -172,7 +172,7 @@ func (n *Node) EndTransaction(args *EndTransactionRequest, reply *EndTransaction
 	return <-rng.readWriteCmd("EndTransaction", args, reply)
 }
 
-// AccumulateTS.
+// AccumulateTS .
 func (n *Node) AccumulateTS(args *AccumulateTSRequest, reply *AccumulateTSResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -181,7 +181,7 @@ func (n *Node) AccumulateTS(args *AccumulateTSRequest, reply *AccumulateTSRespon
 	return <-rng.readWriteCmd("AccumulateTS", args, reply)
 }
 
-// ReapQueue.
+// ReapQueue .
 func (n *Node) ReapQueue(args *ReapQueueRequest, reply *ReapQueueResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -190,7 +190,7 @@ func (n *Node) ReapQueue(args *ReapQueueRequest, reply *ReapQueueResponse) error
 	return <-rng.readWriteCmd("ReapQueue", args, reply)
 }
 
-// EnqueueUpdate.
+// EnqueueUpdate .
 func (n *Node) EnqueueUpdate(args *EnqueueUpdateRequest, reply *EnqueueUpdateResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -199,7 +199,7 @@ func (n *Node) EnqueueUpdate(args *EnqueueUpdateRequest, reply *EnqueueUpdateRes
 	return <-rng.readWriteCmd("EnqueueUpdate", args, reply)
 }
 
-// EnqueueMessage.
+// EnqueueMessage .
 func (n *Node) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessageResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {

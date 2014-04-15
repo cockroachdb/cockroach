@@ -57,7 +57,6 @@ package gossip
 
 import (
 	"flag"
-	"log"
 	"math"
 	"net"
 	"strings"
@@ -66,6 +65,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 var (
@@ -248,7 +248,7 @@ func (g *Gossip) Stop() <-chan error {
 // cluster.
 func (g *Gossip) maxToleratedHops() uint32 {
 	// Get info directly as we have mutex held here.
-	var nodeCount int64 = defaultNodeCount
+	var nodeCount = int64(defaultNodeCount)
 	if info := g.is.getInfo(NodeCountGossip); info != nil {
 		nodeCount = info.Val.(int64)
 	}
@@ -274,7 +274,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 			addr = strings.TrimSpace(addr)
 			tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
-				log.Printf("invalid gossip bootstrap address %s: %s", addr, err)
+				glog.Infof("invalid gossip bootstrap address %s: %s", addr, err)
 				continue
 			}
 			g.bootstraps.addAddr(tcpAddr)
@@ -282,7 +282,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 	}
 	// If we have no bootstrap hosts, fatal exit.
 	if g.bootstraps.len() == 0 {
-		log.Fatalf("no hosts specified for gossip network (use --gossip_bootstrap)")
+		glog.Fatalf("no hosts specified for gossip network (use --gossip_bootstrap)")
 	}
 	// Remove our own node address.
 	g.bootstraps.removeAddr(g.is.NodeAddr)
@@ -323,7 +323,7 @@ func (g *Gossip) bootstrap() {
 			if !haveClients || !haveSentinel {
 				// Select a bootstrap address at random and start client.
 				addr := avail.selectRandom()
-				log.Printf("bootstrapping gossip protocol using host %+v", addr)
+				glog.Infof("bootstrapping gossip protocol using host %+v", addr)
 				g.startClient(addr)
 			}
 		}
@@ -352,7 +352,7 @@ func (g *Gossip) manage() {
 		case c := <-g.disconnected:
 			g.mu.Lock()
 			if c.err != nil {
-				log.Printf("client disconnected: %s", c.err)
+				glog.Infof("client disconnected: %s", c.err)
 			}
 			g.outgoing.removeAddr(c.addr)
 			delete(g.clients, c.addr.String())
@@ -377,7 +377,7 @@ func (g *Gossip) manage() {
 					// connected.
 					addr := g.is.leastUseful(g.outgoing)
 					if addr != nil {
-						log.Printf("closing least useful client %+v to tighten network graph", addr)
+						glog.Infof("closing least useful client %+v to tighten network graph", addr)
 						g.closeClient(addr)
 					}
 				}
@@ -387,10 +387,10 @@ func (g *Gossip) manage() {
 		// If there are no outgoing hosts or sentinel gossip is
 		// missing, signal bootstrapper.
 		if g.outgoing.len() == 0 && g.filterExtant(g.bootstraps).len() > 0 {
-			log.Printf("no outgoing hosts; signaling bootstrap")
+			glog.Infof("no outgoing hosts; signaling bootstrap")
 			g.stalled.Signal()
 		} else if g.is.getInfo(SentinelGossip) == nil {
-			log.Printf("missing sentinel gossip %s; assuming partition and reconnecting", SentinelGossip)
+			glog.Infof("missing sentinel gossip %s; assuming partition and reconnecting", SentinelGossip)
 			g.stalled.Signal()
 		}
 

@@ -18,7 +18,6 @@
 package kv
 
 import (
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/golang/glog"
 )
 
 var (
@@ -47,7 +47,7 @@ func startServer() *kvTestServer {
 	once.Do(func() {
 		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 		if err != nil {
-			log.Fatal(err)
+			glog.Fatal(err)
 		}
 		server = &kvTestServer{
 			rpc: rpc.NewServer(addr),

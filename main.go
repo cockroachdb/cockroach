@@ -17,14 +17,14 @@ package main
 
 import (
 	"flag"
-	"log"
 
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/golang/glog"
 )
 
 func main() {
 	flag.Parse()
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		glog.Fatal(err)
 	}
 }

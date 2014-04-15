@@ -18,10 +18,11 @@
 package rpc
 
 import (
-	"log"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -32,7 +33,7 @@ func TestClientHeartbeat(t *testing.T) {
 	heartbeatInterval = 10 * time.Millisecond
 	addr, err := net.ResolveTCPAddr("tcp", testAddr)
 	if err != nil {
-		log.Fatalf("invalid test server address %s: %s", testAddr, err)
+		glog.Fatalf("invalid test server address %s: %s", testAddr, err)
 	}
 	s := NewServer(addr)
 	go s.ListenAndServe()
