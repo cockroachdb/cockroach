@@ -4,6 +4,7 @@
 *.so
 *~
 .#*
+*.test
 
 # Folders
 _obj
