@@ -21,9 +21,9 @@ import (
 	"encoding/gob"
 	"log"
 	"net"
-	"net/rpc"
 	"time"
 
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -33,7 +33,7 @@ const (
 	maxWaitForNewGossip = 10 * time.Second
 	// gossipDialTimeout is timeout for net.Dial call to connect to
 	// a gossip server.
-	gossipDialTimeout = 5 * time.Second
+	gossipDialTimeout = 2 * time.Second
 )
 
 // init pre-registers net.UnixAddr and net.TCPAddr concrete types with
@@ -46,19 +46,19 @@ func init() {
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	*rpc.Client          // Embedded RPC client
-	addr        net.Addr // Peer node network address
-	laddr       net.Addr // Local connection address
-	forwardAddr net.Addr // Set if disconnected with an alternate addr
-	lastFresh   int64    // Last wall time client received fresh info
-	err         error    // Set if client experienced an error
-	maxAttempts int      // Maximum number of attempts to connect
+	addr        net.Addr         // Peer node network address
+	rpcClient   *rpc.Client      // RPC client
+	forwardAddr net.Addr         // Set if disconnected with an alternate addr
+	lastFresh   int64            // Last wall time client received fresh info
+	err         error            // Set if client experienced an error
+	closer      chan interface{} // Client shutdown channel
 }
 
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
-		addr: addr,
+		addr:   addr,
+		closer: make(chan interface{}, 1),
 	}
 }
 
@@ -66,26 +66,14 @@ func newClient(addr net.Addr) *client {
 // Upon exit, signals client is done by pushing it onto the done
 // channel. If the client experienced an error, its err field will
 // be set. This method blocks and should be invoked via goroutine.
-func (c *client) start(g *Gossip, done chan *client) {
-	// Attempt to dial connection with exponential backoff, max 3
-	// attempts, starting at 1s, 2s, 4s for a total of 7s.
-	opts := util.Options{
-		Backoff:     250 * time.Millisecond, // first backoff at 250ms
-		MaxBackoff:  2 * time.Second,        // max backoff is 2s
-		Constant:    2,                      // doubles
-		MaxAttempts: c.maxAttempts,
-	}
-	util.RetryWithBackoffOptions(opts, func() bool {
-		cl, err := c.dial()
-		if err != nil {
-			log.Print(err)
-			return false
-		}
-		c.Client = cl
-		return true
-	})
-	if c.Client == nil {
-		c.err = util.Errorf("failed to dial remote server %+v", c.addr)
+func (c *client) start(g *Gossip, ready, done chan *client) {
+	c.rpcClient = rpc.NewClient(c.addr)
+	select {
+	case <-c.rpcClient.Ready:
+		ready <- c
+		// Start gossip; see below.
+	case <-time.After(gossipDialTimeout):
+		c.err = util.Errorf("timeout connecting to remote server: %v", c.addr)
 		done <- c
 		return
 	}
@@ -93,21 +81,15 @@ func (c *client) start(g *Gossip, done chan *client) {
 	// Start gossipping and wait for disconnect or error.
 	c.lastFresh = time.Now().UnixNano()
 	err := c.gossip(g)
-	c.Close() // in all cases, close old client connection
 	if err != nil {
 		c.err = util.Errorf("gossip client: %s", err)
 	}
 	done <- c
 }
 
-// dial with a timeout specified by gossipDialTimeout parameter.
-func (c *client) dial() (*rpc.Client, error) {
-	conn, err := net.DialTimeout(c.addr.Network(), c.addr.String(), gossipDialTimeout)
-	if err != nil {
-		return nil, err
-	}
-	c.laddr = conn.LocalAddr()
-	return rpc.NewClient(conn), nil
+// close stops the client gossip loop and returns immediately.
+func (c *client) close() {
+	close(c.closer)
 }
 
 // gossip loops, sending deltas of the infostore and receiving deltas
@@ -136,20 +118,22 @@ func (c *client) gossip(g *Gossip) error {
 		// Send gossip with timeout.
 		args := &GossipRequest{
 			Addr:   g.is.NodeAddr,
-			LAddr:  c.laddr,
+			LAddr:  c.rpcClient.LAddr,
 			MaxSeq: remoteMaxSeq,
 			Delta:  delta,
 		}
 		reply := new(GossipResponse)
-		gossipCall := c.Go("Gossip.Gossip", args, reply, nil)
-		gossipTimeout := time.After(*gossipInterval * 2) // allow twice gossip interval
+		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
 		select {
 		case <-gossipCall.Done:
 			if gossipCall.Error != nil {
 				return gossipCall.Error
 			}
-		case <-gossipTimeout:
+		case <-time.After(*gossipInterval * 2):
+			// Allowed twice gossip interval.
 			return util.Errorf("timeout after: %v", *gossipInterval*2)
+		case <-c.closer:
+			return nil
 		}
 
 		// Handle remote forwarding.

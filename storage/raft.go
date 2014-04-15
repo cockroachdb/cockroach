@@ -14,37 +14,17 @@
 // for names of contributors.
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package db
+package storage
 
-import (
-	"github.com/goraft/raft"
-)
+// A LogEntry provides serialization of a read/write command. Once
+// committed to the log, the command is executed and the result
+// returned via the done channel.
+type LogEntry struct {
+	Method string
+	Args   interface{}
+	Reply  interface{}
 
-func init() {
-	raft.RegisterCommand(&putCommand{})
-}
-
-type putCommand struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-// NewPutCommand allocates and returns a new put command.
-func NewPutCommand(key string, value string) raft.Command {
-	return &putCommand{
-		Key:   key,
-		Value: value,
-	}
-}
-
-// CommandName returns the name of the command in the log.
-func (c *putCommand) CommandName() string {
-	return "cockroach:put"
-}
-
-// Apply writes a value to a key.
-func (c *putCommand) Apply(server raft.Server) (interface{}, error) {
-	db := server.Context().(DB)
-	return nil, db.Put(c.Key, c.Value)
+	done chan error // Used to signal waiting RPC handler
 }

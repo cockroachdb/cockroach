@@ -12,19 +12,10 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package main
-
-import (
-	"flag"
-	"log"
-
-	"github.com/cockroachdb/cockroach/server"
-)
-
-func main() {
-	flag.Parse()
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
-}
+/*
+Package rpc provides RPC server and clients specific to Cockroach.
+*/
+package rpc

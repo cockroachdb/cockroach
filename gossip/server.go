@@ -18,13 +18,12 @@
 package gossip
 
 import (
-	"log"
 	"math/rand"
 	"net"
-	"net/rpc"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -32,8 +31,6 @@ import (
 // newly arrived information on a periodic basis.
 type server struct {
 	interval      time.Duration       // Interval at which to gossip fresh info
-	listener      net.Listener        // Server listener
-	rpcServer     *rpc.Server         // RPC server instance
 	mu            sync.Mutex          // Mutex protects is (infostore) & incoming
 	ready         *sync.Cond          // Broadcasts wakeup to waiting gossip requests
 	is            *infoStore          // The backing infostore
@@ -43,13 +40,15 @@ type server struct {
 }
 
 // newServer creates and returns a server struct.
-func newServer(addr net.Addr, interval time.Duration) *server {
+func newServer(rpcServer *rpc.Server, interval time.Duration) *server {
 	s := &server{
 		interval:      interval,
-		is:            newInfoStore(addr),
+		is:            newInfoStore(rpcServer.Addr),
 		incoming:      newAddrSet(MaxPeers),
 		clientAddrMap: make(map[string]net.Addr),
 	}
+	rpcServer.RegisterName("Gossip", s)
+	rpcServer.AddCloseCallback(s.onClose)
 	s.ready = sync.NewCond(&s.mu)
 	return s
 }
@@ -102,14 +101,11 @@ func (s *server) jitteredGossipInterval() time.Duration {
 	return time.Duration(float64(s.interval) * (0.75 + 0.5*rand.Float64()))
 }
 
-// serve starts up listener via goroutine and then processes
-// connecting clients in an infinite select loop. Periodically, newly
-// available gossip is sent to each peer client in turn. This method
+// serve processes connecting clients in an infinite select
+// loop. Periodically, clients connected and awaiting the next round
+// of gossip are awoken via the conditional variable. This method
 // blocks and should be launched via goroutine.
 func (s *server) serve() {
-	// Start gossip server.
-	go s.listen()
-
 	// Periodically wakeup blocked client gossip requests.
 	gossipTimeout := time.Tick(s.jitteredGossipInterval())
 	for {
@@ -121,51 +117,21 @@ func (s *server) serve() {
 	}
 }
 
-// stopServing sets the server's closed bool to true and closes the
-// listener.
+// stopServing sets the server's closed bool to true and broadcasts to
+// waiting gossip clients to wakeup and finish.
 func (s *server) stopServing() {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closed = true
-	s.listener.Close()
 	s.ready.Broadcast() // wake up clients
-	s.mu.Unlock()
 }
 
-// listen begins serving requests for the gossip protocol. This method
-// should be invoked by goroutine as it will block.
-func (s *server) listen() {
-	ln, err := net.Listen(s.is.NodeAddr.Network(), s.is.NodeAddr.String())
-	if err != nil {
-		log.Fatalf("unable to start gossip node: %s", err)
-	}
-	s.listener = ln
-
-	// Start serving gossip protocol in a loop until listener is closed.
-	log.Printf("serving gossip protocol on %+v...", s.is.NodeAddr)
-	s.rpcServer = rpc.NewServer()
-	s.rpcServer.RegisterName("Gossip", s)
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			if !s.closed {
-				log.Fatalf("gossip server terminated: %s", err)
-			}
-			break
-		}
-		// Serve connection to completion in a goroutine.
-		go s.serveConn(conn)
-	}
-}
-
-// serveConn synchronously serves a single connection. When the
-// connection is closed, the client address is removed from the
-// incoming set.
-func (s *server) serveConn(conn net.Conn) {
-	s.rpcServer.ServeConn(conn)
+// onClose is invoked by the rpcServer each time a connected client
+// is closed. Remove the client from the incoming address set.
+func (s *server) onClose(conn net.Conn) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if clientAddr, ok := s.clientAddrMap[conn.RemoteAddr().String()]; ok {
 		s.incoming.removeAddr(clientAddr)
 	}
-	s.mu.Unlock()
-	conn.Close()
 }

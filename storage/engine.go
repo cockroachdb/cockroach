@@ -15,15 +15,17 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-// Package db provides an interface and implementations for key-value stores.
-package db
+package storage
 
-// DB is the interface that wraps the core operations of a key/value store.
-type DB interface {
+// Engine is the interface that wraps the core operations of a
+// key/value store.
+type Engine interface {
 	// Put sets the given key to the value provided.
-	Put(string, interface{}) error
+	put(key Key, value Value) error
 	// Get returns the value for the given key, nil otherwise.
-	Get(string) (interface{}, error)
+	get(key Key) (Value, error)
 	// Delete removes the item from the db with the given key.
-	Delete(key string) error
+	del(key Key) error
+	// Capacity returns capacity details for the engine's available storage.
+	capacity() (*DiskCapacity, error)
 }

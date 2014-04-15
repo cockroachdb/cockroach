@@ -26,6 +26,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -98,12 +99,14 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 	simCallback func(cycle int, nodes map[string]*Gossip) bool) {
 
 	log.Printf("simulating network with %d nodes", nodeCount)
+	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		addr, err := createSimAddr(network)
 		if err != nil {
 			log.Fatalf("failed to create address: %s", err)
 		}
+		servers[i] = rpc.NewServer(addr)
 		addrs[i] = addr
 	}
 	var bootstrap []net.Addr
@@ -115,7 +118,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 
 	nodes := make(map[string]*Gossip, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := New(addrs[i])
+		node := New(servers[i])
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)
@@ -125,6 +128,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 		}
 		node.Start()
 		nodes[addrs[i].String()] = node
+		go servers[i].ListenAndServe()
 	}
 
 	gossipTimeout := time.Tick(gossipInterval)
@@ -140,8 +144,9 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 		}
 	}
 
-	// Stop all nodes.
-	for _, node := range nodes {
-		node.Stop()
+	// Stop all servers & nodes.
+	for i := 0; i < nodeCount; i++ {
+		servers[i].Close()
+		nodes[addrs[i].String()].Stop()
 	}
 }

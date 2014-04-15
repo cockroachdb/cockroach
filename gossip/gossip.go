@@ -64,6 +64,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -109,19 +110,21 @@ type Gossip struct {
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
 	clients      map[string]*client // Map from address to client
+	connected    chan *client       // Channel of connected clients
 	disconnected chan *client       // Channel of disconnected clients
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
 }
 
 // New creates an instance of a gossip node using the specified
-// node address as the gossip service endpoint.
-func New(addr net.Addr) *Gossip {
+// Cockroach RPC server to initialize the gossip service endpoint.
+func New(rpcServer *rpc.Server) *Gossip {
 	g := &Gossip{
-		server:       newServer(addr, *gossipInterval),
+		server:       newServer(rpcServer, *gossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      make(map[string]*client),
+		connected:    make(chan *client, MaxPeers),
 		disconnected: make(chan *client, MaxPeers),
 	}
 	g.stalled = sync.NewCond(&g.mu)
@@ -348,6 +351,11 @@ func (g *Gossip) manage() {
 	// Loop until closed and there are no remaining outgoing connections.
 	for {
 		select {
+		case c := <-g.connected:
+			g.mu.Lock()
+			g.outgoing.addAddr(c.addr)
+			g.clients[c.addr.String()] = c
+
 		case c := <-g.disconnected:
 			g.mu.Lock()
 			if c.err != nil {
@@ -360,6 +368,7 @@ func (g *Gossip) manage() {
 			if c.forwardAddr != nil {
 				g.startClient(c.forwardAddr)
 			}
+
 		case <-checkTimeout:
 			g.mu.Lock()
 			// Check whether the graph needs to be tightened to
@@ -370,12 +379,10 @@ func (g *Gossip) manage() {
 				if g.outgoing.len() < MaxPeers {
 					g.startClient(distant.selectRandom())
 				} else {
-					// Otherwise, find least useful peer and close
-					// it. Make sure here that we only consider outgoing
-					// clients which are connected.
-					addr := g.is.leastUseful(g.outgoing.filter(func(a net.Addr) bool {
-						return g.clients[a.String()].Client != nil
-					}))
+					// Otherwise, find least useful peer and close it. Make sure
+					// here that we only consider outgoing clients which are
+					// connected.
+					addr := g.is.leastUseful(g.outgoing)
 					if addr != nil {
 						log.Printf("closing least useful client %+v to tighten network graph", addr)
 						g.closeClient(addr)
@@ -410,17 +417,13 @@ func (g *Gossip) manage() {
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr) {
 	c := newClient(addr)
-	g.outgoing.addAddr(addr)
-	g.clients[addr.String()] = c
-	go c.start(g, g.disconnected)
+	go c.start(g, g.connected, g.disconnected)
 }
 
 // closeClient closes an existing client specified by client's
 // remote address.
 func (g *Gossip) closeClient(addr net.Addr) {
 	c := g.clients[addr.String()]
-	if c.Client != nil {
-		c.Close()
-	}
+	c.close()
 	delete(g.clients, addr.String())
 }

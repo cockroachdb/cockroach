@@ -12,19 +12,22 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package main
+package structured
 
-import (
-	"flag"
-	"log"
+import "github.com/cockroachdb/cockroach/kv"
 
-	"github.com/cockroachdb/cockroach/server"
-)
+// A DB implements the structured data API using the Cockroach kv
+// client API.
+type DB struct {
+	// kvDB is a client to the monolithic key-value map.
+	kvDB kv.DB
+}
 
-func main() {
-	flag.Parse()
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
+// NewDB returns a key-value datastore client which connects to the
+// Cockroach cluster via the supplied gossip instance.
+func NewDB(kvDB kv.DB) *DB {
+	return &DB{kvDB: kvDB}
 }

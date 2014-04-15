@@ -13,34 +13,18 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Andrew Bonventre (andybons@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package db
+package storage
 
-import (
-	"github.com/goraft/raft"
-)
-
-func init() {
-	raft.RegisterCommand(&deleteCommand{})
+// Replica describes a replica location by address (host:port), disk
+// (device name) and range start key.
+type Replica struct {
+	Addr     string // host:port.
+	Disk     string // e.g. ssd1.
+	RangeKey []byte // Range start key.
 }
 
-type deleteCommand struct {
-	Key string `json:"key"`
-}
-
-// NewDeleteCommand allocates and returns a new delete command.
-func NewDeleteCommand(key string) raft.Command {
-	return &deleteCommand{Key: key}
-}
-
-// CommandName returns the name of the command in the log.
-func (c *deleteCommand) CommandName() string {
-	return "cockroach:delete"
-}
-
-// Apply writes a value to a key.
-func (c *deleteCommand) Apply(server raft.Server) (interface{}, error) {
-	db := server.Context().(DB)
-	return nil, db.Delete(c.Key)
+// DiskCapacity contains capacity information for a storage device.
+type DiskCapacity struct {
 }

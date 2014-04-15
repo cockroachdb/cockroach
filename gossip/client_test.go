@@ -22,6 +22,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/rpc"
 )
 
 func waitFor(cond func() bool, desc string, t *testing.T) {
@@ -38,11 +40,15 @@ func waitFor(cond func() bool, desc string, t *testing.T) {
 
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
-func startGossip(t *testing.T) (local, remote *Gossip) {
+func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
 	laddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
-	local = New(laddr)
+	lserver = rpc.NewServer(laddr)
+	go lserver.ListenAndServe()
+	local = New(lserver)
 	raddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
-	remote = New(raddr)
+	rserver = rpc.NewServer(raddr)
+	go rserver.ListenAndServe()
+	remote = New(rserver)
 	go remote.serve()
 	time.Sleep(time.Millisecond)
 	return
@@ -50,14 +56,18 @@ func startGossip(t *testing.T) (local, remote *Gossip) {
 
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
-	local, remote := startGossip(t)
+	local, remote, lserver, rserver := startGossip(t)
 	local.AddInfo("local-key", "local value", time.Second)
 	remote.AddInfo("remote-key", "remote value", time.Second)
+	connected := make(chan *client, 1)
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
-	client.maxAttempts = 1
-	go client.start(local, disconnected)
+	go client.start(local, connected, disconnected)
+
+	if client != <-connected {
+		t.Errorf("expected client connect")
+	}
 
 	waitFor(func() bool {
 		_, lerr := remote.GetInfo("local-key")
@@ -66,6 +76,8 @@ func TestClientGossip(t *testing.T) {
 	}, "gossip exchange", t)
 
 	remote.stopServing()
+	lserver.Close()
+	rserver.Close()
 	log.Printf("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")

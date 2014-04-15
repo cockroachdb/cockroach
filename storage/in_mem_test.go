@@ -15,49 +15,51 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-package db
+package storage
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
-func TestBasicDBPutGetDelete(t *testing.T) {
-	store := NewBasicDB()
+func TestInMemEnginePutGetDelete(t *testing.T) {
+	engine := NewInMem(1 << 20)
 	testCases := []struct {
-		key   string
-		value interface{}
+		key, value []byte
 	}{
-		{"dog", "woof"},
-		{"cat", "meow"},
-		{"server", 42},
+		{[]byte("dog"), []byte("woof")},
+		{[]byte("cat"), []byte("meow")},
+		{[]byte("server"), []byte("42")},
 	}
 	for _, c := range testCases {
-		val, err := store.Get(c.key)
+		val, err := engine.get(c.key)
 		if err != nil {
 			t.Errorf("get: expected no error, but got %s", err)
 		}
-		if val != nil {
-			t.Errorf("expected key value %s to be nil: got %+v", c.key, val)
+		if len(val.Bytes) != 0 {
+			t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
 		}
-		err = store.Put(c.key, c.value)
+		err = engine.put(c.key, Value{Bytes: c.value})
 		if err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
-		val, err = store.Get(c.key)
+		val, err = engine.get(c.key)
 		if err != nil {
 			t.Errorf("get: expected no error, but got %s", err)
 		}
-		if val != c.value {
+		if !bytes.Equal(val.Bytes, c.value) {
 			t.Errorf("expected key value %s to be %+v: got %+v", val)
 		}
-		err = store.Delete(c.key)
+		err = engine.del(c.key)
 		if err != nil {
 			t.Errorf("delete: expected no error, but got %s", err)
 		}
-		val, err = store.Get(c.key)
+		val, err = engine.get(c.key)
 		if err != nil {
 			t.Errorf("get: expected no error, but got %s", err)
 		}
-		if val != nil {
-			t.Errorf("expected key value %s to be nil: got %+v", c.key, val)
+		if len(val.Bytes) != 0 {
+			t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
 		}
 	}
 }
