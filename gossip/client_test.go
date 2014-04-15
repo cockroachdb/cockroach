@@ -59,15 +59,10 @@ func TestClientGossip(t *testing.T) {
 	local, remote, lserver, rserver := startGossip(t)
 	local.AddInfo("local-key", "local value", time.Second)
 	remote.AddInfo("remote-key", "remote value", time.Second)
-	connected := make(chan *client, 1)
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
-	go client.start(local, connected, disconnected)
-
-	if client != <-connected {
-		t.Errorf("expected client connect")
-	}
+	go client.start(local, disconnected)
 
 	waitFor(func() bool {
 		_, lerr := remote.GetInfo("local-key")

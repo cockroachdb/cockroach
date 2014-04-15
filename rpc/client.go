@@ -27,20 +27,27 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+const (
+	defaultHeartbeatInterval = 3 * time.Second // 3s
+)
+
 var (
-	clientMu sync.Mutex         // Protects access to the client cache.
-	clients  map[string]*Client // Cache of RPC clients by server address.
+	clientMu          sync.Mutex         // Protects access to the client cache.
+	clients           map[string]*Client // Cache of RPC clients by server address.
+	heartbeatInterval time.Duration
 )
 
 // init creates a new client RPC cache.
 func init() {
 	clients = make(map[string]*Client)
+	heartbeatInterval = defaultHeartbeatInterval
 }
 
 // Client is a Cockroach-specific RPC client with an embedded go
 // rpc.Client struct.
 type Client struct {
 	*rpc.Client               // Embedded RPC client
+	Addr        net.Addr      // Remove address of client
 	LAddr       net.Addr      // Local address of client
 	Ready       chan struct{} // Closed when client is connected
 }
@@ -58,6 +65,7 @@ func NewClient(addr net.Addr) *Client {
 		return c
 	}
 	c := &Client{
+		Addr:  addr,
 		Ready: make(chan struct{}),
 	}
 	clients[addr.String()] = c
@@ -80,9 +88,42 @@ func NewClient(addr net.Addr) *Client {
 		}
 		c.Client = rpc.NewClient(conn)
 		c.LAddr = conn.LocalAddr()
+		log.Printf("client connected: %s", addr)
 		close(c.Ready)
+
+		// Launch heartbeat.
+		go c.heartbeat()
+
 		return true
 	})
 
 	return c
+}
+
+// heartbeat sends periodic heartbeats to client. Closes the
+// connection on error. This method loops indefinitely until an error
+// is encountered.
+func (c *Client) heartbeat() {
+	for {
+		log.Println(c)
+		call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
+		select {
+		case <-call.Done:
+			// On heartbeat failure, remove this client from cache. A new
+			// client to this address will be created on the next call to
+			// NewClient().
+			if call.Error != nil {
+				log.Printf("heartbeat failed: %v; recycling client", call.Error)
+				clientMu.Lock()
+				delete(clients, c.Addr.String())
+				clientMu.Unlock()
+				c.Close()
+				break
+			}
+			time.Sleep(heartbeatInterval)
+		case <-time.After(heartbeatInterval * 2):
+			// Allowed twice gossip interval.
+			log.Printf("client %s unhealthy after %v", c.Addr, heartbeatInterval*2)
+		}
+	}
 }

@@ -110,7 +110,6 @@ type Gossip struct {
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
 	clients      map[string]*client // Map from address to client
-	connected    chan *client       // Channel of connected clients
 	disconnected chan *client       // Channel of disconnected clients
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
@@ -124,7 +123,6 @@ func New(rpcServer *rpc.Server) *Gossip {
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      make(map[string]*client),
-		connected:    make(chan *client, MaxPeers),
 		disconnected: make(chan *client, MaxPeers),
 	}
 	g.stalled = sync.NewCond(&g.mu)
@@ -236,7 +234,7 @@ func (g *Gossip) Start() {
 // exit once all outgoing clients are closed and the management loop
 // for the gossip instance is finished.
 func (g *Gossip) Stop() <-chan error {
-	g.stopServing()                             // set server's closed boolean and exits server
+	g.stopServing()                             // set server's closed boolean and exit server
 	g.stalled.Signal()                          // wake up bootstrap goroutine so it can exit
 	for _, addr := range g.outgoing.asSlice() { // close all outgoing clients.
 		g.closeClient(addr)
@@ -292,7 +290,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 
 // filterExtant removes any addresses from the supplied addrSet which
 // are already connected to this node, either via outgoing or incoming
-// client connection.
+// client connections.
 func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 	return addrs.filter(func(a net.Addr) bool {
 		return !g.outgoing.hasAddr(a)
@@ -351,11 +349,6 @@ func (g *Gossip) manage() {
 	// Loop until closed and there are no remaining outgoing connections.
 	for {
 		select {
-		case c := <-g.connected:
-			g.mu.Lock()
-			g.outgoing.addAddr(c.addr)
-			g.clients[c.addr.String()] = c
-
 		case c := <-g.disconnected:
 			g.mu.Lock()
 			if c.err != nil {
@@ -417,7 +410,9 @@ func (g *Gossip) manage() {
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr) {
 	c := newClient(addr)
-	go c.start(g, g.connected, g.disconnected)
+	g.outgoing.addAddr(c.addr)
+	g.clients[c.addr.String()] = c
+	go c.start(g, g.disconnected)
 }
 
 // closeClient closes an existing client specified by client's

@@ -28,8 +28,9 @@ import (
 // server struct.
 type Server struct {
 	*rpc.Server                          // Embedded RPC server instance
-	Addr           net.Addr              // Address of server
+	Addr           net.Addr              // Server address; may change if picking unused port
 	listener       net.Listener          // Server listener
+	listening      chan struct{}         // signaled when the server is listening
 	mu             sync.Mutex            // Mutex protects closed bool & closeCallbacks slice
 	closed         bool                  // Set upon invocation of Close()
 	closeCallbacks []func(conn net.Conn) // Slice of callbacks to invoke on conn close
@@ -37,11 +38,15 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(addr net.Addr) *Server {
-	return &Server{
+	s := &Server{
 		Server:         rpc.NewServer(),
 		Addr:           addr,
+		listening:      make(chan struct{}, 1),
 		closeCallbacks: make([]func(conn net.Conn), 0, 1),
 	}
+	heartbeat := &HeartbeatService{}
+	s.RegisterName("Heartbeat", heartbeat)
+	return s
 }
 
 // AddCloseCallback adds a callback to the closeCallbacks slice to
@@ -60,13 +65,17 @@ func (s *Server) ListenAndServe() {
 	if err != nil {
 		log.Fatalf("unable to start gossip node: %s", err)
 	}
+	s.listening <- struct{}{} // signal that we are now listening.
 	s.listener = ln
+	s.Addr = ln.Addr()
 
 	// Start serving gossip protocol in a loop until listener is closed.
 	log.Printf("serving on %+v...", s.Addr)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			s.mu.Lock()
+			defer s.mu.Unlock()
 			if !s.closed {
 				log.Fatalf("gossip server terminated: %s", err)
 			}
