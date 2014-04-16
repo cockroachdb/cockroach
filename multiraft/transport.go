@@ -17,7 +17,10 @@
 
 package multiraft
 
-import "github.com/golang/glog"
+import (
+	"net"
+	"net/rpc"
+)
 
 // The Transport interface is supplied by the application to manage communication with
 // other nodes.  It is responsible for mapping from IDs to some communication channel
@@ -28,37 +31,57 @@ type Transport interface {
 	// Listen informs the Transport of the local node's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id string, server RPC) error
+	Listen(id NodeID, server ServerInterface) error
 
 	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
-	Connect(id string) (RPC, error)
+	Connect(id NodeID) (ClientInterface, error)
 }
 
-type localTransport struct {
-	servers map[string]RPC
+type localRPCTransport struct {
+	addresses map[NodeID]string
 }
 
-// NewLocalTransport returns an in-process Transport for testing purposes.
-// MultiRaft instances sharing the same local Transport can communicate with each other.
-func NewLocalTransport() Transport {
-	return &localTransport{make(map[string]RPC)}
+// NewLocalRPCTransport creates a Transport for local testing use.  MultiRaft instances
+// sharing the same local Transport can find and communicate with each other by ID (which
+// can be an arbitrary string).  Each instance binds to a different unused port on
+// localhost.
+func NewLocalRPCTransport() Transport {
+	return &localRPCTransport{make(map[NodeID]string)}
 }
 
-func (lt *localTransport) Listen(id string, server RPC) error {
-	lt.servers[id] = server
+func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
+	rpcServer := rpc.NewServer()
+	err := rpcServer.RegisterName("MultiRaft", &rpcAdapter{server})
+	if err != nil {
+		return err
+	}
+
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return err
+	}
+
+	lt.addresses[id] = listener.Addr().String()
+	go rpcServer.Accept(listener)
 	return nil
 }
 
-func (lt *localTransport) Connect(id string) (RPC, error) {
-	return lt.servers[id], nil
+func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
+	address := lt.addresses[id]
+	client, err := rpc.Dial("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 // RequestVoteRequest is a part of the Raft protocol.  It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type RequestVoteRequest struct {
+	NodeID       NodeID
 	Group        string
 	Term         int
-	CandidateID  string
+	CandidateID  NodeID
 	LastLogIndex int
 	LastLogTerm  int
 }
@@ -75,7 +98,7 @@ type RequestVoteResponse struct {
 type AppendEntriesRequest struct {
 	Group        string
 	Term         int
-	LeaderID     string
+	LeaderID     NodeID
 	PrevLogIndex int
 	PrevLogTerm  int
 	Entries      []LogEntry
@@ -89,82 +112,56 @@ type AppendEntriesResponse struct {
 	Success bool
 }
 
-// RPC is the interface implemented by a MultiRaft server.
-type RPC interface {
+// ServerInterface is a generic interface based on net/rpc.
+type ServerInterface interface {
+	DoRPC(name string, req, resp interface{}) error
+}
+
+// RPCInterface is the methods we expose for use by net/rpc.
+type RPCInterface interface {
 	RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) error
 	AppendEntries(req *AppendEntriesRequest, resp *AppendEntriesResponse) error
 }
 
-type requestVoteRequestOp struct {
-	req  *RequestVoteRequest
-	resp *RequestVoteResponse
-	ch   chan error
+var (
+	requestVoteName   = "MultiRaft.RequestVote"
+	appendEntriesName = "MultiRaft.AppendEntries"
+)
+
+// ClientInterface is the interface expected of the client provided by a transport.
+// It is satisfied by rpc.Client, but could be implemented in other ways (using
+// rpc.Call as a dumb data structure)
+type ClientInterface interface {
+	Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call
 }
 
-type appendEntriesRequestOp struct {
-	req  *AppendEntriesRequest
-	resp *AppendEntriesResponse
-	ch   chan error
+// rpcAdapter converts the generic ServerInterface to the concrete RPCInterface
+type rpcAdapter struct {
+	server ServerInterface
 }
 
-// serverChannel bridges the synchronous RPC interface with MultiRaft's channel-oriented
-// interface. Incoming rpcs are wrapped in "Op" objects and passed onto the channel.
-// The RPC's goroutine remains blocked until an error (or nil) is written to the op's return
-// channel.
-type serverChannel chan<- interface{}
-
-func (ch serverChannel) RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) error {
-	op := &requestVoteRequestOp{req, resp, make(chan error)}
-	ch <- op
-	return <-op.ch
+func (r *rpcAdapter) RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) error {
+	return r.server.DoRPC(requestVoteName, req, resp)
 }
 
-func (ch serverChannel) AppendEntries(req *AppendEntriesRequest,
+func (r *rpcAdapter) AppendEntries(req *AppendEntriesRequest,
 	resp *AppendEntriesResponse) error {
-	op := &appendEntriesRequestOp{req, resp, make(chan error)}
-	ch <- op
-	return <-op.ch
+	return r.server.DoRPC(appendEntriesName, req, resp)
 }
 
 // asyncClient bridges MultiRaft's channel-oriented interface with the synchronous RPC interface.
 // Outgoing requests are run in a goroutine and their response ops are returned on the
 // given channel.
 type asyncClient struct {
-	nodeID string
-	conn   RPC
-	ch     chan<- interface{}
-}
-
-type requestVoteResponseOp struct {
-	nodeID string
-	req    *RequestVoteRequest
-	resp   *RequestVoteResponse
-}
-
-type appendEntriesResponseOp struct {
-	nodeID string
-	req    *AppendEntriesRequest
-	resp   *AppendEntriesResponse
+	nodeID NodeID
+	conn   ClientInterface
+	ch     chan *rpc.Call
 }
 
 func (a *asyncClient) requestVote(req *RequestVoteRequest) {
-	op := &requestVoteResponseOp{a.nodeID, req, &RequestVoteResponse{}}
-	go func() {
-		a.handleRPCResponse("requestVote", op, a.conn.RequestVote(op.req, op.resp))
-	}()
+	a.conn.Go(requestVoteName, req, &RequestVoteResponse{}, a.ch)
 }
 
 func (a *asyncClient) appendEntries(req *AppendEntriesRequest) {
-	op := &appendEntriesResponseOp{a.nodeID, req, &AppendEntriesResponse{}}
-	go func() {
-		a.handleRPCResponse("appendEntries", op, a.conn.AppendEntries(op.req, op.resp))
-	}()
-}
-
-func (a *asyncClient) handleRPCResponse(name string, op interface{}, err error) {
-	if err != nil {
-		glog.Errorf("%s error: %s", name, err)
-		return
-	}
-	a.ch <- op
+	a.conn.Go(appendEntriesName, req, &AppendEntriesResponse{}, a.ch)
 }

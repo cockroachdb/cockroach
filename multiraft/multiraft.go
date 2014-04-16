@@ -20,11 +20,15 @@ package multiraft
 import (
 	"math"
 	"math/rand"
+	"net/rpc"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
+
+// NodeID is a unique non-zero identifier for the node within the cluster.
+type NodeID int32
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
@@ -63,28 +67,28 @@ func (c *Config) Validate() error {
 // MultiRaft represents a local node in a raft cluster.
 type MultiRaft struct {
 	Config
-	id      string
-	ops     chan interface{}
-	Events  chan interface{}
-	stopped chan struct{}
+	id       NodeID
+	ops      chan interface{}
+	requests chan *rpc.Call
+	stopped  chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(id string, config *Config) (*MultiRaft, error) {
+func NewMultiRaft(id NodeID, config *Config) (*MultiRaft, error) {
 	err := config.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	m := &MultiRaft{
-		Config:  *config,
-		id:      id,
-		ops:     make(chan interface{}, 100),
-		Events:  make(chan interface{}, 100),
-		stopped: make(chan struct{}),
+		Config:   *config,
+		id:       id,
+		ops:      make(chan interface{}, 100),
+		requests: make(chan *rpc.Call, 100),
+		stopped:  make(chan struct{}),
 	}
 
-	err = m.Transport.Listen(id, serverChannel(m.ops))
+	err = m.Transport.Listen(id, m)
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +108,39 @@ func (m *MultiRaft) Stop() {
 	<-m.stopped
 }
 
+// DoRPC implements ServerInterface
+func (m *MultiRaft) DoRPC(name string, req, resp interface{}) error {
+	call := &rpc.Call{
+		ServiceMethod: name,
+		Args:          req,
+		Reply:         resp,
+		Done:          make(chan *rpc.Call, 1),
+	}
+	select {
+	case m.requests <- call:
+	default:
+		m.strictErrorLog("RPC request channel blocked")
+		// In non-strict mode, try again with blocking.
+		m.requests <- call
+	}
+	<-call.Done
+	return call.Error
+
+}
+
+// strictErrorLog panics in strict mode and logs an error otherwise.  Arguments are printf-style
+// and will be passed directly to either glog.Errorf or glog.Fatalf.
+func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
+	if m.Strict {
+		glog.Fatalf(format, args...)
+	} else {
+		glog.Errorf(format, args...)
+	}
+}
+
 // CreateGroup creates a new consensus group and joins it.  The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(name string, initialMembers []string) error {
+func (m *MultiRaft) CreateGroup(name string, initialMembers []NodeID) error {
 	op := &createGroupOp{newGroup(name, initialMembers), make(chan error)}
 	m.ops <- op
 	return <-op.ch
@@ -124,9 +158,9 @@ const (
 type group struct {
 	// Persistent state
 	name         string
-	members      []string
+	members      []NodeID
 	currentTerm  int
-	votedFor     string
+	votedFor     NodeID
 	lastLogIndex int
 	lastLogTerm  int
 
@@ -135,14 +169,14 @@ type group struct {
 	commitIndex      int
 	lastApplied      int
 	electionDeadline time.Time
-	votes            map[string]bool
+	votes            map[NodeID]bool
 
 	// Leader state.  Reset on election.
 	nextIndex  map[string]int // default: lastLogIndex + 1
 	matchIndex map[string]int // default: 0
 }
 
-func newGroup(name string, members []string) *group {
+func newGroup(name string, members []NodeID) *group {
 	return &group{
 		name:       name,
 		members:    members,
@@ -161,7 +195,7 @@ type createGroupOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	id       string
+	id       NodeID
 	refCount int
 	client   *asyncClient
 }
@@ -173,8 +207,9 @@ type state struct {
 	*MultiRaft
 	rand          *rand.Rand
 	groups        map[string]*group
-	nodes         map[string]*node
+	nodes         map[NodeID]*node
 	electionTimer *time.Timer
+	responses     chan *rpc.Call
 }
 
 func newState(m *MultiRaft) *state {
@@ -182,7 +217,8 @@ func newState(m *MultiRaft) *state {
 		MultiRaft: m,
 		rand:      util.NewPseudoRand(),
 		groups:    make(map[string]*group),
-		nodes:     make(map[string]*node),
+		nodes:     make(map[NodeID]*node),
+		responses: make(chan *rpc.Call, 100),
 	}
 }
 
@@ -216,17 +252,27 @@ func (s *state) start() {
 			case *createGroupOp:
 				s.createGroup(op)
 
-			case *requestVoteRequestOp:
-				s.requestVoteRequest(op)
+			default:
+				s.strictErrorLog("unknown op: %#v", op)
+			}
 
-			case *requestVoteResponseOp:
-				s.requestVoteResponse(op)
+		case call := <-s.requests:
+			switch call.ServiceMethod {
+			case requestVoteName:
+				s.requestVoteRequest(call.Args.(*RequestVoteRequest),
+					call.Reply.(*RequestVoteResponse), call)
 
 			default:
-				if s.Strict {
-					panic(util.Errorf("unknown op: %#v", op))
-				}
-				glog.Errorf("unknown op: %#v", op)
+				s.strictErrorLog("unknown rpc request: %#v", call.Args)
+			}
+
+		case call := <-s.responses:
+			switch call.ServiceMethod {
+			case requestVoteName:
+				s.requestVoteResponse(call.Args.(*RequestVoteRequest), call.Reply.(*RequestVoteResponse))
+
+			default:
+				s.strictErrorLog("unknown rpc response: %#v", call.Reply)
 			}
 
 		case now := <-electionTimer.C:
@@ -251,37 +297,39 @@ func (s *state) createGroup(op *createGroupOp) {
 			op.ch <- err
 			return
 		}
-		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.ops}}
+		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
 	}
 	s.updateElectionDeadline(op.group)
 	s.groups[op.group.name] = op.group
 	op.ch <- nil
 }
 
-func (s *state) requestVoteRequest(op *requestVoteRequestOp) {
-	g, ok := s.groups[op.req.Group]
+func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteResponse,
+	call *rpc.Call) {
+	g, ok := s.groups[req.Group]
 	if !ok {
-		op.ch <- util.Errorf("unknown group %s", op.req.Group)
+		call.Error = util.Errorf("unknown group %s", req.Group)
+		call.Done <- call
 		return
 	}
-	if g.votedFor != "" && g.votedFor != op.req.CandidateID {
-		op.resp.VoteGranted = false
+	if g.votedFor != NodeID(0) && g.votedFor != req.CandidateID {
+		resp.VoteGranted = false
 	} else {
 		// TODO: check log positions
-		g.currentTerm = op.req.Term
-		op.resp.VoteGranted = true
+		g.currentTerm = req.Term
+		resp.VoteGranted = true
 	}
-	op.resp.Term = g.currentTerm
-	op.ch <- nil
+	resp.Term = g.currentTerm
+	call.Done <- call
 }
 
-func (s *state) requestVoteResponse(op *requestVoteResponseOp) {
-	g := s.groups[op.req.Group]
-	if op.resp.Term < g.currentTerm {
+func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteResponse) {
+	g := s.groups[req.Group]
+	if resp.Term < g.currentTerm {
 		return
 	}
-	if op.resp.VoteGranted {
-		g.votes[op.nodeID] = op.resp.VoteGranted
+	if resp.VoteGranted {
+		g.votes[req.NodeID] = resp.VoteGranted
 	}
 	if len(g.votes)*2 > len(g.members) {
 		hackyTestChannel <- s.id
@@ -303,11 +351,12 @@ func (s *state) becomeCandidate(g *group) {
 	g.role = candidate
 	g.currentTerm++
 	g.votedFor = s.id
-	g.votes = make(map[string]bool)
+	g.votes = make(map[NodeID]bool)
 	s.updateElectionDeadline(g)
 	for _, id := range g.members {
 		node := s.nodes[id]
 		node.client.requestVote(&RequestVoteRequest{
+			NodeID:       id,
 			Group:        g.name,
 			Term:         g.currentTerm,
 			CandidateID:  s.id,
@@ -319,4 +368,4 @@ func (s *state) becomeCandidate(g *group) {
 
 // Temporary channel so we can test the current incomplete state; will be removed
 // as more of the interface is fleshed out.
-var hackyTestChannel = make(chan string)
+var hackyTestChannel = make(chan NodeID)

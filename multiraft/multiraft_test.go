@@ -18,7 +18,6 @@
 package multiraft
 
 import (
-	"fmt"
 	"testing"
 	"time"
 )
@@ -28,7 +27,7 @@ type testCluster struct {
 }
 
 func newTestCluster(size int, t *testing.T) *testCluster {
-	transport := NewLocalTransport()
+	transport := NewLocalRPCTransport()
 	cluster := &testCluster{make([]*state, 0)}
 	for i := 0; i < size; i++ {
 		config := &Config{
@@ -37,7 +36,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 			ElectionTimeoutMax: 20 * time.Millisecond,
 			Strict:             true,
 		}
-		mr, err := NewMultiRaft(fmt.Sprintf("%d", i), config)
+		mr, err := NewMultiRaft(NodeID(i), config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,7 +53,8 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 func TestInitialLeaderElection(t *testing.T) {
 	cluster := newTestCluster(3, t)
 	for i := 0; i < 3; i++ {
-		err := cluster.states[i].CreateGroup("group", []string{"0", "1", "2"})
+		err := cluster.states[i].CreateGroup("group",
+			[]NodeID{cluster.states[0].id, cluster.states[1].id, cluster.states[2].id})
 		if err != nil {
 			t.Fatal(err)
 		}
