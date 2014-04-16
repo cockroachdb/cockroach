@@ -20,6 +20,8 @@ package multiraft
 import (
 	"net"
 	"net/rpc"
+
+	"github.com/golang/glog"
 )
 
 // The Transport interface is supplied by the application to manage communication with
@@ -33,12 +35,15 @@ type Transport interface {
 	// Connect methods can find it.
 	Listen(id NodeID, server ServerInterface) error
 
+	// Stop undoes a previous Listen.
+	Stop(id NodeID)
+
 	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
 	Connect(id NodeID) (ClientInterface, error)
 }
 
 type localRPCTransport struct {
-	addresses map[NodeID]string
+	listeners map[NodeID]net.Listener
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use.  MultiRaft instances
@@ -46,7 +51,7 @@ type localRPCTransport struct {
 // can be an arbitrary string).  Each instance binds to a different unused port on
 // localhost.
 func NewLocalRPCTransport() Transport {
-	return &localRPCTransport{make(map[NodeID]string)}
+	return &localRPCTransport{make(map[NodeID]net.Listener)}
 }
 
 func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
@@ -61,13 +66,33 @@ func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
 		return err
 	}
 
-	lt.addresses[id] = listener.Addr().String()
-	go rpcServer.Accept(listener)
+	lt.listeners[id] = listener
+	go lt.accept(rpcServer, listener)
 	return nil
 }
 
+func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if opError, ok := err.(*net.OpError); ok {
+				if opError.Err.Error() == "use of closed network connection" {
+					return
+				}
+			}
+			glog.Errorf("rpc.Serve: accept: %s", err.Error())
+		}
+		go server.ServeConn(conn)
+	}
+}
+
+func (lt *localRPCTransport) Stop(id NodeID) {
+	lt.listeners[id].Close()
+	delete(lt.listeners, id)
+}
+
 func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
-	address := lt.addresses[id]
+	address := lt.listeners[id].Addr().String()
 	client, err := rpc.Dial("tcp", address)
 	if err != nil {
 		return nil, err
@@ -133,6 +158,7 @@ var (
 // rpc.Call as a dumb data structure)
 type ClientInterface interface {
 	Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call
+	Close() error
 }
 
 // rpcAdapter converts the generic ServerInterface to the concrete RPCInterface

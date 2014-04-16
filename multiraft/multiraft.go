@@ -30,10 +30,17 @@ import (
 // NodeID is a unique non-zero identifier for the node within the cluster.
 type NodeID int32
 
+// isSet returns true if the NodeID is valid (i.e. non-zero)
+func (n NodeID) isSet() bool {
+	return int32(n) != 0
+}
+
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
 	Storage   Storage
 	Transport Transport
+	// Clock may be nil to use real time.
+	Clock Clock
 
 	// A new election is called if the ElectionTimeout elapses with no contact from the leader.
 	// The actual ElectionTimeout is chosen randomly from the range [ElectionTimeoutMin,
@@ -75,9 +82,16 @@ type MultiRaft struct {
 
 // NewMultiRaft creates a MultiRaft object.
 func NewMultiRaft(id NodeID, config *Config) (*MultiRaft, error) {
+	if !id.isSet() {
+		return nil, util.Error("Invalid NodeID")
+	}
 	err := config.Validate()
 	if err != nil {
 		return nil, err
+	}
+
+	if config.Clock == nil {
+		config.Clock = RealClock
 	}
 
 	m := &MultiRaft{
@@ -102,8 +116,9 @@ func (m *MultiRaft) Start() {
 	go s.start()
 }
 
-// Stop terminates the running raft instance.
+// Stop terminates the running raft instance and shuts down all network interfaces.
 func (m *MultiRaft) Stop() {
+	m.Transport.Stop(m.id)
 	m.ops <- &stopOp{}
 	<-m.stopped
 }
@@ -141,6 +156,11 @@ func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 // CreateGroup creates a new consensus group and joins it.  The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
 func (m *MultiRaft) CreateGroup(name string, initialMembers []NodeID) error {
+	for _, id := range initialMembers {
+		if !id.isSet() {
+			return util.Error("Invalid NodeID")
+		}
+	}
 	op := &createGroupOp{newGroup(name, initialMembers), make(chan error)}
 	m.ops <- op
 	return <-op.ch
@@ -224,29 +244,32 @@ func newState(m *MultiRaft) *state {
 
 func (s *state) updateElectionDeadline(g *group) {
 	timeout := util.RandIntInRange(s.rand, int(s.ElectionTimeoutMin), int(s.ElectionTimeoutMax))
-	g.electionDeadline = time.Now().Add(time.Duration(timeout))
+	g.electionDeadline = s.Clock.Now().Add(time.Duration(timeout))
 }
 
 func (s *state) nextElectionTimer() *time.Timer {
 	minTimeout := time.Duration(math.MaxInt64)
-	now := time.Now()
+	now := s.Clock.Now()
 	for _, g := range s.groups {
 		timeout := g.electionDeadline.Sub(now)
 		if timeout < minTimeout {
 			minTimeout = timeout
 		}
 	}
-	return time.NewTimer(minTimeout)
+	return s.Clock.NewElectionTimer(minTimeout)
 }
 
 func (s *state) start() {
+	glog.V(1).Infof("node %v starting", s.id)
 	for {
 		electionTimer := s.nextElectionTimer()
+		glog.V(6).Infof("node %v: selecting", s.id)
 		select {
 		case op := <-s.ops:
+			glog.V(6).Infof("node %v: got op %#v", s.id, op)
 			switch op := op.(type) {
 			case *stopOp:
-				close(s.stopped)
+				s.stop()
 				return
 
 			case *createGroupOp:
@@ -257,6 +280,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.requests:
+			glog.V(6).Infof("node %v: got request %v", s.id, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteRequest(call.Args.(*RequestVoteRequest),
@@ -267,6 +291,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.responses:
+			glog.V(6).Infof("node %v: got response %v", s.id, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteResponse(call.Args.(*RequestVoteRequest), call.Reply.(*RequestVoteResponse))
@@ -276,10 +301,22 @@ func (s *state) start() {
 			}
 
 		case now := <-electionTimer.C:
+			glog.V(6).Infof("node %v: got election timer", s.id)
 			s.handleElectionTimers(now)
 		}
-		electionTimer.Stop()
+		s.Clock.StopElectionTimer(electionTimer)
 	}
+}
+
+func (s *state) stop() {
+	glog.V(6).Infof("node %v stopping", s.id)
+	for _, n := range s.nodes {
+		err := n.client.conn.Close()
+		if err != nil {
+			glog.Warning("error stopping client:", err)
+		}
+	}
+	close(s.stopped)
 }
 
 func (s *state) createGroup(op *createGroupOp) {
@@ -312,7 +349,7 @@ func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteRes
 		call.Done <- call
 		return
 	}
-	if g.votedFor != NodeID(0) && g.votedFor != req.CandidateID {
+	if g.votedFor.isSet() && g.votedFor != req.CandidateID {
 		resp.VoteGranted = false
 	} else {
 		// TODO: check log positions
@@ -331,20 +368,23 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 	if resp.VoteGranted {
 		g.votes[req.NodeID] = resp.VoteGranted
 	}
-	if len(g.votes)*2 > len(g.members) {
+	if g.role == candidate && len(g.votes)*2 > len(g.members) {
+		g.role = leader
+		glog.V(1).Infof("node %v becoming leader for group %s", s.id, g.name)
 		hackyTestChannel <- s.id
 	}
 }
 
 func (s *state) handleElectionTimers(now time.Time) {
 	for _, g := range s.groups {
-		if now.After(g.electionDeadline) {
+		if !now.Before(g.electionDeadline) {
 			s.becomeCandidate(g)
 		}
 	}
 }
 
 func (s *state) becomeCandidate(g *group) {
+	glog.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.id, g.role, g.name)
 	if g.role == leader {
 		panic("cannot transition from leader to candidate")
 	}
@@ -368,4 +408,4 @@ func (s *state) becomeCandidate(g *group) {
 
 // Temporary channel so we can test the current incomplete state; will be removed
 // as more of the interface is fleshed out.
-var hackyTestChannel = make(chan NodeID)
+var hackyTestChannel = make(chan NodeID, 1)

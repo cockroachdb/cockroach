@@ -23,43 +23,64 @@ import (
 )
 
 type testCluster struct {
-	states []*state
+	nodes  []*state
+	clocks []*manualClock
 }
 
 func newTestCluster(size int, t *testing.T) *testCluster {
 	transport := NewLocalRPCTransport()
-	cluster := &testCluster{make([]*state, 0)}
+	cluster := &testCluster{make([]*state, 0), make([]*manualClock, 0)}
 	for i := 0; i < size; i++ {
+		clock := newManualClock()
 		config := &Config{
 			Transport:          transport,
+			Clock:              clock,
 			ElectionTimeoutMin: 10 * time.Millisecond,
 			ElectionTimeoutMax: 20 * time.Millisecond,
 			Strict:             true,
 		}
-		mr, err := NewMultiRaft(NodeID(i), config)
+		mr, err := NewMultiRaft(NodeID(i+1), config)
 		if err != nil {
 			t.Fatal(err)
 		}
 		state := newState(mr)
-		cluster.states = append(cluster.states, state)
+		cluster.nodes = append(cluster.nodes, state)
+		cluster.clocks = append(cluster.clocks, clock)
 	}
 	// Let all the states listen before starting any.
-	for i := 0; i < size; i++ {
-		go cluster.states[i].start()
+	for _, node := range cluster.nodes {
+		go node.start()
 	}
 	return cluster
 }
 
-func TestInitialLeaderElection(t *testing.T) {
-	cluster := newTestCluster(3, t)
-	for i := 0; i < 3; i++ {
-		err := cluster.states[i].CreateGroup("group",
-			[]NodeID{cluster.states[0].id, cluster.states[1].id, cluster.states[2].id})
-		if err != nil {
-			t.Fatal(err)
-		}
+func (c *testCluster) stop() {
+	for _, node := range c.nodes {
+		node.Stop()
 	}
-	// Temporary hack: just wait for some instance to declare itself the winner of an
-	// election.
-	<-hackyTestChannel
+}
+
+func TestInitialLeaderElection(t *testing.T) {
+	// Run the test three times, each time triggering a different node's election clock.
+	// The node that requests an election first should win.
+	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
+		cluster := newTestCluster(3, t)
+		for _, node := range cluster.nodes {
+			err := node.CreateGroup("group",
+				[]NodeID{cluster.nodes[0].id, cluster.nodes[1].id, cluster.nodes[2].id})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		cluster.clocks[leaderIndex].triggerElection()
+
+		// Temporary hack: just wait for some instance to declare itself the winner of an
+		// election.
+		winner := <-hackyTestChannel
+		if winner != cluster.nodes[leaderIndex].id {
+			t.Errorf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].id, winner)
+		}
+		cluster.stop()
+	}
 }
