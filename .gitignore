@@ -25,3 +25,5 @@ _testmain.go
 *.exe
 
 .DS_Store
+
+cockroach
