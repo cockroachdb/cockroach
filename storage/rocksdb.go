@@ -66,10 +66,12 @@ func (r *RocksDB) capacity() (*DiskCapacity, error) {
 	if r.name == "" {
 		// TODO(spencer): set name.
 	}
-	// TODO(spencer): set values in DiskCapacity struct.
-	// capacity = fs.Bsize * fs.Blocks
-	// available = fs.Bsize * fs.Bavail
-	// percentAvail = float64(available) / float64(capacity)
-	capacity := &DiskCapacity{}
+
+	cap := uint64(fs.Bsize) * fs.Blocks
+	avail := uint64(fs.Bsize) * fs.Bavail
+	capacity := &DiskCapacity{
+		Capacity:  cap,
+		Available: avail,
+	}
 	return capacity, nil
 }

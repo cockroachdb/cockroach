@@ -18,27 +18,88 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util"
+	"math/rand"
 )
 
-// An allocator makes allocation decisions based on a zone
+// ZoneConfigFinder looks up a ZoneConfig for a range that starts with
+// a given key.
+type ZoneConfigFinder func(string) (ZoneConfig, error)
+
+// AvailableDiskFinder finds the disks in a datacenter with the most available capacity.
+type AvailableDiskFinder func(string) ([]AvailableDiskConfig, error)
+
+// allocator makes allocation decisions based on a zone
 // configuration, existing range metadata and available servers &
 // disks. Configuration settings and range metadata information is
 // stored directly in the engine-backed range they describe.
 // Information on suitability and availability of servers is
 // gleaned from the gossip network.
 type allocator struct {
-	gossip *gossip.Gossip
+	diskFinder AvailableDiskFinder
+	zcFinder   ZoneConfigFinder
+	rand       rand.Rand
 }
 
+var maxCapacityPrefix = "max-free-capacity-"
+
 // allocate returns a suitable Replica for the range and zone. If none
-// are available / suitable, returns an error.
-//
-// TODO(spencer): currently this just returns a random device from
-// amongst the available servers on the gossip network; need to add
-// zone config and replica metadata.
-func (a *allocator) allocate() (*Replica, error) {
-	// TODO(spencer): choose at random from gossip network's available Disks.
-	return nil, util.Errorf("unimplemented")
+// are available / suitable, returns an error. It looks up the zone config for
+// the block to determine where it needs to send data, then uses the gossip
+// network to pick a random set of nodes in each data center based on the
+// available capacity of the node.
+// TODO(levon) Handle Racks/Power Units.
+// TODO(levon) throw error if not enough suitable replicas can be found
+
+func (a *allocator) allocate(start string, existingReplicas []Replica) ([]Replica, error) {
+	usedHosts := make(map[string]bool)
+	for _, replica := range existingReplicas {
+		usedHosts[replica.Addr] = true
+	}
+	// Find the Zone Config that applies to this range.
+	zoneConfig, err := a.zcFinder(start)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Replica, 0, 1)
+	for dc, diskTypes := range zoneConfig.Replicas {
+		// For each replica to be placed in this data center.
+		for _, diskType := range diskTypes {
+			// Randomly pick a node weighted by capacity.
+			candidates := make([]AvailableDiskConfig, len(zoneConfig.Replicas))
+			var candidateCapacityTotal float64
+			disks, err := a.diskFinder(dc)
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range disks {
+				if c.DiskType == diskType && !usedHosts[c.Node.Address] {
+					candidates = append(candidates, c)
+					candidateCapacityTotal += c.DiskCapacity.PercentAvail()
+				}
+			}
+
+			var capacitySeen float64
+			targetCapacity := rand.Float64()
+
+			// Walk through candidates in random order, stopping when
+			// we've passed the capacity target.
+			for _, c := range candidates {
+				capacitySeen += (c.DiskCapacity.PercentAvail() / candidateCapacityTotal)
+				if capacitySeen >= targetCapacity {
+					replica := Replica{
+						Addr: c.Node.Address,
+						Disk: c.Disk,
+					}
+					result = append(result, replica)
+					usedHosts[c.Node.Address] = true
+					break
+				}
+			}
+		}
+	}
+	return result, nil
 }
+
+/*func findZoneConfig(key string) (ZoneConfig, error) {
+
+}*/

@@ -20,6 +20,7 @@ package storage
 import (
 	"flag"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -44,23 +45,33 @@ var (
 	// full capacity.
 	cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes for "+
 		"data stored in all caches, shared evenly if there are multiple storage devices")
+
+	// storageGossipInterval is the period at which storage is checked and re-added to gossip
+	storageGossipInterval = flag.Duration(
+		"storage_gossip_interval", time.Minute,
+		"approximate interval (time.Duration) for checking local disk capacity and adding to gossip")
 )
 
 // Node holds the set of stores which this roach node serves traffic for.
 type Node struct {
 	gossip   *gossip.Gossip
 	storeMap map[string]*store
+	config   NodeConfig
+	closer   chan struct{}
 }
 
 // NewNode returns a new instance of Node, interpreting command line
 // flags to intialize the appropriate store or set of
 // stores. Registers the storage instance for the RPC service "Node".
 func NewNode(rpcServer *rpc.Server, gossip *gossip.Gossip) *Node {
+	// TODO(levon): Read node configuration and set it here.
 	n := &Node{
 		gossip:   gossip,
 		storeMap: make(map[string]*store),
+		closer:   make(chan struct{}, 1),
 	}
-	allocator := &allocator{gossip: gossip}
+	// TODO(levon): real args here
+	allocator := &allocator{}
 	rpcServer.RegisterName("Node", n)
 
 	if *dataDirs == "" {
@@ -80,6 +91,37 @@ func NewNode(rpcServer *rpc.Server, gossip *gossip.Gossip) *Node {
 	return n
 }
 
+// startGossip starts a goroutine that periodically checks local disk
+// capacity and gossips it.
+func (n *Node) startGossip() {
+	ticker := time.NewTicker(*storageGossipInterval)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				n.gossipCapacities()
+			case <-n.closer:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// gossipCapacities calls capacity on each store and adds it to the gossip
+func (n *Node) gossipCapacities() {
+	gossipTopic := maxCapacityPrefix + n.config.DataCenter
+	for _, store := range n.storeMap {
+		capacity, err := store.engine.capacity()
+		if err != nil {
+			glog.Warningf("Problem getting capacity: %v", err)
+			continue
+		}
+
+		n.gossip.AddInfo(gossipTopic, &AvailableDiskConfig{DiskCapacity: *capacity, Node: n.config}, time.Duration(2)*(*storageGossipInterval))
+	}
+}
+
 // getRange looks up the store by Replica.Disk and then queries it for
 // the range specified by Replica.Range.
 func (n *Node) getRange(r *Replica) (*Range, error) {
@@ -92,6 +134,16 @@ func (n *Node) getRange(r *Replica) (*Range, error) {
 		return nil, err
 	}
 	return rng, nil
+}
+
+// Start starts the node
+func (n *Node) Start() {
+	n.startGossip()
+}
+
+// Stop cleanly stops the node
+func (n *Node) Stop() {
+	close(n.closer)
 }
 
 // All methods to satisfy the Node RPC service fetch the range
