@@ -31,6 +31,9 @@ import (
 // NodeID is a unique non-zero identifier for the node within the cluster.
 type NodeID int32
 
+// GroupID is a unique identifier for a consensus group within the cluster.
+type GroupID int64
+
 // isSet returns true if the NodeID is valid (i.e. non-zero)
 func (n NodeID) isSet() bool {
 	return int32(n) != 0
@@ -75,15 +78,15 @@ func (c *Config) Validate() error {
 // MultiRaft represents a local node in a raft cluster.
 type MultiRaft struct {
 	Config
-	id       NodeID
+	nodeID   NodeID
 	ops      chan interface{}
 	requests chan *rpc.Call
 	stopped  chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(id NodeID, config *Config) (*MultiRaft, error) {
-	if !id.isSet() {
+func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
+	if !nodeID.isSet() {
 		return nil, util.Error("Invalid NodeID")
 	}
 	err := config.Validate()
@@ -97,13 +100,13 @@ func NewMultiRaft(id NodeID, config *Config) (*MultiRaft, error) {
 
 	m := &MultiRaft{
 		Config:   *config,
-		id:       id,
+		nodeID:   nodeID,
 		ops:      make(chan interface{}, 100),
 		requests: make(chan *rpc.Call, 100),
 		stopped:  make(chan struct{}),
 	}
 
-	err = m.Transport.Listen(id, m)
+	err = m.Transport.Listen(nodeID, m)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +122,7 @@ func (m *MultiRaft) Start() {
 
 // Stop terminates the running raft instance and shuts down all network interfaces.
 func (m *MultiRaft) Stop() {
-	m.Transport.Stop(m.id)
+	m.Transport.Stop(m.nodeID)
 	m.ops <- &stopOp{}
 	<-m.stopped
 }
@@ -156,13 +159,13 @@ func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 
 // CreateGroup creates a new consensus group and joins it.  The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(name string, initialMembers []NodeID) error {
+func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error {
 	for _, id := range initialMembers {
 		if !id.isSet() {
 			return util.Error("Invalid NodeID")
 		}
 	}
-	op := &createGroupOp{newGroup(name, initialMembers), make(chan error)}
+	op := &createGroupOp{newGroup(groupID, initialMembers), make(chan error)}
 	m.ops <- op
 	return <-op.ch
 }
@@ -186,7 +189,7 @@ type pendingCall struct {
 
 // group represents the state of a consensus group.
 type group struct {
-	name string
+	groupID GroupID
 	// Persistent state.  When an RPC is received (or another event occurs), the in-memory fields
 	// are updated immediately; the 'persisted' versions are updated later after they have been
 	// (asynchronously) written to stable storage.  The group is 'dirty' whenever the current
@@ -206,22 +209,22 @@ type group struct {
 	votes            map[NodeID]bool
 
 	// Leader state.  Reset on election.
-	nextIndex  map[string]int // default: lastLogIndex + 1
-	matchIndex map[string]int // default: 0
+	nextIndex  map[NodeID]int // default: lastLogIndex + 1
+	matchIndex map[NodeID]int // default: 0
 
 	// a List of *pendingCall
 	pendingCalls list.List
 }
 
-func newGroup(name string, members []NodeID) *group {
+func newGroup(groupID GroupID, members []NodeID) *group {
 	return &group{
-		name: name,
+		groupID: groupID,
 		metadata: &GroupMetadata{
 			Members: members,
 		},
 		role:       follower,
-		nextIndex:  make(map[string]int),
-		matchIndex: make(map[string]int),
+		nextIndex:  make(map[NodeID]int),
+		matchIndex: make(map[NodeID]int),
 	}
 }
 
@@ -234,7 +237,7 @@ type createGroupOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	id       NodeID
+	nodeID   NodeID
 	refCount int
 	client   *asyncClient
 }
@@ -245,8 +248,8 @@ type node struct {
 type state struct {
 	*MultiRaft
 	rand          *rand.Rand
-	groups        map[string]*group
-	dirtyGroups   map[string]*group
+	groups        map[GroupID]*group
+	dirtyGroups   map[GroupID]*group
 	nodes         map[NodeID]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
@@ -257,8 +260,8 @@ func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft:   m,
 		rand:        util.NewPseudoRand(),
-		groups:      make(map[string]*group),
-		dirtyGroups: make(map[string]*group),
+		groups:      make(map[GroupID]*group),
+		dirtyGroups: make(map[GroupID]*group),
 		nodes:       make(map[NodeID]*node),
 		responses:   make(chan *rpc.Call, 100),
 		writeTask:   newWriteTask(m.Storage),
@@ -283,7 +286,7 @@ func (s *state) nextElectionTimer() *time.Timer {
 }
 
 func (s *state) start() {
-	glog.V(1).Infof("node %v starting", s.id)
+	glog.V(1).Infof("node %v starting", s.nodeID)
 	go s.writeTask.start()
 	for {
 		electionTimer := s.nextElectionTimer()
@@ -293,10 +296,10 @@ func (s *state) start() {
 		} else {
 			writeReady = nil
 		}
-		glog.V(6).Infof("node %v: selecting", s.id)
+		glog.V(6).Infof("node %v: selecting", s.nodeID)
 		select {
 		case op := <-s.ops:
-			glog.V(6).Infof("node %v: got op %#v", s.id, op)
+			glog.V(6).Infof("node %v: got op %#v", s.nodeID, op)
 			switch op := op.(type) {
 			case *stopOp:
 				s.stop()
@@ -310,7 +313,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.requests:
-			glog.V(6).Infof("node %v: got request %v", s.id, call)
+			glog.V(6).Infof("node %v: got request %v", s.nodeID, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteRequest(call.Args.(*RequestVoteRequest),
@@ -321,7 +324,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.responses:
-			glog.V(6).Infof("node %v: got response %v", s.id, call)
+			glog.V(6).Infof("node %v: got response %v", s.nodeID, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteResponse(call.Args.(*RequestVoteRequest), call.Reply.(*RequestVoteResponse))
@@ -337,7 +340,7 @@ func (s *state) start() {
 			s.handleWriteResponse(resp)
 
 		case now := <-electionTimer.C:
-			glog.V(6).Infof("node %v: got election timer", s.id)
+			glog.V(6).Infof("node %v: got election timer", s.nodeID)
 			s.handleElectionTimers(now)
 		}
 		s.Clock.StopElectionTimer(electionTimer)
@@ -345,7 +348,7 @@ func (s *state) start() {
 }
 
 func (s *state) stop() {
-	glog.V(6).Infof("node %v stopping", s.id)
+	glog.V(6).Infof("node %v stopping", s.nodeID)
 	for _, n := range s.nodes {
 		err := n.client.conn.Close()
 		if err != nil {
@@ -357,9 +360,9 @@ func (s *state) stop() {
 }
 
 func (s *state) createGroup(op *createGroupOp) {
-	glog.V(6).Infof("node %v creating group %s", s.id, op.group.name)
-	if _, ok := s.groups[op.group.name]; ok {
-		op.ch <- util.Errorf("group %s already exists", op.group.name)
+	glog.V(6).Infof("node %v creating group %v", s.nodeID, op.group.groupID)
+	if _, ok := s.groups[op.group.groupID]; ok {
+		op.ch <- util.Errorf("group %v already exists", op.group.groupID)
 		return
 	}
 	for _, member := range op.group.metadata.Members {
@@ -375,15 +378,15 @@ func (s *state) createGroup(op *createGroupOp) {
 		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
 	}
 	s.updateElectionDeadline(op.group)
-	s.groups[op.group.name] = op.group
+	s.groups[op.group.groupID] = op.group
 	op.ch <- nil
 }
 
 func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteResponse,
 	call *rpc.Call) {
-	g, ok := s.groups[req.Group]
+	g, ok := s.groups[req.GroupID]
 	if !ok {
-		call.Error = util.Errorf("unknown group %s", req.Group)
+		call.Error = util.Errorf("unknown group %v", req.GroupID)
 		call.Done <- call
 		return
 	}
@@ -400,7 +403,7 @@ func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteRes
 }
 
 func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteResponse) {
-	g := s.groups[req.Group]
+	g := s.groups[req.GroupID]
 	if resp.Term < g.metadata.CurrentTerm {
 		return
 	}
@@ -409,18 +412,18 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 	}
 	if g.role == candidate && len(g.votes)*2 > len(g.metadata.Members) {
 		g.role = leader
-		glog.V(1).Infof("node %v becoming leader for group %s", s.id, g.name)
-		hackyTestChannel <- s.id
+		glog.V(1).Infof("node %v becoming leader for group %s", s.nodeID, g.groupID)
+		hackyTestChannel <- s.nodeID
 	}
 	s.updateDirtyStatus(g)
 }
 
 func (s *state) handleWriteReady() {
-	glog.V(6).Infof("node %v write ready, preparing request", s.id)
+	glog.V(6).Infof("node %v write ready, preparing request", s.nodeID)
 	writeRequest := newWriteRequest()
-	for name, group := range s.dirtyGroups {
+	for groupID, group := range s.dirtyGroups {
 		req := newGroupWriteRequest()
-		writeRequest.groups[name] = req
+		writeRequest.groups[groupID] = req
 		if !group.metadata.Equal(group.persistedMetadata) {
 			copy := *group.metadata
 			req.metadata = &copy
@@ -430,9 +433,9 @@ func (s *state) handleWriteReady() {
 }
 
 func (s *state) handleWriteResponse(response *writeResponse) {
-	glog.V(6).Infof("node %v got write response: %#v", s.id, *response)
-	for name, persistedGroup := range response.groups {
-		g := s.groups[name]
+	glog.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
+	for groupID, persistedGroup := range response.groups {
+		g := s.groups[groupID]
 		if persistedGroup.metadata != nil {
 			g.persistedMetadata = persistedGroup.metadata
 		}
@@ -473,22 +476,22 @@ func (s *state) handleElectionTimers(now time.Time) {
 }
 
 func (s *state) becomeCandidate(g *group) {
-	glog.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.id, g.role, g.name)
+	glog.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.nodeID, g.role, g.groupID)
 	if g.role == leader {
 		panic("cannot transition from leader to candidate")
 	}
 	g.role = candidate
 	g.metadata.CurrentTerm++
-	g.metadata.VotedFor = s.id
+	g.metadata.VotedFor = s.nodeID
 	g.votes = make(map[NodeID]bool)
 	s.updateElectionDeadline(g)
 	for _, id := range g.metadata.Members {
 		node := s.nodes[id]
 		node.client.requestVote(&RequestVoteRequest{
 			NodeID:       id,
-			Group:        g.name,
+			GroupID:      g.groupID,
 			Term:         g.metadata.CurrentTerm,
-			CandidateID:  s.id,
+			CandidateID:  s.nodeID,
 			LastLogIndex: g.lastLogIndex,
 			LastLogTerm:  g.lastLogTerm,
 		})
@@ -503,9 +506,9 @@ func (s *state) updateDirtyStatus(g *group) {
 		dirty = true
 	}
 	if dirty {
-		s.dirtyGroups[g.name] = g
+		s.dirtyGroups[g.groupID] = g
 	} else {
-		delete(s.dirtyGroups, g.name)
+		delete(s.dirtyGroups, g.groupID)
 	}
 }
 

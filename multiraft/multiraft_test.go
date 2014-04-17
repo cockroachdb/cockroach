@@ -68,8 +68,8 @@ func TestInitialLeaderElection(t *testing.T) {
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		cluster := newTestCluster(3, t)
 		for _, node := range cluster.nodes {
-			err := node.CreateGroup("group",
-				[]NodeID{cluster.nodes[0].id, cluster.nodes[1].id, cluster.nodes[2].id})
+			err := node.CreateGroup(1,
+				[]NodeID{cluster.nodes[0].nodeID, cluster.nodes[1].nodeID, cluster.nodes[2].nodeID})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -80,8 +80,8 @@ func TestInitialLeaderElection(t *testing.T) {
 		// Temporary hack: just wait for some instance to declare itself the winner of an
 		// election.
 		winner := <-hackyTestChannel
-		if winner != cluster.nodes[leaderIndex].id {
-			t.Errorf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].id, winner)
+		if winner != cluster.nodes[leaderIndex].nodeID {
+			t.Errorf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, winner)
 		}
 		cluster.stop()
 	}

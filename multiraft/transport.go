@@ -104,7 +104,7 @@ func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type RequestVoteRequest struct {
 	NodeID       NodeID
-	Group        string
+	GroupID      GroupID
 	Term         int
 	CandidateID  NodeID
 	LastLogIndex int
@@ -121,7 +121,7 @@ type RequestVoteResponse struct {
 // AppendEntriesRequest is a part of the Raft protocol.  It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type AppendEntriesRequest struct {
-	Group        string
+	GroupID      GroupID
 	Term         int
 	LeaderID     NodeID
 	PrevLogIndex int
