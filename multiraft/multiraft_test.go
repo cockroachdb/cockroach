@@ -32,8 +32,10 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 	cluster := &testCluster{make([]*state, 0), make([]*manualClock, 0)}
 	for i := 0; i < size; i++ {
 		clock := newManualClock()
+		storage := NewMemoryStorage()
 		config := &Config{
 			Transport:          transport,
+			Storage:            storage,
 			Clock:              clock,
 			ElectionTimeoutMin: 10 * time.Millisecond,
 			ElectionTimeoutMax: 20 * time.Millisecond,

@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"container/list"
 	"math"
 	"math/rand"
 	"net/rpc"
@@ -174,15 +175,28 @@ const (
 	leader
 )
 
+// pendingCall represents an RPC that we should not respond to until we have persisted
+// up to the given point.  term and logIndex may be -1 if the rpc didn't modify that
+// variable and therefore can be resolved regardless of its value.
+type pendingCall struct {
+	call     *rpc.Call
+	term     int
+	logIndex int
+}
+
 // group represents the state of a consensus group.
 type group struct {
-	// Persistent state
-	name         string
-	members      []NodeID
-	currentTerm  int
-	votedFor     NodeID
-	lastLogIndex int
-	lastLogTerm  int
+	name string
+	// Persistent state.  When an RPC is received (or another event occurs), the in-memory fields
+	// are updated immediately; the 'persisted' versions are updated later after they have been
+	// (asynchronously) written to stable storage.  The group is 'dirty' whenever the current
+	// and persisted data differ.
+	metadata           *GroupMetadata
+	lastLogIndex       int
+	lastLogTerm        int
+	persistedMetadata  *GroupMetadata
+	persistedLastIndex int
+	persistedLastTerm  int
 
 	// Volatile state
 	role             role
@@ -194,12 +208,17 @@ type group struct {
 	// Leader state.  Reset on election.
 	nextIndex  map[string]int // default: lastLogIndex + 1
 	matchIndex map[string]int // default: 0
+
+	// a List of *pendingCall
+	pendingCalls list.List
 }
 
 func newGroup(name string, members []NodeID) *group {
 	return &group{
-		name:       name,
-		members:    members,
+		name: name,
+		metadata: &GroupMetadata{
+			Members: members,
+		},
 		role:       follower,
 		nextIndex:  make(map[string]int),
 		matchIndex: make(map[string]int),
@@ -227,18 +246,22 @@ type state struct {
 	*MultiRaft
 	rand          *rand.Rand
 	groups        map[string]*group
+	dirtyGroups   map[string]*group
 	nodes         map[NodeID]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
+	writeTask     *writeTask
 }
 
 func newState(m *MultiRaft) *state {
 	return &state{
-		MultiRaft: m,
-		rand:      util.NewPseudoRand(),
-		groups:    make(map[string]*group),
-		nodes:     make(map[NodeID]*node),
-		responses: make(chan *rpc.Call, 100),
+		MultiRaft:   m,
+		rand:        util.NewPseudoRand(),
+		groups:      make(map[string]*group),
+		dirtyGroups: make(map[string]*group),
+		nodes:       make(map[NodeID]*node),
+		responses:   make(chan *rpc.Call, 100),
+		writeTask:   newWriteTask(m.Storage),
 	}
 }
 
@@ -261,8 +284,15 @@ func (s *state) nextElectionTimer() *time.Timer {
 
 func (s *state) start() {
 	glog.V(1).Infof("node %v starting", s.id)
+	go s.writeTask.start()
 	for {
 		electionTimer := s.nextElectionTimer()
+		var writeReady chan struct{}
+		if len(s.dirtyGroups) > 0 {
+			writeReady = s.writeTask.ready
+		} else {
+			writeReady = nil
+		}
 		glog.V(6).Infof("node %v: selecting", s.id)
 		select {
 		case op := <-s.ops:
@@ -300,6 +330,12 @@ func (s *state) start() {
 				s.strictErrorLog("unknown rpc response: %#v", call.Reply)
 			}
 
+		case writeReady <- struct{}{}:
+			s.handleWriteReady()
+
+		case resp := <-s.writeTask.out:
+			s.handleWriteResponse(resp)
+
 		case now := <-electionTimer.C:
 			glog.V(6).Infof("node %v: got election timer", s.id)
 			s.handleElectionTimers(now)
@@ -316,15 +352,17 @@ func (s *state) stop() {
 			glog.Warning("error stopping client:", err)
 		}
 	}
+	s.writeTask.stop()
 	close(s.stopped)
 }
 
 func (s *state) createGroup(op *createGroupOp) {
+	glog.V(6).Infof("node %v creating group %s", s.id, op.group.name)
 	if _, ok := s.groups[op.group.name]; ok {
 		op.ch <- util.Errorf("group %s already exists", op.group.name)
 		return
 	}
-	for _, member := range op.group.members {
+	for _, member := range op.group.metadata.Members {
 		if node, ok := s.nodes[member]; ok {
 			node.refCount++
 			continue
@@ -349,29 +387,80 @@ func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteRes
 		call.Done <- call
 		return
 	}
-	if g.votedFor.isSet() && g.votedFor != req.CandidateID {
+	if g.metadata.VotedFor.isSet() && g.metadata.VotedFor != req.CandidateID {
 		resp.VoteGranted = false
 	} else {
 		// TODO: check log positions
-		g.currentTerm = req.Term
+		g.metadata.CurrentTerm = req.Term
 		resp.VoteGranted = true
 	}
-	resp.Term = g.currentTerm
-	call.Done <- call
+	resp.Term = g.metadata.CurrentTerm
+	g.pendingCalls.PushBack(&pendingCall{call, g.metadata.CurrentTerm, -1})
+	s.updateDirtyStatus(g)
 }
 
 func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteResponse) {
 	g := s.groups[req.Group]
-	if resp.Term < g.currentTerm {
+	if resp.Term < g.metadata.CurrentTerm {
 		return
 	}
 	if resp.VoteGranted {
 		g.votes[req.NodeID] = resp.VoteGranted
 	}
-	if g.role == candidate && len(g.votes)*2 > len(g.members) {
+	if g.role == candidate && len(g.votes)*2 > len(g.metadata.Members) {
 		g.role = leader
 		glog.V(1).Infof("node %v becoming leader for group %s", s.id, g.name)
 		hackyTestChannel <- s.id
+	}
+	s.updateDirtyStatus(g)
+}
+
+func (s *state) handleWriteReady() {
+	glog.V(6).Infof("node %v write ready, preparing request", s.id)
+	writeRequest := newWriteRequest()
+	for name, group := range s.dirtyGroups {
+		req := newGroupWriteRequest()
+		writeRequest.groups[name] = req
+		if !group.metadata.Equal(group.persistedMetadata) {
+			copy := *group.metadata
+			req.metadata = &copy
+		}
+	}
+	s.writeTask.in <- writeRequest
+}
+
+func (s *state) handleWriteResponse(response *writeResponse) {
+	glog.V(6).Infof("node %v got write response: %#v", s.id, *response)
+	for name, persistedGroup := range response.groups {
+		g := s.groups[name]
+		if persistedGroup.metadata != nil {
+			g.persistedMetadata = persistedGroup.metadata
+		}
+		if persistedGroup.lastIndex != -1 {
+			g.persistedLastIndex = persistedGroup.lastIndex
+			g.persistedLastTerm = persistedGroup.lastTerm
+		}
+
+		// Resolve any pending RPCs that have been waiting for persistence to catch up.
+		var toDelete []*list.Element
+		for e := g.pendingCalls.Front(); e != nil; e = e.Next() {
+			call := e.Value.(*pendingCall)
+			if g.persistedMetadata == nil || g.persistedLastIndex == -1 {
+				continue
+			}
+			if call.term != -1 && call.term > g.persistedMetadata.CurrentTerm {
+				continue
+			}
+			if call.logIndex != -1 && call.logIndex > g.persistedLastIndex {
+				continue
+			}
+			call.call.Done <- call.call
+			toDelete = append(toDelete, e)
+		}
+		for _, e := range toDelete {
+			g.pendingCalls.Remove(e)
+		}
+		s.updateDirtyStatus(g)
 	}
 }
 
@@ -389,20 +478,34 @@ func (s *state) becomeCandidate(g *group) {
 		panic("cannot transition from leader to candidate")
 	}
 	g.role = candidate
-	g.currentTerm++
-	g.votedFor = s.id
+	g.metadata.CurrentTerm++
+	g.metadata.VotedFor = s.id
 	g.votes = make(map[NodeID]bool)
 	s.updateElectionDeadline(g)
-	for _, id := range g.members {
+	for _, id := range g.metadata.Members {
 		node := s.nodes[id]
 		node.client.requestVote(&RequestVoteRequest{
 			NodeID:       id,
 			Group:        g.name,
-			Term:         g.currentTerm,
+			Term:         g.metadata.CurrentTerm,
 			CandidateID:  s.id,
 			LastLogIndex: g.lastLogIndex,
 			LastLogTerm:  g.lastLogTerm,
 		})
+	}
+	s.updateDirtyStatus(g)
+}
+
+// updateDirtyStatus sets the dirty flag for the given group.
+func (s *state) updateDirtyStatus(g *group) {
+	dirty := false
+	if !g.metadata.Equal(g.persistedMetadata) {
+		dirty = true
+	}
+	if dirty {
+		s.dirtyGroups[g.name] = g
+	} else {
+		delete(s.dirtyGroups, g.name)
 	}
 }
 
