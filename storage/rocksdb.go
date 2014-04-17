@@ -21,6 +21,7 @@ import (
 	"flag"
 	"syscall"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
@@ -56,17 +57,23 @@ func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 
 // put sets the given key to the value provided.
 func (r *RocksDB) put(key Key, value Value) error {
-	return nil
+	return util.Error("put unimplemented")
 }
 
 // get returns the value for the given key, nil otherwise.
 func (r *RocksDB) get(key Key) (Value, error) {
-	return Value{}, nil
+	return Value{}, util.Error("get unimplemented")
+}
+
+// scan returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive).
+func (r *RocksDB) scan(start, end Key, max int) ([]KeyValue, error) {
+	return []KeyValue{}, util.Error("scan unimplemented")
 }
 
 // del removes the item from the db with the given key.
 func (r *RocksDB) del(key Key) error {
-	return nil
+	return util.Error("del unimplemented")
 }
 
 // capacity queries the underlying file system for disk capacity

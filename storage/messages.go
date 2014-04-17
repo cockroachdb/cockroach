@@ -88,6 +88,7 @@ type GetRequest struct {
 }
 
 // A GetResponse is the return value from the Get() method.
+// If the key doesn't exist, returns nil for Value.Bytes.
 type GetResponse struct {
 	ResponseHeader
 	Value Value

@@ -184,16 +184,7 @@ func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *GetRequest, reply *GetResponse) {
-	val, err := r.engine.get(args.Key)
-	if err != nil {
-		reply.Error = err
-		return
-	} else if val.Bytes == nil {
-		reply.Error = util.Errorf("key %q not found", args.Key)
-		return
-	} else {
-		reply.Value.Bytes = val.Bytes
-	}
+	reply.Value, reply.Error = r.engine.get(args.Key)
 }
 
 // Put sets the value for a specified key. Conditional puts are supported.
@@ -231,12 +222,7 @@ func (r *Range) Put(args *PutRequest, reply *PutResponse) {
 // returns the newly incremented value (encoded as varint64). If no
 // value exists for the key, zero is incremented.
 func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
-	newVal, err := increment(r.engine, args.Key, args.Increment, args.Timestamp)
-	if err != nil {
-		reply.Error = err
-		return
-	}
-	reply.NewValue = newVal
+	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment, args.Timestamp)
 }
 
 // Delete deletes the key and value specified by key.

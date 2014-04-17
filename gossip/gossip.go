@@ -127,8 +127,7 @@ func New(rpcServer *rpc.Server) *Gossip {
 }
 
 // SetBootstrap initializes the set of gossip node addresses used to
-// bootstrap the gossip network. bootstrap should be specified as a
-// comma-separated list of bootstrap hosts.
+// bootstrap the gossip network.
 func (g *Gossip) SetBootstrap(bootstraps []net.Addr) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
