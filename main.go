@@ -16,15 +16,23 @@
 package main
 
 import (
-	"flag"
+	"os"
 
+	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/golang/glog"
 )
 
 func main() {
-	flag.Parse()
-	if err := server.ListenAndServe(); err != nil {
+	c := commander.Commander{
+		Name: "cockroach",
+		Commands: []*commander.Command{
+			server.CmdStart,
+			server.CmdInit,
+		},
+	}
+
+	if err := c.Run(os.Args[1:]); err != nil {
 		glog.Fatal(err)
 	}
 }

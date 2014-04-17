@@ -22,40 +22,40 @@ import "sync"
 // InMem a simple, in-memory key-value store.
 type InMem struct {
 	sync.RWMutex
-	cacheSize int64
-	data      map[string]string
+	maxSize int64
+	data    map[string]string
 }
 
 // NewInMem allocates and returns a new InMem object.
-func NewInMem(cacheSize int64) *InMem {
+func NewInMem(maxSize int64) *InMem {
 	return &InMem{
-		cacheSize: cacheSize,
-		data:      make(map[string]string),
+		maxSize: maxSize,
+		data:    make(map[string]string),
 	}
 }
 
 // put sets the given key to the value provided.
-func (b *InMem) put(key Key, value Value) error {
-	b.Lock()
-	defer b.Unlock()
-	b.data[string(key)] = string(value.Bytes)
+func (in *InMem) put(key Key, value Value) error {
+	in.Lock()
+	defer in.Unlock()
+	in.data[string(key)] = string(value.Bytes)
 	return nil
 }
 
 // get returns the value for the given key, nil otherwise.
-func (b *InMem) get(key Key) (Value, error) {
-	b.RLock()
-	defer b.RUnlock()
+func (in *InMem) get(key Key) (Value, error) {
+	in.RLock()
+	defer in.RUnlock()
 	return Value{
-		Bytes: []byte(b.data[string(key)]),
+		Bytes: []byte(in.data[string(key)]),
 	}, nil
 }
 
 // del removes the item from the db with the given key.
-func (b *InMem) del(key Key) error {
-	b.Lock()
-	defer b.Unlock()
-	delete(b.data, string(key))
+func (in *InMem) del(key Key) error {
+	in.Lock()
+	defer in.Unlock()
+	delete(in.data, string(key))
 	return nil
 }
 
@@ -63,7 +63,10 @@ func (b *InMem) del(key Key) error {
 // computed size of cached keys and values. The actual free space may
 // not be entirely accurate due to object storage costs and other
 // internal glue.
-func (r *InMem) capacity() (*DiskCapacity, error) {
-	capacity := &DiskCapacity{}
-	return capacity, nil
+func (in *InMem) capacity() (StoreCapacity, error) {
+	return StoreCapacity{
+		Capacity:  in.maxSize,
+		Available: in.maxSize, // TODO(spencer): fix this.
+		DiskType:  MEM,
+	}, nil
 }

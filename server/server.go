@@ -26,43 +26,131 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
+	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
 var (
 	httpAddr = flag.String("http_addr", "localhost:8080", "TCP network address to bind to for HTTP traffic")
 	rpcAddr  = flag.String("rpc_addr", "localhost:8081", "TCP network address to bind to for RPC traffic")
+
+	// dataDirs is specified to enable durable storage via
+	// RocksDB-backed key-value stores. Memory-backed key value stores
+	// may be optionally specified via a comma-separated list of integer
+	// sizes.
+	dataDirs = flag.String("data_dirs", "", "specify a comma-separated list of disk "+
+		"type and path or integer size in bytes. For solid state disks, ssd=<path>; "+
+		"for spinning disks, hdd=<path>; for in-memory, mem=<size in bytes>. E.g. "+
+		"--data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=")
+
+	// Regular expression for capturing data directory specifications.
+	dataDirRE = regexp.MustCompile(`^(mem)=([\d]*)|(ssd|hdd)=(.*)$`)
 )
+
+var CmdStart = &commander.Command{
+	UsageLine: "start",
+	Short:     "start node by joining the gossip network",
+	Long: fmt.Sprintf(`
+Start Cockroach node by joining the gossip network and exporting key
+ranges stored on physical device(s). The gossip network is joined by
+contacting one or more well-known hosts specified by the
+--gossip_bootstrap command line flag. Every node should be run with
+the same list of bootstrap hosts to guarantee a connected network.  An
+alternate approach is to use a single host for --gossip_bootstrap and
+round-robin DNS.
+
+Each node exports data from one or more physical devices. These
+devices are specified via the --data_dirs command line flag. This is a
+comma-separated list of paths to storage directories. Although the
+paths should be specified to correspond uniquely to physical devices,
+this requirement isn't strictly enforced.
+
+A node exports an HTTP API with the following endpoints:
+
+  Health check:           http://%s/healthz
+  Remote shutdown:        http://%s/quitquitquit
+  Key-value REST:         http://%s%s
+  Structured Schema REST: http://%s%s
+`, *httpAddr, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
+	Run: runStart,
+}
 
 type server struct {
 	mux            *http.ServeMux
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
-	node           *storage.Node
 	kvDB           kv.DB
 	kvREST         *kv.RESTServer
+	node           *Node
 	structuredDB   *structured.DB
 	structuredREST *structured.RESTServer
 }
 
-// ListenAndServe starts an HTTP server at --http_addr and an RPC server
+// runStart starts an HTTP server at --http_addr and an RPC server
 // at --rpc_addr. This method won't return unless the server is shutdown
 // or a non-temporary error occurs on the HTTP server connection.
-func ListenAndServe() error {
+func runStart(cmd *commander.Command, args []string) {
+	glog.Info("starting cockroach cluster")
 	s, err := newServer()
 	if err != nil {
-		return err
+		glog.Fatal(err)
 	}
-	err = s.start()
+	err = s.start(nil /* init engines from --data_dirs */)
 	s.stop()
-	return err
+	if err != nil {
+		glog.Fatal(err)
+	}
+}
+
+// initEngines interprets the --data_dirs command line flag to
+// initialize a slice of storage.Engine objects.
+func initEngines() ([]storage.Engine, error) {
+	engines := make([]storage.Engine, 0, 1)
+	for _, dir := range strings.Split(*dataDirs, ",") {
+		// Error if regexp doesn't match.
+		matches := dataDirRE.FindStringSubmatch(dir)
+		if matches == nil || len(matches) != 3 {
+			return nil, util.Errorf("invalid data directory %q", dir)
+		}
+
+		var engine storage.Engine
+		var err error
+		if matches[1] == "mem" {
+			size, err := strconv.ParseInt(matches[2], 10, 64)
+			if err != nil {
+				glog.Warningf("unable to init in-memory storage %q; skipping...will not serve data", dir)
+			}
+			engine = storage.NewInMem(size)
+		} else {
+			var typ storage.DiskType
+			switch matches[2] {
+			case "hdd":
+				typ = storage.HDD
+			case "ssd":
+				typ = storage.SSD
+			default:
+				return nil, util.Errorf("unhandled disk type %q", matches[1])
+			}
+			engine, err = storage.NewRocksDB(typ, matches[2])
+			if err != nil {
+				glog.Warningf("unable to init rocksdb with data dir %q; skipping...will not serve data", matches[2])
+				continue
+			}
+		}
+		engines = append(engines, engine)
+	}
+
+	return engines, nil
 }
 
 func newServer() (*server, error) {
@@ -76,21 +164,34 @@ func newServer() (*server, error) {
 	}
 
 	s.gossip = gossip.New(s.rpc)
-	s.node = storage.NewNode(s.rpc, s.gossip)
 	s.kvDB = kv.NewDB(s.gossip)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
+	s.node = NewNode(s.rpc, s.kvDB, s.gossip)
 	s.structuredDB = structured.NewDB(s.kvDB)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 
 	return s, nil
 }
 
-func (s *server) start() error {
-	glog.Infoln("Starting RPC server at", *rpcAddr)
+func (s *server) start(engines []storage.Engine) error {
 	go s.rpc.ListenAndServe() // blocks, so launch in a goroutine
+	glog.Infoln("Started RPC server at", *rpcAddr)
 
-	glog.Infoln("Starting gossip instance")
 	s.gossip.Start()
+	glog.Infoln("Started gossip instance")
+
+	// Init the engines specified via command line flags if not supplied.
+	if engines == nil {
+		var err error
+		engines, err = initEngines()
+		if err != nil {
+			return err
+		}
+	}
+	if err := s.node.start(engines); err != nil {
+		return err
+	}
+	glog.Infoln("Initialized %d storage engines", len(engines))
 
 	s.initHTTP()
 	return http.ListenAndServe(*httpAddr, s)
@@ -98,12 +199,15 @@ func (s *server) start() error {
 
 func (s *server) initHTTP() {
 	glog.Infoln("Starting HTTP server at", *httpAddr)
-	s.mux.HandleFunc("/healthz", s.handleHealthz)
+	s.mux.HandleFunc("/_admin/healthz", s.handleHealthz)
 	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)
 }
 
 func (s *server) stop() {
+	// TODO(spencer): the http server should exit; this functionality is
+	// slated for go 1.3.
+	s.node.stop()
 	s.gossip.Stop()
 	s.rpc.Close()
 }

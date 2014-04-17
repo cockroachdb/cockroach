@@ -46,19 +46,19 @@ func init() {
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
-	addr        net.Addr         // Peer node network address
-	rpcClient   *rpc.Client      // RPC client
-	forwardAddr net.Addr         // Set if disconnected with an alternate addr
-	lastFresh   int64            // Last wall time client received fresh info
-	err         error            // Set if client experienced an error
-	closer      chan interface{} // Client shutdown channel
+	addr        net.Addr      // Peer node network address
+	rpcClient   *rpc.Client   // RPC client
+	forwardAddr net.Addr      // Set if disconnected with an alternate addr
+	lastFresh   int64         // Last wall time client received fresh info
+	err         error         // Set if client experienced an error
+	closer      chan struct{} // Client shutdown channel
 }
 
 // newClient creates and returns a client struct.
 func newClient(addr net.Addr) *client {
 	return &client{
 		addr:   addr,
-		closer: make(chan interface{}, 1),
+		closer: make(chan struct{}, 1),
 	}
 }
 

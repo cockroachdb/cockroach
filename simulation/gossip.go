@@ -192,8 +192,8 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 		}
 
 		var sentinelAge int64
-		if val, err := node.GetInfo(gossip.SentinelGossip); err != nil {
-			glog.Infof("error getting info for sentinel gossip key %q: %s", gossip.SentinelGossip, err)
+		if val, err := node.GetInfo(gossip.KeySentinel); err != nil {
+			glog.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
 			sentinelAge = int64(cycle) - val.(int64)
 		}

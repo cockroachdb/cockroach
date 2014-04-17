@@ -121,11 +121,11 @@ type IncrementRequest struct {
 }
 
 // An IncrementResponse is the return value from the Increment
-// method. It specifies the new value after increment. If the value
-// could not be decoded as specified, Error will be set.
+// method. The new value after increment is specified in NewValue. If
+// the value could not be decoded as specified, Error will be set.
 type IncrementResponse struct {
 	ResponseHeader
-	NewValue Value // NewValue is varint64 encoded
+	NewValue int64
 }
 
 // A DeleteRequest is arguments to the Delete() method.

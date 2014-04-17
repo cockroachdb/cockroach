@@ -92,11 +92,15 @@ func newInfoStore(nodeAddr net.Addr) *infoStore {
 func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *info {
 	is.seqGen++
 	now := monotonicUnixNano()
+	ttlStamp := now + int64(ttl)
+	if ttl == 0*time.Second {
+		ttlStamp = math.MaxInt64
+	}
 	return &info{
 		Key:       key,
 		Val:       val,
 		Timestamp: now,
-		TTLStamp:  now + int64(ttl),
+		TTLStamp:  ttlStamp,
 		NodeAddr:  is.NodeAddr,
 		peerAddr:  is.NodeAddr,
 		seq:       is.seqGen,
@@ -135,8 +139,12 @@ func (is *infoStore) getGroupInfos(prefix string) infoArray {
 //
 // REQUIRES: group.prefix is not already in the info store's groups map.
 func (is *infoStore) registerGroup(g *group) error {
-	if _, ok := is.Groups[g.Prefix]; ok {
-		return util.Errorf("group %q already in group map", g.Prefix)
+	if g2, ok := is.Groups[g.Prefix]; ok {
+		if g.Prefix != g2.Prefix || g.Limit != g2.Limit || g.TypeOf != g2.TypeOf {
+			return util.Errorf("group %q already in group map with different settings %v vs. %v",
+				g.Prefix, g, g2)
+		}
+		return nil
 	}
 	is.Groups[g.Prefix] = g
 	return nil

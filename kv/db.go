@@ -18,7 +18,10 @@
 package kv
 
 import (
+	"bytes"
+	"encoding/gob"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -40,6 +43,43 @@ type DB interface {
 	ReapQueue(args *storage.ReapQueueRequest) <-chan *storage.ReapQueueResponse
 	EnqueueUpdate(args *storage.EnqueueUpdateRequest) <-chan *storage.EnqueueUpdateResponse
 	EnqueueMessage(args *storage.EnqueueMessageRequest) <-chan *storage.EnqueueMessageResponse
+}
+
+// GetI fetches the value at the specified key and deserializes it
+// into "value". Returns true on success or false if the key was not
+// found. The timestamp of the write is returned as the second return
+// value. The first result parameter is "ok", true if a value was
+// found for the requested key; false otherwise. An error is returned
+// on error fetching from underlying storage or deserializing value.
+func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
+	gr := <-db.Get(&storage.GetRequest{Key: key})
+	if gr.Error != nil {
+		return false, 0, gr.Error
+	}
+	if len(gr.Value.Bytes) == 0 {
+		return false, 0, nil
+	}
+	if err := gob.NewDecoder(bytes.NewBuffer(gr.Value.Bytes)).Decode(value); err != nil {
+		return true, gr.Value.Timestamp, err
+	}
+	return true, gr.Value.Timestamp, nil
+}
+
+// PutI sets the given key to the serialized byte string of the value
+// provided. Uses current time and default expiration.
+func PutI(db DB, key storage.Key, value interface{}) error {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
+		return err
+	}
+	pr := <-db.Put(&storage.PutRequest{
+		Key: key,
+		Value: storage.Value{
+			Bytes:     buf.Bytes(),
+			Timestamp: time.Now().UnixNano(),
+		},
+	})
+	return pr.Error
 }
 
 // A DistDB provides methods to access Cockroach's monolithic,

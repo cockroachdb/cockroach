@@ -18,15 +18,9 @@
 package kv
 
 import (
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
-
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/golang/glog"
 )
 
 var (
@@ -35,9 +29,6 @@ var (
 )
 
 type kvTestServer struct {
-	rpc        *rpc.Server
-	gossip     *gossip.Gossip
-	node       *storage.Node
 	db         DB
 	rest       *RESTServer
 	httpServer *httptest.Server
@@ -45,23 +36,12 @@ type kvTestServer struct {
 
 func startServer() *kvTestServer {
 	once.Do(func() {
-		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-		if err != nil {
-			glog.Fatal(err)
-		}
-		server = &kvTestServer{
-			rpc: rpc.NewServer(addr),
-		}
-		server.gossip = gossip.New(server.rpc)
-		server.gossip.SetBootstrap([]net.Addr{server.rpc.Addr})
-		server.node = storage.NewNode(server.rpc, server.gossip)
+		server = &kvTestServer{}
 		server.db = NewLocalDB()
 		server.rest = NewRESTServer(server.db)
 		server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			server.rest.HandleAction(w, r)
 		}))
-		server.gossip.Start()
-		go server.rpc.ListenAndServe() // blocks, so launch in a goroutine
 	})
 	return server
 }

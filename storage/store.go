@@ -17,38 +17,131 @@
 
 package storage
 
-import "sync"
+import (
+	"strconv"
+	"sync"
+	"time"
 
-// A store implements the key-value interface, but coordinates
-// writes between a raft consensus group.
-type store struct {
-	engine    Engine            // The underlying key-value store.
-	allocator *allocator        // Makes allocation decisions.
-	mu        sync.Mutex        // Protects the ranges map.
-	ranges    map[string]*Range // Map of ranges by range start key.
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/util"
+)
+
+// Constants for store-reserved keys. These keys are prefixed with
+// three null characters so that they precede all global keys in the
+// store's map. Data at these keys is local to this store and is not
+// replicated via raft nor is it available via access to the global
+// key-value store.
+var (
+	// keyStoreIdent store immutable identifier for this store, created
+	// when store is first bootstrapped.
+	keyStoreIdent = Key("\x00\x00\x00store-ident")
+	// keyRangeIDGenerator is a range ID generator sequence. Range IDs
+	// must be unique per node ID.
+	keyRangeIDGenerator = Key("\x00\x00\x00range-id-generator")
+	// keyRangeMetadataPrefix is the prefix for keys storing range metadata.
+	// The value is a struct of type RangeMetadata.
+	keyRangeMetadataPrefix = Key("\x00\x00\x00range-")
+)
+
+// rangeKey creates a range key as the concatenation of the
+// rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
+func rangeKey(rangeID int64) Key {
+	return MakeKey(keyRangeMetadataPrefix, Key(strconv.FormatInt(rangeID, 16)))
 }
 
-// newStore returns a new instance of a store.
-func newStore(engine Engine, allocator *allocator) *store {
-	return &store{
+// A StoreIdent uniquely identifies a store in the cluster. The
+// StoreIdent is written to the underlying storage engine at a
+// store-reserved system key (keyStoreIdent).
+type StoreIdent struct {
+	ClusterID string
+	NodeID    int32
+	StoreID   int32
+}
+
+// A Store maintains a map of ranges by start key. A Store corresponds
+// to one physical device.
+type Store struct {
+	Ident     StoreIdent
+	engine    Engine           // The underlying key-value store
+	allocator *allocator       // Makes allocation decisions
+	gossip    *gossip.Gossip   // Passed to new ranges
+	mu        sync.Mutex       // Protects the ranges map
+	ranges    map[int64]*Range // Map of ranges by range ID
+}
+
+// NewStore returns a new instance of a store.
+func NewStore(engine Engine, gossip *gossip.Gossip) *Store {
+	return &Store{
 		engine:    engine,
-		allocator: allocator,
-		ranges:    make(map[string]*Range),
+		allocator: &allocator{},
+		gossip:    gossip,
+		ranges:    make(map[int64]*Range),
 	}
 }
 
-// getRange fetches a range by looking at Replica.StartKey. The range is
-// fetched quickly if it's already been loaded and is in the ranges
-// map; otherwise, an instance of the range is instantiated from the
-// underlying store.
-func (s *store) getRange(r *Replica) (*Range, error) {
-	if rng, ok := s.ranges[string(r.RangeKey)]; ok {
+// Init reads the StoreIdent from the underlying engine.
+func (s *Store) Init(gossip *gossip.Gossip) error {
+	_, _, err := getI(s.engine, keyStoreIdent, &s.Ident)
+	if err != nil {
+		return err
+	}
+
+	// TODO(spencer): scan through all range metadata and instantiate
+	//   ranges. Right now we just get range id hardcoded as 1.
+	var meta RangeMetadata
+	_, _, err = getI(s.engine, rangeKey(1), &meta)
+	if err != nil {
+		return err
+	}
+	rng := NewRange(meta, s.engine, s.allocator, gossip)
+	s.ranges[meta.RangeID] = rng
+
+	return nil
+}
+
+// Bootstrap writes a new store ident to the underlying engine.
+func (s *Store) Bootstrap(ident StoreIdent) error {
+	s.Ident = ident
+	return putI(s.engine, keyStoreIdent, s.Ident)
+}
+
+// GetRange fetches a range by ID. The range is fetched quickly if
+// it's already been loaded and is in the ranges map; otherwise, an
+// instance of the range is instantiated from the underlying store.
+func (s *Store) GetRange(rangeID int64) (*Range, error) {
+	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
 	}
-	rng, err := NewRange(r.RangeKey, s.engine, s.allocator)
+	return nil, util.Errorf("range %d not found on store", rangeID)
+}
+
+// CreateRange allocates a new range ID and stores range metadata.
+// On success, returns the new range.
+func (s *Store) CreateRange(startKey, endKey Key) (*Range, error) {
+	rangeID, err := increment(s.engine, keyRangeIDGenerator, 1, time.Now().UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	s.ranges[string(r.RangeKey)] = rng
+	if ok, _, _ := getI(s.engine, rangeKey(rangeID), nil); ok {
+		return nil, util.Error("newly allocated range id already in use")
+	}
+	// RangeMetadata is stored local to this store only. It is neither
+	// replicated via raft nor available via the global kv store.
+	meta := RangeMetadata{
+		RangeID:  rangeID,
+		StartKey: startKey,
+		EndKey:   endKey,
+	}
+	err = putI(s.engine, rangeKey(rangeID), meta)
+	if err != nil {
+		return nil, err
+	}
+	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
+	s.ranges[rangeID] = rng
 	return rng, nil
+}
+
+// Capacity returns the capacity of the underlying storage engine.
+func (s *Store) Capacity() (StoreCapacity, error) {
+	return s.engine.capacity()
 }

@@ -18,16 +18,19 @@
 package storage
 
 import (
+	"net"
+
 	"github.com/cockroachdb/cockroach/gossip"
 	yaml "gopkg.in/yaml.v1"
 )
 
-// Replica describes a replica location by address (host:port), disk
-// (device name) and range start key.
+// Replica describes a replica location by node ID (corresponds to a
+// host:port via lookup on gossip network), store ID (corresponds to
+// a physical device, unique per node) and range ID.
 type Replica struct {
-	Addr     string // host:port.
-	Disk     string // e.g. ssd1.
-	RangeKey []byte // Range start key.
+	NodeID  int32
+	StoreID int32
+	RangeID int64
 }
 
 // DiskType is the type of a disk that a Store is storing data on.
@@ -38,36 +41,40 @@ const (
 	SSD DiskType = iota
 	// HDD = Spinning disk
 	HDD
+	// MEM = DRAM
+	MEM
 )
 
-// DiskCapacity contains capacity information for a storage device.
-type DiskCapacity struct {
-	Capacity  uint64
-	Available uint64
+// StoreCapacity contains capacity information for a storage device.
+type StoreCapacity struct {
+	Capacity  int64
+	Available int64
+	DiskType  DiskType
 }
 
-// NodeConfig holds configuration about the node.
-type NodeConfig struct {
-	Address    string
-	DataCenter string
+// NodeAttributes holds details on node physical/network topology.
+type NodeAttributes struct {
+	NodeID     int32
+	Address    net.Addr
+	Datacenter string
 	PDU        string
 	Rack       string
 }
 
-// AvailableDiskConfig holds information about a disk that is available in a RoachNode.
-type AvailableDiskConfig struct {
-	Node         NodeConfig
-	Disk         string
-	DiskCapacity DiskCapacity
-	DiskType     DiskType
+// StoreAttributes holds store information including physical/network
+// topology via NodeAttributes and disk type & capacity data.
+type StoreAttributes struct {
+	StoreID    int32
+	Attributes NodeAttributes
+	Capacity   StoreCapacity
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
 	// Replicas is a map from datacenter name to a slice of disk types.
 	Replicas      map[string]([]DiskType) `yaml:"replicas,omitempty"`
-	RangeMinBytes uint64                  `yaml:"range_min_bytes,omitempty"`
-	RangeMaxBytes uint64                  `yaml:"range_max_bytes,omitempty"`
+	RangeMinBytes int64                   `yaml:"range_min_bytes,omitempty"`
+	RangeMaxBytes int64                   `yaml:"range_max_bytes,omitempty"`
 }
 
 // ParseZoneConfig parses a YAML serialized ZoneConfig.
@@ -82,12 +89,12 @@ func (z *ZoneConfig) ToYAML() ([]byte, error) {
 	return yaml.Marshal(z)
 }
 
-// Less compares two AvailableDiskConfigs based on percentage of disk available.
-func (a AvailableDiskConfig) Less(b gossip.Ordered) bool {
-	return a.DiskCapacity.PercentAvail() < b.(AvailableDiskConfig).DiskCapacity.PercentAvail()
+// Less compares two StoreAttributess based on percentage of disk available.
+func (a StoreAttributes) Less(b gossip.Ordered) bool {
+	return a.Capacity.PercentAvail() < b.(StoreAttributes).Capacity.PercentAvail()
 }
 
 // PercentAvail computes the percentage of disk space that is available.
-func (d DiskCapacity) PercentAvail() float64 {
-	return float64(d.Available) / float64(d.Capacity)
+func (sc StoreCapacity) PercentAvail() float64 {
+	return float64(sc.Available) / float64(sc.Capacity)
 }

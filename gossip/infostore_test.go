@@ -19,6 +19,7 @@ package gossip
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 )
@@ -52,9 +53,25 @@ func TestRegisterGroup(t *testing.T) {
 		t.Error("shouldn't belong to a group")
 	}
 
-	// Try to register a group that's already been registered.
-	if is.registerGroup(groupA) == nil {
-		t.Error("should not be able to register group A twice")
+	// Try to register a group that's already been registered; will
+	// succeed if identical.
+	if is.registerGroup(groupA) != nil {
+		t.Error("should be able to register group A twice")
+	}
+	// Now change the group type and try again.
+	groupAAlt := newGroup("a", 1, MaxGroup)
+	if is.registerGroup(groupAAlt) == nil {
+		t.Error("should not be able to register group A again with different properties")
+	}
+}
+
+// TestZeroDuration verifies that specifying a zero duration sets
+// TTLStamp to max int64.
+func TestZeroDuration(t *testing.T) {
+	is := newInfoStore(emptyAddr)
+	info := is.newInfo("a", float64(1), 0*time.Second)
+	if info.TTLStamp != math.MaxInt64 {
+		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
 	}
 }
 

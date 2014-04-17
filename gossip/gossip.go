@@ -78,12 +78,6 @@ var (
 )
 
 const (
-	// SentinelGossip is gossiped info which must not expire or node
-	// considers itself partitioned and will retry with bootstrap
-	// hosts.
-	SentinelGossip = "meta0"
-	// NodeCountGossip is the count of gossip nodes in the network.
-	NodeCountGossip = "nodeCount"
 	// MaxPeers is the maximum number of connected gossip peers.
 	MaxPeers = 10
 	// defaultNodeCount is the default number of nodes in the gossip
@@ -106,6 +100,8 @@ const (
 // entre to the gossip network.
 type Gossip struct {
 	Name         string             // Optional node name
+	Connected    chan struct{}      // Closed upon initial connection
+	hasConnected bool               // Set first time network is connected
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
@@ -119,6 +115,7 @@ type Gossip struct {
 // Cockroach RPC server to initialize the gossip service endpoint.
 func New(rpcServer *rpc.Server) *Gossip {
 	g := &Gossip{
+		Connected:    make(chan struct{}, 1),
 		server:       newServer(rpcServer, *gossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
@@ -186,7 +183,7 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 // RegisterGroup registers a new group with info store. Returns an
 // error if the group was already registered.
 func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error {
-	g.mu.Lock()
+	g.mu.Lock() // Copyright 2014 The Cockroach Authors.
 	defer g.mu.Unlock()
 	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
 }
@@ -249,7 +246,7 @@ func (g *Gossip) Stop() <-chan error {
 func (g *Gossip) maxToleratedHops() uint32 {
 	// Get info directly as we have mutex held here.
 	var nodeCount = int64(defaultNodeCount)
-	if info := g.is.getInfo(NodeCountGossip); info != nil {
+	if info := g.is.getInfo(KeyNodeCount); info != nil {
 		nodeCount = info.Val.(int64)
 	}
 	return uint32(math.Ceil(math.Log(float64(nodeCount))/math.Log(float64(MaxPeers))))*2 + 1
@@ -319,7 +316,7 @@ func (g *Gossip) bootstrap() {
 		if avail.len() > 0 {
 			// Check whether or not we need bootstrap.
 			haveClients := g.outgoing.len() > 0
-			haveSentinel := g.is.getInfo(SentinelGossip) != nil
+			haveSentinel := g.is.getInfo(KeySentinel) != nil
 			if !haveClients || !haveSentinel {
 				// Select a bootstrap address at random and start client.
 				addr := avail.selectRandom()
@@ -389,9 +386,12 @@ func (g *Gossip) manage() {
 		if g.outgoing.len() == 0 && g.filterExtant(g.bootstraps).len() > 0 {
 			glog.Infof("no outgoing hosts; signaling bootstrap")
 			g.stalled.Signal()
-		} else if g.is.getInfo(SentinelGossip) == nil {
-			glog.Infof("missing sentinel gossip %s; assuming partition and reconnecting", SentinelGossip)
+		} else if g.is.getInfo(KeySentinel) == nil {
+			glog.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
 			g.stalled.Signal()
+		} else if !g.hasConnected {
+			g.hasConnected = true
+			close(g.Connected)
 		}
 
 		// The exit condition.

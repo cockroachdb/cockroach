@@ -26,6 +26,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/golang/glog"
 )
 
@@ -41,9 +42,12 @@ func startServer() *server {
 		if err != nil {
 			glog.Fatal(err)
 		}
+		engines := []storage.Engine{storage.NewInMem(1 << 20)}
+		BootstrapCluster(engines[0])
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr})
-		//s.node.InitCluster()
-		go s.start() // TODO(spencer): should shutdown server.
+		go func() {
+			glog.Fatal(s.start(engines)) // TODO(spencer): should shutdown server.
+		}()
 		glog.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
 	})
 	return s
@@ -53,12 +57,12 @@ func resetTestData() {
 	// TODO(spencer): remove all data files once rocksdb is hooked up.
 }
 
-// TestHealthz verifies that /healthz does, in fact, return "ok"
+// TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
 	startServer()
 	defer resetTestData()
-	url := "http://" + *httpAddr + "/healthz"
+	url := "http://" + *httpAddr + "/_admin/healthz"
 	resp, err := http.Get(url)
 	if err != nil {
 		t.Fatalf("error requesting healthz at %s: %s", url, err)
@@ -74,7 +78,7 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-// TestGzip hits the /healthz endpoint while explicitly disabling
+// TestGzip hits the /_admin/healthz endpoint while explicitly disabling
 // decompression on a custom client's Transport and setting it
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
@@ -86,7 +90,7 @@ func TestGzip(t *testing.T) {
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+*httpAddr+"/healthz", nil)
+	req, err := http.NewRequest("GET", "http://"+*httpAddr+"/_admin/healthz", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %s", err)
 	}

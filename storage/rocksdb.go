@@ -18,20 +18,34 @@
 package storage
 
 import (
+	"flag"
 	"syscall"
 
 	"github.com/golang/glog"
 )
 
+const (
+	// defaultCacheSize is the default value for the cacheSize command line flag.
+	defaultCacheSize = 1 << 30 // GB
+)
+
+var (
+	// cacheSize is the amount of memory in bytes to use for caching data.
+	// The value is split evenly between the stores if there are more than one.
+	cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes for "+
+		"caches, shared evenly if there are multiple storage devices")
+)
+
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	dir  string // The data directory
-	name string // The device name
+	typ DiskType // HDD or SSD
+	dir string   // The data directory
 }
 
 // NewRocksDB allocates and returns a new InMem object.
-func NewRocksDB(dir string) (*RocksDB, error) {
+func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 	r := &RocksDB{
+		typ: typ,
 		dir: dir,
 	}
 	if _, err := r.capacity(); err != nil {
@@ -57,21 +71,15 @@ func (r *RocksDB) del(key Key) error {
 
 // capacity queries the underlying file system for disk capacity
 // information.
-func (r *RocksDB) capacity() (*DiskCapacity, error) {
+func (r *RocksDB) capacity() (StoreCapacity, error) {
 	var fs syscall.Statfs_t
+	var capacity StoreCapacity
 	if err := syscall.Statfs(r.dir, &fs); err != nil {
-		return nil, err
+		return capacity, err
 	}
 	glog.Infof("stat filesystem: %v", fs)
-	if r.name == "" {
-		// TODO(spencer): set name.
-	}
-
-	cap := uint64(fs.Bsize) * fs.Blocks
-	avail := uint64(fs.Bsize) * fs.Bavail
-	capacity := &DiskCapacity{
-		Capacity:  cap,
-		Available: avail,
-	}
+	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
+	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
+	capacity.DiskType = r.typ
 	return capacity, nil
 }
