@@ -34,7 +34,7 @@ type RangeMetadata struct {
 	RangeID  int64
 	StartKey Key
 	EndKey   Key
-	Replicas []Replica
+	Replicas RangeLocations
 }
 
 // A Range is a contiguous keyspace with writes managed via an

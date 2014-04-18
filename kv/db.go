@@ -149,7 +149,7 @@ func (db *DistDB) lookupMeta1(key storage.Key) (*storage.RangeLocations, error) 
 		return nil, err
 	}
 	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
-	return db.lookupMetadata(metadataKey, info.([]storage.Replica))
+	return db.lookupMetadata(metadataKey, info.(storage.RangeLocations).Replicas)
 }
 
 func (db *DistDB) lookupMeta2(key storage.Key) (*storage.RangeLocations, error) {
