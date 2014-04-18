@@ -75,9 +75,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// MultiRaft represents a local node in a raft cluster.
+// MultiRaft represents a local node in a raft cluster.  The owner is responsible for consuming
+// the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
+	Events   chan interface{}
 	nodeID   NodeID
 	ops      chan interface{}
 	requests chan *rpc.Call
@@ -101,6 +103,7 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 	m := &MultiRaft{
 		Config:   *config,
 		nodeID:   nodeID,
+		Events:   make(chan interface{}, 1000),
 		ops:      make(chan interface{}, 100),
 		requests: make(chan *rpc.Call, 100),
 		stopped:  make(chan struct{}),
@@ -157,6 +160,17 @@ func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 	}
 }
 
+func (m *MultiRaft) sendEvent(event interface{}) {
+	select {
+	case m.Events <- event:
+		return
+	default:
+		// TODO(bdarnell): how should we handle filling up the Event queue?
+		// Is there any place to apply backpressure?
+		panic("MultiRaft.Events backlog reached limit")
+	}
+}
+
 // CreateGroup creates a new consensus group and joins it.  The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
 func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error {
@@ -170,12 +184,14 @@ func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error 
 	return <-op.ch
 }
 
-type role int
+// Role represents the state of the node in a group.
+type Role int
 
+// Nodes can be either followers, candidates, or leaders.
 const (
-	follower role = iota
-	candidate
-	leader
+	RoleFollower Role = iota
+	RoleCandidate
+	RoleLeader
 )
 
 // pendingCall represents an RPC that we should not respond to until we have persisted
@@ -202,7 +218,7 @@ type group struct {
 	persistedLastTerm  int
 
 	// Volatile state
-	role             role
+	role             Role
 	commitIndex      int
 	lastApplied      int
 	electionDeadline time.Time
@@ -222,7 +238,7 @@ func newGroup(groupID GroupID, members []NodeID) *group {
 		metadata: &GroupMetadata{
 			Members: members,
 		},
-		role:       follower,
+		role:       RoleFollower,
 		nextIndex:  make(map[NodeID]int),
 		matchIndex: make(map[NodeID]int),
 	}
@@ -410,10 +426,10 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 	if resp.VoteGranted {
 		g.votes[req.NodeID] = resp.VoteGranted
 	}
-	if g.role == candidate && len(g.votes)*2 > len(g.metadata.Members) {
-		g.role = leader
-		glog.V(1).Infof("node %v becoming leader for group %s", s.nodeID, g.groupID)
-		hackyTestChannel <- s.nodeID
+	if g.role == RoleCandidate && len(g.votes)*2 > len(g.metadata.Members) {
+		g.role = RoleLeader
+		glog.V(1).Infof("node %v becoming leader for group %v", s.nodeID, g.groupID)
+		s.sendEvent(&EventLeaderElection{g.groupID, s.nodeID})
 	}
 	s.updateDirtyStatus(g)
 }
@@ -477,10 +493,10 @@ func (s *state) handleElectionTimers(now time.Time) {
 
 func (s *state) becomeCandidate(g *group) {
 	glog.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.nodeID, g.role, g.groupID)
-	if g.role == leader {
+	if g.role == RoleLeader {
 		panic("cannot transition from leader to candidate")
 	}
-	g.role = candidate
+	g.role = RoleCandidate
 	g.metadata.CurrentTerm++
 	g.metadata.VotedFor = s.nodeID
 	g.votes = make(map[NodeID]bool)
@@ -511,7 +527,3 @@ func (s *state) updateDirtyStatus(g *group) {
 		delete(s.dirtyGroups, g.groupID)
 	}
 }
-
-// Temporary channel so we can test the current incomplete state; will be removed
-// as more of the interface is fleshed out.
-var hackyTestChannel = make(chan NodeID, 1)

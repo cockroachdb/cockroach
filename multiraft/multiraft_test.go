@@ -25,11 +25,12 @@ import (
 type testCluster struct {
 	nodes  []*state
 	clocks []*manualClock
+	events []*eventDemux
 }
 
 func newTestCluster(size int, t *testing.T) *testCluster {
 	transport := NewLocalRPCTransport()
-	cluster := &testCluster{make([]*state, 0), make([]*manualClock, 0)}
+	cluster := &testCluster{}
 	for i := 0; i < size; i++ {
 		clock := newManualClock()
 		storage := NewMemoryStorage()
@@ -46,8 +47,11 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 			t.Fatal(err)
 		}
 		state := newState(mr)
+		demux := newEventDemux(state.Events)
+		demux.start()
 		cluster.nodes = append(cluster.nodes, state)
 		cluster.clocks = append(cluster.clocks, clock)
+		cluster.events = append(cluster.events, demux)
 	}
 	// Let all the states listen before starting any.
 	for _, node := range cluster.nodes {
@@ -60,6 +64,9 @@ func (c *testCluster) stop() {
 	for _, node := range c.nodes {
 		node.Stop()
 	}
+	for _, demux := range c.events {
+		demux.stop()
+	}
 }
 
 func TestInitialLeaderElection(t *testing.T) {
@@ -67,8 +74,9 @@ func TestInitialLeaderElection(t *testing.T) {
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		cluster := newTestCluster(3, t)
+		groupID := GroupID(1)
 		for _, node := range cluster.nodes {
-			err := node.CreateGroup(1,
+			err := node.CreateGroup(groupID,
 				[]NodeID{cluster.nodes[0].nodeID, cluster.nodes[1].nodeID, cluster.nodes[2].nodeID})
 			if err != nil {
 				t.Fatal(err)
@@ -77,11 +85,13 @@ func TestInitialLeaderElection(t *testing.T) {
 
 		cluster.clocks[leaderIndex].triggerElection()
 
-		// Temporary hack: just wait for some instance to declare itself the winner of an
-		// election.
-		winner := <-hackyTestChannel
-		if winner != cluster.nodes[leaderIndex].nodeID {
-			t.Errorf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID, winner)
+		event := <-cluster.events[leaderIndex].LeaderElection
+		if event.GroupID != groupID {
+			t.Fatalf("election event had incorrect group id %v", event.GroupID)
+		}
+		if event.NodeID != cluster.nodes[leaderIndex].nodeID {
+			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID,
+				event.NodeID)
 		}
 		cluster.stop()
 	}
