@@ -17,13 +17,15 @@
 
 package gossip
 
+import "strconv"
+
 // Constants for gossip keys.
 const (
 	// KeyClusterID is the unique UUID for this Cockroach cluster.
 	// The value is a string UUID for the cluster.
 	KeyClusterID = "cluster-id"
 
-	// KeyMaxCapacityPrefix is the key prefix for gossiping available
+	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
 	// store capacity. The suffix is composed of:
 	// <datacenter>-<hex node ID>-<hex store ID>. The value is a
 	// storage.StoreAttributes struct.
@@ -41,7 +43,7 @@ const (
 	// string address of the node. E.g. node-1bfa: fwd56.sjcb1:24001
 	KeyNodeIDPrefix = "node-"
 
-	// SentinelKey is a key for gossip which must not expire or else the
+	// KeySentinel is a key for gossip which must not expire or else the
 	// node considers itself partitioned and will retry with bootstrap hosts.
 	KeySentinel = KeyClusterID
 
@@ -51,3 +53,8 @@ const (
 	// storage.Replica structs.
 	KeyFirstRangeMetadata = "first-range"
 )
+
+// MakeNodeIDGossipKey returns the gossip key for node ID info.
+func MakeNodeIDGossipKey(nodeID int32) string {
+	return KeyNodeIDPrefix + strconv.FormatInt(int64(nodeID), 16)
+}

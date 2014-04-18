@@ -33,6 +33,9 @@ type Engine interface {
 	put(key Key, value Value) error
 	// get returns the value for the given key, nil otherwise.
 	get(key Key) (Value, error)
+	// scan returns up to max key/value objects starting from
+	// start (inclusive) and ending at end (non-inclusive).
+	scan(start, end Key, max int) ([]KeyValue, error)
 	// delete removes the item from the db with the given key.
 	del(key Key) error
 	// capacity returns capacity details for the engine's available storage.

@@ -292,7 +292,7 @@ func (n *Node) startGossip() {
 	}
 
 	// Always gossip node ID at startup.
-	nodeIDKey := gossip.KeyNodeIDPrefix + strconv.FormatInt(int64(n.Attributes.NodeID), 16)
+	nodeIDKey := gossip.MakeNodeIDGossipKey(n.Attributes.NodeID)
 	n.gossip.AddInfo(nodeIDKey, n.Attributes.Address, ttlNodeIDGossip)
 
 	ticker := time.NewTicker(gossipInterval)
@@ -348,7 +348,7 @@ func (n *Node) getRange(r *storage.Replica) (*storage.Range, error) {
 // sent along to the range via either Range.readOnlyCmd() or
 // Range.readWriteCmd().
 
-// Contains.
+// Contains .
 func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -357,7 +357,7 @@ func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsRe
 	return rng.ReadOnlyCmd("Contains", args, reply)
 }
 
-// Get.
+// Get .
 func (n *Node) Get(args *storage.GetRequest, reply *storage.GetResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -366,7 +366,7 @@ func (n *Node) Get(args *storage.GetRequest, reply *storage.GetResponse) error {
 	return rng.ReadOnlyCmd("Get", args, reply)
 }
 
-// Put.
+// Put .
 func (n *Node) Put(args *storage.PutRequest, reply *storage.PutResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -375,7 +375,7 @@ func (n *Node) Put(args *storage.PutRequest, reply *storage.PutResponse) error {
 	return <-rng.ReadWriteCmd("Put", args, reply)
 }
 
-// Increment.
+// Increment .
 func (n *Node) Increment(args *storage.IncrementRequest, reply *storage.IncrementResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -384,7 +384,7 @@ func (n *Node) Increment(args *storage.IncrementRequest, reply *storage.Incremen
 	return <-rng.ReadWriteCmd("Increment", args, reply)
 }
 
-// Delete.
+// Delete .
 func (n *Node) Delete(args *storage.DeleteRequest, reply *storage.DeleteResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -393,7 +393,7 @@ func (n *Node) Delete(args *storage.DeleteRequest, reply *storage.DeleteResponse
 	return <-rng.ReadWriteCmd("Delete", args, reply)
 }
 
-// DeleteRange.
+// DeleteRange .
 func (n *Node) DeleteRange(args *storage.DeleteRangeRequest, reply *storage.DeleteRangeResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -402,7 +402,7 @@ func (n *Node) DeleteRange(args *storage.DeleteRangeRequest, reply *storage.Dele
 	return <-rng.ReadWriteCmd("DeleteRange", args, reply)
 }
 
-// Scan.
+// Scan .
 func (n *Node) Scan(args *storage.ScanRequest, reply *storage.ScanResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -411,7 +411,7 @@ func (n *Node) Scan(args *storage.ScanRequest, reply *storage.ScanResponse) erro
 	return rng.ReadOnlyCmd("Scan", args, reply)
 }
 
-// EndTransaction.
+// EndTransaction .
 func (n *Node) EndTransaction(args *storage.EndTransactionRequest, reply *storage.EndTransactionResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -420,7 +420,7 @@ func (n *Node) EndTransaction(args *storage.EndTransactionRequest, reply *storag
 	return <-rng.ReadWriteCmd("EndTransaction", args, reply)
 }
 
-// AccumulateTS.
+// AccumulateTS .
 func (n *Node) AccumulateTS(args *storage.AccumulateTSRequest, reply *storage.AccumulateTSResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -429,7 +429,7 @@ func (n *Node) AccumulateTS(args *storage.AccumulateTSRequest, reply *storage.Ac
 	return <-rng.ReadWriteCmd("AccumulateTS", args, reply)
 }
 
-// ReapQueue.
+// ReapQueue .
 func (n *Node) ReapQueue(args *storage.ReapQueueRequest, reply *storage.ReapQueueResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -438,7 +438,7 @@ func (n *Node) ReapQueue(args *storage.ReapQueueRequest, reply *storage.ReapQueu
 	return <-rng.ReadWriteCmd("ReapQueue", args, reply)
 }
 
-// EnqueueUpdate.
+// EnqueueUpdate .
 func (n *Node) EnqueueUpdate(args *storage.EnqueueUpdateRequest, reply *storage.EnqueueUpdateResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
@@ -447,11 +447,20 @@ func (n *Node) EnqueueUpdate(args *storage.EnqueueUpdateRequest, reply *storage.
 	return <-rng.ReadWriteCmd("EnqueueUpdate", args, reply)
 }
 
-// EnqueueMessage.
+// EnqueueMessage .
 func (n *Node) EnqueueMessage(args *storage.EnqueueMessageRequest, reply *storage.EnqueueMessageResponse) error {
 	rng, err := n.getRange(&args.Replica)
 	if err != nil {
 		return err
 	}
 	return <-rng.ReadWriteCmd("EnqueueMessage", args, reply)
+}
+
+// InternalRangeLookup .
+func (n *Node) InternalRangeLookup(args *storage.InternalRangeLookupRequest, reply *storage.InternalRangeLookupResponse) error {
+	rng, err := n.getRange(&args.Replica)
+	if err != nil {
+		return err
+	}
+	return rng.ReadOnlyCmd("InternalRangeLookup", args, reply)
 }

@@ -164,6 +164,8 @@ func (r *Range) executeCmd(method string, args, reply interface{}) error {
 		r.EnqueueUpdate(args.(*EnqueueUpdateRequest), reply.(*EnqueueUpdateResponse))
 	case "EnqueueMessage":
 		r.EnqueueMessage(args.(*EnqueueMessageRequest), reply.(*EnqueueMessageResponse))
+	case "InternalRangeLookup":
+		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -184,16 +186,7 @@ func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *GetRequest, reply *GetResponse) {
-	val, err := r.engine.get(args.Key)
-	if err != nil {
-		reply.Error = err
-		return
-	} else if val.Bytes == nil {
-		reply.Error = util.Errorf("key %q not found", args.Key)
-		return
-	} else {
-		reply.Value.Bytes = val.Bytes
-	}
+	reply.Value, reply.Error = r.engine.get(args.Key)
 }
 
 // Put sets the value for a specified key. Conditional puts are supported.
@@ -231,12 +224,7 @@ func (r *Range) Put(args *PutRequest, reply *PutResponse) {
 // returns the newly incremented value (encoded as varint64). If no
 // value exists for the key, zero is incremented.
 func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
-	newVal, err := increment(r.engine, args.Key, args.Increment, args.Timestamp)
-	if err != nil {
-		reply.Error = err
-		return
-	}
-	reply.NewValue = newVal
+	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment, args.Timestamp)
 }
 
 // Delete deletes the key and value specified by key.
@@ -289,5 +277,12 @@ func (r *Range) EnqueueUpdate(args *EnqueueUpdateRequest, reply *EnqueueUpdateRe
 // EnqueueMessage enqueues a message (Value) for delivery to a
 // recipient inbox.
 func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessageResponse) {
+	reply.Error = util.Error("unimplemented")
+}
+
+// InternalRangeLookup looks up the metadata info for the given metadata key.
+// It looks up the largest key smaller or equal to the given key and
+// returns the value associated with it.
+func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
 	reply.Error = util.Error("unimplemented")
 }

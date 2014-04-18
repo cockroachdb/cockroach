@@ -14,23 +14,47 @@
 // for names of contributors.
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package storage
 
-import "sync"
+import (
+	"bytes"
+	"sync"
+	"unsafe"
+
+	"code.google.com/p/biogo.store/llrb"
+	"github.com/cockroachdb/cockroach/util"
+)
+
+var (
+	llrbNodeSize = int64(unsafe.Sizeof(llrb.Node{}))
+	keyValueSize = int64(unsafe.Sizeof(KeyValue{}))
+)
+
+// computeSize returns the approximate size in bytes that the keyVal
+// object took while stored in the underlying LLRB.
+func computeSize(kv KeyValue) int64 {
+	return int64(len(kv.Key)) + int64(len(kv.Value.Bytes)) + llrbNodeSize + keyValueSize
+}
+
+// Implement the llrb.Comparable interface for tree nodes.
+func (kv KeyValue) Compare(b llrb.Comparable) int {
+	return bytes.Compare(kv.Key, b.(KeyValue).Key)
+}
 
 // InMem a simple, in-memory key-value store.
 type InMem struct {
 	sync.RWMutex
-	maxSize int64
-	data    map[string]string
+	maxBytes  int64
+	usedBytes int64
+	data      llrb.Tree
 }
 
 // NewInMem allocates and returns a new InMem object.
-func NewInMem(maxSize int64) *InMem {
+func NewInMem(maxBytes int64) *InMem {
 	return &InMem{
-		maxSize: maxSize,
-		data:    make(map[string]string),
+		maxBytes: maxBytes,
 	}
 }
 
@@ -38,7 +62,13 @@ func NewInMem(maxSize int64) *InMem {
 func (in *InMem) put(key Key, value Value) error {
 	in.Lock()
 	defer in.Unlock()
-	in.data[string(key)] = string(value.Bytes)
+	kv := KeyValue{Key: key, Value: value}
+	size := computeSize(kv)
+	if size+in.usedBytes > in.maxBytes {
+		return util.Errorf("in mem store at capacity %d + %d > %d", in.usedBytes, size, in.maxBytes)
+	}
+	in.usedBytes += size
+	in.data.Insert(kv)
 	return nil
 }
 
@@ -46,16 +76,43 @@ func (in *InMem) put(key Key, value Value) error {
 func (in *InMem) get(key Key) (Value, error) {
 	in.RLock()
 	defer in.RUnlock()
-	return Value{
-		Bytes: []byte(in.data[string(key)]),
-	}, nil
+	val := in.data.Get(KeyValue{Key: key})
+	if val == nil {
+		return Value{}, nil
+	}
+	return val.(KeyValue).Value, nil
+}
+
+// scan returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive).
+func (in *InMem) scan(start, end Key, max int) ([]KeyValue, error) {
+	in.RLock()
+	defer in.RUnlock()
+
+	var scanned []KeyValue = nil
+	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
+		if len(scanned) >= max {
+			done = true
+			return
+		}
+		scanned = append(scanned, kv.(KeyValue))
+		return
+	}, KeyValue{Key: start}, KeyValue{Key: end})
+
+	return scanned, nil
 }
 
 // del removes the item from the db with the given key.
 func (in *InMem) del(key Key) error {
 	in.Lock()
 	defer in.Unlock()
-	delete(in.data, string(key))
+	// Note: this is approximate. There is likely something missing.
+	// The storage/in_mem_test.go benchmarks this and the measurement
+	// being made seems close enough for government work (tm).
+	if val := in.data.Get(KeyValue{Key: key}); val != nil {
+		in.usedBytes -= computeSize(val.(KeyValue))
+	}
+	in.data.Delete(KeyValue{Key: key})
 	return nil
 }
 
@@ -65,8 +122,8 @@ func (in *InMem) del(key Key) error {
 // internal glue.
 func (in *InMem) capacity() (StoreCapacity, error) {
 	return StoreCapacity{
-		Capacity:  in.maxSize,
-		Available: in.maxSize, // TODO(spencer): fix this.
+		Capacity:  in.maxBytes,
+		Available: in.maxBytes - in.usedBytes,
 		DiskType:  MEM,
 	}, nil
 }
