@@ -20,6 +20,7 @@ package kv
 import (
 	"bytes"
 	"encoding/gob"
+	"net"
 	"reflect"
 	"time"
 
@@ -103,13 +104,83 @@ func NewDB(gossip *gossip.Gossip) DB {
 	return &DistDB{gossip: gossip}
 }
 
+func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
+	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
+	info, err := db.gossip.GetInfo(nodeIDKey)
+	if err != nil {
+		return nil, util.Errorf("Unable to lookup address for node: %v. Error: %v", nodeID, err)
+	}
+	return info.(net.Addr), nil
+}
+
+func (db *DistDB) lookupMetadata(metadataKey storage.Key, replicas []storage.Replica) (*storage.RangeLocations, error) {
+	replica := storage.ChooseRandomReplica(replicas)
+	if replica == nil {
+		return nil, util.Errorf("No replica to choose for metadata key: %q", metadataKey)
+	}
+
+	addr, err := db.nodeIDToAddr(replica.NodeID)
+	if err != nil {
+		// TODO(harshit): May be retry a different replica.
+		return nil, err
+	}
+	client := rpc.NewClient(addr)
+	arg := &storage.InternalRangeLookupRequest{
+		RequestHeader: storage.RequestHeader{
+			Replica: *replica,
+		},
+		Key: metadataKey,
+	}
+	var reply storage.InternalRangeLookupResponse
+	err = client.Call("Node.InternalRangeLookup", arg, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if reply.Error != nil {
+		return nil, reply.Error
+	}
+	return &reply.Locations, nil
+}
+
+// TODO(harshit): Consider caching returned metadata info.
+func (db *DistDB) lookupMeta1(key storage.Key) (*storage.RangeLocations, error) {
+	info, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
+	if err != nil {
+		return nil, err
+	}
+	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
+	return db.lookupMetadata(metadataKey, info.([]storage.Replica))
+}
+
+func (db *DistDB) lookupMeta2(key storage.Key) (*storage.RangeLocations, error) {
+	meta1Val, err := db.lookupMeta1(key)
+	if err != nil {
+		return nil, err
+	}
+	metadataKey := storage.MakeKey(storage.KeyMeta2Prefix, key)
+	return db.lookupMetadata(metadataKey, meta1Val.Replicas)
+}
+
 // getNode gets an RPC client to the node where the requested
 // key is located. The range cache may be updated. The bi-level range
 // metadata for the cluster is consulted in the event that the local
 // cache doesn't contain range metadata corresponding to the specified
 // key.
-func (db *DistDB) getNode(key storage.Key) (*rpc.Client, error) {
-	return nil, util.Errorf("getNode unimplemented")
+func (db *DistDB) getNode(key storage.Key) (*rpc.Client, *storage.Replica, error) {
+	meta2Val, err := db.lookupMeta2(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	replica := storage.ChooseRandomReplica(meta2Val.Replicas)
+	if replica == nil {
+		return nil, nil, util.Errorf("No node found for key: %q", key)
+	}
+	addr, err := db.nodeIDToAddr(replica.NodeID)
+	if err != nil {
+		// TODO(harshit): May be retry a different replica.
+		return nil, nil, err
+	}
+	return rpc.NewClient(addr), replica, nil
 }
 
 // sendRPC sends the specified RPC asynchronously and returns a
@@ -120,8 +191,10 @@ func (db *DistDB) sendRPC(key storage.Key, method string, args, reply interface{
 
 	go func() {
 		replyVal := reflect.ValueOf(reply)
-		node, err := db.getNode(key)
+		node, replica, err := db.getNode(key)
 		if err == nil {
+			argsHeader := args.(*storage.RequestHeader)
+			argsHeader.Replica = *replica
 			err = node.Call(method, args, reply)
 		}
 		if err != nil {
@@ -142,44 +215,44 @@ func (db *DistDB) Contains(args *storage.ContainsRequest) <-chan *storage.Contai
 		args, &storage.ContainsResponse{}).(chan *storage.ContainsResponse)
 }
 
-// Get.
+// Get .
 func (db *DistDB) Get(args *storage.GetRequest) <-chan *storage.GetResponse {
 	return db.sendRPC(args.Key, "Node.Get",
 		args, &storage.GetResponse{}).(chan *storage.GetResponse)
 }
 
-// Put.
+// Put .
 func (db *DistDB) Put(args *storage.PutRequest) <-chan *storage.PutResponse {
 	return db.sendRPC(args.Key, "Node.Put",
 		args, &storage.PutResponse{}).(chan *storage.PutResponse)
 }
 
-// Increment.
+// Increment .
 func (db *DistDB) Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse {
 	return db.sendRPC(args.Key, "Node.Increment",
 		args, &storage.IncrementResponse{}).(chan *storage.IncrementResponse)
 }
 
-// Delete.
+// Delete .
 func (db *DistDB) Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse {
 	return db.sendRPC(args.Key, "Node.Delete",
 		args, &storage.DeleteResponse{}).(chan *storage.DeleteResponse)
 }
 
-// DeleteRange.
+// DeleteRange .
 func (db *DistDB) DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse {
 	// TODO(spencer): range of keys.
 	return db.sendRPC(args.StartKey, "Node.DeleteRange",
 		args, &storage.DeleteRangeResponse{}).(chan *storage.DeleteRangeResponse)
 }
 
-// Scan.
+// Scan .
 func (db *DistDB) Scan(args *storage.ScanRequest) <-chan *storage.ScanResponse {
 	// TODO(spencer): range of keys.
 	return nil
 }
 
-// EndTransaction.
+// EndTransaction .
 func (db *DistDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *storage.EndTransactionResponse {
 	// TODO(spencer): multiple keys here...
 	return db.sendRPC(args.Keys[0], "Node.EndTransaction",

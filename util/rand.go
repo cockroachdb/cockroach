@@ -38,3 +38,7 @@ func NewPseudoRand() *rand.Rand {
 func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
 }
+
+// CachedRand is a global singleton rand.Rand object cached for
+// one-off purposes to generate random numbers.
+var CachedRand = NewPseudoRand()

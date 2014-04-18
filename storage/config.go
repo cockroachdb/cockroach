@@ -21,6 +21,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -97,4 +98,18 @@ func (a StoreAttributes) Less(b gossip.Ordered) bool {
 // PercentAvail computes the percentage of disk space that is available.
 func (sc StoreCapacity) PercentAvail() float64 {
 	return float64(sc.Available) / float64(sc.Capacity)
+}
+
+// RangeLocations is the metadata value stored for a metadata key.
+type RangeLocations struct {
+	Replicas []Replica
+}
+
+// ChooseRandomReplica returns a replica selected at random or nil if none exist.
+func ChooseRandomReplica(replicas []Replica) *Replica {
+	if len(replicas) == 0 {
+		return nil
+	}
+	r := util.CachedRand
+	return &replicas[r.Intn(len(replicas))]
 }

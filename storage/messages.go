@@ -17,6 +17,7 @@
 
 package storage
 
+// Key defines the key in the key-value datastore.
 type Key []byte
 
 // Value specifies the value at a key. Multiple values at the same key
@@ -202,7 +203,7 @@ type AccumulateTSRequest struct {
 	Counts []int64 // One per discrete subtime period (e.g. one/minute or one/second)
 }
 
-// An AccumulateResponse is the return value from the AccumulateTS()
+// An AccumulateTSResponse is the return value from the AccumulateTS()
 // method.
 type AccumulateTSResponse struct {
 	ResponseHeader
@@ -252,4 +253,25 @@ type EnqueueMessageRequest struct {
 // EnqueueMessage() method.
 type EnqueueMessageResponse struct {
 	ResponseHeader
+}
+
+// An InternalRangeLookupRequest is arguments to the InternalRangeLookup()
+// method. It specifies the key for range lookup, which is a system key prefixed
+// by KeyMeta1Prefix or KeyMeta2Prefix to the user key.
+type InternalRangeLookupRequest struct {
+	RequestHeader
+	Key Key
+}
+
+// An InternalRangeLookupResponse is the return value from the
+// InternalRangeLookup() method. It returns the metadata for the
+// range where the key resides. When looking up 1-level metadata,
+// it returns the range containing the 2-level metadata for the key.
+// And when looking up 2-level metadata, it returns the range possibly
+// containing the actual key and its value.
+type InternalRangeLookupResponse struct {
+	ResponseHeader
+	StartKey  Key
+	EndKey    Key
+	Locations RangeLocations
 }
