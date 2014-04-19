@@ -51,7 +51,7 @@ var (
 	dataDirs = flag.String("data_dirs", "", "specify a comma-separated list of disk "+
 		"type and path or integer size in bytes. For solid state disks, ssd=<path>; "+
 		"for spinning disks, hdd=<path>; for in-memory, mem=<size in bytes>. E.g. "+
-		"--data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=")
+		"--data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
 	// Regular expression for capturing data directory specifications.
 	dataDirRE = regexp.MustCompile(`^(mem)=([\d]*)|(ssd|hdd)=(.*)$`)
@@ -65,7 +65,7 @@ Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
 contacting one or more well-known hosts specified by the
 --gossip_bootstrap command line flag. Every node should be run with
-the same list of bootstrap hosts to guarantee a connected network.  An
+the same list of bootstrap hosts to guarantee a connected network. An
 alternate approach is to use a single host for --gossip_bootstrap and
 round-robin DNS.
 
@@ -78,7 +78,6 @@ this requirement isn't strictly enforced.
 A node exports an HTTP API with the following endpoints:
 
   Health check:           http://%s/healthz
-  Remote shutdown:        http://%s/quitquitquit
   Key-value REST:         http://%s%s
   Structured Schema REST: http://%s%s
 `, *httpAddr, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
