@@ -32,6 +32,7 @@ type Replica struct {
 	NodeID  int32
 	StoreID int32
 	RangeID int64
+	DiskType
 }
 
 // DiskType is the type of a disk that a Store is storing data on.

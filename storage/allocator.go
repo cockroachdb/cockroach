@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"math/rand"
 )
 
@@ -35,58 +36,78 @@ type allocator struct {
 }
 
 // allocate returns a suitable Replica for the range and zone. If none
-// are available / suitable, returns an error. It looks up the zone
+// are available / suitable, returns an error. It looks at the zone
 // config for the block to determine where it needs to send data, then
-// uses the gossip network to pick a random set of nodes in each data
+// uses the StoreFinder to pick a random set of nodes in each data
 // center based on the available capacity of the node.
 // TODO(levon): Handle Racks/Power Units.
-// TODO(levon): throw error if not enough suitable replicas can be found.
-// TODO(spencer): only need the delta between existing replicas and zone config's specifications.
-func (a *allocator) allocate(config *ZoneConfig, existingReplicas []Replica) ([]Replica, error) {
-	usedHosts := make(map[int32]struct{})
-	for _, replica := range existingReplicas {
-		usedHosts[replica.NodeID] = struct{}{}
-	}
-	var results []Replica = nil
+func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]Replica) ([]Replica, error) {
+	var neededReplicas int
+	var results []Replica
+
 	for dc, diskTypes := range config.Replicas {
-		// For each replica to be placed in this data center.
+		usedHosts := make(map[int32]struct{})
+		for _, replica := range existingReplicas[dc] {
+			usedHosts[replica.NodeID] = struct{}{}
+		}
+
+		neededReplicas += len(diskTypes)
+		stores, err := a.storeFinder(dc)
+		if err != nil {
+			return nil, err
+		}
+
+		// compute how many of each DiskType we need in this Data Center
+		neededDiskTypes := make(map[DiskType]int)
 		for _, diskType := range diskTypes {
-			// Randomly pick a node weighted by capacity.
-			var candidates []StoreAttributes = nil
-			var capacityTotal float64
-			stores, err := a.storeFinder(dc)
-			if err != nil {
-				return nil, err
-			}
-			for _, s := range stores {
-				_, alreadyUsed := usedHosts[s.Attributes.NodeID]
-				if s.Capacity.DiskType == diskType && !alreadyUsed {
-					candidates = append(candidates, s)
-					capacityTotal += s.Capacity.PercentAvail()
-				}
-			}
+			neededDiskTypes[diskType]++
+		}
 
-			var capacitySeen float64
-			targetCapacity := rand.Float64() * capacityTotal
+		for _, replica := range existingReplicas[dc] {
+			neededDiskTypes[replica.DiskType]--
+		}
 
-			// Walk through candidates in random order, stopping when
-			// we've passed the capacity target.
-			for _, c := range candidates {
-				capacitySeen += c.Capacity.PercentAvail()
-				if capacitySeen >= targetCapacity {
-					replica := Replica{
-						NodeID:  c.Attributes.NodeID,
-						StoreID: c.StoreID,
-						// RangeID is filled in later, when range is created.
+		// For each disk type to be placed in this data center.
+		for diskType, count := range neededDiskTypes {
+			for i := 0; i < count; i++ {
+				// Randomly pick a node weighted by capacity.
+				var candidates []StoreAttributes
+				var capacityTotal float64
+				for _, s := range stores {
+					_, alreadyUsed := usedHosts[s.Attributes.NodeID]
+					if s.Capacity.DiskType == diskType && !alreadyUsed {
+						candidates = append(candidates, s)
+						capacityTotal += s.Capacity.PercentAvail()
 					}
-					results = append(results, replica)
-					usedHosts[c.Attributes.NodeID] = struct{}{}
-					break
+				}
+
+				var capacitySeen float64
+				targetCapacity := rand.Float64() * capacityTotal
+
+				// Walk through candidates, stopping when
+				// we've passed the capacity target.
+				for _, c := range candidates {
+					capacitySeen += c.Capacity.PercentAvail()
+					if capacitySeen >= targetCapacity {
+						replica := Replica{
+							NodeID:   c.Attributes.NodeID,
+							StoreID:  c.StoreID,
+							DiskType: diskType,
+							// RangeID is filled in later, when range is created.
+						}
+						results = append(results, replica)
+						usedHosts[c.Attributes.NodeID] = struct{}{}
+						break
+					}
 				}
 			}
 		}
 	}
-	return results, nil
+	var err error
+	if len(existingReplicas)+len(results) < neededReplicas {
+		err = fmt.Errorf("unable to place all %d replicas, Only %d found", neededReplicas, len(results))
+	}
+	return results, err
 }
 
 /*func findZoneConfig(key string) (ZoneConfig, error) {

@@ -18,28 +18,29 @@
 package storage
 
 import (
-	"log"
 	"reflect"
 	"testing"
+
+	"github.com/golang/glog"
 )
 
 var testConfig = ZoneConfig{
 	Replicas: map[string][]DiskType{
-		"a": []DiskType{1, 2},
-		"b": []DiskType{1, 2},
+		"a": []DiskType{SSD, HDD},
+		"b": []DiskType{SSD, HDD},
 	},
 }
 
 func TestZoneConfigRoundTrip(t *testing.T) {
 	yaml, err := testConfig.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+		glog.Fatalf("failed converting to yaml: %v", err)
 	}
 	parsedZoneConfig, err := ParseZoneConfig(yaml)
 	if err != nil {
-		log.Fatalf("failed parsing config: %v", err)
+		glog.Fatalf("failed parsing config: %v", err)
 	}
 	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		log.Fatalf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
+		glog.Fatalf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
 	}
 }
