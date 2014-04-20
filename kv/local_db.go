@@ -30,17 +30,9 @@ type LocalDB struct {
 	rng *storage.Range
 }
 
-// NewLocalDB returns a local-only key-value datastore client for
-// unittests.
-func NewLocalDB() DB {
-	ldb := &LocalDB{}
-	meta := storage.RangeMetadata{
-		RangeID:  1,
-		StartKey: storage.Key(""),
-		EndKey:   storage.Key("\xff\xff"),
-	}
-	ldb.rng = storage.NewRange(meta, storage.NewInMem(1<<30), nil, nil)
-	return ldb
+// NewLocalDB returns a local-only KV DB for direct access to a store.
+func NewLocalDB(rng *storage.Range) *LocalDB {
+	return &LocalDB{rng: rng}
 }
 
 // invokeMethod sends the specified RPC asynchronously and returns a

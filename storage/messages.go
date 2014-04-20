@@ -160,16 +160,15 @@ type DeleteRangeResponse struct {
 // start and end keys for the scan and the maximum number of results.
 type ScanRequest struct {
 	RequestHeader
-	StartKey   Key    // Empty to start at first key
-	EndKey     Key    // Optional max key; empty to ignore
-	MaxResults uint64 // Must be > 0
+	StartKey   Key   // Empty to start at first key
+	EndKey     Key   // Optional max key; empty to ignore
+	MaxResults int64 // Must be > 0
 }
 
 // A ScanResponse is the return value from the Scan() method.
 type ScanResponse struct {
 	ResponseHeader
-	Rows    []KeyValue // Empty if no rows were scanned
-	LastKey Key        // Non-empty if Rows is non-empty
+	Rows []KeyValue // Empty if no rows were scanned
 }
 
 // An EndTransactionRequest is arguments to the EndTransaction() method.

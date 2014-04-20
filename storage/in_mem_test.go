@@ -123,7 +123,7 @@ func TestInMemOverCapacity(t *testing.T) {
 	}
 }
 
-func verifyScan(start, end Key, max int, expKeys []Key, engine Engine, t *testing.T) {
+func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *testing.T) {
 	kvs, err := engine.scan(start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
@@ -148,7 +148,7 @@ func TestInMemScan(t *testing.T) {
 		Key("aaa"),
 		Key("ab"),
 		Key("abc"),
-		Key("\xff\xff"),
+		KeyMax,
 	}
 
 	// Add keys to store in random order (make sure they sort!).
@@ -160,16 +160,16 @@ func TestInMemScan(t *testing.T) {
 	}
 
 	// Scan all keys (non-inclusive of final key).
-	verifyScan(Key(""), Key("\xff\xff"), 10, keys[0:5], engine, t)
-	verifyScan(Key("a"), Key("\xff\xff"), 10, keys[0:5], engine, t)
+	verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
+	verifyScan(Key("a"), KeyMax, 10, keys[0:5], engine, t)
 
 	// Scan sub range.
 	verifyScan(Key("aab"), Key("abcc"), 10, keys[3:5], engine, t)
 	verifyScan(Key("aa0"), Key("abcc"), 10, keys[2:5], engine, t)
 
 	// Scan with max values.
-	verifyScan(Key(""), Key("\xff\xff\xff"), 3, keys[0:3], engine, t)
-	verifyScan(Key("a0"), Key("\xff\xff\xff"), 3, keys[1:4], engine, t)
+	verifyScan(KeyMin, KeyMax, 3, keys[0:3], engine, t)
+	verifyScan(Key("a0"), KeyMax, 3, keys[1:4], engine, t)
 }
 
 func BenchmarkCapacity(b *testing.B) {

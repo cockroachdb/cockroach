@@ -18,13 +18,11 @@
 package server
 
 import (
-	"bytes"
 	"container/list"
-	"encoding/gob"
+	"net"
 	"strconv"
 	"time"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -59,58 +57,94 @@ type Node struct {
 	maxAvailPrefix string // Prefix for max avail capacity gossip topic
 }
 
-// BootstrapCluster generates a random UUID to uniquely identify a new
-// cluster. Returns the cluster ID on success.
-func BootstrapCluster(engine storage.Engine) (string, error) {
+// allocateNodeID increments the node id generator key to allocate
+// a new, unique node id.
+func allocateNodeID(db kv.DB) (int32, error) {
+	ir := <-db.Increment(&storage.IncrementRequest{
+		Key:       storage.KeyNodeIDGenerator,
+		Increment: 1,
+	})
+	if ir.Error != nil {
+		return 0, util.Errorf("unable to allocate node ID: %v", ir.Error)
+	}
+	return int32(ir.NewValue), nil
+}
+
+// allocateStoreIDs increments the store id generator key for the
+// specified node to allocate "inc" new, unique store ids. The
+// first ID in a contiguous range is returned on success.
+func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
+	ir := <-db.Increment(&storage.IncrementRequest{
+		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
+		Key: storage.MakeKey(storage.KeyStoreIDGeneratorPrefix,
+			[]byte(strconv.Itoa(int(nodeID)))),
+		Increment: inc,
+	})
+	if ir.Error != nil {
+		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %v", inc, nodeID, ir.Error)
+	}
+	return int32(ir.NewValue - inc + 1), nil
+}
+
+// BootstrapCluster bootstraps a store using the provided engine and
+// cluster ID. The bootstrapped store contains a single range spanning
+// all keys. Initial range lookup metadata is populated for the range.
+// Returns a direct-access kv.LocalDB for unittest purposes only.
+func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, error) {
 	sIdent := storage.StoreIdent{
-		ClusterID: uuid.New(),
+		ClusterID: clusterID,
 		NodeID:    1,
 		StoreID:   1,
 	}
 	s := storage.NewStore(engine, nil)
 	if err := s.Init(nil); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Verify the store isn't already part of a cluster.
 	if s.Ident.ClusterID != "" {
-		return "", util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
+		return nil, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 	}
+
+	// Bootstrap store to persist the store ident.
 	if err := s.Bootstrap(sIdent); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Create first range.
-	rng, err := s.CreateRange(storage.Key(""), storage.Key("\xff\xff"))
+	rng, err := s.CreateRange(storage.KeyMin, storage.KeyMax)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if rng.Meta.RangeID != 1 {
-		return "", util.Errorf("expected range id of 1, got %d", rng.Meta.RangeID)
+		return nil, util.Errorf("expected range id of 1, got %d", rng.Meta.RangeID)
 	}
+
+	// Create a local DB to directly modify the new range.
+	localDB := kv.NewLocalDB(rng)
 
 	// Initialize meta1 and meta2 range addressing records.
-	replicas := []storage.Replica{storage.Replica{NodeID: 1, StoreID: 1, RangeID: 1}}
-	var reply storage.PutResponse
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	enc.Encode(replicas)
-	args := &storage.PutRequest{
-		Key: storage.MakeKey(storage.KeyMeta1Prefix, rng.Meta.EndKey),
-		Value: storage.Value{
-			Bytes:     buf.Bytes(),
-			Timestamp: time.Now().UnixNano(),
-		},
+	replica := storage.Replica{
+		NodeID:     1,
+		StoreID:    1,
+		RangeID:    1,
+		Datacenter: getDatacenter(),
+		DiskType:   engine.Type(),
 	}
-	if rng.Put(args, &reply); reply.Error != nil {
-		return "", reply.Error
+	kv.BootstrapRangeLocations(localDB, replica)
+
+	// Initialize node and store ids after the fact to account
+	// for use of node ID = 1 and store ID = 1.
+	if nodeID, err := allocateNodeID(localDB); nodeID != sIdent.NodeID || err != nil {
+		return nil, util.Errorf("expected to intialize node id allocator to %d, got %d: %v",
+			sIdent.NodeID, nodeID, err)
 	}
-	args.Key = storage.MakeKey(storage.KeyMeta2Prefix, rng.Meta.EndKey)
-	if rng.Put(args, &reply); reply.Error != nil {
-		return "", reply.Error
+	if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, localDB); storeID != sIdent.StoreID || err != nil {
+		return nil, util.Errorf("expected to intialize store id allocator to %d, got %d: %v",
+			sIdent.StoreID, storeID, err)
 	}
 
-	return sIdent.ClusterID, nil
+	return localDB, nil
 }
 
 // NewNode returns a new instance of Node, interpreting command line
@@ -118,16 +152,27 @@ func BootstrapCluster(engine storage.Engine) (string, error) {
 // Stores. Registers the storage instance for the RPC service "Node".
 func NewNode(rpcServer *rpc.Server, kvDB kv.DB, gossip *gossip.Gossip) *Node {
 	n := &Node{
-		Attributes: storage.NodeAttributes{
-			Address: rpcServer.Addr,
-		},
 		gossip:   gossip,
 		kvDB:     kvDB,
 		storeMap: make(map[int32]*storage.Store),
 		closer:   make(chan struct{}, 1),
 	}
+	n.initAttributes(rpcServer.Addr)
 	rpcServer.RegisterName("Node", n)
 	return n
+}
+
+// initAttributes initializes the physical/network topology attributes
+// if possible. Datacenter, PDU & Rack values are taken from environment
+// variables or command line flags.
+func (n *Node) initAttributes(addr net.Addr) {
+	n.Attributes = storage.NodeAttributes{
+		// NodeID is after invocation of start()
+		Address:    addr,
+		Datacenter: getDatacenter(),
+		PDU:        getPDU(),
+		Rack:       getRack(),
+	}
 }
 
 // start starts the node by initializing network/physical topology
@@ -135,9 +180,6 @@ func NewNode(rpcServer *rpc.Server, kvDB kv.DB, gossip *gossip.Gossip) *Node {
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
 func (n *Node) start(engines []storage.Engine) error {
-	if err := n.initAttributes(); err != nil {
-		return err
-	}
 	if err := n.initStoreMap(engines); err != nil {
 		return err
 	}
@@ -148,14 +190,6 @@ func (n *Node) start(engines []storage.Engine) error {
 // stop cleanly stops the node
 func (n *Node) stop() {
 	close(n.closer)
-}
-
-// initAttributes initializes the physical/network topology attributes
-// if possible. Datacenter, PDU & Rack values are taken from environment
-// variables or command line flags.
-func (n *Node) initAttributes() error {
-	// TODO(spencer,levon): extract these topology values.
-	return nil
 }
 
 // initStoreMap initializes the Stores map from id to Store. Stores are
@@ -241,32 +275,23 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 		n.ClusterID = val.(string)
 
 		// Allocate a new node ID.
-		ir := <-n.kvDB.Increment(&storage.IncrementRequest{
-			Key:       storage.KeyNodeIDGenerator,
-			Increment: 1,
-		})
-		if ir.Error != nil {
-			glog.Fatalf("unable to allocate node ID: %v", ir.Error)
+		n.Attributes.NodeID, err = allocateNodeID(n.kvDB)
+		if err != nil {
+			glog.Fatal(err)
 		}
-		n.Attributes.NodeID = int32(ir.NewValue)
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	ir := <-n.kvDB.Increment(&storage.IncrementRequest{
-		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
-		Key: storage.MakeKey(storage.KeyStoreIDGeneratorPrefix,
-			[]byte(strconv.Itoa(int(n.Attributes.NodeID)))),
-		Increment: inc,
-	})
-	if ir.Error != nil {
-		glog.Fatalf("unable to allocate %d store IDs: %v", inc, ir.Error)
+	firstID, err := allocateStoreIDs(n.Attributes.NodeID, inc, n.kvDB)
+	if err != nil {
+		glog.Fatal(err)
 	}
 	sIdent := storage.StoreIdent{
 		ClusterID: n.ClusterID,
 		NodeID:    n.Attributes.NodeID,
-		StoreID:   int32(ir.NewValue - inc + 1),
+		StoreID:   firstID,
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)

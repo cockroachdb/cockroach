@@ -19,17 +19,23 @@ package server
 
 import (
 	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/golang/glog"
 )
 
 var CmdInit = &commander.Command{
-	UsageLine: "init <first-range-data-dir> <default-zone-config-filename>",
+	UsageLine: "init <bootstrap-data-dir> <default-zone-config-filename>",
 	Short:     "init new Cockroach cluster",
 	Long: `
-Initialize a new Cockroach cluster on this node. The cluster is started
-with only a single replica, whose data is stored in the directory specified
-by the first argument <first-range-data-dir>.
+Initialize a new Cockroach cluster on this node. The cluster is
+started with only a single replica, whose data is stored in the
+directory specified by the first argument <bootstrap-data-dir>. The
+format of the bootstrap data directory is given by the specification
+below. Note that only SSD and HDD devices may be specified; in-memory
+devices cannot be used to initialize a cluster.
+
+  ssd=<data-dir> | hdd=<data-dir>
 
 The provided zone configuration (specified by second argument
 <default-zone-config-filename>) is installed as the default. In the
@@ -49,12 +55,16 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Specifying the disk type as HDD may be incorrect, but doesn't
 	// matter for this bootstrap step.
-	engine, err := storage.NewRocksDB(storage.HDD, args[0])
+	engine, err := initEngine(args[0])
+	if engine.Type() == storage.MEM {
+		glog.Fatal("Cannot initialize a cockroach cluster using an in-memory storage device")
+	}
 	if err != nil {
 		glog.Fatal(err)
 	}
-	clusterID, err := BootstrapCluster(engine)
-	if err != nil {
+	// Generate a new cluster UUID.
+	clusterID := uuid.New()
+	if _, err := BootstrapCluster(clusterID, engine); err != nil {
 		glog.Fatal(err)
 	}
 	// TODO(spencer): install the default zone config.

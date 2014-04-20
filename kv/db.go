@@ -49,7 +49,7 @@ type DB interface {
 // GetI fetches the value at the specified key and deserializes it
 // into "value". Returns true on success or false if the key was not
 // found. The timestamp of the write is returned as the second return
-// value. The first result parameter is "ok", true if a value was
+// value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
 func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
@@ -83,6 +83,39 @@ func PutI(db DB, key storage.Key, value interface{}) error {
 	return pr.Error
 }
 
+// BootstrapRangeLocations sets meta1 and meta2 values for KeyMax,
+// using the provided replica.
+func BootstrapRangeLocations(db DB, replica storage.Replica) error {
+	locations := storage.RangeLocations{
+		Replicas: []storage.Replica{replica},
+		// TODO(spencer): uncomment when we have hrsht's change.
+		//StartKey: storage.KeyMin,
+	}
+	// Write meta1.
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), locations); err != nil {
+		return err
+	}
+	// Write meta2.
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), locations); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateRangeLocations updates the range locations metadata for the
+// range specified by the meta parameter. This always involves a write
+// to "meta2", and may require a write to "meta1", in the event that
+// meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
+func UpdateRangeLocations(db DB, meta storage.RangeMetadata, locations storage.RangeLocations) error {
+	// TODO(spencer): a lot more work here to actually implement this.
+
+	// Write meta2.
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, meta.EndKey), locations); err != nil {
+		return err
+	}
+	return nil
+}
+
 // A DistDB provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
 // lookup or lookups to find replica metadata for implicated key
@@ -100,7 +133,7 @@ type DistDB struct {
 
 // NewDB returns a key-value datastore client which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDB(gossip *gossip.Gossip) DB {
+func NewDB(gossip *gossip.Gossip) *DistDB {
 	return &DistDB{gossip: gossip}
 }
 

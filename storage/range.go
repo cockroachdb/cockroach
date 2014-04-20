@@ -129,7 +129,7 @@ func (r *Range) maybeGossip() {
 		return
 	}
 	// TODO(spencer): only do this if we're the leader of the consensus group.
-	if bytes.Equal(r.Meta.StartKey, Key("")) {
+	if bytes.Equal(r.Meta.StartKey, KeyMin) {
 		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 1*time.Hour); err != nil {
 			glog.Warningf("failed to gossip first range metadata: %v", err)
 		}
@@ -244,7 +244,7 @@ func (r *Range) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *ScanRequest, reply *ScanResponse) {
-	reply.Error = util.Error("unimplemented")
+	reply.Rows, reply.Error = r.engine.scan(args.StartKey, args.EndKey, args.MaxResults)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant

@@ -58,6 +58,11 @@ func NewInMem(maxBytes int64) *InMem {
 	}
 }
 
+// Type returns MEM.
+func (in *InMem) Type() DiskType {
+	return MEM
+}
+
 // put sets the given key to the value provided.
 func (in *InMem) put(key Key, value Value) error {
 	in.Lock()
@@ -85,13 +90,13 @@ func (in *InMem) get(key Key) (Value, error) {
 
 // scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
-func (in *InMem) scan(start, end Key, max int) ([]KeyValue, error) {
+func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
 
 	var scanned []KeyValue = nil
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
-		if len(scanned) >= max {
+		if int64(len(scanned)) >= max {
 			done = true
 			return
 		}

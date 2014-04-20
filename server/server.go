@@ -116,40 +116,51 @@ func runStart(cmd *commander.Command, args []string) {
 func initEngines() ([]storage.Engine, error) {
 	engines := make([]storage.Engine, 0, 1)
 	for _, dir := range strings.Split(*dataDirs, ",") {
-		// Error if regexp doesn't match.
-		matches := dataDirRE.FindStringSubmatch(dir)
-		if matches == nil || len(matches) != 3 {
-			return nil, util.Errorf("invalid data directory %q", dir)
-		}
-
-		var engine storage.Engine
-		var err error
-		if matches[1] == "mem" {
-			size, err := strconv.ParseInt(matches[2], 10, 64)
-			if err != nil {
-				glog.Warningf("unable to init in-memory storage %q; skipping...will not serve data", dir)
-			}
-			engine = storage.NewInMem(size)
-		} else {
-			var typ storage.DiskType
-			switch matches[2] {
-			case "hdd":
-				typ = storage.HDD
-			case "ssd":
-				typ = storage.SSD
-			default:
-				return nil, util.Errorf("unhandled disk type %q", matches[1])
-			}
-			engine, err = storage.NewRocksDB(typ, matches[2])
-			if err != nil {
-				glog.Warningf("unable to init rocksdb with data dir %q; skipping...will not serve data", matches[2])
-				continue
-			}
+		engine, err := initEngine(dir)
+		if err != nil {
+			glog.Warningf("%v; skipping...will not serve data", err)
+			continue
 		}
 		engines = append(engines, engine)
 	}
 
 	return engines, nil
+}
+
+// initEngine parses the engine specification according to the
+// dataDirRE regexp and instantiates an engine of correct type.
+func initEngine(spec string) (storage.Engine, error) {
+	// Error if regexp doesn't match.
+	matches := dataDirRE.FindStringSubmatch(spec)
+	if matches == nil || len(matches) != 3 {
+		return nil, util.Errorf("invalid engine specification %q", spec)
+	}
+
+	var engine storage.Engine
+	var err error
+	if matches[1] == "mem" {
+		size, err := strconv.ParseInt(matches[2], 10, 64)
+		if err != nil {
+			return nil, util.Error("unable to init in-memory storage %q", spec)
+		}
+		engine = storage.NewInMem(size)
+	} else {
+		var typ storage.DiskType
+		switch matches[2] {
+		case "hdd":
+			typ = storage.HDD
+		case "ssd":
+			typ = storage.SSD
+		default:
+			return nil, util.Errorf("unhandled disk type %q", matches[1])
+		}
+		engine, err = storage.NewRocksDB(typ, matches[2])
+		if err != nil {
+			return nil, util.Errorf("unable to init rocksdb with data dir %q", matches[2])
+		}
+	}
+
+	return engine, nil
 }
 
 func newServer() (*server, error) {

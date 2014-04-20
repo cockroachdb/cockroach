@@ -188,9 +188,10 @@ func TestSimpleRetrieval(t *testing.T) {
 	}
 	var expected = []Replica{
 		Replica{
-			NodeID:   1,
-			StoreID:  1,
-			DiskType: SSD,
+			NodeID:     1,
+			StoreID:    1,
+			DiskType:   SSD,
+			Datacenter: "a",
 		},
 	}
 	if !reflect.DeepEqual(expected, result) {
@@ -237,14 +238,16 @@ func TestTwoDataCenters(t *testing.T) {
 	}
 	var expected = []Replica{
 		Replica{
-			NodeID:   1,
-			StoreID:  1,
-			DiskType: SSD,
+			NodeID:     1,
+			StoreID:    1,
+			Datacenter: "a",
+			DiskType:   SSD,
 		},
 		Replica{
-			NodeID:   2,
-			StoreID:  2,
-			DiskType: SSD,
+			NodeID:     2,
+			StoreID:    2,
+			Datacenter: "b",
+			DiskType:   SSD,
 		},
 	}
 	if !reflect.DeepEqual(expected, result) {

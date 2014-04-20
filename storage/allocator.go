@@ -90,9 +90,10 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 					capacitySeen += c.Capacity.PercentAvail()
 					if capacitySeen >= targetCapacity {
 						replica := Replica{
-							NodeID:   c.Attributes.NodeID,
-							StoreID:  c.StoreID,
-							DiskType: diskType,
+							NodeID:     c.Attributes.NodeID,
+							StoreID:    c.StoreID,
+							Datacenter: dc,
+							DiskType:   diskType,
 							// RangeID is filled in later, when range is created.
 						}
 						results = append(results, replica)

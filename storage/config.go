@@ -25,18 +25,21 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
-// Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network), store ID (corresponds to
-// a physical device, unique per node) and range ID.
-type Replica struct {
-	NodeID  int32
-	StoreID int32
-	RangeID int64
-	DiskType
-}
-
 // DiskType is the type of a disk that a Store is storing data on.
 type DiskType uint32
+
+// Replica describes a replica location by node ID (corresponds to a
+// host:port via lookup on gossip network), store ID (corresponds to
+// a physical device, unique per node) and range ID. Datacenter and
+// DiskType are provided to optimize reads. Replicas are stored in
+// Range lookup records (meta1, meta2).
+type Replica struct {
+	NodeID     int32
+	StoreID    int32
+	RangeID    int64
+	Datacenter string
+	DiskType
+}
 
 const (
 	// SSD = Solid State Disk

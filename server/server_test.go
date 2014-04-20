@@ -43,7 +43,9 @@ func startServer() *server {
 			glog.Fatal(err)
 		}
 		engines := []storage.Engine{storage.NewInMem(1 << 20)}
-		BootstrapCluster(engines[0])
+		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
+			glog.Fatal(err)
+		}
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr})
 		go func() {
 			glog.Fatal(s.start(engines)) // TODO(spencer): should shutdown server.

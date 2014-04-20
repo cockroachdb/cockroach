@@ -23,6 +23,13 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
+	// KeyMin is a minimum key value which sorts before all other keys.
+	KeyMin = Key("")
+	// KeyMax is a maximum key value which sorts after all other
+	// keys. Because keys are stored using an ordered encoding (see
+	// storage/encoding.go), they will never start with \xff.
+	KeyMax = Key("\xff")
+
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
 	// slice of Replica structs.
 	KeyMeta1Prefix = Key("\x00\x00meta1")

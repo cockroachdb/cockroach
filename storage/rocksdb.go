@@ -55,6 +55,12 @@ func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 	return r, nil
 }
 
+// Type returns either HDD or SSD depending on how engine
+// was configured.
+func (r *RocksDB) Type() DiskType {
+	return r.typ
+}
+
 // put sets the given key to the value provided.
 func (r *RocksDB) put(key Key, value Value) error {
 	return util.Error("put unimplemented")
@@ -67,7 +73,7 @@ func (r *RocksDB) get(key Key) (Value, error) {
 
 // scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
-func (r *RocksDB) scan(start, end Key, max int) ([]KeyValue, error) {
+func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 	return []KeyValue{}, util.Error("scan unimplemented")
 }
 
