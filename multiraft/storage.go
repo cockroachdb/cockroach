@@ -19,8 +19,8 @@ package multiraft
 
 import (
 	"reflect"
-	"square/up/util"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
