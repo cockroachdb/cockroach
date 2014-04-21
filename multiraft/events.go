@@ -23,3 +23,8 @@ type EventLeaderElection struct {
 	GroupID GroupID
 	NodeID  NodeID
 }
+
+// An EventCommandCommitted is broadcast whenever a command has been committed.
+type EventCommandCommitted struct {
+	Command []byte
+}

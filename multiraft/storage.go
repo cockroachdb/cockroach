@@ -19,8 +19,18 @@ package multiraft
 
 import (
 	"reflect"
+	"square/up/util"
 
 	"github.com/golang/glog"
+)
+
+// LogEntryType is the type of a LogEntry.
+type LogEntryType int8
+
+// LogEntryCommand is for application-level commands sent via MultiRaft.SendCommand;
+// other LogEntryTypes are for internal use.
+const (
+	LogEntryCommand LogEntryType = iota
 )
 
 // LogEntry represents a persistent log entry.  Payloads are opaque to the raft system.
@@ -28,6 +38,8 @@ import (
 // payloads for membership changes.
 type LogEntry struct {
 	Term    int
+	Index   int
+	Type    LogEntryType
 	Payload []byte
 }
 
@@ -71,8 +83,9 @@ type Storage interface {
 	// SetGroupMetadata is called to update the metadata for the given group.
 	SetGroupMetadata(groupID GroupID, metadata *GroupMetadata) error
 
-	// AppendLogEntries is called to add entries to the log.
-	AppendLogEntries(groupID GroupID, firstIndex int, entries []*LogEntry) error
+	// AppendLogEntries is called to add entries to the log.  The entries will always span
+	// a contiguous range of indices just after the current end of the log.
+	AppendLogEntries(groupID GroupID, entries []*LogEntry) error
 
 	// TruncateLog is called to delete all log entries with index > lastIndex.
 	TruncateLog(groupID GroupID, lastIndex int) error
@@ -89,6 +102,7 @@ type Storage interface {
 
 type memoryGroup struct {
 	metadata GroupMetadata
+	entries  []*LogEntry
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
@@ -119,9 +133,16 @@ func (m *MemoryStorage) SetGroupMetadata(groupID GroupID, metadata *GroupMetadat
 }
 
 // AppendLogEntries implements the Storage interface.
-func (m *MemoryStorage) AppendLogEntries(groupID GroupID, firstIndex int,
-	entries []*LogEntry) error {
-	panic("unimplemented")
+func (m *MemoryStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry) error {
+	g := m.getGroup(groupID)
+	for i, entry := range entries {
+		expectedIndex := len(g.entries) + i
+		if expectedIndex != entry.Index {
+			return util.Errorf("log index mismatch: expected %v but was %v", expectedIndex, entry.Index)
+		}
+	}
+	g.entries = append(g.entries, entries...)
+	return nil
 }
 
 // TruncateLog implements the Storage interface.
@@ -137,14 +158,21 @@ func (m *MemoryStorage) GetLogEntry(groupID GroupID, index int) (*LogEntry, erro
 // GetLogEntries implements the Storage interface.
 func (m *MemoryStorage) GetLogEntries(groupID GroupID, firstIndex, lastIndex int,
 	ch chan<- *LogEntryState) {
-	panic("unimplemented")
+	g := m.getGroup(groupID)
+	for i := firstIndex; i <= lastIndex; i++ {
+		ch <- &LogEntryState{i, *g.entries[i], nil}
+	}
+	close(ch)
 }
 
 // getGroup returns a mutable memoryGroup object, creating if necessary.
 func (m *MemoryStorage) getGroup(groupID GroupID) *memoryGroup {
 	g, ok := m.groups[groupID]
 	if !ok {
-		g = &memoryGroup{}
+		g = &memoryGroup{
+			// Start with a dummy entry because the raft paper uses 1-based indexing.
+			entries: []*LogEntry{nil},
+		}
 		m.groups[groupID] = g
 	}
 	return g
@@ -152,14 +180,8 @@ func (m *MemoryStorage) getGroup(groupID GroupID) *memoryGroup {
 
 // groupWriteRequest represents a set of changes to make to a group.
 type groupWriteRequest struct {
-	metadata  *GroupMetadata
-	nextIndex int
-	entries   []*LogEntry
-}
-
-// newGroupWriteRequest creates a groupWriteRequest.
-func newGroupWriteRequest() *groupWriteRequest {
-	return &groupWriteRequest{nextIndex: -1}
+	metadata *GroupMetadata
+	entries  []*LogEntry
 }
 
 // writeRequest is a collection of groupWriteRequests.
@@ -180,6 +202,7 @@ type groupWriteResponse struct {
 	metadata  *GroupMetadata
 	lastIndex int
 	lastTerm  int
+	entries   []*LogEntry
 }
 
 // writeResponse is a collection of groupWriteResponses.
@@ -227,7 +250,7 @@ func (w *writeTask) start() {
 		response := &writeResponse{make(map[GroupID]*groupWriteResponse)}
 
 		for groupID, groupReq := range request.groups {
-			groupResp := &groupWriteResponse{nil, -1, -1}
+			groupResp := &groupWriteResponse{nil, -1, -1, groupReq.entries}
 			response.groups[groupID] = groupResp
 			if groupReq.metadata != nil {
 				err := w.storage.SetGroupMetadata(groupID, groupReq.metadata)
@@ -237,11 +260,11 @@ func (w *writeTask) start() {
 				groupResp.metadata = groupReq.metadata
 			}
 			if len(groupReq.entries) > 0 {
-				err := w.storage.AppendLogEntries(groupID, groupReq.nextIndex, groupReq.entries)
+				err := w.storage.AppendLogEntries(groupID, groupReq.entries)
 				if err != nil {
 					continue
 				}
-				groupResp.lastIndex = groupReq.nextIndex + len(groupReq.entries) - 1
+				groupResp.lastIndex = groupReq.entries[len(groupReq.entries)-1].Index
 				groupResp.lastTerm = groupReq.entries[len(groupReq.entries)-1].Term
 			}
 		}

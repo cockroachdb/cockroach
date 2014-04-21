@@ -21,7 +21,8 @@ package multiraft
 // channels for ease of testing.  It is not suitable for non-test use because
 // unconsumed channels can become backlogged and block.
 type eventDemux struct {
-	LeaderElection chan *EventLeaderElection
+	LeaderElection   chan *EventLeaderElection
+	CommandCommitted chan *EventCommandCommitted
 
 	events  <-chan interface{}
 	stopper chan struct{}
@@ -30,6 +31,7 @@ type eventDemux struct {
 func newEventDemux(events <-chan interface{}) *eventDemux {
 	return &eventDemux{
 		make(chan *EventLeaderElection, 1000),
+		make(chan *EventCommandCommitted, 1000),
 		events,
 		make(chan struct{}),
 	}
@@ -43,6 +45,9 @@ func (e *eventDemux) start() {
 				switch event := event.(type) {
 				case *EventLeaderElection:
 					e.LeaderElection <- event
+
+				case *EventCommandCommitted:
+					e.CommandCommitted <- event
 				}
 
 			case <-e.stopper:

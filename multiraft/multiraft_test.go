@@ -23,6 +23,7 @@ import (
 )
 
 type testCluster struct {
+	t      *testing.T
 	nodes  []*state
 	clocks []*manualClock
 	events []*eventDemux
@@ -30,7 +31,7 @@ type testCluster struct {
 
 func newTestCluster(size int, t *testing.T) *testCluster {
 	transport := NewLocalRPCTransport()
-	cluster := &testCluster{}
+	cluster := &testCluster{t: t}
 	for i := 0; i < size; i++ {
 		clock := newManualClock()
 		storage := NewMemoryStorage()
@@ -69,19 +70,29 @@ func (c *testCluster) stop() {
 	}
 }
 
+// createGroup replicates a group among the first numReplicas nodes in the cluster
+func (c *testCluster) createGroup(groupID GroupID, numReplicas int) {
+	var replicaIDs []NodeID
+	var replicaNodes []*state
+	for i := 0; i < numReplicas; i++ {
+		replicaNodes = append(replicaNodes, c.nodes[i])
+		replicaIDs = append(replicaIDs, c.nodes[i].nodeID)
+	}
+	for _, node := range replicaNodes {
+		err := node.CreateGroup(groupID, replicaIDs)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+	}
+}
+
 func TestInitialLeaderElection(t *testing.T) {
 	// Run the test three times, each time triggering a different node's election clock.
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		cluster := newTestCluster(3, t)
 		groupID := GroupID(1)
-		for _, node := range cluster.nodes {
-			err := node.CreateGroup(groupID,
-				[]NodeID{cluster.nodes[0].nodeID, cluster.nodes[1].nodeID, cluster.nodes[2].nodeID})
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		cluster.createGroup(groupID, 3)
 
 		cluster.clocks[leaderIndex].triggerElection()
 
@@ -94,5 +105,25 @@ func TestInitialLeaderElection(t *testing.T) {
 				event.NodeID)
 		}
 		cluster.stop()
+	}
+}
+
+func TestCommand(t *testing.T) {
+	cluster := newTestCluster(3, t)
+	groupID := GroupID(1)
+	cluster.createGroup(groupID, 3)
+	// TODO(bdarnell): once followers can forward to leaders, don't wait for the election here.
+	cluster.clocks[0].triggerElection()
+	<-cluster.events[0].LeaderElection
+
+	// Submit a command to the leader
+	cluster.nodes[0].SubmitCommand(groupID, []byte("command"))
+
+	// The command will be committed on each node.
+	for _, events := range cluster.events {
+		commit := <-events.CommandCommitted
+		if string(commit.Command) != "command" {
+			t.Errorf("unexpected value in committed command: %v", commit.Command)
+		}
 	}
 }

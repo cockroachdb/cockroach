@@ -100,10 +100,16 @@ func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
 	return client, nil
 }
 
+// RequestHeader contains fields common to all RPC requests.
+type RequestHeader struct {
+	SrcNode  NodeID
+	DestNode NodeID
+}
+
 // RequestVoteRequest is a part of the Raft protocol.  It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type RequestVoteRequest struct {
-	NodeID       NodeID
+	RequestHeader
 	GroupID      GroupID
 	Term         int
 	CandidateID  NodeID
@@ -121,12 +127,13 @@ type RequestVoteResponse struct {
 // AppendEntriesRequest is a part of the Raft protocol.  It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type AppendEntriesRequest struct {
+	RequestHeader
 	GroupID      GroupID
 	Term         int
 	LeaderID     NodeID
 	PrevLogIndex int
 	PrevLogTerm  int
-	Entries      []LogEntry
+	Entries      []*LogEntry
 	LeaderCommit int
 }
 
