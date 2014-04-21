@@ -105,9 +105,7 @@ func (s *Store) Bootstrap(ident StoreIdent) error {
 	return putI(s.engine, keyStoreIdent, s.Ident)
 }
 
-// GetRange fetches a range by ID. The range is fetched quickly if
-// it's already been loaded and is in the ranges map; otherwise, an
-// instance of the range is instantiated from the underlying store.
+// GetRange fetches a range by ID. Returns an error if no range is found.
 func (s *Store) GetRange(rangeID int64) (*Range, error) {
 	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
@@ -131,6 +129,7 @@ func (s *Store) CreateRange(startKey, endKey Key) (*Range, error) {
 		RangeID:  rangeID,
 		StartKey: startKey,
 		EndKey:   endKey,
+		Replicas: RangeLocations{StartKey: startKey},
 	}
 	err = putI(s.engine, rangeKey(rangeID), meta)
 	if err != nil {

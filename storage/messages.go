@@ -265,12 +265,11 @@ type InternalRangeLookupRequest struct {
 // An InternalRangeLookupResponse is the return value from the
 // InternalRangeLookup() method. It returns the metadata for the
 // range where the key resides. When looking up 1-level metadata,
-// it returns the range containing the 2-level metadata for the key.
-// And when looking up 2-level metadata, it returns the range possibly
-// containing the actual key and its value.
+// it returns the info for the range containing the 2-level metadata
+// for the key. And when looking up 2-level metadata, it returns the
+// info for the range possibly containing the actual key and its value.
 type InternalRangeLookupResponse struct {
 	ResponseHeader
-	StartKey  Key
-	EndKey    Key
+	EndKey    Key // The key in datastore whose value is the Locations object.
 	Locations RangeLocations
 }

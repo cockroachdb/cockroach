@@ -38,7 +38,7 @@ func computeSize(kv KeyValue) int64 {
 	return int64(len(kv.Key)) + int64(len(kv.Value.Bytes)) + llrbNodeSize + keyValueSize
 }
 
-// Implement the llrb.Comparable interface for tree nodes.
+// Compare implements the llrb.Comparable interface for tree nodes.
 func (kv KeyValue) Compare(b llrb.Comparable) int {
 	return bytes.Compare(kv.Key, b.(KeyValue).Key)
 }
@@ -94,7 +94,7 @@ func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
 
-	var scanned []KeyValue = nil
+	var scanned []KeyValue
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if int64(len(scanned)) >= max {
 			done = true

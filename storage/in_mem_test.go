@@ -41,7 +41,7 @@ func TestInMemEnginePutGetDelete(t *testing.T) {
 			t.Errorf("get: expected no error, but got %s", err)
 		}
 		if len(val.Bytes) != 0 {
-			t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
+			t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
 		}
 		err = engine.put(c.key, Value{Bytes: c.value})
 		if err != nil {
@@ -129,8 +129,8 @@ func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *test
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
 	}
 	if len(kvs) != len(expKeys) {
-		t.Errorf("scan %q-%q: expected scanned keys mismatch %d != %d: %s",
-			string(start), string(end), len(kvs), len(expKeys), kvs)
+		t.Errorf("scan %q-%q: expected scanned keys mismatch %d != %d: %v",
+			start, end, len(kvs), len(expKeys), kvs)
 	}
 	for i, kv := range kvs {
 		if !bytes.Equal(kv.Key, expKeys[i]) {

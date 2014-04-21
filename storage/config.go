@@ -105,7 +105,12 @@ func (sc StoreCapacity) PercentAvail() float64 {
 }
 
 // RangeLocations is the metadata value stored for a metadata key.
+// The metadata key has meta1 or meta2 key prefix and the suffix encodes
+// the end key of the range this struct represents.
 type RangeLocations struct {
+	// The start key of the range represented by this struct, along with the
+	// meta1 or meta2 key prefix.
+	StartKey Key
 	Replicas []Replica
 }
 

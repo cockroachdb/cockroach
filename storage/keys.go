@@ -21,6 +21,11 @@ import (
 	"bytes"
 )
 
+// MakeKey makes a new key which is prefix+suffix.
+func MakeKey(prefix, suffix Key) Key {
+	return Key(bytes.Join([][]byte{prefix, suffix}, []byte{}))
+}
+
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMin is a minimum key value which sorts before all other keys.
@@ -30,19 +35,17 @@ var (
 	// storage/encoding.go), they will never start with \xff.
 	KeyMax = Key("\xff")
 
+	// KeyMetaPrefix is the common prefix of the metadata key.
+	KeyMetaPrefix = Key("\x00\x00meta")
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
-	// slice of Replica structs.
-	KeyMeta1Prefix = Key("\x00\x00meta1")
+	// RangeLocations struct.
+	KeyMeta1Prefix = MakeKey(KeyMetaPrefix, Key("1"))
 	// KeyMeta2Prefix is the second level of key addressing. The value is a
-	// slice of Replica structs.
-	KeyMeta2Prefix = Key("\x00\x00meta2")
+	// RangeLocations struct.
+	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, Key("2"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
 	KeyNodeIDGenerator = Key("\x00node-id-generator")
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
 	KeyStoreIDGeneratorPrefix = Key("\x00store-id-generator-")
 )
-
-func MakeKey(prefix, suffix Key) Key {
-	return Key(bytes.Join([][]byte{prefix, suffix}, []byte{}))
-}

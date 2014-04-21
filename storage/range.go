@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"container/list"
+	"encoding/gob"
 	"sync"
 	"time"
 
@@ -280,9 +281,44 @@ func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessag
 	reply.Error = util.Error("unimplemented")
 }
 
-// InternalRangeLookup looks up the metadata info for the given metadata key.
-// It looks up the largest key smaller or equal to the given key and
-// returns the value associated with it.
+// InternalRangeLookup looks up the metadata info for the given args.Key.
+// args.Key should be a metadata key, which are of the form "\0\0meta[12]<encoded_key>".
 func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
-	reply.Error = util.Error("unimplemented")
+	if !bytes.HasPrefix(args.Key, KeyMetaPrefix) {
+		reply.Error = util.Errorf("Invalid metadata key: %q", args.Key)
+		return
+	}
+
+	// Validate that key is not outside the range. Since the keys encoded in metadata keys are
+	// the end keys of the range the metadata represent, the check args.Key >= r.Meta.StartKey
+	// may result in false negatives.
+	if bytes.Compare(args.Key, r.Meta.EndKey) >= 0 {
+		reply.Error = util.Errorf("Key outside the range %v with end key %q", r.Meta.RangeID, r.Meta.EndKey)
+		return
+	}
+
+	// We want to search for the metadata key just greater than args.Key.
+	nextKey := MakeKey(args.Key, Key{0})
+	kvs, err := r.engine.scan(nextKey, nil, 1)
+	if err != nil {
+		reply.Error = err
+		return
+	}
+	// We should have gotten the key with the same metadata level prefix as we queried.
+	metaPrefix := args.Key[0:len(KeyMeta1Prefix)]
+	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].Key, metaPrefix) {
+		reply.Error = util.Errorf("Key not found in range %v", r.Meta.RangeID)
+		return
+	}
+
+	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(reply.Locations); err != nil {
+		reply.Error = err
+		return
+	}
+	if bytes.Compare(args.Key, reply.Locations.StartKey) < 0 {
+		// args.Key doesn't belong to this range. We are perhaps searching the wrong node?
+		reply.Error = util.Errorf("No range found for key %q in range: %+v", args.Key, r.Meta)
+		return
+	}
+	reply.EndKey = kvs[0].Key
 }

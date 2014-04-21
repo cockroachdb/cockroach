@@ -140,7 +140,7 @@ func NewDB(gossip *gossip.Gossip) *DistDB {
 func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
 	info, err := db.gossip.GetInfo(nodeIDKey)
-	if err != nil {
+	if info == nil || err != nil {
 		return nil, util.Errorf("Unable to lookup address for node: %v. Error: %v", nodeID, err)
 	}
 	return info.(net.Addr), nil
