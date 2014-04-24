@@ -51,12 +51,13 @@ var (
 	dataDirs = flag.String("data_dirs", "", "specify a comma-separated list of disk "+
 		"type and path or integer size in bytes. For solid state disks, ssd=<path>; "+
 		"for spinning disks, hdd=<path>; for in-memory, mem=<size in bytes>. E.g. "+
-		"--data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
+		"-data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
 	// Regular expression for capturing data directory specifications.
 	dataDirRE = regexp.MustCompile(`^(mem)=([\d]*)|(ssd|hdd)=(.*)$`)
 )
 
+// A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
 	UsageLine: "start",
 	Short:     "start node by joining the gossip network",
@@ -64,13 +65,13 @@ var CmdStart = &commander.Command{
 Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
 contacting one or more well-known hosts specified by the
---gossip_bootstrap command line flag. Every node should be run with
+-gossip_bootstrap command line flag. Every node should be run with
 the same list of bootstrap hosts to guarantee a connected network. An
-alternate approach is to use a single host for --gossip_bootstrap and
+alternate approach is to use a single host for -gossip_bootstrap and
 round-robin DNS.
 
 Each node exports data from one or more physical devices. These
-devices are specified via the --data_dirs command line flag. This is a
+devices are specified via the -data_dirs command line flag. This is a
 comma-separated list of paths to storage directories. Although the
 paths should be specified to correspond uniquely to physical devices,
 this requirement isn't strictly enforced.
@@ -80,7 +81,7 @@ A node exports an HTTP API with the following endpoints:
   Health check:           http://%s/healthz
   Key-value REST:         http://%s%s
   Structured Schema REST: http://%s%s
-`, *httpAddr, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
+`, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
 	Run: runStart,
 }
 
@@ -95,8 +96,8 @@ type server struct {
 	structuredREST *structured.RESTServer
 }
 
-// runStart starts an HTTP server at --http_addr and an RPC server
-// at --rpc_addr. This method won't return unless the server is shutdown
+// ListenAndServe starts an HTTP server at -http_addr and an RPC server
+// at -rpc_addr. This method won't return unless the server is shutdown
 // or a non-temporary error occurs on the HTTP server connection.
 func runStart(cmd *commander.Command, args []string) {
 	glog.Info("starting cockroach cluster")
@@ -104,14 +105,14 @@ func runStart(cmd *commander.Command, args []string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	err = s.start(nil /* init engines from --data_dirs */)
+	err = s.start(nil /* init engines from -data_dirs */)
 	s.stop()
 	if err != nil {
 		glog.Fatal(err)
 	}
 }
 
-// initEngines interprets the --data_dirs command line flag to
+// initEngines interprets the -data_dirs command line flag to
 // initialize a slice of storage.Engine objects.
 func initEngines() ([]storage.Engine, error) {
 	engines := make([]storage.Engine, 0, 1)
@@ -141,7 +142,7 @@ func initEngine(spec string) (storage.Engine, error) {
 	if matches[1] == "mem" {
 		size, err := strconv.ParseInt(matches[2], 10, 64)
 		if err != nil {
-			return nil, util.Error("unable to init in-memory storage %q", spec)
+			return nil, util.Errorf("unable to init in-memory storage %q", spec)
 		}
 		engine = storage.NewInMem(size)
 	} else {

@@ -28,14 +28,19 @@ const (
 	StructuredKeyPrefix = "/structured/"
 )
 
+// A RESTServer provides a RESTful HTTP API to interact with
+// an underlying key-value store.
 type RESTServer struct {
 	db *DB // Structured database client
 }
 
+// NewRESTServer allocates and returns a new server.
 func NewRESTServer(db *DB) *RESTServer {
 	return &RESTServer{db: db}
 }
 
+// HandleAction arbitrates requests to the appropriate function
+// based on the request’s HTTP method.
 func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":

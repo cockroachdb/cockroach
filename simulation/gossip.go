@@ -30,7 +30,7 @@ simulation.
 
 To run:
 
-    go run simulation/gossip.go --size=(small|medium|large|huge|ginormous)
+    go run simulation/gossip.go -size=(small|medium|large|huge|ginormous)
 
 Log output includes instructions for displaying the graph output as a
 series of images to visualize the evolution of the network.

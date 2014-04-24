@@ -52,7 +52,7 @@ func TestInMemEnginePutGetDelete(t *testing.T) {
 			t.Errorf("get: expected no error, but got %s", err)
 		}
 		if !bytes.Equal(val.Bytes, c.value) {
-			t.Errorf("expected key value %s to be %+v: got %+v", val)
+			t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 		}
 		err = engine.del(c.key)
 		if err != nil {

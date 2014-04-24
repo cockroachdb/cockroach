@@ -27,6 +27,7 @@ type PingResponse struct {
 	Pong string // An echo of value sent with PingRequest.
 }
 
+// A HeartbeatService exposes a method to echo its request params.
 type HeartbeatService struct{}
 
 // Ping echos the contents of the request to the response.

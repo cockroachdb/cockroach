@@ -244,15 +244,15 @@ func (n *Node) initStoreMap(engines []storage.Engine) error {
 func (n *Node) validateStores() error {
 	for _, s := range n.storeMap {
 		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
-			return util.Error("unidentified store in store map: %s", s.Ident)
+			return util.Errorf("unidentified store in store map: %+v", s.Ident)
 		}
 		if n.ClusterID == "" {
 			n.ClusterID = s.Ident.ClusterID
 			n.Attributes.NodeID = s.Ident.NodeID
 		} else if n.ClusterID != s.Ident.ClusterID {
-			return util.Errorf("store ident %s cluster ID doesn't match node ident %s", s.Ident, n.ClusterID)
+			return util.Errorf("store ident %+v cluster ID doesn't match node ident %+v", s.Ident, n.ClusterID)
 		} else if n.Attributes.NodeID != s.Ident.NodeID {
-			return util.Errorf("store ident %s node ID doesn't match node ident %s", s.Ident, n.Attributes.NodeID)
+			return util.Errorf("store ident %+v node ID doesn't match node ident %+v", s.Ident, n.Attributes.NodeID)
 		}
 	}
 	return nil

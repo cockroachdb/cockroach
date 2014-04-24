@@ -139,7 +139,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		if values[i].(float64) != float64(i) {
-			t.Errorf("index %d has incorrect value: %d, expected %d", i, values[i].(float64), i)
+			t.Errorf("index %d has incorrect value: %f, expected %d", i, values[i].(float64), i)
 		}
 	}
 
@@ -157,7 +157,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		if values[i].(string) != fmt.Sprintf("%d", i) {
-			t.Errorf("index %d has incorrect value: %d, expected %d", i, values[i], fmt.Sprintf("%d", i))
+			t.Errorf("index %d has incorrect value: %d, expected %s", i, values[i], fmt.Sprintf("%d", i))
 		}
 	}
 }

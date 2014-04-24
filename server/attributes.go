@@ -22,6 +22,7 @@ import (
 	"os"
 )
 
+// Environment variables that inform the locality of where the process runs.
 const (
 	EnvVarDatacenter = "DATACENTER"
 	EnvVarPDU        = "PDU"
@@ -45,21 +46,21 @@ func getFlagOrEnvVar(flag, envVar string) string {
 }
 
 // getDatacenter determines the datacenter either through a command
-// line flag (--datacenter) or from the DATACENTER environment
+// line flag (-datacenter) or from the DATACENTER environment
 // variable. If neither is available, returns an empty string.
 func getDatacenter() string {
 	return getFlagOrEnvVar(*datacenter, EnvVarDatacenter)
 }
 
 // getPDU determines the power distribution unit either through a
-// command line flag (--pdu) or from the PDU environment variable. If
+// command line flag (-pdu) or from the PDU environment variable. If
 // neither is available, returns an empty string.
 func getPDU() string {
 	return getFlagOrEnvVar(*pdu, EnvVarPDU)
 }
 
 // getRack determines the hardware rack identifier either through a
-// command line flag (--rack) or from the RACK environment
+// command line flag (-rack) or from the RACK environment
 // variable. If neither is available, returns an empty string.
 func getRack() string {
 	return getFlagOrEnvVar(*rack, EnvVarRack)

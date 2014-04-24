@@ -170,7 +170,7 @@ type Schema struct {
 var foreignKeyRE = regexp.MustCompile(`^([^\.]*)(?:\.([^\.]*))?$`)
 
 // Set containing all valid schema column types.
-var ValidTypes map[string]struct{} = map[string]struct{}{
+var ValidTypes = map[string]struct{}{
 	"integer":    struct{}{},
 	"float":      struct{}{},
 	"string":     struct{}{},
@@ -184,7 +184,7 @@ var ValidTypes map[string]struct{} = map[string]struct{}{
 }
 
 // Set containing all valid index types.
-var ValidIndexTypes map[string]struct{} = map[string]struct{}{
+var ValidIndexTypes = map[string]struct{}{
 	"fulltext":  struct{}{},
 	"location":  struct{}{},
 	"secondary": struct{}{},
@@ -284,7 +284,7 @@ func (s *Schema) Validate() error {
 
 	// Third pass: validate foreign keys (need all columns validated first).
 	for _, t := range s.Tables {
-		for fkTable, _ := range t.foreignKeys {
+		for fkTable := range t.foreignKeys {
 			if err := s.validateForeignKey(t, fkTable); err != nil {
 				return fmt.Errorf("table %q, foreign key %q: %v", t.Name, fkTable, err)
 			}
@@ -442,7 +442,7 @@ func (s *Schema) validateForeignKey(t *Table, fkTable string) error {
 
 	// Get two sorted lists of column names: for foreign key reference, and...
 	fkColNames := make([]string, 0, len(t.foreignKeys[fkTable]))
-	for key, _ := range t.foreignKeys[fkTable] {
+	for key := range t.foreignKeys[fkTable] {
 		fkColNames = append(fkColNames, key)
 	}
 	sort.Strings(fkColNames)
@@ -499,10 +499,9 @@ func (s *Schema) parseForeignKey(c *Column) (table, column string, err error) {
 		if column == fkColumn.Name {
 			if c.Type == fkColumn.Type {
 				return
-			} else {
-				err = fmt.Errorf("foreign key %q has type mismatch %q != %q", c.ForeignKey, fkColumn.Type, c.Type)
-				return
 			}
+			err = fmt.Errorf("foreign key %q has type mismatch %q != %q", c.ForeignKey, fkColumn.Type, c.Type)
+			return
 		}
 	}
 	err = fmt.Errorf("foreign key %q does not reference a primary key column", c.ForeignKey)

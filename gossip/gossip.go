@@ -216,7 +216,7 @@ func (g *Gossip) Outgoing() []net.Addr {
 
 // Start launches the gossip instance, which commences joining the
 // gossip network using the node addresses supplied to NewGossip and
-// specified via command-line flag: --gossip_bootstrap.
+// specified via command-line flag: -gossip_bootstrap.
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
@@ -260,7 +260,7 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 }
 
 // parseBootstrapAddresses parses the gossip bootstrap addresses
-// passed via --gossip_bootstrap.
+// passed via -gossip_bootstrap.
 func (g *Gossip) parseBootstrapAddresses() {
 	g.mu.Lock()
 	defer g.mu.Unlock()

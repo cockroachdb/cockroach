@@ -213,7 +213,7 @@ func (g *group) addInfo(i *info) error {
 		t1 := reflect.TypeOf(i.Val).Kind()
 		t2 := reflect.TypeOf(g.gatekeeper.Val).Kind()
 		if t1 != t2 {
-			return util.Errorf("info %+v has type %s whereas group has type %s", t1, t2)
+			return util.Errorf("info %+v has type %s whereas group has type %s", i, t1, t2)
 		}
 	}
 

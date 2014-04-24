@@ -107,7 +107,7 @@ func TestAddrSetFilter(t *testing.T) {
 		return !addrs2.hasAddr(a)
 	})
 	if filtered.len() != 1 || filtered.hasAddr(addr1) || !filtered.hasAddr(addr0) {
-		t.Error("expected filter to leave addr0: %+v", filtered)
+		t.Errorf("expected filter to leave addr0: %+v", filtered)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/golang/glog"
 )
 
+// A CmdInit command initializes a new Cockroach cluster.
 var CmdInit = &commander.Command{
 	UsageLine: "init <bootstrap-data-dir> <default-zone-config-filename>",
 	Short:     "init new Cockroach cluster",
