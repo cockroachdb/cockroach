@@ -97,7 +97,7 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 		StoreID:   1,
 	}
 	s := storage.NewStore(engine, nil)
-	if err := s.Init(nil); err != nil {
+	if err := s.Init(); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +203,7 @@ func (n *Node) initStoreMap(engines []storage.Engine) error {
 
 	for _, engine := range engines {
 		s := storage.NewStore(engine, n.gossip)
-		if err := s.Init(n.gossip); err != nil {
+		if err := s.Init(); err != nil {
 			return err
 		}
 		// If Stores have been bootstrapped, their ident will be

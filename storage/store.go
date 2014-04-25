@@ -80,10 +80,12 @@ func NewStore(engine Engine, gossip *gossip.Gossip) *Store {
 }
 
 // Init reads the StoreIdent from the underlying engine.
-func (s *Store) Init(gossip *gossip.Gossip) error {
-	_, _, err := getI(s.engine, keyStoreIdent, &s.Ident)
+func (s *Store) Init() error {
+	ok, _, err := getI(s.engine, keyStoreIdent, &s.Ident)
 	if err != nil {
 		return err
+	} else if !ok {
+		return util.Error("store has not been bootstrapped")
 	}
 
 	// TODO(spencer): scan through all range metadata and instantiate
@@ -93,15 +95,25 @@ func (s *Store) Init(gossip *gossip.Gossip) error {
 	if err != nil {
 		return err
 	}
-	rng := NewRange(meta, s.engine, s.allocator, gossip)
+	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
 	s.ranges[meta.RangeID] = rng
 
 	return nil
 }
 
-// Bootstrap writes a new store ident to the underlying engine.
+// Bootstrap writes a new store ident to the underlying engine. To
+// ensure that no crufty data already exists in the engine, it scans
+// the engine contents before writing the new store ident. The engine
+// should be completely empty. It returns an error if called on a
+// non-empty engine.
 func (s *Store) Bootstrap(ident StoreIdent) error {
 	s.Ident = ident
+	kvs, err := s.engine.scan(KeyMin, KeyMax, 1 /* only need one entry to fail! */)
+	if err != nil {
+		return util.Errorf("unable to scan engine to verify empty: %v", err)
+	} else if len(kvs) > 0 {
+		return util.Errorf("engine not empty on bootstrap; first key-value %q: %q", kvs[0].Key, kvs[0].Value)
+	}
 	return putI(s.engine, keyStoreIdent, s.Ident)
 }
 
