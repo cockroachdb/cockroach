@@ -97,9 +97,6 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 		StoreID:   1,
 	}
 	s := storage.NewStore(engine, nil)
-	if err := s.Init(); err != nil {
-		return nil, err
-	}
 
 	// Verify the store isn't already part of a cluster.
 	if s.Ident.ClusterID != "" {
@@ -108,6 +105,10 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 
 	// Bootstrap store to persist the store ident.
 	if err := s.Bootstrap(sIdent); err != nil {
+		return nil, err
+	}
+
+	if err := s.Init(); err != nil {
 		return nil, err
 	}
 
