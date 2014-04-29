@@ -12,31 +12,17 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package main
+package kv
 
-import (
-	"os"
+import "flag"
 
-	commander "code.google.com/p/go-commander"
-	"github.com/cockroachdb/cockroach/server"
-	"github.com/golang/glog"
+var (
+	Addr = flag.String("addr", "localhost:8080", "address for connection to cockroach cluster")
 )
 
-func main() {
-	c := commander.Commander{
-		Name: "cockroach",
-		Commands: []*commander.Command{
-			server.CmdInit,
-			server.CmdGetZone,
-			server.CmdLsZones,
-			server.CmdRmZone,
-			server.CmdSetZone,
-			server.CmdStart,
-		},
-	}
-
-	if err := c.Run(os.Args[1:]); err != nil {
-		glog.Fatal(err)
-	}
+func HTTPAddr() string {
+	return "http://" + *Addr
 }

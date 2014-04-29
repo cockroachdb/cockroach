@@ -25,10 +25,12 @@ import (
 )
 
 var testConfig = ZoneConfig{
-	Replicas: map[string][]DiskType{
-		"a": []DiskType{SSD, HDD},
-		"b": []DiskType{SSD, HDD},
+	Replicas: map[string][]string{
+		"a": []string{"SSD", "HDD"},
+		"b": []string{"SSD", "HDD"},
 	},
+	RangeMinBytes: 1 << 20,
+	RangeMaxBytes: 64 << 20,
 }
 
 func TestZoneConfigRoundTrip(t *testing.T) {

@@ -31,12 +31,12 @@ import (
 )
 
 var (
-	s    *server
-	once sync.Once
+	s              *server
+	serverTestOnce sync.Once
 )
 
 func startServer() *server {
-	once.Do(func() {
+	serverTestOnce.Do(func() {
 		resetTestData()
 		s, err := newServer()
 		if err != nil {

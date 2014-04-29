@@ -59,8 +59,8 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 
 		// compute how many of each DiskType we need in this Data Center
 		neededDiskTypes := make(map[DiskType]int)
-		for _, diskType := range diskTypes {
-			neededDiskTypes[diskType]++
+		for _, strDiskType := range diskTypes {
+			neededDiskTypes[StringToDiskType(strDiskType)]++
 		}
 
 		for _, replica := range existingReplicas[dc] {

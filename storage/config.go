@@ -22,11 +22,37 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 	yaml "gopkg.in/yaml.v1"
+)
+
+const (
+	// SSD = Solid State Disk
+	SSD DiskType = iota
+	// HDD = Spinning disk
+	HDD
+	// MEM = DRAM
+	MEM
 )
 
 // DiskType is the type of a disk that a Store is storing data on.
 type DiskType uint32
+
+// StringToDiskType converts disk type string to DiskType. Returns
+// "HDD" as default if no matching disk type is found.
+func StringToDiskType(str string) DiskType {
+	switch str {
+	case "SSD":
+		return SSD
+	case "HDD":
+		return HDD
+	case "MEM":
+		return MEM
+	default:
+		glog.Errorf("invalid disk type specified %q; using HDD", str)
+		return HDD
+	}
+}
 
 // Replica describes a replica location by node ID (corresponds to a
 // host:port via lookup on gossip network), store ID (corresponds to
@@ -40,15 +66,6 @@ type Replica struct {
 	Datacenter string
 	DiskType
 }
-
-const (
-	// SSD = Solid State Disk
-	SSD DiskType = iota
-	// HDD = Spinning disk
-	HDD
-	// MEM = DRAM
-	MEM
-)
 
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
@@ -77,9 +94,9 @@ type StoreAttributes struct {
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
 	// Replicas is a map from datacenter name to a slice of disk types.
-	Replicas      map[string]([]DiskType) `yaml:"replicas,omitempty"`
-	RangeMinBytes int64                   `yaml:"range_min_bytes,omitempty"`
-	RangeMaxBytes int64                   `yaml:"range_max_bytes,omitempty"`
+	Replicas      map[string][]string `yaml:"replicas,omitempty"`
+	RangeMinBytes int64               `yaml:"range_min_bytes,omitempty"`
+	RangeMaxBytes int64               `yaml:"range_max_bytes,omitempty"`
 }
 
 // ParseZoneConfig parses a YAML serialized ZoneConfig.

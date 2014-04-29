@@ -92,6 +92,7 @@ type server struct {
 	kvDB           kv.DB
 	kvREST         *kv.RESTServer
 	node           *Node
+	admin          *adminServer
 	structuredDB   *structured.DB
 	structuredREST *structured.RESTServer
 }
@@ -178,6 +179,7 @@ func newServer() (*server, error) {
 	s.kvDB = kv.NewDB(s.gossip)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.rpc, s.kvDB, s.gossip)
+	s.admin = newAdminServer(s.kvDB)
 	s.structuredDB = structured.NewDB(s.kvDB)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 
@@ -209,8 +211,9 @@ func (s *server) start(engines []storage.Engine) error {
 }
 
 func (s *server) initHTTP() {
-	glog.Infoln("Starting HTTP server at", *httpAddr)
-	s.mux.HandleFunc("/_admin/healthz", s.handleHealthz)
+	glog.Infof("Starting HTTP server at %s", *httpAddr)
+	s.mux.HandleFunc(adminKeyPrefix+"healthz", s.admin.handleHealthz)
+	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
 	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)
 }
@@ -248,9 +251,4 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	gzw := newGzipResponseWriter(w)
 	defer gzw.Close()
 	s.mux.ServeHTTP(gzw, r)
-}
-
-func (s *server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintln(w, "ok")
 }

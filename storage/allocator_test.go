@@ -24,21 +24,21 @@ import (
 )
 
 var simpleZoneConfig = ZoneConfig{
-	Replicas: map[string][]DiskType{
-		"a": []DiskType{SSD},
+	Replicas: map[string][]string{
+		"a": []string{"SSD"},
 	},
 }
 
 var multiDisksConfig = ZoneConfig{
-	Replicas: map[string][]DiskType{
-		"a": []DiskType{SSD, HDD, MEM},
+	Replicas: map[string][]string{
+		"a": []string{"SSD", "HDD", "MEM"},
 	},
 }
 
 var multiDCConfig = ZoneConfig{
-	Replicas: map[string][]DiskType{
-		"a": []DiskType{SSD},
-		"b": []DiskType{SSD},
+	Replicas: map[string][]string{
+		"a": []string{"SSD"},
+		"b": []string{"SSD"},
 	},
 }
 
