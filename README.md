@@ -120,7 +120,7 @@ efficiently sideline updates which can tolerate asynchronous execution
 and 2) provide an integrated message queuing system for asynchronous
 communication between distributed system components.
 
-![SQL - NoSQL - SpanSQL Capabilities](/cockroachdb/cockroach/tree/master/resources/doc/sql-nosql-spansql.png?raw=true "SQL - NoSQL - SpanSQL Capabilities")
+![SQL - NoSQL - SpanSQL Capabilities](/cockroachdb/cockroach/master/resources/doc/sql-nosql-spansql.png?raw=true "SQL - NoSQL - SpanSQL Capabilities")
 
 -----------------
 
