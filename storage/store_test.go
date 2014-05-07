@@ -51,7 +51,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
-		t.Error("failure fetching 1st range: %v", err)
+		t.Errorf("failure fetching 1st range: %v", err)
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped engine.
@@ -61,7 +61,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 	// 1st range should be available.
 	if _, err := store.GetRange(1); err != nil {
-		t.Error("failure fetching 1st range: %v", err)
+		t.Errorf("failure fetching 1st range: %v", err)
 	}
 }
 

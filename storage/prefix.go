@@ -179,7 +179,6 @@ func (p *prefixConfigCache) matchesByPrefix(key Key) []*prefixConfig {
 		// Truncate final character and loop.
 		prefix = prefix[0 : len(prefix)-1]
 	}
-	return configs
 }
 
 // splitRangeByPrefixes returns a list of key ranges with

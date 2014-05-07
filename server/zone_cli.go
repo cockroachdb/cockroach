@@ -116,7 +116,7 @@ func runLsZones(cmd *commander.Command, args []string) {
 	}
 	var prefixes []string
 	if err = json.Unmarshal(b, &prefixes); err != nil {
-		fmt.Println("unable to parse admin REST response: %v\n", err)
+		fmt.Printf("unable to parse admin REST response: %v\n", err)
 	}
 	var re *regexp.Regexp
 	if len(args) == 1 {
