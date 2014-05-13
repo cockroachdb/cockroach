@@ -124,6 +124,6 @@ communication between distributed system components.
 
 For design details visit: https://docs.google.com/document/d/11k2EmhLGSbViBvi6_zFEiKzuXxYF49ZuuDJLe6O8gBU/edit?usp=sharing
 
-#### SQL - NoSQL - SpanSQL Capabilities
+#### SQL - NoSQL - NewSQL Capabilities
 
-![SQL - NoSQL - SpanSQL Capabilities](/resources/doc/sql-nosql-spansql.png?raw=true)
+![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
