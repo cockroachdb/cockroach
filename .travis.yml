@@ -9,7 +9,7 @@ before_install:
   - wget https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz
   - tar -xzvf gflags-2.0-no-svn-files.tar.gz
   - cd gflags-2.0
-  - ./configure && make && sudo make install
+  - ./configure && make && sudo make install && cd ..
   - go get code.google.com/p/biogo.store/llrb
   - go get code.google.com/p/go-commander
   - go get code.google.com/p/go-uuid/uuid
