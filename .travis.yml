@@ -5,7 +5,7 @@ go:
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev
+  - sudo apt-get install -y libsnappy-dev zlib1g-dev libbz2-dev
   - go get code.google.com/p/biogo.store/llrb
   - go get code.google.com/p/go-commander
   - go get code.google.com/p/go-uuid/uuid
