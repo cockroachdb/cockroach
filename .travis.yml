@@ -5,11 +5,7 @@ go:
 
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -y libsnappy-dev zlib1g-dev libbz2-dev
-  - wget https://github.com/schuhschuh/gflags/archive/v2.1.1.tar.gz
-  - tar -xzvf v2.1.1.tar.gz
-  - cd gflags-2.1.1/
-  - ./configure && make && sudo make install
+  - sudo apt-get install -y gflags libsnappy-dev zlib1g-dev libbz2-dev
   - go get code.google.com/p/biogo.store/llrb
   - go get code.google.com/p/go-commander
   - go get code.google.com/p/go-uuid/uuid
