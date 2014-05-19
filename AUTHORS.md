@@ -5,3 +5,5 @@
 - Spencer Kimball <spencer.kimball@gmail.com>
 - Andrew Bonventre <andybons@gmail.com>
 - Shawn Morel <shawn@strangemonad.com>
+- Ben Darnell <ben@bendarnell.com>
+- Peter Mattis <petermattis@gmail.com>
