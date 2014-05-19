@@ -6,23 +6,19 @@ ROCKSDB := $(CURDIR)/_vendor/rocksdb
 CGO_CFLAGS  := "-I$(ROCKSDB)/include"
 CGO_LDFLAGS := "-L$(ROCKSDB)"
 
-DYLD_LIBRARY_PATH := $(ROCKSDB)
-
-BUILD_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
-	             CGO_CFLAGS=$(CGO_CFLAGS)
-RUN_FLAGS   := $(BUILD_FLAGS) \
-	             DYLD_LIBRARY_PATH=$(DYLD_LIBRARY_PATH)
+CGO_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
+	           CGO_CFLAGS=$(CGO_CFLAGS)
 
 all: build test
 
 rocksdb:
-	cd $(ROCKSDB); make shared_lib
+	cd $(ROCKSDB); make static_lib
 
 build: rocksdb
-	$(BUILD_FLAGS) $(GO) build
+	$(CGO_FLAGS) $(GO) build
 
 test:
-	$(RUN_FLAGS) $(GO) test ./...
+	$(CGO_FLAGS) $(GO) test ./...
 
 clean:
 	$(GO) clean
