@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-go test ./... || exit 1
+make test || exit 1
 
 # Find the .go files that are being modified by this change. Exclude the
 # auto-generated .pb.go files.

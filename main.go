@@ -20,7 +20,6 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/golang/glog"
 )
 
 func main() {
@@ -37,6 +36,6 @@ func main() {
 	}
 
 	if err := c.Run(os.Args[1:]); err != nil {
-		glog.Fatal(err)
+		os.Exit(1)
 	}
 }
