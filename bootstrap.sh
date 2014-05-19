@@ -13,6 +13,10 @@ fi
 
 set -e -x
 
+# Init submodules.
+git submodule init
+git submodule update
+
 # Grab binaries required by git hooks.
 go get github.com/golang/lint/golint
 go get code.google.com/p/go.tools/cmd/vet
