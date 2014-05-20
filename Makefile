@@ -7,7 +7,7 @@ CGO_CFLAGS  := "-I$(ROCKSDB)/include"
 CGO_LDFLAGS := "-L$(ROCKSDB)"
 
 CGO_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
-	           CGO_CFLAGS=$(CGO_CFLAGS)
+             CGO_CFLAGS=$(CGO_CFLAGS)
 
 all: build test
 

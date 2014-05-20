@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-make test || exit 1
-
 # Find the .go files that are being modified by this change. Exclude the
 # auto-generated .pb.go files.
 gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$' | grep -v '.pb.go$')

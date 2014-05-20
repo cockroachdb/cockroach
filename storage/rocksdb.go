@@ -19,6 +19,7 @@
 package storage
 
 // #cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
+// #cgo linux LDFLAGS: -lrt
 // #include <stdlib.h>
 // #include "rocksdb/c.h"
 import "C"
@@ -65,12 +66,30 @@ func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 		r.rdb = nil
 		s := C.GoString(cErr)
 		C.free(unsafe.Pointer(cErr))
+		// TODO(andybons): use util.Error.
 		return nil, errors.New(s)
 	}
 	if _, err := r.capacity(); err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+// DestroyRocksDB destroys the underlying filesystem
+// data associated with the database.
+func DestroyRocksDB(dir string) error {
+	cDir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cDir))
+
+	cOpts := C.rocksdb_options_create()
+	defer C.rocksdb_options_destroy(cOpts)
+
+	var cErr *C.char
+	C.rocksdb_destroy_db(cOpts, cDir, &cErr)
+	if cErr != nil {
+		return charToErr(cErr)
+	}
+	return nil
 }
 
 // Type returns either HDD or SSD depending on how engine
@@ -84,6 +103,7 @@ func (r *RocksDB) Type() DiskType {
 func charToErr(c *C.char) error {
 	s := C.GoString(c)
 	C.free(unsafe.Pointer(c))
+	// TODO(andybons): use util.Error.
 	return errors.New(s)
 }
 
@@ -92,7 +112,7 @@ func charToErr(c *C.char) error {
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
 func (r *RocksDB) put(key Key, value Value) error {
-	// rocksdb_put, _get, and _delete call memcpy() (by way of Memtable::Add)
+	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
 	var cKey, cVal *C.char
@@ -103,6 +123,8 @@ func (r *RocksDB) put(key Key, value Value) error {
 	if valLen > 0 {
 		cVal = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
 	}
+	// TODO(andybons): create shared read and write options when we create the rocksdb
+	// struct; they won't change in nearly all cases.
 	wOpts := C.rocksdb_writeoptions_create()
 	defer C.rocksdb_writeoptions_destroy(wOpts)
 	var cErr *C.char

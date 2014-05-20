@@ -14,10 +14,12 @@ func TestRocksDBEnginePutGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
-	defer engine.close()
-	if engine.Type() != SSD {
-		t.Errorf("expected SSD data type, got %v", engine.Type())
-	}
+	defer func(t *testing.T) {
+		engine.close()
+		if err := DestroyRocksDB(loc); err != nil {
+			t.Errorf("could not delete rocksdb db at %s: %v", loc, err)
+		}
+	}(t)
 	testCases := []struct {
 		key, value []byte
 	}{
