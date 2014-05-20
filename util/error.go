@@ -29,7 +29,7 @@ const errorPrefixFormat string = "%s:%d: "
 // original caller.
 func getPrefix(format string) string {
 	if _, file, line, ok := runtime.Caller(2); ok {
-		return fmt.Sprintf(errorPrefixFormat, filepath.Base(file), line)
+		return fmt.Sprintf(format, filepath.Base(file), line)
 	}
 	return ""
 }
