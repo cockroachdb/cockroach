@@ -1,7 +1,7 @@
 language: go
 
 go:
-  - 1.2.1
+  - 1.2.2
 
 before_install:
   - sudo apt-get update -qq
@@ -24,3 +24,10 @@ install:
 
 script:
   - make test
+
+notifications:
+  email:
+    recipients:
+      - cockroach-db@googlegroups.com
+    on_success: change
+    on_failure: always
