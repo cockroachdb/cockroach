@@ -16,7 +16,7 @@ func TestRocksDBEnginePutGetDelete(t *testing.T) {
 	}
 	defer func(t *testing.T) {
 		engine.close()
-		if err := DestroyRocksDB(loc); err != nil {
+		if err := engine.destroy(); err != nil {
 			t.Errorf("could not delete rocksdb db at %s: %v", loc, err)
 		}
 	}(t)

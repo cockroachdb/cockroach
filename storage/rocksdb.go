@@ -44,52 +44,77 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb *C.rocksdb_t // The DB handle
-	typ DiskType     // HDD or SSD
-	dir string       // The data directory
+	rdb   *C.rocksdb_t              // The DB handle
+	opts  *C.rocksdb_options_t      // Options used when creating or destroying
+	rOpts *C.rocksdb_readoptions_t  // The default read options
+	wOpts *C.rocksdb_writeoptions_t // The default write options
+
+	typ DiskType // HDD or SSD
+	dir string   // The data directory
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 	r := &RocksDB{typ: typ, dir: dir}
+	r.createOptions()
 
 	cDir := C.CString(dir)
 	defer C.free(unsafe.Pointer(cDir))
 
-	cOpts := C.rocksdb_options_create()
-	defer C.rocksdb_options_destroy(cOpts)
-	C.rocksdb_options_set_create_if_missing(cOpts, 1)
-	// TODO(andybons): Set the cache size.
-
 	var cErr *C.char
-	if r.rdb = C.rocksdb_open(cOpts, cDir, &cErr); cErr != nil {
+	if r.rdb = C.rocksdb_open(r.opts, cDir, &cErr); cErr != nil {
 		r.rdb = nil
+		r.destroyOptions()
 		s := C.GoString(cErr)
 		C.free(unsafe.Pointer(cErr))
 		// TODO(andybons): use util.Error.
 		return nil, errors.New(s)
 	}
 	if _, err := r.capacity(); err != nil {
+		if err := r.destroy(); err != nil {
+			glog.Warningf("could not destroy db at %s", dir)
+		}
 		return nil, err
 	}
 	return r, nil
 }
 
-// DestroyRocksDB destroys the underlying filesystem
-// data associated with the database.
-func DestroyRocksDB(dir string) error {
-	cDir := C.CString(dir)
+// destroy destroys the underlying filesystem data associated with the database.
+func (r *RocksDB) destroy() error {
+	cDir := C.CString(r.dir)
 	defer C.free(unsafe.Pointer(cDir))
 
-	cOpts := C.rocksdb_options_create()
-	defer C.rocksdb_options_destroy(cOpts)
+	defer r.destroyOptions()
 
 	var cErr *C.char
-	C.rocksdb_destroy_db(cOpts, cDir, &cErr)
+	C.rocksdb_destroy_db(r.opts, cDir, &cErr)
 	if cErr != nil {
 		return charToErr(cErr)
 	}
 	return nil
+}
+
+// createOptions sets the default options for creating, reading, and writing
+// from the db. destroyOptions should be called when the options aren't needed
+// anymore.
+func (r *RocksDB) createOptions() {
+	// TODO(andybons): Set the cache size.
+	r.opts = C.rocksdb_options_create()
+	C.rocksdb_options_set_create_if_missing(r.opts, 1)
+
+	r.wOpts = C.rocksdb_writeoptions_create()
+	r.rOpts = C.rocksdb_readoptions_create()
+}
+
+// destroyOptions destroys the options used for creating, reading, and writing
+// from the db. It is meant to be used in conjunction with createOptions.
+func (r *RocksDB) destroyOptions() {
+	C.rocksdb_options_destroy(r.opts)
+	C.rocksdb_readoptions_destroy(r.rOpts)
+	C.rocksdb_writeoptions_destroy(r.wOpts)
+	r.opts = nil
+	r.rOpts = nil
+	r.wOpts = nil
 }
 
 // Type returns either HDD or SSD depending on how engine
@@ -123,12 +148,8 @@ func (r *RocksDB) put(key Key, value Value) error {
 	if valLen > 0 {
 		cVal = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
 	}
-	// TODO(andybons): create shared read and write options when we create the rocksdb
-	// struct; they won't change in nearly all cases.
-	wOpts := C.rocksdb_writeoptions_create()
-	defer C.rocksdb_writeoptions_destroy(wOpts)
 	var cErr *C.char
-	C.rocksdb_put(r.rdb, wOpts, cKey, C.size_t(keyLen), cVal, C.size_t(valLen), &cErr)
+	C.rocksdb_put(r.rdb, r.wOpts, cKey, C.size_t(keyLen), cVal, C.size_t(valLen), &cErr)
 	if cErr != nil {
 		return charToErr(cErr)
 	}
@@ -142,13 +163,11 @@ func (r *RocksDB) get(key Key) (Value, error) {
 	if keyLen > 0 {
 		cKey = (*C.char)(unsafe.Pointer(&key[0]))
 	}
-	rOpts := C.rocksdb_readoptions_create()
-	defer C.rocksdb_readoptions_destroy(rOpts)
 	var (
 		cValLen C.size_t
 		cErr    *C.char
 	)
-	cVal := C.rocksdb_get(r.rdb, rOpts, cKey, C.size_t(keyLen), &cValLen, &cErr)
+	cVal := C.rocksdb_get(r.rdb, r.rOpts, cKey, C.size_t(keyLen), &cValLen, &cErr)
 	if cErr != nil {
 		return Value{}, charToErr(cErr)
 	}
@@ -166,10 +185,8 @@ func (r *RocksDB) del(key Key) error {
 	if keyLen > 0 {
 		cKey = (*C.char)(unsafe.Pointer(&key[0]))
 	}
-	wOpts := C.rocksdb_writeoptions_create()
-	defer C.rocksdb_writeoptions_destroy(wOpts)
 	var cErr *C.char
-	C.rocksdb_delete(r.rdb, wOpts, cKey, C.size_t(keyLen), &cErr)
+	C.rocksdb_delete(r.rdb, r.wOpts, cKey, C.size_t(keyLen), &cErr)
 	if cErr != nil {
 		return charToErr(cErr)
 	}
