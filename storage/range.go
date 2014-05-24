@@ -21,13 +21,28 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/gob"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
+	yaml "gopkg.in/yaml.v1"
 )
+
+// configPrefixes describes administrative configuration maps
+// affecting ranges of the key-value map by key prefix.
+var configPrefixes = []struct {
+	keyPrefix Key         // Range key prefix
+	gossipKey string      // Gossip key
+	configI   interface{} // Config struct interface
+	dirty     bool        // Info in this config has changed; need to re-init and gossip
+}{
+	{KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, AcctConfig{}, true},
+	{KeyConfigPermissionPrefix, gossip.KeyConfigPermission, PermConfig{}, true},
+	{KeyConfigZonePrefix, gossip.KeyConfigZone, ZoneConfig{}, true},
+}
 
 // A RangeMetadata holds information about the range, including
 // range ID and start and end keys, and replicas slice.
@@ -63,7 +78,8 @@ func NewRange(meta RangeMetadata, engine Engine, allocator *allocator, gossip *g
 		gossip:    gossip,
 		pending:   list.New(),
 	}
-	r.maybeGossip()
+	r.maybeGossipFirstRange()
+	r.maybeGossipConfigMaps()
 	return r
 }
 
@@ -118,23 +134,71 @@ func (r *Range) ReadWriteCmd(method string, args, reply interface{}) <-chan erro
 	return logEntry.done
 }
 
-// maybeGossip gossips in the event that this range has something
-// interesting to share and it's the leader of its consensus
-// group. For example, the range containing the start of the key space
-// gossips its Replicas configuration to allow key addressing. This
-// method should be reinvoked whenever something may have changed
-// necessitating fresh gossip.
-func (r *Range) maybeGossip() {
-	// Certain test cases have no gossip; ignore if so.
-	if r.gossip == nil {
-		return
-	}
+// maybeGossipFirstRange gossips the range locations if this range is
+// the start of the key space.
+func (r *Range) maybeGossipFirstRange() {
 	// TODO(spencer): only do this if we're the leader of the consensus group.
-	if bytes.Equal(r.Meta.StartKey, KeyMin) {
-		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 1*time.Hour); err != nil {
-			glog.Warningf("failed to gossip first range metadata: %v", err)
+	// if r.isLeader() {
+	if r.gossip != nil && bytes.Equal(r.Meta.StartKey, KeyMin) {
+		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 0*time.Second); err != nil {
+			glog.Errorf("failed to gossip first range metadata: %v", err)
 		}
 	}
+}
+
+// maybeGossipConfigMaps gossips configuration maps if their data
+// falls within the range and their contents are marked
+// dirty. Configuration maps include accounting, permissions, and
+// zones.
+func (r *Range) maybeGossipConfigMaps() {
+	// TODO(spencer): only do this if we're the leader of the consensus group.
+	// if r.isLeader() {
+	if r.gossip != nil {
+		for _, cp := range configPrefixes {
+			if cp.dirty && r.containsKey(cp.keyPrefix) {
+				confMap, err := r.initConfigMap(cp.keyPrefix, cp.configI)
+				if err != nil {
+					glog.Errorf("failed init %s configuration map: %v", cp.gossipKey, err)
+					continue
+				} else {
+					if err := r.gossip.AddInfo(cp.gossipKey, confMap, 0*time.Second); err != nil {
+						glog.Errorf("failed to gossip %s configuration map: %v", cp.gossipKey, err)
+						continue
+					}
+				}
+				cp.dirty = false
+			}
+		}
+	}
+}
+
+// initConfigMap initializes a prefix config map for the specified key
+// prefix. Prefix configuration maps include accounting, permissions,
+// and zones.
+func (r *Range) initConfigMap(keyPrefix Key, configI interface{}) (*prefixConfigMap, error) {
+	// TODO(spencer): need to make sure range splitting never
+	// crosses a configuration map's key prefix.
+	kvs, err := r.engine.scan(keyPrefix, PrefixEndKey(keyPrefix), 0)
+	if err != nil {
+		return nil, err
+	}
+	var configs []*prefixConfig
+	for _, kv := range kvs {
+		// Instantiate an instance of the config type by unmarshalling
+		// YAML text from the Value into a new instance of configI.
+		config := reflect.New(reflect.TypeOf(configI)).Interface()
+		if err := yaml.Unmarshal(kv.Value.Bytes, config); err != nil {
+			return nil, util.Errorf("unable to unmarshal yaml: %s: %v", string(kv.Value.Bytes), err)
+		}
+		configs = append(configs, &prefixConfig{prefix: bytes.TrimPrefix(kv.Key, keyPrefix), config: config})
+	}
+	return newPrefixConfigMap(configs)
+}
+
+// containsKey returns whether this range contains the specified key.
+func (r *Range) containsKey(key Key) bool {
+	return bytes.Compare(r.Meta.StartKey, key) <= 0 &&
+		bytes.Compare(r.Meta.EndKey, key) > 0
 }
 
 // executeCmd switches over the method and multiplexes to execute the
@@ -218,6 +282,14 @@ func (r *Range) Put(args *PutRequest, reply *PutResponse) {
 	if err := r.engine.put(args.Key, args.Value); err != nil {
 		reply.Error = err
 		return
+	}
+	// Check whether this put has modified a configuration map.
+	for _, cp := range configPrefixes {
+		if bytes.HasPrefix(args.Key, cp.keyPrefix) {
+			cp.dirty = true
+			r.maybeGossipConfigMaps()
+			break
+		}
 	}
 }
 

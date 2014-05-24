@@ -96,7 +96,7 @@ func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 
 	var scanned []KeyValue
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
-		if int64(len(scanned)) >= max {
+		if max != 0 && int64(len(scanned)) >= max {
 			done = true
 			return
 		}

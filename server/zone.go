@@ -55,7 +55,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if err != nil {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
-	zoneKey := storage.MakeKey(storage.KeyZoneConfigPrefix, storage.Key(path[1:]))
+	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
 	pr := <-zh.kvDB.Put(&storage.PutRequest{Key: zoneKey, Value: storage.Value{Bytes: body}})
 	if pr.Error != nil {
 		return pr.Error
@@ -76,8 +76,8 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 	// Scan all zones if the key is empty.
 	if len(path) == 0 {
 		sr := <-zh.kvDB.Scan(&storage.ScanRequest{
-			StartKey:   storage.KeyZoneConfigPrefix,
-			EndKey:     storage.PrefixEndKey(storage.KeyZoneConfigPrefix),
+			StartKey:   storage.KeyConfigZonePrefix,
+			EndKey:     storage.PrefixEndKey(storage.KeyConfigZonePrefix),
 			MaxResults: maxGetResults,
 		})
 		if sr.Error != nil {
@@ -89,7 +89,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 		}
 		var prefixes []string
 		for _, kv := range sr.Rows {
-			trimmed := bytes.TrimPrefix(kv.Key, storage.KeyZoneConfigPrefix)
+			trimmed := bytes.TrimPrefix(kv.Key, storage.KeyConfigZonePrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// JSON-encode the prefixes array.
@@ -97,7 +97,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("unable to format zone configurations: %v", err)
 		}
 	} else {
-		zoneKey := storage.MakeKey(storage.KeyZoneConfigPrefix, storage.Key(path[1:]))
+		zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
 		gr := <-zh.kvDB.Get(&storage.GetRequest{Key: zoneKey})
 		if gr.Error != nil {
 			return
@@ -126,7 +126,7 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 	if path == "/" {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
-	zoneKey := storage.MakeKey(storage.KeyZoneConfigPrefix, storage.Key(path[1:]))
+	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
 	dr := <-zh.kvDB.Delete(&storage.DeleteRequest{Key: zoneKey})
 	if dr.Error != nil {
 		return dr.Error

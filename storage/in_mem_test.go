@@ -170,6 +170,9 @@ func TestInMemScan(t *testing.T) {
 	// Scan with max values.
 	verifyScan(KeyMin, KeyMax, 3, keys[0:3], engine, t)
 	verifyScan(Key("a0"), KeyMax, 3, keys[1:4], engine, t)
+
+	// Scan with max value 0 gets all values.
+	verifyScan(KeyMin, KeyMax, 0, keys[0:5], engine, t)
 }
 
 func BenchmarkCapacity(b *testing.B) {

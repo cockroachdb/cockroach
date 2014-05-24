@@ -25,6 +25,15 @@ const (
 	// The value is a string UUID for the cluster.
 	KeyClusterID = "cluster-id"
 
+	// KeyConfigAccounting is the accounting configuration map.
+	KeyConfigAccounting = "accounting"
+
+	// KeyConfigPermission is the permission configuration map.
+	KeyConfigPermission = "permissions"
+
+	// KeyConfigZone is the zone configuration map.
+	KeyConfigZone = "zones"
+
 	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
 	// store capacity. The suffix is composed of:
 	// <datacenter>-<hex node ID>-<hex store ID>. The value is a

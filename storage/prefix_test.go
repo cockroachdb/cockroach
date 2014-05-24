@@ -32,16 +32,16 @@ const (
 	config4 = 4
 )
 
-func buildTestPrefixConfigCache() *prefixConfigCache {
+func buildTestPrefixConfigMap() *prefixConfigMap {
 	configs := []*prefixConfig{
 		{KeyMin, config1},
 		{Key("/db1"), config2},
 		{Key("/db1/table"), config3},
 		{Key("/db3"), config4},
 	}
-	pcc, err := newPrefixConfigCache(configs)
+	pcc, err := newPrefixConfigMap(configs)
 	if err != nil {
-		glog.Fatalf("unexpected error building config cache: %v", err)
+		glog.Fatalf("unexpected error building config map: %v", err)
 	}
 	return pcc
 }
@@ -87,7 +87,7 @@ func TestPrefixConfigSort(t *testing.T) {
 		Key("\xfe"),
 		KeyMax,
 	}
-	pcc := &prefixConfigCache{}
+	pcc := &prefixConfigMap{}
 	for _, key := range keys {
 		pcc.configs = append(pcc.configs, &prefixConfig{key, nil})
 	}
@@ -111,7 +111,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 		{Key("/db3"), config4},
 		{Key("/db4"), config1},
 	}
-	pcc := buildTestPrefixConfigCache()
+	pcc := buildTestPrefixConfigMap()
 	if len(pcc.configs) != len(expPrefixConfigs) {
 		t.Fatalf("incorrect number of built prefix configs; expected %d, got %d",
 			len(expPrefixConfigs), len(pcc.configs))
@@ -129,7 +129,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 
 // TestMatchByPrefix verifies matching on longest prefix.
 func TestMatchByPrefix(t *testing.T) {
-	pcc := buildTestPrefixConfigCache()
+	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		key       Key
 		expConfig interface{}
@@ -158,7 +158,7 @@ func TestMatchByPrefix(t *testing.T) {
 
 // TestesMatchesByPrefix verifies all matching prefixes.
 func TestMatchesByPrefix(t *testing.T) {
-	pcc := buildTestPrefixConfigCache()
+	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		key        Key
 		expConfigs []interface{}
@@ -194,11 +194,11 @@ func TestMatchesByPrefix(t *testing.T) {
 // TestSplitRangeByPrefixesErrors verifies various error conditions
 // for splitting ranges.
 func TestSplitRangeByPrefixesError(t *testing.T) {
-	pcc, err := newPrefixConfigCache([]*prefixConfig{})
+	pcc, err := newPrefixConfigMap([]*prefixConfig{})
 	if err == nil {
-		t.Error("expected error building config cache with no default prefix")
+		t.Error("expected error building config map with no default prefix")
 	}
-	pcc = buildTestPrefixConfigCache()
+	pcc = buildTestPrefixConfigMap()
 	// Key order is reversed.
 	if _, err := pcc.splitRangeByPrefixes(KeyMax, KeyMin); err == nil {
 		t.Error("expected error with reversed keys")
@@ -212,7 +212,7 @@ func TestSplitRangeByPrefixesError(t *testing.T) {
 // TestSplitRangeByPrefixes verifies splitting of a key range
 // into sub-ranges based on config prefixes.
 func TestSplitRangeByPrefixes(t *testing.T) {
-	pcc := buildTestPrefixConfigCache()
+	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		start, end Key
 		expRanges  []*rangeResult

@@ -35,7 +35,16 @@ var (
 	// storage/encoding.go), they will never start with \xff.
 	KeyMax = Key("\xff")
 
-	// KeyMetaPrefix is the common prefix of the metadata key.
+	// KeyConfigAccountingPrefix specifies the key prefix for accounting
+	// configurations. The suffix is the affected key prefix.
+	KeyConfigAccountingPrefix = Key("\x00acct")
+	// KeyConfigPermissionPrefix specifies the key prefix for accounting
+	// configurations. The suffix is the affected key prefix.
+	KeyConfigPermissionPrefix = Key("\x00perm")
+	// KeyConfigZonePrefix specifies the key prefix for zone
+	// configurations. The suffix is the affected key prefix.
+	KeyConfigZonePrefix = Key("\x00zone")
+	// KeyMetaPrefix is the prefix for range metadata keys.
 	KeyMetaPrefix = Key("\x00\x00meta")
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
 	// RangeLocations struct.
@@ -48,8 +57,4 @@ var (
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
 	KeyStoreIDGeneratorPrefix = Key("\x00store-id-generator-")
-	// KeyZoneConfigPrefix specifies the key prefix for zone
-	// configurations. The suffix is the prefix for all keys in the
-	// zone.
-	KeyZoneConfigPrefix = Key("\x00zone")
 )

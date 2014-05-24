@@ -91,6 +91,24 @@ type StoreAttributes struct {
 	Capacity   StoreCapacity
 }
 
+// AcctConfig holds accounting configuration.
+type AcctConfig struct {
+	// Nothing for the moment.
+}
+
+// Permission specifies read/write access and associated priority.
+type Permission struct {
+	Users    []string `yaml:"users,omitempty"`    // Empty to specify default permission
+	Read     bool     `yaml:"read,omitempty"`     // Default means reads are restricted
+	Write    bool     `yaml:"write,omitempty"`    // Default means writes are restricted
+	Priority float32  `yaml:"priority,omitempty"` // 0.0 means default priority
+}
+
+// PermConfig holds permission configuration.
+type PermConfig struct {
+	Perms []Permission `yaml:"permissions,omitempty"`
+}
+
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
 	// Replicas is a map from datacenter name to a slice of disk types.

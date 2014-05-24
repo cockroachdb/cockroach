@@ -37,6 +37,7 @@ type Engine interface {
 	get(key Key) (Value, error)
 	// scan returns up to max key/value objects starting from
 	// start (inclusive) and ending at end (non-inclusive).
+	// Specify max=0 for unbounded scans.
 	scan(start, end Key, max int64) ([]KeyValue, error)
 	// delete removes the item from the db with the given key.
 	del(key Key) error
