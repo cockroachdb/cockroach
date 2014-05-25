@@ -69,7 +69,7 @@ it will squash all commits, update the commit message with the original headline
 
 ## Design
 
-Cockroach is a distributed key:value datastore which supports ACID
+Cockroach is a distributed key/value datastore which supports ACID
 transactional semantics and versioned values as first-class
 features. The primary design goal is global consistency and
 survivability, hence the name. Cockroach aims to tolerate disk,

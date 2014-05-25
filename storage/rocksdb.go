@@ -25,12 +25,11 @@ package storage
 import "C"
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"syscall"
 	"unsafe"
-
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
@@ -140,16 +139,16 @@ func (r *RocksDB) put(key Key, value Value) error {
 	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
-	var cKey, cVal *C.char
-	keyLen, valLen := len(key), len(value.Bytes)
-	if keyLen > 0 {
-		cKey = (*C.char)(unsafe.Pointer(&key[0]))
-	}
-	if valLen > 0 {
-		cVal = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
-	}
 	var cErr *C.char
-	C.rocksdb_put(r.rdb, r.wOpts, cKey, C.size_t(keyLen), cVal, C.size_t(valLen), &cErr)
+	C.rocksdb_put(
+		r.rdb,
+		r.wOpts,
+		(*C.char)(unsafe.Pointer(&key[0])),
+		C.size_t(len(key)),
+		(*C.char)(unsafe.Pointer(&value.Bytes[0])),
+		C.size_t(len(value.Bytes)),
+		&cErr)
+
 	if cErr != nil {
 		return charToErr(cErr)
 	}
@@ -158,16 +157,18 @@ func (r *RocksDB) put(key Key, value Value) error {
 
 // get returns the value for the given key.
 func (r *RocksDB) get(key Key) (Value, error) {
-	keyLen := len(key)
-	var cKey *C.char
-	if keyLen > 0 {
-		cKey = (*C.char)(unsafe.Pointer(&key[0]))
-	}
 	var (
 		cValLen C.size_t
 		cErr    *C.char
 	)
-	cVal := C.rocksdb_get(r.rdb, r.rOpts, cKey, C.size_t(keyLen), &cValLen, &cErr)
+	cVal := C.rocksdb_get(
+		r.rdb,
+		r.rOpts,
+		(*C.char)(unsafe.Pointer(&key[0])),
+		C.size_t(len(key)),
+		&cValLen,
+		&cErr)
+
 	if cErr != nil {
 		return Value{}, charToErr(cErr)
 	}
@@ -180,13 +181,14 @@ func (r *RocksDB) get(key Key) (Value, error) {
 
 // del removes the item from the db with the given key.
 func (r *RocksDB) del(key Key) error {
-	keyLen := len(key)
-	var cKey *C.char
-	if keyLen > 0 {
-		cKey = (*C.char)(unsafe.Pointer(&key[0]))
-	}
 	var cErr *C.char
-	C.rocksdb_delete(r.rdb, r.wOpts, cKey, C.size_t(keyLen), &cErr)
+	C.rocksdb_delete(
+		r.rdb,
+		r.wOpts,
+		(*C.char)(unsafe.Pointer(&key[0])),
+		C.size_t(len(key)),
+		&cErr)
+
 	if cErr != nil {
 		return charToErr(cErr)
 	}
@@ -195,8 +197,48 @@ func (r *RocksDB) del(key Key) error {
 
 // scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
+// If max is zero then the number of key/values returned is unbounded.
 func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
-	return []KeyValue{}, util.Error("scan unimplemented")
+	// In order to prevent content displacement, caching is disabled
+	// when performing scans. Any options set within the shared read
+	// options field that should be carried over needs to be set here
+	// as well.
+	opts := C.rocksdb_readoptions_create()
+	C.rocksdb_readoptions_set_fill_cache(opts, 0)
+	defer C.rocksdb_readoptions_destroy(opts)
+	it := C.rocksdb_create_iterator(r.rdb, opts)
+	defer C.rocksdb_iter_destroy(it)
+
+	keyVals := []KeyValue{}
+	C.rocksdb_iter_seek(it, (*C.char)(unsafe.Pointer(&start[0])), C.size_t(len(start)))
+	for i := int64(1); C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
+		if max > 0 && i > max {
+			break
+		}
+		var l C.size_t
+		// The data returned by rocksdb_iter_{key,value} is not meant to be
+		// freed by the client. It is a direct reference to the data managed
+		// by the iterator, so it is copied instead of freed.
+		data := C.rocksdb_iter_key(it, &l)
+		k := C.GoBytes(unsafe.Pointer(data), C.int(l))
+		if bytes.Equal(k, end) {
+			break
+		}
+		data = C.rocksdb_iter_value(it, &l)
+		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
+		keyVals = append(keyVals, KeyValue{
+			Key:   k,
+			Value: Value{Bytes: v},
+		})
+		i++
+	}
+	// Check for any errors during iteration.
+	var cErr *C.char
+	C.rocksdb_iter_get_error(it, &cErr)
+	if cErr != nil {
+		return nil, charToErr(cErr)
+	}
+	return keyVals, nil
 }
 
 // capacity queries the underlying file system for disk capacity
