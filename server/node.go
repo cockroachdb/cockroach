@@ -158,7 +158,7 @@ func NewNode(rpcServer *rpc.Server, kvDB kv.DB, gossip *gossip.Gossip) *Node {
 		storeMap: make(map[int32]*storage.Store),
 		closer:   make(chan struct{}, 1),
 	}
-	n.initAttributes(rpcServer.Addr)
+	n.initAttributes(rpcServer.Addr())
 	rpcServer.RegisterName("Node", n)
 	return n
 }

@@ -23,9 +23,7 @@ import (
 	"time"
 )
 
-const (
-	testAddr = "localhost:0"
-)
+const testAddr = "localhost:0"
 
 func TestClientHeartbeat(t *testing.T) {
 	heartbeatInterval = 10 * time.Millisecond
@@ -39,9 +37,9 @@ func TestClientHeartbeat(t *testing.T) {
 	// picking an unused port. If we don't wait for the server to start listening,
 	// the address will be incorrect.
 	<-s.listening
-	c := NewClient(s.Addr)
+	c := NewClient(s.Addr())
 	time.Sleep(heartbeatInterval * 2)
-	if c != NewClient(s.Addr) {
+	if c != NewClient(s.Addr()) {
 		t.Error("expected cached client to be returned while healthy")
 	}
 	s.Close()
@@ -51,7 +49,7 @@ func TestClientHeartbeat(t *testing.T) {
 	// the client. Then get a new client and verify it's a new client
 	// struct.
 	time.Sleep(heartbeatInterval + 1*time.Millisecond)
-	if c == NewClient(s.Addr) {
+	if c == NewClient(s.Addr()) {
 		t.Error("expected failed client to not be returned in 2nd call to NewClient")
 	}
 }

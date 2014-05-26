@@ -20,6 +20,9 @@ build: rocksdb
 test:
 	$(CGO_FLAGS) $(GO) test ./...
 
+testrace:
+	$(CGO_FLAGS) $(GO) test -race ./...
+
 clean:
 	$(GO) clean
 	cd $(ROCKSDB); make clean

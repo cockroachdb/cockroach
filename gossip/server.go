@@ -43,7 +43,7 @@ type server struct {
 func newServer(rpcServer *rpc.Server, interval time.Duration) *server {
 	s := &server{
 		interval:      interval,
-		is:            newInfoStore(rpcServer.Addr),
+		is:            newInfoStore(rpcServer.Addr()),
 		incoming:      newAddrSet(MaxPeers),
 		clientAddrMap: make(map[string]net.Addr),
 	}

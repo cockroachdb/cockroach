@@ -28,11 +28,12 @@ import (
 // Server is a Cockroach-specific RPC server with an embedded go RPC
 // server struct.
 type Server struct {
-	*rpc.Server                          // Embedded RPC server instance
-	Addr           net.Addr              // Server address; may change if picking unused port
-	listener       net.Listener          // Server listener
-	listening      chan struct{}         // signaled when the server is listening
-	mu             sync.Mutex            // Mutex protects closed bool & closeCallbacks slice
+	*rpc.Server               // Embedded RPC server instance
+	listener    net.Listener  // Server listener
+	listening   chan struct{} // signaled when the server is listening
+
+	mu             sync.RWMutex          // Mutex protects the fields below
+	addr           net.Addr              // Server address; may change if picking unused port
 	closed         bool                  // Set upon invocation of Close()
 	closeCallbacks []func(conn net.Conn) // Slice of callbacks to invoke on conn close
 }
@@ -41,7 +42,7 @@ type Server struct {
 func NewServer(addr net.Addr) *Server {
 	s := &Server{
 		Server:         rpc.NewServer(),
-		Addr:           addr,
+		addr:           addr,
 		listening:      make(chan struct{}, 1),
 		closeCallbacks: make([]func(conn net.Conn), 0, 1),
 	}
@@ -62,16 +63,19 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 // invoked by goroutine as it will loop serving incoming client and
 // not return until Close() is invoked.
 func (s *Server) ListenAndServe() {
-	ln, err := net.Listen(s.Addr.Network(), s.Addr.String())
+	ln, err := net.Listen(s.addr.Network(), s.addr.String())
 	if err != nil {
 		glog.Fatalf("unable to start gossip node: %s", err)
 	}
 	s.listening <- struct{}{} // signal that we are now listening.
 	s.listener = ln
-	s.Addr = ln.Addr()
+
+	s.mu.Lock()
+	s.addr = ln.Addr()
+	s.mu.Unlock()
 
 	// Start serving gossip protocol in a loop until listener is closed.
-	glog.Infof("serving on %+v...", s.Addr)
+	glog.Infof("serving on %+v...", s.addr)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -85,6 +89,13 @@ func (s *Server) ListenAndServe() {
 		// Serve connection to completion in a goroutine.
 		go s.serveConn(conn)
 	}
+}
+
+// Addr returns the server's network address.
+func (s *Server) Addr() net.Addr {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.addr
 }
 
 // Close closes the listener.

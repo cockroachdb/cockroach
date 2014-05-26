@@ -39,7 +39,7 @@ var (
 
 // init creates a new client RPC cache.
 func init() {
-	clients = make(map[string]*Client)
+	clients = map[string]*Client{}
 	heartbeatInterval = defaultHeartbeatInterval
 }
 
