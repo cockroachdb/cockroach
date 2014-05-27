@@ -105,6 +105,7 @@ type Gossip struct {
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
+	clientsMu    sync.Mutex         // Mutex protects the clients map
 	clients      map[string]*client // Map from address to client
 	disconnected chan *client       // Channel of disconnected clients
 	exited       chan error         // Channel to signal exit
@@ -119,7 +120,7 @@ func New(rpcServer *rpc.Server) *Gossip {
 		server:       newServer(rpcServer, *gossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
-		clients:      make(map[string]*client),
+		clients:      map[string]*client{},
 		disconnected: make(chan *client, MaxPeers),
 	}
 	g.stalled = sync.NewCond(&g.mu)
@@ -351,7 +352,10 @@ func (g *Gossip) manage() {
 				glog.Infof("client disconnected: %s", c.err)
 			}
 			g.outgoing.removeAddr(c.addr)
+
+			g.clientsMu.Lock()
 			delete(g.clients, c.addr.String())
+			g.clientsMu.Unlock()
 
 			// If the client was disconnected with a forwarding address, connect now.
 			if c.forwardAddr != nil {
@@ -410,14 +414,18 @@ func (g *Gossip) manage() {
 func (g *Gossip) startClient(addr net.Addr) {
 	c := newClient(addr)
 	g.outgoing.addAddr(c.addr)
+	g.clientsMu.Lock()
 	g.clients[c.addr.String()] = c
+	g.clientsMu.Unlock()
 	go c.start(g, g.disconnected)
 }
 
 // closeClient closes an existing client specified by client's
 // remote address.
 func (g *Gossip) closeClient(addr net.Addr) {
+	g.clientsMu.Lock()
 	c := g.clients[addr.String()]
 	c.close()
 	delete(g.clients, addr.String())
+	g.clientsMu.Unlock()
 }

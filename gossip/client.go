@@ -117,7 +117,7 @@ func (c *client) gossip(g *Gossip) error {
 		// Send gossip with timeout.
 		args := &GossipRequest{
 			Addr:   g.is.NodeAddr,
-			LAddr:  c.rpcClient.LAddr,
+			LAddr:  c.rpcClient.LocalAddr(),
 			MaxSeq: remoteMaxSeq,
 			Delta:  delta,
 		}

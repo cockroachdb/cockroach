@@ -46,10 +46,12 @@ func init() {
 // Client is a Cockroach-specific RPC client with an embedded go
 // rpc.Client struct.
 type Client struct {
-	*rpc.Client               // Embedded RPC client
-	Addr        net.Addr      // Remove address of client
-	LAddr       net.Addr      // Local address of client
-	Ready       chan struct{} // Closed when client is connected
+	Ready chan struct{} // Closed when client is connected
+
+	mu          sync.RWMutex // Mutex protects the fields below
+	*rpc.Client              // Embedded RPC client
+	addr        net.Addr     // Remote address of client
+	lAddr       net.Addr     // Local address of client
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -65,10 +67,10 @@ func NewClient(addr net.Addr) *Client {
 		return c
 	}
 	c := &Client{
-		Addr:  addr,
+		addr:  addr,
 		Ready: make(chan struct{}),
 	}
-	clients[addr.String()] = c
+	clients[c.Addr().String()] = c
 	clientMu.Unlock()
 
 	// Attempt to dial connection with exponential backoff starting
@@ -86,8 +88,11 @@ func NewClient(addr net.Addr) *Client {
 			glog.Info(err)
 			return false
 		}
+		c.mu.Lock()
 		c.Client = rpc.NewClient(conn)
-		c.LAddr = conn.LocalAddr()
+		c.lAddr = conn.LocalAddr()
+		c.mu.Unlock()
+
 		glog.Infof("client connected: %s", addr)
 		close(c.Ready)
 
@@ -98,6 +103,27 @@ func NewClient(addr net.Addr) *Client {
 	})
 
 	return c
+}
+
+// Close closes the client connection.
+func (c *Client) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Client.Close()
+}
+
+// Addr returns remote address of the client.
+func (c *Client) Addr() net.Addr {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.addr
+}
+
+// LocalAddr returns the local address of the client.
+func (c *Client) LocalAddr() net.Addr {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lAddr
 }
 
 // heartbeat sends periodic heartbeats to client. Closes the
@@ -115,7 +141,7 @@ func (c *Client) heartbeat() {
 			if call.Error != nil {
 				glog.Infof("heartbeat failed: %v; recycling client", call.Error)
 				clientMu.Lock()
-				delete(clients, c.Addr.String())
+				delete(clients, c.Addr().String())
 				clientMu.Unlock()
 				c.Close()
 				break
@@ -123,7 +149,7 @@ func (c *Client) heartbeat() {
 			time.Sleep(heartbeatInterval)
 		case <-time.After(heartbeatInterval * 2):
 			// Allowed twice gossip interval.
-			glog.Infof("client %s unhealthy after %v", c.Addr, heartbeatInterval*2)
+			glog.Infof("client %s unhealthy after %v", c.Addr(), heartbeatInterval*2)
 		}
 	}
 }
