@@ -2,6 +2,41 @@
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
+## Current Status
+
+### May 30th, 2014
+
+It seems that a tweet about Cockroach has brought this project into
+the spotlight, making a status update a requirement.
+
+A little history: I started writing the design document
+(https://docs.google.com/document/d/11k2EmhLGSbViBvi6_zFEiKzuXxYF49ZuuDJLe6O8gBU/edit?usp=sharing)
+in January, 2014. In February, I started some of the implementation,
+primarily as a means to really get a handle on Go as a systems
+programming language. To that end, I started on the gossip network
+because it's a self-contained piece with just enough interesting
+complexity to make it non-trivial. At that time, Andy Bonventre
+and Shawn Morel started making contributions. All of us have put in
+bits and pieces of work on the system on spare nights and weekends.
+
+As things currently stand, the system IS NOT OPERATIONAL. Not even
+as a lame demo. That will change soon.
+
+I've been busy trying to align this project with my current employer's
+business interests so I can start working on it full time and
+hopefully garner some additional manpower along the way. If that
+doesn't work out, I will continue the project in my spare time.
+Given the amount of interest the system seems to have
+garnered (based on recent visitor statistics), I'm going to dedicate
+a more consistent effort. It seems the world is ready for an open
+source database with these capabilities. It would be a shame not to
+make it a reality.
+
+Please, if anyone is interested in contributing, feel free to contact
+the developer group at cockroach-db@googlegroups.com.
+
+Spencer Kimball
+
 ## Getting and building
 
 A working [Go environment](http://golang.org/doc/code.html) and [prerequisites for building
