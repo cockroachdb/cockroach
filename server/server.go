@@ -82,7 +82,8 @@ A node exports an HTTP API with the following endpoints:
   Key-value REST:         http://%s%s
   Structured Schema REST: http://%s%s
 `, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
-	Run: runStart,
+	Run:  runStart,
+	Flag: *flag.CommandLine,
 }
 
 type server struct {

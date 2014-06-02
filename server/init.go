@@ -18,6 +18,8 @@
 package server
 
 import (
+	"flag"
+
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/storage"
@@ -46,7 +48,9 @@ to the correct level upon start.
 
 To start the cluster after initialization, run "cockroach start".
 `,
-	Run: runInit}
+	Run:  runInit,
+	Flag: *flag.CommandLine,
+}
 
 // runInit.
 func runInit(cmd *commander.Command, args []string) {
