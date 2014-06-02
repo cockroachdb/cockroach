@@ -107,7 +107,14 @@ func runStart(cmd *commander.Command, args []string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	err = s.start(nil /* init engines from -data_dirs */)
+	// init engines from -data_dirs
+	engines, err := initEngines()
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	err = s.start(engines)
+
 	s.stop()
 	if err != nil {
 		glog.Fatal(err)
