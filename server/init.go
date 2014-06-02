@@ -57,11 +57,11 @@ func runInit(cmd *commander.Command, args []string) {
 	// Specifying the disk type as HDD may be incorrect, but doesn't
 	// matter for this bootstrap step.
 	engine, err := initEngine(args[0])
-	if engine.Type() == storage.MEM {
-		glog.Fatal("Cannot initialize a cockroach cluster using an in-memory storage device")
-	}
 	if err != nil {
 		glog.Fatal(err)
+	}
+	if engine.Type() == storage.MEM {
+		glog.Fatal("Cannot initialize a cockroach cluster using an in-memory storage device")
 	}
 	// Generate a new cluster UUID.
 	clusterID := uuid.New()
