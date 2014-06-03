@@ -1,5 +1,7 @@
 # Contributing to Cockroach
 
+###We use GitHub for everything but code reviews.
+
 We use [Phabricator](http://phabricator.andybons.com/) for code reviews. Phabricator
 uses your GitHub credentials, just click on the "Login or Register" button. The Phabricator
 development model is similar to the GitHub pull request model in that changes are
