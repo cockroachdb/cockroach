@@ -55,6 +55,27 @@ func startServer() *server {
 	return s
 }
 
+func TestInitEngine(t *testing.T) {
+	testCases := []struct {
+		key string
+		typ storage.DiskType
+	}{
+		{"mem=1000", storage.MEM},
+		{"ssd=/tmp/.foobar", storage.SSD},
+		{"hdd=/tmp/.foobar2", storage.HDD},
+	}
+	for _, spec := range testCases {
+		engine, err := initEngine(spec.key)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		if engine.Type() != spec.typ {
+			glog.Fatalf("wrong engine type created, expected %v but got %v", spec.typ, engine.Type())
+		}
+
+	}
+}
+
 func resetTestData() {
 	// TODO(spencer): remove all data files once rocksdb is hooked up.
 }

@@ -82,7 +82,8 @@ A node exports an HTTP API with the following endpoints:
   Key-value REST:         http://%s%s
   Structured Schema REST: http://%s%s
 `, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
-	Run: runStart,
+	Run:  runStart,
+	Flag: *flag.CommandLine,
 }
 
 type server struct {
@@ -97,16 +98,24 @@ type server struct {
 	structuredREST *structured.RESTServer
 }
 
-// ListenAndServe starts an HTTP server at -http_addr and an RPC server
-// at -rpc_addr. This method won't return unless the server is shutdown
-// or a non-temporary error occurs on the HTTP server connection.
+// runStart starts the cockroach node using -data_dirs as the list of storage
+// devices ("stores") on this machine and -gossip_bootstrap as the list of
+// "well-known" hosts used to join this node to the cockroach cluster via the
+// gossip network.
 func runStart(cmd *commander.Command, args []string) {
 	glog.Info("starting cockroach cluster")
 	s, err := newServer()
 	if err != nil {
 		glog.Fatal(err)
 	}
-	err = s.start(nil /* init engines from -data_dirs */)
+	// init engines from -data_dirs
+	engines, err := initEngines()
+	if err != nil {
+		glog.Fatal(err)
+	}
+
+	err = s.start(engines)
+
 	s.stop()
 	if err != nil {
 		glog.Fatal(err)
@@ -134,7 +143,7 @@ func initEngines() ([]storage.Engine, error) {
 func initEngine(spec string) (storage.Engine, error) {
 	// Error if regexp doesn't match.
 	matches := dataDirRE.FindStringSubmatch(spec)
-	if matches == nil || len(matches) != 3 {
+	if matches == nil || len(matches) != 5 {
 		return nil, util.Errorf("invalid engine specification %q", spec)
 	}
 
@@ -147,21 +156,21 @@ func initEngine(spec string) (storage.Engine, error) {
 		}
 		engine = storage.NewInMem(size)
 	} else {
+		// type, file = matches[3], matches[4]
 		var typ storage.DiskType
-		switch matches[2] {
+		switch matches[3] {
 		case "hdd":
 			typ = storage.HDD
 		case "ssd":
 			typ = storage.SSD
 		default:
-			return nil, util.Errorf("unhandled disk type %q", matches[1])
+			return nil, util.Errorf("unhandled disk type %q", matches[3])
 		}
-		engine, err = storage.NewRocksDB(typ, matches[2])
+		engine, err = storage.NewRocksDB(typ, matches[4])
 		if err != nil {
-			return nil, util.Errorf("unable to init rocksdb with data dir %q", matches[2])
+			return nil, util.Errorf("unable to init rocksdb with data dir %q", matches[4])
 		}
 	}
-
 	return engine, nil
 }
 

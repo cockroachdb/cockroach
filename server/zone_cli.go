@@ -20,6 +20,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -61,7 +62,9 @@ Fetches and displays the zone configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run: runGetZones}
+	Run:  runGetZones,
+	Flag: *flag.CommandLine,
+}
 
 // runGetZones invokes the REST API with GET action and key prefix as path.
 func runGetZones(cmd *commander.Command, args []string) {
@@ -93,7 +96,9 @@ the listing are filtered by key prefixes matching the regexp. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run: runLsZones}
+	Run:  runLsZones,
+	Flag: *flag.CommandLine,
+}
 
 // runLsZones invokes the REST API with GET action and no path, which
 // fetches a list of all zone configuration prefixes. The optional
@@ -150,7 +155,9 @@ command can affect only a single zone config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it
 contains non-ascii bytes or spaces.
 `,
-	Run: runRmZone}
+	Run:  runRmZone,
+	Flag: *flag.CommandLine,
+}
 
 // runRmZone invokes the REST API with DELETE action and key prefix as
 // path.
@@ -204,7 +211,9 @@ Setting zone configs will guarantee that key ranges will be split
 such that no key range straddles two zone config specifications.
 This feature can be taken advantage of to pre-split ranges.
 `,
-	Run: runSetZone}
+	Run:  runSetZone,
+	Flag: *flag.CommandLine,
+}
 
 // runSetZone invokes the REST API with POST action and key prefix as
 // path. The specified configuration file is read from disk and sent

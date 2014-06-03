@@ -30,6 +30,7 @@ import (
 	"flag"
 	"syscall"
 	"unsafe"
+
 	"github.com/golang/glog"
 )
 
@@ -210,7 +211,13 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 	defer C.rocksdb_iter_destroy(it)
 
 	keyVals := []KeyValue{}
-	C.rocksdb_iter_seek(it, (*C.char)(unsafe.Pointer(&start[0])), C.size_t(len(start)))
+	byteCount := len(start)
+	if byteCount < 1 {
+		// empty key needs special treatment due to start[0] a few lines down
+		C.rocksdb_iter_seek_to_first(it)
+	} else {
+		C.rocksdb_iter_seek(it, (*C.char)(unsafe.Pointer(&start[0])), C.size_t(byteCount))
+	}
 	for i := int64(1); C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
 		if max > 0 && i > max {
 			break

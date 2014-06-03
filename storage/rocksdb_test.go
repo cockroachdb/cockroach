@@ -89,28 +89,33 @@ func TestRocksDBEngineScan(t *testing.T) {
 		keyMap[string(c.key)] = c.value
 	}
 	// Should return all key/value pairs in lexicographic order.
-	keyvals, err := engine.scan([]byte("cat"), nil, 0)
-	if err != nil {
-		t.Fatalf("could not run scan: %v", err)
-	}
-	sortedKeys := make([]string, len(testCases))
-	for i, t := range testCases {
-		sortedKeys[i] = string(t.key)
-	}
-	sort.Strings(sortedKeys)
-	ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
+	// Note that []byte("") is the lowest key possible and is
+	// a special case in engine.scan, that's why we test it here
+	startKeys := [][]byte{[]byte("cat"), []byte("")}
+	for _, startKey := range startKeys {
+		keyvals, err := engine.scan([]byte(startKey), nil, 0)
+		if err != nil {
+			t.Fatalf("could not run scan: %v", err)
+		}
+		sortedKeys := make([]string, len(testCases))
+		for i, t := range testCases {
+			sortedKeys[i] = string(t.key)
+		}
+		sort.Strings(sortedKeys)
+		ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
+		keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 0)
+		if err != nil {
+			t.Fatalf("could not run scan: %v", err)
+		}
+		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
-	keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 0)
-	if err != nil {
-		t.Fatalf("could not run scan: %v", err)
+		keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 2)
+		if err != nil {
+			t.Fatalf("could not run scan: %v", err)
+		}
+		ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
 	}
-	ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
-	keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 2)
-	if err != nil {
-		t.Fatalf("could not run scan: %v", err)
-	}
-	ensureRangeEqual(t, sortedKeys[1:3], keyMap, keyvals)
 }
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []KeyValue) {
