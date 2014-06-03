@@ -15,7 +15,7 @@ make
 
 **We use GitHub for everything but code reviews.**
 
-We use [Phabricator](http://phabricator.andybons.com/) for code reviews. Phabricator
+We use [Phabricator](http://phabricator.cockroachdb.org/) for code reviews. Phabricator
 uses your GitHub credentials, just click on the "Login or Register" button. The Phabricator
 development model is similar to the GitHub pull request model in that changes are
 typically developed on their own branch and then uploaded for review. When a change is
