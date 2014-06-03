@@ -1,4 +1,4 @@
 {
   "project_id" : "cockroach",
-  "conduit_uri" : "http://phabricator.andybons.com/"
+  "conduit_uri" : "http://phabricator.cockroachdb.org/"
 }
