@@ -1,6 +1,19 @@
 # Contributing to Cockroach
 
-###We use GitHub for everything but code reviews.
+### Getting and building
+
+A working [Go environment](http://golang.org/doc/code.html) and [prerequisites for building
+RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md) are both presumed.
+```bash
+go get github.com/cockroachdb/cockroach
+cd $GOPATH/src/github.com/cockroachdb/cockroach
+./bootstrap.sh
+make
+```
+
+### Bugs, features, and code review
+
+**We use GitHub for everything but code reviews.**
 
 We use [Phabricator](http://phabricator.andybons.com/) for code reviews. Phabricator
 uses your GitHub credentials, just click on the "Login or Register" button. The Phabricator
@@ -13,7 +26,7 @@ the review is complete and submitted.
 + Commit your changes locally using `git add` and `git commit`.
 + Upload your change for review using `arc diff`.
 
-## Installing Arcanist
+### Installing Arcanist
 To install Arcanist (the code review tool)...
 
 Create a dir that will hold the two repos required.
