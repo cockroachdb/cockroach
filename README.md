@@ -2,6 +2,10 @@
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
+## Status
+
+**“Not even a lame demo” PRE-ALPHA**
+
 ## Get in touch
 
 + cockroach-db@googlegroups.com
