@@ -38,10 +38,42 @@ func TestErrorf(t *testing.T) {
 	}
 }
 
+// TestErrorfSkip verifies ErrorfSkip with an additional stack frame.
+func TestErrorfSkip(t *testing.T) {
+	var err error
+	func() {
+		err = ErrorfSkip(1, "foo: %d %f", 1, 3.14)
+	}()
+	_, file, line, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("could not get runtime info for test")
+	}
+	expected := fmt.Sprintf("%sfoo: 1 3.140000", fmt.Sprintf(errorPrefixFormat, filepath.Base(file), line-1))
+	if expected != err.Error() {
+		t.Errorf("expected %s, got %s", expected, err.Error())
+	}
+}
+
 // TestError verifies the pass through to fmt.Error as well as
 // file/line prefix.
 func TestError(t *testing.T) {
 	err := Error("foo ", 1, 3.14)
+	_, file, line, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("could not get runtime info for test")
+	}
+	expected := fmt.Sprintf("%sfoo 1 3.14", fmt.Sprintf(errorPrefixFormat, filepath.Base(file), line-1))
+	if expected != err.Error() {
+		t.Errorf("expected %s, got %s", expected, err.Error())
+	}
+}
+
+// TestErrorSkip verifies ErrorSkip with an additional stack frame.
+func TestErrorSkip(t *testing.T) {
+	var err error
+	func() {
+		err = ErrorSkip(1, "foo ", 1, 3.14)
+	}()
 	_, file, line, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatalf("could not get runtime info for test")
