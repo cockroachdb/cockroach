@@ -38,11 +38,12 @@ func TestErrorf(t *testing.T) {
 	}
 }
 
-// TestErrorfSkip verifies ErrorfSkip with an additional stack frame.
-func TestErrorfSkip(t *testing.T) {
+// TestErrorfSkipFrames verifies ErrorfSkipFrames with an additional
+// stack frame.
+func TestErrorfSkipFrames(t *testing.T) {
 	var err error
 	func() {
-		err = ErrorfSkip(1, "foo: %d %f", 1, 3.14)
+		err = ErrorfSkipFrames(1, "foo: %d %f", 1, 3.14)
 	}()
 	_, file, line, ok := runtime.Caller(0)
 	if !ok {
@@ -68,11 +69,12 @@ func TestError(t *testing.T) {
 	}
 }
 
-// TestErrorSkip verifies ErrorSkip with an additional stack frame.
-func TestErrorSkip(t *testing.T) {
+// TestErrorSkipFrames verifies ErrorSkipFrames with an additional
+// stack frame.
+func TestErrorSkipFrames(t *testing.T) {
 	var err error
 	func() {
-		err = ErrorSkip(1, "foo ", 1, 3.14)
+		err = ErrorSkipFrames(1, "foo ", 1, 3.14)
 	}()
 	_, file, line, ok := runtime.Caller(0)
 	if !ok {

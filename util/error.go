@@ -26,8 +26,8 @@ import (
 const defaultSkip = 2
 const errorPrefixFormat string = "%s:%d: "
 
-// getPrefix skips two stack frames to get the file & line number of
-// original caller.
+// getPrefix skips "skip" stack frames to get the file & line number
+// of original caller.
 func getPrefix(skip int, format string) string {
 	if _, file, line, ok := runtime.Caller(skip); ok {
 		return fmt.Sprintf(format, filepath.Base(file), line)
@@ -41,24 +41,24 @@ func Errorf(format string, a ...interface{}) error {
 	return fmt.Errorf(getPrefix(defaultSkip, errorPrefixFormat)+format, a...)
 }
 
-// ErrorfSkip allows the skip count for stack frames to be specified.
-// This is useful when generating errors via helper methods. Skip
-// should be specified as the number of additional stack frames
-// between the location at which the error is caused and the location
-// at which the error is generated.
-func ErrorfSkip(skip int, format string, a ...interface{}) error {
+// ErrorfSkipFrames allows the skip count for stack frames to be
+// specified. This is useful when generating errors via helper
+// methods. Skip should be specified as the number of additional stack
+// frames between the location at which the error is caused and the
+// location at which the error is generated.
+func ErrorfSkipFrames(skip int, format string, a ...interface{}) error {
 	return fmt.Errorf(getPrefix(defaultSkip+skip, errorPrefixFormat)+format, a...)
 }
 
 // Error is a passthrough to fmt.Error, with an additional prefix
 // containing the filename and line number.
 func Error(a ...interface{}) error {
-	return ErrorSkip(1, a...)
+	return ErrorSkipFrames(1, a...)
 }
 
-// ErrorSkip allows the skip count for stack frames to be specified.
-// See the comments for ErrorfSkip.
-func ErrorSkip(skip int, a ...interface{}) error {
+// ErrorSkipFrames allows the skip count for stack frames to be
+// specified. See the comments for ErrorfSkip.
+func ErrorSkipFrames(skip int, a ...interface{}) error {
 	prefix := getPrefix(defaultSkip+skip, errorPrefixFormat)
 	if prefix != "" {
 		a = append([]interface{}{prefix}, a...)
