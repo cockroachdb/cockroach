@@ -26,11 +26,11 @@ import "C"
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"syscall"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
@@ -65,10 +65,7 @@ func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
 	if r.rdb = C.rocksdb_open(r.opts, cDir, &cErr); cErr != nil {
 		r.rdb = nil
 		r.destroyOptions()
-		s := C.GoString(cErr)
-		C.free(unsafe.Pointer(cErr))
-		// TODO(andybons): use util.Error.
-		return nil, errors.New(s)
+		return nil, charToErr(cErr)
 	}
 	if _, err := r.capacity(); err != nil {
 		if err := r.destroy(); err != nil {
@@ -128,8 +125,11 @@ func (r *RocksDB) Type() DiskType {
 func charToErr(c *C.char) error {
 	s := C.GoString(c)
 	C.free(unsafe.Pointer(c))
-	// TODO(andybons): use util.Error.
-	return errors.New(s)
+	return util.ErrorSkipFrames(1, s)
+}
+
+func emptyKeyError() error {
+	return util.ErrorSkipFrames(1, "attempted access to empty key")
 }
 
 // put sets the given key to the value provided.
@@ -137,6 +137,9 @@ func charToErr(c *C.char) error {
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
 func (r *RocksDB) put(key Key, value Value) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
@@ -158,6 +161,9 @@ func (r *RocksDB) put(key Key, value Value) error {
 
 // get returns the value for the given key.
 func (r *RocksDB) get(key Key) (Value, error) {
+	if len(key) == 0 {
+		return Value{}, emptyKeyError()
+	}
 	var (
 		cValLen C.size_t
 		cErr    *C.char
@@ -182,6 +188,9 @@ func (r *RocksDB) get(key Key) (Value, error) {
 
 // del removes the item from the db with the given key.
 func (r *RocksDB) del(key Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	var cErr *C.char
 	C.rocksdb_delete(
 		r.rdb,
@@ -212,8 +221,9 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 
 	keyVals := []KeyValue{}
 	byteCount := len(start)
-	if byteCount < 1 {
-		// empty key needs special treatment due to start[0] a few lines down
+	if byteCount == 0 {
+		// start=Key("") needs special treatment since we need
+		// to access start[0] in an explicit seek.
 		C.rocksdb_iter_seek_to_first(it)
 	} else {
 		C.rocksdb_iter_seek(it, (*C.char)(unsafe.Pointer(&start[0])), C.size_t(byteCount))

@@ -55,24 +55,37 @@ func startServer() *server {
 	return s
 }
 
+// TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
 	testCases := []struct {
-		key string
-		typ storage.DiskType
+		key          string           // data directory
+		expectedType storage.DiskType // type for created engine
+		wantError    bool             // do we expect an error from this key?
 	}{
-		{"mem=1000", storage.MEM},
-		{"ssd=/tmp/.foobar", storage.SSD},
-		{"hdd=/tmp/.foobar2", storage.HDD},
+		{"mem=1000", storage.MEM, false},
+		{"ssd=/tmp/.foobar", storage.SSD, false},
+		{"hdd=/tmp/.foobar2", storage.HDD, false},
+		{"", storage.HDD, true},
+		{"  ", storage.HDD, true},
+		{"arbitrarystring", storage.HDD, true},
+		{"mem=notaninteger", storage.HDD, true},
+		{"mem=", storage.HDD, true},
+		{"ssd=", storage.HDD, true},
+		{"hdd=", storage.HDD, true},
+		{"abc=/dev/null", storage.HDD, true},
 	}
 	for _, spec := range testCases {
 		engine, err := initEngine(spec.key)
-		if err != nil {
-			glog.Fatal(err)
+		if err == nil {
+			if spec.wantError {
+				t.Fatalf("invalid engine spec '%v' erroneously accepted", spec.key)
+			}
+			if engine.Type() != spec.expectedType {
+				t.Errorf("wrong engine type created, expected %v but got %v", spec.expectedType, engine.Type())
+			}
+		} else if !spec.wantError {
+			t.Error(err)
 		}
-		if engine.Type() != spec.typ {
-			glog.Fatalf("wrong engine type created, expected %v but got %v", spec.typ, engine.Type())
-		}
-
 	}
 }
 

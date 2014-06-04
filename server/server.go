@@ -54,7 +54,7 @@ var (
 		"-data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
 	// Regular expression for capturing data directory specifications.
-	dataDirRE = regexp.MustCompile(`^(mem)=([\d]*)|(ssd|hdd)=(.*)$`)
+	dataDirRE = regexp.MustCompile(`^(mem)=([\d]+)|(ssd|hdd)=(.+)$`)
 )
 
 // A CmdStart command starts nodes by joining the gossip network.
@@ -143,7 +143,7 @@ func initEngines() ([]storage.Engine, error) {
 func initEngine(spec string) (storage.Engine, error) {
 	// Error if regexp doesn't match.
 	matches := dataDirRE.FindStringSubmatch(spec)
-	if matches == nil || len(matches) != 5 {
+	if matches == nil {
 		return nil, util.Errorf("invalid engine specification %q", spec)
 	}
 
@@ -213,7 +213,7 @@ func (s *server) start(engines []storage.Engine) error {
 	if err := s.node.start(engines); err != nil {
 		return err
 	}
-	glog.Infoln("Initialized %d storage engines", len(engines))
+	glog.Infoln("Initialized", len(engines), "storage engines")
 
 	s.initHTTP()
 	return http.ListenAndServe(*httpAddr, s)
