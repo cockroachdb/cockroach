@@ -386,7 +386,7 @@ func (g *Gossip) manage() {
 
 		// If there are no outgoing hosts or sentinel gossip is
 		// missing, signal bootstrapper.
-		if g.outgoing.len() == 0 && g.filterExtant(g.bootstraps).len() > 0 {
+		if g.outgoing.len() == 0 {
 			glog.Infof("no outgoing hosts; signaling bootstrap")
 			g.stalled.Signal()
 		} else if g.is.getInfo(KeySentinel) == nil {

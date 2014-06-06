@@ -18,6 +18,7 @@
 package rpc
 
 import (
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
@@ -76,12 +77,13 @@ func NewClient(addr net.Addr) *Client {
 	// Attempt to dial connection with exponential backoff starting
 	// at 1s and ending at 30s with indefinite retries.
 	opts := util.Options{
+		Tag:         fmt.Sprintf("client %s connection", addr),
 		Backoff:     1 * time.Second,  // first backoff at 1s
 		MaxBackoff:  30 * time.Second, // max backoff is 30s
 		Constant:    2,                // doubles
 		MaxAttempts: 0,                // indefinite retries
 	}
-	go util.RetryWithBackoffOptions(opts, func() bool {
+	go util.RetryWithBackoff(opts, func() bool {
 		// TODO(spencer): use crypto.tls.
 		conn, err := net.Dial(addr.Network(), addr.String())
 		if err != nil {
@@ -93,11 +95,17 @@ func NewClient(addr net.Addr) *Client {
 		c.lAddr = conn.LocalAddr()
 		c.mu.Unlock()
 
-		glog.Infof("client connected: %s", addr)
+		// Launch heartbeat; this ensures at least one heartbeat succeeds
+		// before exiting the retry loop.
+		if err = c.heartbeat(); err != nil {
+			glog.Info(err)
+			return false
+		}
+
+		glog.Infof("client %s connected", addr)
 		close(c.Ready)
 
-		// Launch heartbeat.
-		go c.heartbeat()
+		go c.startHeartbeat()
 
 		return true
 	})
@@ -126,30 +134,40 @@ func (c *Client) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
-// heartbeat sends periodic heartbeats to client. Closes the
-// connection on error. This method loops indefinitely until an error
-// is encountered.
-func (c *Client) heartbeat() {
+// startHeartbeat sends periodic heartbeats to client. Closes the
+// connection on error. Heartbeats are sent in an infinite loop until
+// an error is encountered.
+func (c *Client) startHeartbeat() {
+	glog.Infof("client %s starting heartbeat", c.Addr())
 	for {
-		glog.Info(c)
-		call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
-		select {
-		case <-call.Done:
-			// On heartbeat failure, remove this client from cache. A new
-			// client to this address will be created on the next call to
-			// NewClient().
-			if call.Error != nil {
-				glog.Infof("heartbeat failed: %v; recycling client", call.Error)
-				clientMu.Lock()
-				delete(clients, c.Addr().String())
-				clientMu.Unlock()
-				c.Close()
-				break
-			}
-			time.Sleep(heartbeatInterval)
-		case <-time.After(heartbeatInterval * 2):
-			// Allowed twice gossip interval.
-			glog.Infof("client %s unhealthy after %v", c.Addr(), heartbeatInterval*2)
+		// On heartbeat failure, remove this client from cache. A new
+		// client to this address will be created on the next call to
+		// NewClient().
+		if err := c.heartbeat(); err != nil {
+			glog.Infof("heartbeat failed: %v; recycling client %s", err, c.Addr())
+			clientMu.Lock()
+			delete(clients, c.Addr().String())
+			clientMu.Unlock()
+			c.Close()
+			break
 		}
+		time.Sleep(heartbeatInterval)
 	}
+}
+
+// heartbeat sends a single heartbeat RPC.
+func (c *Client) heartbeat() error {
+	call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
+	select {
+	case <-call.Done:
+		glog.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
+		return call.Error
+	case <-time.After(heartbeatInterval * 2):
+		// Allowed twice gossip interval.
+		// TODO(spencer): mark client unhealthy.
+		glog.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval*2)
+	}
+
+	<-call.Done
+	return call.Error
 }

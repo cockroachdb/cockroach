@@ -17,33 +17,35 @@
 
 package util
 
-import "time"
+import (
+	"time"
+
+	"github.com/golang/glog"
+)
 
 // Options provides control of retry loop logic via the
 // RetryWithBackoffOptions method.
 type Options struct {
+	Tag         string        // Tag for helpful logging of backoffs
 	Backoff     time.Duration // Default retry backoff interval
 	MaxBackoff  time.Duration // Maximum retry backoff interval
 	Constant    float64       // Default backoff constant
 	MaxAttempts int           // Maximum number of attempts (0 for infinite)
 }
 
-// RetryWithBackoff is uses default retry constants to implement an
-// exponential backoff. When fn returns true, retry ends. Returns
-// an error if the maximum number of retries is exceeded.
-func RetryWithBackoff(fn func() bool) error {
-	defaultOpts := Options{
-		Backoff:     time.Millisecond * 10,
-		MaxBackoff:  time.Minute,
-		Constant:    2,
-		MaxAttempts: 10,
-	}
-	return RetryWithBackoffOptions(defaultOpts, fn)
+var DefaultRetryOpts = Options{
+	Tag:         "retry loop method invocation",
+	Backoff:     time.Millisecond * 10,
+	MaxBackoff:  time.Minute,
+	Constant:    2,
+	MaxAttempts: 10,
 }
 
-// RetryWithBackoffOptions implements retry with exponential backoff
-// using the supplied options as parameters.
-func RetryWithBackoffOptions(opts Options, fn func() bool) error {
+// RetryWithBackoff implements retry with exponential backoff using
+// the supplied options as parameters. When fn returns true, retry
+// ends. Returns an error if the maximum number of retries is
+// exceeded.
+func RetryWithBackoff(opts Options, fn func() bool) error {
 	backoff := opts.Backoff
 	for count := 1; true; count++ {
 		if fn() {
@@ -52,6 +54,7 @@ func RetryWithBackoffOptions(opts Options, fn func() bool) error {
 		if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
 			return Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
 		}
+		glog.Infof("%s failed; retrying in %s", opts.Tag, backoff)
 		select {
 		case <-time.After(backoff):
 			// Increase backoff.

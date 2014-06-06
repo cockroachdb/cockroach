@@ -23,9 +23,9 @@ import (
 )
 
 func TestRetry(t *testing.T) {
-	opts := Options{time.Microsecond * 10, time.Second, 2, 10}
+	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 10}
 	var retries int
-	err := RetryWithBackoffOptions(opts, func() bool {
+	err := RetryWithBackoff(opts, func() bool {
 		retries++
 		if retries >= 3 {
 			return true
@@ -41,8 +41,8 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	timer := time.AfterFunc(time.Second, func() {
 		t.Error("max backoff not respected")
 	})
-	opts := Options{time.Microsecond * 10, time.Microsecond * 10, 1000, 3}
-	err := RetryWithBackoffOptions(opts, func() bool {
+	opts := Options{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3}
+	err := RetryWithBackoff(opts, func() bool {
 		return false
 	})
 	if err == nil {
@@ -53,8 +53,8 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 
 func TestRetryExceedsMaxAttempts(t *testing.T) {
 	var retries int
-	opts := Options{time.Microsecond * 10, time.Second, 2, 3}
-	err := RetryWithBackoffOptions(opts, func() bool {
+	opts := Options{"test", time.Microsecond * 10, time.Second, 2, 3}
+	err := RetryWithBackoff(opts, func() bool {
 		retries++
 		return false
 	})

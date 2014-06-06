@@ -31,9 +31,6 @@ const (
 	// maxWaitForNewGossip is minimum wait for new gossip before a
 	// peer is considered a poor source of good gossip and is GC'd.
 	maxWaitForNewGossip = 10 * time.Second
-	// gossipDialTimeout is timeout for net.Dial call to connect to
-	// a gossip server.
-	gossipDialTimeout = 2 * time.Second
 )
 
 // init pre-registers net.UnixAddr and net.TCPAddr concrete types with
@@ -68,14 +65,7 @@ func newClient(addr net.Addr) *client {
 // be set. This method blocks and should be invoked via goroutine.
 func (c *client) start(g *Gossip, done chan *client) {
 	c.rpcClient = rpc.NewClient(c.addr)
-	select {
-	case <-c.rpcClient.Ready:
-		// Start gossip; see below.
-	case <-time.After(gossipDialTimeout):
-		c.err = util.Errorf("timeout connecting to remote server: %v", c.addr)
-		done <- c
-		return
-	}
+	<-c.rpcClient.Ready
 
 	// Start gossipping and wait for disconnect or error.
 	c.lastFresh = time.Now().UnixNano()
