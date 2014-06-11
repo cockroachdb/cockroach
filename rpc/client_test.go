@@ -33,11 +33,7 @@ func TestClientHeartbeat(t *testing.T) {
 		t.Fatalf("invalid test server address %s: %s", testAddr, err)
 	}
 	s := NewServer(addr)
-	go s.ListenAndServe()
-	// Delve into rpc server struct to ensure we get correct address since we're
-	// picking an unused port. If we don't wait for the server to start listening,
-	// the address will be incorrect.
-	<-s.listening
+	s.Start()
 	c := NewClient(s.Addr())
 	time.Sleep(heartbeatInterval * 2)
 	if c != NewClient(s.Addr()) {
@@ -60,11 +56,9 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	s := &Server{
 		Server:         rpc.NewServer(),
 		addr:           addr,
-		listening:      make(chan struct{}, 1),
 		closeCallbacks: make([]func(conn net.Conn), 0, 1),
 	}
-	go s.ListenAndServe()
-	<-s.listening
+	s.Start()
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.

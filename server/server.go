@@ -26,6 +26,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
@@ -96,6 +98,7 @@ type server struct {
 	admin          *adminServer
 	structuredDB   *structured.DB
 	structuredREST *structured.RESTServer
+	httpListener   *net.Listener // holds http endpoint information
 }
 
 // runStart starts the cockroach node using -data_dirs as the list of storage
@@ -116,10 +119,16 @@ func runStart(cmd *commander.Command, args []string) {
 
 	err = s.start(engines)
 
-	s.stop()
 	if err != nil {
 		glog.Fatal(err)
 	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+
+	// Block until one of the signals above is received.
+	<-c
+	s.stop()
 }
 
 // initEngines interprets the -data_dirs command line flag to
@@ -196,7 +205,7 @@ func newServer() (*server, error) {
 }
 
 func (s *server) start(engines []storage.Engine) error {
-	go s.rpc.ListenAndServe() // blocks, so launch in a goroutine
+	s.rpc.Start() // bind RPC socket and launch goroutine.
 	glog.Infoln("Started RPC server at", *rpcAddr)
 
 	s.gossip.Start()
@@ -216,11 +225,19 @@ func (s *server) start(engines []storage.Engine) error {
 	glog.Infoln("Initialized", len(engines), "storage engines")
 
 	s.initHTTP()
-	return http.ListenAndServe(*httpAddr, s)
+	ln, err := net.Listen("tcp", *httpAddr)
+	if err != nil {
+		return util.Errorf("Could not listen on %s: %s", *httpAddr, err)
+	}
+	// Obtaining the http end point listener is difficult using
+	// http.ListenAndServe(), so we are storing it with the server
+	s.httpListener = &ln
+	glog.Infof("Starting HTTP server at %s", ln.Addr())
+	go http.Serve(ln, s)
+	return nil
 }
 
 func (s *server) initHTTP() {
-	glog.Infof("Starting HTTP server at %s", *httpAddr)
 	s.mux.HandleFunc(adminKeyPrefix+"healthz", s.admin.handleHealthz)
 	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
 	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)

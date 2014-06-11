@@ -107,7 +107,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 			glog.Fatalf("failed to create address: %s", err)
 		}
 		servers[i] = rpc.NewServer(addr)
-		go servers[i].ListenAndServe()
+		servers[i].Start()
 		addrs[i] = addr
 	}
 	var bootstrap []net.Addr

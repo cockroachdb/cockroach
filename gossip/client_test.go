@@ -43,11 +43,11 @@ func waitFor(cond func() bool, desc string, t *testing.T) {
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
 	laddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
 	lserver = rpc.NewServer(laddr)
-	go lserver.ListenAndServe()
+	lserver.Start()
 	local = New(lserver)
 	raddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
 	rserver = rpc.NewServer(raddr)
-	go rserver.ListenAndServe()
+	rserver.Start()
 	remote = New(rserver)
 	go remote.serve()
 	time.Sleep(time.Millisecond)

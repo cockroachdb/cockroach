@@ -28,9 +28,8 @@ import (
 // Server is a Cockroach-specific RPC server with an embedded go RPC
 // server struct.
 type Server struct {
-	*rpc.Server               // Embedded RPC server instance
-	listener    net.Listener  // Server listener
-	listening   chan struct{} // signaled when the server is listening
+	*rpc.Server              // Embedded RPC server instance
+	listener    net.Listener // Server listener
 
 	mu             sync.RWMutex          // Mutex protects the fields below
 	addr           net.Addr              // Server address; may change if picking unused port
@@ -43,7 +42,6 @@ func NewServer(addr net.Addr) *Server {
 	s := &Server{
 		Server:         rpc.NewServer(),
 		addr:           addr,
-		listening:      make(chan struct{}, 1),
 		closeCallbacks: make([]func(conn net.Conn), 0, 1),
 	}
 	heartbeat := &HeartbeatService{}
@@ -59,36 +57,37 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 	s.closeCallbacks = append(s.closeCallbacks, cb)
 }
 
-// ListenAndServe begins listening and serving. This method should be
-// invoked by goroutine as it will loop serving incoming client and
-// not return until Close() is invoked.
-func (s *Server) ListenAndServe() {
+// Start runs the RPC server. After this method returns, the
+// socket will have been bound.
+func (s *Server) Start() error {
 	ln, err := net.Listen(s.addr.Network(), s.addr.String())
 	if err != nil {
-		glog.Fatalf("unable to start gossip node: %s", err)
+		return err
 	}
-	s.listening <- struct{}{} // signal that we are now listening.
 	s.listener = ln
 
 	s.mu.Lock()
 	s.addr = ln.Addr()
 	s.mu.Unlock()
 
-	// Start serving gossip protocol in a loop until listener is closed.
-	glog.Infof("serving on %+v...", s.addr)
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			if !s.closed {
-				glog.Fatalf("gossip server terminated: %s", err)
+	go func() {
+		// Start serving gossip protocol in a loop until listener is closed.
+		glog.Infof("serving on %+v...", s.addr)
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				if !s.closed {
+					glog.Fatalf("gossip server terminated: %s", err)
+				}
+				break
 			}
-			break
+			// Serve connection to completion in a goroutine.
+			go s.serveConn(conn)
 		}
-		// Serve connection to completion in a goroutine.
-		go s.serveConn(conn)
-	}
+	}()
+	return nil
 }
 
 // Addr returns the server's network address.

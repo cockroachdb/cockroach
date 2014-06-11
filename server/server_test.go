@@ -35,6 +35,13 @@ var (
 	serverTestOnce sync.Once
 )
 
+func init() {
+	// We update these with the actual port once the servers
+	// have been launched for the purpose of this test.
+	*httpAddr = "localhost:0"
+	*rpcAddr = "localhost:0"
+}
+
 func startServer() *server {
 	serverTestOnce.Do(func() {
 		resetTestData()
@@ -47,9 +54,15 @@ func startServer() *server {
 			glog.Fatal(err)
 		}
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
-		go func() {
-			glog.Fatal(s.start(engines)) // TODO(spencer): should shutdown server.
-		}()
+		err = s.start(engines) // TODO(spencer): should shutdown server.
+		if err != nil {
+			glog.Fatalf("Could not start server: %s", err)
+		}
+
+		// Update the configuration variables to reflect the actual
+		// sockets bound during this test.
+		*httpAddr = (*s.httpListener).Addr().String()
+		*rpcAddr = s.rpc.Addr().String()
 		glog.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
 	})
 	return s

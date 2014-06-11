@@ -304,7 +304,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Loops until the node is closed and should be
-// invoked via goroutin.
+// invoked via goroutine.
 func (n *Node) startGossip() {
 	// Register gossip groups.
 	n.maxAvailPrefix = gossip.KeyMaxAvailCapacityPrefix + n.Attributes.Datacenter
