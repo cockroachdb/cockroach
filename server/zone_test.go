@@ -77,7 +77,6 @@ func ExampleSetAndGetZone() {
 	// Output:
 	// set zone config for key prefix ""
 	// zone config for key prefix "":
-	//
 	// replicas:
 	//   dc1:
 	//   - SSD
@@ -86,7 +85,6 @@ func ExampleSetAndGetZone() {
 	//
 	// set zone config for key prefix "db1"
 	// zone config for key prefix "db1":
-	//
 	// replicas:
 	//   dc1:
 	//   - SSD
@@ -95,7 +93,6 @@ func ExampleSetAndGetZone() {
 	//
 	// set zone config for key prefix "db+2"
 	// zone config for key prefix "db+2":
-	//
 	// replicas:
 	//   dc1:
 	//   - SSD
@@ -104,7 +101,6 @@ func ExampleSetAndGetZone() {
 	//
 	// set zone config for key prefix "%FE"
 	// zone config for key prefix "%FE":
-	//
 	// replicas:
 	//   dc1:
 	//   - SSD

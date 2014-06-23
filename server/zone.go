@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
+	yaml "gopkg.in/yaml.v1"
 )
 
 const (
@@ -41,8 +42,8 @@ type zoneHandler struct {
 
 // Put writes a zone config for the specified key prefix "key".  The
 // zone config is parsed from the input "body". The zone config is
-// stored as YAML text. The specified body must be valid utf8 and
-// must validly parse into a zone config struct.
+// stored gob-encoded. The specified body must be valid utf8 and must
+// validly parse into a zone config struct.
 func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for zone Put")
@@ -51,14 +52,13 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if !utf8.ValidString(configStr) {
 		return util.Errorf("config contents not valid utf8: %q", body)
 	}
-	_, err := storage.ParseZoneConfig(body)
+	config, err := storage.ParseZoneConfig(body)
 	if err != nil {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
 	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
-	pr := <-zh.kvDB.Put(&storage.PutRequest{Key: zoneKey, Value: storage.Value{Bytes: body}})
-	if pr.Error != nil {
-		return pr.Error
+	if err := kv.PutI(zh.kvDB, zoneKey, config); err != nil {
+		return err
 	}
 	return nil
 }
@@ -69,10 +69,9 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 // matching the remainder is retrieved. Note that this will retrieve
 // the default zone config if "key" is equal to "/", and will list all
 // configs if "key" is equal to "". The body result contains
-// JSON-formmatted output via the GetZoneResponse struct.
+// JSON-formatted output for a listing of keys and YAML-formatted
+// output for retrieval of a zone config.
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	contentType = "application/json"
-
 	// Scan all zones if the key is empty.
 	if len(path) == 0 {
 		sr := <-zh.kvDB.Scan(&storage.ScanRequest{
@@ -93,26 +92,34 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// JSON-encode the prefixes array.
+		contentType = "application/json"
 		if body, err = json.Marshal(prefixes); err != nil {
 			err = util.Errorf("unable to format zone configurations: %v", err)
 		}
 	} else {
 		zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
-		gr := <-zh.kvDB.Get(&storage.GetRequest{Key: zoneKey})
-		if gr.Error != nil {
+		var ok bool
+		config := &storage.ZoneConfig{}
+		if ok, _, err = kv.GetI(zh.kvDB, zoneKey, config); err != nil {
 			return
 		}
 		// On get, if there's no zone config for the requested prefix,
 		// return a not found error.
-		if gr.Value.Bytes == nil {
+		if !ok {
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		if !utf8.ValidString(string(gr.Value.Bytes)) {
-			err = util.Errorf("config contents not valid utf8: %q", gr.Value)
+		var out []byte
+		if out, err = yaml.Marshal(config); err != nil {
+			err = util.Errorf("unable to marshal zone config %+v to yaml: %v", config, err)
 			return
 		}
-		body = gr.Value.Bytes
+		if !utf8.ValidString(string(out)) {
+			err = util.Errorf("config contents not valid utf8: %q", out)
+			return
+		}
+		contentType = "text/yaml"
+		body = out
 	}
 
 	return

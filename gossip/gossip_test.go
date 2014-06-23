@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/golang/glog"
 )
 
@@ -75,7 +73,7 @@ func TestConvergence(t *testing.T) {
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
-	g := New(rpc.NewServer(testAddr("test-addr:0")))
+	g := New()
 	g.AddInfo("i", int64(1), time.Hour)
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
@@ -102,7 +100,7 @@ func TestGossipInfoStore(t *testing.T) {
 // TestGossipGroupsInfoStore verifies gossiping of groups via the
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
-	g := New(rpc.NewServer(testAddr("test-addr:0")))
+	g := New()
 
 	// For int64.
 	g.RegisterGroup("i", 3, MinGroup)

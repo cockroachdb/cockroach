@@ -43,8 +43,8 @@ import (
 )
 
 var (
-	httpAddr = flag.String("http_addr", "localhost:8080", "TCP network address to bind to for HTTP traffic")
-	rpcAddr  = flag.String("rpc_addr", "localhost:8081", "TCP network address to bind to for RPC traffic")
+	rpcAddr  = flag.String("rpc_addr", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
+	httpAddr = flag.String("http_addr", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
 
 	// dataDirs is specified to enable durable storage via
 	// RocksDB-backed key-value stores. Memory-backed key value stores
@@ -80,15 +80,16 @@ this requirement isn't strictly enforced.
 
 A node exports an HTTP API with the following endpoints:
 
-  Health check:           http://%s/healthz
-  Key-value REST:         http://%s%s
-  Structured Schema REST: http://%s%s
-`, *httpAddr, *httpAddr, kv.KVKeyPrefix, *httpAddr, structured.StructuredKeyPrefix),
+  Health check:           /healthz
+  Key-value REST:         %s
+  Structured Schema REST: %s
+`, kv.KVKeyPrefix, structured.StructuredKeyPrefix),
 	Run:  runStart,
 	Flag: *flag.CommandLine,
 }
 
 type server struct {
+	host           string
 	mux            *http.ServeMux
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
@@ -106,19 +107,18 @@ type server struct {
 // "well-known" hosts used to join this node to the cockroach cluster via the
 // gossip network.
 func runStart(cmd *commander.Command, args []string) {
-	glog.Info("starting cockroach cluster")
+	glog.Info("Starting cockroach cluster")
 	s, err := newServer()
 	if err != nil {
 		glog.Fatal(err)
 	}
 	// init engines from -data_dirs
-	engines, err := initEngines()
+	engines, err := initEngines(*dataDirs)
 	if err != nil {
 		glog.Fatal(err)
 	}
 
-	err = s.start(engines)
-
+	err = s.start(engines, false)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -131,11 +131,11 @@ func runStart(cmd *commander.Command, args []string) {
 	s.stop()
 }
 
-// initEngines interprets the -data_dirs command line flag to
-// initialize a slice of storage.Engine objects.
-func initEngines() ([]storage.Engine, error) {
+// initEngines interprets the dirs parameter to initialize a slice of
+// storage.Engine objects.
+func initEngines(dirs string) ([]storage.Engine, error) {
 	engines := make([]storage.Engine, 0, 1)
-	for _, dir := range strings.Split(*dataDirs, ",") {
+	for _, dir := range strings.Split(dirs, ",") {
 		engine, err := initEngine(dir)
 		if err != nil {
 			glog.Warningf("%v; skipping...will not serve data", err)
@@ -173,30 +173,43 @@ func initEngine(spec string) (storage.Engine, error) {
 		case "ssd":
 			typ = storage.SSD
 		default:
-			return nil, util.Errorf("unhandled disk type %q", matches[3])
+			return nil, util.Errorf("unhandled disk type %q", matches[4])
 		}
 		engine, err = storage.NewRocksDB(typ, matches[4])
 		if err != nil {
 			return nil, util.Errorf("unable to init rocksdb with data dir %q", matches[4])
 		}
 	}
+
 	return engine, nil
 }
 
 func newServer() (*server, error) {
+	// Determine hostname in case it hasn't been specified in -rpc_addr or -http_addr.
+	host, err := os.Hostname()
+	if err != nil {
+		host = "localhost"
+	}
+
+	// Resolve
+	if strings.HasPrefix(*rpcAddr, ":") {
+		*rpcAddr = host + *rpcAddr
+	}
 	addr, err := net.ResolveTCPAddr("tcp", *rpcAddr)
 	if err != nil {
 		return nil, err
 	}
+
 	s := &server{
-		mux: http.NewServeMux(),
-		rpc: rpc.NewServer(addr),
+		host: host,
+		mux:  http.NewServeMux(),
+		rpc:  rpc.NewServer(addr),
 	}
 
-	s.gossip = gossip.New(s.rpc)
+	s.gossip = gossip.New()
 	s.kvDB = kv.NewDB(s.gossip)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
-	s.node = NewNode(s.rpc, s.kvDB, s.gossip)
+	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
 	s.structuredDB = structured.NewDB(s.kvDB)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
@@ -204,30 +217,40 @@ func newServer() (*server, error) {
 	return s, nil
 }
 
-func (s *server) start(engines []storage.Engine) error {
+// start runs the RPC and HTTP servers, starts the gossip instance (if
+// selfBootstrap is true, uses the rpc server's address as the gossip
+// bootstrap), and starts the node using the supplied engines slice.
+func (s *server) start(engines []storage.Engine, selfBootstrap bool) error {
 	s.rpc.Start() // bind RPC socket and launch goroutine.
-	glog.Infoln("Started RPC server at", *rpcAddr)
+	glog.Infof("Started RPC server at %s", s.rpc.Addr())
 
-	s.gossip.Start()
+	// Handle self-bootstrapping case for a single node.
+	if selfBootstrap {
+		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
+	}
+	s.gossip.Start(s.rpc)
 	glog.Infoln("Started gossip instance")
 
 	// Init the engines specified via command line flags if not supplied.
 	if engines == nil {
 		var err error
-		engines, err = initEngines()
+		engines, err = initEngines(*dataDirs)
 		if err != nil {
 			return err
 		}
 	}
-	if err := s.node.start(engines); err != nil {
+	if err := s.node.start(s.rpc, engines); err != nil {
 		return err
 	}
-	glog.Infoln("Initialized", len(engines), "storage engines")
+	glog.Infof("Initialized %d storage engine(s)", len(engines))
 
 	s.initHTTP()
+	if strings.HasPrefix(*httpAddr, ":") {
+		*httpAddr = s.host + *httpAddr
+	}
 	ln, err := net.Listen("tcp", *httpAddr)
 	if err != nil {
-		return util.Errorf("Could not listen on %s: %s", *httpAddr, err)
+		return util.Errorf("could not listen on %s: %s", *httpAddr, err)
 	}
 	// Obtaining the http end point listener is difficult using
 	// http.ListenAndServe(), so we are storing it with the server

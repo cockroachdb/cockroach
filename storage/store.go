@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -79,6 +80,29 @@ func NewStore(engine Engine, gossip *gossip.Gossip) *Store {
 	}
 }
 
+// Close calls Range.Stop() on all active ranges.
+func (s *Store) Close() {
+	for _, rng := range s.ranges {
+		rng.Stop()
+	}
+}
+
+// String formats a store for debug output.
+func (s *Store) String() string {
+	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
+}
+
+// IsBootstrapped returns true if the store has already been
+// bootstrapped. If the store ident is corrupt, IsBootstrapped will
+// return true; the exact error can be retrieved via a call to Init().
+func (s *Store) IsBootstrapped() bool {
+	ok, _, err := getI(s.engine, keyStoreIdent, &s.Ident)
+	if err != nil || ok {
+		return true
+	}
+	return false
+}
+
 // Init reads the StoreIdent from the underlying engine.
 func (s *Store) Init() error {
 	ok, _, err := getI(s.engine, keyStoreIdent, &s.Ident)
@@ -91,11 +115,13 @@ func (s *Store) Init() error {
 	// TODO(spencer): scan through all range metadata and instantiate
 	//   ranges. Right now we just get range id hardcoded as 1.
 	var meta RangeMetadata
-	_, _, err = getI(s.engine, rangeKey(1), &meta)
-	if err != nil {
+	ok, _, err = getI(s.engine, rangeKey(1), &meta)
+	if err != nil || !ok {
 		return err
 	}
+
 	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
+	rng.Start()
 	s.ranges[meta.RangeID] = rng
 
 	return nil
@@ -127,7 +153,7 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 
 // CreateRange allocates a new range ID and stores range metadata.
 // On success, returns the new range.
-func (s *Store) CreateRange(startKey, endKey Key) (*Range, error) {
+func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, error) {
 	rangeID, err := increment(s.engine, keyRangeIDGenerator, 1, time.Now().UnixNano())
 	if err != nil {
 		return nil, err
@@ -138,16 +164,21 @@ func (s *Store) CreateRange(startKey, endKey Key) (*Range, error) {
 	// RangeMetadata is stored local to this store only. It is neither
 	// replicated via raft nor available via the global kv store.
 	meta := RangeMetadata{
-		RangeID:  rangeID,
-		StartKey: startKey,
-		EndKey:   endKey,
-		Replicas: RangeLocations{StartKey: startKey},
+		ClusterID: s.Ident.ClusterID,
+		RangeID:   rangeID,
+		StartKey:  startKey,
+		EndKey:    endKey,
+		Replicas: RangeLocations{
+			StartKey: startKey,
+			Replicas: replicas,
+		},
 	}
 	err = putI(s.engine, rangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
 	}
 	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
+	rng.Start()
 	s.ranges[rangeID] = rng
 	return rng, nil
 }

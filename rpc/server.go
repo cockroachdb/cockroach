@@ -26,7 +26,11 @@ import (
 )
 
 // Server is a Cockroach-specific RPC server with an embedded go RPC
-// server struct.
+// server struct. By default it handles a simple heartbeat protocol
+// to measure link health. It also supports close callbacks.
+//
+// TODO(spencer): heartbeat protocol should also measure link latency
+// and clock skew.
 type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
@@ -40,9 +44,8 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(addr net.Addr) *Server {
 	s := &Server{
-		Server:         rpc.NewServer(),
-		addr:           addr,
-		closeCallbacks: make([]func(conn net.Conn), 0, 1),
+		Server: rpc.NewServer(),
+		addr:   addr,
 	}
 	heartbeat := &HeartbeatService{}
 	s.RegisterName("Heartbeat", heartbeat)
@@ -57,8 +60,8 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 	s.closeCallbacks = append(s.closeCallbacks, cb)
 }
 
-// Start runs the RPC server. After this method returns, the
-// socket will have been bound.
+// Start runs the RPC server. After this method returns, the socket
+// will have been bound. Use Server.Addr() to ascertain server address.
 func (s *Server) Start() error {
 	ln, err := net.Listen(s.addr.Network(), s.addr.String())
 	if err != nil {
@@ -71,21 +74,22 @@ func (s *Server) Start() error {
 	s.mu.Unlock()
 
 	go func() {
-		// Start serving gossip protocol in a loop until listener is closed.
-		glog.Infof("serving on %+v...", s.addr)
+		// Start serving in a loop until listener is closed.
+		glog.Infof("serving on %+v...", s.Addr())
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				s.mu.Lock()
-				defer s.mu.Unlock()
 				if !s.closed {
-					glog.Fatalf("gossip server terminated: %s", err)
+					glog.Fatalf("server terminated: %s", err)
 				}
+				s.mu.Unlock()
 				break
 			}
 			// Serve connection to completion in a goroutine.
 			go s.serveConn(conn)
 		}
+		glog.Infof("done serving on %+v", s.Addr())
 	}()
 	return nil
 }
@@ -106,13 +110,14 @@ func (s *Server) Close() {
 }
 
 // serveConn synchronously serves a single connection. When the
-// connection is closed, the client address is removed from the
-// incoming set.
+// connection is closed, close callbacks are invoked.
 func (s *Server) serveConn(conn net.Conn) {
 	s.ServeConn(conn)
 	s.mu.Lock()
-	for _, cb := range s.closeCallbacks {
-		cb(conn)
+	if s.closeCallbacks != nil {
+		for _, cb := range s.closeCallbacks {
+			cb(conn)
+		}
 	}
 	s.mu.Unlock()
 	conn.Close()

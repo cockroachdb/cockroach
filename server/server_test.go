@@ -20,7 +20,6 @@ package server
 import (
 	"compress/gzip"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -53,8 +52,7 @@ func startServer() *server {
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			glog.Fatal(err)
 		}
-		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
-		err = s.start(engines) // TODO(spencer): should shutdown server.
+		err = s.start(engines, true) // TODO(spencer): should shutdown server.
 		if err != nil {
 			glog.Fatalf("Could not start server: %s", err)
 		}

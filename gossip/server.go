@@ -18,6 +18,8 @@
 package gossip
 
 import (
+	"bytes"
+	"encoding/gob"
 	"math/rand"
 	"net"
 	"sync"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/golang/glog"
 )
 
 // server maintains an array of connected peers to which it gossips
@@ -40,15 +43,13 @@ type server struct {
 }
 
 // newServer creates and returns a server struct.
-func newServer(rpcServer *rpc.Server, interval time.Duration) *server {
+func newServer(interval time.Duration) *server {
 	s := &server{
+		is:            newInfoStore(nil),
 		interval:      interval,
-		is:            newInfoStore(rpcServer.Addr()),
 		incoming:      newAddrSet(MaxPeers),
 		clientAddrMap: make(map[string]net.Addr),
 	}
-	rpcServer.RegisterName("Gossip", s)
-	rpcServer.AddCloseCallback(s.onClose)
 	s.ready = sync.NewCond(&s.mu)
 	return s
 }
@@ -76,6 +77,7 @@ func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
 
 	// Update infostore with gossipped infos.
 	if args.Delta != nil {
+		glog.V(1).Infof("received delta infostore from client %s: %s", args.Addr, args.Delta)
 		s.is.combine(args.Delta)
 	}
 	// If requested max sequence is not -1, wait for gossip interval to expire.
@@ -89,37 +91,51 @@ func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
 	// Return reciprocal delta.
 	delta := s.is.delta(args.Addr, args.MaxSeq)
 	if delta != nil {
+		// If V(1), double check that we can gob-encode the infostore.
+		// Problems here seem to very confusingly disappear into the RPC internals.
+		if glog.V(1) {
+			var buf bytes.Buffer
+			if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
+				glog.Fatalf("infostore could not be encoded: %v", err)
+			}
+		}
 		reply.Delta = delta
+		glog.Infof("gossip: client %s sent %d info(s)", args.Addr, delta.infoCount())
 	}
-
 	return nil
 }
 
 // jitteredGossipInterval returns a randomly jittered duration from
-// interval [0.75 * gossipInterval, 1.25 * gossipInterval]
+// interval [0.75 * gossipInterval, 1.25 * gossipInterval).
 func (s *server) jitteredGossipInterval() time.Duration {
 	return time.Duration(float64(s.interval) * (0.75 + 0.5*rand.Float64()))
 }
 
-// serve processes connecting clients in an infinite select
-// loop. Periodically, clients connected and awaiting the next round
-// of gossip are awoken via the conditional variable. This method
-// blocks and should be launched via goroutine.
-func (s *server) serve() {
-	// Periodically wakeup blocked client gossip requests.
-	gossipTimeout := time.Tick(s.jitteredGossipInterval())
-	for {
-		select {
-		case <-gossipTimeout:
-			// Wakeup all blocked gossip requests.
-			s.ready.Broadcast()
+// start initializes the infostore with the rpc server address and
+// then begins processing connecting clients in an infinite select
+// loop via goroutine. Periodically, clients connected and awaiting
+// the next round of gossip are awoken via the conditional variable.
+func (s *server) start(rpcServer *rpc.Server) {
+	s.is.NodeAddr = rpcServer.Addr()
+	rpcServer.RegisterName("Gossip", s)
+	rpcServer.AddCloseCallback(s.onClose)
+
+	go func() {
+		// Periodically wakeup blocked client gossip requests.
+		gossipTimeout := time.Tick(s.jitteredGossipInterval())
+		for {
+			select {
+			case <-gossipTimeout:
+				// Wakeup all blocked gossip requests.
+				s.ready.Broadcast()
+			}
 		}
-	}
+	}()
 }
 
-// stopServing sets the server's closed bool to true and broadcasts to
+// stop sets the server's closed bool to true and broadcasts to
 // waiting gossip clients to wakeup and finish.
-func (s *server) stopServing() {
+func (s *server) stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true

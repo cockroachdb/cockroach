@@ -18,11 +18,11 @@
 package gossip
 
 import (
-	"net"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
@@ -41,15 +41,16 @@ func waitFor(cond func() bool, desc string, t *testing.T) {
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
-	laddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
+	laddr := util.CreateTestAddr("unix")
 	lserver = rpc.NewServer(laddr)
 	lserver.Start()
-	local = New(lserver)
-	raddr := &net.UnixAddr{Net: "unix", Name: tempUnixFile()}
+	local = New()
+	raddr := util.CreateTestAddr("unix")
 	rserver = rpc.NewServer(raddr)
 	rserver.Start()
-	remote = New(rserver)
-	go remote.serve()
+	remote = New()
+	local.start(lserver)
+	remote.start(rserver)
 	time.Sleep(time.Millisecond)
 	return
 }
@@ -70,7 +71,8 @@ func TestClientGossip(t *testing.T) {
 		return lerr == nil && rerr == nil
 	}, "gossip exchange", t)
 
-	remote.stopServing()
+	remote.stop()
+	local.stop()
 	lserver.Close()
 	rserver.Close()
 	glog.Info("done serving")

@@ -41,18 +41,33 @@ func ExampleNewGoSchema() {
 	// db: PhotoDB
 	// db_key: pdb
 	// tables:
-	// - table: User
-	//   table_key: us
+	// - table: Comment
+	//   table_key: co
 	//   columns:
+	//   - column: PhotoStreamID
+	//     column_key: si
+	//     type: integer
+	//     foreign_key: PhotoStream.ID
+	//     interleave: true
+	//     ondelete: cascade
+	//     primary_key: true
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
 	//     primary_key: true
-	//     scatter: true
 	//     auto_increment: 1
-	//   - column: Name
-	//     column_key: na
+	//   - column: UserID
+	//     column_key: ui
+	//     type: integer
+	//     foreign_key: User.ID
+	//     ondelete: setnull
+	//   - column: Message
+	//     column_key: me
 	//     type: string
+	//     index: fulltext
+	//   - column: Timestamp
+	//     column_key: ti
+	//     type: integer
 	// - table: Identity
 	//   table_key: id
 	//   columns:
@@ -121,33 +136,18 @@ func ExampleNewGoSchema() {
 	//   - column: Timestamp
 	//     column_key: ti
 	//     type: integer
-	// - table: Comment
-	//   table_key: co
+	// - table: User
+	//   table_key: us
 	//   columns:
-	//   - column: PhotoStreamID
-	//     column_key: si
-	//     type: integer
-	//     foreign_key: PhotoStream.ID
-	//     interleave: true
-	//     ondelete: cascade
-	//     primary_key: true
 	//   - column: ID
 	//     column_key: id
 	//     type: integer
 	//     primary_key: true
+	//     scatter: true
 	//     auto_increment: 1
-	//   - column: UserID
-	//     column_key: ui
-	//     type: integer
-	//     foreign_key: User.ID
-	//     ondelete: setnull
-	//   - column: Message
-	//     column_key: me
+	//   - column: Name
+	//     column_key: na
 	//     type: string
-	//     index: fulltext
-	//   - column: Timestamp
-	//     column_key: ti
-	//     type: integer
 }
 
 // A struct with every structured schema data type.

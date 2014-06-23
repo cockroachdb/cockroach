@@ -28,8 +28,8 @@ import (
 // prefixConfig maps from a string prefix to config objects.
 // Config objects include accounting, permissions, and zones.
 type prefixConfig struct {
-	prefix Key         // the prefix the config affects
-	config interface{} // the config object
+	Prefix Key         // the prefix the config affects
+	Config interface{} // the config object
 }
 
 // prefixConfigMap holds a slice of prefix configs, sorted by
@@ -74,7 +74,7 @@ func (p *prefixConfigMap) Swap(i, j int) {
 	p.configs[i], p.configs[j] = p.configs[j], p.configs[i]
 }
 func (p *prefixConfigMap) Less(i, j int) bool {
-	return bytes.Compare(p.configs[i].prefix, p.configs[j].prefix) < 0
+	return bytes.Compare(p.configs[i].Prefix, p.configs[j].Prefix) < 0
 }
 
 // newPrefixConfigMap creates a new prefix config map and sorts
@@ -104,10 +104,10 @@ func newPrefixConfigMap(configs []*prefixConfig) (*prefixConfigMap, error) {
 	}
 	sort.Sort(p)
 	for _, pc := range p.configs {
-		p.canonicalConfigs[pc.config] = pc
+		p.canonicalConfigs[pc.Config] = pc
 	}
 
-	if len(p.configs) == 0 || bytes.Compare(p.configs[0].prefix, KeyMin) != 0 {
+	if len(p.configs) == 0 || bytes.Compare(p.configs[0].Prefix, KeyMin) != 0 {
 		return nil, util.Errorf("no default prefix specified")
 	}
 
@@ -116,13 +116,13 @@ func newPrefixConfigMap(configs []*prefixConfig) (*prefixConfigMap, error) {
 
 	for _, entry := range p.configs {
 		// Pop entries from the stack which aren't prefixes.
-		for stack.Len() > 0 && !bytes.HasPrefix(entry.prefix, stack.Back().Value.(*prefixConfig).prefix) {
+		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(*prefixConfig).Prefix) {
 			stack.Remove(stack.Back())
 		}
 		if stack.Len() != 0 {
 			newConfigs = append(newConfigs, &prefixConfig{
-				prefix: PrefixEndKey(entry.prefix),
-				config: stack.Back().Value.(*prefixConfig).config,
+				Prefix: PrefixEndKey(entry.Prefix),
+				Config: stack.Back().Value.(*prefixConfig).Config,
 			})
 		}
 		stack.PushBack(entry)
@@ -154,13 +154,13 @@ func newPrefixConfigMap(configs []*prefixConfig) (*prefixConfigMap, error) {
 // specified key.
 func (p *prefixConfigMap) matchByPrefix(key Key) *prefixConfig {
 	n := sort.Search(len(p.configs), func(i int) bool {
-		return bytes.Compare(key, p.configs[i].prefix) < 0
+		return bytes.Compare(key, p.configs[i].Prefix) < 0
 	})
 	if n == 0 || n > len(p.configs) {
 		panic("should never match a key outside of default range")
 	}
 	// Lookup and return canonical prefixConfig.
-	return p.canonicalConfigs[p.configs[n-1].config]
+	return p.canonicalConfigs[p.configs[n-1].Config]
 }
 
 // matchesByPrefix returns a list of prefixConfig objects with
@@ -172,7 +172,7 @@ func (p *prefixConfigMap) matchesByPrefix(key Key) []*prefixConfig {
 	for {
 		config := p.matchByPrefix(prefix)
 		configs = append(configs, config)
-		prefix = config.prefix
+		prefix = config.Prefix
 		if len(prefix) == 0 {
 			return configs
 		}
@@ -212,10 +212,10 @@ func (p *prefixConfigMap) splitRangeByPrefixes(start, end Key) ([]*rangeResult, 
 		return nil, util.Errorf("start key %q not less than end key %q", start, end)
 	}
 	startIdx := sort.Search(len(p.configs), func(i int) bool {
-		return bytes.Compare(start, p.configs[i].prefix) < 0
+		return bytes.Compare(start, p.configs[i].Prefix) < 0
 	})
 	endIdx := sort.Search(len(p.configs), func(i int) bool {
-		return bytes.Compare(end, p.configs[i].prefix) < 0
+		return bytes.Compare(end, p.configs[i].Prefix) < 0
 	})
 
 	if startIdx >= len(p.configs) || endIdx > len(p.configs) {
@@ -226,17 +226,17 @@ func (p *prefixConfigMap) splitRangeByPrefixes(start, end Key) ([]*rangeResult, 
 	// Create the first range result which goes from start -> end and
 	// uses the config specified for the start key.
 	var results []*rangeResult
-	result := &rangeResult{start: start, end: end, config: p.configs[startIdx-1].config}
+	result := &rangeResult{start: start, end: end, config: p.configs[startIdx-1].Config}
 	results = append(results, result)
 
 	// Now, cycle through from startIdx to endIdx, adding a new
 	// rangeResult at each step.
 	for i := startIdx; i < endIdx; i++ {
-		result.end = p.configs[i].prefix
+		result.end = p.configs[i].Prefix
 		if bytes.Compare(result.end, end) == 0 {
 			break
 		}
-		result = &rangeResult{start: result.end, end: end, config: p.configs[i].config}
+		result = &rangeResult{start: result.end, end: end, config: p.configs[i].Config}
 		results = append(results, result)
 	}
 

@@ -18,6 +18,8 @@
 package gossip
 
 import (
+	"bytes"
+	"fmt"
 	"math"
 	"net"
 	"sync"
@@ -60,6 +62,30 @@ func monotonicUnixNano() int64 {
 	}
 	lastTime = now
 	return now
+}
+
+// String returns a string representation of an infostore.
+func (is *infoStore) String() string {
+	buf := bytes.Buffer{}
+	prepend := ""
+	if count := is.infoCount(); count > 0 {
+		buf.WriteString(fmt.Sprintf("infostore contains %d info(s)", count))
+	} else {
+		buf.WriteString("infostore is empty")
+	}
+	// Compute delta of groups and infos.
+	is.visitInfos(func(g *group) error {
+		buf.WriteString(prepend)
+		prepend = ", "
+		buf.WriteString(fmt.Sprintf("group %q", g.Prefix))
+		return nil
+	}, func(i *info) error {
+		buf.WriteString(prepend)
+		prepend = ", "
+		buf.WriteString(fmt.Sprintf("info %q: %+v", i.Key, i.Val))
+		return nil
+	})
+	return buf.String()
 }
 
 // Returns true if the info belongs to a group registered with

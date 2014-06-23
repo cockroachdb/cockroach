@@ -69,10 +69,10 @@ import (
 )
 
 var (
-	gossipBootstrap = flag.String(
+	GossipBootstrap = flag.String(
 		"gossip_bootstrap", "",
 		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")
-	gossipInterval = flag.Duration(
+	GossipInterval = flag.Duration(
 		"gossip_interval", 2*time.Second,
 		"approximate interval (time.Duration) for gossiping new information to peers")
 )
@@ -112,12 +112,11 @@ type Gossip struct {
 	stalled      *sync.Cond         // Indicates bootstrap is required
 }
 
-// New creates an instance of a gossip node using the specified
-// Cockroach RPC server to initialize the gossip service endpoint.
-func New(rpcServer *rpc.Server) *Gossip {
+// New creates an instance of a gossip node.
+func New() *Gossip {
 	g := &Gossip{
-		Connected:    make(chan struct{}, 1),
-		server:       newServer(rpcServer, *gossipInterval),
+		Connected:    make(chan struct{}),
+		server:       newServer(*GossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      map[string]*client{},
@@ -150,7 +149,11 @@ func (g *Gossip) SetInterval(interval time.Duration) {
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.is.addInfo(g.is.newInfo(key, val, ttl))
+	err := g.is.addInfo(g.is.newInfo(key, val, ttl))
+	if err == nil {
+		g.checkConnected()
+	}
+	return err
 }
 
 // GetInfo returns an info value by key or an error if specified
@@ -216,24 +219,29 @@ func (g *Gossip) Outgoing() []net.Addr {
 }
 
 // Start launches the gossip instance, which commences joining the
-// gossip network using the node addresses supplied to NewGossip and
-// specified via command-line flag: -gossip_bootstrap.
+// gossip network using the supplied rpc server and the gossip
+// bootstrap addresses specified via command-line flag:
+// -gossip_bootstrap.
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start() {
-	go g.serve()     // serve gossip protocol
-	go g.bootstrap() // bootstrap gossip client
-	go g.manage()    // manage gossip clients
+func (g *Gossip) Start(rpcServer *rpc.Server) {
+	// Start up asynchronous processors.
+	g.server.start(rpcServer) // serve gossip protocol
+	go g.bootstrap()          // bootstrap gossip client
+	go g.manage()             // manage gossip clients
 }
 
 // Stop shuts down the gossip server. Returns a channel which signals
 // exit once all outgoing clients are closed and the management loop
 // for the gossip instance is finished.
 func (g *Gossip) Stop() <-chan error {
-	g.stopServing()                             // set server's closed boolean and exit server
-	g.stalled.Signal()                          // wake up bootstrap goroutine so it can exit
-	for _, addr := range g.outgoing.asSlice() { // close all outgoing clients.
+	// Set server's closed boolean and exit server.
+	g.stop()
+	// Wake up bootstrap goroutine so it can exit.
+	g.stalled.Signal()
+	// Close all outgoing clients.
+	for _, addr := range g.outgoing.asSlice() {
 		g.closeClient(addr)
 	}
 	return g.exited
@@ -265,13 +273,13 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 func (g *Gossip) parseBootstrapAddresses() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if *gossipBootstrap != "" {
-		addresses := strings.Split(*gossipBootstrap, ",")
+	if *GossipBootstrap != "" {
+		addresses := strings.Split(*GossipBootstrap, ",")
 		for _, addr := range addresses {
 			addr = strings.TrimSpace(addr)
 			tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
-				glog.Infof("invalid gossip bootstrap address %s: %s", addr, err)
+				glog.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
 				continue
 			}
 			g.bootstraps.addAddr(tcpAddr)
@@ -384,17 +392,17 @@ func (g *Gossip) manage() {
 			}
 		}
 
-		// If there are no outgoing hosts or sentinel gossip is
-		// missing, signal bootstrapper.
-		if g.outgoing.len() == 0 {
-			glog.Infof("no outgoing hosts; signaling bootstrap")
-			g.stalled.Signal()
-		} else if g.is.getInfo(KeySentinel) == nil {
-			glog.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
-			g.stalled.Signal()
-		} else if !g.hasConnected {
-			g.hasConnected = true
-			close(g.Connected)
+		// If there are no outgoing hosts or sentinel gossip is missing,
+		// and there are still unused bootstrap hosts, signal bootstrapper
+		// to try another.
+		if g.filterExtant(g.bootstraps).len() > 0 {
+			if g.outgoing.len()+g.incoming.len() == 0 {
+				glog.Infof("no connections; signaling bootstrap")
+				g.stalled.Signal()
+			} else if g.is.getInfo(KeySentinel) == nil {
+				glog.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
+				g.stalled.Signal()
+			}
 		}
 
 		// The exit condition.
@@ -406,6 +414,19 @@ func (g *Gossip) manage() {
 
 	// Signal exit.
 	g.exited <- nil
+}
+
+// checkConnected checks whether this gossip instance is connected to
+// enough of the gossip network that it has received the sentinel
+// gossip info. Once connected, the "Connected" channel is closed to
+// signal to any waiters that the gossip instance is ready.
+func (g *Gossip) checkConnected() {
+	// Check if we have the sentinel gossip (cluster ID) to start.
+	// If so, then mark ourselves as trivially connected to the gossip network.
+	if !g.hasConnected && g.is.getInfo(KeySentinel) != nil {
+		g.hasConnected = true
+		close(g.Connected)
+	}
 }
 
 // startClient launches a new client connected to remote address.
@@ -424,8 +445,9 @@ func (g *Gossip) startClient(addr net.Addr) {
 // remote address.
 func (g *Gossip) closeClient(addr net.Addr) {
 	g.clientsMu.Lock()
-	c := g.clients[addr.String()]
-	c.close()
-	delete(g.clients, addr.String())
+	if c, ok := g.clients[addr.String()]; ok {
+		c.close()
+		delete(g.clients, addr.String())
+	}
 	g.clientsMu.Unlock()
 }

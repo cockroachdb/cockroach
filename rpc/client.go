@@ -38,6 +38,15 @@ var (
 	heartbeatInterval time.Duration
 )
 
+// clientRetryOptions specifies exponential backoff starting
+// at 1s and ending at 30s with indefinite retries.
+var clientRetryOptions = util.RetryOptions{
+	Backoff:     1 * time.Second,  // first backoff at 1s
+	MaxBackoff:  30 * time.Second, // max backoff is 30s
+	Constant:    2,                // doubles
+	MaxAttempts: 0,                // indefinite retries
+}
+
 // init creates a new client RPC cache.
 func init() {
 	clients = map[string]*Client{}
@@ -47,77 +56,102 @@ func init() {
 // Client is a Cockroach-specific RPC client with an embedded go
 // rpc.Client struct.
 type Client struct {
-	Ready chan struct{} // Closed when client is connected
+	Ready  chan struct{} // Closed when client is connected
+	Closed chan struct{} // Closed when connection has closed
 
 	mu          sync.RWMutex // Mutex protects the fields below
 	*rpc.Client              // Embedded RPC client
 	addr        net.Addr     // Remote address of client
 	lAddr       net.Addr     // Local address of client
+	healthy     bool
 }
 
 // NewClient returns a client RPC stub for the specified address
 // (usually a TCP host:port, but for testing may be a unix domain
 // socket). The process-wide client RPC cache is consulted first; if
 // the requested client is not present, it's created and the cache is
-// updated. The returned client is returned immediately and may not be
-// healthy.
-func NewClient(addr net.Addr) *Client {
+// updated. Specify opts to fine tune client connection behavior or
+// nil to use defaults (i.e. indefinite retries with exponential
+// backoff).
+//
+// The Client.Ready channel is closed after the client has connected
+// and completed one successful heartbeat. The Closed channel is
+// closed if the client fails to connect or if the client's Close()
+// method is invoked.
+func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 	clientMu.Lock()
 	if c, ok := clients[addr.String()]; ok {
 		clientMu.Unlock()
 		return c
 	}
 	c := &Client{
-		addr:  addr,
-		Ready: make(chan struct{}),
+		addr:   addr,
+		Ready:  make(chan struct{}),
+		Closed: make(chan struct{}),
 	}
 	clients[c.Addr().String()] = c
 	clientMu.Unlock()
 
-	// Attempt to dial connection with exponential backoff starting
-	// at 1s and ending at 30s with indefinite retries.
-	opts := util.Options{
-		Tag:         fmt.Sprintf("client %s connection", addr),
-		Backoff:     1 * time.Second,  // first backoff at 1s
-		MaxBackoff:  30 * time.Second, // max backoff is 30s
-		Constant:    2,                // doubles
-		MaxAttempts: 0,                // indefinite retries
+	// Attempt to dial connection.
+	retryOpts := clientRetryOptions
+	if opts != nil {
+		retryOpts = *opts
 	}
-	go util.RetryWithBackoff(opts, func() bool {
-		// TODO(spencer): use crypto.tls.
-		conn, err := net.Dial(addr.Network(), addr.String())
+	retryOpts.Tag = fmt.Sprintf("client %s connection", addr)
+
+	go func() {
+		err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
+			// TODO(spencer): use crypto.tls.
+			conn, err := net.Dial(addr.Network(), addr.String())
+			if err != nil {
+				glog.Info(err)
+				return false, nil
+			}
+			c.mu.Lock()
+			c.Client = rpc.NewClient(conn)
+			c.lAddr = conn.LocalAddr()
+			c.mu.Unlock()
+
+			// Ensure at least one heartbeat succeeds before exiting the
+			// retry loop.
+			if err = c.heartbeat(); err != nil {
+				clientMu.Lock()
+				delete(clients, c.Addr().String())
+				c.Client.Close()
+				clientMu.Unlock()
+				return false, err
+			}
+
+			// Signal client is ready by closing Ready channel.
+			glog.Infof("client %s connected", addr)
+			close(c.Ready)
+
+			// Launch periodic heartbeat.
+			go c.startHeartbeat()
+
+			return true, nil
+		})
 		if err != nil {
-			glog.Info(err)
-			return false
+			glog.Errorf("client %s failed to connect", addr)
+			close(c.Closed)
 		}
-		c.mu.Lock()
-		c.Client = rpc.NewClient(conn)
-		c.lAddr = conn.LocalAddr()
-		c.mu.Unlock()
-
-		// Launch heartbeat; this ensures at least one heartbeat succeeds
-		// before exiting the retry loop.
-		if err = c.heartbeat(); err != nil {
-			glog.Info(err)
-			return false
-		}
-
-		glog.Infof("client %s connected", addr)
-		close(c.Ready)
-
-		go c.startHeartbeat()
-
-		return true
-	})
+	}()
 
 	return c
 }
 
-// Close closes the client connection.
-func (c *Client) Close() error {
+// IsConnected returns whether the client is connected.
+func (c *Client) IsConnected() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.Client.Close()
+	return c.Client != nil
+}
+
+// IsHealthy returns whether the client is healthy.
+func (c *Client) IsHealthy() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.healthy
 }
 
 // Addr returns remote address of the client.
@@ -139,19 +173,21 @@ func (c *Client) LocalAddr() net.Addr {
 // an error is encountered.
 func (c *Client) startHeartbeat() {
 	glog.Infof("client %s starting heartbeat", c.Addr())
+	// On heartbeat failure, remove this client from cache. A new
+	// client to this address will be created on the next call to
+	// NewClient().
 	for {
-		// On heartbeat failure, remove this client from cache. A new
-		// client to this address will be created on the next call to
-		// NewClient().
+		time.Sleep(heartbeatInterval)
 		if err := c.heartbeat(); err != nil {
-			glog.Infof("heartbeat failed: %v; recycling client %s", err, c.Addr())
+			glog.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
 			clientMu.Lock()
 			delete(clients, c.Addr().String())
+			c.healthy = false
+			close(c.Closed)
+			c.Client.Close()
 			clientMu.Unlock()
-			c.Close()
 			break
 		}
-		time.Sleep(heartbeatInterval)
 	}
 }
 
@@ -161,11 +197,16 @@ func (c *Client) heartbeat() error {
 	select {
 	case <-call.Done:
 		glog.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
+		c.mu.Lock()
+		c.healthy = true
+		c.mu.Unlock()
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
 		// Allowed twice gossip interval.
-		// TODO(spencer): mark client unhealthy.
-		glog.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval*2)
+		c.mu.Lock()
+		c.healthy = false
+		c.mu.Unlock()
+		glog.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	}
 
 	<-call.Done

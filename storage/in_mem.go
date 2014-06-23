@@ -20,6 +20,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 	"unsafe"
 
@@ -56,6 +57,11 @@ func NewInMem(maxBytes int64) *InMem {
 	return &InMem{
 		maxBytes: maxBytes,
 	}
+}
+
+// String formatter.
+func (in *InMem) String() string {
+	return fmt.Sprintf("mem=%d", in.maxBytes)
 }
 
 // Type returns MEM.

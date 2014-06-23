@@ -93,8 +93,8 @@ func TestPrefixConfigSort(t *testing.T) {
 	}
 	sort.Sort(pcc)
 	for i, pc := range pcc.configs {
-		if bytes.Compare(pc.prefix, expKeys[i]) != 0 {
-			t.Errorf("order for index %d incorrect; expected %q, got %q", i, expKeys[i], pc.prefix)
+		if bytes.Compare(pc.Prefix, expKeys[i]) != 0 {
+			t.Errorf("order for index %d incorrect; expected %q, got %q", i, expKeys[i], pc.Prefix)
 		}
 	}
 }
@@ -118,11 +118,11 @@ func TestPrefixConfigBuild(t *testing.T) {
 	}
 	for i, pc := range pcc.configs {
 		exp := expPrefixConfigs[i]
-		if bytes.Compare(pc.prefix, exp.prefix) != 0 {
-			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.prefix, pc.prefix)
+		if bytes.Compare(pc.Prefix, exp.Prefix) != 0 {
+			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.Prefix, pc.Prefix)
 		}
-		if pc.config != exp.config {
-			t.Errorf("config for index %d incorrect: expected %v, got %v", i, exp.config, pc.config)
+		if pc.Config != exp.Config {
+			t.Errorf("config for index %d incorrect: expected %v, got %v", i, exp.Config, pc.Config)
 		}
 	}
 }
@@ -150,8 +150,8 @@ func TestMatchByPrefix(t *testing.T) {
 	}
 	for i, test := range testData {
 		pc := pcc.matchByPrefix(test.key)
-		if test.expConfig != pc.config {
-			t.Errorf("%d: expected config %v for %q; got %v", i, test.expConfig, test.key, pc.config)
+		if test.expConfig != pc.Config {
+			t.Errorf("%d: expected config %v for %q; got %v", i, test.expConfig, test.key, pc.Config)
 		}
 	}
 }
@@ -184,8 +184,8 @@ func TestMatchesByPrefix(t *testing.T) {
 			continue
 		}
 		for j, pc := range pcs {
-			if pc.config != test.expConfigs[j] {
-				t.Errorf("%d: expected \"%d\"th config %v for %q; got %v", i, j, test.expConfigs[j], test.key, pc.config)
+			if pc.Config != test.expConfigs[j] {
+				t.Errorf("%d: expected \"%d\"th config %v for %q; got %v", i, j, test.expConfigs[j], test.key, pc.Config)
 			}
 		}
 	}

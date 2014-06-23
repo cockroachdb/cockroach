@@ -21,6 +21,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"runtime"
 	"testing"
@@ -120,6 +121,49 @@ func TestInMemOverCapacity(t *testing.T) {
 	}
 	if err = engine.put(Key("2"), Value{Bytes: bytes}); err == nil {
 		t.Error("put: expected error, but got none")
+	}
+}
+
+func TestInMemIncrement(t *testing.T) {
+	engine := NewInMem(1 << 20)
+	// Start with increment of an empty key.
+	val, err := increment(engine, Key("a"), 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != 1 {
+		t.Errorf("expected increment to be %d; got %d", 1, val)
+	}
+	// Increment same key by 1.
+	if val, err = increment(engine, Key("a"), 1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if val != 2 {
+		t.Errorf("expected increment to be %d; got %d", 2, val)
+	}
+	// Increment same key by 2.
+	if val, err = increment(engine, Key("a"), 2, 0); err != nil {
+		t.Fatal(err)
+	}
+	if val != 4 {
+		t.Errorf("expected increment to be %d; got %d", 4, val)
+	}
+	// Decrement same key by -1.
+	if val, err = increment(engine, Key("a"), -1, 0); err != nil {
+		t.Fatal(err)
+	}
+	if val != 3 {
+		t.Errorf("expected increment to be %d; got %d", 3, val)
+	}
+	// Increment same key by max int64 value to cause overflow; should return error.
+	if val, err = increment(engine, Key("a"), math.MaxInt64, 0); err == nil {
+		t.Error("expected an overflow error")
+	}
+	if val, err = increment(engine, Key("a"), 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if val != 3 {
+		t.Errorf("expected increment to be %d; got %d", 3, val)
 	}
 }
 

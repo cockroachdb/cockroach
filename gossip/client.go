@@ -30,7 +30,7 @@ import (
 const (
 	// maxWaitForNewGossip is minimum wait for new gossip before a
 	// peer is considered a poor source of good gossip and is GC'd.
-	maxWaitForNewGossip = 10 * time.Second
+	maxWaitForNewGossip = 1 * time.Minute
 )
 
 // init pre-registers net.UnixAddr and net.TCPAddr concrete types with
@@ -55,7 +55,7 @@ type client struct {
 func newClient(addr net.Addr) *client {
 	return &client{
 		addr:   addr,
-		closer: make(chan struct{}, 1),
+		closer: make(chan struct{}),
 	}
 }
 
@@ -64,8 +64,15 @@ func newClient(addr net.Addr) *client {
 // channel. If the client experienced an error, its err field will
 // be set. This method blocks and should be invoked via goroutine.
 func (c *client) start(g *Gossip, done chan *client) {
-	c.rpcClient = rpc.NewClient(c.addr)
-	<-c.rpcClient.Ready
+	c.rpcClient = rpc.NewClient(c.addr, nil)
+	select {
+	case <-c.rpcClient.Ready:
+		// Success!
+	case <-c.rpcClient.Closed:
+		c.err = util.Errorf("gossip client failed to connect")
+		done <- c
+		return
+	}
 
 	// Start gossipping and wait for disconnect or error.
 	c.lastFresh = time.Now().UnixNano()
@@ -118,11 +125,12 @@ func (c *client) gossip(g *Gossip) error {
 			if gossipCall.Error != nil {
 				return gossipCall.Error
 			}
-		case <-time.After(*gossipInterval * 2):
-			// Allowed twice gossip interval.
-			return util.Errorf("timeout after: %v", *gossipInterval*2)
+		case <-c.rpcClient.Closed:
+			return util.Error("client closed")
 		case <-c.closer:
 			return nil
+		case <-time.After(*GossipInterval * 10):
+			return util.Errorf("timeout after: %v", *GossipInterval*10)
 		}
 
 		// Handle remote forwarding.
@@ -135,14 +143,19 @@ func (c *client) gossip(g *Gossip) error {
 		// Combine remote node's infostore delta with ours.
 		now := time.Now().UnixNano()
 		if reply.Delta != nil {
+			glog.V(1).Infof("received gossip reply delta from %s: %s", c.addr, reply.Delta)
 			g.mu.Lock()
 			freshCount := g.is.combine(reply.Delta)
 			if freshCount > 0 {
 				c.lastFresh = now
 			}
 			remoteMaxSeq = reply.Delta.MaxSeq
+
+			// If we have the sentinel gossip, we're considered connected.
+			g.checkConnected()
 			g.mu.Unlock()
 		}
+
 		// Check whether peer node is too boring--disconnect if yes.
 		if (now - c.lastFresh) > int64(maxWaitForNewGossip) {
 			return util.Errorf("peer is too boring")

@@ -30,6 +30,7 @@ var testIdent = StoreIdent{
 func TestStoreInitAndBootstrap(t *testing.T) {
 	engine := NewInMem(1 << 20)
 	store := NewStore(engine, nil)
+	defer store.Close()
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Init(); err == nil {
@@ -47,7 +48,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Create range and fetch.
-	if _, err := store.CreateRange(KeyMin, KeyMax); err != nil {
+	if _, err := store.CreateRange(KeyMin, KeyMax, []Replica{}); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
@@ -75,6 +76,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 		t.Errorf("failure putting key foo into engine: %v", err)
 	}
 	store := NewStore(engine, nil)
+	defer store.Close()
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Init(); err == nil {

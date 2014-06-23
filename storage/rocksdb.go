@@ -20,6 +20,7 @@ package storage
 
 // #cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
 // #cgo linux LDFLAGS: -lrt
+// #cgo darwin LDFLAGS: -lc++
 // #include <stdlib.h>
 // #include "rocksdb/c.h"
 import "C"
@@ -27,6 +28,7 @@ import "C"
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"syscall"
 	"unsafe"
 
@@ -112,6 +114,11 @@ func (r *RocksDB) destroyOptions() {
 	r.opts = nil
 	r.rOpts = nil
 	r.wOpts = nil
+}
+
+// String formatter.
+func (r *RocksDB) String() string {
+	return fmt.Sprintf("%s=%s", r.typ, r.dir)
 }
 
 // Type returns either HDD or SSD depending on how engine

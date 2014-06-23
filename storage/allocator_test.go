@@ -227,7 +227,7 @@ func TestThreeDisksSameDC(t *testing.T) {
 	}
 }
 
-func TestTwoDataCenters(t *testing.T) {
+func TestTwoDatacenters(t *testing.T) {
 	var a = allocator{
 		storeFinder: multiDCStores,
 		rand:        *rand.New(rand.NewSource(0)),

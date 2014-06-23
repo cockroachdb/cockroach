@@ -19,17 +19,31 @@ package storage
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/gob"
 	"reflect"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
-	yaml "gopkg.in/yaml.v1"
 )
+
+// init pre-registers RangeLocations and PrefixConfigMap types.
+func init() {
+	gob.Register(RangeLocations{})
+	gob.Register([]*prefixConfig{})
+	gob.Register(AcctConfig{})
+	gob.Register(PermConfig{})
+	gob.Register(ZoneConfig{})
+}
+
+// ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
+// serves as the sentinel gossip key which informs a node whether or
+// not it's connected to the primary gossip network and not just a
+// partition. As such it must expire on a reasonable basis and be
+// continually re-gossipped. The replica which is the raft leader of
+// the first range gossips it.
+const ttlClusterIDGossip = 30 * time.Second
 
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
@@ -47,10 +61,11 @@ var configPrefixes = []struct {
 // A RangeMetadata holds information about the range, including
 // range ID and start and end keys, and replicas slice.
 type RangeMetadata struct {
-	RangeID  int64
-	StartKey Key
-	EndKey   Key
-	Replicas RangeLocations
+	ClusterID string
+	RangeID   int64
+	StartKey  Key
+	EndKey    Key
+	Replicas  RangeLocations
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -64,8 +79,8 @@ type Range struct {
 	engine    Engine         // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
-	mu        sync.Mutex     // Protects the pending list
-	pending   *list.List     // Not-yet-proposed log entries
+	pending   chan *LogEntry // Not-yet-proposed log entries
+	closer    chan struct{}  // Channel for closing the range
 	// TODO(andybons): raft instance goes here.
 }
 
@@ -76,31 +91,50 @@ func NewRange(meta RangeMetadata, engine Engine, allocator *allocator, gossip *g
 		engine:    engine,
 		allocator: allocator,
 		gossip:    gossip,
-		pending:   list.New(),
+		pending:   make(chan *LogEntry, 100 /* TODO(spencer): what's correct value? */),
+		closer:    make(chan struct{}),
 	}
-	r.maybeGossipFirstRange()
-	r.maybeGossipConfigMaps()
 	return r
 }
 
+// Start begins gossiping and starts the pending log entry processing
+// loop in a goroutine.
+func (r *Range) Start() {
+	r.maybeGossipClusterID()
+	r.maybeGossipFirstRange()
+	r.maybeGossipConfigs()
+	go r.processPending()
+	go r.startGossip()
+}
+
+// Stop ends the log processing loop.
+func (r *Range) Stop() {
+	close(r.closer)
+}
+
+// IsFirstRange returns true if this is the first range.
+func (r *Range) IsFirstRange() bool {
+	return bytes.Equal(r.Meta.StartKey, KeyMin)
+}
+
+// IsLeader returns true if this range replica is the raft leader.
+// TODO(spencer): this is always true for now.
+func (r *Range) IsLeader() bool {
+	return true
+}
+
 // ReadOnlyCmd executes a read-only command against the store. If this
-// server has executed a raft command or heartbeat at a timestamp
-// greater than the read timestamp, we can satisfy the read locally
-// without further ado. Otherwise, we must contact ceil(N/2) raft
-// participants with a ReadQuorum RPC to determine with certainty
-// whether our local data is up to date. The requests to other
-// participants simply check their in-memory latest-write-cache to
-// determine whether the key in question was updated since this node's
-// last raft heartbeat, but before this command's read timestamp. In
-// the process, the latest-read-cache timestamp for the key being read
-// is updated on each participant. If this replica has stale info for
-// the key, an error is returned to the client to retry at the replica
-// with newer information.
+// server is the raft leader, we can satisfy the read
+// locally. Otherwise, if this server has executed a raft command or
+// heartbeat at a timestamp greater than the read timestamp, we can
+// also satisfy the read locally. Otherwise, we must ping the leader
+// to determine with certainty whether our local data is up to
+// date.
 func (r *Range) ReadOnlyCmd(method string, args, reply interface{}) error {
 	if r == nil {
 		return util.Errorf("invalid node specification")
 	}
-	return nil
+	return r.executeCmd(method, args, reply)
 }
 
 // ReadWriteCmd executes a read-write command against the store. If
@@ -120,8 +154,6 @@ func (r *Range) ReadWriteCmd(method string, args, reply interface{}) <-chan erro
 		c <- util.Errorf("invalid node specification")
 		return c
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	logEntry := &LogEntry{
 		Method: method,
@@ -129,40 +161,78 @@ func (r *Range) ReadWriteCmd(method string, args, reply interface{}) <-chan erro
 		Reply:  reply,
 		done:   make(chan error, 1),
 	}
-	r.pending.PushBack(logEntry)
+	r.pending <- logEntry
 
 	return logEntry.done
+}
+
+// processPending processes pending read/write commands, sending them
+// to other replicas in the set as necessary to achieve consensus.
+// This method processes indefinitely or until the Range.Stop() is
+// invoked.
+//
+// TODO(spencer): this is pretty temporary. Just executing commands
+// immediately until raft is in place.
+func (r *Range) processPending() {
+	for {
+		select {
+		case logEntry := <-r.pending:
+			logEntry.done <- r.executeCmd(logEntry.Method, logEntry.Args, logEntry.Reply)
+		case <-r.closer:
+			break
+		}
+	}
+}
+
+// startGossip periodically gossips the cluster ID if it's the
+// first range and the raft leader.
+func (r *Range) startGossip() {
+	ticker := time.NewTicker(ttlClusterIDGossip / 2)
+	for {
+		select {
+		case <-ticker.C:
+			r.maybeGossipClusterID()
+		case <-r.closer:
+			break
+		}
+	}
+}
+
+// maybeGossipClusterID gossips the cluster ID if this range is
+// the start of the key space.
+func (r *Range) maybeGossipClusterID() {
+	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
+		if err := r.gossip.AddInfo(gossip.KeyClusterID, r.Meta.ClusterID, ttlClusterIDGossip); err != nil {
+			glog.Errorf("failed to gossip cluster ID %s: %v", r.Meta.ClusterID, err)
+		}
+	}
 }
 
 // maybeGossipFirstRange gossips the range locations if this range is
 // the start of the key space.
 func (r *Range) maybeGossipFirstRange() {
-	// TODO(spencer): only do this if we're the leader of the consensus group.
-	// if r.isLeader() {
-	if r.gossip != nil && bytes.Equal(r.Meta.StartKey, KeyMin) {
+	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 0*time.Second); err != nil {
 			glog.Errorf("failed to gossip first range metadata: %v", err)
 		}
 	}
 }
 
-// maybeGossipConfigMaps gossips configuration maps if their data
+// maybeGossipConfigs gossips configuration maps if their data
 // falls within the range and their contents are marked
 // dirty. Configuration maps include accounting, permissions, and
 // zones.
-func (r *Range) maybeGossipConfigMaps() {
-	// TODO(spencer): only do this if we're the leader of the consensus group.
-	// if r.isLeader() {
-	if r.gossip != nil {
+func (r *Range) maybeGossipConfigs() {
+	if r.gossip != nil && r.IsLeader() {
 		for _, cp := range configPrefixes {
 			if cp.dirty && r.containsKey(cp.keyPrefix) {
-				confMap, err := r.initConfigMap(cp.keyPrefix, cp.configI)
+				configs, err := r.loadConfigs(cp.keyPrefix, cp.configI)
 				if err != nil {
-					glog.Errorf("failed init %s configuration map: %v", cp.gossipKey, err)
+					glog.Errorf("failed loading %s configs: %v", cp.gossipKey, err)
 					continue
 				} else {
-					if err := r.gossip.AddInfo(cp.gossipKey, confMap, 0*time.Second); err != nil {
-						glog.Errorf("failed to gossip %s configuration map: %v", cp.gossipKey, err)
+					if err := r.gossip.AddInfo(cp.gossipKey, configs, 0*time.Second); err != nil {
+						glog.Errorf("failed to gossip %s configs: %v", cp.gossipKey, err)
 						continue
 					}
 				}
@@ -172,10 +242,10 @@ func (r *Range) maybeGossipConfigMaps() {
 	}
 }
 
-// initConfigMap initializes a prefix config map for the specified key
-// prefix. Prefix configuration maps include accounting, permissions,
-// and zones.
-func (r *Range) initConfigMap(keyPrefix Key, configI interface{}) (*prefixConfigMap, error) {
+// loadConfigs scans and returns the config entries under
+// "keyPrefix". Prefix configuration maps include accounting,
+// permissions, and zones.
+func (r *Range) loadConfigs(keyPrefix Key, configI interface{}) ([]*prefixConfig, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
 	kvs, err := r.engine.scan(keyPrefix, PrefixEndKey(keyPrefix), 0)
@@ -185,14 +255,14 @@ func (r *Range) initConfigMap(keyPrefix Key, configI interface{}) (*prefixConfig
 	var configs []*prefixConfig
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
-		// YAML text from the Value into a new instance of configI.
+		// gob encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface()
-		if err := yaml.Unmarshal(kv.Value.Bytes, config); err != nil {
-			return nil, util.Errorf("unable to unmarshal yaml: %s: %v", string(kv.Value.Bytes), err)
+		if err := gob.NewDecoder(bytes.NewBuffer(kv.Value.Bytes)).Decode(config); err != nil {
+			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
 		}
-		configs = append(configs, &prefixConfig{prefix: bytes.TrimPrefix(kv.Key, keyPrefix), config: config})
+		configs = append(configs, &prefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
 	}
-	return newPrefixConfigMap(configs)
+	return configs, nil
 }
 
 // containsKey returns whether this range contains the specified key.
@@ -233,6 +303,11 @@ func (r *Range) executeCmd(method string, args, reply interface{}) error {
 		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
+	}
+	// Return the error (if any) set in the reply.
+	err := reflect.ValueOf(reply).Elem().FieldByName("Error").Interface()
+	if err != nil {
+		return err.(error)
 	}
 	return nil
 }
@@ -287,7 +362,7 @@ func (r *Range) Put(args *PutRequest, reply *PutResponse) {
 	for _, cp := range configPrefixes {
 		if bytes.HasPrefix(args.Key, cp.keyPrefix) {
 			cp.dirty = true
-			r.maybeGossipConfigMaps()
+			r.maybeGossipConfigs()
 			break
 		}
 	}
@@ -357,7 +432,7 @@ func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessag
 // args.Key should be a metadata key, which are of the form "\0\0meta[12]<encoded_key>".
 func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
 	if !bytes.HasPrefix(args.Key, KeyMetaPrefix) {
-		reply.Error = util.Errorf("Invalid metadata key: %q", args.Key)
+		reply.Error = util.Errorf("invalid metadata key: %q", args.Key)
 		return
 	}
 
@@ -365,13 +440,13 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	// the end keys of the range the metadata represent, the check args.Key >= r.Meta.StartKey
 	// may result in false negatives.
 	if bytes.Compare(args.Key, r.Meta.EndKey) >= 0 {
-		reply.Error = util.Errorf("Key outside the range %v with end key %q", r.Meta.RangeID, r.Meta.EndKey)
+		reply.Error = util.Errorf("key outside the range %v with end key %q", r.Meta.RangeID, r.Meta.EndKey)
 		return
 	}
 
 	// We want to search for the metadata key just greater than args.Key.
 	nextKey := MakeKey(args.Key, Key{0})
-	kvs, err := r.engine.scan(nextKey, nil, 1)
+	kvs, err := r.engine.scan(nextKey, KeyMax, 1)
 	if err != nil {
 		reply.Error = err
 		return
@@ -379,17 +454,17 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	// We should have gotten the key with the same metadata level prefix as we queried.
 	metaPrefix := args.Key[0:len(KeyMeta1Prefix)]
 	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].Key, metaPrefix) {
-		reply.Error = util.Errorf("Key not found in range %v", r.Meta.RangeID)
+		reply.Error = util.Errorf("key not found in range %v", r.Meta.RangeID)
 		return
 	}
 
-	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(reply.Locations); err != nil {
+	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(&reply.Locations); err != nil {
 		reply.Error = err
 		return
 	}
 	if bytes.Compare(args.Key, reply.Locations.StartKey) < 0 {
 		// args.Key doesn't belong to this range. We are perhaps searching the wrong node?
-		reply.Error = util.Errorf("No range found for key %q in range: %+v", args.Key, r.Meta)
+		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
 		return
 	}
 	reply.EndKey = kvs[0].Key

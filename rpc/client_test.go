@@ -22,36 +22,29 @@ import (
 	"net/rpc"
 	"testing"
 	"time"
-)
 
-const testAddr = "localhost:0"
+	"github.com/cockroachdb/cockroach/util"
+)
 
 func TestClientHeartbeat(t *testing.T) {
 	heartbeatInterval = 10 * time.Millisecond
-	addr, err := net.ResolveTCPAddr("tcp", testAddr)
-	if err != nil {
-		t.Fatalf("invalid test server address %s: %s", testAddr, err)
-	}
+	addr := util.CreateTestAddr("tcp")
 	s := NewServer(addr)
 	s.Start()
-	c := NewClient(s.Addr())
+	c := NewClient(s.Addr(), nil)
 	time.Sleep(heartbeatInterval * 2)
-	if c != NewClient(s.Addr()) {
+	if c != NewClient(s.Addr(), nil) {
 		t.Error("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
 	s.Close()
-	c.Close()
 }
 
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
 	heartbeatInterval = 10 * time.Millisecond
-	addr, err := net.ResolveTCPAddr("tcp", testAddr)
-	if err != nil {
-		t.Fatalf("invalid test server address %s: %s", testAddr, err)
-	}
+	addr := util.CreateTestAddr("tcp")
 	// Create a server which doesn't support heartbeats.
 	s := &Server{
 		Server:         rpc.NewServer(),
@@ -62,16 +55,11 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.
-	c := NewClient(s.Addr())
+	c := NewClient(s.Addr(), nil)
 	select {
 	case <-c.Ready:
 		t.Error("unexpected client heartbeat success")
-	case <-time.After(10 * time.Millisecond):
-		// TODO(spencer): this isn't so great, as it relies on client
-		// being able to connect in 10ms. Would be better to wait on
-		// a notification of the client having attempted the heartbeat
-		// and failed.
+	case <-c.Closed:
 	}
 	s.Close()
-	c.Close()
 }

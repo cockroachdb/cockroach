@@ -19,10 +19,8 @@ package gossip
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
-	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
@@ -30,51 +28,10 @@ import (
 	"github.com/golang/glog"
 )
 
-const (
-	// minLocalhostPort is the starting port in a range of ports to use
-	// for simulating a gossip network.
-	minLocalhostPort = 9000
-)
-
-var (
-	port = minLocalhostPort
-)
-
 // init seeds the random number generator for non-determinism across
 // multiple runs.
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-}
-
-// tempUnixFile creates a temporary file for use with a unix domain socket.
-func tempUnixFile() string {
-	f, err := ioutil.TempFile("", "unix-socket")
-	if err != nil {
-		glog.Fatalf("unable to create temp file: %s", err)
-	}
-	f.Close()
-	os.Remove(f.Name())
-	return f.Name()
-}
-
-// tempLocalhostAddr creates an address to localhost using a monotonically
-// increasing port number in the range [minLocalhostPort, ...].
-func tempLocalhostAddr() string {
-	str := fmt.Sprintf("127.0.0.1:%d", port)
-	port++
-	return str
-}
-
-// createSimAddr creates an unused address for simulation gossip nodes.
-// The "network" parameter should be one of "tcp" or "unix".
-func createSimAddr(network string) (net.Addr, error) {
-	switch network {
-	case "tcp":
-		return net.ResolveTCPAddr("tcp", tempLocalhostAddr())
-	case "unix":
-		return net.ResolveUnixAddr("unix", tempUnixFile())
-	}
-	return nil, util.Errorf("unknown network type: %s", network)
 }
 
 // SimulateNetwork creates nodeCount gossip nodes. The network should
@@ -102,13 +59,12 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		addr, err := createSimAddr(network)
-		if err != nil {
-			glog.Fatalf("failed to create address: %s", err)
-		}
+		addr := util.CreateTestAddr(network)
 		servers[i] = rpc.NewServer(addr)
-		servers[i].Start()
-		addrs[i] = addr
+		if err := servers[i].Start(); err != nil {
+			glog.Fatal(err)
+		}
+		addrs[i] = servers[i].Addr()
 	}
 	var bootstrap []net.Addr
 	if nodeCount < 3 {
@@ -119,15 +75,15 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 
 	nodes := make(map[string]*Gossip, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := New(servers[i])
+		node := New()
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)
+		node.Start(servers[i])
 		// Node 0 gossips node count.
 		if i == 0 {
 			node.AddInfo(KeyNodeCount, int64(nodeCount), time.Hour)
 		}
-		node.Start()
 		nodes[addrs[i].String()] = node
 	}
 

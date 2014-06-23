@@ -18,13 +18,12 @@
 package storage
 
 import (
-	"net"
+	"bytes"
+	"encoding/gob"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/rpc"
-	yaml "gopkg.in/yaml.v1"
 )
 
 var (
@@ -61,27 +60,17 @@ var (
 	}
 )
 
-// marshalConfig marshals the specified configI interface into yaml
-// bytes.
-func marshalConfig(configI interface{}, t *testing.T) []byte {
-	bytes, err := yaml.Marshal(configI)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return bytes
-}
-
 // createTestEngine creates an in-memory engine and initializes some
 // default configuration settings.
 func createTestEngine(t *testing.T) Engine {
 	engine := NewInMem(1 << 20)
-	if err := engine.put(KeyConfigAccountingPrefix, Value{Bytes: marshalConfig(testDefaultAcctConfig, t)}); err != nil {
+	if err := putI(engine, KeyConfigAccountingPrefix, testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.put(KeyConfigPermissionPrefix, Value{Bytes: marshalConfig(testDefaultPermConfig, t)}); err != nil {
+	if err := putI(engine, KeyConfigPermissionPrefix, testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.put(KeyConfigZonePrefix, Value{Bytes: marshalConfig(testDefaultZoneConfig, t)}); err != nil {
+	if err := putI(engine, KeyConfigZonePrefix, testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 	return engine
@@ -96,13 +85,16 @@ func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 		EndKey:   KeyMax,
 		Replicas: testRangeLocations,
 	}
-	g := gossip.New(rpc.NewServer(&net.UnixAddr{"fake", "unix"}))
-	return NewRange(rm, engine, nil, g), g
+	g := gossip.New()
+	r := NewRange(rm, engine, nil, g)
+	r.Start()
+	return r, g
 }
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
 func TestRangeGossipFirstRange(t *testing.T) {
-	_, g := createTestRange(createTestEngine(t), t)
+	r, g := createTestRange(createTestEngine(t), t)
+	defer r.Stop()
 	info, err := g.GetInfo(gossip.KeyFirstRangeMetadata)
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +107,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossipped.
 func TestRangeGossipAllConfigs(t *testing.T) {
-	_, g := createTestRange(createTestEngine(t), t)
+	r, g := createTestRange(createTestEngine(t), t)
+	defer r.Stop()
 	testData := []struct {
 		gossipKey string
 		configs   []*prefixConfig
@@ -129,9 +122,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		configMap := info.(*prefixConfigMap)
-		if !reflect.DeepEqual(configMap.configs, test.configs) {
-			t.Errorf("expected gossiped configs to be equal %s vs %s", configMap.configs, test.configs)
+		configs := info.([]*prefixConfig)
+		if !reflect.DeepEqual(configs, test.configs) {
+			t.Errorf("expected gossiped configs to be equal %s vs %s", configs, test.configs)
 		}
 	}
 }
@@ -148,23 +141,23 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		},
 	}
 	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
-	if err := engine.put(key, Value{Bytes: marshalConfig(db1Perm, t)}); err != nil {
+	if err := putI(engine, key, db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	_, g := createTestRange(engine, t)
+	r, g := createTestRange(engine, t)
+	defer r.Stop()
 
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(*prefixConfigMap)
+	configs := info.([]*prefixConfig)
 	expConfigs := []*prefixConfig{
 		&prefixConfig{KeyMin, &testDefaultPermConfig},
 		&prefixConfig{Key("/db1"), &db1Perm},
-		&prefixConfig{PrefixEndKey(Key("/db1")), &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual(configMap.configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap.configs, expConfigs)
+	if !reflect.DeepEqual(configs, expConfigs) {
+		t.Errorf("expected gossiped configs to be equal %s vs %s", configs, expConfigs)
 	}
 }
 
@@ -172,6 +165,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 // permissions cause the updated configs to be re-gossipped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
 	r, g := createTestRange(createTestEngine(t), t)
+	defer r.Stop()
 	// Add a permission for a new key prefix.
 	db1Perm := PermConfig{
 		Perms: []Permission{
@@ -180,7 +174,12 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
 	reply := &PutResponse{}
-	r.Put(&PutRequest{Key: key, Value: Value{Bytes: marshalConfig(db1Perm, t)}}, reply)
+
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(db1Perm); err != nil {
+		t.Fatal(err)
+	}
+	r.Put(&PutRequest{Key: key, Value: Value{Bytes: buf.Bytes()}}, reply)
 	if reply.Error != nil {
 		t.Fatal(reply.Error)
 	}
@@ -189,13 +188,12 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configMap := info.(*prefixConfigMap)
+	configs := info.([]*prefixConfig)
 	expConfigs := []*prefixConfig{
 		&prefixConfig{KeyMin, &testDefaultPermConfig},
 		&prefixConfig{Key("/db1"), &db1Perm},
-		&prefixConfig{PrefixEndKey(Key("/db1")), &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual(configMap.configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap.configs, expConfigs)
+	if !reflect.DeepEqual(configs, expConfigs) {
+		t.Errorf("expected gossiped configs to be equal %s vs %s", configs, expConfigs)
 	}
 }

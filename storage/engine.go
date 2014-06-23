@@ -100,12 +100,18 @@ func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
 			return 0, util.Errorf("key %q cannot be incremented; integer overflow", key)
 		}
 	}
-	int64Val += inc
+
+	// Check for overflow and underflow.
+	r := int64Val + inc
+	if (r < int64Val) != (inc < 0) {
+		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
+	}
+
 	encoded := make([]byte, binary.MaxVarintLen64)
-	numBytes := binary.PutVarint(encoded, int64Val)
+	numBytes := binary.PutVarint(encoded, r)
 	encoded = encoded[:numBytes]
 	if err = engine.put(key, Value{Bytes: encoded, Timestamp: ts}); err != nil {
 		return 0, err
 	}
-	return int64Val, nil
+	return r, nil
 }

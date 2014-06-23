@@ -149,15 +149,22 @@ type Table struct {
 	incomingForeignKeys map[string]map[string]*Column
 }
 
+// TableSlice helpfully implements the sort interface.
+type TableSlice []*Table
+
+func (ts TableSlice) Len() int           { return len(ts) }
+func (ts TableSlice) Swap(i, j int)      { ts[i], ts[j] = ts[j], ts[i] }
+func (ts TableSlice) Less(i, j int) bool { return ts[i].Name < ts[j].Name }
+
 // Schema contains a named sequence of Table schemas. The Key should
 // be a shortened identifier related to Name. The Schema Key is stored
 // as part of every row key within the database, so size
 // matters and small is better (for once). Schema Keys must be unique
 // within a Cockroach cluster.
 type Schema struct {
-	Name   string   `yaml:"db"`
-	Key    string   `yaml:"db_key"`
-	Tables []*Table `yaml:",omitempty"`
+	Name   string     `yaml:"db"`
+	Key    string     `yaml:"db_key"`
+	Tables TableSlice `yaml:",omitempty"`
 
 	// byName is a map from table name to *Table.
 	byName map[string]*Table
@@ -206,6 +213,9 @@ func NewGoSchema(name, key string, schemaMap map[string]interface{}) (*Schema, e
 		}
 		s.Tables = append(s.Tables, table)
 	}
+	// Sort tables.
+	sort.Sort(s.Tables)
+
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
@@ -218,6 +228,9 @@ func NewYAMLSchema(in []byte) (*Schema, error) {
 	if err := yaml.Unmarshal(in, s); err != nil {
 		return nil, err
 	}
+	// Sort tables.
+	sort.Sort(s.Tables)
+
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
