@@ -4,7 +4,26 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Status
 
-**“Not even a lame demo” PRE-ALPHA**
+**ALPHA**
+
+* Gossip network
+* Cluster initialization and joining
+* Basic Key-Value REST API
+
+* NO: Raft consensus, range splitting, transactions (!)
+
+## Simple Setup
+
+* node1> ./cockroach init [hdd|ssd]=<path>
+* node1> ./cockroach start -gossip_bootstrap=:8081 -rpc_addr=:8081 -http_adr=:8080 -data_dirs=[hdd|ssd]=<path>
+
+* node2> ./cockroach start -gossip_bootstrap=<node1-addr>:8081 -http_adr=:8080 -data_dirs=[hdd|ssd]=<path>
+
+## Next Steps
+
+* More versatile store descriptions
+* Flesh out node allocation via gossip
+* Range splitting
 
 ## Get in touch
 
