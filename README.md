@@ -1,10 +1,28 @@
-# Cockroach [![Build Status](https://secure.travis-ci.org/cockroachdb/cockroach.png)](http://travis-ci.org/cockroachdb/cockroach)  [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-pre--alpha-red.svg) 
+# Cockroach [![Build Status](https://secure.travis-ci.org/cockroachdb/cockroach.png)](http://travis-ci.org/cockroachdb/cockroach)  [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg) 
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Status
 
-**“Not even a lame demo” PRE-ALPHA**
+**ALPHA**
+
+* Gossip network
+* Cluster initialization and joining
+* Basic Key-Value REST API
+* NO: Raft consensus, range splitting, transactions (!)
+
+## Simple Setup
+
+* node1> ./cockroach init hdd=path
+* node1> ./cockroach start -gossip_bootstrap=:8081 -rpc_addr=:8081 -http_adr=:8080 -data_dirs=hdd=path
+
+* node2> ./cockroach start -gossip_bootstrap=node1:8081 -http_adr=:8080 -data_dirs=hdd=path
+
+## Next Steps
+
+* More versatile store descriptions
+* Flesh out node allocation via gossip
+* Range splitting
 
 ## Get in touch
 
