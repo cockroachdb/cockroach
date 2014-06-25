@@ -70,7 +70,7 @@ import (
 
 var (
 	GossipBootstrap = flag.String(
-		"gossip_bootstrap", "",
+		"gossip", "",
 		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")
 	GossipInterval = flag.Duration(
 		"gossip_interval", 2*time.Second,
@@ -221,8 +221,7 @@ func (g *Gossip) Outgoing() []net.Addr {
 
 // Start launches the gossip instance, which commences joining the
 // gossip network using the supplied rpc server and the gossip
-// bootstrap addresses specified via command-line flag:
-// -gossip_bootstrap.
+// bootstrap addresses specified via command-line flag: -gossip.
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
@@ -271,7 +270,7 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 }
 
 // parseBootstrapAddresses parses the gossip bootstrap addresses
-// passed via -gossip_bootstrap.
+// passed via -gossip command line flag.
 func (g *Gossip) parseBootstrapAddresses() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -289,7 +288,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 	}
 	// If we have no bootstrap hosts, fatal exit.
 	if g.bootstraps.len() == 0 {
-		glog.Fatalf("no hosts specified for gossip network (use --gossip_bootstrap)")
+		glog.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
 	if g.bootstraps.hasAddr(g.is.NodeAddr) {

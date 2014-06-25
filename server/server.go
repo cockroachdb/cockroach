@@ -61,16 +61,16 @@ var (
 
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
-	UsageLine: "start --gossip_bootstrap=host1:port1[,host2:port2...] --data_dirs=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)",
+	UsageLine: "start --gossip=host1:port1[,host2:port2...] --data_dirs=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)",
 	Short:     "start node by joining the gossip network",
 	Long: fmt.Sprintf(`
+
 Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
-contacting one or more well-known hosts specified by the
--gossip_bootstrap command line flag. Every node should be run with
-the same list of bootstrap hosts to guarantee a connected network. An
-alternate approach is to use a single host for -gossip_bootstrap and
-round-robin DNS.
+contacting one or more well-known hosts specified by the -gossip
+command line flag. Every node should be run with the same list of
+bootstrap hosts to guarantee a connected network. An alternate
+approach is to use a single host for -gossip and round-robin DNS.
 
 Each node exports data from one or more physical devices. These
 devices are specified via the -data_dirs command line flag. This is a
@@ -102,10 +102,10 @@ type server struct {
 	httpListener   *net.Listener // holds http endpoint information
 }
 
-// runStart starts the cockroach node using -data_dirs as the list of storage
-// devices ("stores") on this machine and -gossip_bootstrap as the list of
-// "well-known" hosts used to join this node to the cockroach cluster via the
-// gossip network.
+// runStart starts the cockroach node using -data_dirs as the list of
+// storage devices ("stores") on this machine and -gossip as the list
+// of "well-known" hosts used to join this node to the cockroach
+// cluster via the gossip network.
 func runStart(cmd *commander.Command, args []string) {
 	glog.Info("Starting cockroach cluster")
 	s, err := newServer()
