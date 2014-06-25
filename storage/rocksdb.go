@@ -273,7 +273,7 @@ func (r *RocksDB) capacity() (StoreCapacity, error) {
 	if err := syscall.Statfs(r.dir, &fs); err != nil {
 		return capacity, err
 	}
-	glog.Infof("stat filesystem: %v", fs)
+	//glog.Infof("stat filesystem: %v", fs)
 	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
 	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
 	capacity.DiskType = r.typ

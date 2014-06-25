@@ -20,7 +20,7 @@ package kv
 import "flag"
 
 // Addr is the tcp address used to connect to the Cockroach cluster.
-var Addr = flag.String("addr", "localhost:8080", "address for connection to cockroach cluster")
+var Addr = flag.String("addr", "127.0.0.1:8080", "address for connection to cockroach cluster")
 
 // HTTPAddr returns the fully qualified URL used to connect to the Cockroach cluster.
 func HTTPAddr() string {

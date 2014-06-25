@@ -64,6 +64,7 @@ type Client struct {
 	addr        net.Addr     // Remote address of client
 	lAddr       net.Addr     // Local address of client
 	healthy     bool
+	closed      bool
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -115,10 +116,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 			// Ensure at least one heartbeat succeeds before exiting the
 			// retry loop.
 			if err = c.heartbeat(); err != nil {
-				clientMu.Lock()
-				delete(clients, c.Addr().String())
-				c.Client.Close()
-				clientMu.Unlock()
+				c.Close()
 				return false, err
 			}
 
@@ -133,7 +131,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 		})
 		if err != nil {
 			glog.Errorf("client %s failed to connect", addr)
-			close(c.Closed)
+			c.Close()
 		}
 	}()
 
@@ -168,6 +166,20 @@ func (c *Client) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
+// close removes the client from the clients map and closes
+// the Closed channel.
+func (c *Client) Close() {
+	clientMu.Lock()
+	if !c.closed {
+		delete(clients, c.Addr().String())
+		c.healthy = false
+		c.closed = true
+		close(c.Closed)
+		c.Client.Close()
+	}
+	clientMu.Unlock()
+}
+
 // startHeartbeat sends periodic heartbeats to client. Closes the
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
@@ -180,12 +192,7 @@ func (c *Client) startHeartbeat() {
 		time.Sleep(heartbeatInterval)
 		if err := c.heartbeat(); err != nil {
 			glog.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
-			clientMu.Lock()
-			delete(clients, c.Addr().String())
-			c.healthy = false
-			close(c.Closed)
-			c.Client.Close()
-			clientMu.Unlock()
+			c.Close()
 			break
 		}
 	}

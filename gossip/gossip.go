@@ -97,11 +97,12 @@ const (
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
 // During bootstrapping, the bootstrap list contains candidates for
-// entre to the gossip network.
+// entry to the gossip network.
 type Gossip struct {
 	Name         string             // Optional node name
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
+	isBootstrap  bool               // True if this node is a bootstrap host
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
@@ -230,6 +231,7 @@ func (g *Gossip) Start(rpcServer *rpc.Server) {
 	g.server.start(rpcServer) // serve gossip protocol
 	go g.bootstrap()          // bootstrap gossip client
 	go g.manage()             // manage gossip clients
+	go g.maybeWarnAboutInit()
 }
 
 // Stop shuts down the gossip server. Returns a channel which signals
@@ -290,7 +292,10 @@ func (g *Gossip) parseBootstrapAddresses() {
 		glog.Fatalf("no hosts specified for gossip network (use --gossip_bootstrap)")
 	}
 	// Remove our own node address.
-	g.bootstraps.removeAddr(g.is.NodeAddr)
+	if g.bootstraps.hasAddr(g.is.NodeAddr) {
+		g.isBootstrap = true
+		g.bootstraps.removeAddr(g.is.NodeAddr)
+	}
 }
 
 // filterExtant removes any addresses from the supplied addrSet which
@@ -395,11 +400,12 @@ func (g *Gossip) manage() {
 		// If there are no outgoing hosts or sentinel gossip is missing,
 		// and there are still unused bootstrap hosts, signal bootstrapper
 		// to try another.
+		hasSentinel := g.is.getInfo(KeySentinel) != nil
 		if g.filterExtant(g.bootstraps).len() > 0 {
 			if g.outgoing.len()+g.incoming.len() == 0 {
 				glog.Infof("no connections; signaling bootstrap")
 				g.stalled.Signal()
-			} else if g.is.getInfo(KeySentinel) == nil {
+			} else if !hasSentinel {
 				glog.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
 				g.stalled.Signal()
 			}
@@ -414,6 +420,44 @@ func (g *Gossip) manage() {
 
 	// Signal exit.
 	g.exited <- nil
+}
+
+// maybeWarnAboutInit looks for signs indicating a cluster which
+// hasn't been initialized and warns. There's no absolutely sure way
+// to determine whether the current node is simply waiting to be
+// bootstrapped to an existing cluster vs. the operator having failed
+// to initialize the cluster via the "cockroach init" command, so
+// we can only warn.
+//
+// This method checks whether all gossip bootstrap hosts are
+// connected, and whether the node itself is a bootstrap host, but
+// there is still no sentinel gossip.
+func (g *Gossip) maybeWarnAboutInit() {
+	time.Sleep(5 * time.Second)
+	retryOptions := util.RetryOptions{
+		Tag:         "check cluster initialization",
+		Backoff:     5 * time.Second,  // first backoff at 5s
+		MaxBackoff:  60 * time.Second, // max backoff is 60s
+		Constant:    2,                // doubles
+		MaxAttempts: 0,                // indefinite retries
+	}
+	util.RetryWithBackoff(retryOptions, func() (bool, error) {
+		g.mu.Lock()
+		hasSentinel := g.is.getInfo(KeySentinel) != nil
+		allConnected := g.filterExtant(g.bootstraps).len() == 0
+		g.mu.Unlock()
+		// If we have the sentinel, exit the retry loop.
+		if hasSentinel {
+			return true, nil
+		}
+		// Otherwise, if all bootstrap hosts are connected and this
+		// node is a bootstrap host, warn.
+		if allConnected && g.isBootstrap {
+			glog.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
+				"Use \"cockroach init\" to initialize.")
+		}
+		return false, nil
+	})
 }
 
 // checkHasConnected checks whether this gossip instance is connected

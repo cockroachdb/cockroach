@@ -112,7 +112,7 @@ func runStart(cmd *commander.Command, args []string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	// init engines from -data_dirs
+	// Init engines from -data_dirs.
 	engines, err := initEngines(*dataDirs)
 	if err != nil {
 		glog.Fatal(err)
@@ -194,7 +194,7 @@ func newServer() (*server, error) {
 	// Determine hostname in case it hasn't been specified in -rpc_addr or -http_addr.
 	host, err := os.Hostname()
 	if err != nil {
-		host = "localhost"
+		host = "127.0.0.1"
 	}
 
 	// Resolve

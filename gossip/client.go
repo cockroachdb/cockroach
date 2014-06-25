@@ -123,6 +123,7 @@ func (c *client) gossip(g *Gossip) error {
 		select {
 		case <-gossipCall.Done:
 			if gossipCall.Error != nil {
+				c.rpcClient.Close()
 				return gossipCall.Error
 			}
 		case <-c.rpcClient.Closed:

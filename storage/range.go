@@ -31,6 +31,7 @@ import (
 // init pre-registers RangeLocations and PrefixConfigMap types.
 func init() {
 	gob.Register(RangeLocations{})
+	gob.Register(StoreAttributes{})
 	gob.Register([]*prefixConfig{})
 	gob.Register(AcctConfig{})
 	gob.Register(PermConfig{})

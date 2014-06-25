@@ -61,7 +61,7 @@ func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
 		return err
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
 	}

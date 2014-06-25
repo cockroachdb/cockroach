@@ -37,8 +37,8 @@ var (
 func init() {
 	// We update these with the actual port once the servers
 	// have been launched for the purpose of this test.
-	*httpAddr = "localhost:0"
-	*rpcAddr = "localhost:0"
+	*httpAddr = "127.0.0.1:0"
+	*rpcAddr = "127.0.0.1:0"
 }
 
 func startServer() *server {
