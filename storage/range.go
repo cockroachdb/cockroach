@@ -179,7 +179,7 @@ func (r *Range) processPending() {
 		case logEntry := <-r.pending:
 			logEntry.done <- r.executeCmd(logEntry.Method, logEntry.Args, logEntry.Reply)
 		case <-r.closer:
-			break
+			return
 		}
 	}
 }
@@ -193,7 +193,7 @@ func (r *Range) startGossip() {
 		case <-ticker.C:
 			r.maybeGossipClusterID()
 		case <-r.closer:
-			break
+			return
 		}
 	}
 }

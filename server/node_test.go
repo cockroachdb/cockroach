@@ -129,7 +129,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 10ms) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.getStoreCount() == 3 }, 5*time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.getStoreCount() == 3 }, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }
@@ -142,7 +142,7 @@ func TestNodeJoin(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
-	*gossip.GossipInterval = 500 * time.Millisecond
+	*gossip.GossipInterval = 10 * time.Millisecond
 	// Start the bootstrap node.
 	engines1 := []storage.Engine{engine}
 	addr1 := util.CreateTestAddr("tcp")
@@ -155,7 +155,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.getStoreCount() == 1 }, 5*time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.getStoreCount() == 1 }, 50*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,7 +174,7 @@ func TestNodeJoin(t *testing.T) {
 			t.Error("addr1 gossip %s doesn't match addr1 address %s", val.(net.Addr).String(), server1.Addr().String())
 		}
 		return true
-	}, 1*time.Second); err != nil {
+	}, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }
