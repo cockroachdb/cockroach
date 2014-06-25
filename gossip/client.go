@@ -152,7 +152,7 @@ func (c *client) gossip(g *Gossip) error {
 			remoteMaxSeq = reply.Delta.MaxSeq
 
 			// If we have the sentinel gossip, we're considered connected.
-			g.checkConnected()
+			g.checkHasConnected()
 			g.mu.Unlock()
 		}
 

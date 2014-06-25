@@ -35,8 +35,8 @@ import (
 
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
-// of engines. The server and node are returned. If startGossip is
-// true, the gossip instance is started.
+// of engines. The server and node are returned. If gossipBS is not
+// nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []storage.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node) {
 	rpcServer := rpc.NewServer(addr)

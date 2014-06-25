@@ -199,7 +199,7 @@ func (r *Range) startGossip() {
 }
 
 // maybeGossipClusterID gossips the cluster ID if this range is
-// the start of the key space.
+// the start of the key space and the raft leader.
 func (r *Range) maybeGossipClusterID() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyClusterID, r.Meta.ClusterID, ttlClusterIDGossip); err != nil {
@@ -209,7 +209,7 @@ func (r *Range) maybeGossipClusterID() {
 }
 
 // maybeGossipFirstRange gossips the range locations if this range is
-// the start of the key space.
+// the start of the key space and the raft leader.
 func (r *Range) maybeGossipFirstRange() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 0*time.Second); err != nil {
@@ -218,10 +218,10 @@ func (r *Range) maybeGossipFirstRange() {
 	}
 }
 
-// maybeGossipConfigs gossips configuration maps if their data
-// falls within the range and their contents are marked
-// dirty. Configuration maps include accounting, permissions, and
-// zones.
+// maybeGossipConfigs gossips configuration maps if their data falls
+// within the range, this replica is the raft leader, and their
+// contents are marked dirty. Configuration maps include accounting,
+// permissions, and zones.
 func (r *Range) maybeGossipConfigs() {
 	if r.gossip != nil && r.IsLeader() {
 		for _, cp := range configPrefixes {

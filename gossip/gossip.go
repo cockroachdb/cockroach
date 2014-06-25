@@ -151,7 +151,7 @@ func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
 	defer g.mu.Unlock()
 	err := g.is.addInfo(g.is.newInfo(key, val, ttl))
 	if err == nil {
-		g.checkConnected()
+		g.checkHasConnected()
 	}
 	return err
 }
@@ -416,11 +416,11 @@ func (g *Gossip) manage() {
 	g.exited <- nil
 }
 
-// checkConnected checks whether this gossip instance is connected to
-// enough of the gossip network that it has received the sentinel
+// checkHasConnected checks whether this gossip instance is connected
+// to enough of the gossip network that it has received the sentinel
 // gossip info. Once connected, the "Connected" channel is closed to
 // signal to any waiters that the gossip instance is ready.
-func (g *Gossip) checkConnected() {
+func (g *Gossip) checkHasConnected() {
 	// Check if we have the sentinel gossip (cluster ID) to start.
 	// If so, then mark ourselves as trivially connected to the gossip network.
 	if !g.hasConnected && g.is.getInfo(KeySentinel) != nil {
