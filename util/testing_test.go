@@ -76,3 +76,34 @@ func TestTrueWithin(t *testing.T) {
 		t.Errorf("unexpected error on method which returns true after 5 invocations: %v", err)
 	}
 }
+
+type Dummy struct {
+	Key int
+}
+
+func TestContainsSameElements(t *testing.T) {
+	s1 := []int{1, 1, 3, 2, 1}
+	s2 := []int{3, 2, 1, 1, 1}
+	s3 := []int{1, 1, 3, 2, -100}
+	s4 := []int{4}
+	d1 := []Dummy{Dummy{1}, Dummy{2}}
+	d2 := []Dummy{Dummy{2}, Dummy{1}}
+
+	if !ContainsSameElements([]int{}, []int{}) ||
+		!ContainsSameElements(s1, s2) ||
+		!ContainsSameElements(s1, s1) ||
+		!ContainsSameElements(s2, s2) ||
+		!ContainsSameElements(s2, s1) ||
+		!ContainsSameElements(d1, d2) ||
+		!ContainsSameElements(d2, d2) ||
+		!ContainsSameElements(d1, d1) ||
+		!ContainsSameElements(d2, d1) {
+		t.Error("unexpected failed comparison")
+	}
+
+	if ContainsSameElements(s1, s3) ||
+		ContainsSameElements(s1, s3) ||
+		ContainsSameElements(s1, s4) {
+		t.Error("unexpected succeeded comparison")
+	}
+}

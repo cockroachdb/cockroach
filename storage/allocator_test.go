@@ -274,17 +274,20 @@ func TestExistingReplica(t *testing.T) {
 	}
 	var expected = []Replica{
 		Replica{
-			NodeID:   2,
-			StoreID:  3,
-			DiskType: HDD,
+			NodeID:     3,
+			StoreID:    4,
+			Datacenter: "a",
+			DiskType:   HDD,
+		},
+		Replica{
+			NodeID:     4,
+			StoreID:    5,
+			Datacenter: "a",
+			DiskType:   MEM,
 		},
 	}
-	if result[0].DiskType != HDD {
-		t.Fatalf("Expected placement on an HDD, Got: %v", result[0].DiskType)
-	}
-	if result[0].NodeID == 1 {
-		t.Fatal("Expected placement on a node other than 1")
-	}
-	if !reflect.DeepEqual(expected, result) {
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Fatalf("Expected: %v\nGot: %v", expected, result)
 	}
 }

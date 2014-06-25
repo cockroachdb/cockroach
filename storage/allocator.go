@@ -20,6 +20,7 @@ package storage
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 )
 
 // StoreFinder finds the disks in a datacenter with the most available capacity.
@@ -45,7 +46,16 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 	var neededReplicas int
 	var results []Replica
 
-	for dc, diskTypes := range config.Replicas {
+	// Create a sorted list of datacenters to fix the order in which
+	// replicas are assigned.
+	dcs := make([]string, len(config.Replicas), len(config.Replicas))
+	for dc := range config.Replicas {
+		dcs = append(dcs, dc)
+	}
+	sort.Strings(dcs)
+
+	for _, dc := range dcs {
+		diskTypes := config.Replicas[dc]
 		usedHosts := make(map[int32]struct{})
 		for _, replica := range existingReplicas[dc] {
 			usedHosts[replica.NodeID] = struct{}{}
@@ -57,10 +67,16 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 			return nil, err
 		}
 
-		// compute how many of each DiskType we need in this Data Center
+		// Compute how many of each DiskType we need in this Data Center.
+		// We store the maximal disk type as we need it below.
+		maxDiskType := DiskType(0)
 		neededDiskTypes := make(map[DiskType]int)
 		for _, strDiskType := range diskTypes {
-			neededDiskTypes[StringToDiskType(strDiskType)]++
+			diskType := StringToDiskType(strDiskType)
+			if diskType > maxDiskType {
+				maxDiskType = diskType
+			}
+			neededDiskTypes[diskType]++
 		}
 
 		for _, replica := range existingReplicas[dc] {
@@ -68,7 +84,10 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 		}
 
 		// For each disk type to be placed in this data center.
-		for diskType, count := range neededDiskTypes {
+		// We avoid ranging over the map directly as this introduces
+		// unwanted randomness.
+		for diskType := DiskType(0); diskType <= maxDiskType; diskType++ {
+			count := neededDiskTypes[diskType]
 			for i := 0; i < count; i++ {
 				// Randomly pick a node weighted by capacity.
 				var candidates []StoreAttributes
@@ -82,7 +101,7 @@ func (a *allocator) allocate(config *ZoneConfig, existingReplicas map[string][]R
 				}
 
 				var capacitySeen float64
-				targetCapacity := rand.Float64() * capacityTotal
+				targetCapacity := a.rand.Float64() * capacityTotal
 
 				// Walk through candidates, stopping when
 				// we've passed the capacity target.
