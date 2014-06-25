@@ -23,6 +23,9 @@ test:
 testrace:
 	$(CGO_FLAGS) $(GO) test -race ./...
 
+coverage:
+	$(CGO_FLAGS) $(GO) test -cover ./...
+
 clean:
 	$(GO) clean
 	cd $(ROCKSDB); make clean
