@@ -16,6 +16,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 
 	commander "code.google.com/p/go-commander"
@@ -32,6 +33,20 @@ func main() {
 			server.CmdRmZone,
 			server.CmdSetZone,
 			server.CmdStart,
+			&commander.Command{
+				UsageLine: "listparams",
+				Short:     "list all available parameters and their default values",
+				Long: `
+List all available parameters and their default values.
+Note that parameter parsing stops after the first non-
+option after the command name. Hence, the options need
+to precede any additional arguments,
+
+  cockroach <command> [options] [arguments].`,
+				Run: func(cmd *commander.Command, args []string) {
+					flag.CommandLine.PrintDefaults()
+				},
+			},
 		},
 	}
 

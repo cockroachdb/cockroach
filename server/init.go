@@ -48,7 +48,7 @@ To start the cluster after initialization, run "cockroach start".
 
 // runInit.
 func runInit(cmd *commander.Command, args []string) {
-	if len(args) != 2 {
+	if len(args) != 1 {
 		cmd.Usage()
 		return
 	}

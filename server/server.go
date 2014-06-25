@@ -61,7 +61,7 @@ var (
 
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
-	UsageLine: "start",
+	UsageLine: "start --gossip_bootstrap=host1:port1[,host2:port2...] --data_dirs=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)",
 	Short:     "start node by joining the gossip network",
 	Long: fmt.Sprintf(`
 Start Cockroach node by joining the gossip network and exporting key
@@ -117,8 +117,12 @@ func runStart(cmd *commander.Command, args []string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
+	if len(engines) == 0 {
+		glog.Fatal(util.Error("No valid entry found in -data_dirs"))
+	}
 
 	err = s.start(engines, false)
+	defer s.stop()
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -128,7 +132,6 @@ func runStart(cmd *commander.Command, args []string) {
 
 	// Block until one of the signals above is received.
 	<-c
-	s.stop()
 }
 
 // initEngines interprets the dirs parameter to initialize a slice of
@@ -136,6 +139,9 @@ func runStart(cmd *commander.Command, args []string) {
 func initEngines(dirs string) ([]storage.Engine, error) {
 	engines := make([]storage.Engine, 0, 1)
 	for _, dir := range strings.Split(dirs, ",") {
+		if len(dir) == 0 {
+			continue
+		}
 		engine, err := initEngine(dir)
 		if err != nil {
 			glog.Warningf("%v; skipping...will not serve data", err)
