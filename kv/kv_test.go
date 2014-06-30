@@ -44,7 +44,7 @@ func startServer() *kvTestServer {
 			EndKey:   storage.KeyMax,
 		}
 		server = &kvTestServer{}
-		server.db = NewLocalDB(storage.NewRange(meta, storage.NewInMem(1<<30), nil, nil))
+		server.db = NewLocalDB(storage.NewRange(meta, storage.NewInMem(storage.Attributes{}, 1<<30), nil, nil))
 		server.rest = NewRESTServer(server.db)
 		server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			server.rest.HandleAction(w, r)

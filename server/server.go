@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -46,23 +47,35 @@ var (
 	rpcAddr  = flag.String("rpc_addr", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
 	httpAddr = flag.String("http_addr", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
 
-	// dataDirs is specified to enable durable storage via
-	// RocksDB-backed key-value stores. Memory-backed key value stores
-	// may be optionally specified via a comma-separated list of integer
-	// sizes.
-	dataDirs = flag.String("data_dirs", "", "specify a comma-separated list of disk "+
-		"type and path or integer size in bytes. For solid state disks, ssd=<path>; "+
-		"for spinning disks, hdd=<path>; for in-memory, mem=<size in bytes>. E.g. "+
-		"-data_dirs=hdd=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
+	// stores is specified to enable durable storage via RocksDB-backed
+	// key-value stores. Memory-backed key value stores may be
+	// optionally specified via mem=<integer byte size>.
+	stores = flag.String("stores", "", "specify a comma-separated list of stores, "+
+		"specified by a comma-separated list of device attributes followed by '=' and "+
+		"either a filepath for a persistent store or an integer size in bytes for an "+
+		"in-memory store. Device attributes typically include whether the store is "+
+		"flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device "+
+		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
+		"For example, -stores=hdd,7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
+
+	// attrs specifies node topography or machine capabilities, used to
+	// match capabilities or location preferences specified in zone configs.
+	attrs = flag.String("attrs", "", "specify a comma-separated list of node "+
+		"attributes. Attributes are arbitrary strings specifying topography or "+
+		"machine capabilities. Topography might include datacenter designation (e.g. "+
+		"\"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
+		"might include specialized hardware or number of cores (e.g. \"gpu\", "+
+		"\"x16c\"). For example: -attrs=us-west-1b,gpu")
 
 	// Regular expression for capturing data directory specifications.
-	dataDirRE = regexp.MustCompile(`^(mem)=([\d]+)|(ssd|hdd)=(.+)$`)
+	storesRE = regexp.MustCompile(`^(.+)=(.+)$`)
 )
 
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
-	UsageLine: "start --gossip=host1:port1[,host2:port2...] --data_dirs=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)",
-	Short:     "start node by joining the gossip network",
+	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
+		"-stores=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)[,...]",
+	Short: "start node by joining the gossip network",
 	Long: fmt.Sprintf(`
 
 Start Cockroach node by joining the gossip network and exporting key
@@ -73,10 +86,11 @@ bootstrap hosts to guarantee a connected network. An alternate
 approach is to use a single host for -gossip and round-robin DNS.
 
 Each node exports data from one or more physical devices. These
-devices are specified via the -data_dirs command line flag. This is a
-comma-separated list of paths to storage directories. Although the
-paths should be specified to correspond uniquely to physical devices,
-this requirement isn't strictly enforced.
+devices are specified via the -stores command line flag. This is a
+comma-separated list of paths to storage directories or for in-memory
+stores, the number of bytes. Although the paths should be specified to
+correspond uniquely to physical devices, this requirement isn't
+strictly enforced.
 
 A node exports an HTTP API with the following endpoints:
 
@@ -102,7 +116,7 @@ type server struct {
 	httpListener   *net.Listener // holds http endpoint information
 }
 
-// runStart starts the cockroach node using -data_dirs as the list of
+// runStart starts the cockroach node using -stores as the list of
 // storage devices ("stores") on this machine and -gossip as the list
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
@@ -112,13 +126,13 @@ func runStart(cmd *commander.Command, args []string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	// Init engines from -data_dirs.
-	engines, err := initEngines(*dataDirs)
+	// Init engines from -stores.
+	engines, err := initEngines(*stores)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	if len(engines) == 0 {
-		glog.Fatal(util.Error("No valid entry found in -data_dirs"))
+		glog.Fatal(util.Error("No valid entry found in -stores"))
 	}
 
 	err = s.start(engines, false)
@@ -132,6 +146,20 @@ func runStart(cmd *commander.Command, args []string) {
 
 	// Block until one of the signals above is received.
 	<-c
+}
+
+// parseAttributes parses a comma-separated list of strings,
+// filtering empty strings (i.e. ",," will yield no attributes.
+// Returns the list of strings as Attributes.
+func parseAttributes(attrsStr string) storage.Attributes {
+	var filtered []string
+	for _, attr := range strings.Split(attrsStr, ",") {
+		if len(attr) != 0 {
+			filtered = append(filtered, attr)
+		}
+	}
+	sort.Strings(filtered)
+	return storage.Attributes(filtered)
 }
 
 // initEngines interprets the dirs parameter to initialize a slice of
@@ -154,36 +182,27 @@ func initEngines(dirs string) ([]storage.Engine, error) {
 }
 
 // initEngine parses the engine specification according to the
-// dataDirRE regexp and instantiates an engine of correct type.
+// storesRE regexp and instantiates an engine of correct type.
 func initEngine(spec string) (storage.Engine, error) {
 	// Error if regexp doesn't match.
-	matches := dataDirRE.FindStringSubmatch(spec)
+	matches := storesRE.FindStringSubmatch(spec)
 	if matches == nil {
 		return nil, util.Errorf("invalid engine specification %q", spec)
 	}
 
+	// Parse attributes as a comma-separated list.
+	attrs := parseAttributes(matches[1])
+
 	var engine storage.Engine
-	var err error
-	if matches[1] == "mem" {
-		size, err := strconv.ParseInt(matches[2], 10, 64)
-		if err != nil {
-			return nil, util.Errorf("unable to init in-memory storage %q", spec)
+	if size, err := strconv.ParseUint(matches[2], 10, 64); err == nil {
+		if size == 0 {
+			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
 		}
-		engine = storage.NewInMem(size)
+		engine = storage.NewInMem(attrs, int64(size))
 	} else {
-		// type, file = matches[3], matches[4]
-		var typ storage.DiskType
-		switch matches[3] {
-		case "hdd":
-			typ = storage.HDD
-		case "ssd":
-			typ = storage.SSD
-		default:
-			return nil, util.Errorf("unhandled disk type %q", matches[4])
-		}
-		engine, err = storage.NewRocksDB(typ, matches[4])
+		engine, err = storage.NewRocksDB(attrs, matches[2])
 		if err != nil {
-			return nil, util.Errorf("unable to init rocksdb with data dir %q", matches[4])
+			return nil, util.Errorf("unable to init rocksdb with data dir %q: %v", matches[2], err)
 		}
 	}
 
@@ -240,12 +259,16 @@ func (s *server) start(engines []storage.Engine, selfBootstrap bool) error {
 	// Init the engines specified via command line flags if not supplied.
 	if engines == nil {
 		var err error
-		engines, err = initEngines(*dataDirs)
+		engines, err = initEngines(*stores)
 		if err != nil {
 			return err
 		}
 	}
-	if err := s.node.start(s.rpc, engines); err != nil {
+
+	// Init the node attributes from the -attrs command line flag.
+	nodeAttrs := parseAttributes(*attrs)
+
+	if err := s.node.start(s.rpc, engines, nodeAttrs); err != nil {
 		return err
 	}
 	glog.Infof("Initialized %d storage engine(s)", len(engines))

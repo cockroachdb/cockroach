@@ -166,7 +166,7 @@ func (c *Client) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
-// close removes the client from the clients map and closes
+// Close removes the client from the clients map and closes
 // the Closed channel.
 func (c *Client) Close() {
 	clientMu.Lock()

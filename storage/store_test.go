@@ -28,7 +28,7 @@ var testIdent = StoreIdent{
 // TestStoreInitAndBootstrap verifies store initialization and
 // bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 	store := NewStore(engine, nil)
 	defer store.Close()
 
@@ -69,7 +69,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // TestBootstrapOfNonEmptyStore verifies bootstrap failure if engine
 // is not empty.
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
 	if err := engine.put(Key("foo"), Value{Bytes: []byte("bar")}); err != nil {

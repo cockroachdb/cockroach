@@ -28,10 +28,10 @@ import (
 	"github.com/golang/glog"
 )
 
-// init pre-registers RangeLocations and PrefixConfigMap types.
+// init pre-registers RangeDescriptor and PrefixConfigMap types.
 func init() {
-	gob.Register(RangeLocations{})
-	gob.Register(StoreAttributes{})
+	gob.Register(RangeDescriptor{})
+	gob.Register(StoreDescriptor{})
 	gob.Register([]*prefixConfig{})
 	gob.Register(AcctConfig{})
 	gob.Register(PermConfig{})
@@ -66,7 +66,7 @@ type RangeMetadata struct {
 	RangeID   int64
 	StartKey  Key
 	EndKey    Key
-	Replicas  RangeLocations
+	Replicas  RangeDescriptor
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -459,11 +459,11 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		return
 	}
 
-	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(&reply.Locations); err != nil {
+	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(&reply.Range); err != nil {
 		reply.Error = err
 		return
 	}
-	if bytes.Compare(args.Key, reply.Locations.StartKey) < 0 {
+	if bytes.Compare(args.Key, reply.Range.StartKey) < 0 {
 		// args.Key doesn't belong to this range. We are perhaps searching the wrong node?
 		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
 		return

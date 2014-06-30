@@ -13,10 +13,10 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Simple Setup
 
-* node1> ./cockroach init hdd=path
-* node1> ./cockroach start -gossip=:8081 -rpc_addr=:8081 -http_adr=:8080 -data_dirs=hdd=path
+* node1> ./cockroach init hdd=\<path>
+* node1> ./cockroach start -gossip=:8081 -rpc_addr=:8081 -http_adr=:8080 -stores=hdd=\<path>
 
-* node2> ./cockroach start -gossip=node1:8081 -http_adr=:8080 -data_dirs=hdd=path
+* node2> ./cockroach start -gossip=node1:8081 -http_adr=:8080 -stores=hdd=\<path>
 
 ## Next Steps
 

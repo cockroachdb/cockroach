@@ -85,10 +85,10 @@ func PutI(db DB, key storage.Key, value interface{}) error {
 	return pr.Error
 }
 
-// BootstrapRangeLocations sets meta1 and meta2 values for KeyMax,
+// BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeLocations(db DB, replica storage.Replica) error {
-	locations := storage.RangeLocations{
+func BootstrapRangeDescriptor(db DB, replica storage.Replica) error {
+	locations := storage.RangeDescriptor{
 		StartKey: storage.KeyMin,
 		Replicas: []storage.Replica{replica},
 	}
@@ -134,7 +134,11 @@ func BootstrapConfigs(db DB) error {
 	// TODO(spencer): change this when zone specifications change to elect for three
 	// replicas with no specific features set.
 	zoneConfig := &storage.ZoneConfig{
-		Replicas:      map[string][]string{"": []string{"HDD", "HDD", "HDD"}},
+		Replicas: []storage.Attributes{
+			storage.Attributes([]string{"hdd"}),
+			storage.Attributes([]string{"hdd"}),
+			storage.Attributes([]string{"hdd"}),
+		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
 	}
@@ -145,11 +149,11 @@ func BootstrapConfigs(db DB) error {
 	return nil
 }
 
-// UpdateRangeLocations updates the range locations metadata for the
+// UpdateRangeDescriptor updates the range locations metadata for the
 // range specified by the meta parameter. This always involves a write
 // to "meta2", and may require a write to "meta1", in the event that
 // meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
-func UpdateRangeLocations(db DB, meta storage.RangeMetadata, locations storage.RangeLocations) error {
+func UpdateRangeDescriptor(db DB, meta storage.RangeMetadata, locations storage.RangeDescriptor) error {
 	// TODO(spencer): a lot more work here to actually implement this.
 
 	// Write meta2.
@@ -220,12 +224,12 @@ func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 // lookupRangeMetadataFirstLevel issues an InternalRangeLookup request
 // to the first-level range metadata table. This always chooses from
 // amongst the first range metadata replicas (these are gossipped).
-func (db *DistDB) lookupRangeMetadataFirstLevel(key storage.Key) (*storage.RangeLocations, error) {
+func (db *DistDB) lookupRangeMetadataFirstLevel(key storage.Key) (*storage.RangeDescriptor, error) {
 	info, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
 	if err != nil {
 		return nil, firstRangeMissingErr{err}
 	}
-	replicas := info.(storage.RangeLocations).Replicas
+	replicas := info.(storage.RangeDescriptor).Replicas
 	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
 	args := &storage.InternalRangeLookupRequest{Key: metadataKey}
 	replyChan := make(chan *storage.InternalRangeLookupResponse, len(replicas))
@@ -233,7 +237,7 @@ func (db *DistDB) lookupRangeMetadataFirstLevel(key storage.Key) (*storage.Range
 		return nil, err
 	}
 	reply := <-replyChan
-	return &reply.Locations, nil
+	return &reply.Range, nil
 }
 
 // lookupRangeMetadata first looks up the specified key in the first
@@ -241,7 +245,7 @@ func (db *DistDB) lookupRangeMetadataFirstLevel(key storage.Key) (*storage.Range
 // second level of range metadata to yield the set of replicas where
 // the key resides. This process is retried in a loop until the key's
 // replicas are located or a non-retryable error is encountered.
-func (db *DistDB) lookupRangeMetadata(key storage.Key) (*storage.RangeLocations, error) {
+func (db *DistDB) lookupRangeMetadata(key storage.Key) (*storage.RangeDescriptor, error) {
 	firstLevelMeta, err := db.lookupRangeMetadataFirstLevel(key)
 	if err != nil {
 		return nil, err
@@ -253,7 +257,7 @@ func (db *DistDB) lookupRangeMetadata(key storage.Key) (*storage.RangeLocations,
 		return nil, err
 	}
 	reply := <-replyChan
-	return &reply.Locations, nil
+	return &reply.Range, nil
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied

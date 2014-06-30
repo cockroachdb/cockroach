@@ -47,7 +47,7 @@ const (
 // Node manages a map of stores (by store ID) for which it serves traffic.
 type Node struct {
 	ClusterID  string                 // UUID for Cockroach cluster
-	Attributes storage.NodeAttributes // Node ID, network/physical topology
+	Descriptor storage.NodeDescriptor // Node ID, network/physical topology
 	gossip     *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
 	kvDB       kv.DB                  // Used to access global id generators
 	closer     chan struct{}
@@ -117,11 +117,10 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 
 	// Create first range.
 	replica := storage.Replica{
-		NodeID:     1,
-		StoreID:    1,
-		RangeID:    1,
-		Datacenter: getDatacenter(),
-		DiskType:   engine.Type(),
+		NodeID:  1,
+		StoreID: 1,
+		RangeID: 1,
+		Attrs:   storage.Attributes{},
 	}
 	rng, err := s.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{replica})
 	if err != nil {
@@ -135,7 +134,7 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 	localDB := kv.NewLocalDB(rng)
 
 	// Initialize range addressing records and default administrative configs.
-	if err := kv.BootstrapRangeLocations(localDB, replica); err != nil {
+	if err := kv.BootstrapRangeDescriptor(localDB, replica); err != nil {
 		return nil, err
 	}
 	if err := kv.BootstrapConfigs(localDB); err != nil {
@@ -169,16 +168,14 @@ func NewNode(kvDB kv.DB, gossip *gossip.Gossip) *Node {
 	return n
 }
 
-// initAttributes initializes the physical/network topology attributes
+// initDescriptor initializes the physical/network topology attributes
 // if possible. Datacenter, PDU & Rack values are taken from environment
 // variables or command line flags.
-func (n *Node) initAttributes(addr net.Addr) {
-	n.Attributes = storage.NodeAttributes{
+func (n *Node) initDescriptor(addr net.Addr, attrs storage.Attributes) {
+	n.Descriptor = storage.NodeDescriptor{
 		// NodeID is after invocation of start()
-		Address:    addr,
-		Datacenter: getDatacenter(),
-		PDU:        getPDU(),
-		Rack:       getRack(),
+		Address: addr,
+		Attrs:   attrs,
 	}
 }
 
@@ -186,8 +183,9 @@ func (n *Node) initAttributes(addr net.Addr) {
 // attributes gleaned from the environment and initializing stores
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, engines []storage.Engine) error {
-	n.initAttributes(rpcServer.Addr())
+func (n *Node) start(rpcServer *rpc.Server, engines []storage.Engine,
+	attrs storage.Attributes) error {
+	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
 	if err := n.initStoreMap(engines); err != nil {
@@ -271,11 +269,11 @@ func (n *Node) validateStores() error {
 		}
 		if n.ClusterID == "" {
 			n.ClusterID = s.Ident.ClusterID
-			n.Attributes.NodeID = s.Ident.NodeID
+			n.Descriptor.NodeID = s.Ident.NodeID
 		} else if n.ClusterID != s.Ident.ClusterID {
 			return util.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
-		} else if n.Attributes.NodeID != s.Ident.NodeID {
-			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Attributes.NodeID)
+		} else if n.Descriptor.NodeID != s.Ident.NodeID {
+			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
 	}
 	return nil
@@ -289,30 +287,30 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	glog.Infof("bootstrapping %d store(s)", bootstraps.Len())
 
 	// Allocate a new node ID if necessary.
-	if n.Attributes.NodeID == 0 {
+	if n.Descriptor.NodeID == 0 {
 		var err error
-		n.Attributes.NodeID, err = allocateNodeID(n.kvDB)
-		glog.Infof("new node allocated ID %d", n.Attributes.NodeID)
+		n.Descriptor.NodeID, err = allocateNodeID(n.kvDB)
+		glog.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 		if err != nil {
 			glog.Fatal(err)
 		}
 		// Gossip node address keyed by node ID.
-		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Attributes.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, n.Attributes.Address, ttlNodeIDGossip); err != nil {
-			glog.Errorf("couldn't gossip address for node %d: %v", n.Attributes.NodeID, err)
+		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
+		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
+			glog.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Attributes.NodeID, inc, n.kvDB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.kvDB)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	sIdent := storage.StoreIdent{
 		ClusterID: n.ClusterID,
-		NodeID:    n.Attributes.NodeID,
+		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
@@ -344,15 +342,15 @@ func (n *Node) connectGossip() {
 		n.ClusterID = gossipClusterID
 	} else if n.ClusterID != gossipClusterID {
 		glog.Fatalf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
-			n.Attributes.NodeID, n.ClusterID, gossipClusterID)
+			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
 	glog.Infof("node connected via gossip and verified as part of cluster %q", gossipClusterID)
 
 	// Gossip node address keyed by node ID.
-	if n.Attributes.NodeID != 0 {
-		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Attributes.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, n.Attributes.Address, ttlNodeIDGossip); err != nil {
-			glog.Errorf("couldn't gossip address for node %d: %v", n.Attributes.NodeID, err)
+	if n.Descriptor.NodeID != 0 {
+		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
+		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
+			glog.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
 }
@@ -379,25 +377,19 @@ func (n *Node) gossipCapacities() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 
-	// Register gossip groups.
-	n.maxAvailPrefix = gossip.KeyMaxAvailCapacityPrefix + n.Attributes.Datacenter
-	n.gossip.RegisterGroup(n.maxAvailPrefix, gossipGroupLimit, gossip.MaxGroup)
-
 	for _, store := range n.storeMap {
-		capacity, err := store.Capacity()
+		storeDesc, err := store.Descriptor(&n.Descriptor)
 		if err != nil {
-			glog.Warningf("problem getting capacity: %v", err)
+			glog.Warningf("problem getting store descriptor for store %+v: %v", store.Ident, err)
 			continue
 		}
-
-		keyMaxCapacity := n.maxAvailPrefix + strconv.FormatInt(int64(n.Attributes.NodeID), 16) + "-" +
-			strconv.FormatInt(int64(store.Ident.StoreID), 16)
-		storeAttr := storage.StoreAttributes{
-			StoreID:    store.Ident.StoreID,
-			Attributes: n.Attributes,
-			Capacity:   capacity,
-		}
-		n.gossip.AddInfo(keyMaxCapacity, storeAttr, ttlCapacityGossip)
+		gossipPrefix := gossip.KeyMaxAvailCapacityPrefix + storeDesc.CombinedAttrs().SortedString()
+		keyMaxCapacity := gossipPrefix + strconv.FormatInt(int64(storeDesc.Node.NodeID), 10) + "-" +
+			strconv.FormatInt(int64(storeDesc.StoreID), 10)
+		// Register gossip group.
+		n.gossip.RegisterGroup(gossipPrefix, gossipGroupLimit, gossip.MaxGroup)
+		// Gossip store descriptor.
+		n.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
 	}
 }
 

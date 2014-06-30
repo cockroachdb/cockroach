@@ -195,17 +195,19 @@ spaces.
 The zone config format has the following YAML schema:
 
   replicas:
-    <datacenter>:
-    - {SSD|HDD|MEM}
-    - ...
-    <datacenter>:
-    - {SSD|HDD|MEM}
-    - ...
-    <...>:
-    - {SSD|HDD|MEM}
+    - [comma-separated attribute list]
     - ...
   range_min_bytes: <size-in-bytes>
   range_max_bytes: <size-in-bytes>
+
+For example:
+
+  replicas:
+    - [us-east-1a, ssd]
+    - [us-east-1b, ssd]
+    - [us-west-1b, ssd]
+  range_min_bytes: 8388608
+  range_min_bytes: 67108864
 
 Setting zone configs will guarantee that key ranges will be split
 such that no key range straddles two zone config specifications.

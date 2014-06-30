@@ -27,22 +27,20 @@ import (
 )
 
 var (
-	testRangeLocations = RangeLocations{
+	testRangeDescriptor = RangeDescriptor{
 		StartKey: KeyMin,
 		Replicas: []Replica{
 			{
-				NodeID:     1,
-				StoreID:    1,
-				RangeID:    1,
-				Datacenter: "dc1",
-				DiskType:   MEM,
+				NodeID:  1,
+				StoreID: 1,
+				RangeID: 1,
+				Attrs:   Attributes([]string{"dc1", "mem"}),
 			},
 			{
-				NodeID:     2,
-				StoreID:    1,
-				RangeID:    1,
-				Datacenter: "dc2",
-				DiskType:   MEM,
+				NodeID:  2,
+				StoreID: 1,
+				RangeID: 1,
+				Attrs:   Attributes([]string{"dc2", "mem"}),
 			},
 		},
 	}
@@ -53,9 +51,9 @@ var (
 		},
 	}
 	testDefaultZoneConfig = ZoneConfig{
-		Replicas: map[string][]string{
-			"dc1": []string{"MEM"},
-			"dc2": []string{"MEM"},
+		Replicas: []Attributes{
+			Attributes([]string{"dc1", "mem"}),
+			Attributes([]string{"dc2", "mem"}),
 		},
 	}
 )
@@ -63,7 +61,7 @@ var (
 // createTestEngine creates an in-memory engine and initializes some
 // default configuration settings.
 func createTestEngine(t *testing.T) Engine {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes([]string{"dc1", "mem"}), 1<<20)
 	if err := putI(engine, KeyConfigAccountingPrefix, testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +81,7 @@ func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 		RangeID:  0,
 		StartKey: KeyMin,
 		EndKey:   KeyMax,
-		Replicas: testRangeLocations,
+		Replicas: testRangeDescriptor,
 	}
 	g := gossip.New()
 	r := NewRange(rm, engine, nil, g)
@@ -99,8 +97,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(info.(RangeLocations), testRangeLocations) {
-		t.Errorf("expected gossipped range locations to be equal: %s vs %s", info.(RangeLocations), testRangeLocations)
+	if !reflect.DeepEqual(info.(RangeDescriptor), testRangeDescriptor) {
+		t.Errorf("expected gossipped range locations to be equal: %s vs %s", info.(RangeDescriptor), testRangeDescriptor)
 	}
 }
 

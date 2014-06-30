@@ -28,7 +28,7 @@ import (
 )
 
 func TestInMemEnginePutGetDelete(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 	testCases := []struct {
 		key, value []byte
 	}{
@@ -70,7 +70,7 @@ func TestInMemEnginePutGetDelete(t *testing.T) {
 }
 
 func TestInMemCapacity(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 	c, err := engine.capacity()
 	if err != nil {
 		t.Errorf("unexpected error fetching capacity: %v", err)
@@ -113,7 +113,7 @@ func TestInMemCapacity(t *testing.T) {
 }
 
 func TestInMemOverCapacity(t *testing.T) {
-	engine := NewInMem(120 /* 120 bytes only -- enough for one node, not two */)
+	engine := NewInMem(Attributes{}, 120 /* 120 bytes only -- enough for one node, not two */)
 	bytes := []byte("0123456789")
 	var err error
 	if err = engine.put(Key("1"), Value{Bytes: bytes}); err != nil {
@@ -125,7 +125,7 @@ func TestInMemOverCapacity(t *testing.T) {
 }
 
 func TestInMemIncrement(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 	// Start with increment of an empty key.
 	val, err := increment(engine, Key("a"), 1, 0)
 	if err != nil {
@@ -185,7 +185,7 @@ func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *test
 }
 
 func TestInMemScan(t *testing.T) {
-	engine := NewInMem(1 << 20)
+	engine := NewInMem(Attributes{}, 1<<20)
 	keys := []Key{
 		Key("a"),
 		Key("aa"),
@@ -220,7 +220,7 @@ func TestInMemScan(t *testing.T) {
 }
 
 func BenchmarkCapacity(b *testing.B) {
-	engine := NewInMem(1 << 30)
+	engine := NewInMem(Attributes{}, 1<<30)
 	bytes := []byte("0123456789")
 	for i := 0; i < b.N; i++ {
 		if err := engine.put(Key(fmt.Sprintf("%d", i)), Value{Bytes: bytes}); err != nil {

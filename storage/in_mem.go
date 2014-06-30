@@ -47,26 +47,30 @@ func (kv KeyValue) Compare(b llrb.Comparable) int {
 // InMem a simple, in-memory key-value store.
 type InMem struct {
 	sync.RWMutex
+	attrs     Attributes
 	maxBytes  int64
 	usedBytes int64
 	data      llrb.Tree
 }
 
 // NewInMem allocates and returns a new InMem object.
-func NewInMem(maxBytes int64) *InMem {
+func NewInMem(attrs Attributes, maxBytes int64) *InMem {
 	return &InMem{
+		attrs:    attrs,
 		maxBytes: maxBytes,
 	}
 }
 
 // String formatter.
 func (in *InMem) String() string {
-	return fmt.Sprintf("mem=%d", in.maxBytes)
+	return fmt.Sprintf("%s=%d", in.attrs, in.maxBytes)
 }
 
-// Type returns MEM.
-func (in *InMem) Type() DiskType {
-	return MEM
+// Attrs returns the list of attributes describing this engine.  This
+// includes the disk type (always "mem") and potentially other labels
+// to identify important attributes of the engine.
+func (in *InMem) Attrs() Attributes {
+	return in.attrs
 }
 
 // put sets the given key to the value provided.
@@ -135,6 +139,5 @@ func (in *InMem) capacity() (StoreCapacity, error) {
 	return StoreCapacity{
 		Capacity:  in.maxBytes,
 		Available: in.maxBytes - in.usedBytes,
-		DiskType:  MEM,
 	}, nil
 }

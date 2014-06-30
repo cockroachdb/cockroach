@@ -168,7 +168,7 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 		RangeID:   rangeID,
 		StartKey:  startKey,
 		EndKey:    endKey,
-		Replicas: RangeLocations{
+		Replicas: RangeDescriptor{
 			StartKey: startKey,
 			Replicas: replicas,
 		},
@@ -183,7 +183,28 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 	return rng, nil
 }
 
+// Attrs returns the attributes of the underlying store.
+func (s *Store) Attrs() Attributes {
+	return s.engine.Attrs()
+}
+
 // Capacity returns the capacity of the underlying storage engine.
 func (s *Store) Capacity() (StoreCapacity, error) {
 	return s.engine.capacity()
+}
+
+// Descriptor returns a StoreDescriptor including current store
+// capacity information.
+func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
+	capacity, err := s.Capacity()
+	if err != nil {
+		return nil, err
+	}
+	// Initialize the store descriptor.
+	return &StoreDescriptor{
+		StoreID:  s.Ident.StoreID,
+		Attrs:    s.Attrs(),
+		Node:     *nodeDesc,
+		Capacity: capacity,
+	}, nil
 }

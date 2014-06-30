@@ -54,7 +54,7 @@ func createTestNode(addr net.Addr, engines []storage.Engine, gossipBS net.Addr, 
 	}
 	db := kv.NewDB(g)
 	node := NewNode(db, g)
-	if err := node.start(rpcServer, engines); err != nil {
+	if err := node.start(rpcServer, engines, nil); err != nil {
 		t.Fatal(err)
 	}
 	return rpcServer, node
@@ -71,7 +71,7 @@ func formatKeys(keys []storage.Key) string {
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
-	engine := storage.NewInMem(1 << 20)
+	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", engine)
 	if err != nil {
 		t.Fatal(err)
@@ -112,15 +112,15 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added.
 func TestBootstrapNewStore(t *testing.T) {
-	engine := storage.NewInMem(1 << 20)
+	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
 	if _, err := BootstrapCluster("cluster-1", engine); err != nil {
 		t.Fatal(err)
 	}
 	// Provide a list of engines for initializing a node.
 	engines := []storage.Engine{
 		engine,
-		storage.NewInMem(1 << 20),
-		storage.NewInMem(1 << 20),
+		storage.NewInMem(storage.Attributes{}, 1<<20),
+		storage.NewInMem(storage.Attributes{}, 1<<20),
 	}
 	server, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer server.Close()
@@ -137,7 +137,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
-	engine := storage.NewInMem(1 << 20)
+	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
 	if _, err := BootstrapCluster("cluster-1", engine); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server1.Close()
 
 	// Create a new node.
-	engines2 := []storage.Engine{storage.NewInMem(1 << 20)}
+	engines2 := []storage.Engine{storage.NewInMem(storage.Attributes{}, 1<<20)}
 	server2, node2 := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer server2.Close()
 
@@ -160,8 +160,8 @@ func TestNodeJoin(t *testing.T) {
 	}
 
 	// Verify node1 sees node2 via gossip and vice versa.
-	node1Key := gossip.MakeNodeIDGossipKey(node1.Attributes.NodeID)
-	node2Key := gossip.MakeNodeIDGossipKey(node2.Attributes.NodeID)
+	node1Key := gossip.MakeNodeIDGossipKey(node1.Descriptor.NodeID)
+	node2Key := gossip.MakeNodeIDGossipKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
 		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
 			return false

@@ -48,7 +48,7 @@ func startServer() *server {
 		if err != nil {
 			glog.Fatal(err)
 		}
-		engines := []storage.Engine{storage.NewInMem(1 << 20)}
+		engines := []storage.Engine{storage.NewInMem(storage.Attributes{}, 1<<20)}
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			glog.Fatal(err)
 		}
@@ -69,33 +69,41 @@ func startServer() *server {
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
 	testCases := []struct {
-		key          string           // data directory
-		expectedType storage.DiskType // type for created engine
-		wantError    bool             // do we expect an error from this key?
+		key       string             // data directory
+		expAttrs  storage.Attributes // attributes for engine
+		wantError bool               // do we expect an error from this key?
+		isMem     bool               // is the engine in-memory?
 	}{
-		{"mem=1000", storage.MEM, false},
-		{"ssd=/tmp/.foobar", storage.SSD, false},
-		{"hdd=/tmp/.foobar2", storage.HDD, false},
-		{"", storage.HDD, true},
-		{"  ", storage.HDD, true},
-		{"arbitrarystring", storage.HDD, true},
-		{"mem=notaninteger", storage.HDD, true},
-		{"mem=", storage.HDD, true},
-		{"ssd=", storage.HDD, true},
-		{"hdd=", storage.HDD, true},
-		{"abc=/dev/null", storage.HDD, true},
+		{"mem=1000", storage.Attributes([]string{"mem"}), false, true},
+		{"ssd=1000", storage.Attributes([]string{"ssd"}), false, true},
+		{"ssd=/tmp/.foobar", storage.Attributes([]string{"ssd"}), false, false},
+		{"hdd=/tmp/.foobar2", storage.Attributes([]string{"hdd"}), false, false},
+		{"mem=/tmp/.foobar3", storage.Attributes([]string{"mem"}), false, false},
+		{"abc=/tmp/.foobar4", storage.Attributes([]string{"abc"}), false, false},
+		{"hdd,7200rpm=/tmp/.foobar5", storage.Attributes([]string{"hdd", "7200rpm"}), false, false},
+		{"hdd=/dev/null", storage.Attributes{}, true, false},
+		{"", storage.Attributes{}, true, false},
+		{"  ", storage.Attributes{}, true, false},
+		{"arbitrarystring", storage.Attributes{}, true, false},
+		{"mem=", storage.Attributes{}, true, false},
+		{"ssd=", storage.Attributes{}, true, false},
+		{"hdd=", storage.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
 		engine, err := initEngine(spec.key)
 		if err == nil {
 			if spec.wantError {
-				t.Fatalf("invalid engine spec '%v' erroneously accepted", spec.key)
+				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
 			}
-			if engine.Type() != spec.expectedType {
-				t.Errorf("wrong engine type created, expected %v but got %v", spec.expectedType, engine.Type())
+			if engine.Attrs().SortedString() != spec.expAttrs.SortedString() {
+				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, engine.Attrs(), spec)
+			}
+			_, ok := engine.(*storage.InMem)
+			if spec.isMem != ok {
+				t.Errorf("expected in memory? %b, got %b: %+v", spec.isMem, ok, spec)
 			}
 		} else if !spec.wantError {
-			t.Error(err)
+			t.Errorf("expected no error, got %v: %+v", err, spec)
 		}
 	}
 }

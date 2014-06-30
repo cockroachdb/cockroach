@@ -32,7 +32,7 @@ import (
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
 func startAdminServer() *httptest.Server {
-	db, err := BootstrapCluster("cluster-1", storage.NewInMem(1<<20))
+	db, err := BootstrapCluster("cluster-1", storage.NewInMem(storage.Attributes{}, 1<<20))
 	if err != nil {
 		glog.Fatal(err)
 	}

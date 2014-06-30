@@ -47,10 +47,10 @@ var (
 	// KeyMetaPrefix is the prefix for range metadata keys.
 	KeyMetaPrefix = Key("\x00\x00meta")
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
-	// RangeLocations struct.
+	// RangeDescriptor struct.
 	KeyMeta1Prefix = MakeKey(KeyMetaPrefix, Key("1"))
 	// KeyMeta2Prefix is the second level of key addressing. The value is a
-	// RangeLocations struct.
+	// RangeDescriptor struct.
 	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, Key("2"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
 	KeyNodeIDGenerator = Key("\x00node-id-generator")

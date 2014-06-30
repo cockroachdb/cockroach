@@ -28,17 +28,20 @@ import (
 
 // A CmdInit command initializes a new Cockroach cluster.
 var CmdInit = &commander.Command{
-	UsageLine: "init <bootstrap-data-dir>",
+	UsageLine: "init <bootstrap store>",
 	Short:     "init new Cockroach cluster",
 	Long: `
 Initialize a new Cockroach cluster on this node. The cluster is
 started with only a single replica, whose data is stored in the
-directory specified by the first argument <bootstrap-data-dir>. The
-format of the bootstrap data directory is given by the specification
-below. Note that only SSD and HDD devices may be specified; in-memory
-devices cannot be used to initialize a cluster.
+directory specified by the first argument <bootstrap store>. The
+format of the bootstrap store is given by the specification
+below. Note that attributes should not specify in-memory ("mem").
 
-  ssd=<data-dir> | hdd=<data-dir>
+  <comma-separated store attributes>=<data dir path>
+
+For example:
+
+  cockroach init hdd,7200rpm=/mnt/hda1
 
 To start the cluster after initialization, run "cockroach start".
 `,
@@ -52,16 +55,16 @@ func runInit(cmd *commander.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	// Specifying the disk type as HDD may be incorrect, but doesn't
-	// matter for this bootstrap step.
+	// Initialize the engine based on the first argument and
+	// then verify it's not in-memory.
 	engine, err := initEngine(args[0])
 	if err != nil {
 		glog.Fatal(err)
 	}
-	if engine.Type() == storage.MEM {
-		glog.Fatal("Cannot initialize a cockroach cluster using an in-memory storage device")
+	if _, ok := engine.(*storage.InMem); ok {
+		glog.Fatal("Cannot initialize a cluster using an in-memory store")
 	}
-	// Generate a new cluster UUID.
+	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
 	if _, err := BootstrapCluster(clusterID, engine); err != nil {
 		glog.Fatal(err)

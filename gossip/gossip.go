@@ -69,9 +69,13 @@ import (
 )
 
 var (
+	// GossipBootstrap is a comma-separated list of node addresses which
+	// active as bootstrap hosts for connecting to the gossip network.
 	GossipBootstrap = flag.String(
 		"gossip", "",
 		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")
+	// GossipInterval is a time interval specifying how often gossip is
+	// communicated between hosts on the gossip network.
 	GossipInterval = flag.Duration(
 		"gossip_interval", 2*time.Second,
 		"approximate interval (time.Duration) for gossiping new information to peers")

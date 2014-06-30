@@ -270,6 +270,6 @@ type InternalRangeLookupRequest struct {
 // info for the range possibly containing the actual key and its value.
 type InternalRangeLookupResponse struct {
 	ResponseHeader
-	EndKey    Key // The key in datastore whose value is the Locations object.
-	Locations RangeLocations
+	EndKey Key // The key in datastore whose value is the Range object.
+	Range  RangeDescriptor
 }

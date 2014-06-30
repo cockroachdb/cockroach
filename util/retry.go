@@ -33,14 +33,6 @@ type RetryOptions struct {
 	MaxAttempts int           // Maximum number of attempts (0 for infinite)
 }
 
-var DefaultRetryOptions = RetryOptions{
-	Tag:         "retry loop method invocation",
-	Backoff:     time.Millisecond * 10,
-	MaxBackoff:  time.Minute,
-	Constant:    2,
-	MaxAttempts: 10,
-}
-
 // RetryWithBackoff implements retry with exponential backoff using
 // the supplied options as parameters. When fn returns false and the
 // number of retry attempts haven't been exhausted, fn is

@@ -29,8 +29,8 @@ import (
 // Engine is the interface that wraps the core operations of a
 // key/value store.
 type Engine interface {
-	// The engine disk type.
-	Type() DiskType
+	// The engine/store attributes.
+	Attrs() Attributes
 	// put sets the given key to the value provided.
 	put(key Key, value Value) error
 	// get returns the value for the given key, nil otherwise.

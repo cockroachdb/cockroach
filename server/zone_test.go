@@ -30,8 +30,7 @@ import (
 const (
 	testConfig = `
 replicas:
-  dc1:
-  - SSD
+  - [dc1, ssd]
 range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
@@ -77,33 +76,25 @@ func ExampleSetAndGetZone() {
 	// Output:
 	// set zone config for key prefix ""
 	// zone config for key prefix "":
-	// replicas:
-	//   dc1:
-	//   - SSD
+	// replicas: [[dc1, ssd]]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
-	//
+
 	// set zone config for key prefix "db1"
 	// zone config for key prefix "db1":
-	// replicas:
-	//   dc1:
-	//   - SSD
+	// replicas: [[dc1, ssd]]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
-	//
+
 	// set zone config for key prefix "db+2"
 	// zone config for key prefix "db+2":
-	// replicas:
-	//   dc1:
-	//   - SSD
+	// replicas: [[dc1, ssd]]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
-	//
+
 	// set zone config for key prefix "%FE"
 	// zone config for key prefix "%FE":
-	// replicas:
-	//   dc1:
-	//   - SSD
+	// replicas: [[dc1, ssd]]
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 }

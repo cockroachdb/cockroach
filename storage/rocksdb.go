@@ -51,13 +51,13 @@ type RocksDB struct {
 	rOpts *C.rocksdb_readoptions_t  // The default read options
 	wOpts *C.rocksdb_writeoptions_t // The default write options
 
-	typ DiskType // HDD or SSD
-	dir string   // The data directory
+	attrs Attributes
+	dir   string // The data directory
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(typ DiskType, dir string) (*RocksDB, error) {
-	r := &RocksDB{typ: typ, dir: dir}
+func NewRocksDB(attrs Attributes, dir string) (*RocksDB, error) {
+	r := &RocksDB{attrs: attrs, dir: dir}
 	r.createOptions()
 
 	cDir := C.CString(dir)
@@ -118,13 +118,15 @@ func (r *RocksDB) destroyOptions() {
 
 // String formatter.
 func (r *RocksDB) String() string {
-	return fmt.Sprintf("%s=%s", r.typ, r.dir)
+	return fmt.Sprintf("%s=%s", r.attrs, r.dir)
 }
 
-// Type returns either HDD or SSD depending on how engine
-// was configured.
-func (r *RocksDB) Type() DiskType {
-	return r.typ
+// Attrs returns the list of attributes describing this engine.  This
+// may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
+// and potentially other labels to identify important attributes of
+// the engine.
+func (r *RocksDB) Attrs() Attributes {
+	return r.attrs
 }
 
 // charToErr converts a *C.char to an error, freeing the given
@@ -245,7 +247,7 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 		// by the iterator, so it is copied instead of freed.
 		data := C.rocksdb_iter_key(it, &l)
 		k := C.GoBytes(unsafe.Pointer(data), C.int(l))
-		if bytes.Equal(k, end) {
+		if bytes.Compare(k, end) >= 0 {
 			break
 		}
 		data = C.rocksdb_iter_value(it, &l)
@@ -276,7 +278,6 @@ func (r *RocksDB) capacity() (StoreCapacity, error) {
 	//glog.Infof("stat filesystem: %v", fs)
 	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
 	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
-	capacity.DiskType = r.typ
 	return capacity, nil
 }
 

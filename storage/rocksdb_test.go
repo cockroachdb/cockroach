@@ -11,7 +11,7 @@ import (
 
 func TestRocksDBEnginePutGetDelete(t *testing.T) {
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	engine, err := NewRocksDB(SSD, loc)
+	engine, err := NewRocksDB(Attributes([]string{"ssd"}), loc)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -84,7 +84,7 @@ func TestRocksDBEnginePutGetDelete(t *testing.T) {
 
 func TestRocksDBEngineScan(t *testing.T) {
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	engine, err := NewRocksDB(SSD, loc)
+	engine, err := NewRocksDB(Attributes([]string{"ssd"}), loc)
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -123,6 +123,13 @@ func TestRocksDBEngineScan(t *testing.T) {
 	}
 	ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
+	// Check an end of range which does not equal an existing key.
+	keyvals, err = engine.scan([]byte("chinese"), []byte("german1"), 0)
+	if err != nil {
+		t.Fatalf("could not run scan: %v", err)
+	}
+	ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
+
 	keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 2)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
@@ -132,9 +139,9 @@ func TestRocksDBEngineScan(t *testing.T) {
 	// Should return all key/value pairs in lexicographic order.
 	// Note that []byte("") is the lowest key possible and is
 	// a special case in engine.scan, that's why we test it here.
-	startKeys := [][]byte{[]byte("cat"), []byte("")}
+	startKeys := []Key{Key("cat"), Key("")}
 	for _, startKey := range startKeys {
-		keyvals, err := engine.scan([]byte(startKey), nil, 0)
+		keyvals, err := engine.scan(startKey, KeyMax, 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
@@ -144,7 +151,7 @@ func TestRocksDBEngineScan(t *testing.T) {
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []KeyValue) {
 	if len(keyvals) != len(sortedKeys) {
-		t.Errorf("length mismatch. expected %d, got %d", len(sortedKeys), len(keyvals))
+		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
 	t.Log("---")
 	for i, kv := range keyvals {
