@@ -124,21 +124,25 @@ func runStart(cmd *commander.Command, args []string) {
 	glog.Info("Starting cockroach cluster")
 	s, err := newServer()
 	if err != nil {
-		glog.Fatal(err)
+		glog.Errorf("Failed to start Cockroach server: %v", err)
+		return
 	}
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
-		glog.Fatal(err)
+		glog.Errorf("Failed to initialize engines from -stores=%q: %v", *stores, err)
+		return
 	}
 	if len(engines) == 0 {
-		glog.Fatal(util.Error("No valid entry found in -stores"))
+		glog.Errorf("No valid engines specified after initializing from -stores=%q", *stores)
+		return
 	}
 
 	err = s.start(engines, false)
 	defer s.stop()
 	if err != nil {
-		glog.Fatal(err)
+		glog.Errorf("Cockroach server exited with error: %v", err)
+		return
 	}
 
 	c := make(chan os.Signal, 1)
@@ -222,7 +226,7 @@ func newServer() (*server, error) {
 	}
 	addr, err := net.ResolveTCPAddr("tcp", *rpcAddr)
 	if err != nil {
-		return nil, err
+		return nil, util.Errorf("unable to resolve RPC address %q: %v", *rpcAddr, err)
 	}
 
 	s := &server{

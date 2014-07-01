@@ -138,7 +138,7 @@ func (s *Store) Bootstrap(ident StoreIdent) error {
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %v", err)
 	} else if len(kvs) > 0 {
-		return util.Errorf("engine not empty on bootstrap; first key-value %q: %q", kvs[0].Key, kvs[0].Value)
+		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
 	return putI(s.engine, keyStoreIdent, s.Ident)
 }

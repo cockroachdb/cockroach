@@ -19,6 +19,8 @@ package server
 
 import (
 	"flag"
+	"fmt"
+	"os"
 
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
@@ -59,16 +61,19 @@ func runInit(cmd *commander.Command, args []string) {
 	// then verify it's not in-memory.
 	engine, err := initEngine(args[0])
 	if err != nil {
-		glog.Fatal(err)
+		glog.Errorf("Failed to initialize engine %q: %v", args[0], err)
+		return
 	}
 	if _, ok := engine.(*storage.InMem); ok {
-		glog.Fatal("Cannot initialize a cluster using an in-memory store")
+		glog.Errorf("Cannot initialize a cluster using an in-memory store")
+		return
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
 	if _, err := BootstrapCluster(clusterID, engine); err != nil {
-		glog.Fatal(err)
+		glog.Errorf("Failed to bootstrap cluster: %v", err)
+		return
 	}
-	glog.Infof("Cockroach cluster %s has been initialized", clusterID)
-	glog.Infof(`To start the cluster, run "cockroach start"`)
+	fmt.Fprintf(os.Stdout, "Cockroach cluster %s has been initialized\n", clusterID)
+	fmt.Fprintf(os.Stdout, "To start the cluster, run \"cockroach start\"\n")
 }

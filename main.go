@@ -18,12 +18,38 @@ package main
 import (
 	"flag"
 	"os"
+	"runtime"
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/golang/glog"
 )
 
+func init() {
+	// If log directory has not been set, set -alsologtostderr to true.
+	var hasLogDir, hasAlsoLogStderr bool
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-log_dir", "--log_dir":
+			hasLogDir = true
+		case "-alsologtostderr", "--alsologtostderr":
+			hasAlsoLogStderr = true
+		}
+	}
+	if !hasLogDir && !hasAlsoLogStderr {
+		os.Args = append(os.Args, "-alsologtostderr")
+	}
+}
+
 func main() {
+	// Instruct Go to use all CPU cores.
+	// TODO(spencer): this may be excessive and result in worse
+	// performance. We should keep an eye on this as we move to
+	// production workloads.
+	numCPU := runtime.NumCPU()
+	runtime.GOMAXPROCS(numCPU)
+	glog.Infof("running using %d processor cores", numCPU)
+
 	c := commander.Commander{
 		Name: "cockroach",
 		Commands: []*commander.Command{
@@ -51,6 +77,7 @@ to precede any additional arguments,
 	}
 
 	if err := c.Run(os.Args[1:]); err != nil {
+		glog.Errorf("Failed running command \"%s\": %v\n", os.Args[1:], err)
 		os.Exit(1)
 	}
 }
