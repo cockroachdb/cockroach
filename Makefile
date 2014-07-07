@@ -14,8 +14,11 @@ all: build test
 rocksdb:
 	cd $(ROCKSDB); make static_lib
 
-build: rocksdb
+build: goget rocksdb
 	$(CGO_FLAGS) $(GO) build
+
+goget:
+	$(CGO_FLAGS) $(GO) get ./...
 
 test:
 	$(CGO_FLAGS) $(GO) test ./...

@@ -49,6 +49,12 @@ func TestRESTEndpoints(t *testing.T) {
 		{"GET", "Hello, 世界", "", "is cool", 200},
 		{"DELETE", "Hello, 世界", "", "", 200},
 		{"GET", "Hello, 世界", "", "key not found\n", 404},
+		{"GET", "", "", "empty key not allowed\n", 401},
+		{"POST", "", "", "empty key not allowed\n", 401},
+		{"POST", "emptea", "", "", 200},
+		{"GET", "emptea", "", "", 200},
+		{"DELETE", "emptea", "", "", 200},
+		{"GET", "emptea", "", "key not found\n", 404},
 	}
 
 	for i, c := range testCases {

@@ -149,6 +149,13 @@ func (r *RocksDB) put(key Key, value Value) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
+
+	// Empty values correspond to a null pointer.
+	valuePointer := (*C.char)(nil)
+	if len(value.Bytes) > 0 {
+		valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
+	}
+
 	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
@@ -158,7 +165,7 @@ func (r *RocksDB) put(key Key, value Value) error {
 		r.wOpts,
 		(*C.char)(unsafe.Pointer(&key[0])),
 		C.size_t(len(key)),
-		(*C.char)(unsafe.Pointer(&value.Bytes[0])),
+		valuePointer,
 		C.size_t(len(value.Bytes)),
 		&cErr)
 

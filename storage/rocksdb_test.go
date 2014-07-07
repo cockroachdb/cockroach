@@ -49,6 +49,8 @@ func TestRocksDBEnginePutGetDelete(t *testing.T) {
 	}{
 		{[]byte("dog"), []byte("woof")},
 		{[]byte("cat"), []byte("meow")},
+		{[]byte("emptyval"), nil},
+		{[]byte("emptyval2"), []byte("")},
 		{[]byte("server"), []byte("42")},
 	}
 	for _, c := range testCases {

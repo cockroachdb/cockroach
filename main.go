@@ -37,7 +37,7 @@ func init() {
 		}
 	}
 	if !hasLogDir && !hasAlsoLogStderr {
-		os.Args = append(os.Args, "-alsologtostderr")
+		flag.CommandLine.Set("alsologtostderr", "true")
 	}
 }
 

@@ -62,7 +62,11 @@ func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
 func dbKey(path string) (storage.Key, error) {
 	result, err := url.QueryUnescape(strings.TrimPrefix(path, KVKeyPrefix))
 	if err == nil {
-		return storage.Key(result), nil
+		k := storage.Key(result)
+		if len(k) == 0 {
+			return nil, fmt.Errorf("empty key not allowed")
+		}
+		return k, nil
 	}
 	return nil, err
 }
@@ -97,7 +101,9 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
 	if gr.Error != nil {
 		http.Error(w, gr.Error.Error(), http.StatusInternalServerError)
 		return
-	} else if len(gr.Value.Bytes) == 0 {
+	}
+	// An empty key will not be nil, but have zero length.
+	if gr.Value.Bytes == nil {
 		http.Error(w, "key not found", http.StatusNotFound)
 		return
 	}

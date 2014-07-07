@@ -35,6 +35,8 @@ func TestInMemEnginePutGetDelete(t *testing.T) {
 		{[]byte("dog"), []byte("woof")},
 		{[]byte("cat"), []byte("meow")},
 		{[]byte("server"), []byte("42")},
+		{[]byte("empty1"), nil},
+		{[]byte("empty2"), []byte("")},
 	}
 	for _, c := range testCases {
 		val, err := engine.get(c.key)
