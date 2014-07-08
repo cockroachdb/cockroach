@@ -1,0 +1,206 @@
+Cockroach TODO
+
+* HLC Timestamp. Suggested HLC struct:
+
+    type HLTimestamp struct {
+      WallTime int64  // nanos since epoch
+      Logical  int32
+    }
+
+  - Disallow regression
+
+
+* Transactions
+
+  - Transaction ID: generated via allocation of block of transaction
+    IDs. Suggested transaction struct:
+
+    type IsolationType int
+
+    const (
+      SERIALIZABLE IsolationType = iota
+      SNAPSHOT     IsolationType
+    )
+
+    type Transaction struct {
+      ID           int64
+      Priority     int32
+      Isolation    IsolationType
+      Epoch        int32       // incremented on txn retry
+      Timestamp    HLTimestamp // 0 to use timestamp at destination
+      MaxTimestamp HLTimestamp // Timestamp + clock skew; set to Timestamp for historical read
+    }
+
+  - Generate random priority, pick candidate timestamp.
+
+  - Modified ops:
+
+    - Get: logic to support clock skew uncertainty and concurrency.
+
+      If Timestamp on transaction is 0, assign current node's wall
+      clock as Timestamp and MaxTimestamp. This timestamp is returned
+      via the ResponseHeader.
+
+      Simple, common case: if most recent timestamp for key is less
+      than Timestamp and committed, read value.
+
+      If most recent timestamp for key is greater than MaxTimestamp
+      (it can be either committed or an intent), and there are no
+      versions of key between Timestamp and MaxTimestamp, read value
+      for key at Timestamp.
+
+      If there are version(s) of the key (can include most recent
+      intent) with timestamp between Timestamp and MaxTimestamp,
+      return WriteWithinUncertaintyInterval error. The ResponseHeader
+      will contain the latest version's timestamp (actually, just the
+      latest version with timestamp <= MaxTimestamp); on transaction
+      retry, Timestamp will be min(key's timestamp + 1, MaxTimestamp),
+      and MaxTimestamp will be max(key's timestamp + 1, MaxTimestamp).
+
+      In the event an intent is encountered with timestamp <=
+      Timestamp, try to push the transaction to Timestamp + 1. If
+      already committed, resolve and retry the read. If push succeeds,
+      read value for key at Timestamp. If push fails, backoff and
+      retry the transaction.
+
+      After reading any value, update the read-timestamp-cache with
+      the txn's Timestamp.
+
+    - Put: additions to support intent marker.
+
+      If entry doesn't exist, or does exist and is not an intent and
+      has earlier timestamp than Timestamp, add new put value with
+      intent set to true.
+
+      If entry exists, is committed, but has later timestamp, write
+      put intent with existing timestamp + 1 (this new timestamp is
+      returned with response and becomes the new Timestamp for the txn).
+
+      If entry exists but is intent:
+
+        - If intent is owned by this txn, continue; update txn settings
+          for intent, including new Epoch, Priority and Timestamp.
+
+        - Otherwise, if intent owned by another txn, try to push
+          transaction (with "Abort"=true). If result of push is
+          already-committed or aborted, resolve the existing intent
+          and retry put. If push succeeds (meaning the other txn is
+          aborted), delete existing intent and write new intent. If
+          push fails, backoff and retry the transaction.
+
+      If read-timestamp-cache has an entry for the key with a later
+      timestamp, write put intent with read timestamp + 1 (the read
+      timestamp becomes the new Timestamp for the txn).
+
+      TODO(spencer): split this logic up into what happens before raft
+      log write and what happens when raft command is executed.
+
+    - Resolve: clear a key's intent status.
+
+      Either marks a put intent as committed or aborted. On abort the
+      put intent is deleted. The resolve method takes the Txn record
+      which includes the Epoch of the txn. If the Epoch doesn't match,
+      a committed txn will still delete the put intent.
+
+    New operations on transaction table rows:
+
+    - PushTransaction: Moves transaction timestamp forwards.
+
+      If the txn is committed, return already-committed error. If txn
+      has been aborted, noop and return success.
+
+      Compare PushTxn and Txn priorities:
+
+        - If Txn.Priority < PushTxn.Priority, return retry-txn
+          error. Transaction will be retried with priority =
+          max(random, PushTxn.Priority - 1).
+
+        - If Txn.Priority > PushTxn.Priority, set/add txn entry with
+          new timestamp as max(existing timestamp, push timestamp + 1).
+
+      type PushTransactionRequest struct {
+        RequestHeader
+        Key     Key         // derivative of txn table prefix & txn ID
+        Abort   bool        // abort txn on successful push--this is done for puts
+        PushTxn Transaction // from encounted txn intent
+        Txn     Transaction // txn which encountered intent
+      }
+
+      type PushTransactionResponse struct {
+        ResponseHeader
+      }
+
+    - AbortTransaction: called on transaction abort from client
+      connection.
+
+      If txn isn't yet recorded or alive but not committed, add
+      aborted entry. If txn is committed, returns already-committed
+      error.
+
+    - CommitTransaction: called on final commit from client connection.
+
+      If txn isn't yet recorded, or is alive but not committed:
+
+        - If isolation is snapshot: adds committed entry and returns
+          final timestamp, which is the max of any pushed timestamp
+          and the txn's Timestamp.
+
+        - If isolation is serializable: if there is a pushed timestamp
+          which is greater than the txn's Timestamp, txn must retry;
+          returns retry-txn error. If there is no entry or pushed
+          timestamp is <= txn's Timestamp, adds committed entry.
+
+      If txn aborted, returns already-aborted error. If already
+      committed, returns already-committed error.
+
+  - On transaction retry, coordinator checks the txn table to verify
+    txn has not been aborted before proceeding.
+
+  - On transaction conclusion, resolve all known intents.
+
+
+* StoreFinder using Gossip protocol to filter
+
+
+* Range split
+
+  - Split criteria: is range larger than max_range_bytes?
+
+  - Keep a sampled set of keys per range for finding split key.
+
+  - Transactionally rewrite range addressing indexes.
+
+
+* Rebalance range replica. Only fully-replicated ranges may be
+  rebalanced.
+
+  - Keep a rebalance queue in memory. Range replicas are added to the
+    queue from a store during initial range scan and also during
+    operation as a response to certain conditions. Listed here:
+
+    - A range is split. Each replica in the split range is marked as
+      needing rebalancing.
+
+    - Replica not matching zone config. When zone config changes happen,
+      all ranges are scanned by each store and any mismatched replicas
+      are added to the queue.
+
+  - Rebalance away from stores finding themselves in top N space
+    utilized, taking care to account for fewer than N stores in
+    cluster. Only stores finding themselves in the top N space
+    utilized set may have rebalances in effect.
+
+  - Rebalance target is selected from available stores in bottom N
+    space utilized. Adjacent stores are exempted.
+
+  - Add rebalance target to replica set and rewrite range addressing
+    indexes.
+
+  - Rebalance targets are added to replica set always exactly one at a
+    time. Targets are marked as REBALANCING. Obsolete sources are
+    marked as PENDING_DELETION. Any time a range becomes fully
+    replicated, the range leader replica will move REBALANCING
+    replicas into state OK and will remove PENDING_DELETION replicas
+    from the RangeDescriptor. The store which owns a removed replica
+    is responsible for clearing the relevant portion of the key space
+    as well as any other housekeeping details.
