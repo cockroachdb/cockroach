@@ -9,7 +9,7 @@ $provisioner = <<SCRIPT
   sudo apt-get install -qy python-software-properties
   sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   sudo apt-get update -qq
-  sudo apt-get install -y -qq gcc-4.8 g++-4.8 zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev curl
+  sudo apt-get install -y -qq gcc-4.8 g++-4.8 zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev curl make
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
   wget https://gflags.googlecode.com/files/libgflags0_2.0-1_amd64.deb
@@ -18,7 +18,7 @@ $provisioner = <<SCRIPT
   sudo dpkg -i libgflags-dev_2.0-1_amd64.deb
 
   # Go time.
-  sudo curl -s https://storage.googleapis.com/golang/go1.2.2.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
+  curl -s https://storage.googleapis.com/golang/go1.2.2.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
   echo "export PATH=/usr/local/go/bin:\\$PATH" >> .bashrc
   echo "export GOPATH=/vagrant_gopath" >> .bashrc
 SCRIPT
