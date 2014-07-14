@@ -96,14 +96,39 @@ efficiently sideline updates which can tolerate asynchronous execution
 and 2) provide an integrated message queuing system for asynchronous
 communication between distributed system components.
 
+#### SQL - NoSQL - NewSQL Capabilities
+
+![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
+
+## Architecture
+
+Cockroach implements a layered architecture, with various
+subdirectories handling layers as appropriate. The highest level of
+abstraction is the SQL layer (currently not implemented). It depends
+directly on the [structured data API][5] (structured/). The structured
+data API provides familiar relational concepts such as schemas,
+tables, columns, and indexes. The structured data API in turn depends
+on the [distributed key value store][6] (kv/). The distributed key
+value store handles the details of range addressing to provide the
+abstraction of a single, monolithic key value store. It communicates
+with any number of [cockroach nodes][7] (server/), storing the actual
+data. Each node contains one or more [stores][8] (storage/), one per
+physical device.
+
+![Cockroach Architecture](/resources/doc/architecture.png?raw=true)
+
+Each store contains potentially many ranges, the lowest-level unit of
+key-value data. Ranges are replicated using the [Raft][2] consensus
+protocol.
+
+![Range Architecture Blowup](/resources/doc/architecture-blowup.png?raw=true)
+
 [0]: http://rocksdb.org/
 [1]: https://code.google.com/p/leveldb/
 [2]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf
 [3]: http://research.google.com/archive/spanner.html
 [4]: http://research.google.com/pubs/pub36971.html
-
------------------
-
-#### SQL - NoSQL - NewSQL Capabilities
-
-![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
+[5]: http://godoc.org/github.com/cockroachdb/cockroach/structured
+[6]: http://godoc.org/github.com/cockroachdb/cockroach/kv
+[7]: http://godoc.org/github.com/cockroachdb/cockroach/server
+[8]: http://godoc.org/github.com/cockroachdb/cockroach/storage
