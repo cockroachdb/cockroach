@@ -103,7 +103,7 @@ communication between distributed system components.
 ## Architecture
 
 Cockroach implements a layered architecture, with various
-subdirectories handling layers as appropriate. The highest level of
+subdirectories implementing layers as appropriate. The highest level of
 abstraction is the SQL layer (currently not implemented). It depends
 directly on the [structured data API][5] ([structured/][6]). The structured
 data API provides familiar relational concepts such as schemas,
