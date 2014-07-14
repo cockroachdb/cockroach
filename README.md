@@ -119,7 +119,10 @@ physical device.
 
 Each store contains potentially many ranges, the lowest-level unit of
 key-value data. Ranges are replicated using the [Raft][2] consensus
-protocol.
+protocol. The diagram below is a blown up version of stores from four
+of the five nodes in the previous diagram. Each range is replicated
+three ways using raft. The color coding shows associated range
+replicas.
 
 ![Range Architecture Blowup](/resources/doc/architecture-blowup.png?raw=true)
 
