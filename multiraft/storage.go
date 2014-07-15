@@ -18,8 +18,6 @@
 package multiraft
 
 import (
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -43,26 +41,48 @@ type LogEntry struct {
 	Payload []byte
 }
 
-// GroupMetadata represents the persistent state of a group.
-type GroupMetadata struct {
-	Members     []NodeID
+// GroupElectionState records the votes this node has made so that it will not change its
+// vote after a restart.
+type GroupElectionState struct {
+	// CurrentTerm is the highest term this node has seen.
 	CurrentTerm int
-	VotedFor    NodeID
+
+	// VotedFor is the node this node has voted for in CurrentTerm's election.  It is zero
+	// If this node has not yet voted in CurrentTerm.
+	VotedFor NodeID
 }
 
-// Equal compares two GroupMetadatas.
-func (g *GroupMetadata) Equal(other *GroupMetadata) bool {
-	// TODO(bdarnell): write a real equality function once membership features have finalized.
-	return reflect.DeepEqual(g, other)
+// Equal compares two GroupElectionStates.
+func (g *GroupElectionState) Equal(other *GroupElectionState) bool {
+	return other != nil && g.CurrentTerm == other.CurrentTerm && g.VotedFor == other.VotedFor
+}
+
+// GroupMembers maintains the current and future members of the group.  It is updated when
+// log entries are received rather than when they are committed as a part of the "joint
+// consensus" protocol (section 6 of the Raft paper).
+type GroupMembers struct {
+	// Members contains the current members of the group and is always non-empty.
+	// When ProposedMembers is non-empty, the group is in a "joint consensus" phase and
+	// a quorum must be reached independently among both Members and ProposedMembers.
+	// 'Members' never changes except to be set to the ProposedMembers of the most recently
+	// committed GroupMembers.
+	Members         []NodeID
+	ProposedMembers []NodeID
+
+	// NonVotingMembers receive logs for the group but do not participate in elections
+	// or quorum decisions.  When a new node is added to the group it is initially
+	// a NonVotingMember until it has caught up to the current log position.
+	NonVotingMembers []NodeID
 }
 
 // GroupPersistentState is a unified view of the readable data (except for log entries)
 // about a group; used by Storage.LoadGroups.
 type GroupPersistentState struct {
-	GroupID      GroupID
-	Metadata     GroupMetadata
-	LastLogIndex int
-	LastLogTerm  int
+	GroupID       GroupID
+	ElectionState GroupElectionState
+	Members       GroupMembers
+	LastLogIndex  int
+	LastLogTerm   int
 }
 
 // LogEntryState is used by Storage.GetLogEntries to bundle a LogEntry with its index
@@ -80,8 +100,8 @@ type Storage interface {
 	// The returned channel should be closed once all groups have been loaded.
 	LoadGroups() <-chan *GroupPersistentState
 
-	// SetGroupMetadata is called to update the metadata for the given group.
-	SetGroupMetadata(groupID GroupID, metadata *GroupMetadata) error
+	// SetGroupElectionState is called to update the election state for the given group.
+	SetGroupElectionState(groupID GroupID, electionState *GroupElectionState) error
 
 	// AppendLogEntries is called to add entries to the log.  The entries will always span
 	// a contiguous range of indices just after the current end of the log.
@@ -101,8 +121,8 @@ type Storage interface {
 }
 
 type memoryGroup struct {
-	metadata GroupMetadata
-	entries  []*LogEntry
+	electionState GroupElectionState
+	entries       []*LogEntry
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
@@ -126,9 +146,10 @@ func (m *MemoryStorage) LoadGroups() <-chan *GroupPersistentState {
 	return ch
 }
 
-// SetGroupMetadata implements the Storage interface.
-func (m *MemoryStorage) SetGroupMetadata(groupID GroupID, metadata *GroupMetadata) error {
-	m.getGroup(groupID).metadata = *metadata
+// SetGroupElectionState implements the Storage interface.
+func (m *MemoryStorage) SetGroupElectionState(groupID GroupID,
+	electionState *GroupElectionState) error {
+	m.getGroup(groupID).electionState = *electionState
 	return nil
 }
 
@@ -180,8 +201,8 @@ func (m *MemoryStorage) getGroup(groupID GroupID) *memoryGroup {
 
 // groupWriteRequest represents a set of changes to make to a group.
 type groupWriteRequest struct {
-	metadata *GroupMetadata
-	entries  []*LogEntry
+	electionState *GroupElectionState
+	entries       []*LogEntry
 }
 
 // writeRequest is a collection of groupWriteRequests.
@@ -199,10 +220,10 @@ func newWriteRequest() *writeRequest {
 // state was not changed (which may be because there were no changes in the request
 // or due to an error)
 type groupWriteResponse struct {
-	metadata  *GroupMetadata
-	lastIndex int
-	lastTerm  int
-	entries   []*LogEntry
+	electionState *GroupElectionState
+	lastIndex     int
+	lastTerm      int
+	entries       []*LogEntry
 }
 
 // writeResponse is a collection of groupWriteResponses.
@@ -252,12 +273,12 @@ func (w *writeTask) start() {
 		for groupID, groupReq := range request.groups {
 			groupResp := &groupWriteResponse{nil, -1, -1, groupReq.entries}
 			response.groups[groupID] = groupResp
-			if groupReq.metadata != nil {
-				err := w.storage.SetGroupMetadata(groupID, groupReq.metadata)
+			if groupReq.electionState != nil {
+				err := w.storage.SetGroupElectionState(groupID, groupReq.electionState)
 				if err != nil {
 					continue
 				}
-				groupResp.metadata = groupReq.metadata
+				groupResp.electionState = groupReq.electionState
 			}
 			if len(groupReq.entries) > 0 {
 				err := w.storage.AppendLogEntries(groupID, groupReq.entries)

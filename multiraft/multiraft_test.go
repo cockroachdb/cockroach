@@ -20,6 +20,8 @@ package multiraft
 import (
 	"testing"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 type testCluster struct {
@@ -120,7 +122,8 @@ func TestCommand(t *testing.T) {
 	cluster.nodes[0].SubmitCommand(groupID, []byte("command"))
 
 	// The command will be committed on each node.
-	for _, events := range cluster.events {
+	for i, events := range cluster.events {
+		glog.Infof("waiting for event to be commited on node %v", i)
 		commit := <-events.CommandCommitted
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)
