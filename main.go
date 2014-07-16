@@ -48,7 +48,7 @@ func main() {
 	// production workloads.
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)
-	glog.Infof("running using %d processor cores", numCPU)
+	glog.V(1).Infof("running using %d processor cores", numCPU)
 
 	c := commander.Commander{
 		Name: "cockroach",
@@ -76,6 +76,9 @@ to precede any additional arguments,
 		},
 	}
 
+	if len(os.Args) == 1 {
+		os.Args = append(os.Args, "help")
+	}
 	if err := c.Run(os.Args[1:]); err != nil {
 		glog.Errorf("Failed running command \"%s\": %v\n", os.Args[1:], err)
 		os.Exit(1)
