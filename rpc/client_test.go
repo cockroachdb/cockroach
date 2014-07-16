@@ -26,8 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-func TestClientHeartbeat(t *testing.T) {
+func init() {
+	// Setting the heartbeat interval in individual tests
+	// triggers the race detector, so this is better for now.
 	heartbeatInterval = 10 * time.Millisecond
+}
+
+func TestClientHeartbeat(t *testing.T) {
 	addr := util.CreateTestAddr("tcp")
 	s := NewServer(addr)
 	s.Start()
@@ -43,7 +48,6 @@ func TestClientHeartbeat(t *testing.T) {
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
-	heartbeatInterval = 10 * time.Millisecond
 	addr := util.CreateTestAddr("tcp")
 	// Create a server which doesn't support heartbeats.
 	s := &Server{

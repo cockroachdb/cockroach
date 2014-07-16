@@ -23,6 +23,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func newTestInfo(key string, val interface{}) *info {
@@ -316,7 +318,7 @@ type testValue struct {
 	stringVal string
 }
 
-func (t *testValue) Less(o Ordered) bool {
+func (t *testValue) Less(o util.Ordered) bool {
 	return t.intVal < o.(*testValue).intVal
 }
 

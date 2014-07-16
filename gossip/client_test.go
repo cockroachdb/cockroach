@@ -26,18 +26,6 @@ import (
 	"github.com/golang/glog"
 )
 
-func waitFor(cond func() bool, desc string, t *testing.T) {
-	const maxTime = 500 * time.Millisecond
-	for elapsed := 0 * time.Nanosecond; elapsed < maxTime; {
-		if cond() {
-			return
-		}
-		time.Sleep(maxTime / 100)
-		elapsed += maxTime / 100
-	}
-	t.Errorf("exceeded %s waiting for %s", maxTime, desc)
-}
-
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
@@ -65,11 +53,13 @@ func TestClientGossip(t *testing.T) {
 	client := newClient(remote.is.NodeAddr)
 	go client.start(local, disconnected)
 
-	waitFor(func() bool {
+	if err := util.IsTrueWithin(func() bool {
 		_, lerr := remote.GetInfo("local-key")
 		_, rerr := local.GetInfo("remote-key")
 		return lerr == nil && rerr == nil
-	}, "gossip exchange", t)
+	}, 500*time.Millisecond); err != nil {
+		t.Errorf("gossip exchange failed or taking too long")
+	}
 
 	remote.stop()
 	local.stop()

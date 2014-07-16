@@ -1,15 +1,3 @@
-Cockroach TODO
-
-* HLC Timestamp. Suggested HLC struct:
-
-    type HLTimestamp struct {
-      WallTime int64  // nanos since epoch
-      Logical  int32
-    }
-
-  - Disallow regression
-
-
 * Transactions
 
   - Transaction ID: generated via allocation of block of transaction

@@ -37,7 +37,7 @@ least loaded nodes or the 100 disks with most unused capacity).
 
 Single-valued info values can have any type. Values to be used with
 groups must either be of type int64, float64, string or implement the
-gossip.Ordered interface.
+util.Ordered interface.
 
 A map of info objects and a map of Group objects are kept by a Gossip
 instance. Single-valued info objects can be added via

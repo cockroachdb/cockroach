@@ -232,6 +232,9 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 }
 
 func main() {
+	if f := flag.Lookup("alsologtostderr"); f != nil {
+		fmt.Println("Starting simulation. Add -alsologtostderr to see progress.")
+	}
 	flag.Parse()
 
 	dirName, err := ioutil.TempDir("", "gossip-simulation-")
@@ -295,5 +298,5 @@ func main() {
 
 	// Output instructions for viewing graphs.
 	fileList := strings.Join(fns, " ")
-	glog.Infof("To view simulation graph output run (you must install graphviz):\nfor f in %s ; do dot $f -Tpng -o $f.png ; done ; open `for f in %s ; do echo $f.png; done`", fileList, fileList)
+	fmt.Printf("To view simulation graph output run (you must install graphviz):\nfor f in %s ; do dot $f -Tpng -o $f.png ; done ; open `for f in %s ; do echo $f.png; done`", fileList, fileList)
 }

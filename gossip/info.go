@@ -21,29 +21,24 @@ import (
 	"net"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
-
-// Ordered is used to compare info values when managing info groups.
-// Info values which are not int64, float64 or string must implement
-// this interface to be used with groups.
-type Ordered interface {
-	// Returns true if the supplied Ordered value is less than this
-	// object.
-	Less(b Ordered) bool
-}
 
 // info is the basic unit of information traded over the gossip
 // network.
 type info struct {
-	Key       string      // Info key
-	Val       interface{} // Info value: must be one of {int64, float64, string}
-	Timestamp int64       // Wall time at origination (Unix-nanos)
-	TTLStamp  int64       // Wall time before info is discarded (Unix-nanos)
-	Hops      uint32      // Number of hops from originator
-	NodeAddr  net.Addr    // Originating node in "host:port" format
-	peerAddr  net.Addr    // Proximate peer which passed us the info
-	seq       int64       // Sequence number for incremental updates
+	Key string // Info key
+	// Info value: must be one of {int65, float64, string} or
+	// implement the util.Ordered interface to be used with groups.
+	// For single infos any type is allowed.
+	Val       interface{}
+	Timestamp int64    // Wall time at origination (Unix-nanos)
+	TTLStamp  int64    // Wall time before info is discarded (Unix-nanos)
+	Hops      uint32   // Number of hops from originator
+	NodeAddr  net.Addr // Originating node in "host:port" format
+	peerAddr  net.Addr // Proximate peer which passed us the info
+	seq       int64    // Sequence number for incremental updates
 }
 
 // infoPrefix returns the text preceding the last period within
@@ -66,8 +61,8 @@ func (i *info) less(b *info) bool {
 	case string:
 		return t < b.Val.(string)
 	default:
-		if ord, ok := i.Val.(Ordered); ok {
-			return ord.Less(b.Val.(Ordered))
+		if ord, ok := i.Val.(util.Ordered); ok {
+			return ord.Less(b.Val.(util.Ordered))
 		}
 		glog.Fatalf("unhandled info value type: %s", t)
 	}

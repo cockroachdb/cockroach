@@ -154,7 +154,7 @@ func (g *group) getInfo(key string) *info {
 		// Check TTL and discard if too old.
 		now := time.Now().UnixNano()
 		if i.TTLStamp <= now {
-			delete(g.Infos, key)
+			g.removeInternal(i)
 			return nil
 		}
 		return i

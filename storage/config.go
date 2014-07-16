@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -110,7 +109,7 @@ func (s *StoreDescriptor) CombinedAttrs() Attributes {
 }
 
 // Less compares two StoreDescriptors based on percentage of disk available.
-func (s StoreDescriptor) Less(b gossip.Ordered) bool {
+func (s StoreDescriptor) Less(b util.Ordered) bool {
 	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
 }
 
