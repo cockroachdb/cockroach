@@ -94,10 +94,16 @@
 
     - PushTransaction: Moves transaction timestamp forwards.
 
+      If existing txn entry isn't present or its LastHeartbeat
+      timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat.
+      If current time - LastHeartbeat > MaxHeartbeatExpiry, then
+      the existing txn should be either pushed forward or aborted,
+      depending on value of Request.Abort.
+
       If the txn is committed, return already-committed error. If txn
       has been aborted, noop and return success.
 
-      Compare PushTxn and Txn priorities:
+      Otherwise, Compare PushTxn and Txn priorities:
 
         - If Txn.Priority < PushTxn.Priority, return retry-txn
           error. Transaction will be retried with priority =
@@ -105,6 +111,7 @@
 
         - If Txn.Priority > PushTxn.Priority, set/add txn entry with
           new timestamp as max(existing timestamp, push timestamp + 1).
+          If Request.Abort is true, set/add ABORTED txn entry.
 
       type PushTransactionRequest struct {
         RequestHeader
@@ -140,6 +147,11 @@
 
       If txn aborted, returns already-aborted error. If already
       committed, returns already-committed error.
+
+  - Transaction coordinator must continually heartbeat the transaction
+    table in order to update liveness of txn. On a PushTransaction,
+    the pusher will always succeed if the pushee has not heartbeat the
+    txn table entry within the allotted timeout.
 
   - On transaction retry, coordinator checks the txn table to verify
     txn has not been aborted before proceeding.
