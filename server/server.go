@@ -51,12 +51,12 @@ var (
 	// key-value stores. Memory-backed key value stores may be
 	// optionally specified via mem=<integer byte size>.
 	stores = flag.String("stores", "", "specify a comma-separated list of stores, "+
-		"specified by a comma-separated list of device attributes followed by '=' and "+
+		"specified by a colon-separated list of device attributes followed by '=' and "+
 		"either a filepath for a persistent store or an integer size in bytes for an "+
 		"in-memory store. Device attributes typically include whether the store is "+
 		"flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device "+
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
-		"For example, -stores=hdd,7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
+		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
 	// attrs specifies node topography or machine capabilities, used to
 	// match capabilities or location preferences specified in zone configs.
@@ -68,7 +68,7 @@ var (
 		"\"x16c\"). For example: -attrs=us-west-1b,gpu")
 
 	// Regular expression for capturing data directory specifications.
-	storesRE = regexp.MustCompile(`^(.+)=(.+)$`)
+	storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 )
 
 // A CmdStart command starts nodes by joining the gossip network.
@@ -152,12 +152,12 @@ func runStart(cmd *commander.Command, args []string) {
 	<-c
 }
 
-// parseAttributes parses a comma-separated list of strings,
+// parseAttributes parses a colon-separated list of strings,
 // filtering empty strings (i.e. ",," will yield no attributes.
 // Returns the list of strings as Attributes.
 func parseAttributes(attrsStr string) storage.Attributes {
 	var filtered []string
-	for _, attr := range strings.Split(attrsStr, ",") {
+	for _, attr := range strings.Split(attrsStr, ":") {
 		if len(attr) != 0 {
 			filtered = append(filtered, attr)
 		}
@@ -166,18 +166,25 @@ func parseAttributes(attrsStr string) storage.Attributes {
 	return storage.Attributes(filtered)
 }
 
-// initEngines interprets the dirs parameter to initialize a slice of
+// initEngines interprets the stores parameter to initialize a slice of
 // storage.Engine objects.
-func initEngines(dirs string) ([]storage.Engine, error) {
-	engines := make([]storage.Engine, 0, 1)
-	for _, dir := range strings.Split(dirs, ",") {
-		if len(dir) == 0 {
-			continue
+func initEngines(stores string) ([]storage.Engine, error) {
+	// Error if regexp doesn't match.
+	storeSpecs := storesRE.FindAllStringSubmatch(stores, -1)
+	if storeSpecs == nil || len(storeSpecs) == 0 {
+		return nil, util.Errorf("invalid or empty engines specification %q", stores)
+	}
+
+	engines := []storage.Engine{}
+	for _, store := range storeSpecs {
+		if len(store) != 4 {
+			return nil, util.Errorf("unable to parse attributes and path from store %q", store[0])
 		}
-		engine, err := initEngine(dir)
+		// There are two matches for each store specification: the colon-separated
+		// list of attributes and the path.
+		engine, err := initEngine(store[1], store[2])
 		if err != nil {
-			glog.Warningf("%v; skipping...will not serve data", err)
-			continue
+			return nil, util.Errorf("unable to init engine for store %q: %v", store[0], err)
 		}
 		engines = append(engines, engine)
 	}
@@ -185,28 +192,22 @@ func initEngines(dirs string) ([]storage.Engine, error) {
 	return engines, nil
 }
 
-// initEngine parses the engine specification according to the
-// storesRE regexp and instantiates an engine of correct type.
-func initEngine(spec string) (storage.Engine, error) {
-	// Error if regexp doesn't match.
-	matches := storesRE.FindStringSubmatch(spec)
-	if matches == nil {
-		return nil, util.Errorf("invalid engine specification %q", spec)
-	}
-
-	// Parse attributes as a comma-separated list.
-	attrs := parseAttributes(matches[1])
-
+// initEngine parses the store attributes as a colon-separated list
+// and instantiates an engine based on the dir parameter. If dir parses
+// to an integer, it's taken to mean an in-memory engine; otherwise,
+// dir is treated as a path and a RocksDB engine is created.
+func initEngine(attrsStr, path string) (storage.Engine, error) {
+	attrs := parseAttributes(attrsStr)
 	var engine storage.Engine
-	if size, err := strconv.ParseUint(matches[2], 10, 64); err == nil {
+	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
 		if size == 0 {
 			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
 		}
 		engine = storage.NewInMem(attrs, int64(size))
 	} else {
-		engine, err = storage.NewRocksDB(attrs, matches[2])
+		engine, err = storage.NewRocksDB(attrs, path)
 		if err != nil {
-			return nil, util.Errorf("unable to init rocksdb with data dir %q: %v", matches[2], err)
+			return nil, util.Errorf("unable to init rocksdb with data dir %q: %v", path, err)
 		}
 	}
 

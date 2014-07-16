@@ -59,11 +59,12 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Initialize the engine based on the first argument and
 	// then verify it's not in-memory.
-	engine, err := initEngine(args[0])
+	engines, err := initEngines(args[0])
 	if err != nil {
 		glog.Errorf("Failed to initialize engine %q: %v", args[0], err)
 		return
 	}
+	engine := engines[0]
 	if _, ok := engine.(*storage.InMem); ok {
 		glog.Errorf("Cannot initialize a cluster using an in-memory store")
 		return

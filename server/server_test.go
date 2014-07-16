@@ -19,8 +19,10 @@ package server
 
 import (
 	"compress/gzip"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -43,7 +45,6 @@ func init() {
 
 func startServer() *server {
 	serverTestOnce.Do(func() {
-		resetTestData()
 		s, err := newServer()
 		if err != nil {
 			glog.Fatal(err)
@@ -66,8 +67,32 @@ func startServer() *server {
 	return s
 }
 
+// createTempDirs creates "count" temporary directories and returns
+// the paths to each as a slice.
+func createTempDirs(count int, t *testing.T) []string {
+	tmp := make([]string, count)
+	for i := 0; i < count; i++ {
+		var err error
+		if tmp[i], err = ioutil.TempDir("", "_server_test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return tmp
+}
+
+// resetTestData recursively removes all files written to the
+// directories specified as parameters.
+func resetTestData(dirs []string) {
+	for _, dir := range dirs {
+		os.RemoveAll(dir)
+	}
+}
+
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
+	tmp := createTempDirs(5, t)
+	defer resetTestData(tmp)
+
 	testCases := []struct {
 		key       string             // data directory
 		expAttrs  storage.Attributes // attributes for engine
@@ -76,11 +101,11 @@ func TestInitEngine(t *testing.T) {
 	}{
 		{"mem=1000", storage.Attributes([]string{"mem"}), false, true},
 		{"ssd=1000", storage.Attributes([]string{"ssd"}), false, true},
-		{"ssd=/tmp/.foobar", storage.Attributes([]string{"ssd"}), false, false},
-		{"hdd=/tmp/.foobar2", storage.Attributes([]string{"hdd"}), false, false},
-		{"mem=/tmp/.foobar3", storage.Attributes([]string{"mem"}), false, false},
-		{"abc=/tmp/.foobar4", storage.Attributes([]string{"abc"}), false, false},
-		{"hdd,7200rpm=/tmp/.foobar5", storage.Attributes([]string{"hdd", "7200rpm"}), false, false},
+		{fmt.Sprintf("ssd=%s", tmp[0]), storage.Attributes([]string{"ssd"}), false, false},
+		{fmt.Sprintf("hdd=%s", tmp[1]), storage.Attributes([]string{"hdd"}), false, false},
+		{fmt.Sprintf("mem=%s", tmp[2]), storage.Attributes([]string{"mem"}), false, false},
+		{fmt.Sprintf("abc=%s", tmp[3]), storage.Attributes([]string{"abc"}), false, false},
+		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), storage.Attributes([]string{"hdd", "7200rpm"}), false, false},
 		{"hdd=/dev/null", storage.Attributes{}, true, false},
 		{"", storage.Attributes{}, true, false},
 		{"  ", storage.Attributes{}, true, false},
@@ -90,11 +115,15 @@ func TestInitEngine(t *testing.T) {
 		{"hdd=", storage.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
-		engine, err := initEngine(spec.key)
+		engines, err := initEngines(spec.key)
 		if err == nil {
 			if spec.wantError {
 				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
 			}
+			if len(engines) != 1 {
+				t.Fatalf("unexpected number of engines: %d: %+v", len(engines), spec)
+			}
+			engine := engines[0]
 			if engine.Attrs().SortedString() != spec.expAttrs.SortedString() {
 				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, engine.Attrs(), spec)
 			}
@@ -108,15 +137,45 @@ func TestInitEngine(t *testing.T) {
 	}
 }
 
-func resetTestData() {
-	// TODO(spencer): remove all data files once rocksdb is hooked up.
+// TestInitEngines tests whether multiple engines specified as a
+// single comma-separated list are parsed correctly.
+func TestInitEngines(t *testing.T) {
+	tmp := createTempDirs(2, t)
+	defer resetTestData(tmp)
+
+	stores := fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
+	expEngines := []struct {
+		attrs storage.Attributes
+		isMem bool
+	}{
+		{storage.Attributes([]string{"mem"}), true},
+		{storage.Attributes([]string{"mem", "ddr3"}), true},
+		{storage.Attributes([]string{"ssd"}), false},
+		{storage.Attributes([]string{"hdd", "7200rpm"}), false},
+	}
+
+	engines, err := initEngines(stores)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(engines) != len(expEngines) {
+		t.Errorf("number of engines parsed %d != expected %d", len(engines), len(expEngines))
+	}
+	for i, engine := range engines {
+		if engine.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
+			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, engine.Attrs(), expEngines[i])
+		}
+		_, ok := engine.(*storage.InMem)
+		if expEngines[i].isMem != ok {
+			t.Errorf("expected in memory? %b, got %b: %+v", expEngines[i].isMem, ok, expEngines[i])
+		}
+	}
 }
 
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
 	startServer()
-	defer resetTestData()
 	url := "http://" + *httpAddr + "/_admin/healthz"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -138,7 +197,6 @@ func TestHealthz(t *testing.T) {
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
 	startServer()
-	defer resetTestData()
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
