@@ -65,11 +65,13 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
 
@@ -149,8 +151,15 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 	// Determine maximum number of incoming connections. Create outgoing
 	// edges, keeping track of which are new since last time (added=true).
 	outgoingMap := make(edgeMap)
+	sortedAddresses := util.MapKeys(nodes).([]string)
+	sort.Strings(sortedAddresses)
 	var maxIncoming int
-	for addr, node := range nodes {
+	// The order the graph file is written influences the arrangement
+	// of nodes in the output image, so it makes sense to eliminate
+	// randomness here. Unfortunately with graphviz it's fairly hard
+	// to get a consistent ordering.
+	for _, addr := range sortedAddresses {
+		node := nodes[addr]
 		incoming := node.Incoming()
 		for _, iAddr := range incoming {
 			e := edge{dest: addr}
@@ -176,7 +185,8 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 
 	f.WriteString("digraph G {\n")
 	f.WriteString("node [shape=record];\n")
-	for addr, node := range nodes {
+	for _, addr := range sortedAddresses {
+		node := nodes[addr]
 		var incomplete int
 		var totalAge int64
 		for infoKey := range nodes {
@@ -274,7 +284,6 @@ func main() {
 	}
 
 	edgeSet := make(map[string]edge)
-	fns := make([]string, 0, numCycles/outputEvery)
 
 	gossip.SimulateNetwork(nodeCount, *network, gossipInterval, func(cycle int, nodes map[string]*gossip.Gossip) bool {
 		if cycle == numCycles {
@@ -289,7 +298,6 @@ func main() {
 		// Output dot graph periodically.
 		if (cycle+1)%outputEvery == 0 {
 			dotFN := fmt.Sprintf("%s/sim-cycle-%d.dot", dirName, cycle)
-			fns = append(fns, dotFN)
 			outputDotFile(dotFN, cycle, nodes, edgeSet)
 		}
 
@@ -297,6 +305,5 @@ func main() {
 	})
 
 	// Output instructions for viewing graphs.
-	fileList := strings.Join(fns, " ")
-	fmt.Printf("To view simulation graph output run (you must install graphviz):\nfor f in %s ; do dot $f -Tpng -o $f.png ; done ; open `for f in %s ; do echo $f.png; done`", fileList, fileList)
+	fmt.Printf("To view simulation graph output run (you must install graphviz):\n\nfor f in %s/*.dot ; do circo $f -Tpng -o $f.png ; echo $f.png ; done\n", dirName)
 }

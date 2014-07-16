@@ -180,8 +180,8 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 
 // insertRandomInfos inserts random values into group and returns
 // a slice of info objects.
-func insertRandomInfos(g *group, count int) infoArray {
-	infos := make(infoArray, count)
+func insertRandomInfos(g *group, count int) infoSlice {
+	infos := make(infoSlice, count)
 
 	for i := 0; i < count; i++ {
 		infos[i] = newTestInfo(fmt.Sprintf("a.%d", i), rand.Float64())
@@ -205,10 +205,10 @@ func TestGroups100Keys(t *testing.T) {
 	}
 	sort.Sort(infos)
 
-	minInfos := minGroup.infosAsArray()
+	minInfos := minGroup.infosAsSlice()
 	sort.Sort(minInfos)
 
-	maxInfos := maxGroup.infosAsArray()
+	maxInfos := maxGroup.infosAsSlice()
 	sort.Sort(maxInfos)
 
 	for i := 0; i < 100; i++ {
@@ -299,7 +299,7 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	}
 
 	// Try 2 infos, one with short TTL and one with long TTL and
-	// verify operation of infosAsArray.
+	// verify operation of infosAsSlice.
 	info1 := newTestInfo("a.1", int64(1))
 	info2 := newTestInfo("a.2", int64(2))
 	info2.TTLStamp = i.Timestamp + int64(time.Nanosecond)
@@ -307,7 +307,7 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	g.addInfo(info2)
 
 	time.Sleep(time.Nanosecond)
-	infos := g.infosAsArray()
+	infos := g.infosAsSlice()
 	if len(infos) != 1 || infos[0].Val != info1.Val {
 		t.Error("only one info should be returned", infos)
 	}
@@ -333,7 +333,7 @@ func TestGroupWithStructVal(t *testing.T) {
 	g.addInfo(i2)
 	g.addInfo(i3)
 
-	infos := g.infosAsArray()
+	infos := g.infosAsSlice()
 	if infos[0].Val != i2.Val || infos[1].Val != i3.Val || infos[2].Val != i1.Val {
 		t.Error("Ordered interface not working properly with groups")
 	}

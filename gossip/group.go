@@ -112,7 +112,7 @@ func (g *group) update() {
 	}
 }
 
-// compact compacts the group infos array by removing expired info objects.
+// compact compacts the group infos slice by removing expired info objects.
 // Returns true if compaction occurred and space is free.
 func (g *group) compact() bool {
 	now := time.Now().UnixNano()
@@ -162,12 +162,12 @@ func (g *group) getInfo(key string) *info {
 	return nil
 }
 
-// infosAsArray returns an array of infos from group, sorted by value;
+// infosAsSlice returns an slice of infos from group, sorted by value;
 // sort order is dependent on group type (MinGroup: ascending,
 // MaxGroup: descending).
-func (g *group) infosAsArray() infoArray {
+func (g *group) infosAsSlice() infoSlice {
 	now := time.Now().UnixNano()
-	infos := make(infoArray, 0, len(g.Infos))
+	infos := make(infoSlice, 0, len(g.Infos))
 	for _, i := range g.Infos {
 		// Check TTL and discard if too old.
 		if i.expired(now) {

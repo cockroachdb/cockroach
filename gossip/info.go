@@ -93,10 +93,10 @@ func (i *info) isFresh(addr net.Addr, seq int64) bool {
 // infoMap is a map of keys to info object pointers.
 type infoMap map[string]*info
 
-// infoArray is a slice of Info object pointers.
-type infoArray []*info
+// infoSlice is a slice of Info object pointers.
+type infoSlice []*info
 
-// Implement sort.Interface for infoArray.
-func (a infoArray) Len() int           { return len(a) }
-func (a infoArray) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a infoArray) Less(i, j int) bool { return a[i].less(a[j]) }
+// Implement sort.Interface for infoSlice.
+func (a infoSlice) Len() int           { return len(a) }
+func (a infoSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a infoSlice) Less(i, j int) bool { return a[i].less(a[j]) }

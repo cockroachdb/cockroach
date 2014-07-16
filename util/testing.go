@@ -87,10 +87,10 @@ func ContainsSameElements(s1, s2 interface{}) bool {
 	// TODO add support for chans when needed.
 	// Preliminary checks to weed out incompatible inputs.
 	if reflect.TypeOf(s1).Kind() != reflect.Slice || reflect.TypeOf(s2).Kind() != reflect.Slice {
-		panic("Received non-slice argument")
+		panic("received non-slice argument")
 	}
 	if reflect.TypeOf(s1) != reflect.TypeOf(s2) {
-		panic("Received slices with incompatible types")
+		panic("received slices with incompatible types")
 	}
 
 	// Create a map that keeps a count of how often we see

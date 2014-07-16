@@ -20,9 +20,7 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Next Steps
 
-* More versatile store descriptions
-* Flesh out node allocation via gossip
-* Range splitting
+See [TODO.md](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
 ## Get in touch
 

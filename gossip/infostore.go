@@ -151,9 +151,9 @@ func (is *infoStore) getInfo(key string) *info {
 
 // getGroupInfos returns an array of info objects from specified group.
 // Returns nil if group is not registered.
-func (is *infoStore) getGroupInfos(prefix string) infoArray {
+func (is *infoStore) getGroupInfos(prefix string) infoSlice {
 	if group, ok := is.Groups[prefix]; ok {
-		return group.infosAsArray()
+		return group.infosAsSlice()
 	}
 	return nil
 }

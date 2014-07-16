@@ -53,7 +53,7 @@ func TestPrefix(t *testing.T) {
 }
 
 func TestSort(t *testing.T) {
-	infos := infoArray{
+	infos := infoSlice{
 		{"a", 3.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
 		{"b", 1.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
 		{"c", 2.1, 0, 0, 0, emptyAddr, emptyAddr, 0},

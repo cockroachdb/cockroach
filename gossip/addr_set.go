@@ -37,7 +37,7 @@ func newAddrSet(maxSize int) *addrSet {
 }
 
 // hasSpace returns whether there are fewer than maxSize addrs
-// in the addrs array.
+// in the addrs slice.
 func (as *addrSet) hasSpace() bool {
 	return len(as.addrs) < as.maxSize
 }
@@ -86,7 +86,7 @@ func (as *addrSet) filter(filterFn func(addr net.Addr) bool) *addrSet {
 }
 
 // hasAddr verifies that the supplied address matches a addr
-// in the array.
+// in the slice.
 func (as *addrSet) hasAddr(addr net.Addr) bool {
 	_, ok := as.addrs[addr.String()]
 	return ok
