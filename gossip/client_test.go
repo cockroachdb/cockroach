@@ -26,6 +26,12 @@ import (
 	"github.com/golang/glog"
 )
 
+func init() {
+	// With the default gossip interval, some tests
+	// may take longer than they need.
+	*GossipInterval = 20 * time.Millisecond
+}
+
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
@@ -68,5 +74,51 @@ func TestClientGossip(t *testing.T) {
 	glog.Info("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")
+	}
+}
+
+// TestClientDisconnectRedundant verifies that the gossip server
+// will drop an outgoing client connection that is already an
+// inbound client connection of another node.
+func TestClientDisconnectRedundant(t *testing.T) {
+	local, remote, _, _ := startGossip(t)
+	// startClient doesn't lock the underlying gossip
+	// object, so we acquire those locks here.
+	local.mu.Lock()
+	remote.mu.Lock()
+	rAddr := remote.is.NodeAddr
+	lAddr := local.is.NodeAddr
+	local.startClient(rAddr)
+	remote.startClient(lAddr)
+	local.mu.Unlock()
+	remote.mu.Unlock()
+	go local.manage()
+	go remote.manage()
+	wasConnected1, wasConnected2 := false, false
+	if err := util.IsTrueWithin(func() bool {
+		// Check which of the clients is connected to the other.
+		local.clientsMu.Lock()
+		defer local.clientsMu.Unlock()
+		remote.clientsMu.Lock()
+		defer remote.clientsMu.Unlock()
+		_, ok1 := local.clients[rAddr.String()]
+		_, ok2 := remote.clients[lAddr.String()]
+		if ok1 {
+			wasConnected1 = true
+		}
+		if ok2 {
+			wasConnected2 = true
+		}
+		// Check if at some point both nodes were connected to
+		// each other, but now aren't any more.
+		// Unfortunately it's difficult to get a more direct
+		// read on what's happening without really messing with
+		// the internals.
+		if wasConnected1 && wasConnected2 && (!ok1 || !ok2) {
+			return true
+		}
+		return false
+	}, 500*time.Millisecond); err != nil {
+		t.Fatalf("timeout reached before redundant client connection was closed")
 	}
 }
