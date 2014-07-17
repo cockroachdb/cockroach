@@ -184,6 +184,7 @@ func (r *RocksDB) get(key Key) (Value, error) {
 		cValLen C.size_t
 		cErr    *C.char
 	)
+
 	cVal := C.rocksdb_get(
 		r.rdb,
 		r.rOpts,
@@ -272,6 +273,54 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 		return nil, charToErr(cErr)
 	}
 	return keyVals, nil
+}
+
+// writeBatch applies all puts and deletes atomically via RocksDB write
+// batch facility.
+func (r *RocksDB) writeBatch(puts []KeyValue, dels []Key) error {
+	batch := C.rocksdb_writebatch_create()
+	defer C.rocksdb_writebatch_destroy(batch)
+
+	for _, put := range puts {
+		key, value := put.Key, put.Value
+		if len(key) == 0 {
+			return emptyKeyError()
+		}
+
+		// Empty values correspond to a null pointer.
+		valuePointer := (*C.char)(nil)
+		if len(value.Bytes) > 0 {
+			valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
+		}
+
+		// We write the batch before returning from this method, so we
+		// don't need to worry about the GC reclaiming the data stored in
+		// the "puts" and "dels" parameters.
+		C.rocksdb_writebatch_put(
+			batch,
+			(*C.char)(unsafe.Pointer(&key[0])),
+			C.size_t(len(key)),
+			valuePointer,
+			C.size_t(len(value.Bytes)))
+	}
+
+	for _, key := range dels {
+		if len(key) == 0 {
+			return emptyKeyError()
+		}
+		C.rocksdb_writebatch_delete(
+			batch,
+			(*C.char)(unsafe.Pointer(&key[0])),
+			C.size_t(len(key)))
+	}
+
+	var cErr *C.char
+	C.rocksdb_write(r.rdb, r.wOpts, batch, &cErr)
+	if cErr != nil {
+		return charToErr(cErr)
+	}
+
+	return nil
 }
 
 // capacity queries the underlying file system for disk capacity

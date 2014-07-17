@@ -41,6 +41,8 @@ type Engine interface {
 	scan(start, end Key, max int64) ([]KeyValue, error)
 	// delete removes the item from the db with the given key.
 	del(key Key) error
+	// writeBatch atomically applies the specified writes and deletions.
+	writeBatch(puts []KeyValue, deletes []Key) error
 	// capacity returns capacity details for the engine's available storage.
 	capacity() (StoreCapacity, error)
 }

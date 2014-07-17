@@ -77,6 +77,11 @@ func (in *InMem) Attrs() Attributes {
 func (in *InMem) put(key Key, value Value) error {
 	in.Lock()
 	defer in.Unlock()
+	return in.putLocked(key, value)
+}
+
+// putLocked assumes mutex is already held by caller. See put().
+func (in *InMem) putLocked(key Key, value Value) error {
 	kv := KeyValue{Key: key, Value: value}
 	size := computeSize(kv)
 	if size+in.usedBytes > in.maxBytes {
@@ -121,6 +126,11 @@ func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 func (in *InMem) del(key Key) error {
 	in.Lock()
 	defer in.Unlock()
+	return in.delLocked(key)
+}
+
+// delLocked assumes mutex is already held by caller. See del().
+func (in *InMem) delLocked(key Key) error {
 	// Note: this is approximate. There is likely something missing.
 	// The storage/in_mem_test.go benchmarks this and the measurement
 	// being made seems close enough for government work (tm).
@@ -128,6 +138,24 @@ func (in *InMem) del(key Key) error {
 		in.usedBytes -= computeSize(val.(KeyValue))
 	}
 	in.data.Delete(KeyValue{Key: key})
+	return nil
+}
+
+// writeBatch atomically applies the specified writes and deletions
+// by holding the mutex.
+func (in *InMem) writeBatch(puts []KeyValue, dels []Key) error {
+	in.Lock()
+	defer in.Unlock()
+	for _, put := range puts {
+		if err := in.putLocked(put.Key, put.Value); err != nil {
+			return err
+		}
+	}
+	for _, del := range dels {
+		if err := in.delLocked(del); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
