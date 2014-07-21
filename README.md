@@ -20,7 +20,7 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Next Steps
 
-See [TODO.md](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
+See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO)
 
 ## Get in touch
 
