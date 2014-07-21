@@ -17,11 +17,7 @@
 
 package structured
 
-import (
-	"testing"
-
-	"github.com/golang/glog"
-)
+import "testing"
 
 // User is a top-level table. User IDs are scattered, meaning a two
 // byte hash of the ID from the UserID sequence is prepended to yield
@@ -95,21 +91,82 @@ func createTestSchema() (*Schema, error) {
 
 // TestNoPrimaryKey verifies a missing primary key is an error.
 func TestNoPrimaryKey(t *testing.T) {
-	yaml := `db: Test
+	yaml := []byte(`db: Test
 db_key: t
 tables:
 - table: A
-  table_key: a`
-	if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
+  table_key: a`)
+	if _, err := NewYAMLSchema(yaml); err == nil {
 		t.Errorf("expected failure on missing primary key")
+	}
+}
+
+// TestBadKey verifies an invalid key length for schemas, columns, and
+// tables is an error.
+func TestBadKey(t *testing.T) {
+	testCases := []struct {
+		yamlData  []byte
+		errString string
+	}{
+		{[]byte(`db: Test`), "expected failure on missing schema key value"},
+
+		{[]byte(`db: Test
+db_key: toolong`), "expected failure on schema key value being too long"},
+
+		{[]byte(`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: aaaaa
+  columns:
+  - column: A
+    column_key: a
+    type: integer
+    primary_key: true`), "expected failure on table key value being too long"},
+
+		{[]byte(`db: Test
+db_key: t
+tables:
+- table: A
+  columns:
+  - column: A
+    column_key: a
+    type: integer
+    primary_key: true`), "expected failure on missing table key value"},
+
+		{[]byte(`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+  columns:
+  - column: A
+    column_key: aaaaa
+    type: integer
+    primary_key: true`), "expected failure on column key value being too long"},
+
+		{[]byte(`db: Test
+db_key: t
+tables:
+- table: A
+  table_key: a
+  columns:
+  - column: A
+    type: integer
+    primary_key: true`), "expected failure on missing column key value"},
+	}
+	for _, tc := range testCases {
+		if _, err := NewYAMLSchema(tc.yamlData); err == nil {
+			t.Errorf(tc.errString)
+		}
 	}
 }
 
 // TestDuplicateTables verifies that duplicate table names and table
 // keys are disallowed within a single schema.
 func TestDuplicateTables(t *testing.T) {
-	badYAML := []string{
-		`db: Test
+	badYAML := [][]byte{
+		[]byte(`db: Test
 db_key: t
 tables:
 - table: A
@@ -123,9 +180,9 @@ tables:
   columns:
   - column: A
     column_key: a
-    primary_key: true`,
+    primary_key: true`),
 
-		`db: Test
+		[]byte(`db: Test
 db_key: t
 tables:
 - table: A
@@ -139,11 +196,11 @@ tables:
   columns:
   - column: A
     column_key: a
-    primary_key: true`,
+    primary_key: true`),
 	}
 
 	for i, yaml := range badYAML {
-		if _, err := NewYAMLSchema([]byte(yaml)); err == nil {
+		if _, err := NewYAMLSchema(yaml); err == nil {
 			t.Errorf("%d: expected failure on duplicate table names", i)
 		}
 	}
@@ -189,7 +246,7 @@ tables:
 func TestForeignKeys(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		glog.Fatalf("failed building schema: %s", err)
+		t.Fatalf("failed building schema: %s", err)
 	}
 	spT := s.byName["StreamPost"]
 	if spT.foreignKeys["PhotoStream"]["ID"] != spT.byName["PhotoStreamID"] {
@@ -221,7 +278,8 @@ func TestForeignKeys(t *testing.T) {
 func TestBadForeignKeys(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		glog.Fatalf("failed building schema: %s", err)
+
+		t.Fatalf("failed building schema: %s", err)
 	}
 
 	badForeignKeys := []string{
@@ -242,7 +300,7 @@ func TestBadForeignKeys(t *testing.T) {
 func TestColumnOptions(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		glog.Fatalf("failed building schema: %s", err)
+		t.Fatalf("failed building schema: %s", err)
 	}
 	if !s.byName["User"].byName["ID"].PrimaryKey {
 		t.Errorf("expected User.ID to be primary key")

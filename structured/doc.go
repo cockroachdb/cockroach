@@ -95,7 +95,7 @@ Columns are specified as follows:
                         fulltext)
       interleave       true
       on_delete:       (cascade |
-                        setnul)
+                        setnull)
       primary_key:     true
       scatter:         true
 

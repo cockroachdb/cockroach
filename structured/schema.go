@@ -176,26 +176,51 @@ type Schema struct {
 // declarations include "Table.Column" or just "Table".
 var foreignKeyRE = regexp.MustCompile(`^([^\.]*)(?:\.([^\.]*))?$`)
 
+// The maximum length for a {schema, table, column} key.
+const maxKeyLength = 3
+
+// Valid schema column types.
+const (
+	columnTypeInteger    = "integer"
+	columnTypeFloat      = "float"
+	columnTypeString     = "string"
+	columnTypeBlob       = "blob"
+	columnTypeTime       = "time"
+	columnTypeLatLong    = "latlong"
+	columnTypeIntegerSet = "integerset"
+	columnTypeStringSet  = "stringset"
+	columnTypeIntegerMap = "integermap"
+	columnTypeStringMap  = "stringmap"
+)
+
 // Set containing all valid schema column types.
-var ValidTypes = map[string]struct{}{
-	"integer":    struct{}{},
-	"float":      struct{}{},
-	"string":     struct{}{},
-	"blob":       struct{}{},
-	"time":       struct{}{},
-	"latlong":    struct{}{},
-	"integerset": struct{}{},
-	"stringset":  struct{}{},
-	"integermap": struct{}{},
-	"stringmap":  struct{}{},
+var validTypes = map[string]struct{}{
+	columnTypeInteger:    struct{}{},
+	columnTypeFloat:      struct{}{},
+	columnTypeString:     struct{}{},
+	columnTypeBlob:       struct{}{},
+	columnTypeTime:       struct{}{},
+	columnTypeLatLong:    struct{}{},
+	columnTypeIntegerSet: struct{}{},
+	columnTypeStringSet:  struct{}{},
+	columnTypeIntegerMap: struct{}{},
+	columnTypeStringMap:  struct{}{},
 }
 
+// Valid index types.
+const (
+	indexTypeFullText  = "fulltext"
+	indexTypeLocation  = "location"
+	indexTypeSecondary = "secondary"
+	indexTypeUnique    = "unique"
+)
+
 // Set containing all valid index types.
-var ValidIndexTypes = map[string]struct{}{
-	"fulltext":  struct{}{},
-	"location":  struct{}{},
-	"secondary": struct{}{},
-	"unique":    struct{}{},
+var validIndexTypes = map[string]struct{}{
+	indexTypeFullText:  struct{}{},
+	indexTypeLocation:  struct{}{},
+	indexTypeSecondary: struct{}{},
+	indexTypeUnique:    struct{}{},
 }
 
 // NewGoSchema returns a schema using name and key and a map from
@@ -248,8 +273,12 @@ func (s *Schema) ToYAML() ([]byte, error) {
 // be "cascade" or "setnull"). Refer to the source for the complete
 // list of checks.
 func (s *Schema) Validate() error {
-	s.byName = make(map[string]*Table)
-	s.byKey = make(map[string]*Table)
+	if len(s.Key) < 1 || len(s.Key) > maxKeyLength {
+		return fmt.Errorf("schema %q: key %q must be 1-%d characters", s.Name, s.Key, maxKeyLength)
+	}
+
+	s.byName = map[string]*Table{}
+	s.byKey = map[string]*Table{}
 
 	// First pass through validation validates all tables. This establishes
 	// primary keys, necessary to validate columns in second pass.
@@ -267,14 +296,14 @@ func (s *Schema) Validate() error {
 		s.byKey[t.Key] = t
 
 		// Verify table key length.
-		if len(t.Key) > 3 {
-			return fmt.Errorf("table %q: key %q is limited to 1-3 characters", t.Name, t.Key)
+		if len(t.Key) < 1 || len(t.Key) > maxKeyLength {
+			return fmt.Errorf("table %q: key %q must be 1-%d characters", t.Name, t.Key, maxKeyLength)
 		}
 
 		// Init table data structures.
 		t.primaryKey = make([]*Column, 0, 1)
-		t.foreignKeys = make(map[string]map[string]*Column)
-		t.incomingForeignKeys = make(map[string]map[string]*Column)
+		t.foreignKeys = map[string]map[string]*Column{}
+		t.incomingForeignKeys = map[string]map[string]*Column{}
 
 		// Validate table.
 		if err := s.validateTable(t); err != nil {
@@ -310,8 +339,8 @@ func (s *Schema) Validate() error {
 // validateTable validates the table for consistency, correctness and
 // completeness.
 func (s *Schema) validateTable(t *Table) error {
-	t.byName = make(map[string]*Column)
-	t.byKey = make(map[string]*Column)
+	t.byName = map[string]*Column{}
+	t.byKey = map[string]*Column{}
 
 	for _, c := range t.Columns {
 		// Check for duplicate column names.
@@ -327,7 +356,7 @@ func (s *Schema) validateTable(t *Table) error {
 		t.byKey[c.Key] = c
 
 		// Verify column key length.
-		if len(c.Key) > 3 {
+		if len(c.Key) < 1 || len(c.Key) > maxKeyLength {
 			return fmt.Errorf("column %q: key %q is limited to 1-3 characters", c.Name, c.Key)
 		}
 
@@ -342,7 +371,7 @@ func (s *Schema) validateTable(t *Table) error {
 
 // validateColumn validates the column options.
 func (s *Schema) validateColumn(c *Column, t *Table) error {
-	if _, ok := ValidTypes[c.Type]; !ok {
+	if _, ok := validTypes[c.Type]; !ok {
 		return fmt.Errorf("invalid type %q", c.Type)
 	}
 
@@ -355,7 +384,7 @@ func (s *Schema) validateColumn(c *Column, t *Table) error {
 	}
 
 	// Auto-increment columns must be type integer!
-	if c.Auto != nil && c.Type != "integer" {
+	if c.Auto != nil && c.Type != columnTypeInteger {
 		return fmt.Errorf("auto may only be specified with columns of type integer")
 	}
 
@@ -408,7 +437,7 @@ func (s *Schema) validateColumn(c *Column, t *Table) error {
 	}
 
 	if c.Index != "" {
-		if _, ok := ValidIndexTypes[c.Index]; !ok {
+		if _, ok := validIndexTypes[c.Index]; !ok {
 			return fmt.Errorf("invalid index type %q", c.Index)
 		}
 		switch c.Index {
@@ -562,7 +591,7 @@ func getColumnSchema(sf reflect.StructField) (*Column, error) {
 		}
 		key, value := keyValueSplit[0], keyValueSplit[1]
 		if i == 0 {
-			if value != "" {
+			if len(value) > 0 {
 				return nil, util.Errorf("roach tag for field %s must begin with column key, a short (1-3) character designation related to column name: %s", c.Name, spec)
 			}
 			c.Key = key
@@ -579,82 +608,98 @@ func getColumnSchema(sf reflect.StructField) (*Column, error) {
 }
 
 // getSchemaType returns the schema type depending on the reflect.Type type.
-// The schema type is one of: (integer, float, string, blob, time, latlong,
-// integerset, stringset, integermap, stringmap).
+// The valid schema types are defined in the constants above.
 func getSchemaType(field reflect.StructField) (string, error) {
 	switch t := reflect.New(field.Type).Interface().(type) {
 	case *bool, *int, *int8, *int16, *int32, *int64:
-		return "integer", nil
+		return columnTypeInteger, nil
 	case *float32, *float64:
-		return "float", nil
+		return columnTypeFloat, nil
 	case *string:
-		return "string", nil
+		return columnTypeString, nil
 	case *[]byte:
-		return "blob", nil
+		return columnTypeBlob, nil
 	case *time.Time:
-		return "time", nil
+		return columnTypeTime, nil
 	case *LatLong:
-		return "latlong", nil
+		return columnTypeLatLong, nil
 	case *IntegerSet:
-		return "integerset", nil
+		return columnTypeIntegerSet, nil
 	case *StringSet:
-		return "stringset", nil
+		return columnTypeStringSet, nil
 	case *IntegerMap:
-		return "integermap", nil
+		return columnTypeIntegerMap, nil
 	case *StringMap:
-		return "stringmap", nil
+		return columnTypeStringMap, nil
 	default:
 		return "", util.Errorf("invalid type %v; only integer, float, string, time, latlong, integerset, stringset, integermap, stringmap are allowed", t)
 	}
 }
 
+// Valid column options.
+const (
+	columnOptionPrimaryKey     = "pk"
+	columnOptionForeignKey     = "fk"
+	columnOptionAutoIncrement  = "auto"
+	columnOptionFullTextIndex  = "fulltextindex"
+	columnOptionInterleave     = "interleave"
+	columnOptionLocationIndex  = "locationindex"
+	columnOptionScatter        = "scatter"
+	columnOptionSecondaryIndex = "secondaryindex"
+	columnOptionUniqueIndex    = "uniqueindex"
+	columnOptionOnDelete       = "ondelete"
+
+	columnDeleteOptionCascade = "cascade"
+	columnDeleteOptionSetNull = "setnull"
+)
+
 // setColumnOption sets column options based on the key/value pair.
 // An error is returned if the option key or value is invalid.
 func setColumnOption(c *Column, key, value string) error {
 	switch key {
-	case "auto":
+	case columnOptionAutoIncrement:
 		c.Auto = new(int64)
-		if value != "" {
+		if len(value) > 0 {
 			start, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				return util.Errorf("auto-increment start value: %v", err)
+				return util.Errorf("error parsing auto-increment start value %q: %v", value, err)
 			}
 			*c.Auto = start
 		} else {
 			*c.Auto = 1
 		}
-	case "fk":
-		if value == "" {
+	case columnOptionForeignKey:
+		if len(value) == 0 {
 			return util.Errorf("foreign key must specify reference as <Table>[.<Column>]")
 		}
 		c.ForeignKey = value
-	case "fulltextindex":
-		c.Index = "fulltext"
-	case "interleave":
+	case columnOptionFullTextIndex:
+		c.Index = indexTypeFullText
+	case columnOptionInterleave:
 		c.Interleave = true
-	case "locationindex":
-		c.Index = "location"
-	case "ondelete":
+	case columnOptionLocationIndex:
+		c.Index = indexTypeLocation
+	case columnOptionOnDelete:
 		switch value {
-		case "cascade", "setnull":
+		case columnDeleteOptionCascade, columnDeleteOptionSetNull:
 			c.OnDelete = value
 		default:
-			return util.Errorf("column option %q must specify either %q or %q", key, "cascade", "setnull")
+			return util.Errorf("column option %q must specify either %q or %q", key, columnDeleteOptionCascade, columnDeleteOptionSetNull)
 		}
-	case "pk":
-		if value != "" {
+	case columnOptionPrimaryKey:
+		if len(value) > 0 {
 			return util.Errorf("column option %q should not specify a value", key)
 		}
 		c.PrimaryKey = true
-	case "scatter":
-		if value != "" {
+	case columnOptionScatter:
+		if len(value) > 0 {
 			return util.Errorf("column option %q should not specify a value", key)
 		}
 		c.Scatter = true
-	case "secondaryindex":
-		c.Index = "secondary"
-	case "unqieindex":
-		c.Index = "unique"
+	case columnOptionSecondaryIndex:
+		c.Index = indexTypeSecondary
+	case columnOptionUniqueIndex:
+		c.Index = indexTypeUnique
 	default:
 		return util.Errorf("unrecognized column option: %q", key)
 	}
