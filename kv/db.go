@@ -168,10 +168,6 @@ type DistDB struct {
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
 	gossip *gossip.Gossip
-	// rangeCache caches replica metadata for key ranges. The cache is
-	// filled while servicing read and write requests to the key value
-	// store.
-	rangeCache util.LRUCache
 }
 
 // Default constants for timeouts.
