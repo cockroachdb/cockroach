@@ -71,10 +71,12 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	if _, err := BootstrapCluster(clusterID, engine); err != nil {
+	localDB, err := BootstrapCluster(clusterID, engine)
+	if err != nil {
 		glog.Errorf("Failed to bootstrap cluster: %v", err)
 		return
 	}
+	defer localDB.Close()
 	fmt.Fprintf(os.Stdout, "Cockroach cluster %s has been initialized\n", clusterID)
 	fmt.Fprintf(os.Stdout, "To start the cluster, run \"cockroach start\"\n")
 }

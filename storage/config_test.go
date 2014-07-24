@@ -21,8 +21,6 @@ package storage
 import (
 	"reflect"
 	"testing"
-
-	"github.com/golang/glog"
 )
 
 var testConfig = ZoneConfig{
@@ -49,24 +47,24 @@ range_max_bytes: 67108864
 func TestZoneConfigRoundTrip(t *testing.T) {
 	yaml, err := testConfig.ToYAML()
 	if err != nil {
-		glog.Errorf("failed converting to yaml: %v", err)
+		t.Errorf("failed converting to yaml: %v", err)
 	}
 	parsedZoneConfig, err := ParseZoneConfig(yaml)
 	if err != nil {
-		glog.Errorf("failed parsing config: %v", err)
+		t.Errorf("failed parsing config: %v", err)
 	}
 	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		glog.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
+		t.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
 	}
 }
 
 func TestZoneConfigYAMLParsing(t *testing.T) {
 	parsedZoneConfig, err := ParseZoneConfig([]byte(yamlConfig))
 	if err != nil {
-		glog.Errorf("failed parsing config: %v", err)
+		t.Errorf("failed parsing config: %v", err)
 	}
 	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		glog.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
+		t.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
 	}
 }
 
@@ -75,37 +73,60 @@ func TestIsSubset(t *testing.T) {
 	b := Attributes([]string{"a", "b"})
 	c := Attributes([]string{"a"})
 	if !b.IsSubset(a) {
-		glog.Errorf("expected %+v to be a subset of %+v", b, a)
+		t.Errorf("expected %+v to be a subset of %+v", b, a)
 	}
 	if !c.IsSubset(a) {
-		glog.Errorf("expected %+v to be a subset of %+v", c, a)
+		t.Errorf("expected %+v to be a subset of %+v", c, a)
 	}
 	if !c.IsSubset(b) {
-		glog.Errorf("expected %+v to be a subset of %+v", c, b)
+		t.Errorf("expected %+v to be a subset of %+v", c, b)
 	}
 	if a.IsSubset(b) {
-		glog.Errorf("%+v should not be a subset of %+v", a, b)
+		t.Errorf("%+v should not be a subset of %+v", a, b)
 	}
 	if a.IsSubset(c) {
-		glog.Errorf("%+v should not be a subset of %+v", a, c)
+		t.Errorf("%+v should not be a subset of %+v", a, c)
 	}
 	if b.IsSubset(c) {
-		glog.Errorf("%+v should not be a subset of %+v", b, c)
+		t.Errorf("%+v should not be a subset of %+v", b, c)
 	}
 }
 
 func TestSortedString(t *testing.T) {
 	a := Attributes([]string{"a", "b", "c"})
 	if a.SortedString() != "a,b,c" {
-		glog.Errorf("sorted string of %+v (%s) != \"a,b,c\"", a, a.SortedString())
+		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", a, a.SortedString())
 	}
 	b := Attributes([]string{"c", "a", "b"})
 	if b.SortedString() != "a,b,c" {
-		glog.Errorf("sorted string of %+v (%s) != \"a,b,c\"", b, b.SortedString())
+		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", b, b.SortedString())
 	}
 	// Duplicates.
 	c := Attributes([]string{"c", "c", "a", "a", "b", "b"})
 	if c.SortedString() != "a,b,c" {
-		glog.Errorf("sorted string of %+v (%s) != \"a,b,c\"", c, c.SortedString())
+		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", c, c.SortedString())
+	}
+}
+
+func TestPermConfig(t *testing.T) {
+	p := &PermConfig{
+		Read:  []string{"foo", "bar", "baz"},
+		Write: []string{"foo", "baz"},
+	}
+	for _, u := range p.Read {
+		if !p.CanRead(u) {
+			t.Errorf("expected read permission for %q", u)
+		}
+	}
+	if p.CanRead("bad") {
+		t.Errorf("unexpected read access for user \"bad\"")
+	}
+	for _, u := range p.Write {
+		if !p.CanWrite(u) {
+			t.Errorf("expected read permission for %q", u)
+		}
+	}
+	if p.CanWrite("bar") {
+		t.Errorf("unexpected read access for user \"bar\"")
 	}
 }

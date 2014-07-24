@@ -55,7 +55,12 @@ type DB interface {
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
 func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
-	gr := <-db.Get(&storage.GetRequest{Key: key})
+	gr := <-db.Get(&storage.GetRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+	})
 	if gr.Error != nil {
 		return false, 0, gr.Error
 	}
@@ -76,7 +81,10 @@ func PutI(db DB, key storage.Key, value interface{}) error {
 		return err
 	}
 	pr := <-db.Put(&storage.PutRequest{
-		Key: key,
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
 		Value: storage.Value{
 			Bytes:     buf.Bytes(),
 			Timestamp: time.Now().UnixNano(),
@@ -87,17 +95,13 @@ func PutI(db DB, key storage.Key, value interface{}) error {
 
 // BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeDescriptor(db DB, replica storage.Replica) error {
-	locations := storage.RangeDescriptor{
-		StartKey: storage.KeyMin,
-		Replicas: []storage.Replica{replica},
-	}
+func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor) error {
 	// Write meta1.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), locations); err != nil {
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), desc); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), locations); err != nil {
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), desc); err != nil {
 		return err
 	}
 	return nil
@@ -114,30 +118,22 @@ func BootstrapConfigs(db DB) error {
 	if err := PutI(db, storage.MakeKey(storage.KeyConfigAccountingPrefix, storage.KeyMin), acctConfig); err != nil {
 		return err
 	}
-
 	// Permission config.
 	permConfig := &storage.PermConfig{
-		Perms: []storage.Permission{
-			{
-				Users:    []string{""}, // all users
-				Read:     true,
-				Write:    true,
-				Priority: 1.0,
-			},
-		},
+		Read:  []string{storage.UserRoot}, // root user
+		Write: []string{storage.UserRoot}, // root user
 	}
 	if err := PutI(db, storage.MakeKey(storage.KeyConfigPermissionPrefix, storage.KeyMin), permConfig); err != nil {
 		return err
 	}
-
 	// Zone config.
 	// TODO(spencer): change this when zone specifications change to elect for three
 	// replicas with no specific features set.
 	zoneConfig := &storage.ZoneConfig{
 		Replicas: []storage.Attributes{
-			storage.Attributes([]string{"hdd"}),
-			storage.Attributes([]string{"hdd"}),
-			storage.Attributes([]string{"hdd"}),
+			storage.Attributes{},
+			storage.Attributes{},
+			storage.Attributes{},
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
@@ -145,7 +141,6 @@ func BootstrapConfigs(db DB) error {
 	if err := PutI(db, storage.MakeKey(storage.KeyConfigZonePrefix, storage.KeyMin), zoneConfig); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -212,6 +207,45 @@ func NewDB(gossip *gossip.Gossip) *DistDB {
 	return &DistDB{gossip: gossip}
 }
 
+// verifyPermissions verifies that the requesting user (header.User)
+// has permission to read/write (capabilities depend on method
+// name). In the event that multiple permission configs apply to the
+// key range implicated by the command, the lowest common denominator
+// for permission. For example, if a scan crosses two permission
+// configs, both configs must allow read permissions or the entire
+// scan will fail.
+func (db *DistDB) verifyPermissions(method string, header *storage.RequestHeader) error {
+	// Get permissions map from gossip.
+	permMap, err := db.gossip.GetInfo(gossip.KeyConfigPermission)
+	if err != nil {
+		return err
+	}
+	if permMap == nil {
+		return util.Errorf("perm configs not available; cannot execute %s", method)
+	}
+	// Visit PermConfig(s) which apply to the method's key range.
+	//   - For each, verify each PermConfig allows reads or writes as method requires.
+	end := header.EndKey
+	if end == nil {
+		end = header.Key
+	}
+	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
+		header.Key, end, func(start, end storage.Key, config interface{}) error {
+			perm := config.(*storage.PermConfig)
+			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
+				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
+					header.User, string(start), string(end), perm)
+			}
+			if storage.NeedWritePerm(method) && !perm.CanWrite(header.User) {
+				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
+					header.User, string(start), string(end), perm)
+			}
+			return nil
+		})
+}
+
+// nodeIDToAddr uses the gossip network to translate from node ID
+// to a host:port address pair.
 func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
 	info, err := db.gossip.GetInfo(nodeIDKey)
@@ -231,7 +265,12 @@ func (db *DistDB) lookupRangeMetadataFirstLevel(key storage.Key) (*storage.Range
 	}
 	replicas := info.(storage.RangeDescriptor).Replicas
 	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
-	args := &storage.InternalRangeLookupRequest{Key: metadataKey}
+	args := &storage.InternalRangeLookupRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  metadataKey,
+			User: storage.UserRoot,
+		},
+	}
 	replyChan := make(chan *storage.InternalRangeLookupResponse, len(replicas))
 	if err = db.sendRPC(replicas, "Node.InternalRangeLookup", args, replyChan); err != nil {
 		return nil, err
@@ -251,7 +290,12 @@ func (db *DistDB) lookupRangeMetadata(key storage.Key) (*storage.RangeDescriptor
 		return nil, err
 	}
 	metadataKey := storage.MakeKey(storage.KeyMeta2Prefix, key)
-	args := &storage.InternalRangeLookupRequest{Key: metadataKey}
+	args := &storage.InternalRangeLookupRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  metadataKey,
+			User: storage.UserRoot,
+		},
+	}
 	replyChan := make(chan *storage.InternalRangeLookupResponse, len(firstLevelMeta.Replicas))
 	if err = db.sendRPC(firstLevelMeta.Replicas, "Node.InternalRangeLookup", args, replyChan); err != nil {
 		return nil, err
@@ -294,14 +338,23 @@ func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args, reply
 	return rpc.Send(argsMap, method, replyChanI, rpcOpts)
 }
 
-// routeRPC looks up the appropriate range based on the supplied key
-// and sends the RPC according to the specified options. routeRPC
-// sends asynchronously and returns a channel which receives the reply
-// struct when the call is complete. Returns a channel of the same
-// type as "reply".
-func (db *DistDB) routeRPC(key storage.Key, method string, args, reply interface{}) interface{} {
+// routeRPC verifies permissions and looks up the appropriate range
+// based on the supplied key and sends the RPC according to the
+// specified options. routeRPC sends asynchronously and returns a
+// channel which receives the reply struct when the call is
+// complete. Returns a channel of the same type as "reply".
+func (db *DistDB) routeRPC(method string, header *storage.RequestHeader, args, reply interface{}) interface{} {
 	chanVal := reflect.MakeChan(reflect.ChanOf(reflect.BothDir, reflect.TypeOf(reply)), 1)
 
+	// Verify permissions.
+	if err := db.verifyPermissions(method, header); err != nil {
+		replyVal := reflect.ValueOf(reply)
+		reflect.Indirect(replyVal).FieldByName("Error").Set(reflect.ValueOf(err))
+		chanVal.Send(replyVal)
+		return chanVal.Interface()
+	}
+
+	// Retry logic for lookup of range by key and RPCs to range replicas.
 	go func() {
 		retryOpts := util.RetryOptions{
 			Tag:         fmt.Sprintf("routing %s rpc", method),
@@ -311,7 +364,7 @@ func (db *DistDB) routeRPC(key storage.Key, method string, args, reply interface
 			MaxAttempts: 0, // retry indefinitely
 		}
 		err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
-			rangeMeta, err := db.lookupRangeMetadata(key)
+			rangeMeta, err := db.lookupRangeMetadata(header.Key)
 			if err == nil {
 				err = db.sendRPC(rangeMeta.Replicas, method, args, chanVal.Interface())
 			}
@@ -338,51 +391,58 @@ func (db *DistDB) routeRPC(key storage.Key, method string, args, reply interface
 
 // Contains checks for the existence of a key.
 func (db *DistDB) Contains(args *storage.ContainsRequest) <-chan *storage.ContainsResponse {
-	return db.routeRPC(args.Key, "Node.Contains",
+	return db.routeRPC("Node.Contains", &args.RequestHeader,
 		args, &storage.ContainsResponse{}).(chan *storage.ContainsResponse)
 }
 
 // Get .
 func (db *DistDB) Get(args *storage.GetRequest) <-chan *storage.GetResponse {
-	return db.routeRPC(args.Key, "Node.Get",
+	return db.routeRPC("Node.Get", &args.RequestHeader,
 		args, &storage.GetResponse{}).(chan *storage.GetResponse)
 }
 
 // Put .
 func (db *DistDB) Put(args *storage.PutRequest) <-chan *storage.PutResponse {
-	return db.routeRPC(args.Key, "Node.Put",
+	return db.routeRPC("Node.Put", &args.RequestHeader,
 		args, &storage.PutResponse{}).(chan *storage.PutResponse)
+}
+
+// ConditionalPut .
+func (db *DistDB) ConditionalPut(args *storage.ConditionalPutRequest) <-chan *storage.ConditionalPutResponse {
+	return db.routeRPC("Node.ConditionalPut", &args.RequestHeader,
+		args, &storage.ConditionalPutResponse{}).(chan *storage.ConditionalPutResponse)
 }
 
 // Increment .
 func (db *DistDB) Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse {
-	return db.routeRPC(args.Key, "Node.Increment",
+	return db.routeRPC("Node.Increment", &args.RequestHeader,
 		args, &storage.IncrementResponse{}).(chan *storage.IncrementResponse)
 }
 
 // Delete .
 func (db *DistDB) Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse {
-	return db.routeRPC(args.Key, "Node.Delete",
+	return db.routeRPC("Node.Delete", &args.RequestHeader,
 		args, &storage.DeleteResponse{}).(chan *storage.DeleteResponse)
 }
 
 // DeleteRange .
 func (db *DistDB) DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse {
 	// TODO(spencer): range of keys.
-	return db.routeRPC(args.StartKey, "Node.DeleteRange",
+	return db.routeRPC("Node.DeleteRange", &args.RequestHeader,
 		args, &storage.DeleteRangeResponse{}).(chan *storage.DeleteRangeResponse)
 }
 
 // Scan .
 func (db *DistDB) Scan(args *storage.ScanRequest) <-chan *storage.ScanResponse {
 	// TODO(spencer): range of keys.
-	return nil
+	return db.routeRPC("Node.Scan", &args.RequestHeader,
+		args, &storage.ScanResponse{}).(chan *storage.ScanResponse)
 }
 
 // EndTransaction .
 func (db *DistDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *storage.EndTransactionResponse {
 	// TODO(spencer): multiple keys here...
-	return db.routeRPC(args.Keys[0], "Node.EndTransaction",
+	return db.routeRPC("Node.EndTransaction", &args.RequestHeader,
 		args, &storage.EndTransactionResponse{}).(chan *storage.EndTransactionResponse)
 }
 
@@ -391,7 +451,7 @@ func (db *DistDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *st
 // key/value might represent a minute of data. Each would contain 60
 // int64 counts, each representing a second.
 func (db *DistDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storage.AccumulateTSResponse {
-	return db.routeRPC(args.Key, "Node.AccumulateTS",
+	return db.routeRPC("Node.AccumulateTS", &args.RequestHeader,
 		args, &storage.AccumulateTSResponse{}).(chan *storage.AccumulateTSResponse)
 }
 
@@ -401,18 +461,18 @@ func (db *DistDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storag
 // the requested maximum. If fewer than the maximum were returned,
 // then the queue is empty.
 func (db *DistDB) ReapQueue(args *storage.ReapQueueRequest) <-chan *storage.ReapQueueResponse {
-	return db.routeRPC(args.Inbox, "Node.ReapQueue",
+	return db.routeRPC("Node.ReapQueue", &args.RequestHeader,
 		args, &storage.ReapQueueResponse{}).(chan *storage.ReapQueueResponse)
 }
 
 // EnqueueUpdate enqueues an update for eventual execution.
 func (db *DistDB) EnqueueUpdate(args *storage.EnqueueUpdateRequest) <-chan *storage.EnqueueUpdateResponse {
-	// TODO(spencer): queued updates go to system-reserved keys.
-	return nil
+	return db.routeRPC("Node.EnqueueUpdate", &args.RequestHeader,
+		args, &storage.EnqueueUpdateResponse{}).(chan *storage.EnqueueUpdateResponse)
 }
 
 // EnqueueMessage enqueues a message for delivery to an inbox.
 func (db *DistDB) EnqueueMessage(args *storage.EnqueueMessageRequest) <-chan *storage.EnqueueMessageResponse {
-	return db.routeRPC(args.Inbox, "Node.EnqueueMessage",
+	return db.routeRPC("Node.EnqueueMessage", &args.RequestHeader,
 		args, &storage.EnqueueMessageResponse{}).(chan *storage.EnqueueMessageResponse)
 }

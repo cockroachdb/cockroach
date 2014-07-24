@@ -128,17 +128,30 @@ type AcctConfig struct {
 	// Nothing for the moment.
 }
 
-// Permission specifies read/write access and associated priority.
-type Permission struct {
-	Users    []string `yaml:"users,omitempty"`    // Empty to specify default permission
-	Read     bool     `yaml:"read,omitempty"`     // Default means reads are restricted
-	Write    bool     `yaml:"write,omitempty"`    // Default means writes are restricted
-	Priority float32  `yaml:"priority,omitempty"` // 0.0 means default priority
+// PermConfig holds permission configuration, specifying read/write ACLs.
+type PermConfig struct {
+	Read  []string `yaml:"read,omitempty"`  // ACL lists users with read permissions
+	Write []string `yaml:"write,omitempty"` // ACL lists users with write permissions
 }
 
-// PermConfig holds permission configuration.
-type PermConfig struct {
-	Perms []Permission `yaml:"permissions,omitempty"`
+// CanRead does a linear search for user to verify read permission.
+func (p *PermConfig) CanRead(user string) bool {
+	for _, u := range p.Read {
+		if u == user {
+			return true
+		}
+	}
+	return false
+}
+
+// CanWrite does a linear search for user to verify write permission.
+func (p *PermConfig) CanWrite(user string) bool {
+	for _, u := range p.Write {
+		if u == user {
+			return true
+		}
+	}
+	return false
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.

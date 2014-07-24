@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/storage"
 )
 
@@ -38,13 +39,18 @@ type kvTestServer struct {
 
 func startServer() *kvTestServer {
 	once.Do(func() {
-		meta := storage.RangeMetadata{
-			RangeID:  1,
-			StartKey: storage.KeyMin,
-			EndKey:   storage.KeyMax,
-		}
 		server = &kvTestServer{}
-		server.db = NewLocalDB(storage.NewRange(meta, storage.NewInMem(storage.Attributes{}, 1<<30), nil, nil))
+		g := gossip.New()
+		localDB := NewLocalDB()
+		engine := storage.NewInMem(storage.Attributes{}, 1<<20)
+		store := storage.NewStore(engine, g)
+		_, err := store.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{storage.Replica{RangeID: 1}})
+		if err != nil {
+			panic(err)
+		}
+		localDB.AddStore(store)
+		BootstrapConfigs(localDB)
+		server.db = localDB
 		server.rest = NewRESTServer(server.db)
 		server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			server.rest.HandleAction(w, r)

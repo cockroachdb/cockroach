@@ -32,10 +32,10 @@ import (
 func init() {
 	gob.Register(RangeDescriptor{})
 	gob.Register(StoreDescriptor{})
-	gob.Register([]*prefixConfig{})
-	gob.Register(AcctConfig{})
-	gob.Register(PermConfig{})
-	gob.Register(ZoneConfig{})
+	gob.Register(PrefixConfigMap{})
+	gob.Register(&AcctConfig{})
+	gob.Register(&PermConfig{})
+	gob.Register(&ZoneConfig{})
 }
 
 // ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
@@ -59,6 +59,61 @@ var configPrefixes = []struct {
 	{KeyConfigZonePrefix, gossip.KeyConfigZone, ZoneConfig{}, true},
 }
 
+// The following are the method names supported by the KV API.
+const (
+	Contains            = "Contains"
+	Get                 = "Get"
+	Put                 = "Put"
+	ConditionalPut      = "ConditionalPut"
+	Increment           = "Increment"
+	Scan                = "Scan"
+	Delete              = "Delete"
+	DeleteRange         = "DeleteRange"
+	EndTransaction      = "EndTransaction"
+	AccumulateTS        = "AccumulateTS"
+	ReapQueue           = "ReapQueue"
+	EnqueueUpdate       = "EnqueueUpdate"
+	EnqueueMessage      = "EnqueueMessage"
+	InternalRangeLookup = "InternalRangeLookup"
+)
+
+// readMethods specifies the set of methods which read and return data.
+var readMethods = map[string]struct{}{
+	Contains:            struct{}{},
+	Get:                 struct{}{},
+	ConditionalPut:      struct{}{},
+	Increment:           struct{}{},
+	Scan:                struct{}{},
+	ReapQueue:           struct{}{},
+	InternalRangeLookup: struct{}{},
+}
+
+// writeMethods specifies the set of methods which write data.
+var writeMethods = map[string]struct{}{
+	Put:            struct{}{},
+	ConditionalPut: struct{}{},
+	Increment:      struct{}{},
+	Delete:         struct{}{},
+	DeleteRange:    struct{}{},
+	EndTransaction: struct{}{},
+	AccumulateTS:   struct{}{},
+	ReapQueue:      struct{}{},
+	EnqueueUpdate:  struct{}{},
+	EnqueueMessage: struct{}{},
+}
+
+// NeedReadPerm returns true if the specified method requires read permissions.
+func NeedReadPerm(method string) bool {
+	_, ok := readMethods[method]
+	return ok
+}
+
+// NeedWritePerm returns true if the specified method requires write permissions.
+func NeedWritePerm(method string) bool {
+	_, ok := writeMethods[method]
+	return ok
+}
+
 // A RangeMetadata holds information about the range, including
 // range ID and start and end keys, and replicas slice.
 type RangeMetadata struct {
@@ -66,7 +121,7 @@ type RangeMetadata struct {
 	RangeID   int64
 	StartKey  Key
 	EndKey    Key
-	Replicas  RangeDescriptor
+	Desc      RangeDescriptor
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -80,7 +135,7 @@ type Range struct {
 	engine    Engine         // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
-	pending   chan *LogEntry // Not-yet-proposed log entries
+	pending   chan *Cmd      // Pending commands to propose to Raft
 	closer    chan struct{}  // Channel for closing the range
 	// TODO(andybons): raft instance goes here.
 }
@@ -92,7 +147,7 @@ func NewRange(meta RangeMetadata, engine Engine, allocator *allocator, gossip *g
 		engine:    engine,
 		allocator: allocator,
 		gossip:    gossip,
-		pending:   make(chan *LogEntry, 100 /* TODO(spencer): what's correct value? */),
+		pending:   make(chan *Cmd, 10 /* TODO(spencer): what's correct value? */),
 		closer:    make(chan struct{}),
 	}
 	return r
@@ -124,47 +179,31 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
-// ReadOnlyCmd executes a read-only command against the store. If this
-// server is the raft leader, we can satisfy the read
-// locally. Otherwise, if this server has executed a raft command or
-// heartbeat at a timestamp greater than the read timestamp, we can
-// also satisfy the read locally. Otherwise, we must ping the leader
-// to determine with certainty whether our local data is up to
-// date.
-func (r *Range) ReadOnlyCmd(method string, args, reply interface{}) error {
-	if r == nil {
-		return util.Errorf("invalid node specification")
-	}
-	return r.executeCmd(method, args, reply)
+// ContainsKey returns whether this range contains the specified key.
+func (r *Range) ContainsKey(key Key) bool {
+	return bytes.Compare(r.Meta.StartKey, key) <= 0 &&
+		bytes.Compare(r.Meta.EndKey, key) > 0
 }
 
-// ReadWriteCmd executes a read-write command against the store. If
-// this node is the raft leader, it proposes the write to the other
-// raft participants. Otherwise, the write is forwarded via a
-// FollowerPropose RPC to the leader and this replica waits for an ACK
-// to execute the command locally and return the result to the
-// requesting client.
-//
-// Commands which mutate the store must be proposed as part of the
-// raft consensus write protocol. Only after committed can the command
-// be executed. To facilitate this, ReadWriteCmd returns a channel
-// which is signaled upon completion.
-func (r *Range) ReadWriteCmd(method string, args, reply interface{}) <-chan error {
-	if r == nil {
-		c := make(chan error, 1)
-		c <- util.Errorf("invalid node specification")
-		return c
+// ContainsKeyRange returns whether this range contains the specified
+// key range from start to end.
+func (r *Range) ContainsKeyRange(start, end Key) bool {
+	if len(end) == 0 {
+		end = start
 	}
-
-	logEntry := &LogEntry{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
-		done:   make(chan error, 1),
+	if bytes.Compare(start, end) > 0 {
+		glog.Errorf("start key is larger than end key %q > %q", string(start), string(end))
+		return false
 	}
-	r.pending <- logEntry
+	return bytes.Compare(r.Meta.StartKey, start) <= 0 &&
+		bytes.Compare(r.Meta.EndKey, end) >= 0
+}
 
-	return logEntry.done
+// EnqueueCmd enqueues a command to the pending queue for Raft
+// proposals.
+func (r *Range) EnqueueCmd(cmd *Cmd) error {
+	r.pending <- cmd
+	return <-cmd.done
 }
 
 // processPending processes pending read/write commands, sending them
@@ -213,7 +252,7 @@ func (r *Range) maybeGossipClusterID() {
 // the start of the key space and the raft leader.
 func (r *Range) maybeGossipFirstRange() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
-		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Replicas, 0*time.Second); err != nil {
+		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Desc, 0*time.Second); err != nil {
 			glog.Errorf("failed to gossip first range metadata: %v", err)
 		}
 	}
@@ -226,14 +265,14 @@ func (r *Range) maybeGossipFirstRange() {
 func (r *Range) maybeGossipConfigs() {
 	if r.gossip != nil && r.IsLeader() {
 		for _, cp := range configPrefixes {
-			if cp.dirty && r.containsKey(cp.keyPrefix) {
-				configs, err := r.loadConfigs(cp.keyPrefix, cp.configI)
+			if cp.dirty && r.ContainsKey(cp.keyPrefix) {
+				configMap, err := r.loadConfigMap(cp.keyPrefix, cp.configI)
 				if err != nil {
-					glog.Errorf("failed loading %s configs: %v", cp.gossipKey, err)
+					glog.Errorf("failed loading %s config map: %v", cp.gossipKey, err)
 					continue
 				} else {
-					if err := r.gossip.AddInfo(cp.gossipKey, configs, 0*time.Second); err != nil {
-						glog.Errorf("failed to gossip %s configs: %v", cp.gossipKey, err)
+					if err := r.gossip.AddInfo(cp.gossipKey, configMap, 0*time.Second); err != nil {
+						glog.Errorf("failed to gossip %s configMap: %v", cp.gossipKey, err)
 						continue
 					}
 				}
@@ -243,17 +282,17 @@ func (r *Range) maybeGossipConfigs() {
 	}
 }
 
-// loadConfigs scans and returns the config entries under
-// "keyPrefix". Prefix configuration maps include accounting,
-// permissions, and zones.
-func (r *Range) loadConfigs(keyPrefix Key, configI interface{}) ([]*prefixConfig, error) {
+// loadConfigMap scans the config entries under keyPrefix and
+// instantiates/returns a config map. Prefix configuration maps
+// include accounting, permissions, and zones.
+func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
 	kvs, err := r.engine.scan(keyPrefix, PrefixEndKey(keyPrefix), 0)
 	if err != nil {
 		return nil, err
 	}
-	var configs []*prefixConfig
+	var configs []*PrefixConfig
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// gob encoded config from the Value into a new instance of configI.
@@ -261,46 +300,42 @@ func (r *Range) loadConfigs(keyPrefix Key, configI interface{}) ([]*prefixConfig
 		if err := gob.NewDecoder(bytes.NewBuffer(kv.Value.Bytes)).Decode(config); err != nil {
 			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
 		}
-		configs = append(configs, &prefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
+		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
 	}
-	return configs, nil
-}
-
-// containsKey returns whether this range contains the specified key.
-func (r *Range) containsKey(key Key) bool {
-	return bytes.Compare(r.Meta.StartKey, key) <= 0 &&
-		bytes.Compare(r.Meta.EndKey, key) > 0
+	return NewPrefixConfigMap(configs)
 }
 
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
 func (r *Range) executeCmd(method string, args, reply interface{}) error {
 	switch method {
-	case "Contains":
+	case Contains:
 		r.Contains(args.(*ContainsRequest), reply.(*ContainsResponse))
-	case "Get":
+	case Get:
 		r.Get(args.(*GetRequest), reply.(*GetResponse))
-	case "Put":
+	case Put:
 		r.Put(args.(*PutRequest), reply.(*PutResponse))
-	case "Increment":
+	case ConditionalPut:
+		r.ConditionalPut(args.(*ConditionalPutRequest), reply.(*ConditionalPutResponse))
+	case Increment:
 		r.Increment(args.(*IncrementRequest), reply.(*IncrementResponse))
-	case "Delete":
+	case Delete:
 		r.Delete(args.(*DeleteRequest), reply.(*DeleteResponse))
-	case "DeleteRange":
+	case DeleteRange:
 		r.DeleteRange(args.(*DeleteRangeRequest), reply.(*DeleteRangeResponse))
-	case "Scan":
+	case Scan:
 		r.Scan(args.(*ScanRequest), reply.(*ScanResponse))
-	case "EndTransaction":
+	case EndTransaction:
 		r.EndTransaction(args.(*EndTransactionRequest), reply.(*EndTransactionResponse))
-	case "AccumulateTS":
+	case AccumulateTS:
 		r.AccumulateTS(args.(*AccumulateTSRequest), reply.(*AccumulateTSResponse))
-	case "ReapQueue":
+	case ReapQueue:
 		r.ReapQueue(args.(*ReapQueueRequest), reply.(*ReapQueueResponse))
-	case "EnqueueUpdate":
+	case EnqueueUpdate:
 		r.EnqueueUpdate(args.(*EnqueueUpdateRequest), reply.(*EnqueueUpdateResponse))
-	case "EnqueueMessage":
+	case EnqueueMessage:
 		r.EnqueueMessage(args.(*EnqueueMessageRequest), reply.(*EnqueueMessageResponse))
-	case "InternalRangeLookup":
+	case InternalRangeLookup:
 		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
@@ -330,43 +365,55 @@ func (r *Range) Get(args *GetRequest, reply *GetResponse) {
 	reply.Value, reply.Error = r.engine.get(args.Key)
 }
 
-// Put sets the value for a specified key. Conditional puts are supported.
+// Put sets the value for a specified key.
 func (r *Range) Put(args *PutRequest, reply *PutResponse) {
-	// Handle conditional put.
-	if args.ExpValue != nil {
-		// Handle check for non-existence of key.
-		val, err := r.engine.get(args.Key)
-		if err != nil {
-			reply.Error = err
-			return
-		}
-		if args.ExpValue.Bytes == nil && val.Bytes != nil {
-			reply.Error = util.Errorf("key %q already exists", args.Key)
-			return
-		} else if args.ExpValue != nil {
-			// Handle check for existence when there is no key.
-			if val.Bytes == nil {
-				reply.Error = util.Errorf("key %q does not exist", args.Key)
-				return
-			} else if !bytes.Equal(args.ExpValue.Bytes, val.Bytes) {
-				reply.ActualValue.Bytes = val.Bytes
-				reply.Error = util.Errorf("key %q does not match existing", args.Key)
-				return
-			}
-		}
-	}
-	if err := r.engine.put(args.Key, args.Value); err != nil {
+	reply.Error = r.internalPut(args.Key, args.Value)
+}
+
+// ConditionalPut sets the value for a specified key only if
+// the expected value matches. If not, the return value contains
+// the actual value.
+func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPutResponse) {
+	// Handle check for non-existence of key.
+	val, err := r.engine.get(args.Key)
+	if err != nil {
 		reply.Error = err
 		return
 	}
+	if args.ExpValue.Bytes == nil && val.Bytes != nil {
+		reply.Error = util.Errorf("key %q already exists", args.Key)
+		return
+	} else if args.ExpValue.Bytes != nil {
+		// Handle check for existence when there is no key.
+		if val.Bytes == nil {
+			reply.Error = util.Errorf("key %q does not exist", args.Key)
+			return
+		} else if !bytes.Equal(args.ExpValue.Bytes, val.Bytes) {
+			reply.ActualValue = &Value{Bytes: val.Bytes, Timestamp: val.Timestamp}
+			reply.Error = util.Errorf("key %q does not match existing", args.Key)
+			return
+		}
+	}
+
+	reply.Error = r.internalPut(args.Key, args.Value)
+}
+
+// internalPut is the guts of the put method, called from both Put()
+// and ConditionalPut().
+func (r *Range) internalPut(key Key, value Value) error {
+	// Put the value.
+	if err := r.engine.put(key, value); err != nil {
+		return err
+	}
 	// Check whether this put has modified a configuration map.
 	for _, cp := range configPrefixes {
-		if bytes.HasPrefix(args.Key, cp.keyPrefix) {
+		if bytes.HasPrefix(key, cp.keyPrefix) {
 			cp.dirty = true
 			r.maybeGossipConfigs()
 			break
 		}
 	}
+	return nil
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
@@ -393,7 +440,7 @@ func (r *Range) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *ScanRequest, reply *ScanResponse) {
-	reply.Rows, reply.Error = r.engine.scan(args.StartKey, args.EndKey, args.MaxResults)
+	reply.Rows, reply.Error = r.engine.scan(args.Key, args.EndKey, args.MaxResults)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant

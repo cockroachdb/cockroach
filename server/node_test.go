@@ -76,10 +76,15 @@ func TestBootstrapCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer localDB.Close()
+
 	// Scan the complete contents of the local database.
 	sr := <-localDB.Scan(&storage.ScanRequest{
-		StartKey:   storage.KeyMin,
-		EndKey:     storage.KeyMax,
+		RequestHeader: storage.RequestHeader{
+			Key:    storage.KeyMin,
+			EndKey: storage.KeyMax,
+			User:   storage.UserRoot,
+		},
 		MaxResults: math.MaxInt64,
 	})
 	if sr.Error != nil {
@@ -113,10 +118,13 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added.
 func TestBootstrapNewStore(t *testing.T) {
 	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	if _, err := BootstrapCluster("cluster-1", engine); err != nil {
+	localDB, err := BootstrapCluster("cluster-1", engine)
+	if err != nil {
 		t.Fatal(err)
 	}
-	// Provide a list of engines for initializing a node.
+	localDB.Close()
+
+	// Start a new node with two new stores which will require bootstrapping.
 	engines := []storage.Engine{
 		engine,
 		storage.NewInMem(storage.Attributes{}, 1<<20),
@@ -129,7 +137,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 10ms) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.getStoreCount() == 3 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.localDB.GetStoreCount() == 3 }, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }
@@ -138,9 +146,12 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	if _, err := BootstrapCluster("cluster-1", engine); err != nil {
+	localDB, err := BootstrapCluster("cluster-1", engine)
+	if err != nil {
 		t.Fatal(err)
 	}
+	localDB.Close()
+
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
 	*gossip.GossipInterval = 10 * time.Millisecond
 	// Start the bootstrap node.
@@ -155,7 +166,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.getStoreCount() == 1 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.localDB.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 

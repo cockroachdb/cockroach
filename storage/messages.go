@@ -17,6 +17,8 @@
 
 package storage
 
+const UserRoot = "root"
+
 // Key defines the key in the key-value datastore.
 type Key []byte
 
@@ -50,6 +52,14 @@ type RequestHeader struct {
 	// The following values are set internally and should not be set
 	// manually.
 
+	// The key for request. If the request operates on a range, this
+	// represents the starting key for the range.
+	Key Key
+	// End key is empty if request spans only a single key.
+	EndKey Key
+	// User is the originating user. Used to lookup priority when
+	// scheduling queued operations at target node.
+	User string
 	// Replica specifies the destination for the request. See config.go.
 	Replica Replica
 	// MaxTimestamp is the maximum wall time seen by the client to
@@ -73,7 +83,6 @@ type ResponseHeader struct {
 // A ContainsRequest is arguments to the Contains() method.
 type ContainsRequest struct {
 	RequestHeader
-	Key Key
 }
 
 // A ContainsResponse is the return value of the Contains() method.
@@ -85,7 +94,6 @@ type ContainsResponse struct {
 // A GetRequest is arguments to the Get() method.
 type GetRequest struct {
 	RequestHeader
-	Key Key
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -96,19 +104,30 @@ type GetResponse struct {
 }
 
 // A PutRequest is arguments to the Put() method.
-// Conditional puts are supported if ExpValue is set.
+type PutRequest struct {
+	RequestHeader
+	Value Value // The value to put
+}
+
+// A PutResponse is the return value from the Put() method.
+type PutResponse struct {
+	ResponseHeader
+}
+
+// A ConditionalPutRequest is arguments to the ConditionalPut()
+// method.
 // - Returns true and sets value if ExpValue equals existing value.
 // - If key doesn't exist and ExpValue is empty, sets value.
 // - Otherwise, returns error.
-type PutRequest struct {
+type ConditionalPutRequest struct {
 	RequestHeader
-	Key      Key    // must be non-empty
-	Value    Value  // The value to put
-	ExpValue *Value // ExpValue.Bytes empty to test for non-existence
+	Value    Value // The value to put
+	ExpValue Value // ExpValue.Bytes empty to test for non-existence
 }
 
-// A PutResponse is the return value form the Put() method.
-type PutResponse struct {
+// A ConditionalPutRequest is the return value from the
+// ConditionalPut() method.
+type ConditionalPutResponse struct {
 	ResponseHeader
 	ActualValue *Value // ActualValue.Bytes set if conditional put failed
 }
@@ -118,7 +137,6 @@ type PutResponse struct {
 // varint64.
 type IncrementRequest struct {
 	RequestHeader
-	Key       Key
 	Increment int64
 }
 
@@ -133,7 +151,6 @@ type IncrementResponse struct {
 // A DeleteRequest is arguments to the Delete() method.
 type DeleteRequest struct {
 	RequestHeader
-	Key Key
 }
 
 // A DeleteResponse is the return value from the Delete() method.
@@ -145,8 +162,6 @@ type DeleteResponse struct {
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
 	RequestHeader
-	StartKey Key // Empty to start at first key
-	EndKey   Key // Non-inclusive; if empty, deletes all
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
@@ -160,8 +175,6 @@ type DeleteRangeResponse struct {
 // start and end keys for the scan and the maximum number of results.
 type ScanRequest struct {
 	RequestHeader
-	StartKey   Key   // Empty to start at first key
-	EndKey     Key   // Optional max key; empty to ignore
 	MaxResults int64 // Must be > 0
 }
 
@@ -173,12 +186,9 @@ type ScanResponse struct {
 
 // An EndTransactionRequest is arguments to the EndTransaction() method.
 // It specifies whether to commit or roll back an extant transaction.
-// It also lists the keys involved in the transaction so their write
-// intents may be aborted or committed.
 type EndTransactionRequest struct {
 	RequestHeader
-	Commit bool  // False to abort and rollback
-	Keys   []Key // Write-intent keys to commit or abort
+	Commit bool // False to abort and rollback
 }
 
 // An EndTransactionResponse is the return value from the
@@ -198,7 +208,6 @@ type EndTransactionResponse struct {
 // time series counts for this discrete time interval.
 type AccumulateTSRequest struct {
 	RequestHeader
-	Key    Key
 	Counts []int64 // One per discrete subtime period (e.g. one/minute or one/second)
 }
 
@@ -213,7 +222,6 @@ type AccumulateTSResponse struct {
 // to be reapted and also the maximum number of results to return.
 type ReapQueueRequest struct {
 	RequestHeader
-	Inbox      Key   // Recipient inbox key
 	MaxResults int64 // Maximum results to return; must be > 0
 }
 
@@ -244,7 +252,6 @@ type EnqueueUpdateResponse struct {
 // byte slice value).
 type EnqueueMessageRequest struct {
 	RequestHeader
-	Inbox   Key   // Recipient key
 	Message Value // Message value to delivery to inbox
 }
 
@@ -259,7 +266,6 @@ type EnqueueMessageResponse struct {
 // by KeyMeta1Prefix or KeyMeta2Prefix to the user key.
 type InternalRangeLookupRequest struct {
 	RequestHeader
-	Key Key
 }
 
 // An InternalRangeLookupResponse is the return value from the

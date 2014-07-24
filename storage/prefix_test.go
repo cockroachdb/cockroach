@@ -32,14 +32,14 @@ const (
 	config4 = 4
 )
 
-func buildTestPrefixConfigMap() *prefixConfigMap {
-	configs := []*prefixConfig{
-		{KeyMin, config1},
-		{Key("/db1"), config2},
-		{Key("/db1/table"), config3},
-		{Key("/db3"), config4},
+func buildTestPrefixConfigMap() PrefixConfigMap {
+	configs := []*PrefixConfig{
+		{KeyMin, nil, config1},
+		{Key("/db1"), nil, config2},
+		{Key("/db1/table"), nil, config3},
+		{Key("/db3"), nil, config4},
 	}
-	pcc, err := newPrefixConfigMap(configs)
+	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
 		glog.Fatalf("unexpected error building config map: %v", err)
 	}
@@ -87,12 +87,12 @@ func TestPrefixConfigSort(t *testing.T) {
 		Key("\xfe"),
 		KeyMax,
 	}
-	pcc := &prefixConfigMap{}
+	pcc := PrefixConfigMap{}
 	for _, key := range keys {
-		pcc.configs = append(pcc.configs, &prefixConfig{key, nil})
+		pcc = append(pcc, &PrefixConfig{key, nil, nil})
 	}
 	sort.Sort(pcc)
-	for i, pc := range pcc.configs {
+	for i, pc := range pcc {
 		if bytes.Compare(pc.Prefix, expKeys[i]) != 0 {
 			t.Errorf("order for index %d incorrect; expected %q, got %q", i, expKeys[i], pc.Prefix)
 		}
@@ -102,21 +102,21 @@ func TestPrefixConfigSort(t *testing.T) {
 // TestPrefixConfigBuild adds prefixes and verifies they're
 // sorted and proper end keys are generated.
 func TestPrefixConfigBuild(t *testing.T) {
-	expPrefixConfigs := []prefixConfig{
-		{KeyMin, config1},
-		{Key("/db1"), config2},
-		{Key("/db1/table"), config3},
-		{Key("/db1/tablf"), config2},
-		{Key("/db2"), config1},
-		{Key("/db3"), config4},
-		{Key("/db4"), config1},
+	expPrefixConfigs := []PrefixConfig{
+		{KeyMin, nil, config1},
+		{Key("/db1"), nil, config2},
+		{Key("/db1/table"), nil, config3},
+		{Key("/db1/tablf"), nil, config2},
+		{Key("/db2"), nil, config1},
+		{Key("/db3"), nil, config4},
+		{Key("/db4"), nil, config1},
 	}
 	pcc := buildTestPrefixConfigMap()
-	if len(pcc.configs) != len(expPrefixConfigs) {
+	if len(pcc) != len(expPrefixConfigs) {
 		t.Fatalf("incorrect number of built prefix configs; expected %d, got %d",
-			len(expPrefixConfigs), len(pcc.configs))
+			len(expPrefixConfigs), len(pcc))
 	}
-	for i, pc := range pcc.configs {
+	for i, pc := range pcc {
 		exp := expPrefixConfigs[i]
 		if bytes.Compare(pc.Prefix, exp.Prefix) != 0 {
 			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.Prefix, pc.Prefix)
@@ -149,7 +149,7 @@ func TestMatchByPrefix(t *testing.T) {
 		{Key("/xff"), config1},
 	}
 	for i, test := range testData {
-		pc := pcc.matchByPrefix(test.key)
+		pc := pcc.MatchByPrefix(test.key)
 		if test.expConfig != pc.Config {
 			t.Errorf("%d: expected config %v for %q; got %v", i, test.expConfig, test.key, pc.Config)
 		}
@@ -178,7 +178,7 @@ func TestMatchesByPrefix(t *testing.T) {
 		{Key("/xff"), []interface{}{config1}},
 	}
 	for i, test := range testData {
-		pcs := pcc.matchesByPrefix(test.key)
+		pcs := pcc.MatchesByPrefix(test.key)
 		if len(pcs) != len(test.expConfigs) {
 			t.Errorf("%d: expected %d matches, got %d", i, len(test.expConfigs), len(pcs))
 			continue
@@ -194,18 +194,18 @@ func TestMatchesByPrefix(t *testing.T) {
 // TestSplitRangeByPrefixesErrors verifies various error conditions
 // for splitting ranges.
 func TestSplitRangeByPrefixesError(t *testing.T) {
-	pcc, err := newPrefixConfigMap([]*prefixConfig{})
+	pcc, err := NewPrefixConfigMap([]*PrefixConfig{})
 	if err == nil {
 		t.Error("expected error building config map with no default prefix")
 	}
 	pcc = buildTestPrefixConfigMap()
 	// Key order is reversed.
-	if _, err := pcc.splitRangeByPrefixes(KeyMax, KeyMin); err == nil {
+	if _, err := pcc.SplitRangeByPrefixes(KeyMax, KeyMin); err == nil {
 		t.Error("expected error with reversed keys")
 	}
 	// Same start and end keys.
-	if _, err := pcc.splitRangeByPrefixes(KeyMin, KeyMin); err == nil {
-		t.Error("expected error with same start & end keys")
+	if _, err := pcc.SplitRangeByPrefixes(KeyMin, KeyMin); err != nil {
+		t.Error("unexpected error with same start & end keys")
 	}
 }
 
@@ -215,10 +215,10 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		start, end Key
-		expRanges  []*rangeResult
+		expRanges  []*RangeResult
 	}{
 		// The full range.
-		{KeyMin, KeyMax, []*rangeResult{
+		{KeyMin, KeyMax, []*RangeResult{
 			{KeyMin, Key("/db1"), config1},
 			{Key("/db1"), Key("/db1/table"), config2},
 			{Key("/db1/table"), Key("/db1/tablf"), config3},
@@ -228,7 +228,7 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 			{Key("/db4"), KeyMax, config1},
 		}},
 		// A subrange containing all databases.
-		{Key("/db"), Key("/dc"), []*rangeResult{
+		{Key("/db"), Key("/dc"), []*RangeResult{
 			{Key("/db"), Key("/db1"), config1},
 			{Key("/db1"), Key("/db1/table"), config2},
 			{Key("/db1/table"), Key("/db1/tablf"), config3},
@@ -238,7 +238,7 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 			{Key("/db4"), Key("/dc"), config1},
 		}},
 		// A subrange spanning from arbitrary points within zones.
-		{Key("/db1/a"), Key("/db3/b"), []*rangeResult{
+		{Key("/db1/a"), Key("/db3/b"), []*RangeResult{
 			{Key("/db1/a"), Key("/db1/table"), config2},
 			{Key("/db1/table"), Key("/db1/tablf"), config3},
 			{Key("/db1/tablf"), Key("/db2"), config2},
@@ -246,22 +246,22 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 			{Key("/db3"), Key("/db3/b"), config4},
 		}},
 		// A subrange containing only /db1.
-		{Key("/db1"), Key("/db2"), []*rangeResult{
+		{Key("/db1"), Key("/db2"), []*RangeResult{
 			{Key("/db1"), Key("/db1/table"), config2},
 			{Key("/db1/table"), Key("/db1/tablf"), config3},
 			{Key("/db1/tablf"), Key("/db2"), config2},
 		}},
 		// A subrange containing only /db1/table.
-		{Key("/db1/table"), Key("/db1/tablf"), []*rangeResult{
+		{Key("/db1/table"), Key("/db1/tablf"), []*RangeResult{
 			{Key("/db1/table"), Key("/db1/tablf"), config3},
 		}},
 		// A subrange within /db1/table.
-		{Key("/db1/table3"), Key("/db1/table4"), []*rangeResult{
+		{Key("/db1/table3"), Key("/db1/table4"), []*RangeResult{
 			{Key("/db1/table3"), Key("/db1/table4"), config3},
 		}},
 	}
 	for i, test := range testData {
-		results, err := pcc.splitRangeByPrefixes(test.start, test.end)
+		results, err := pcc.SplitRangeByPrefixes(test.start, test.end)
 		if err != nil {
 			t.Errorf("%d: unexpected error splitting ranges: %v", i, err)
 		}

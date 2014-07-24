@@ -46,9 +46,8 @@ var (
 	}
 	testDefaultAcctConfig = AcctConfig{}
 	testDefaultPermConfig = PermConfig{
-		Perms: []Permission{
-			{Read: true, Write: true},
-		},
+		Read:  []string{"root"},
+		Write: []string{"root"},
 	}
 	testDefaultZoneConfig = ZoneConfig{
 		Replicas: []Attributes{
@@ -81,12 +80,53 @@ func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 		RangeID:  0,
 		StartKey: KeyMin,
 		EndKey:   KeyMax,
-		Replicas: testRangeDescriptor,
+		Desc:     testRangeDescriptor,
 	}
 	g := gossip.New()
 	r := NewRange(rm, engine, nil, g)
 	r.Start()
 	return r, g
+}
+
+// TestRangeContains verifies methods to check whether a key or key range
+// is contained within the range.
+func TestRangeContains(t *testing.T) {
+	r, _ := createTestRange(createTestEngine(t), t)
+	defer r.Stop()
+	r.Meta.StartKey = Key("a")
+	r.Meta.EndKey = Key("b")
+
+	testData := []struct {
+		start, end Key
+		contains   bool
+	}{
+		// Single keys.
+		{Key("a"), Key("a"), true},
+		{Key("aa"), Key("aa"), true},
+		{Key("`"), Key("`"), false},
+		{Key("b"), Key("b"), false},
+		{Key("c"), Key("c"), false},
+		// Key ranges.
+		{Key("a"), Key("b"), true},
+		{Key("a"), Key("aa"), true},
+		{Key("aa"), Key("b"), true},
+		{Key("0"), Key("9"), false},
+		{Key("`"), Key("a"), false},
+		{Key("b"), Key("bb"), false},
+		{Key("0"), Key("bb"), false},
+		{Key("aa"), Key("bb"), false},
+	}
+	for _, test := range testData {
+		if bytes.Compare(test.start, test.end) == 0 {
+			if r.ContainsKey(test.start) != test.contains {
+				t.Errorf("expected key %q within range", test.start)
+			}
+		} else {
+			if r.ContainsKeyRange(test.start, test.end) != test.contains {
+				t.Errorf("expected key range %q-%q within range", test.start, test.end)
+			}
+		}
+	}
 }
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
@@ -109,20 +149,21 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 	defer r.Stop()
 	testData := []struct {
 		gossipKey string
-		configs   []*prefixConfig
+		configs   []*PrefixConfig
 	}{
-		{gossip.KeyConfigAccounting, []*prefixConfig{&prefixConfig{KeyMin, &testDefaultAcctConfig}}},
-		{gossip.KeyConfigPermission, []*prefixConfig{&prefixConfig{KeyMin, &testDefaultPermConfig}}},
-		{gossip.KeyConfigZone, []*prefixConfig{&prefixConfig{KeyMin, &testDefaultZoneConfig}}},
+		{gossip.KeyConfigAccounting, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultAcctConfig}}},
+		{gossip.KeyConfigPermission, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigZone, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
 		info, err := g.GetInfo(test.gossipKey)
 		if err != nil {
 			t.Fatal(err)
 		}
-		configs := info.([]*prefixConfig)
-		if !reflect.DeepEqual(configs, test.configs) {
-			t.Errorf("expected gossiped configs to be equal %s vs %s", configs, test.configs)
+		configMap := info.(PrefixConfigMap)
+		expConfigs := []*PrefixConfig{test.configs[0]}
+		if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+			t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 		}
 	}
 }
@@ -133,10 +174,8 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	engine := createTestEngine(t)
 	// Add a permission for a new key prefix.
 	db1Perm := PermConfig{
-		Perms: []Permission{
-			{Users: []string{"spencer"}, Read: true, Write: true, Priority: 100.0},
-			{Users: []string{"foo", "bar", "baz"}, Read: true, Write: false, Priority: 10.0},
-		},
+		Read:  []string{"spencer", "foo", "bar", "baz"},
+		Write: []string{"spencer"},
 	}
 	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
 	if err := putI(engine, key, db1Perm); err != nil {
@@ -149,13 +188,14 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configs := info.([]*prefixConfig)
-	expConfigs := []*prefixConfig{
-		&prefixConfig{KeyMin, &testDefaultPermConfig},
-		&prefixConfig{Key("/db1"), &db1Perm},
+	configMap := info.(PrefixConfigMap)
+	expConfigs := []*PrefixConfig{
+		&PrefixConfig{KeyMin, nil, &testDefaultPermConfig},
+		&PrefixConfig{Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{Key("/db2"), KeyMin, &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual(configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configs, expConfigs)
+	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
 
@@ -166,9 +206,8 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	defer r.Stop()
 	// Add a permission for a new key prefix.
 	db1Perm := PermConfig{
-		Perms: []Permission{
-			{Users: []string{"spencer"}, Read: true, Write: true, Priority: 100.0},
-		},
+		Read:  []string{"spencer"},
+		Write: []string{"spencer"},
 	}
 	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
 	reply := &PutResponse{}
@@ -177,7 +216,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if err := gob.NewEncoder(&buf).Encode(db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	r.Put(&PutRequest{Key: key, Value: Value{Bytes: buf.Bytes()}}, reply)
+	r.Put(&PutRequest{RequestHeader: RequestHeader{Key: key}, Value: Value{Bytes: buf.Bytes()}}, reply)
 	if reply.Error != nil {
 		t.Fatal(reply.Error)
 	}
@@ -186,12 +225,13 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	configs := info.([]*prefixConfig)
-	expConfigs := []*prefixConfig{
-		&prefixConfig{KeyMin, &testDefaultPermConfig},
-		&prefixConfig{Key("/db1"), &db1Perm},
+	configMap := info.(PrefixConfigMap)
+	expConfigs := []*PrefixConfig{
+		&PrefixConfig{KeyMin, nil, &testDefaultPermConfig},
+		&PrefixConfig{Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{Key("/db2"), KeyMin, &testDefaultPermConfig},
 	}
-	if !reflect.DeepEqual(configs, expConfigs) {
-		t.Errorf("expected gossiped configs to be equal %s vs %s", configs, expConfigs)
+	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
+		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }

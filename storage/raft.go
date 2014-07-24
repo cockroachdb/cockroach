@@ -18,13 +18,14 @@
 
 package storage
 
-// A LogEntry provides serialization of a read/write command. Once
-// committed to the log, the command is executed and the result
-// returned via the done channel.
-type LogEntry struct {
-	Method string
-	Args   interface{}
-	Reply  interface{}
+// A Cmd provides serialization for a read-only or read/write
+// command. Once committed to the Raft log, the command is executed
+// and the result returned via the done channel.
+type Cmd struct {
+	Method   string
+	Args     interface{}
+	Reply    interface{}
+	ReadOnly bool
 
 	done chan error // Used to signal waiting RPC handler
 }

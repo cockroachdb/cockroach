@@ -75,8 +75,11 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 	// Scan all zones if the key is empty.
 	if len(path) == 0 {
 		sr := <-zh.kvDB.Scan(&storage.ScanRequest{
-			StartKey:   storage.KeyConfigZonePrefix,
-			EndKey:     storage.PrefixEndKey(storage.KeyConfigZonePrefix),
+			RequestHeader: storage.RequestHeader{
+				Key:    storage.KeyConfigZonePrefix,
+				EndKey: storage.PrefixEndKey(storage.KeyConfigZonePrefix),
+				User:   storage.UserRoot,
+			},
 			MaxResults: maxGetResults,
 		})
 		if sr.Error != nil {
@@ -134,7 +137,12 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
 	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
-	dr := <-zh.kvDB.Delete(&storage.DeleteRequest{Key: zoneKey})
+	dr := <-zh.kvDB.Delete(&storage.DeleteRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  zoneKey,
+			User: storage.UserRoot,
+		},
+	})
 	if dr.Error != nil {
 		return dr.Error
 	}

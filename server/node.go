@@ -21,7 +21,6 @@ import (
 	"container/list"
 	"net"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -44,16 +43,22 @@ const (
 	ttlNodeIDGossip = 0 * time.Second
 )
 
-// Node manages a map of stores (by store ID) for which it serves traffic.
+// A Node manages a map of stores (by store ID) for which it serves
+// traffic. A node is the top-level data structure. There is one node
+// instance per process. A node accepts incoming RPCs and services
+// them by directing the commands contained within RPCs to local
+// stores, which in turn direct the commands to specific ranges.  Each
+// node has access to the global, monolithic Key-Value abstraction via
+// its "distDB" reference. Nodes use this to allocate node and store
+// IDs for bootstrapping the node itself or new stores as they're added
+// on subsequent instantiations.
 type Node struct {
 	ClusterID  string                 // UUID for Cockroach cluster
 	Descriptor storage.NodeDescriptor // Node ID, network/physical topology
 	gossip     *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
-	kvDB       kv.DB                  // Used to access global id generators
+	distDB     kv.DB                  // Global KV DB; used to access global id generators
+	localDB    *kv.LocalDB            // Local KV DB for access to node-local stores
 	closer     chan struct{}
-
-	mu       sync.RWMutex             // Protects storeMap during bootstrapping
-	storeMap map[int32]*storage.Store // Map from StoreID to Store
 
 	maxAvailPrefix string // Prefix for max avail capacity gossip topic
 }
@@ -62,7 +67,10 @@ type Node struct {
 // a new, unique node id.
 func allocateNodeID(db kv.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
-		Key:       storage.KeyNodeIDGenerator,
+		RequestHeader: storage.RequestHeader{
+			Key:  storage.KeyNodeIDGenerator,
+			User: storage.UserRoot,
+		},
 		Increment: 1,
 	})
 	if ir.Error != nil {
@@ -77,8 +85,10 @@ func allocateNodeID(db kv.DB) (int32, error) {
 func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
 		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
-		Key: storage.MakeKey(storage.KeyStoreIDGeneratorPrefix,
-			[]byte(strconv.Itoa(int(nodeID)))),
+		RequestHeader: storage.RequestHeader{
+			Key:  storage.MakeKey(storage.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
+			User: storage.UserRoot,
+		},
 		Increment: inc,
 	})
 	if ir.Error != nil {
@@ -92,14 +102,14 @@ func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
 // all keys. Initial range lookup metadata is populated for the range.
 //
 // Returns a direct-access kv.LocalDB for unittest purposes only.
-func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, error) {
+func BootstrapCluster(clusterID string, engine storage.Engine) (
+	*kv.LocalDB, error) {
 	sIdent := storage.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
 		StoreID:   1,
 	}
 	s := storage.NewStore(engine, nil)
-	defer s.Close()
 
 	// Verify the store isn't already part of a cluster.
 	if s.Ident.ClusterID != "" {
@@ -131,12 +141,19 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 	}
 
 	// Create a local DB to directly modify the new range.
-	localDB := kv.NewLocalDB(rng)
+	localDB := kv.NewLocalDB()
+	localDB.AddStore(s)
 
 	// Initialize range addressing records and default administrative configs.
-	if err := kv.BootstrapRangeDescriptor(localDB, replica); err != nil {
+	desc := storage.RangeDescriptor{
+		StartKey: storage.KeyMin,
+		Replicas: []storage.Replica{replica},
+	}
+	if err := kv.BootstrapRangeDescriptor(localDB, desc); err != nil {
 		return nil, err
 	}
+
+	// Write default configs to local DB.
 	if err := kv.BootstrapConfigs(localDB); err != nil {
 		return nil, err
 	}
@@ -158,12 +175,12 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (*kv.LocalDB, err
 // NewNode returns a new instance of Node, interpreting command line
 // flags to initialize the appropriate Store or set of
 // Stores. Registers the storage instance for the RPC service "Node".
-func NewNode(kvDB kv.DB, gossip *gossip.Gossip) *Node {
+func NewNode(distDB kv.DB, gossip *gossip.Gossip) *Node {
 	n := &Node{
-		gossip:   gossip,
-		kvDB:     kvDB,
-		storeMap: make(map[int32]*storage.Store),
-		closer:   make(chan struct{}),
+		gossip:  gossip,
+		distDB:  distDB,
+		localDB: kv.NewLocalDB(),
+		closer:  make(chan struct{}),
 	}
 	return n
 }
@@ -188,7 +205,7 @@ func (n *Node) start(rpcServer *rpc.Server, engines []storage.Engine,
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
-	if err := n.initStoreMap(engines); err != nil {
+	if err := n.initStores(engines); err != nil {
 		return err
 	}
 	go n.startGossip()
@@ -199,24 +216,17 @@ func (n *Node) start(rpcServer *rpc.Server, engines []storage.Engine,
 // stop cleanly stops the node.
 func (n *Node) stop() {
 	close(n.closer)
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	for _, store := range n.storeMap {
-		store.Close()
-	}
+	n.localDB.Close()
 }
 
-// initStoreMap initializes the Stores map from id to Store. Stores are
-// added to the storeMap if the Store is already bootstrapped. A
-// bootstrapped Store has a valid ident with cluster, node and Store
-// IDs set. If the Store doesn't yet have a valid ident, it's added to
-// the bootstraps list for initialization once the cluster and node
-// IDs have been determined.
-func (n *Node) initStoreMap(engines []storage.Engine) error {
+// initStores initializes the Stores map from id to Store. Stores are
+// added to the localDB if already bootstrapped. A bootstrapped Store
+// has a valid ident with cluster, node and Store IDs set. If the
+// Store doesn't yet have a valid ident, it's added to the bootstraps
+// list for initialization once the cluster and node IDs have been
+// determined.
+func (n *Node) initStores(engines []storage.Engine) error {
 	bootstraps := list.New()
-
-	n.mu.Lock()
-	defer n.mu.Unlock()
 
 	for _, engine := range engines {
 		s := storage.NewStore(engine, n.gossip)
@@ -238,7 +248,7 @@ func (n *Node) initStoreMap(engines []storage.Engine) error {
 				return err
 			}
 			glog.Infof("initialized store %s: %+v", s, capacity)
-			n.storeMap[s.Ident.StoreID] = s
+			n.localDB.AddStore(s)
 		}
 	}
 
@@ -263,7 +273,7 @@ func (n *Node) initStoreMap(engines []storage.Engine) error {
 // cluster ID and node ID. The node's ident is initialized based on
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
-	for _, s := range n.storeMap {
+	return n.localDB.VisitStores(func(s *storage.Store) error {
 		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
 			return util.Errorf("unidentified store in store map: %s", s)
 		}
@@ -275,8 +285,8 @@ func (n *Node) validateStores() error {
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
 			return util.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // bootstrapStores bootstraps uninitialized stores once the cluster
@@ -289,7 +299,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	// Allocate a new node ID if necessary.
 	if n.Descriptor.NodeID == 0 {
 		var err error
-		n.Descriptor.NodeID, err = allocateNodeID(n.kvDB)
+		n.Descriptor.NodeID, err = allocateNodeID(n.distDB)
 		glog.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 		if err != nil {
 			glog.Fatal(err)
@@ -304,7 +314,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.kvDB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.distDB)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -316,9 +326,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
 		s.Bootstrap(sIdent)
-		n.mu.Lock()
-		n.storeMap[s.Ident.StoreID] = s
-		n.mu.Unlock()
+		n.localDB.AddStore(s)
 		sIdent.StoreID++
 		glog.Infof("bootstrapped store %s", s)
 	}
@@ -374,14 +382,11 @@ func (n *Node) startGossip() {
 // gossipCapacities calls capacity on each store and adds it to the
 // gossip network.
 func (n *Node) gossipCapacities() {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-
-	for _, store := range n.storeMap {
-		storeDesc, err := store.Descriptor(&n.Descriptor)
+	n.localDB.VisitStores(func(s *storage.Store) error {
+		storeDesc, err := s.Descriptor(&n.Descriptor)
 		if err != nil {
-			glog.Warningf("problem getting store descriptor for store %+v: %v", store.Ident, err)
-			continue
+			glog.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
+			return nil
 		}
 		gossipPrefix := gossip.KeyMaxAvailCapacityPrefix + storeDesc.CombinedAttrs().SortedString()
 		keyMaxCapacity := gossipPrefix + strconv.FormatInt(int64(storeDesc.Node.NodeID), 10) + "-" +
@@ -390,151 +395,87 @@ func (n *Node) gossipCapacities() {
 		n.gossip.RegisterGroup(gossipPrefix, gossipGroupLimit, gossip.MaxGroup)
 		// Gossip store descriptor.
 		n.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
-	}
+		return nil
+	})
 }
 
-// storeCount returns the number of stores this node is exporting.
-func (n *Node) getStoreCount() int {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	return len(n.storeMap)
-}
-
-// getRange looks up the store by Replica.StoreID and then queries it for
-// the range specified by Replica.RangeID.
-func (n *Node) getRange(r *storage.Replica) (*storage.Range, error) {
-	n.mu.RLock()
-	store, ok := n.storeMap[r.StoreID]
-	n.mu.RUnlock()
-	if !ok {
-		return nil, util.Errorf("store for replica %+v not found", r)
-	}
-	rng, err := store.GetRange(r.RangeID)
-	if err != nil {
-		return nil, err
-	}
-	return rng, nil
-}
-
-// All methods to satisfy the Node RPC service fetch the range
-// based on the Replica target provided in the argument header.
-// Commands are broken down into read-only and read-write and
-// sent along to the range via either Range.readOnlyCmd() or
-// Range.readWriteCmd().
-
-// Contains .
-func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsResponse) error {
-	rng, err := n.getRange(&args.Replica)
+// executeCmd looks up the store specified by header.Replica, and runs
+// Store.ExecuteCmd.
+func (n *Node) executeCmd(method string, header *storage.RequestHeader, args, reply interface{}) error {
+	store, err := n.localDB.GetStore(&header.Replica)
 	if err != nil {
 		return err
 	}
-	return rng.ReadOnlyCmd("Contains", args, reply)
+	store.ExecuteCmd(method, header, args, reply)
+	return nil
+}
+
+// Contains .
+func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsResponse) error {
+	return n.executeCmd(storage.Contains, &args.RequestHeader, args, reply)
 }
 
 // Get .
 func (n *Node) Get(args *storage.GetRequest, reply *storage.GetResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return rng.ReadOnlyCmd("Get", args, reply)
+	return n.executeCmd(storage.Get, &args.RequestHeader, args, reply)
 }
 
 // Put .
 func (n *Node) Put(args *storage.PutRequest, reply *storage.PutResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("Put", args, reply)
+	return n.executeCmd(storage.Put, &args.RequestHeader, args, reply)
+}
+
+// ConditionalPut .
+func (n *Node) ConditionalPut(args *storage.ConditionalPutRequest, reply *storage.ConditionalPutResponse) error {
+	return n.executeCmd(storage.ConditionalPut, &args.RequestHeader, args, reply)
 }
 
 // Increment .
 func (n *Node) Increment(args *storage.IncrementRequest, reply *storage.IncrementResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("Increment", args, reply)
+	return n.executeCmd(storage.Increment, &args.RequestHeader, args, reply)
 }
 
 // Delete .
 func (n *Node) Delete(args *storage.DeleteRequest, reply *storage.DeleteResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("Delete", args, reply)
+	return n.executeCmd(storage.Delete, &args.RequestHeader, args, reply)
 }
 
 // DeleteRange .
 func (n *Node) DeleteRange(args *storage.DeleteRangeRequest, reply *storage.DeleteRangeResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("DeleteRange", args, reply)
+	return n.executeCmd(storage.DeleteRange, &args.RequestHeader, args, reply)
 }
 
 // Scan .
 func (n *Node) Scan(args *storage.ScanRequest, reply *storage.ScanResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return rng.ReadOnlyCmd("Scan", args, reply)
+	return n.executeCmd(storage.Scan, &args.RequestHeader, args, reply)
 }
 
 // EndTransaction .
 func (n *Node) EndTransaction(args *storage.EndTransactionRequest, reply *storage.EndTransactionResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("EndTransaction", args, reply)
+	return n.executeCmd(storage.EndTransaction, &args.RequestHeader, args, reply)
 }
 
 // AccumulateTS .
 func (n *Node) AccumulateTS(args *storage.AccumulateTSRequest, reply *storage.AccumulateTSResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("AccumulateTS", args, reply)
+	return n.executeCmd(storage.AccumulateTS, &args.RequestHeader, args, reply)
 }
 
 // ReapQueue .
 func (n *Node) ReapQueue(args *storage.ReapQueueRequest, reply *storage.ReapQueueResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("ReapQueue", args, reply)
+	return n.executeCmd(storage.ReapQueue, &args.RequestHeader, args, reply)
 }
 
 // EnqueueUpdate .
 func (n *Node) EnqueueUpdate(args *storage.EnqueueUpdateRequest, reply *storage.EnqueueUpdateResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("EnqueueUpdate", args, reply)
+	return n.executeCmd(storage.EnqueueUpdate, &args.RequestHeader, args, reply)
 }
 
 // EnqueueMessage .
 func (n *Node) EnqueueMessage(args *storage.EnqueueMessageRequest, reply *storage.EnqueueMessageResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return <-rng.ReadWriteCmd("EnqueueMessage", args, reply)
+	return n.executeCmd(storage.EnqueueMessage, &args.RequestHeader, args, reply)
 }
 
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *storage.InternalRangeLookupRequest, reply *storage.InternalRangeLookupResponse) error {
-	rng, err := n.getRange(&args.Replica)
-	if err != nil {
-		return err
-	}
-	return rng.ReadOnlyCmd("InternalRangeLookup", args, reply)
+	return n.executeCmd(storage.InternalRangeLookup, &args.RequestHeader, args, reply)
 }

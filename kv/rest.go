@@ -83,7 +83,13 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	pr := <-s.db.Put(&storage.PutRequest{Key: key, Value: storage.Value{Bytes: b}})
+	pr := <-s.db.Put(&storage.PutRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+		Value: storage.Value{Bytes: b},
+	})
 	if pr.Error != nil {
 		http.Error(w, pr.Error.Error(), http.StatusInternalServerError)
 		return
@@ -97,7 +103,12 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	gr := <-s.db.Get(&storage.GetRequest{Key: key})
+	gr := <-s.db.Get(&storage.GetRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+	})
 	if gr.Error != nil {
 		http.Error(w, gr.Error.Error(), http.StatusInternalServerError)
 		return
@@ -117,7 +128,12 @@ func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	dr := <-s.db.Delete(&storage.DeleteRequest{Key: key})
+	dr := <-s.db.Delete(&storage.DeleteRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+	})
 	if dr.Error != nil {
 		http.Error(w, dr.Error.Error(), http.StatusInternalServerError)
 		return
