@@ -89,15 +89,18 @@ func TestEngineWriteBatch(t *testing.T) {
 		<-readsBegun
 
 		// Create key/values and put them in a batch to engine.
-		puts := make([]KeyValue, numWrites)
-		for i := 0; i < len(puts); i++ {
-			puts[i].Key = key
-			puts[i].Value = Value{Bytes: []byte(strconv.Itoa(i))}
+		puts := make([]interface{}, numWrites, numWrites)
+		for i := 0; i < numWrites; i++ {
+			puts[i] = BatchPut{Key: key, Value: Value{Bytes: []byte(strconv.Itoa(i))}}
 		}
-		if err := e.writeBatch(puts, nil); err != nil {
+		if err := e.writeBatch(puts); err != nil {
 			t.Fatal(err)
 		}
 		close(writesDone)
 		<-readsDone
 	}, t)
+}
+
+func TestEngineBatch(t *testing.T) {
+	// TODO(Tobias): add a test of writeBatch as soon as D83 merges.
 }

@@ -29,6 +29,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"reflect"
 	"syscall"
 	"unsafe"
 
@@ -275,43 +276,55 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 	return keyVals, nil
 }
 
-// writeBatch applies all puts and deletes atomically via RocksDB write
-// batch facility.
-func (r *RocksDB) writeBatch(puts []KeyValue, dels []Key) error {
+// writeBatch applies the puts, merges and deletes atomically via
+// the RocksDB write batch facility. The list must only contain
+// elements of type Batch{Put,Merge,Delete}.
+func (r *RocksDB) writeBatch(cmds []interface{}) error {
+	if len(cmds) == 0 {
+		return nil
+	}
 	batch := C.rocksdb_writebatch_create()
 	defer C.rocksdb_writebatch_destroy(batch)
+	for i, e := range cmds {
+		switch v := e.(type) {
+		case BatchDelete:
+			if len(v) == 0 {
+				return emptyKeyError()
+			}
+			C.rocksdb_writebatch_delete(
+				batch,
+				(*C.char)(unsafe.Pointer(&v[0])),
+				C.size_t(len(v)))
+		case BatchPut:
+			key, value := v.Key, v.Value
+			valuePointer := (*C.char)(nil)
+			if len(value.Bytes) > 0 {
+				valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
+			}
 
-	for _, put := range puts {
-		key, value := put.Key, put.Value
-		if len(key) == 0 {
-			return emptyKeyError()
+			// We write the batch before returning from this method, so we
+			// don't need to worry about the GC reclaiming the data stored.
+			C.rocksdb_writebatch_put(
+				batch,
+				(*C.char)(unsafe.Pointer(&key[0])),
+				C.size_t(len(key)),
+				valuePointer,
+				C.size_t(len(value.Bytes)))
+		case BatchMerge:
+			key, value := v.Key, v.Value
+			valuePointer := (*C.char)(nil)
+			if len(value.Bytes) > 0 {
+				valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
+			}
+			C.rocksdb_writebatch_merge(
+				batch,
+				(*C.char)(unsafe.Pointer(&key[0])),
+				C.size_t(len(key)),
+				valuePointer,
+				C.size_t(len(value.Bytes)))
+		default:
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
 		}
-
-		// Empty values correspond to a null pointer.
-		valuePointer := (*C.char)(nil)
-		if len(value.Bytes) > 0 {
-			valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
-		}
-
-		// We write the batch before returning from this method, so we
-		// don't need to worry about the GC reclaiming the data stored in
-		// the "puts" and "dels" parameters.
-		C.rocksdb_writebatch_put(
-			batch,
-			(*C.char)(unsafe.Pointer(&key[0])),
-			C.size_t(len(key)),
-			valuePointer,
-			C.size_t(len(value.Bytes)))
-	}
-
-	for _, key := range dels {
-		if len(key) == 0 {
-			return emptyKeyError()
-		}
-		C.rocksdb_writebatch_delete(
-			batch,
-			(*C.char)(unsafe.Pointer(&key[0])),
-			C.size_t(len(key)))
 	}
 
 	var cErr *C.char
@@ -319,7 +332,6 @@ func (r *RocksDB) writeBatch(puts []KeyValue, dels []Key) error {
 	if cErr != nil {
 		return charToErr(cErr)
 	}
-
 	return nil
 }
 

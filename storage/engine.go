@@ -41,11 +41,23 @@ type Engine interface {
 	scan(start, end Key, max int64) ([]KeyValue, error)
 	// delete removes the item from the db with the given key.
 	del(key Key) error
-	// writeBatch atomically applies the specified writes and deletions.
-	writeBatch(puts []KeyValue, deletes []Key) error
+	// writeBatch atomically applies the specified writes, deletions and
+	// merges. The list passed to writeBatch must only contain elements
+	// of type Batch{Put,Merge,Delete}.
+	writeBatch([]interface{}) error
 	// capacity returns capacity details for the engine's available storage.
 	capacity() (StoreCapacity, error)
 }
+
+// A BatchDelete is a delete operation executed as part of
+// an atomic batch.
+type BatchDelete Key
+
+// A BatchPut is a put operation executed as part of an atomic batch.
+type BatchPut KeyValue
+
+// A BatchMerge is a merge operation executed as part of an atomic batch.
+type BatchMerge KeyValue
 
 // putI sets the given key to the gob-serialized byte string of the
 // value provided. Used internally. Uses current time and default

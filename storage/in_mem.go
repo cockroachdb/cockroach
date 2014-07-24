@@ -21,6 +21,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sync"
 	"unsafe"
 
@@ -141,19 +142,32 @@ func (in *InMem) delLocked(key Key) error {
 	return nil
 }
 
-// writeBatch atomically applies the specified writes and deletions
-// by holding the mutex.
-func (in *InMem) writeBatch(puts []KeyValue, dels []Key) error {
+// writeBatch atomically applies the specified writes, merges and
+// deletions by holding the mutex. The list must only contain
+// elements of type Batch{Put,Merge,Delete}.
+func (in *InMem) writeBatch(cmds []interface{}) error {
+	if len(cmds) == 0 {
+		return nil
+	}
 	in.Lock()
 	defer in.Unlock()
-	for _, put := range puts {
-		if err := in.putLocked(put.Key, put.Value); err != nil {
-			return err
-		}
-	}
-	for _, del := range dels {
-		if err := in.delLocked(del); err != nil {
-			return err
+	// TODO(Tobias): pre-execution loop to check that we will
+	// not run out of space. Make sure merge() bookkeeps correctly.
+	for i, e := range cmds {
+		switch v := e.(type) {
+		case BatchDelete:
+			if err := in.delLocked(Key(v)); err != nil {
+				return err
+			}
+		case BatchPut:
+			if err := in.putLocked(v.Key, v.Value); err != nil {
+				return err
+			}
+		case BatchMerge:
+			// TODO(Tobias): Implement as soon as D83 closes
+			return util.Errorf("not implemented")
+		default:
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
 		}
 	}
 	return nil
