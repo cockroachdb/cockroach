@@ -45,9 +45,9 @@ var (
 	storeKeyRangeMetadataPrefix = Key("\x00\x00\x00range-")
 )
 
-// rangeKey creates a range key as the concatenation of the
+// makeRangeKey creates a range key as the concatenation of the
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
-func rangeKey(rangeID int64) Key {
+func makeRangeKey(rangeID int64) Key {
 	return MakeKey(storeKeyRangeMetadataPrefix, Key(strconv.FormatInt(rangeID, 10)))
 }
 
@@ -135,7 +135,7 @@ func (s *Store) Init() error {
 	// TODO(spencer): scan through all range metadata and instantiate
 	//   ranges. Right now we just get range ID hardcoded as 1.
 	var meta RangeMetadata
-	ok, _, err = getI(s.engine, rangeKey(1), &meta)
+	ok, _, err = getI(s.engine, makeRangeKey(1), &meta)
 	if err != nil || !ok {
 		return err
 	}
@@ -196,7 +196,7 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 	if err != nil {
 		return nil, err
 	}
-	if ok, _, _ := getI(s.engine, rangeKey(rangeID), nil); ok {
+	if ok, _, _ := getI(s.engine, makeRangeKey(rangeID), nil); ok {
 		return nil, util.Error("newly allocated range ID already in use")
 	}
 	// RangeMetadata is stored local to this store only. It is neither
@@ -211,7 +211,7 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 			Replicas: replicas,
 		},
 	}
-	err = putI(s.engine, rangeKey(rangeID), meta)
+	err = putI(s.engine, makeRangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
 	}

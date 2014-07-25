@@ -63,6 +63,25 @@ func ExampleNewHLClock() {
 	fmt.Printf("The Unix Epoch is now approximately %dns old.\n", t.WallTime)
 }
 
+func TestLess(t *testing.T) {
+	var m ManualClock
+	c := NewHLClock(m.UnixNano)
+	a := c.Timestamp()
+	b := c.Timestamp()
+	if a.Less(b) || b.Less(a) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+	m = ManualClock(1)
+	b = c.Now()
+	if !a.Less(b) {
+		t.Errorf("expected %+v < %+v", a, b)
+	}
+	a = c.Now() // add one to logical clock from b
+	if !b.Less(a) {
+		t.Errorf("expected %+v < %+v", b, a)
+	}
+}
+
 // TestHLClock performs a complete test of all basic phenomena,
 // including backward jumps in local physical time and clock drift.
 func TestHLClock(t *testing.T) {

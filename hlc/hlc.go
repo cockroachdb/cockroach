@@ -50,7 +50,7 @@ type HLTimestamp struct {
 // Less implements the util.Ordered interface, allowing
 // the comparison of timestamps.
 func (t HLTimestamp) Less(s HLTimestamp) bool {
-	return t.WallTime < s.WallTime && t.Logical < s.Logical
+	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
 }
 
 // HLClock is a hybrid logical clock. Objects of this

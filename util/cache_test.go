@@ -45,15 +45,15 @@ var getTests = []struct {
 	{"string_miss", "myKey", "nonsense", false},
 }
 
-func noEviction(size int, key Key, value interface{}) bool {
+func noEviction(size int, key, value interface{}) bool {
 	return false
 }
 
-func evictTwoOrMore(size int, key Key, value interface{}) bool {
+func evictTwoOrMore(size int, key, value interface{}) bool {
 	return size > 1
 }
 
-func evictThreeOrMore(size int, key Key, value interface{}) bool {
+func evictThreeOrMore(size int, key, value interface{}) bool {
 	return size > 2
 }
 
@@ -67,6 +67,23 @@ func TestCacheGet(t *testing.T) {
 		} else if ok && val != 1234 {
 			t.Fatalf("%s expected get to return 1234 but got %v", tt.name, val)
 		}
+	}
+}
+
+func TestCacheClear(t *testing.T) {
+	mc := NewUnorderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	mc.Add(testKey("a"), 1)
+	mc.Add(testKey("b"), 2)
+	mc.Clear()
+	if _, ok := mc.Get(testKey("a")); ok {
+		t.Error("expected cache cleared")
+	}
+	if _, ok := mc.Get(testKey("b")); ok {
+		t.Error("expected cache cleared")
+	}
+	mc.Add(testKey("a"), 1)
+	if _, ok := mc.Get(testKey("a")); !ok {
+		t.Error("expected reinsert to succeed")
 	}
 }
 
@@ -184,6 +201,23 @@ func TestOrderedCache(t *testing.T) {
 	}
 }
 
+func TestOrderedCacheClear(t *testing.T) {
+	oc := NewOrderedCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	oc.Add(testKey("a"), 1)
+	oc.Add(testKey("b"), 2)
+	oc.Clear()
+	if _, ok := oc.Get(testKey("a")); ok {
+		t.Error("expected cache cleared")
+	}
+	if _, ok := oc.Get(testKey("b")); ok {
+		t.Error("expected cache cleared")
+	}
+	oc.Add(testKey("a"), 1)
+	if _, ok := oc.Get(testKey("a")); !ok {
+		t.Error("expected reinsert to succeed")
+	}
+}
+
 type rangeKey string
 
 // Compare implements interval.Comparable.
@@ -231,5 +265,22 @@ func TestIntervalCacheOverlap(t *testing.T) {
 	vs := ic.GetOverlaps(rangeKey("d"), rangeKey("g"))
 	if !reflect.DeepEqual(expValues, vs) {
 		t.Errorf("expected overlap values %+v, got %+v", expValues, vs)
+	}
+}
+
+func TestIntervalCacheClear(t *testing.T) {
+	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
+	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
+	ic.Add(ic.NewKey(rangeKey("c"), rangeKey("e")), 2)
+	ic.Clear()
+	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("c"))); ok {
+		t.Error("expected cache cleared")
+	}
+	if _, ok := ic.Get(ic.NewKey(rangeKey("c"), rangeKey("e"))); ok {
+		t.Error("expected cache cleared")
+	}
+	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
+	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("c"))); !ok {
+		t.Error("expected reinsert to succeed")
 	}
 }
