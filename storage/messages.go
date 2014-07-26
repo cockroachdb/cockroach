@@ -17,10 +17,8 @@
 
 package storage
 
+// UserRoot is the username for the root user.
 const UserRoot = "root"
-
-// Key defines the key in the key-value datastore.
-type Key []byte
 
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp. Values which have been overwritten
@@ -29,6 +27,12 @@ type Key []byte
 type Value struct {
 	// Bytes is the byte string value.
 	Bytes []byte
+	// Checksum is a CRC-32-IEEE checksum. A Value will only be used in
+	// a write operation by the database if either its checksum is zero
+	// or the CRC checksum of Bytes matches it.
+	// Values returned by the database will contain a checksum of the
+	// contained value.
+	Checksum uint32
 	// Timestamp of value in nanoseconds since epoch.
 	Timestamp int64
 	// Expiration in nanoseconds.
@@ -125,15 +129,15 @@ type ConditionalPutRequest struct {
 	ExpValue Value // ExpValue.Bytes empty to test for non-existence
 }
 
-// A ConditionalPutRequest is the return value from the
+// A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 type ConditionalPutResponse struct {
 	ResponseHeader
 	ActualValue *Value // ActualValue.Bytes set if conditional put failed
 }
 
-// An IncrementRequest is arguments to the Increment() method. It
-// increments the value for key, interpreting the existing value as a
+// An IncrementRequest is arguments to the Increment() method.
+// It increments the value for key, interpreting the existing value as a
 // varint64.
 type IncrementRequest struct {
 	RequestHeader

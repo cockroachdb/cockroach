@@ -28,27 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// Constants for store-reserved keys. These keys are prefixed with
-// three null characters so that they precede all global keys in the
-// store's map. Data at these keys is local to this store and is not
-// replicated via raft nor is it available via access to the global
-// key-value store.
-var (
-	// storeKeyIdent store immutable identifier for this store, created
-	// when store is first bootstrapped.
-	storeKeyIdent = Key("\x00\x00\x00store-ident")
-	// storeKeyRangeIDGenerator is a range ID generator sequence. Range IDs
-	// must be unique per node ID.
-	storeKeyRangeIDGenerator = Key("\x00\x00\x00range-id-generator")
-	// storeKeyRangeMetadataPrefix is the prefix for keys storing range metadata.
-	// The value is a struct of type RangeMetadata.
-	storeKeyRangeMetadataPrefix = Key("\x00\x00\x00range-")
-)
-
-// makeRangeKey creates a range key as the concatenation of the
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
 func makeRangeKey(rangeID int64) Key {
-	return MakeKey(storeKeyRangeMetadataPrefix, Key(strconv.FormatInt(rangeID, 10)))
+	return MakeKey(KeyLocalRangeMetadataPrefix, Key(strconv.FormatInt(rangeID, 10)))
 }
 
 // A RangeSlice is a slice of Range pointers used for replica lookups
@@ -69,7 +51,7 @@ func (rs RangeSlice) Less(i, j int) bool {
 
 // A StoreIdent uniquely identifies a store in the cluster. The
 // StoreIdent is written to the underlying storage engine at a
-// store-reserved system key (storeKeyIdent).
+// store-reserved system key (KeyLocalIdent).
 type StoreIdent struct {
 	ClusterID string
 	NodeID    int32
@@ -116,7 +98,7 @@ func (s *Store) String() string {
 // bootstrapped. If the store ident is corrupt, IsBootstrapped will
 // return true; the exact error can be retrieved via a call to Init().
 func (s *Store) IsBootstrapped() bool {
-	ok, _, err := getI(s.engine, storeKeyIdent, &s.Ident)
+	ok, _, err := getI(s.engine, KeyLocalIdent, &s.Ident)
 	if err != nil || ok {
 		return true
 	}
@@ -125,7 +107,7 @@ func (s *Store) IsBootstrapped() bool {
 
 // Init reads the StoreIdent from the underlying engine.
 func (s *Store) Init() error {
-	ok, _, err := getI(s.engine, storeKeyIdent, &s.Ident)
+	ok, _, err := getI(s.engine, KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -162,7 +144,7 @@ func (s *Store) Bootstrap(ident StoreIdent) error {
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	return putI(s.engine, storeKeyIdent, s.Ident)
+	return putI(s.engine, KeyLocalIdent, s.Ident)
 }
 
 // GetRange fetches a range by ID. Returns an error if no range is found.
@@ -192,7 +174,7 @@ func (s *Store) GetRanges() RangeSlice {
 // CreateRange allocates a new range ID and stores range metadata.
 // On success, returns the new range.
 func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, error) {
-	rangeID, err := increment(s.engine, storeKeyRangeIDGenerator, 1, time.Now().UnixNano())
+	rangeID, err := increment(s.engine, KeyLocalRangeIDGenerator, 1, time.Now().UnixNano())
 	if err != nil {
 		return nil, err
 	}

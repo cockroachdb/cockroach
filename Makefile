@@ -9,25 +9,28 @@ CGO_LDFLAGS := "-L$(ROCKSDB)"
 CGO_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
              CGO_CFLAGS=$(CGO_CFLAGS)
 
+PKG := "./..."
+TESTS := ".*"
+
 all: build test
 
 rocksdb:
 	cd $(ROCKSDB); make static_lib
 
-build: rocksdb goget
+build: rocksdb
 	$(CGO_FLAGS) $(GO) build
 
 goget:
 	$(CGO_FLAGS) $(GO) get ./...
 
 test:
-	$(CGO_FLAGS) $(GO) test ./...
+	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG)
 
 testrace:
-	$(CGO_FLAGS) $(GO) test -race ./...
+	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG)
 
 coverage:
-	$(CGO_FLAGS) $(GO) test -cover ./...
+	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG)
 
 clean:
 	$(GO) clean

@@ -15,14 +15,17 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Andrew Bonventre (andybons@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package storage
 
-// #cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
-// #cgo linux LDFLAGS: -lrt
-// #cgo darwin LDFLAGS: -lc++
-// #include <stdlib.h>
-// #include "rocksdb/c.h"
+/*
+#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
+#cgo linux LDFLAGS: -lrt
+#cgo darwin LDFLAGS: -lc++
+#include "rocksdb/c.h"
+#include "merge.h"
+*/
 import "C"
 
 import (
@@ -47,10 +50,11 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb   *C.rocksdb_t              // The DB handle
-	opts  *C.rocksdb_options_t      // Options used when creating or destroying
-	rOpts *C.rocksdb_readoptions_t  // The default read options
-	wOpts *C.rocksdb_writeoptions_t // The default write options
+	rdb           *C.rocksdb_t               // The DB handle
+	opts          *C.rocksdb_options_t       // Options used when creating or destroying
+	rOpts         *C.rocksdb_readoptions_t   // The default read options
+	wOpts         *C.rocksdb_writeoptions_t  // The default write options
+	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB Merge operator
 
 	attrs Attributes
 	dir   string // The data directory
@@ -101,6 +105,10 @@ func (r *RocksDB) createOptions() {
 	// TODO(andybons): Set the cache size.
 	r.opts = C.rocksdb_options_create()
 	C.rocksdb_options_set_create_if_missing(r.opts, 1)
+	// This enables us to use rocksdb_merge with counter semantics.
+	// See rocksdb.{c,h} for the C implementation.
+	r.mergeOperator = C.MakeMergeOperator()
+	C.rocksdb_options_set_merge_operator(r.opts, r.mergeOperator)
 
 	r.wOpts = C.rocksdb_writeoptions_create()
 	r.rOpts = C.rocksdb_readoptions_create()
@@ -109,9 +117,17 @@ func (r *RocksDB) createOptions() {
 // destroyOptions destroys the options used for creating, reading, and writing
 // from the db. It is meant to be used in conjunction with createOptions.
 func (r *RocksDB) destroyOptions() {
+	// The merge operator is stored inside of r.opts as a std::shared_ptr,
+	// so it will actually be freed automatically.
+	// Calling rocksdb_mergeoperator_destroy will ignore that shared_ptr,
+	// and a subsequent rocksdb_options_destroy would segfault.
+	// The following line zeroes the shared_ptr instead, effectively
+	// deallocating the merge operator if one is set.
+	C.rocksdb_options_set_merge_operator(r.opts, nil)
 	C.rocksdb_options_destroy(r.opts)
 	C.rocksdb_readoptions_destroy(r.rOpts)
 	C.rocksdb_writeoptions_destroy(r.wOpts)
+	r.mergeOperator = nil
 	r.opts = nil
 	r.rOpts = nil
 	r.wOpts = nil
@@ -142,6 +158,16 @@ func emptyKeyError() error {
 	return util.ErrorSkipFrames(1, "attempted access to empty key")
 }
 
+// bytesPointer returns a pointer to the first byte of the slice or
+// nil if the byte slice is empty.
+func bytesPointer(bytes []byte) *C.char {
+	if len(bytes) > 0 {
+		return (*C.char)(unsafe.Pointer(&bytes[0]))
+	}
+	// Empty values correspond to a null pointer.
+	return (*C.char)(nil)
+}
+
 // put sets the given key to the value provided.
 //
 // The key and value byte slices may be reused safely. put takes a copy of
@@ -151,12 +177,6 @@ func (r *RocksDB) put(key Key, value Value) error {
 		return emptyKeyError()
 	}
 
-	// Empty values correspond to a null pointer.
-	valuePointer := (*C.char)(nil)
-	if len(value.Bytes) > 0 {
-		valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
-	}
-
 	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
@@ -164,9 +184,41 @@ func (r *RocksDB) put(key Key, value Value) error {
 	C.rocksdb_put(
 		r.rdb,
 		r.wOpts,
-		(*C.char)(unsafe.Pointer(&key[0])),
+		bytesPointer(key),
 		C.size_t(len(key)),
-		valuePointer,
+		bytesPointer(value.Bytes),
+		C.size_t(len(value.Bytes)),
+		&cErr)
+
+	if cErr != nil {
+		return charToErr(cErr)
+	}
+	return nil
+}
+
+// merge implements the RocksDB merge operator using the function goMergeInit
+// to initialize missing values and goMerge to merge the old and the given
+// value into a new value, which is then stored under key.
+// Currently 64-bit counter logic is implemented. See the documentation of
+// goMerge and goMergeInit for details.
+//
+// The key and value byte slices may be reused safely. merge takes a copy
+// of them before returning.
+func (r *RocksDB) merge(key Key, value Value) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+
+	// rocksdb_merge calls memcpy() (by way of MemTable::Add)
+	// when called, so we do not need to worry about these byte slices being
+	// reclaimed by the GC.
+	var cErr *C.char
+	C.rocksdb_merge(
+		r.rdb,
+		r.wOpts,
+		bytesPointer(key),
+		C.size_t(len(key)),
+		bytesPointer(value.Bytes),
 		C.size_t(len(value.Bytes)),
 		&cErr)
 
@@ -189,7 +241,7 @@ func (r *RocksDB) get(key Key) (Value, error) {
 	cVal := C.rocksdb_get(
 		r.rdb,
 		r.rOpts,
-		(*C.char)(unsafe.Pointer(&key[0])),
+		bytesPointer(key),
 		C.size_t(len(key)),
 		&cValLen,
 		&cErr)
@@ -213,7 +265,7 @@ func (r *RocksDB) del(key Key) error {
 	C.rocksdb_delete(
 		r.rdb,
 		r.wOpts,
-		(*C.char)(unsafe.Pointer(&key[0])),
+		bytesPointer(key),
 		C.size_t(len(key)),
 		&cErr)
 
@@ -244,7 +296,7 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 		// to access start[0] in an explicit seek.
 		C.rocksdb_iter_seek_to_first(it)
 	} else {
-		C.rocksdb_iter_seek(it, (*C.char)(unsafe.Pointer(&start[0])), C.size_t(byteCount))
+		C.rocksdb_iter_seek(it, bytesPointer(start), C.size_t(byteCount))
 	}
 	for i := int64(1); C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
 		if max > 0 && i > max {
@@ -293,34 +345,25 @@ func (r *RocksDB) writeBatch(cmds []interface{}) error {
 			}
 			C.rocksdb_writebatch_delete(
 				batch,
-				(*C.char)(unsafe.Pointer(&v[0])),
+				bytesPointer(v),
 				C.size_t(len(v)))
 		case BatchPut:
 			key, value := v.Key, v.Value
-			valuePointer := (*C.char)(nil)
-			if len(value.Bytes) > 0 {
-				valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
-			}
-
 			// We write the batch before returning from this method, so we
 			// don't need to worry about the GC reclaiming the data stored.
 			C.rocksdb_writebatch_put(
 				batch,
-				(*C.char)(unsafe.Pointer(&key[0])),
+				bytesPointer(key),
 				C.size_t(len(key)),
-				valuePointer,
+				bytesPointer(value.Bytes),
 				C.size_t(len(value.Bytes)))
 		case BatchMerge:
 			key, value := v.Key, v.Value
-			valuePointer := (*C.char)(nil)
-			if len(value.Bytes) > 0 {
-				valuePointer = (*C.char)(unsafe.Pointer(&value.Bytes[0]))
-			}
 			C.rocksdb_writebatch_merge(
 				batch,
-				(*C.char)(unsafe.Pointer(&key[0])),
+				bytesPointer(key),
 				C.size_t(len(key)),
-				valuePointer,
+				bytesPointer(value.Bytes),
 				C.size_t(len(value.Bytes)))
 		default:
 			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))

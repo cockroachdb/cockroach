@@ -55,26 +55,6 @@ type RangeResult struct {
 	config     interface{}
 }
 
-// PrefixEndKey determines the end key given a start key as a prefix. This
-// adds "1" to the final byte and propagates the carry. The special
-// case of KeyMin ("") always returns KeyMax ("\xff").
-func PrefixEndKey(prefix Key) Key {
-	if bytes.Compare(prefix, KeyMin) == 0 {
-		return KeyMax
-	}
-	end := make([]byte, len(prefix))
-	copy(end, prefix)
-	for i := len(end) - 1; i >= 0; i-- {
-		end[i] = end[i] + 1
-		if end[i] != 0 {
-			return end
-		}
-	}
-	// This statement will only be reached if the key is already a
-	// maximal byte string (i.e. already \xff...).
-	return prefix
-}
-
 // Implementation of sort.Interface.
 func (p PrefixConfigMap) Len() int {
 	return len(p)
@@ -83,7 +63,7 @@ func (p PrefixConfigMap) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
 func (p PrefixConfigMap) Less(i, j int) bool {
-	return bytes.Compare(p[i].Prefix, p[j].Prefix) < 0
+	return p[i].Prefix.Less(p[j].Prefix)
 }
 
 // NewPrefixConfigMap creates a new prefix config map and sorts
@@ -222,17 +202,16 @@ func (p PrefixConfigMap) VisitPrefixes(start, end Key, visitor func(start, end K
 
 	if startIdx == endIdx {
 		return visitor(start, end, p[startIdx-1].Config)
-	} else {
-		for i := startIdx; i < endIdx; i++ {
-			visitor(start, p[i].Prefix, p[i-1].Config)
-			if bytes.Equal(p[i].Prefix, end) {
-				return nil
-			}
-			start = p[i].Prefix
+	}
+	for i := startIdx; i < endIdx; i++ {
+		visitor(start, p[i].Prefix, p[i-1].Config)
+		if bytes.Equal(p[i].Prefix, end) {
+			return nil
 		}
-		if err := visitor(start, end, p[endIdx-1].Config); err != nil {
-			return err
-		}
+		start = p[i].Prefix
+	}
+	if err := visitor(start, end, p[endIdx-1].Config); err != nil {
+		return err
 	}
 
 	return nil

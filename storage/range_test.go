@@ -235,3 +235,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
 }
+
+func TestInternalRangeLookup(t *testing.T) {
+	// TODO(Spencer): test, esp. for correct key range scanned
+}

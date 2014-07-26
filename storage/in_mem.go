@@ -15,6 +15,7 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package storage
 
@@ -83,9 +84,18 @@ func (in *InMem) put(key Key, value Value) error {
 
 // putLocked assumes mutex is already held by caller. See put().
 func (in *InMem) putLocked(key Key, value Value) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	kv := KeyValue{Key: key, Value: value}
 	size := computeSize(kv)
-	if size+in.usedBytes > in.maxBytes {
+	// If the key already exists, compute the size change of the
+	// replacement with the new value.
+	if val := in.data.Get(KeyValue{Key: key}); val != nil {
+		size -= computeSize(val.(KeyValue))
+	}
+
+	if size > in.maxBytes-in.usedBytes {
 		return util.Errorf("in mem store at capacity %d + %d > %d", in.usedBytes, size, in.maxBytes)
 	}
 	in.usedBytes += size
@@ -93,10 +103,42 @@ func (in *InMem) putLocked(key Key, value Value) error {
 	return nil
 }
 
+// merge implements a merge operation which updates the existing value stored
+// under key based on the value passed.
+// See the documentation of goMerge and goMergeInit for details.
+func (in *InMem) merge(key Key, value Value) error {
+	in.Lock()
+	defer in.Unlock()
+	return in.mergeLocked(key, value)
+}
+
+// mergeLocked assumes the mutex is already held by the caller. See merge().
+func (in *InMem) mergeLocked(key Key, value Value) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	existingVal, err := in.getLocked(key)
+	if err != nil {
+		return err
+	}
+	// Emulate RocksDB errors by... not having errors.
+	newValue, _ := goMerge(existingVal.Bytes, value.Bytes)
+	return in.putLocked(key, Value{Bytes: newValue})
+}
+
 // get returns the value for the given key, nil otherwise.
 func (in *InMem) get(key Key) (Value, error) {
 	in.RLock()
 	defer in.RUnlock()
+	return in.getLocked(key)
+}
+
+// getLocked performs a get operation assuming that the caller
+// is already holding the mutex.
+func (in *InMem) getLocked(key Key) (Value, error) {
+	if len(key) == 0 {
+		return Value{}, emptyKeyError()
+	}
 	val := in.data.Get(KeyValue{Key: key})
 	if val == nil {
 		return Value{}, nil
@@ -132,6 +174,9 @@ func (in *InMem) del(key Key) error {
 
 // delLocked assumes mutex is already held by caller. See del().
 func (in *InMem) delLocked(key Key) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	// Note: this is approximate. There is likely something missing.
 	// The storage/in_mem_test.go benchmarks this and the measurement
 	// being made seems close enough for government work (tm).
@@ -164,8 +209,9 @@ func (in *InMem) writeBatch(cmds []interface{}) error {
 				return err
 			}
 		case BatchMerge:
-			// TODO(Tobias): Implement as soon as D83 closes
-			return util.Errorf("not implemented")
+			if err := in.mergeLocked(v.Key, v.Value); err != nil {
+				return err
+			}
 		default:
 			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
 		}

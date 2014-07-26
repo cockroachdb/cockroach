@@ -402,6 +402,8 @@ func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPu
 // and ConditionalPut().
 func (r *Range) internalPut(key Key, value Value) error {
 	// Put the value.
+	// TODO(Tobias): Turn this into a writebatch with account stats in a reusable way.
+	// This requires use of RocksDB's merge operator to implement increasable counters
 	if err := r.engine.put(key, value); err != nil {
 		return err
 	}
@@ -417,8 +419,8 @@ func (r *Range) internalPut(key Key, value Value) error {
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
-// returns the newly incremented value (encoded as varint64). If no
-// value exists for the key, zero is incremented.
+// returns the newly incremented value (encoded as varint64). If no value
+// exists for the key, zero is incremented.
 func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
 	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment, args.Timestamp)
 }
@@ -484,16 +486,15 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		return
 	}
 
-	// Validate that key is not outside the range. Since the keys encoded in metadata keys are
-	// the end keys of the range the metadata represent, the check args.Key >= r.Meta.StartKey
-	// may result in false negatives.
-	if bytes.Compare(args.Key, r.Meta.EndKey) >= 0 {
+	// Validate that key is not outside the range. A range ends just
+	// before its Meta.EndKey.
+	if !args.Key.Less(r.Meta.EndKey) {
 		reply.Error = util.Errorf("key outside the range %v with end key %q", r.Meta.RangeID, r.Meta.EndKey)
 		return
 	}
 
 	// We want to search for the metadata key just greater than args.Key.
-	nextKey := MakeKey(args.Key, Key{0})
+	nextKey := NextKey(args.Key)
 	kvs, err := r.engine.scan(nextKey, KeyMax, 1)
 	if err != nil {
 		reply.Error = err
@@ -510,7 +511,7 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		reply.Error = err
 		return
 	}
-	if bytes.Compare(args.Key, reply.Range.StartKey) < 0 {
+	if args.Key.Less(reply.Range.StartKey) {
 		// args.Key doesn't belong to this range. We are perhaps searching the wrong node?
 		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
 		return
