@@ -7,3 +7,4 @@
 - Shawn Morel <shawn@strangemonad.com>
 - Ben Darnell <ben@bendarnell.com>
 - Peter Mattis <petermattis@gmail.com>
+- Tobias Schottdorf <tobias.schottdorf@gmail.com>
