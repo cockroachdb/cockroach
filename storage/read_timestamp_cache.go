@@ -89,7 +89,7 @@ func (rtc *ReadTimestampCache) Clear() {
 // key only.
 func (rtc *ReadTimestampCache) Add(start, end Key, timestamp hlc.HLTimestamp) {
 	if end == nil {
-		end = start
+		end = NextKey(start)
 	}
 	rtc.cache.Add(rtc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
 }
@@ -100,7 +100,7 @@ func (rtc *ReadTimestampCache) Add(start, end Key, timestamp hlc.HLTimestamp) {
 // high water timestamp is returned.
 func (rtc *ReadTimestampCache) GetMax(start, end Key) hlc.HLTimestamp {
 	if end == nil {
-		end = start
+		end = NextKey(start)
 	}
 	max := rtc.highWater
 	for _, v := range rtc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {

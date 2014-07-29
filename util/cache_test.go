@@ -227,23 +227,30 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 
 func TestIntervalCache(t *testing.T) {
 	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("b")), 1)
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 2)
+	key1 := ic.NewKey(rangeKey("a"), rangeKey("b"))
+	key2 := ic.NewKey(rangeKey("a"), rangeKey("c"))
+	key3 := ic.NewKey(rangeKey("d"), rangeKey("d\x00"))
+	ic.Add(key1, 1)
+	ic.Add(key2, 2)
+	ic.Add(key3, 3)
 
 	// Verify hit & miss.
-	if v, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("b"))); !ok || v.(int) != 1 {
+	if v, ok := ic.Get(key1); !ok || v.(int) != 1 {
 		t.Error("failed to fetch value for key \"a\"-\"b\"")
 	}
-	if v, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("c"))); !ok || v.(int) != 2 {
+	if v, ok := ic.Get(key2); !ok || v.(int) != 2 {
 		t.Error("failed to fetch value for key \"a\"-\"c\"")
 	}
-	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("a"))); ok {
+	if v, ok := ic.Get(key3); !ok || v.(int) != 3 {
+		t.Error("failed to fetch value for key \"d\"")
+	}
+	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("a\x00"))); ok {
 		t.Error("unexpected success fetching \"a\"")
 	}
 
 	// Verify replacement on adding identical key.
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("b")), 3)
-	if v, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("b"))); !ok || v.(int) != 3 {
+	ic.Add(key1, 3)
+	if v, ok := ic.Get(key1); !ok || v.(int) != 3 {
 		t.Error("failed to fetch value for key \"a\"-\"b\"")
 	}
 }
@@ -270,17 +277,19 @@ func TestIntervalCacheOverlap(t *testing.T) {
 
 func TestIntervalCacheClear(t *testing.T) {
 	ic := NewIntervalCache(CacheConfig{Policy: CacheLRU, ShouldEvict: noEviction})
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
-	ic.Add(ic.NewKey(rangeKey("c"), rangeKey("e")), 2)
+	key1 := ic.NewKey(rangeKey("a"), rangeKey("c"))
+	key2 := ic.NewKey(rangeKey("c"), rangeKey("e"))
+	ic.Add(key1, 1)
+	ic.Add(key2, 2)
 	ic.Clear()
-	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("c"))); ok {
+	if _, ok := ic.Get(key1); ok {
 		t.Error("expected cache cleared")
 	}
-	if _, ok := ic.Get(ic.NewKey(rangeKey("c"), rangeKey("e"))); ok {
+	if _, ok := ic.Get(key2); ok {
 		t.Error("expected cache cleared")
 	}
-	ic.Add(ic.NewKey(rangeKey("a"), rangeKey("c")), 1)
-	if _, ok := ic.Get(ic.NewKey(rangeKey("a"), rangeKey("c"))); !ok {
+	ic.Add(key1, 1)
+	if _, ok := ic.Get(key1); !ok {
 		t.Error("expected reinsert to succeed")
 	}
 }

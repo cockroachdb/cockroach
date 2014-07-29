@@ -38,24 +38,22 @@ func TestKeySorting(t *testing.T) {
 	}
 }
 
-// TestPrevAndNextKey tests that the methods for creating
-// successors and predecessors of a Key work as expected.
-func TestPrevNextKey(t *testing.T) {
+// TestNextKey tests that the method for creating successors of a Key
+// works as expected.
+func TestNextKey(t *testing.T) {
 	testCases := []struct {
 		key  Key
-		prev Key
 		next Key
 	}{
-		{nil, Key(""), Key("\x00")},
-		{Key(""), Key(""), Key("\x00")},
-		{Key("test key"), Key("test ke\x78"), Key("test ke\x7a")},
-		{Key(KeyMax), Key("\xfe"), Key("\xff\x00")},
-		{Key("xoxo\x00"), Key("xoxo"), Key("xoxo\x01")},
+		{nil, Key("\x00")},
+		{Key(""), Key("\x00")},
+		{Key("test key"), Key("test key\x00")},
+		{Key(KeyMax), Key("\xff\x00")},
+		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
 	}
 	for i, c := range testCases {
-		if !bytes.Equal(PrevKey(c.key), c.prev) || !bytes.Equal(NextKey(c.key), (c.next)) {
-			t.Fatalf("%d: unexpected prev/next key for \"%s\": %s, %s", i, c.key, PrevKey(c.key), NextKey(c.key))
+		if !bytes.Equal(NextKey(c.key), (c.next)) {
+			t.Fatalf("%d: unexpected next key for \"%s\": %s", i, NextKey(c.key))
 		}
 	}
-
 }

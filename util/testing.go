@@ -67,14 +67,14 @@ func CreateTestAddr(network string) net.Addr {
 
 // IsTrueWithin returns an error if the supplied function fails to
 // evaluate to true within the specified duration. The function is
-// invoked at most 50 times over the course of the specified time
+// invoked at most 10 times over the course of the specified time
 // duration.
 func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 10; i++ {
 		if trueFunc() {
 			return nil
 		}
-		time.Sleep(duration / 50)
+		time.Sleep(duration / 10)
 	}
 	return fmt.Errorf("condition failed to evaluate true within %s", duration)
 }

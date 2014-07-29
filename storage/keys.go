@@ -58,34 +58,7 @@ func PrefixEndKey(prefix Key) Key {
 // key. No special behaviour applies for KeyMax. nil is treated like
 // the empty key.
 func NextKey(k Key) Key {
-	l := len(k)
-	// If we can't increase the last character, return a copy with
-	// an extra zero byte at the end.
-	if l == 0 || k[l-1] == '\xff' {
-		return MakeKey(k, Key{0})
-	}
-	// In the general case, copy and increase last character.
-	out := append([]byte(nil), k...)
-	out[l-1]++
-	return out
-}
-
-// PrevKey returns a new Key that sorts immediately before the given key
-// with the exception of returning the empty key for Key("") or nil.
-func PrevKey(k Key) Key {
-	l := len(k)
-	if l == 0 {
-		// For an empty key, return an empty key.
-		return Key("")
-	}
-	if k[l-1] == '\x00' {
-		// If it ends with a null byte, return a copy without it.
-		return append([]byte(nil), k[:l-1]...)
-	}
-	// If we have anything else in the end, copy and decrease by one.
-	out := append([]byte(nil), k...)
-	out[l-1]--
-	return out
+	return MakeKey(k, Key{0})
 }
 
 // Constants for system-reserved keys in the KV map.
