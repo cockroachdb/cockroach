@@ -256,8 +256,8 @@ func (r *RocksDB) get(key Key) (Value, error) {
 	return Value{Bytes: C.GoBytes(unsafe.Pointer(cVal), C.int(cValLen))}, nil
 }
 
-// del removes the item from the db with the given key.
-func (r *RocksDB) del(key Key) error {
+// clear removes the item from the db with the given key.
+func (r *RocksDB) clear(key Key) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}

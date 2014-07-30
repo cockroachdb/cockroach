@@ -151,7 +151,11 @@ func (in *InMem) getLocked(key Key) (Value, error) {
 func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
+	return in.scanLocked(start, end, max)
+}
 
+// scanLocked is intended to be called within at least a read lock.
+func (in *InMem) scanLocked(start, end Key, max int64) ([]KeyValue, error) {
 	var scanned []KeyValue
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if max != 0 && int64(len(scanned)) >= max {
@@ -165,15 +169,15 @@ func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
 	return scanned, nil
 }
 
-// del removes the item from the db with the given key.
-func (in *InMem) del(key Key) error {
+// clear removes the item from the db with the given key.
+func (in *InMem) clear(key Key) error {
 	in.Lock()
 	defer in.Unlock()
-	return in.delLocked(key)
+	return in.clearLocked(key)
 }
 
-// delLocked assumes mutex is already held by caller. See del().
-func (in *InMem) delLocked(key Key) error {
+// clearLocked assumes mutex is already held by caller. See clear().
+func (in *InMem) clearLocked(key Key) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -201,7 +205,7 @@ func (in *InMem) writeBatch(cmds []interface{}) error {
 	for i, e := range cmds {
 		switch v := e.(type) {
 		case BatchDelete:
-			if err := in.delLocked(Key(v)); err != nil {
+			if err := in.clearLocked(Key(v)); err != nil {
 				return err
 			}
 		case BatchPut:

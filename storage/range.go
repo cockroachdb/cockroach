@@ -427,7 +427,8 @@ func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
 
 // Delete deletes the key and value specified by key.
 func (r *Range) Delete(args *DeleteRequest, reply *DeleteResponse) {
-	if err := r.engine.del(args.Key); err != nil {
+	// TODO(manik) replace this with abstraction to go through MVCC layer rather than talk to the engine directly
+	if err := r.engine.clear(args.Key); err != nil {
 		reply.Error = err
 	}
 }
