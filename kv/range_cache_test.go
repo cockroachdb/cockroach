@@ -19,7 +19,6 @@ package kv
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"code.google.com/p/biogo.store/llrb"
@@ -118,12 +117,10 @@ func (db *testMetadataDB) assertHitCount(t *testing.T, expected int) {
 }
 
 func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
-	fmt.Printf("Lookup %s\n", key)
-	metadata, err := rc.LookupRangeMetadata(storage.Key(key))
+	_, err := rc.LookupRangeMetadata(storage.Key(key))
 	if err != nil {
 		t.Fatalf("Error from lookup range metadata: %s", err.Error())
 	}
-	fmt.Printf("Metadata: %s\n", metadata.StartKey)
 }
 
 // TestRangeCache is a simple test which verifies that metadata ranges are being

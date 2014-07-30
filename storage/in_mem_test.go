@@ -90,13 +90,12 @@ func BenchmarkCapacity(b *testing.B) {
 			b.Fatalf("put: expected no error, but got %s", err)
 		}
 		if i%10000 == 0 {
-			c, err := engine.capacity()
+			_, err := engine.capacity()
 			if err != nil {
 				b.Errorf("unexpected error fetching capacity: %v", err)
 			}
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-			fmt.Printf("bytes in use: engine=%d process=%d\n", c.Capacity-c.Available, m.Alloc)
 		}
 	}
 }
