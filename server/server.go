@@ -44,8 +44,8 @@ import (
 )
 
 var (
-	rpcAddr  = flag.String("rpc_addr", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
-	httpAddr = flag.String("http_addr", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
+	rpcAddr  = flag.String("rpc", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
+	httpAddr = flag.String("http", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
 
 	// stores is specified to enable durable storage via RocksDB-backed
 	// key-value stores. Memory-backed key value stores may be
@@ -111,6 +111,7 @@ type server struct {
 	kvREST         *kv.RESTServer
 	node           *Node
 	admin          *adminServer
+	status         *statusServer
 	structuredDB   *structured.DB
 	structuredREST *structured.RESTServer
 	httpListener   *net.Listener // holds http endpoint information
@@ -215,7 +216,7 @@ func initEngine(attrsStr, path string) (storage.Engine, error) {
 }
 
 func newServer() (*server, error) {
-	// Determine hostname in case it hasn't been specified in -rpc_addr or -http_addr.
+	// Determine hostname in case it hasn't been specified in -rpc or -http.
 	host, err := os.Hostname()
 	if err != nil {
 		host = "127.0.0.1"
@@ -241,6 +242,7 @@ func newServer() (*server, error) {
 	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
+	s.status = newStatusServer(s.kvDB)
 	s.structuredDB = structured.NewDB(s.kvDB)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 
@@ -295,7 +297,17 @@ func (s *server) start(engines []storage.Engine, selfBootstrap bool) error {
 }
 
 func (s *server) initHTTP() {
+	// TODO(shawn) pretty "/" landing page
 	s.mux.HandleFunc(adminKeyPrefix+"healthz", s.admin.handleHealthz)
+
+	// Status endpoints:
+	s.mux.HandleFunc(statusKeyPrefix, s.status.handleStatus)
+	s.mux.HandleFunc(statusNodesKeyPrefix, s.status.handleNodeStatus)
+	s.mux.HandleFunc(statusGossipKeyPrefix, s.status.handleGossipStatus)
+	s.mux.HandleFunc(statusStoresKeyPrefix, s.status.handleStoresStatus)
+	s.mux.HandleFunc(statusTransactionsKeyPrefix, s.status.handleTransactionStatus)
+	s.mux.HandleFunc(statusLocalKeyPrefix, s.status.handleLocalStatus)
+
 	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
 	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)

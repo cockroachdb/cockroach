@@ -69,8 +69,8 @@ import (
 )
 
 var (
-	// GossipBootstrap is a comma-separated list of node addresses which
-	// active as bootstrap hosts for connecting to the gossip network.
+	// GossipBootstrap is a comma-separated list of node addresses that
+	// act as bootstrap hosts for connecting to the gossip network.
 	GossipBootstrap = flag.String(
 		"gossip", "",
 		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")

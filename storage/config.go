@@ -125,7 +125,7 @@ type RangeDescriptor struct {
 
 // AcctConfig holds accounting configuration.
 type AcctConfig struct {
-	// Nothing for the moment.
+	ClusterID string
 }
 
 // PermConfig holds permission configuration, specifying read/write ACLs.
