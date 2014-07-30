@@ -159,7 +159,7 @@ func TestEngineBatch(t *testing.T) {
 				currentBatch[k] = batch[shuffledIndices[k]]
 			}
 			// Reset the key
-			engine.del(key)
+			engine.clear(key)
 			// Run it once with individual operations and remember the result.
 			for _, op := range currentBatch {
 				if err := engine.writeBatch([]interface{}{op}); err != nil {
@@ -191,13 +191,13 @@ func TestEnginePutGetDelete(t *testing.T) {
 				_, err := engine.get([]byte(""))
 				return err
 			}(),
-			engine.del(nil),
+			engine.clear(nil),
 			func() error {
 				_, err := engine.get(nil)
 				return err
 			}(),
-			engine.del(nil),
-			engine.del([]byte("")),
+			engine.clear(nil),
+			engine.clear([]byte("")),
 		} {
 			if err == nil {
 				t.Fatalf("illegal handling of empty key")
@@ -232,7 +232,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 			if !bytes.Equal(val.Bytes, c.value) {
 				t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 			}
-			if err := engine.del(c.key); err != nil {
+			if err := engine.clear(c.key); err != nil {
 				t.Errorf("delete: expected no error, but got %s", err)
 			}
 			val, err = engine.get(c.key)
@@ -401,13 +401,7 @@ func TestEngineScan2(t *testing.T) {
 			KeyMax,
 		}
 
-		// Add keys to store in random order (make sure they sort!).
-		order := rand.Perm(len(keys))
-		for idx := range order {
-			if err := engine.put(keys[idx], Value{Bytes: []byte("value")}); err != nil {
-				t.Errorf("put: expected no error, but got %s", err)
-			}
-		}
+		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
 		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
@@ -424,4 +418,55 @@ func TestEngineScan2(t *testing.T) {
 		// Scan with max value 0 gets all values.
 		verifyScan(KeyMin, KeyMax, 0, keys[0:5], engine, t)
 	}, t)
+}
+
+func TestEngineDeleteRange(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		keys := []Key{
+			Key("a"),
+			Key("aa"),
+			Key("aaa"),
+			Key("ab"),
+			Key("abc"),
+			KeyMax,
+		}
+
+		insertKeys(keys, engine, t)
+
+		// Scan all keys (non-inclusive of final key).
+		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
+
+		// Delete a range of keys
+		numDeleted, err := clearRange(engine, Key("aa"), Key("abc"), 0)
+		// Verify what was deleted
+		if err != nil {
+			t.Error("Not expecting an error")
+		}
+		if numDeleted != 3 {
+			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
+		}
+		// Verify what's left
+		verifyScan(KeyMin, KeyMax, 10, []Key{Key("a"), Key("abc")}, engine, t)
+
+		// Reinstate removed entries
+		insertKeys(keys, engine, t)
+		numDeleted, err = clearRange(engine, Key("aa"), Key("abc"), 2) // Max of 2 entries only
+		if err != nil {
+			t.Error("Not expecting an error")
+		}
+		if numDeleted != 2 {
+			t.Errorf("Expected to delete 2 entries; was %v", numDeleted)
+		}
+		verifyScan(KeyMin, KeyMax, 10, []Key{Key("a"), Key("ab"), Key("abc")}, engine, t)
+	}, t)
+}
+
+func insertKeys(keys []Key, engine Engine, t *testing.T) {
+	// Add keys to store in random order (make sure they sort!).
+	order := rand.Perm(len(keys))
+	for idx := range order {
+		if err := engine.put(keys[idx], Value{Bytes: []byte("value")}); err != nil {
+			t.Errorf("put: expected no error, but got %s", err)
+		}
+	}
 }

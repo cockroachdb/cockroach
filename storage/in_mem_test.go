@@ -56,7 +56,7 @@ func TestInMemCapacity(t *testing.T) {
 	}
 
 	// Remove key.
-	err = engine.del(Key(bytes))
+	err = engine.clear(Key(bytes))
 	if err != nil {
 		t.Errorf("delete: expected no error, but got %s", err)
 	}

@@ -166,13 +166,15 @@ type DeleteResponse struct {
 // specifies the range of keys to delete.
 type DeleteRangeRequest struct {
 	RequestHeader
+	// If 0, *all* entries between Key (inclusive) and EndKey (exclusive) are deleted.
+	MaxEntriesToDelete int64 // Must be >= 0
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 type DeleteRangeResponse struct {
 	ResponseHeader
-	NumDeleted uint64
+	NumDeleted int64 // Number of entries removed
 }
 
 // A ScanRequest is arguments to the Scan() method. It specifies the

@@ -39,8 +39,10 @@ type Engine interface {
 	// start (inclusive) and ending at end (non-inclusive).
 	// Specify max=0 for unbounded scans.
 	scan(start, end Key, max int64) ([]KeyValue, error)
-	// delete removes the item from the db with the given key.
-	del(key Key) error
+	// clear removes the item from the db with the given key.
+	// Note that clear actually removes entries from the storage
+	// engine, rather than inserting tombstones.
+	clear(key Key) error
 	// writeBatch atomically applies the specified writes, deletions and
 	// merges. The list passed to writeBatch must only contain elements
 	// of type Batch{Put,Merge,Delete}.
@@ -132,4 +134,33 @@ func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
 		return 0, err
 	}
 	return r, nil
+}
+
+// clearRange removes a set of entries, from start (inclusive)
+// to end (exclusive), up to max entries.  If max is 0, all
+// entries between start and end are deleted.  This function
+// returns the number of entries removed.  Either all entries
+// within the range, up to max, will be deleted, or none, and
+// an error will be returned.  Note that this function actually
+// removes entries from the storage engine, rather than inserting
+// tombstones.
+func clearRange(engine Engine, start, end Key, max int64) (int, error) {
+	scanned, err := engine.scan(start, end, max)
+
+	if err != nil {
+		return 0, err
+	}
+
+	var numElements = len(scanned)
+	var deletes = make([]interface{}, numElements, numElements)
+	// Loop over the scanned entries and add to a delete batch
+	for idx, kv := range scanned {
+		deletes[idx] = BatchDelete(kv.Key)
+	}
+
+	err = engine.writeBatch(deletes)
+	if err != nil {
+		return 0, err
+	}
+	return numElements, nil
 }
