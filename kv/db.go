@@ -37,6 +37,7 @@ type DB interface {
 	Contains(args *storage.ContainsRequest) <-chan *storage.ContainsResponse
 	Get(args *storage.GetRequest) <-chan *storage.GetResponse
 	Put(args *storage.PutRequest) <-chan *storage.PutResponse
+	ConditionalPut(args *storage.ConditionalPutRequest) <-chan *storage.ConditionalPutResponse
 	Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse
 	Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse
 	DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse

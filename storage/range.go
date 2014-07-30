@@ -120,7 +120,7 @@ type RangeMetadata struct {
 	ClusterID string
 	RangeID   int64
 	StartKey  Key
-	EndKey    Key
+	EndKey    Key // non-inclusive, this key is held by the next range
 	Desc      RangeDescriptor
 }
 
