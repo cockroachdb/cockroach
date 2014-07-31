@@ -32,9 +32,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -66,6 +68,11 @@ var (
 		"\"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
 		"might include specialized hardware or number of cores (e.g. \"gpu\", "+
 		"\"x16c\"). For example: -attrs=us-west-1b,gpu")
+
+	maxDrift = flag.Duration("max_drift", 250*time.Millisecond, "specify "+
+		"the maximum clock drift for the cluster. Clock drift is measured on all "+
+		"node-to-node links and if any node notices it has clock drift in excess "+
+		"of -max_drift, it will commit suicide.")
 
 	// Regular expression for capturing data directory specifications.
 	storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
@@ -128,6 +135,11 @@ func runStart(cmd *commander.Command, args []string) {
 		glog.Errorf("Failed to start Cockroach server: %v", err)
 		return
 	}
+
+	// Create a new hybrid-logical clock using the internal clock.
+	clock := hlc.NewHLClock(hlc.UnixNano)
+	clock.SetMaxDrift(*maxDrift)
+
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
@@ -139,7 +151,7 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	err = s.start(engines, false)
+	err = s.start(clock, engines, false)
 	defer s.stop()
 	if err != nil {
 		glog.Errorf("Cockroach server exited with error: %v", err)
@@ -252,7 +264,7 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(engines []storage.Engine, selfBootstrap bool) error {
+func (s *server) start(clock *hlc.HLClock, engines []storage.Engine, selfBootstrap bool) error {
 	s.rpc.Start() // bind RPC socket and launch goroutine.
 	glog.Infof("Started RPC server at %s", s.rpc.Addr())
 
@@ -275,7 +287,7 @@ func (s *server) start(engines []storage.Engine, selfBootstrap bool) error {
 	// Init the node attributes from the -attrs command line flag.
 	nodeAttrs := parseAttributes(*attrs)
 
-	if err := s.node.start(s.rpc, engines, nodeAttrs); err != nil {
+	if err := s.node.start(s.rpc, clock, engines, nodeAttrs); err != nil {
 		return err
 	}
 	glog.Infof("Initialized %d storage engine(s)", len(engines))

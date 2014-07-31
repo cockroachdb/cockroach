@@ -82,6 +82,25 @@ func TestLess(t *testing.T) {
 	}
 }
 
+func TestEqual(t *testing.T) {
+	var m ManualClock
+	c := NewHLClock(m.UnixNano)
+	a := c.Timestamp()
+	b := c.Timestamp()
+	if !a.Equal(b) {
+		t.Errorf("expected %+v == %+v", a, b)
+	}
+	m = ManualClock(1)
+	b = c.Now()
+	if a.Equal(b) {
+		t.Errorf("expected %+v < %+v", a, b)
+	}
+	a = c.Now() // add one to logical clock from b
+	if b.Equal(a) {
+		t.Errorf("expected %+v < %+v", b, a)
+	}
+}
+
 // TestHLClock performs a complete test of all basic phenomena,
 // including backward jumps in local physical time and clock drift.
 func TestHLClock(t *testing.T) {

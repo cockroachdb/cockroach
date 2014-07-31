@@ -69,8 +69,7 @@ type BatchPut rawKeyValue
 type BatchMerge rawKeyValue
 
 // putI sets the given key to the gob-serialized byte string of the
-// value provided. Used internally. Uses current time and default
-// expiration.
+// value provided. Used internally.
 func putI(engine Engine, key Key, value interface{}) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {

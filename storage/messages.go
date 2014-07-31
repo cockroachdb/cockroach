@@ -17,13 +17,15 @@
 
 package storage
 
+import (
+	"github.com/cockroachdb/cockroach/hlc"
+)
+
 // UserRoot is the username for the root user.
 const UserRoot = "root"
 
 // Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp. Values which have been overwritten
-// have an associated expiration, after which they will be permanently
-// deleted.
+// are supported based on timestamp.
 type Value struct {
 	// Bytes is the byte string value.
 	Bytes []byte
@@ -33,10 +35,8 @@ type Value struct {
 	// Values returned by the database will contain a checksum of the
 	// contained value.
 	Checksum uint32
-	// Timestamp of value in nanoseconds since epoch.
-	Timestamp int64
-	// Expiration in nanoseconds.
-	Expiration int64
+	// Timestamp of value.
+	Timestamp hlc.HLTimestamp
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
@@ -49,9 +49,9 @@ type KeyValue struct {
 // RequestHeader is supplied with every storage node request.
 type RequestHeader struct {
 	// Timestamp specifies time at which read or writes should be
-	// performed. In nanoseconds since the epoch. Defaults to current
-	// wall time.
-	Timestamp int64
+	// performed. If the timestamp is set to zero value, its value
+	// is initialized to the wall time of the receiving node.
+	Timestamp hlc.HLTimestamp
 
 	// The following values are set internally and should not be set
 	// manually.
@@ -66,11 +66,6 @@ type RequestHeader struct {
 	User string
 	// Replica specifies the destination for the request. See config.go.
 	Replica Replica
-	// MaxTimestamp is the maximum wall time seen by the client to
-	// date. This should be supplied with successive transactions for
-	// linearalizability for this client. In nanoseconds since the
-	// epoch.
-	MaxTimestamp int64
 	// TxID is set non-empty if a transaction is underway. Empty string
 	// to start a new transaction.
 	TxID string
@@ -80,6 +75,14 @@ type RequestHeader struct {
 type ResponseHeader struct {
 	// Error is non-nil if an error occurred.
 	Error error
+	// Timestamp specifies time at which read or write actually was
+	// performed. In the case of both reads and writes, if the supplied
+	// timestamp is 0, the node servicing the request will use its
+	// timestamp for the operation and its value will be set
+	// here. Additionally, in the case of writes, this value may be
+	// increased from the timestamp passed with the RequestHeader when
+	// the key being written was either read or updated more recently.
+	Timestamp hlc.HLTimestamp
 	// TxID is non-empty if a transaction is underway.
 	TxID string
 }
@@ -205,7 +208,7 @@ type EndTransactionRequest struct {
 // distributed node to maintain consistency.
 type EndTransactionResponse struct {
 	ResponseHeader
-	CommitTimestamp int64 // Unix nanos (us)
+	CommitTimestamp hlc.HLTimestamp
 	CommitWait      int64 // Remaining with (us)
 }
 

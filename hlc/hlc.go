@@ -44,13 +44,18 @@ type HLTimestamp struct {
 	// effectively bounded by
 	// (maximum clock skew)/(minimal ns between events)
 	// and nearly impossible to overflow.
-	Logical uint64
+	Logical int64
 }
 
 // Less implements the util.Ordered interface, allowing
 // the comparison of timestamps.
 func (t HLTimestamp) Less(s HLTimestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
+}
+
+// Equal returns whether two timestamps are the same.
+func (t HLTimestamp) Equal(s HLTimestamp) bool {
+	return t.WallTime == s.WallTime && t.Logical == s.Logical
 }
 
 // HLClock is a hybrid logical clock. Objects of this
@@ -73,7 +78,7 @@ type HLClock struct {
 	// maxDrift specifies how far ahead of the physical
 	// clock the wall time can be.
 	// See SetMaxDrift.
-	maxDrift uint
+	maxDrift time.Duration
 }
 
 // ManualClock is a convenience type to facilitate
@@ -106,16 +111,15 @@ func NewHLClock(physicalClock func() int64) *HLClock {
 	}
 }
 
-// SetMaxDrift sets the maximal drift in nanoseconds
-// from the physical clock that a call to Update may cause.
-// A well-chosen value is large enough to ignore a
-// reasonable amount of clock skew but will prevent
-// ill-configured nodes from dramatically skewing the
-// wall time of the clock into the future.
+// SetMaxDrift sets the maximal drift from the physical clock that a
+// call to Update may cause. A well-chosen value is large enough to
+// ignore a reasonable amount of clock skew but will prevent
+// ill-configured nodes from dramatically skewing the wall time of the
+// clock into the future.
 //
 // A value of zero disables this safety feature.
 // The default value for a new instance is zero.
-func (c *HLClock) SetMaxDrift(delta uint) {
+func (c *HLClock) SetMaxDrift(delta time.Duration) {
 	c.Lock()
 	defer c.Unlock()
 	c.maxDrift = delta
@@ -124,7 +128,7 @@ func (c *HLClock) SetMaxDrift(delta uint) {
 // MaxDrift returns the maximal drift allowed.
 // A value of 0 means drift checking is disabled.
 // See SetMaxDrift for details.
-func (c *HLClock) MaxDrift() uint {
+func (c *HLClock) MaxDrift() time.Duration {
 	c.Lock()
 	defer c.Unlock()
 	return c.maxDrift
@@ -200,9 +204,11 @@ func (c *HLClock) Update(rt HLTimestamp) (result HLTimestamp, err error) {
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.state.WallTime {
-		if c.maxDrift > 0 && uint(rt.WallTime-physicalClock) > c.maxDrift {
+		if c.maxDrift.Nanoseconds() > 0 &&
+			rt.WallTime-physicalClock > c.maxDrift.Nanoseconds() {
 			// The remote wall time is too far ahead to be trustworthy.
-			err = util.Errorf("Remote wall time drifts from local physical clock: %d (%dns ahead)", rt.WallTime, rt.WallTime-physicalClock)
+			err = util.Errorf("Remote wall time drifts from local physical clock: %d (%dns ahead)",
+				rt.WallTime, rt.WallTime-physicalClock)
 			return
 		}
 		// The remote clock is ahead of ours, and we update

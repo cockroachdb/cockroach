@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/storage"
 )
 
@@ -40,13 +41,14 @@ func startNewServer() *kvTestServer {
 	g := gossip.New()
 	localDB := NewLocalDB()
 	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	store := storage.NewStore(engine, g)
+	clock := hlc.NewHLClock(hlc.UnixNano)
+	store := storage.NewStore(clock, engine, g)
 	_, err := store.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{storage.Replica{RangeID: 1}})
 	if err != nil {
 		panic(err)
 	}
 	localDB.AddStore(store)
-	BootstrapConfigs(localDB)
+	BootstrapConfigs(localDB, clock.Now())
 	server.db = localDB
 	server.rest = NewRESTServer(server.db)
 	server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

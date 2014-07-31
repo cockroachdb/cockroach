@@ -19,13 +19,19 @@ package storage
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/hlc"
+)
+
+const (
+	maxClockSkew = 250 * time.Millisecond
 )
 
 func TestReadTimestampCache(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
+	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 
 	// First simulate a read of just "a" at time 0.
@@ -92,6 +98,7 @@ func TestReadTimestampCache(t *testing.T) {
 func TestReadTimestampCacheEviction(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
+	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 
 	// Increment time to the maxClockSkew high water mark + 1.
@@ -115,6 +122,7 @@ func TestReadTimestampCacheEviction(t *testing.T) {
 func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
+	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
 
@@ -163,6 +171,7 @@ func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 func TestReadTimestampCacheClear(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
+	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 
 	// Increment time to the maxClockSkew high water mark + 1.

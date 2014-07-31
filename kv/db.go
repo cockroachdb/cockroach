@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -55,7 +56,7 @@ type DB interface {
 // value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
-func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
+func GetI(db DB, key storage.Key, value interface{}) (bool, hlc.HLTimestamp, error) {
 	gr := <-db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -63,10 +64,10 @@ func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
 		},
 	})
 	if gr.Error != nil {
-		return false, 0, gr.Error
+		return false, hlc.HLTimestamp{}, gr.Error
 	}
 	if len(gr.Value.Bytes) == 0 {
-		return false, 0, nil
+		return false, hlc.HLTimestamp{}, nil
 	}
 	if err := gob.NewDecoder(bytes.NewBuffer(gr.Value.Bytes)).Decode(value); err != nil {
 		return true, gr.Value.Timestamp, err
@@ -75,34 +76,32 @@ func GetI(db DB, key storage.Key, value interface{}) (bool, int64, error) {
 }
 
 // PutI sets the given key to the serialized byte string of the value
-// provided. Uses current time and default expiration.
-func PutI(db DB, key storage.Key, value interface{}) error {
+// and the provided timestamp.
+func PutI(db DB, key storage.Key, value interface{}, timestamp hlc.HLTimestamp) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
 		return err
 	}
 	pr := <-db.Put(&storage.PutRequest{
 		RequestHeader: storage.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
+			Key:       key,
+			User:      storage.UserRoot,
+			Timestamp: timestamp,
 		},
-		Value: storage.Value{
-			Bytes:     buf.Bytes(),
-			Timestamp: time.Now().UnixNano(),
-		},
+		Value: storage.Value{Bytes: buf.Bytes()},
 	})
 	return pr.Error
 }
 
 // BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor) error {
+func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc.HLTimestamp) error {
 	// Write meta1.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), desc); err != nil {
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), desc); err != nil {
+	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	return nil
@@ -113,10 +112,11 @@ func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor) error {
 // prefix, meaning they apply to the entire database. Permissions are
 // granted to all users and the zone requires three replicas with no
 // other specifications.
-func BootstrapConfigs(db DB) error {
+func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
 	// Accounting config.
 	acctConfig := &storage.AcctConfig{}
-	if err := PutI(db, storage.MakeKey(storage.KeyConfigAccountingPrefix, storage.KeyMin), acctConfig); err != nil {
+	key := storage.MakeKey(storage.KeyConfigAccountingPrefix, storage.KeyMin)
+	if err := PutI(db, key, acctConfig, timestamp); err != nil {
 		return err
 	}
 	// Permission config.
@@ -124,7 +124,8 @@ func BootstrapConfigs(db DB) error {
 		Read:  []string{storage.UserRoot}, // root user
 		Write: []string{storage.UserRoot}, // root user
 	}
-	if err := PutI(db, storage.MakeKey(storage.KeyConfigPermissionPrefix, storage.KeyMin), permConfig); err != nil {
+	key = storage.MakeKey(storage.KeyConfigPermissionPrefix, storage.KeyMin)
+	if err := PutI(db, key, permConfig, timestamp); err != nil {
 		return err
 	}
 	// Zone config.
@@ -139,7 +140,8 @@ func BootstrapConfigs(db DB) error {
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
 	}
-	if err := PutI(db, storage.MakeKey(storage.KeyConfigZonePrefix, storage.KeyMin), zoneConfig); err != nil {
+	key = storage.MakeKey(storage.KeyConfigZonePrefix, storage.KeyMin)
+	if err := PutI(db, key, zoneConfig, timestamp); err != nil {
 		return err
 	}
 	return nil
@@ -149,11 +151,13 @@ func BootstrapConfigs(db DB) error {
 // range specified by the meta parameter. This always involves a write
 // to "meta2", and may require a write to "meta1", in the event that
 // meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
-func UpdateRangeDescriptor(db DB, meta storage.RangeMetadata, locations storage.RangeDescriptor) error {
+func UpdateRangeDescriptor(db DB, meta storage.RangeMetadata,
+	desc storage.RangeDescriptor, timestamp hlc.HLTimestamp) error {
 	// TODO(spencer): a lot more work here to actually implement this.
 
 	// Write meta2.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, meta.EndKey), locations); err != nil {
+	key := storage.MakeKey(storage.KeyMeta2Prefix, meta.EndKey)
+	if err := PutI(db, key, desc, timestamp); err != nil {
 		return err
 	}
 	return nil
@@ -181,24 +185,24 @@ const (
 	maxRetryBackoff        = 30 * time.Second
 )
 
-// A firstRangeMissingErr indicates that the first range has not yet
+// A firstRangeMissingError indicates that the first range has not yet
 // been gossipped. This will be the case for a node which hasn't yet
 // joined the gossip network.
-type firstRangeMissingErr struct {
+type firstRangeMissingError struct {
 	error
 }
 
 // CanRetry implements the Retryable interface.
-func (f firstRangeMissingErr) CanRetry() bool { return true }
+func (f firstRangeMissingError) CanRetry() bool { return true }
 
-// A noNodesAvailErr specifies that no node addresses in a replica set
+// A noNodesAvailError specifies that no node addresses in a replica set
 // were available via the gossip network.
-type noNodeAddrsAvailErr struct {
+type noNodeAddrsAvailError struct {
 	error
 }
 
 // CanRetry implements the Retryable interface.
-func (n noNodeAddrsAvailErr) CanRetry() bool { return true }
+func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 
 // NewDB returns a key-value datastore client which connects to the
 // Cockroach cluster via the supplied gossip instance.
@@ -282,7 +286,7 @@ func (db *DistDB) lookupRangeMetadata(key storage.Key,
 func (db *DistDB) GetLevelOneMetadata(key storage.Key) (storage.Key, *storage.RangeDescriptor, error) {
 	info, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
 	if err != nil {
-		return nil, nil, firstRangeMissingErr{err}
+		return nil, nil, firstRangeMissingError{err}
 	}
 	infoRange := info.(storage.RangeDescriptor)
 	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
@@ -322,7 +326,7 @@ func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args, reply
 		argsMap[addr] = argsVal.Interface()
 	}
 	if len(argsMap) == 0 {
-		return noNodeAddrsAvailErr{util.Errorf("%s: no replica node addresses available via gossip", method)}
+		return noNodeAddrsAvailError{util.Errorf("%s: no replica node addresses available via gossip", method)}
 	}
 	rpcOpts := rpc.Options{
 		N:               1,

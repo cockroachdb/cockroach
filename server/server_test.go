@@ -27,6 +27,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/golang/glog"
 )
@@ -53,7 +54,8 @@ func startServer() *server {
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			glog.Fatal(err)
 		}
-		err = s.start(engines, true) // TODO(spencer): should shutdown server.
+		clock := hlc.NewHLClock(hlc.UnixNano)
+		err = s.start(clock, engines, true) // TODO(spencer): should shutdown server.
 		if err != nil {
 			glog.Fatalf("Could not start server: %s", err)
 		}

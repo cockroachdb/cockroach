@@ -1,3 +1,10 @@
+* Encode basic key value types:
+  - Counter
+  - Bag o' bytes
+  - Error if increment is used on a bag o' bytes
+  - Error if Put/Get used on a counter
+  - Should Scan return counters?
+
 * Transactions
 
   - Transaction ID: generated via allocation of block of transaction

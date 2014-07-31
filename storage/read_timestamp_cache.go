@@ -33,13 +33,6 @@ const (
 	// than minCacheWindow will necessarily have to advance their commit
 	// timestamp.
 	minCacheWindow = 10 * time.Second
-
-	// maxClockSkew specifies the maximum clock skew for the cluster.
-	// Clock skew is measured on all node-to-node links and if any node
-	// notices it has clock skew in excess of maxClockSkew, it will commit
-	// suicide.
-	// TODO(spencer): move this elsewhere.
-	maxClockSkew = 250 * time.Millisecond
 )
 
 // rangeKey implements interval.Comparable.
@@ -81,7 +74,7 @@ func NewReadTimestampCache(clock *hlc.HLClock) *ReadTimestampCache {
 func (rtc *ReadTimestampCache) Clear() {
 	rtc.cache.Clear()
 	rtc.highWater = rtc.clock.Now()
-	rtc.highWater.WallTime += maxClockSkew.Nanoseconds()
+	rtc.highWater.WallTime += int64(rtc.clock.MaxDrift())
 }
 
 // Add the specified read timestamp to the cache as covering the range of

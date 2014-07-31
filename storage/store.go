@@ -20,10 +20,12 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strconv"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -61,21 +63,27 @@ type StoreIdent struct {
 // to one physical device.
 type Store struct {
 	Ident     StoreIdent
+	clock     *hlc.HLClock
 	engine    Engine         // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Passed to new ranges
 
-	mu     sync.RWMutex     // Protects ranges map
-	ranges map[int64]*Range // Map of ranges by range ID
+	mu      sync.RWMutex        // Protects ranges, readQ & tsCache.
+	ranges  map[int64]*Range    // Map of ranges by range ID
+	readQ   *ReadQueue          // Reads queued behind pending writes
+	tsCache *ReadTimestampCache // Most recent read timestamps for keys / key ranges
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(engine Engine, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.HLClock, engine Engine, gossip *gossip.Gossip) *Store {
 	return &Store{
+		clock:     clock,
 		engine:    engine,
 		allocator: &allocator{},
 		gossip:    gossip,
 		ranges:    make(map[int64]*Range),
+		readQ:     NewReadQueue(),
+		tsCache:   NewReadTimestampCache(clock),
 	}
 }
 
@@ -234,17 +242,89 @@ func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
 func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply interface{}) error {
+	// If the request has a zero timestamp, initialize to this node's clock.
+	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
+		// Update both incoming and outgoing timestamps.
+		header.Timestamp = s.clock.Now()
+		replyVal := reflect.ValueOf(reply)
+		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(header.Timestamp))
+	} else {
+		// Otherwise, update our clock with the incoming request. This
+		// advances the local node's clock to a high water mark from
+		// amongst all nodes with which it has interacted. The update is
+		// bounded by the max clock drift.
+		_, err := s.clock.Update(header.Timestamp)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Verify specified range contains the command's implicated keys.
 	rng, err := s.GetRange(header.Replica.RangeID)
 	if err != nil {
 		return err
 	}
 	if !rng.ContainsKeyRange(header.Key, header.EndKey) {
-		return util.Errorf("key range %q-%q outside of range bounds %q-%q",
-			string(header.Key), string(header.EndKey), string(rng.Meta.StartKey), string(rng.Meta.EndKey))
+		return &NotInRangeError{start: rng.Meta.StartKey, end: rng.Meta.EndKey}
+	}
+	if !rng.IsLeader() {
+		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
+		return &NotLeaderError{}
 	}
 
-	// Create a Raft command and add it to the per-user command queue.
+	// If this is a read-only command, update the read timestamp cache
+	// and wait for any overlapping writes ahead of us to clear via the
+	// read queue.
+	if !NeedWritePerm(method) {
+		s.mu.Lock()
+		s.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
+		var wg sync.WaitGroup
+		s.readQ.AddRead(header.Key, header.EndKey, &wg)
+		s.mu.Unlock()
+		wg.Wait()
+
+		// It's possible that arbitrary delays (e.g. major GC, VM
+		// de-prioritization, etc.) could cause the execution of this read
+		// to happen AFTER the range replica has lost leadership.
+		//
+		// There is a chance that we waited on writes, and although they
+		// were committed to the log, they weren't successfully applied to
+		// this replica's state machine. However, we avoid this being a
+		// problem because Range.executeCmd verifies leadership again.
+		//
+		// Keep in mind that it's impossible for any writes to occur to
+		// keys we're reading here with timestamps before this read's
+		// timestamp. This is because the read-timestamp-cache prevents it
+		// for the active leader and leadership changes force the
+		// read-timestamp-cache to reset its high water mark.
+		return rng.executeCmd(method, args, reply)
+	}
+
+	// Otherwise, we have a mutating (read-write/write-only)
+	// command. One of the prime invariants of Cockroach is that a
+	// mutating command cannot write a key with an earlier timestamp
+	// than the most recent read of the same key. So first order of
+	// business here is to check the read timestamp cache for reads
+	// which are more recent than the timestamp of this write. If more
+	// recent, we simply update the write's timestamp before enqueuing
+	// it for execution. When the write returns, the updated timestamp
+	// will inform the final commit timestamp.
+	s.mu.Lock()
+	if ts := s.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
+		// Update both the incoming request and outgoing reply timestamps.
+		ts.Logical += 1 // increment logical component by one to differentiate.
+		header.Timestamp = ts
+		replyVal := reflect.ValueOf(reply)
+		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(ts))
+	}
+
+	// The next step is to add the write to the read queue to inform
+	// subsequent reads that there is a pending write. Reads which
+	// overlap pending writes must wait for those writes to complete.
+	wKey := s.readQ.AddWrite(header.Key, header.EndKey)
+	s.mu.Unlock()
+
+	// Create command and enqueue for Raft.
 	cmd := &Cmd{
 		Method:   method,
 		Args:     args,
@@ -252,5 +332,13 @@ func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply int
 		ReadOnly: !NeedWritePerm(method),
 		done:     make(chan error, 1),
 	}
-	return rng.EnqueueCmd(cmd)
+	// This waits for the command to complete.
+	err = rng.EnqueueCmd(cmd)
+
+	// Now that the command has completed, remove the pending write.
+	s.mu.Lock()
+	s.readQ.RemoveWrite(wKey)
+	s.mu.Unlock()
+
+	return err
 }

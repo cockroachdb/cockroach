@@ -135,9 +135,8 @@ type Range struct {
 	engine    Engine         // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
-	pending   chan *Cmd      // Pending commands to propose to Raft
+	raft      chan *Cmd      // Raft commands
 	closer    chan struct{}  // Channel for closing the range
-	// TODO(andybons): raft instance goes here.
 }
 
 // NewRange initializes the range starting at key.
@@ -147,19 +146,19 @@ func NewRange(meta RangeMetadata, engine Engine, allocator *allocator, gossip *g
 		engine:    engine,
 		allocator: allocator,
 		gossip:    gossip,
-		pending:   make(chan *Cmd, 10 /* TODO(spencer): what's correct value? */),
+		raft:      make(chan *Cmd, 10 /* TODO(spencer): what's correct value? */),
 		closer:    make(chan struct{}),
 	}
 	return r
 }
 
-// Start begins gossiping and starts the pending log entry processing
+// Start begins gossiping and starts the raft command processing
 // loop in a goroutine.
 func (r *Range) Start() {
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs()
-	go r.processPending()
+	go r.processRaft()
 	go r.startGossip()
 }
 
@@ -197,25 +196,39 @@ func (r *Range) ContainsKeyRange(start, end Key) bool {
 	return !start.Less(r.Meta.StartKey) && !r.Meta.EndKey.Less(end)
 }
 
-// EnqueueCmd enqueues a command to the pending queue for Raft
-// proposals.
+// EnqueueCmd enqueues a command to Raft.
 func (r *Range) EnqueueCmd(cmd *Cmd) error {
-	r.pending <- cmd
+	r.raft <- cmd
 	return <-cmd.done
 }
 
-// processPending processes pending read/write commands, sending them
-// to other replicas in the set as necessary to achieve consensus.
-// This method processes indefinitely or until the Range.Stop() is
-// invoked.
+// processRaft processes read/write commands, sending them to the Raft
+// consensus algorithm. This method processes indefinitely or until
+// Range.Stop() is invoked.
 //
 // TODO(spencer): this is pretty temporary. Just executing commands
-// immediately until raft is in place.
-func (r *Range) processPending() {
+//   immediately until Raft is in place.
+//
+// TODO(bdarnell): when Raft elects this range replica as the leader,
+//   we need to be careful to do the following before the range is
+//   allowed to believe it's the leader and begin to accept writes and
+//   reads:
+//     - Push noop command to raft followers in order to verify the
+//       committed entries in the log.
+//     - Apply all committed log entries to the state machine.
+//     - Signal the range to clear its read timestamp cache
+//     - Signal the range that it's now the leader with the duration
+//       of its leader lease.
+//   If we don't do this, then a read which was previously gated on
+//   the former leader waiting for overlapping writes to commit to
+//   the underlying state machine, might transit to the new leader
+//   and be able to access the new leader's state machine BEFORE
+//   the overlapping writes are applied.
+func (r *Range) processRaft() {
 	for {
 		select {
-		case logEntry := <-r.pending:
-			logEntry.done <- r.executeCmd(logEntry.Method, logEntry.Args, logEntry.Reply)
+		case cmd := <-r.raft:
+			cmd.done <- r.executeCmd(cmd.Method, cmd.Args, cmd.Reply)
 		case <-r.closer:
 			return
 		}
@@ -306,6 +319,10 @@ func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigM
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
 func (r *Range) executeCmd(method string, args, reply interface{}) error {
+	if !r.IsLeader() {
+		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
+		return &NotLeaderError{}
+	}
 	switch method {
 	case Contains:
 		r.Contains(args.(*ContainsRequest), reply.(*ContainsResponse))
@@ -390,7 +407,7 @@ func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPu
 			return
 		} else if !bytes.Equal(args.ExpValue.Bytes, val) {
 			// TODO(Jiang-Ming): provide the correct timestamp once switch to use MVCC
-			reply.ActualValue = &Value{Bytes: val, Timestamp: 0}
+			reply.ActualValue = &Value{Bytes: val}
 			reply.Error = util.Errorf("key %q does not match existing", args.Key)
 			return
 		}

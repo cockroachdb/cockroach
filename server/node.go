@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -109,7 +110,9 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (
 		NodeID:    1,
 		StoreID:   1,
 	}
-	s := storage.NewStore(engine, nil)
+	clock := hlc.NewHLClock(hlc.UnixNano)
+	now := clock.Now()
+	s := storage.NewStore(clock, engine, nil)
 
 	// Verify the store isn't already part of a cluster.
 	if s.Ident.ClusterID != "" {
@@ -149,12 +152,12 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (
 		StartKey: storage.KeyMin,
 		Replicas: []storage.Replica{replica},
 	}
-	if err := kv.BootstrapRangeDescriptor(localDB, desc); err != nil {
+	if err := kv.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
 		return nil, err
 	}
 
 	// Write default configs to local DB.
-	if err := kv.BootstrapConfigs(localDB); err != nil {
+	if err := kv.BootstrapConfigs(localDB, now); err != nil {
 		return nil, err
 	}
 
@@ -200,12 +203,12 @@ func (n *Node) initDescriptor(addr net.Addr, attrs storage.Attributes) {
 // attributes gleaned from the environment and initializing stores
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, engines []storage.Engine,
-	attrs storage.Attributes) error {
+func (n *Node) start(rpcServer *rpc.Server, clock *hlc.HLClock,
+	engines []storage.Engine, attrs storage.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
-	if err := n.initStores(engines); err != nil {
+	if err := n.initStores(clock, engines); err != nil {
 		return err
 	}
 	go n.startGossip()
@@ -225,11 +228,11 @@ func (n *Node) stop() {
 // Store doesn't yet have a valid ident, it's added to the bootstraps
 // list for initialization once the cluster and node IDs have been
 // determined.
-func (n *Node) initStores(engines []storage.Engine) error {
+func (n *Node) initStores(clock *hlc.HLClock, engines []storage.Engine) error {
 	bootstraps := list.New()
 
 	for _, engine := range engines {
-		s := storage.NewStore(engine, n.gossip)
+		s := storage.NewStore(clock, engine, n.gossip)
 		// If not bootstrapped, add to list.
 		if !s.IsBootstrapped() {
 			bootstraps.PushBack(s)
