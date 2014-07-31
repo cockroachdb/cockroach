@@ -9,8 +9,9 @@ CGO_LDFLAGS := "-L$(ROCKSDB)"
 CGO_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
              CGO_CFLAGS=$(CGO_CFLAGS)
 
-PKG := "./..."
-TESTS := ".*"
+PKG       := "./..."
+TESTS     := ".*"
+TESTFLAGS := "--logtostderr"
 
 all: build test
 
@@ -24,13 +25,13 @@ goget:
 	$(CGO_FLAGS) $(GO) get ./...
 
 test:
-	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG)
+	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace:
-	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG)
+	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 coverage:
-	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG)
+	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 clean:
 	$(GO) clean
