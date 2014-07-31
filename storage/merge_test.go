@@ -23,7 +23,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/encoding"
 )
 
 func gibberishBytes(n int) []byte {
@@ -51,7 +51,7 @@ func TestGoMerge(t *testing.T) {
 		{Counter(0), nil},
 	}
 	for i, c := range badCombinations {
-		_, err := goMerge(util.GobEncodeOrDie(c.old), util.GobEncodeOrDie(c.update))
+		_, err := goMerge(encoding.MustGobEncode(c.old), encoding.MustGobEncode(c.update))
 		if err == nil {
 			t.Errorf("goMerge: %d: expected error", i)
 		}
@@ -86,8 +86,8 @@ func TestGoMerge(t *testing.T) {
 	}
 
 	for i, c := range testCasesCounter {
-		oEncoded := util.GobEncodeOrDie(c.old)
-		uEncoded := util.GobEncodeOrDie(c.update)
+		oEncoded := encoding.MustGobEncode(c.old)
+		uEncoded := encoding.MustGobEncode(c.update)
 
 		result, err := goMerge(oEncoded, uEncoded)
 		if c.wantError {
@@ -100,21 +100,21 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		resultDecoded := util.GobDecodeOrDie(result)
+		resultDecoded := encoding.MustGobDecode(result)
 		if resultDecoded != c.expected {
 			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
 		}
 	}
 	for i, c := range testCasesAppender {
-		oEncoded := util.GobEncodeOrDie(c.old)
-		uEncoded := util.GobEncodeOrDie(c.update)
+		oEncoded := encoding.MustGobEncode(c.old)
+		uEncoded := encoding.MustGobEncode(c.update)
 
 		result, err := goMerge(oEncoded, uEncoded)
 		if err != nil {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		resultDecoded := util.GobDecodeOrDie(result)
+		resultDecoded := encoding.MustGobDecode(result)
 		if !bytes.Equal(resultDecoded.(Appender), c.expected) {
 			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
 		}

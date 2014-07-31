@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/encoding"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -63,7 +64,7 @@ func (n Counter) Merge(o Mergable) (Mergable, error) {
 	if !ok {
 		return n, util.Error("parameter is of wrong type")
 	}
-	if util.WillOverflow(int64(n), int64(m)) {
+	if encoding.WillOverflow(int64(n), int64(m)) {
 		return n, util.Errorf("merge error: %d + %d overflows", n, m)
 	}
 	result := Counter(n + m)
@@ -96,14 +97,14 @@ func (s Appender) Merge(t Mergable) (Mergable, error) {
 // The two values obtained in this way are merged and the result, or
 // an error, returned.
 func goMerge(existing, update []byte) ([]byte, error) {
-	u, err := util.GobDecode(update)
+	u, err := encoding.GobDecode(update)
 	if err != nil {
 		return nil, util.Errorf("merge: %v", err)
 	}
 	if _, ok := u.(Mergable); !ok {
 		return nil, util.Error("update is not Mergable")
 	}
-	e, err := util.GobDecode(existing)
+	e, err := encoding.GobDecode(existing)
 	if err != nil {
 		e = u.(Mergable).Init(existing)
 	}
@@ -114,7 +115,7 @@ func goMerge(existing, update []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return util.GobEncode(newValue)
+	return encoding.GobEncode(newValue)
 }
 
 //export mergeInit

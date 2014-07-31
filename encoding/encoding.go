@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package util
+package encoding
 
 import (
 	"bytes"
@@ -27,12 +27,8 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util"
 )
-
-// HashNoCheck is a special value that can be passed as a checksum
-// to indicate that CRC32 checking should not be performed.
-var HashNoCheck = crc32.NewIEEE()
 
 // GobEncode is a convenience function to return the gob representation
 // of the given value. If this value implements an interface, it needs
@@ -47,37 +43,37 @@ func GobEncode(v interface{}) ([]byte, error) {
 }
 
 // GobDecode is a convenience function to return the unmarshaled value
-// of the given string. If the value implements an interface, it needs
-// to be registered before GobEncode can be used.
-func GobDecode(s []byte) (interface{}, error) {
+// of the given byte slice. If the value implements an interface, it
+// needs to be registered before GobEncode can be used.
+func GobDecode(b []byte) (interface{}, error) {
 	var result interface{}
-	err := gob.NewDecoder(bytes.NewBuffer(s)).Decode(&result)
+	err := gob.NewDecoder(bytes.NewBuffer(b)).Decode(&result)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-// GobDecodeOrDie calls GobDecode and panics in case of an error.
-func GobDecodeOrDie(b []byte) interface{} {
+// MustGobDecode calls GobDecode and panics in case of an error.
+func MustGobDecode(b []byte) interface{} {
 	bDecoded, err := GobDecode(b)
 	if err != nil {
-		glog.Fatal(err)
+		panic(err)
 	}
 	return bDecoded
 }
 
-// GobEncodeOrDie calls GobEncode and panics in case of an error.
-func GobEncodeOrDie(o interface{}) []byte {
+// MustGobEncode calls GobEncode and panics in case of an error.
+func MustGobEncode(o interface{}) []byte {
 	oEncoded, err := GobEncode(o)
 	if err != nil {
-		glog.Fatal(err)
+		panic(err)
 	}
 	return oEncoded
 }
 
-// NewChecksum returns a CRC32 checksum computed from the input byte slice.
-func NewChecksum(b []byte) hash.Hash32 {
+// newChecksum returns a CRC32 checksum computed from the input byte slice.
+func newChecksum(b []byte) hash.Hash32 {
 	crc := crc32.NewIEEE()
 	crc.Write(b)
 	return crc
@@ -90,10 +86,10 @@ func NewChecksum(b []byte) hash.Hash32 {
 // otherwise.
 func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	// Compute the first part of the expected checksum.
-	c := NewChecksum(k)
+	c := newChecksum(k)
 	size := c.Size()
 	if size > len(b) {
-		return nil, Errorf("not enough bytes for %d character checksum", size)
+		return nil, util.Errorf("not enough bytes for %d character checksum", size)
 	}
 	// Add the second part.
 	c.Write(b[:len(b)-size])
@@ -103,7 +99,7 @@ func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	bActual := b[len(b)-size:]
 
 	if !bytes.Equal(bWanted, bActual) {
-		return nil, Errorf("CRC integrity error: %v != %v", bActual, bWanted)
+		return nil, util.Errorf("CRC integrity error: %v != %v", bActual, bWanted)
 	}
 	return b[:len(b)-size], nil
 }
@@ -111,12 +107,10 @@ func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 // wrapChecksum computes the checksum of the byte slice b appended to k.
 // The output is b with the checksum appended.
 func wrapChecksum(k []byte, b []byte) []byte {
-	chk := NewChecksum(k)
+	chk := newChecksum(k)
 	chk.Write(b)
 	return chk.Sum(b)
 }
-
-// TODO(Tobias): implement SQLite4-encoding.
 
 // Encode translates the given value into a byte representation used to store
 // it in the underlying key-value store. It typically applies to user-level
@@ -144,7 +138,7 @@ func Encode(k []byte, v interface{}) ([]byte, error) {
 func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	v, err := unwrapChecksum(k, wrappedValue)
 	if err != nil {
-		return nil, Errorf("integrity error: %v", err)
+		return nil, util.Errorf("integrity error: %v", err)
 	}
 
 	// TODO(Tobias): This is highly provisional, interpreting everything as a
@@ -153,9 +147,9 @@ func Decode(k []byte, wrappedValue []byte) (interface{}, error) {
 	var numBytes int
 	int64Val, numBytes := binary.Varint(v)
 	if numBytes == 0 {
-		return nil, Errorf("%v cannot be decoded; not varint-encoded", v)
+		return nil, util.Errorf("%v cannot be decoded; not varint-encoded", v)
 	} else if numBytes < 0 {
-		return nil, Errorf("%v cannot be decoded; integer overflow", v)
+		return nil, util.Errorf("%v cannot be decoded; integer overflow", v)
 	}
 	return int64Val, nil
 }

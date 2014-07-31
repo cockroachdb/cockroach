@@ -278,7 +278,6 @@ func TestForeignKeys(t *testing.T) {
 func TestBadForeignKeys(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-
 		t.Fatalf("failed building schema: %s", err)
 	}
 

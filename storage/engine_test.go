@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/encoding"
 )
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []rawKeyValue) {
@@ -138,17 +138,17 @@ func TestEngineBatch(t *testing.T) {
 			BatchPut{key: key, value: []byte("Cockroach~B")},
 			BatchPut{key: key, value: []byte("CockroachD~")},
 			BatchDelete(key),
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("C"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender(" o"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("  c"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender(" k"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("r"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender(" o"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("  a"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender(" c"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("h"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender(" D"))},
-			BatchMerge{key: key, value: util.GobEncodeOrDie(Appender("  B"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("C"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" o"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  c"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" k"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("r"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" o"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  a"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" c"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("h"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" D"))},
+			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  B"))},
 		}
 
 		for i := 0; i < numShuffles; i++ {
@@ -253,9 +253,9 @@ func TestEngineMerge(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testKey := Key("haste not in life")
 		merges := [][]byte{
-			[]byte(util.GobEncodeOrDie(Appender("x"))),
-			[]byte(util.GobEncodeOrDie(Appender("y"))),
-			[]byte(util.GobEncodeOrDie(Appender("z"))),
+			[]byte(encoding.MustGobEncode(Appender("x"))),
+			[]byte(encoding.MustGobEncode(Appender("y"))),
+			[]byte(encoding.MustGobEncode(Appender("z"))),
 		}
 		for i, update := range merges {
 			if err := engine.merge(testKey, update); err != nil {
@@ -263,7 +263,7 @@ func TestEngineMerge(t *testing.T) {
 			}
 		}
 		result, _ := engine.get(testKey)
-		if !bytes.Equal(util.GobDecodeOrDie(result).(Appender), Appender("xyz")) {
+		if !bytes.Equal(encoding.MustGobDecode(result).(Appender), Appender("xyz")) {
 			t.Errorf("unexpected append-merge result")
 		}
 	}, t)

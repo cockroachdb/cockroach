@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package util
+package encoding
 
 import (
 	"math"

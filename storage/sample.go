@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/cockroachdb/cockroach/encoding"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -140,7 +141,7 @@ func (es *EngineSampleStorage) Slice() []interface{} {
 
 	sl := make([]interface{}, len(res))
 	for i, kv := range res {
-		if dv, err := util.GobDecode(kv.value); err == nil {
+		if dv, err := encoding.GobDecode(kv.value); err == nil {
 			sl[i] = dv
 		} else {
 			glog.Warning(err)

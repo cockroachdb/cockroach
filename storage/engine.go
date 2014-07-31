@@ -22,6 +22,7 @@ import (
 	"encoding/gob"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/encoding"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -109,7 +110,7 @@ func increment(engine Engine, key Key, inc int64) (int64, error) {
 	var int64Val int64
 	// If the value exists, attempt to decode it as a varint.
 	if len(val) != 0 {
-		decoded, err := util.Decode(key, val)
+		decoded, err := encoding.Decode(key, val)
 		if err != nil {
 			return 0, err
 		}
@@ -120,7 +121,7 @@ func increment(engine Engine, key Key, inc int64) (int64, error) {
 	}
 
 	// Check for overflow and underflow.
-	if util.WillOverflow(int64Val, inc) {
+	if encoding.WillOverflow(int64Val, inc) {
 		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
 	}
 
@@ -129,7 +130,7 @@ func increment(engine Engine, key Key, inc int64) (int64, error) {
 	}
 
 	r := int64Val + inc
-	encoded, err := util.Encode(key, r)
+	encoded, err := encoding.Encode(key, r)
 	if err != nil {
 		return 0, util.Errorf("error encoding %d", r)
 	}
