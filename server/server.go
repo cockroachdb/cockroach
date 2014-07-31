@@ -97,7 +97,7 @@ A node exports an HTTP API with the following endpoints:
   Health check:           /healthz
   Key-value REST:         %s
   Structured Schema REST: %s
-`, kv.KVKeyPrefix, structured.StructuredKeyPrefix),
+`, kv.APIPrefix, structured.StructuredKeyPrefix),
 	Run:  runStart,
 	Flag: *flag.CommandLine,
 }
@@ -309,7 +309,7 @@ func (s *server) initHTTP() {
 	s.mux.HandleFunc(statusLocalKeyPrefix, s.status.handleLocalStatus)
 
 	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
-	s.mux.HandleFunc(kv.KVKeyPrefix, s.kvREST.HandleAction)
+	s.mux.HandleFunc(kv.APIPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)
 }
 

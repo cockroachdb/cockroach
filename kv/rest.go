@@ -22,16 +22,47 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/storage"
 )
 
 const (
-	// KVKeyPrefix is the prefix for RESTful endpoints used to
+	// APIPrefix is the prefix for RESTful endpoints used to
 	// interact directly with the key-value datastore.
-	KVKeyPrefix = "/db/"
+	APIPrefix = "/kv/"
+	// EntryPrefix is the prefix for endpoints that interact with individual key-value pairs directly.
+	EntryPrefix = APIPrefix + "entry/"
+	// RangePrefix is the prefix for endpoints that interact with a range of key-value pairs.
+	RangePrefix = APIPrefix + "range/"
+	// CounterPrefix is the prefix for the endpoint that increments a key by a given amount.
+	CounterPrefix = APIPrefix + "counter/"
 )
+
+// Function signture for an HTTP handler that only takes a writer and a request
+type actionHandler func(*RESTServer, http.ResponseWriter, *http.Request)
+
+// Function signture for an HTTP handler that takes a writer and a request and a storage key
+type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, storage.Key)
+
+// Maps various path + HTTP method combos to specific server methods
+var routingTable = map[string]map[string]actionHandler{
+	EntryPrefix: {
+		"GET":    makeActionWithKey((*RESTServer).handleEntryGetAction),
+		"PUT":    makeActionWithKey((*RESTServer).handleEntryPutAction),
+		"POST":   makeActionWithKey((*RESTServer).handleEntryPutAction),
+		"DELETE": makeActionWithKey((*RESTServer).handleEntryDeleteAction),
+		"HEAD":   makeActionWithKey((*RESTServer).handleEntryHeadAction),
+	},
+	RangePrefix: {
+	// TODO(zbrock + matthew) not supported yet!
+	},
+	CounterPrefix: {
+		"GET":  (*RESTServer).handleIncrementAction,
+		"POST": (*RESTServer).handleIncrementAction,
+	},
+}
 
 // A RESTServer provides a RESTful HTTP API to interact with
 // an underlying key-value store.
@@ -47,20 +78,34 @@ func NewRESTServer(db DB) *RESTServer {
 // HandleAction arbitrates requests to the appropriate function
 // based on the request’s HTTP method.
 func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		s.handleGetAction(w, r)
-	case "PUT", "POST":
-		s.handlePutAction(w, r)
-	case "DELETE":
-		s.handleDeleteAction(w, r)
-	default:
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+	for endPoint, epRoutes := range routingTable {
+		if strings.HasPrefix(r.URL.Path, endPoint) {
+			epHandler := epRoutes[r.Method]
+			if epHandler == nil {
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+				return
+			}
+			epHandler(s, w, r)
+			return
+		}
+	}
+	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	return
+}
+
+func makeActionWithKey(act actionKeyHandler) actionHandler {
+	return func(s *RESTServer, w http.ResponseWriter, r *http.Request) {
+		key, err := dbKey(r.URL.Path, EntryPrefix)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		act(s, w, r, key)
 	}
 }
 
-func dbKey(path string) (storage.Key, error) {
-	result, err := url.QueryUnescape(strings.TrimPrefix(path, KVKeyPrefix))
+func dbKey(path, apiPrefix string) (storage.Key, error) {
+	result, err := url.QueryUnescape(strings.TrimPrefix(path, apiPrefix))
 	if err == nil {
 		k := storage.Key(result)
 		if len(k) == 0 {
@@ -71,12 +116,45 @@ func dbKey(path string) (storage.Key, error) {
 	return nil, err
 }
 
-func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request) {
-	key, err := dbKey(r.URL.Path)
+func (s *RESTServer) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
+	key, err := dbKey(r.URL.Path, CounterPrefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// GET Requests are just an increment with 0 value.
+	var inputVal int64
+
+	if r.Method == "POST" {
+		b, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+		inputVal, err = strconv.ParseInt(string(b), 10, 64)
+		if err != nil {
+			http.Error(w, "Could not parse int64 for increment", http.StatusBadRequest)
+			return
+		}
+	}
+
+	gr := <-s.db.Increment(&storage.IncrementRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+		Increment: inputVal,
+	})
+	if gr.Error != nil {
+		http.Error(w, gr.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(w, "%d", gr.NewValue)
+}
+
+func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -97,12 +175,7 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
-	key, err := dbKey(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
 	gr := <-s.db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -115,19 +188,32 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
 	}
 	// An empty key will not be nil, but have zero length.
 	if gr.Value.Bytes == nil {
-		http.Error(w, "key not found", http.StatusNotFound)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "application/octet-stream")
 	fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
 }
 
-func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
-	key, err := dbKey(r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
+	cr := <-s.db.Contains(&storage.ContainsRequest{
+		RequestHeader: storage.RequestHeader{
+			Key:  key,
+			User: storage.UserRoot,
+		},
+	})
+	if cr.Error != nil {
+		http.Error(w, cr.Error.Error(), http.StatusInternalServerError)
 		return
 	}
+	if !cr.Exists {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *RESTServer) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
 	dr := <-s.db.Delete(&storage.DeleteRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,

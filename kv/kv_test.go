@@ -20,7 +20,6 @@ package kv
 import (
 	"net/http"
 	"net/http/httptest"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/storage"
@@ -28,7 +27,6 @@ import (
 
 var (
 	server *kvTestServer
-	once   sync.Once
 )
 
 type kvTestServer struct {
@@ -37,24 +35,22 @@ type kvTestServer struct {
 	httpServer *httptest.Server
 }
 
-func startServer() *kvTestServer {
-	once.Do(func() {
-		server = &kvTestServer{}
-		g := gossip.New()
-		localDB := NewLocalDB()
-		engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-		store := storage.NewStore(engine, g)
-		_, err := store.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{storage.Replica{RangeID: 1}})
-		if err != nil {
-			panic(err)
-		}
-		localDB.AddStore(store)
-		BootstrapConfigs(localDB)
-		server.db = localDB
-		server.rest = NewRESTServer(server.db)
-		server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			server.rest.HandleAction(w, r)
-		}))
-	})
+func startNewServer() *kvTestServer {
+	server = &kvTestServer{}
+	g := gossip.New()
+	localDB := NewLocalDB()
+	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
+	store := storage.NewStore(engine, g)
+	_, err := store.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{storage.Replica{RangeID: 1}})
+	if err != nil {
+		panic(err)
+	}
+	localDB.AddStore(store)
+	BootstrapConfigs(localDB)
+	server.db = localDB
+	server.rest = NewRESTServer(server.db)
+	server.httpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.rest.HandleAction(w, r)
+	}))
 	return server
 }

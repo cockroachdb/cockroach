@@ -26,52 +26,255 @@ import (
 	"github.com/golang/glog"
 )
 
-// TestKVRESTEndpoints tests that the REST endpoints for modifying KV
-// map are working properly.
-func TestRESTEndpoints(t *testing.T) {
-	s := startServer()
-	testCases := []struct {
-		method, key, payload, response string
-		status                         int
-	}{
-		{"GET", "my_key", "", "key not found\n", 404},
-		{"PUT", "my_key", "is cool", "", 200},
-		{"GET", "my_key", "", "is cool", 200},
-		{"DELETE", "my_key", "", "", 200},
-		{"GET", "my_key", "", "key not found\n", 404},
-		{"POST", "my_key", "is cool", "", 200},
-		{"GET", "my_key", "", "is cool", 200},
-		{"DELETE", "my_key", "", "", 200},
-		{"GET", "my_key", "", "key not found\n", 404},
-		{"PATCH", "my_key", "", "Bad Request\n", 401},
-		{"GET", "Hello, 世界", "", "key not found\n", 404},
-		{"PUT", "Hello, 世界", "is cool", "", 200},
-		{"GET", "Hello, 世界", "", "is cool", 200},
-		{"DELETE", "Hello, 世界", "", "", 200},
-		{"GET", "Hello, 世界", "", "key not found\n", 404},
-		{"GET", "", "", "empty key not allowed\n", 401},
-		{"POST", "", "", "empty key not allowed\n", 401},
-		{"POST", "emptea", "", "", 200},
-		{"GET", "emptea", "", "", 200},
-		{"DELETE", "emptea", "", "", 200},
-		{"GET", "emptea", "", "key not found\n", 404},
-	}
+type TestRequest struct {
+	method, key, body, url string
+}
 
-	for i, c := range testCases {
-		req, err := http.NewRequest(c.method, s.httpServer.URL+KVKeyPrefix+c.key, strings.NewReader(c.payload))
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			glog.Fatal(err)
-		}
-		defer resp.Body.Close()
-		b, err := ioutil.ReadAll(resp.Body)
-		if string(b) != c.response {
-			t.Errorf("%d: %s %s: expected response %q, got %q", i, req.Method, req.URL.Path, c.response, string(b))
-		}
+type TestResponse struct {
+	status   int
+	body, ct string
+}
+
+type RequestResponse struct {
+	request  TestRequest
+	response TestResponse
+}
+
+func NewResponse(status int, args ...string) TestResponse {
+	resp := TestResponse{status, "", "text/plain; charset=utf-8"}
+	switch len(args) {
+	case 2:
+		resp.ct = args[1]
+		fallthrough
+	case 1:
+		resp.body = args[0]
+		fallthrough
+	case 0:
+		break
+	default:
+		panic("Expected at most 2 arguments to NewResponse")
 	}
+	return resp
+}
+
+func NewRequest(args ...string) TestRequest {
+	req := TestRequest{"GET", "", "", EntryPrefix}
+	switch len(args) {
+	case 4:
+		req.url = args[3]
+		fallthrough
+	case 3:
+		req.body = args[2]
+		fallthrough
+	case 2:
+		req.key = args[1]
+		fallthrough
+	case 1:
+		req.method = args[0]
+		fallthrough
+	case 0:
+		break
+	default:
+		panic("Expected at most 4 arguments to NewRequest")
+	}
+	return req
+}
+
+func TestHeadAndPut(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("HEAD", "my_key"),
+			NewResponse(404),
+		},
+		{
+			NewRequest("PUT", "my_key", "is cool"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("HEAD", "my_key"),
+			NewResponse(200),
+		},
+	})
+}
+
+func TestGetAndPut(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("GET", "my_key"),
+			NewResponse(404, "key not found\n"),
+		},
+		{
+			NewRequest("PUT", "my_key", "is pretty cool"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("GET", "my_key"),
+			NewResponse(200, "is pretty cool", "application/octet-stream"),
+		},
+	})
+}
+
+func TestDelete(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("PUT", "my_key", "is super cool"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("DELETE", "my_key"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("HEAD", "my_key"),
+			NewResponse(404),
+		},
+	})
+}
+
+func TestUnsupportedVerbs(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("PATCH", "my_key", ""),
+			NewResponse(405, "Method Not Allowed\n"),
+		},
+		{
+			NewRequest("OPTIONS", "", ""),
+			NewResponse(405, "Method Not Allowed\n"),
+		},
+	})
+}
+
+func TestPost(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("HEAD", "my_key"),
+			NewResponse(404),
+		},
+		{
+			NewRequest("GET", "my_key"),
+			NewResponse(404, "key not found\n"),
+		},
+		{
+			NewRequest("POST", "my_key", "is totes cool"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("HEAD", "my_key"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("GET", "my_key"),
+			NewResponse(200, "is totes cool", "application/octet-stream"),
+		},
+	})
+}
+
+func TestNonAsciiKeys(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("HEAD", "Hello, 世界"),
+			NewResponse(404),
+		},
+		{
+			NewRequest("GET", "Hello, 世界"),
+			NewResponse(404, "key not found\n"),
+		},
+		{
+			NewRequest("PUT", "Hello, 世界", "is nonascii cool"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("HEAD", "Hello, 世界"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("GET", "Hello, 世界"),
+			NewResponse(200, "is nonascii cool", "application/octet-stream"),
+		},
+		{
+			NewRequest("DELETE", "Hello, 世界"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("HEAD", "Hello, 世界"),
+			NewResponse(404),
+		},
+		{
+			NewRequest("GET", "Hello, 世界"),
+			NewResponse(404, "key not found\n"),
+		},
+		{
+			NewRequest("HEAD", "Hello, 世界"),
+			NewResponse(404),
+		},
+	})
+}
+
+func TestEmptyKeysAndValues(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("GET"),
+			NewResponse(400, "empty key not allowed\n"),
+		},
+		{
+			NewRequest("POST"),
+			NewResponse(400, "empty key not allowed\n"),
+		},
+		{
+			NewRequest("POST", "emptea"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("GET", "emptea"),
+			NewResponse(200, "", "application/octet-stream"),
+		},
+		{
+			NewRequest("DELETE", "emptea"),
+			NewResponse(200),
+		},
+		{
+			NewRequest("GET", "emptea"),
+			NewResponse(404, "key not found\n"),
+		},
+	})
+}
+
+func TestIncrement(t *testing.T) {
+	verifySingleEntryTestCases(t, []RequestResponse{
+		{
+			NewRequest("POST", "", "", CounterPrefix),
+			NewResponse(400, "empty key not allowed\n"),
+		},
+		{
+			NewRequest("POST", "some_key", "", CounterPrefix),
+			NewResponse(400, "Could not parse int64 for increment\n"),
+		},
+
+		{
+			NewRequest("PUT", "some_key", "1", CounterPrefix),
+			NewResponse(405, "Method Not Allowed\n"),
+		},
+		{
+			NewRequest("GET", "some_key", "", CounterPrefix),
+			NewResponse(200, "0"),
+		},
+		{
+			NewRequest("POST", "some_key", "2", CounterPrefix),
+			NewResponse(200, "2"),
+		},
+		{
+			NewRequest("GET", "some_key", "", CounterPrefix),
+			NewResponse(200, "2"),
+		},
+		{
+			NewRequest("POST", "some_key", "-3", CounterPrefix),
+			NewResponse(200, "-1"),
+		},
+		{
+			NewRequest("POST", "some_key", "0", CounterPrefix),
+			NewResponse(200, "-1"),
+		},
+	})
 }
 
 // TestKeyUnescape ensures that keys specified via URL paths are properly decoded.
@@ -81,13 +284,39 @@ func TestKeyUnescape(t *testing.T) {
 		"Hello%2C+%E4%B8%96%E7%95%8C": "Hello, 世界",
 	}
 	for escaped, expected := range testCases {
-		key, err := dbKey(KVKeyPrefix + escaped)
+		key, err := dbKey(EntryPrefix+escaped, EntryPrefix)
 		if err != nil {
-			t.Errorf("error getting db key from path %s: %s", KVKeyPrefix+escaped, err)
+			t.Errorf("error getting db key from path %s: %s", EntryPrefix+escaped, err)
 			continue
 		}
 		if string(key) != expected {
 			t.Errorf("expected key value %q, got %q", expected, string(key))
+		}
+	}
+}
+
+func verifySingleEntryTestCases(t *testing.T, testcases []RequestResponse) {
+	s := startNewServer()
+	for i, tc := range testcases {
+		tReq, tResp := tc.request, tc.response
+		req, err := http.NewRequest(tReq.method, s.httpServer.URL+tReq.url+tReq.key, strings.NewReader(tReq.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, err := ioutil.ReadAll(resp.Body)
+		if resp.StatusCode != tResp.status {
+			t.Errorf("%d: %s %s: expected response status of %d, got %d", i, req.Method, req.URL.Path, tResp.status, resp.StatusCode)
+		}
+		if string(b) != tResp.body {
+			t.Errorf("%d: %s %s: expected response %q, got %q", i, req.Method, req.URL.Path, tResp.body, string(b))
+		}
+		if resp.Header.Get("Content-Type") != tResp.ct {
+			t.Errorf("%d: %s %s: expected Content-Type to be %q, got %q", i, req.Method, req.URL.Path, tResp.ct, resp.Header.Get("Content-Type"))
 		}
 	}
 }
