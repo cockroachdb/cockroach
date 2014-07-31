@@ -101,7 +101,7 @@ func TestGetAndPut(t *testing.T) {
 	verifySingleEntryTestCases(t, []RequestResponse{
 		{
 			NewRequest("GET", "my_key"),
-			NewResponse(404, "key not found\n"),
+			NewResponse(404, statusText(404)),
 		},
 		{
 			NewRequest("PUT", "my_key", "is pretty cool"),
@@ -135,11 +135,11 @@ func TestUnsupportedVerbs(t *testing.T) {
 	verifySingleEntryTestCases(t, []RequestResponse{
 		{
 			NewRequest("PATCH", "my_key", ""),
-			NewResponse(405, "Method Not Allowed\n"),
+			NewResponse(405, statusText(405)),
 		},
 		{
 			NewRequest("OPTIONS", "", ""),
-			NewResponse(405, "Method Not Allowed\n"),
+			NewResponse(405, statusText(405)),
 		},
 	})
 }
@@ -152,7 +152,7 @@ func TestPost(t *testing.T) {
 		},
 		{
 			NewRequest("GET", "my_key"),
-			NewResponse(404, "key not found\n"),
+			NewResponse(404, statusText(404)),
 		},
 		{
 			NewRequest("POST", "my_key", "is totes cool"),
@@ -177,7 +177,7 @@ func TestNonAsciiKeys(t *testing.T) {
 		},
 		{
 			NewRequest("GET", "Hello, 世界"),
-			NewResponse(404, "key not found\n"),
+			NewResponse(404, statusText(404)),
 		},
 		{
 			NewRequest("PUT", "Hello, 世界", "is nonascii cool"),
@@ -201,7 +201,7 @@ func TestNonAsciiKeys(t *testing.T) {
 		},
 		{
 			NewRequest("GET", "Hello, 世界"),
-			NewResponse(404, "key not found\n"),
+			NewResponse(404, statusText(404)),
 		},
 		{
 			NewRequest("HEAD", "Hello, 世界"),
@@ -234,7 +234,7 @@ func TestEmptyKeysAndValues(t *testing.T) {
 		},
 		{
 			NewRequest("GET", "emptea"),
-			NewResponse(404, "key not found\n"),
+			NewResponse(404, statusText(404)),
 		},
 	})
 }
@@ -319,4 +319,9 @@ func verifySingleEntryTestCases(t *testing.T, testcases []RequestResponse) {
 			t.Errorf("%d: %s %s: expected Content-Type to be %q, got %q", i, req.Method, req.URL.Path, tResp.ct, resp.Header.Get("Content-Type"))
 		}
 	}
+}
+
+// go's default http error writer adds a new line
+func statusText(status int) string {
+	return http.StatusText(status) + "\n"
 }
