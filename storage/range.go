@@ -181,8 +181,7 @@ func (r *Range) IsLeader() bool {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key Key) bool {
-	return bytes.Compare(r.Meta.StartKey, key) <= 0 &&
-		bytes.Compare(r.Meta.EndKey, key) > 0
+	return !key.Less(r.Meta.StartKey) && key.Less(r.Meta.EndKey)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
@@ -191,12 +190,11 @@ func (r *Range) ContainsKeyRange(start, end Key) bool {
 	if len(end) == 0 {
 		end = start
 	}
-	if bytes.Compare(start, end) > 0 {
+	if end.Less(start) {
 		glog.Errorf("start key is larger than end key %q > %q", string(start), string(end))
 		return false
 	}
-	return bytes.Compare(r.Meta.StartKey, start) <= 0 &&
-		bytes.Compare(r.Meta.EndKey, end) >= 0
+	return !start.Less(r.Meta.StartKey) && !r.Meta.EndKey.Less(end)
 }
 
 // EnqueueCmd enqueues a command to the pending queue for Raft

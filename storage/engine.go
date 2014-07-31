@@ -125,6 +125,10 @@ func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
 		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
 	}
 
+	if inc == 0 {
+		return int64Val, nil
+	}
+
 	r := int64Val + inc
 	encoded, err := util.Encode(key, r)
 	if err != nil {

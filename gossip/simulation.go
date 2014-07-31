@@ -28,12 +28,6 @@ import (
 	"github.com/golang/glog"
 )
 
-// init seeds the random number generator for non-determinism across
-// multiple runs.
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
-
 // SimulateNetwork creates nodeCount gossip nodes. The network should
 // be set to either "tcp" or "unix". The gossipInterval should be set
 // to a compressed simulation timescale, though large enough to give
@@ -54,6 +48,10 @@ func init() {
 // The simulation callback receives a map of nodes, keyed by node address.
 func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration,
 	simCallback func(cycle int, nodes map[string]*Gossip) bool) {
+
+	// seed the random number generator for non-determinism across
+	// multiple runs.
+	rand.Seed(time.Now().UTC().UnixNano())
 
 	glog.Infof("simulating network with %d nodes", nodeCount)
 	servers := make([]*rpc.Server, nodeCount)

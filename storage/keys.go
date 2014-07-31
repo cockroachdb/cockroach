@@ -28,8 +28,13 @@ func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) == -1
 }
 
-// MakeKey makes a new key which is prefix+suffix.
-func MakeKey(prefix, suffix Key) Key {
+// MakeKey makes a new key which is the concatenation of the
+// given inputs, in order.
+func MakeKey(prefix Key, keys ...Key) Key {
+	suffix := []byte(nil)
+	for _, k := range keys {
+		suffix = append(suffix, []byte(k)...)
+	}
 	return Key(bytes.Join([][]byte{prefix, suffix}, []byte{}))
 }
 
@@ -87,6 +92,9 @@ var (
 	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
 	// The value is a struct of type RangeMetadata.
 	KeyLocalRangeMetadataPrefix = MakeKey(KeyLocalPrefix, Key("range-"))
+	// KeyLocalRangeSamplePrefix is the prefix for keys storing range write
+	// samples.
+	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("keysample-"))
 
 	// KeyReplicatedPrefix indicates the beginning of the key range
 	// that is replicated across the cluster.

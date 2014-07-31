@@ -57,3 +57,11 @@ func TestNextKey(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeKey(t *testing.T) {
+	if !bytes.Equal(MakeKey(Key("A"), Key("B")), Key("AB")) ||
+		!bytes.Equal(MakeKey(Key("A")), Key("A")) ||
+		!bytes.Equal(MakeKey(Key("A"), Key("B"), Key("C")), Key("ABC")) {
+		t.Fatalf("MakeKey is broken")
+	}
+}
