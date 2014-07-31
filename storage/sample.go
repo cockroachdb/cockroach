@@ -104,7 +104,7 @@ func (es *EngineSampleStorage) Discard() {
 func (es *EngineSampleStorage) Get(i int) interface{} {
 	var ret interface{}
 	key := es.indexToKey(i)
-	ok, _, err := getI(es.engine, key, &ret)
+	ok, err := getI(es.engine, key, &ret)
 	if !ok {
 		glog.Warningf("key %v not found", string(key))
 	} else if err != nil {
@@ -140,7 +140,7 @@ func (es *EngineSampleStorage) Slice() []interface{} {
 
 	sl := make([]interface{}, len(res))
 	for i, kv := range res {
-		if dv, err := util.GobDecode(kv.Value.Bytes); err == nil {
+		if dv, err := util.GobDecode(kv.value); err == nil {
 			sl[i] = dv
 		} else {
 			glog.Warning(err)
@@ -181,7 +181,7 @@ func (es *EngineSampleStorage) incVar(k Key, inc int64) int64 {
 	if ok && inc == 0 {
 		return s
 	}
-	r, err := increment(es.engine, MakeKey(es.prefix, k), inc, 0)
+	r, err := increment(es.engine, MakeKey(es.prefix, k), inc)
 	if err != nil {
 		glog.Warning(err)
 		// If the increment failed, stick with the old value if possible.
