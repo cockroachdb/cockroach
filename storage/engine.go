@@ -21,10 +21,14 @@ import (
 	"bytes"
 	"encoding/gob"
 	"reflect"
-	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 )
+
+type rawKeyValue struct {
+	key   Key
+	value []byte
+}
 
 // Engine is the interface that wraps the core operations of a
 // key/value store.
@@ -32,13 +36,13 @@ type Engine interface {
 	// The engine/store attributes.
 	Attrs() Attributes
 	// put sets the given key to the value provided.
-	put(key Key, value Value) error
+	put(key Key, value []byte) error
 	// get returns the value for the given key, nil otherwise.
-	get(key Key) (Value, error)
+	get(key Key) ([]byte, error)
 	// scan returns up to max key/value objects starting from
 	// start (inclusive) and ending at end (non-inclusive).
 	// Specify max=0 for unbounded scans.
-	scan(start, end Key, max int64) ([]KeyValue, error)
+	scan(start, end Key, max int64) ([]rawKeyValue, error)
 	// clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
@@ -49,7 +53,7 @@ type Engine interface {
 	writeBatch([]interface{}) error
 	// merge implements a merge operation with counter semantics.
 	// See the docs for goMergeInit and goMerge for details.
-	merge(key Key, value Value) error
+	merge(key Key, value []byte) error
 	// capacity returns capacity details for the engine's available storage.
 	capacity() (StoreCapacity, error)
 }
@@ -58,10 +62,10 @@ type Engine interface {
 type BatchDelete Key
 
 // A BatchPut is a put operation executed as part of an atomic batch.
-type BatchPut KeyValue
+type BatchPut rawKeyValue
 
 // A BatchMerge is a merge operation executed as part of an atomic batch.
-type BatchMerge KeyValue
+type BatchMerge rawKeyValue
 
 // putI sets the given key to the gob-serialized byte string of the
 // value provided. Used internally. Uses current time and default
@@ -71,37 +75,32 @@ func putI(engine Engine, key Key, value interface{}) error {
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
 		return err
 	}
-	return engine.put(key, Value{
-		Bytes:     buf.Bytes(),
-		Timestamp: time.Now().UnixNano(),
-	})
+	return engine.put(key, buf.Bytes())
 }
 
 // getI fetches the specified key and gob-deserializes it into
 // "value". Returns true on success or false if the key was not
-// found. The timestamp of the write is returned as the second return
-// value.
-func getI(engine Engine, key Key, value interface{}) (bool, int64, error) {
+// found.
+func getI(engine Engine, key Key, value interface{}) (bool, error) {
 	val, err := engine.get(key)
 	if err != nil {
-		return false, 0, err
+		return false, err
 	}
-	if len(val.Bytes) == 0 {
-		return false, 0, nil
+	if len(val) == 0 {
+		return false, nil
 	}
 	if value != nil {
-		if err = gob.NewDecoder(bytes.NewBuffer(val.Bytes)).Decode(value); err != nil {
-			return true, val.Timestamp, err
+		if err = gob.NewDecoder(bytes.NewBuffer(val)).Decode(value); err != nil {
+			return true, err
 		}
 	}
-	return true, val.Timestamp, nil
+	return true, nil
 }
 
 // increment fetches the varint encoded int64 value specified by key
-// and adds "inc" to it then re-encodes as varint and puts the new
-// value to key using the timestamp "ts". The newly incremented value
-// is returned.
-func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
+// and adds "inc" to it then re-encodes as varint. The newly incremented
+// value is returned.
+func increment(engine Engine, key Key, inc int64) (int64, error) {
 	// First retrieve existing value.
 	val, err := engine.get(key)
 	if err != nil {
@@ -109,8 +108,8 @@ func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
 	}
 	var int64Val int64
 	// If the value exists, attempt to decode it as a varint.
-	if len(val.Bytes) != 0 {
-		decoded, err := util.Decode(key, val.Bytes)
+	if len(val) != 0 {
+		decoded, err := util.Decode(key, val)
 		if err != nil {
 			return 0, err
 		}
@@ -134,7 +133,7 @@ func increment(engine Engine, key Key, inc int64, ts int64) (int64, error) {
 	if err != nil {
 		return 0, util.Errorf("error encoding %d", r)
 	}
-	if err = engine.put(key, Value{Bytes: encoded, Timestamp: ts}); err != nil {
+	if err = engine.put(key, encoded); err != nil {
 		return 0, err
 	}
 	return r, nil
@@ -159,7 +158,7 @@ func clearRange(engine Engine, start, end Key, max int64) (int, error) {
 	var deletes = make([]interface{}, numElements, numElements)
 	// Loop over the scanned entries and add to a delete batch
 	for idx, kv := range scanned {
-		deletes[idx] = BatchDelete(kv.Key)
+		deletes[idx] = BatchDelete(kv.key)
 	}
 
 	err = engine.writeBatch(deletes)

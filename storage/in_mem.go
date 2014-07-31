@@ -32,18 +32,18 @@ import (
 
 var (
 	llrbNodeSize = int64(unsafe.Sizeof(llrb.Node{}))
-	keyValueSize = int64(unsafe.Sizeof(KeyValue{}))
+	keyValueSize = int64(unsafe.Sizeof(rawKeyValue{}))
 )
 
 // computeSize returns the approximate size in bytes that the keyVal
 // object took while stored in the underlying LLRB.
-func computeSize(kv KeyValue) int64 {
-	return int64(len(kv.Key)) + int64(len(kv.Value.Bytes)) + llrbNodeSize + keyValueSize
+func computeSize(kv rawKeyValue) int64 {
+	return int64(len(kv.key)) + int64(len(kv.value)) + llrbNodeSize + keyValueSize
 }
 
 // Compare implements the llrb.Comparable interface for tree nodes.
-func (kv KeyValue) Compare(b llrb.Comparable) int {
-	return bytes.Compare(kv.Key, b.(KeyValue).Key)
+func (kv rawKeyValue) Compare(b llrb.Comparable) int {
+	return bytes.Compare(kv.key, b.(rawKeyValue).key)
 }
 
 // InMem a simple, in-memory key-value store.
@@ -76,23 +76,23 @@ func (in *InMem) Attrs() Attributes {
 }
 
 // put sets the given key to the value provided.
-func (in *InMem) put(key Key, value Value) error {
+func (in *InMem) put(key Key, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.putLocked(key, value)
 }
 
 // putLocked assumes mutex is already held by caller. See put().
-func (in *InMem) putLocked(key Key, value Value) error {
+func (in *InMem) putLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	kv := KeyValue{Key: key, Value: value}
+	kv := rawKeyValue{key: key, value: value}
 	size := computeSize(kv)
 	// If the key already exists, compute the size change of the
 	// replacement with the new value.
-	if val := in.data.Get(KeyValue{Key: key}); val != nil {
-		size -= computeSize(val.(KeyValue))
+	if val := in.data.Get(rawKeyValue{key: key}); val != nil {
+		size -= computeSize(val.(rawKeyValue))
 	}
 
 	if size > in.maxBytes-in.usedBytes {
@@ -106,14 +106,14 @@ func (in *InMem) putLocked(key Key, value Value) error {
 // merge implements a merge operation which updates the existing value stored
 // under key based on the value passed.
 // See the documentation of goMerge and goMergeInit for details.
-func (in *InMem) merge(key Key, value Value) error {
+func (in *InMem) merge(key Key, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.mergeLocked(key, value)
 }
 
 // mergeLocked assumes the mutex is already held by the caller. See merge().
-func (in *InMem) mergeLocked(key Key, value Value) error {
+func (in *InMem) mergeLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -122,12 +122,12 @@ func (in *InMem) mergeLocked(key Key, value Value) error {
 		return err
 	}
 	// Emulate RocksDB errors by... not having errors.
-	newValue, _ := goMerge(existingVal.Bytes, value.Bytes)
-	return in.putLocked(key, Value{Bytes: newValue})
+	newValue, _ := goMerge(existingVal, value)
+	return in.putLocked(key, newValue)
 }
 
 // get returns the value for the given key, nil otherwise.
-func (in *InMem) get(key Key) (Value, error) {
+func (in *InMem) get(key Key) ([]byte, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.getLocked(key)
@@ -135,36 +135,36 @@ func (in *InMem) get(key Key) (Value, error) {
 
 // getLocked performs a get operation assuming that the caller
 // is already holding the mutex.
-func (in *InMem) getLocked(key Key) (Value, error) {
+func (in *InMem) getLocked(key Key) ([]byte, error) {
 	if len(key) == 0 {
-		return Value{}, emptyKeyError()
+		return nil, emptyKeyError()
 	}
-	val := in.data.Get(KeyValue{Key: key})
+	val := in.data.Get(rawKeyValue{key: key})
 	if val == nil {
-		return Value{}, nil
+		return nil, nil
 	}
-	return val.(KeyValue).Value, nil
+	return val.(rawKeyValue).value, nil
 }
 
 // scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
-func (in *InMem) scan(start, end Key, max int64) ([]KeyValue, error) {
+func (in *InMem) scan(start, end Key, max int64) ([]rawKeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.scanLocked(start, end, max)
 }
 
 // scanLocked is intended to be called within at least a read lock.
-func (in *InMem) scanLocked(start, end Key, max int64) ([]KeyValue, error) {
-	var scanned []KeyValue
+func (in *InMem) scanLocked(start, end Key, max int64) ([]rawKeyValue, error) {
+	var scanned []rawKeyValue
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if max != 0 && int64(len(scanned)) >= max {
 			done = true
 			return
 		}
-		scanned = append(scanned, kv.(KeyValue))
+		scanned = append(scanned, kv.(rawKeyValue))
 		return
-	}, KeyValue{Key: start}, KeyValue{Key: end})
+	}, rawKeyValue{key: start}, rawKeyValue{key: end})
 
 	return scanned, nil
 }
@@ -184,10 +184,10 @@ func (in *InMem) clearLocked(key Key) error {
 	// Note: this is approximate. There is likely something missing.
 	// The storage/in_mem_test.go benchmarks this and the measurement
 	// being made seems close enough for government work (tm).
-	if val := in.data.Get(KeyValue{Key: key}); val != nil {
-		in.usedBytes -= computeSize(val.(KeyValue))
+	if val := in.data.Get(rawKeyValue{key: key}); val != nil {
+		in.usedBytes -= computeSize(val.(rawKeyValue))
 	}
-	in.data.Delete(KeyValue{Key: key})
+	in.data.Delete(rawKeyValue{key: key})
 	return nil
 }
 
@@ -209,11 +209,11 @@ func (in *InMem) writeBatch(cmds []interface{}) error {
 				return err
 			}
 		case BatchPut:
-			if err := in.putLocked(v.Key, v.Value); err != nil {
+			if err := in.putLocked(v.key, v.value); err != nil {
 				return err
 			}
 		case BatchMerge:
-			if err := in.mergeLocked(v.Key, v.Value); err != nil {
+			if err := in.mergeLocked(v.key, v.value); err != nil {
 				return err
 			}
 		default:

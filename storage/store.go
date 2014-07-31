@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
@@ -98,7 +97,7 @@ func (s *Store) String() string {
 // bootstrapped. If the store ident is corrupt, IsBootstrapped will
 // return true; the exact error can be retrieved via a call to Init().
 func (s *Store) IsBootstrapped() bool {
-	ok, _, err := getI(s.engine, KeyLocalIdent, &s.Ident)
+	ok, err := getI(s.engine, KeyLocalIdent, &s.Ident)
 	if err != nil || ok {
 		return true
 	}
@@ -107,7 +106,7 @@ func (s *Store) IsBootstrapped() bool {
 
 // Init reads the StoreIdent from the underlying engine.
 func (s *Store) Init() error {
-	ok, _, err := getI(s.engine, KeyLocalIdent, &s.Ident)
+	ok, err := getI(s.engine, KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -117,7 +116,7 @@ func (s *Store) Init() error {
 	// TODO(spencer): scan through all range metadata and instantiate
 	//   ranges. Right now we just get range ID hardcoded as 1.
 	var meta RangeMetadata
-	ok, _, err = getI(s.engine, makeRangeKey(1), &meta)
+	ok, err = getI(s.engine, makeRangeKey(1), &meta)
 	if err != nil || !ok {
 		return err
 	}
@@ -142,7 +141,7 @@ func (s *Store) Bootstrap(ident StoreIdent) error {
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %v", err)
 	} else if len(kvs) > 0 {
-		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
+		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].key)
 	}
 	return putI(s.engine, KeyLocalIdent, s.Ident)
 }
@@ -174,11 +173,11 @@ func (s *Store) GetRanges() RangeSlice {
 // CreateRange allocates a new range ID and stores range metadata.
 // On success, returns the new range.
 func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, error) {
-	rangeID, err := increment(s.engine, KeyLocalRangeIDGenerator, 1, time.Now().UnixNano())
+	rangeID, err := increment(s.engine, KeyLocalRangeIDGenerator, 1)
 	if err != nil {
 		return nil, err
 	}
-	if ok, _, _ := getI(s.engine, makeRangeKey(rangeID), nil); ok {
+	if ok, _ := getI(s.engine, makeRangeKey(rangeID), nil); ok {
 		return nil, util.Error("newly allocated range ID already in use")
 	}
 	// RangeMetadata is stored local to this store only. It is neither

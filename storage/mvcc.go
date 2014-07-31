@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strconv"
@@ -44,6 +45,14 @@ type writeTimestampTooOldError struct {
 	Timestamp int64
 }
 
+// Constants for system-reserved value prefix.
+var (
+	// valueNormalPrefix is the prefix for the normal value.
+	valueNormalPrefix = byte(0)
+	// valueDeletedPrefix is the prefix for the deleted value.
+	valueDeletedPrefix = byte(1)
+)
+
 func (e *writeIntentError) Error() string {
 	return fmt.Sprintf("there exists a write intent from transaction %s", e.TxnID)
 }
@@ -53,35 +62,56 @@ func (e *writeTimestampTooOldError) Error() string {
 }
 
 // get returns the value for the key specified in the request and it
-// needs to satisfy the given timestamp condition. The values of multiple
-// versions for the given key should be organized as following:
+// needs to satisfy the given timestamp condition.
+// txnID in the response is used to indicate that the response value
+// belongs to a write intent.
+func (mvcc *MVCC) get(key Key, timestamp int64, txnID string) (Value, string, error) {
+	value, txnID, err := mvcc.getInternal(key, timestamp, txnID)
+	if err != nil {
+		return Value{}, txnID, err
+	}
+
+	// In case the key does not exist.
+	if len(value) == 0 {
+		return Value{}, txnID, err
+	}
+
+	if value[0] == valueDeletedPrefix {
+		return Value{}, txnID, nil
+	}
+
+	// TODO(Jiang-Ming): use unwrapChecksum here and return the real timestamp.
+	return Value{Bytes: value[1:]}, txnID, nil
+}
+
+// getInternal implements the actual logic of get function.
+// The values of multiple versions for the given key should
+// be organized as follows:
 // ...
-// keyA : keyMetatdata of keyA
+// keyA : keyMetatata of keyA
 // keyA_Timestamp_n : value of version_n
 // keyA_Timestamp_n-1 : value of version_n-1
 // ...
 // keyA_Timestamp_0 : value of version_0
-// keyB : keyMetatdata of keyB
+// keyB : keyMetadata of keyB
 // ...
-// txnID in the response will be used to indicate if the response value
-// belongs to a write intent.
-func (mvcc *MVCC) get(key Key, timestamp int64) (Value, string, error) {
+func (mvcc *MVCC) getInternal(key Key, timestamp int64, txnID string) ([]byte, string, error) {
 	keyMetadata := &keyMetadata{}
-	ok, _, err := getI(mvcc.engine, key, keyMetadata)
-	value := Value{}
-	if err != nil {
-		return value, "", err
-	}
-	if !ok {
-		return value, "", nil
+	ok, err := getI(mvcc.engine, key, keyMetadata)
+	if err != nil || !ok {
+		return nil, "", err
 	}
 
 	// If the read timestamp is greater than the latest one, we can just
 	// fetch the value without a scan.
 	if timestamp >= keyMetadata.Timestamp { // TODO(Jiang-Ming): need to use 'Less' in hlc
+		if len(keyMetadata.TxnID) > 0 && (len(txnID) == 0 || keyMetadata.TxnID != txnID) {
+			return nil, "", &writeIntentError{TxnID: keyMetadata.TxnID}
+		}
+
 		latestKey := MakeKey(key, encodeTimestamp(keyMetadata.Timestamp))
-		value, err = mvcc.engine.get(latestKey)
-		return value, keyMetadata.TxnID, err
+		val, err := mvcc.engine.get(latestKey)
+		return val, keyMetadata.TxnID, err
 	}
 
 	nextKey := MakeKey(key, encodeTimestamp(timestamp))
@@ -90,11 +120,9 @@ func (mvcc *MVCC) get(key Key, timestamp int64) (Value, string, error) {
 	// the value of the next key.
 	kvs, err := mvcc.engine.scan(nextKey, PrefixEndKey(key), 1)
 	if len(kvs) > 0 {
-		value = kvs[0].Value
-	} else {
-		value = Value{}
+		return kvs[0].value, "", err
 	}
-	return value, "", err
+	return nil, "", err
 }
 
 // put sets the value for a specified key. It will save the value with
@@ -102,8 +130,26 @@ func (mvcc *MVCC) get(key Key, timestamp int64) (Value, string, error) {
 // We assume the range will check for an existing write intent before
 // executing any Put action at the MVCC level.
 func (mvcc *MVCC) put(key Key, timestamp int64, value Value, txnID string) error {
+	if value.Timestamp != 0 && value.Timestamp != timestamp {
+		return util.Errorf(
+			"the timestamp %d provided in value does not match the timestamp %d in request",
+			value.Timestamp, timestamp)
+	}
+
+	// TODO(Jiang-Ming): use wrapChecksum here and encode the timestamp
+	// into val which need to be used in get response.
+	val := bytes.Join([][]byte{[]byte{valueNormalPrefix}, value.Bytes}, []byte(""))
+	return mvcc.putInternal(key, timestamp, val, txnID)
+}
+
+// delete marks the key deleted and will not return in the next get response.
+func (mvcc *MVCC) delete(key Key, timestamp int64, txnID string) error {
+	return mvcc.putInternal(key, timestamp, []byte{valueDeletedPrefix}, txnID)
+}
+
+func (mvcc *MVCC) putInternal(key Key, timestamp int64, value []byte, txnID string) error {
 	keyMeta := &keyMetadata{}
-	ok, _, err := getI(mvcc.engine, key, keyMeta)
+	ok, err := getI(mvcc.engine, key, keyMeta)
 	if err != nil {
 		return err
 	}
@@ -114,8 +160,7 @@ func (mvcc *MVCC) put(key Key, timestamp int64, value Value, txnID string) error
 		// operation does not come from the same transaction.
 		// This should not happen since range should check the existing
 		// write intent before executing any Put action at MVCC level.
-		if len(keyMeta.TxnID) > 0 &&
-			(len(txnID) == 0 || (len(txnID) > 0 && keyMeta.TxnID != txnID)) {
+		if len(keyMeta.TxnID) > 0 && (len(txnID) == 0 || keyMeta.TxnID != txnID) {
 			return &writeIntentError{TxnID: keyMeta.TxnID}
 		}
 
@@ -135,11 +180,6 @@ func (mvcc *MVCC) put(key Key, timestamp int64, value Value, txnID string) error
 
 	// Save the value with the given version (Key + Timestamp).
 	return mvcc.engine.put(MakeKey(key, encodeTimestamp(timestamp)), value)
-}
-
-// delete deletes the key and value specified by key.
-func (mvcc *MVCC) delete(key Key, timestamp int64, txID string) error {
-	return util.Error("unimplemented")
 }
 
 // deleteRange deletes the range of key/value pairs specified by

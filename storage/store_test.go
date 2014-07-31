@@ -77,7 +77,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	engine := NewInMem(Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
-	if err := engine.put(Key("foo"), Value{Bytes: []byte("bar")}); err != nil {
+	if err := engine.put(Key("foo"), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %v", err)
 	}
 	store := NewStore(engine, nil)

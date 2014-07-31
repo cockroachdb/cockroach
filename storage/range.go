@@ -295,10 +295,10 @@ func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigM
 		// Instantiate an instance of the config type by unmarshalling
 		// gob encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface()
-		if err := gob.NewDecoder(bytes.NewBuffer(kv.Value.Bytes)).Decode(config); err != nil {
-			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
+		if err := gob.NewDecoder(bytes.NewBuffer(kv.value)).Decode(config); err != nil {
+			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.key), err)
 		}
-		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
+		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.key, keyPrefix), Config: config})
 	}
 	return NewPrefixConfigMap(configs)
 }
@@ -353,14 +353,16 @@ func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
 		reply.Error = err
 		return
 	}
-	if val.Bytes != nil {
+	if val != nil {
 		reply.Exists = true
 	}
 }
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *GetRequest, reply *GetResponse) {
-	reply.Value, reply.Error = r.engine.get(args.Key)
+	val, err := r.engine.get(args.Key)
+	reply.Value = Value{Bytes: val}
+	reply.Error = err
 }
 
 // Put sets the value for a specified key.
@@ -378,16 +380,17 @@ func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPu
 		reply.Error = err
 		return
 	}
-	if args.ExpValue.Bytes == nil && val.Bytes != nil {
+	if args.ExpValue.Bytes == nil && val != nil {
 		reply.Error = util.Errorf("key %q already exists", args.Key)
 		return
 	} else if args.ExpValue.Bytes != nil {
 		// Handle check for existence when there is no key.
-		if val.Bytes == nil {
+		if val == nil {
 			reply.Error = util.Errorf("key %q does not exist", args.Key)
 			return
-		} else if !bytes.Equal(args.ExpValue.Bytes, val.Bytes) {
-			reply.ActualValue = &Value{Bytes: val.Bytes, Timestamp: val.Timestamp}
+		} else if !bytes.Equal(args.ExpValue.Bytes, val) {
+			// TODO(Jiang-Ming): provide the correct timestamp once switch to use MVCC
+			reply.ActualValue = &Value{Bytes: val, Timestamp: 0}
 			reply.Error = util.Errorf("key %q does not match existing", args.Key)
 			return
 		}
@@ -402,7 +405,7 @@ func (r *Range) internalPut(key Key, value Value) error {
 	// Put the value.
 	// TODO(Tobias): Turn this into a writebatch with account stats in a reusable way.
 	// This requires use of RocksDB's merge operator to implement increasable counters
-	if err := r.engine.put(key, value); err != nil {
+	if err := r.engine.put(key, value.Bytes); err != nil {
 		return err
 	}
 	// Check whether this put has modified a configuration map.
@@ -420,12 +423,11 @@ func (r *Range) internalPut(key Key, value Value) error {
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
-	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment, args.Timestamp)
+	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment)
 }
 
 // Delete deletes the key and value specified by key.
 func (r *Range) Delete(args *DeleteRequest, reply *DeleteResponse) {
-	// TODO(manik) replace this with abstraction to go through MVCC layer rather than talk to the engine directly
 	if err := r.engine.clear(args.Key); err != nil {
 		reply.Error = err
 	}
@@ -441,7 +443,16 @@ func (r *Range) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *ScanRequest, reply *ScanResponse) {
-	reply.Rows, reply.Error = r.engine.scan(args.Key, args.EndKey, args.MaxResults)
+	kvs, err := r.engine.scan(args.Key, args.EndKey, args.MaxResults)
+	if err != nil {
+		reply.Error = err
+		return
+	}
+	reply.Rows = make([]KeyValue, len(kvs))
+	for idx, kv := range kvs {
+		// TODO(Jiang-Ming): provide the correct timestamp and checksum once switch to mvcc
+		reply.Rows[idx] = KeyValue{Key: kv.key, Value: Value{Bytes: kv.value}}
+	}
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
@@ -501,12 +512,12 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	}
 	// We should have gotten the key with the same metadata level prefix as we queried.
 	metaPrefix := args.Key[0:len(KeyMeta1Prefix)]
-	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].Key, metaPrefix) {
+	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].key, metaPrefix) {
 		reply.Error = util.Errorf("key not found in range %v", r.Meta.RangeID)
 		return
 	}
 
-	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value.Bytes)).Decode(&reply.Range); err != nil {
+	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].value)).Decode(&reply.Range); err != nil {
 		reply.Error = err
 		return
 	}
@@ -515,5 +526,5 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
 		return
 	}
-	reply.EndKey = kvs[0].Key
+	reply.EndKey = kvs[0].key
 }

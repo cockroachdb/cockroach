@@ -41,7 +41,7 @@ func TestInMemCapacity(t *testing.T) {
 	bytes := []byte("0123456789")
 
 	// Add a key.
-	err = engine.put(Key(bytes), Value{Bytes: bytes})
+	err = engine.put(Key(bytes), bytes)
 	if err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
 	}
@@ -69,10 +69,10 @@ func TestInMemCapacity(t *testing.T) {
 }
 
 func TestInMemOverCapacity(t *testing.T) {
-	value := Value{Bytes: []byte("0123456789")}
+	value := []byte("0123456789")
 	// Create an engine with enough space for one, but not two, nodes.
 	engine := NewInMem(Attributes{},
-		int64(float64(computeSize(KeyValue{Key: Key("X"), Value: value}))*1.5))
+		int64(float64(computeSize(rawKeyValue{key: Key("X"), value: value}))*1.5))
 	var err error
 	if err = engine.put(Key("1"), value); err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
@@ -86,7 +86,7 @@ func BenchmarkCapacity(b *testing.B) {
 	engine := NewInMem(Attributes{}, 1<<30)
 	bytes := []byte("0123456789")
 	for i := 0; i < b.N; i++ {
-		if err := engine.put(Key(fmt.Sprintf("%d", i)), Value{Bytes: bytes}); err != nil {
+		if err := engine.put(Key(fmt.Sprintf("%d", i)), bytes); err != nil {
 			b.Fatalf("put: expected no error, but got %s", err)
 		}
 		if i%10000 == 0 {

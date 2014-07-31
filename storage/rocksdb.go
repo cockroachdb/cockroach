@@ -172,7 +172,7 @@ func bytesPointer(bytes []byte) *C.char {
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
-func (r *RocksDB) put(key Key, value Value) error {
+func (r *RocksDB) put(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -186,8 +186,8 @@ func (r *RocksDB) put(key Key, value Value) error {
 		r.wOpts,
 		bytesPointer(key),
 		C.size_t(len(key)),
-		bytesPointer(value.Bytes),
-		C.size_t(len(value.Bytes)),
+		bytesPointer(value),
+		C.size_t(len(value)),
 		&cErr)
 
 	if cErr != nil {
@@ -204,7 +204,7 @@ func (r *RocksDB) put(key Key, value Value) error {
 //
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
-func (r *RocksDB) merge(key Key, value Value) error {
+func (r *RocksDB) merge(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -218,8 +218,8 @@ func (r *RocksDB) merge(key Key, value Value) error {
 		r.wOpts,
 		bytesPointer(key),
 		C.size_t(len(key)),
-		bytesPointer(value.Bytes),
-		C.size_t(len(value.Bytes)),
+		bytesPointer(value),
+		C.size_t(len(value)),
 		&cErr)
 
 	if cErr != nil {
@@ -229,9 +229,9 @@ func (r *RocksDB) merge(key Key, value Value) error {
 }
 
 // get returns the value for the given key.
-func (r *RocksDB) get(key Key) (Value, error) {
+func (r *RocksDB) get(key Key) ([]byte, error) {
 	if len(key) == 0 {
-		return Value{}, emptyKeyError()
+		return nil, emptyKeyError()
 	}
 	var (
 		cValLen C.size_t
@@ -247,13 +247,13 @@ func (r *RocksDB) get(key Key) (Value, error) {
 		&cErr)
 
 	if cErr != nil {
-		return Value{}, charToErr(cErr)
+		return nil, charToErr(cErr)
 	}
 	if cVal == nil {
-		return Value{}, nil
+		return nil, nil
 	}
 	defer C.free(unsafe.Pointer(cVal))
-	return Value{Bytes: C.GoBytes(unsafe.Pointer(cVal), C.int(cValLen))}, nil
+	return C.GoBytes(unsafe.Pointer(cVal), C.int(cValLen)), nil
 }
 
 // clear removes the item from the db with the given key.
@@ -278,7 +278,7 @@ func (r *RocksDB) clear(key Key) error {
 // scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
+func (r *RocksDB) scan(start, end Key, max int64) ([]rawKeyValue, error) {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -289,7 +289,7 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 	it := C.rocksdb_create_iterator(r.rdb, opts)
 	defer C.rocksdb_iter_destroy(it)
 
-	keyVals := []KeyValue{}
+	keyVals := []rawKeyValue{}
 	byteCount := len(start)
 	if byteCount == 0 {
 		// start=Key("") needs special treatment since we need
@@ -313,9 +313,9 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]KeyValue, error) {
 		}
 		data = C.rocksdb_iter_value(it, &l)
 		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
-		keyVals = append(keyVals, KeyValue{
-			Key:   k,
-			Value: Value{Bytes: v},
+		keyVals = append(keyVals, rawKeyValue{
+			key:   k,
+			value: v,
 		})
 		i++
 	}
@@ -348,23 +348,23 @@ func (r *RocksDB) writeBatch(cmds []interface{}) error {
 				bytesPointer(v),
 				C.size_t(len(v)))
 		case BatchPut:
-			key, value := v.Key, v.Value
+			key, value := v.key, v.value
 			// We write the batch before returning from this method, so we
 			// don't need to worry about the GC reclaiming the data stored.
 			C.rocksdb_writebatch_put(
 				batch,
 				bytesPointer(key),
 				C.size_t(len(key)),
-				bytesPointer(value.Bytes),
-				C.size_t(len(value.Bytes)))
+				bytesPointer(value),
+				C.size_t(len(value)))
 		case BatchMerge:
-			key, value := v.Key, v.Value
+			key, value := v.key, v.value
 			C.rocksdb_writebatch_merge(
 				batch,
 				bytesPointer(key),
 				C.size_t(len(key)),
-				bytesPointer(value.Bytes),
-				C.size_t(len(value.Bytes)))
+				bytesPointer(value),
+				C.size_t(len(value)))
 		default:
 			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
 		}
