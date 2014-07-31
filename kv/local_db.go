@@ -78,7 +78,7 @@ func (db *LocalDB) AddStore(s *storage.Store) {
 	}
 	db.storeMap[s.Ident.StoreID] = s
 
-	// Maintain a slice of ranges ordered by LastKey.
+	// Maintain a slice of ranges ordered by StartKey.
 	db.ranges = append(db.ranges, s.GetRanges()...)
 	sort.Sort(db.ranges)
 }
@@ -113,11 +113,13 @@ func (db *LocalDB) lookupReplica(key storage.Key) *storage.Replica {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	n := sort.Search(len(db.ranges), func(i int) bool {
-		return bytes.Compare(key, db.ranges[i].Meta.StartKey) >= 0
+		return bytes.Compare(key, db.ranges[i].Meta.EndKey) < 0
 	})
 	if n >= len(db.ranges) || bytes.Compare(key, db.ranges[n].Meta.EndKey) >= 0 {
 		return nil
 	}
+
+	// Search the Replicas for the one that references our local Range. See executeCmd() as well.
 	for i, repl := range db.ranges[n].Meta.Desc.Replicas {
 		if repl.RangeID == db.ranges[n].Meta.RangeID {
 			return &db.ranges[n].Meta.Desc.Replicas[i]
@@ -139,7 +141,12 @@ func (db *LocalDB) executeCmd(method string, header *storage.RequestHeader, args
 	go func() {
 		// If the replica isn't specified in the header, look it up.
 		var err error
+
 		var store *storage.Store
+		// If we aren't given a Replica, then a little bending over backwards here. We need to find the Store, but all
+		// we have is the Key. So find its Range locally, and pull out its Replica which we use to find the Store.
+		// This lets us use the same codepath below (store.ExecuteCmd) for both locally and remotely originated
+		// commands.
 		if header.Replica.NodeID == 0 {
 			if repl := db.lookupReplica(header.Key); repl != nil {
 				header.Replica = *repl

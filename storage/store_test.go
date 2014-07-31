@@ -17,7 +17,12 @@
 
 package storage
 
-import "testing"
+import (
+	"bytes"
+	"fmt"
+	"sort"
+	"testing"
+)
 
 var testIdent = StoreIdent{
 	ClusterID: "cluster",
@@ -86,5 +91,21 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	// Bootstrap should fail on non-empty engine.
 	if err := store.Bootstrap(testIdent); err == nil {
 		t.Error("expected bootstrap error on non-empty store")
+	}
+}
+
+func TestRangeSliceSort(t *testing.T) {
+	var rs RangeSlice
+	for i := 4; i >= 0; i-- {
+		key := Key(fmt.Sprintf("foo%d", i))
+		rs = append(rs, &Range{Meta: RangeMetadata{StartKey: key}})
+	}
+
+	sort.Sort(rs)
+	for i := 0; i < 5; i++ {
+		expectedKey := Key(fmt.Sprintf("foo%d", i))
+		if !bytes.Equal(rs[i].Meta.StartKey, expectedKey) {
+			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Meta.StartKey)
+		}
 	}
 }
