@@ -25,10 +25,11 @@ import (
 )
 
 type testCluster struct {
-	t      *testing.T
-	nodes  []*state
-	clocks []*manualClock
-	events []*eventDemux
+	t        *testing.T
+	nodes    []*state
+	clocks   []*manualClock
+	events   []*eventDemux
+	storages []*BlockableStorage
 }
 
 func newTestCluster(size int, t *testing.T) *testCluster {
@@ -36,7 +37,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 	cluster := &testCluster{t: t}
 	for i := 0; i < size; i++ {
 		clock := newManualClock()
-		storage := NewMemoryStorage()
+		storage := &BlockableStorage{storage: NewMemoryStorage()}
 		config := &Config{
 			Transport:          transport,
 			Storage:            storage,
@@ -55,6 +56,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 		cluster.nodes = append(cluster.nodes, state)
 		cluster.clocks = append(cluster.clocks, clock)
 		cluster.events = append(cluster.events, demux)
+		cluster.storages = append(cluster.storages, storage)
 	}
 	// Let all the states listen before starting any.
 	for _, node := range cluster.nodes {
@@ -112,6 +114,7 @@ func TestInitialLeaderElection(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	cluster := newTestCluster(3, t)
+	defer cluster.stop()
 	groupID := GroupID(1)
 	cluster.createGroup(groupID, 3)
 	// TODO(bdarnell): once followers can forward to leaders, don't wait for the election here.
@@ -128,5 +131,50 @@ func TestCommand(t *testing.T) {
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)
 		}
+	}
+}
+
+func TestSlowStorage(t *testing.T) {
+	cluster := newTestCluster(3, t)
+	defer cluster.stop()
+	groupID := GroupID(1)
+	cluster.createGroup(groupID, 3)
+
+	// TODO(bdarnell): once followers can forward to leaders, don't wait for the election here.
+	cluster.clocks[0].triggerElection()
+	<-cluster.events[0].LeaderElection
+
+	// Block the storage on the last node.
+	// TODO(bdarnell): there appear to still be issues if the storage is blocked during
+	// the election.
+	cluster.storages[2].Block()
+
+	// Submit a command to the leader
+	cluster.nodes[0].SubmitCommand(groupID, []byte("command"))
+
+	// Even with the third node blocked, the other nodes can make progress.
+	for i := 0; i < 2; i++ {
+		events := cluster.events[i]
+		glog.Infof("waiting for event to be commited on node %v", i)
+		commit := <-events.CommandCommitted
+		if string(commit.Command) != "command" {
+			t.Errorf("unexpected value in committed command: %v", commit.Command)
+		}
+	}
+
+	// Ensure that node 2 is in fact blocked.
+	time.Sleep(time.Millisecond)
+	select {
+	case commit := <-cluster.events[2].CommandCommitted:
+		t.Errorf("didn't expect commits on node 2 but got %v", commit)
+	default:
+	}
+
+	// After unblocking the third node, it will catch up.
+	cluster.storages[2].Unblock()
+	glog.Infof("waiting for event to be commited on node 2")
+	commit := <-cluster.events[2].CommandCommitted
+	if string(commit.Command) != "command" {
+		t.Errorf("unexpected value in committed command: %v", commit.Command)
 	}
 }

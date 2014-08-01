@@ -233,9 +233,13 @@ type group struct {
 	persistedLastTerm         int
 
 	// Volatile state
-	role             Role
+	role Role
+	// leaderCommitIndex is the last commitIndex we have received from the leader.
+	leaderCommitIndex int
+	// commitIndex is the last index we have applied (i.e. issued as an
+	// EventCommandCommitted).  It is the smaller of leaderCommitIndex and our
+	// persistedLastIndex.
 	commitIndex      int
-	lastApplied      int
 	electionDeadline time.Time
 	votes            map[NodeID]bool
 
@@ -639,6 +643,10 @@ func (s *state) handleWriteResponse(response *writeResponse) {
 			g.persistedLastTerm = persistedGroup.lastTerm
 		}
 
+		// If we are catching up, commit any newly-persisted entries that the leader
+		// already considers committed.
+		s.commitEntries(g, g.leaderCommitIndex)
+
 		// Resolve any pending RPCs that have been waiting for persistence to catch up.
 		var toDelete []*list.Element
 		for e := g.pendingCalls.Front(); e != nil; e = e.Next() {
@@ -696,14 +704,18 @@ func (s *state) becomeCandidate(g *group) {
 	s.updateDirtyStatus(g)
 }
 
-func (s *state) commitEntries(g *group, index int) {
-	if index <= g.commitIndex {
+func (s *state) commitEntries(g *group, leaderCommitIndex int) {
+	if leaderCommitIndex == g.commitIndex {
+		return
+	} else if leaderCommitIndex < g.commitIndex {
 		// Commit index cannot actually move backwards, but a newly-elected leader might
 		// report stale positions for a short time so just ignore them.
 		glog.V(6).Infof("node %v: ignoring commit index %v because it is behind existing commit %v",
-			s.nodeID, index, g.commitIndex)
+			s.nodeID, leaderCommitIndex, g.commitIndex)
 		return
 	}
+	g.leaderCommitIndex = leaderCommitIndex
+	index := leaderCommitIndex
 	if index > g.persistedLastIndex {
 		// If we are not caught up with the leader, just commit as far as we can.
 		// We'll continue to commit new entries as we receive AppendEntriesRequests.
