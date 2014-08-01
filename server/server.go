@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
@@ -104,7 +105,7 @@ A node exports an HTTP API with the following endpoints:
   Health check:           /healthz
   Key-value REST:         %s
   Structured Schema REST: %s
-`, kv.APIPrefix, structured.StructuredKeyPrefix),
+`, rest.APIPrefix, structured.StructuredKeyPrefix),
 	Run:  runStart,
 	Flag: *flag.CommandLine,
 }
@@ -115,7 +116,7 @@ type server struct {
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
 	kvDB           kv.DB
-	kvREST         *kv.RESTServer
+	kvREST         *rest.RESTServer
 	node           *Node
 	admin          *adminServer
 	status         *statusServer
@@ -251,7 +252,7 @@ func newServer() (*server, error) {
 
 	s.gossip = gossip.New()
 	s.kvDB = kv.NewDB(s.gossip)
-	s.kvREST = kv.NewRESTServer(s.kvDB)
+	s.kvREST = rest.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
 	s.status = newStatusServer(s.kvDB)
@@ -321,7 +322,7 @@ func (s *server) initHTTP() {
 	s.mux.HandleFunc(statusLocalKeyPrefix, s.status.handleLocalStatus)
 
 	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
-	s.mux.HandleFunc(kv.APIPrefix, s.kvREST.HandleAction)
+	s.mux.HandleFunc(rest.APIPrefix, s.kvREST.HandleAction)
 	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)
 }
 

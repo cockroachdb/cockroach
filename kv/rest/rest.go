@@ -15,7 +15,7 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-package kv
+package rest
 
 import (
 	"fmt"
@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/kv"
 )
 
 const (
@@ -67,11 +68,11 @@ var routingTable = map[string]map[string]actionHandler{
 // A RESTServer provides a RESTful HTTP API to interact with
 // an underlying key-value store.
 type RESTServer struct {
-	db DB // Key-value database client
+	db kv.DB // Key-value database client
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db DB) *RESTServer {
+func NewRESTServer(db kv.DB) *RESTServer {
 	return &RESTServer{db: db}
 }
 
