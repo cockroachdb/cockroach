@@ -8,3 +8,5 @@
 - Ben Darnell <ben@bendarnell.com>
 - Peter Mattis <petermattis@gmail.com>
 - Tobias Schottdorf <tobias.schottdorf@gmail.com>
+- Zach Brock <zbrock@gmail.com>
+- Matthew O'Connor <matthew.t.oconnor@gmail.com>
