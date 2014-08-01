@@ -47,7 +47,7 @@ type writeTimestampTooOldError struct {
 }
 
 // Constants for system-reserved value prefix.
-var (
+const (
 	// valueNormalPrefix is the prefix for the normal value.
 	valueNormalPrefix = byte(0)
 	// valueDeletedPrefix is the prefix for the deleted value.
@@ -68,17 +68,9 @@ func (e *writeTimestampTooOldError) Error() string {
 // belongs to a write intent.
 func (mvcc *MVCC) get(key Key, timestamp hlc.HLTimestamp, txnID string) (Value, string, error) {
 	value, txnID, err := mvcc.getInternal(key, timestamp, txnID)
-	if err != nil {
+	// In case of error, or the key doesn't exist, or the key was deleted.
+	if err != nil || len(value) == 0 || value[0] == valueDeletedPrefix {
 		return Value{}, txnID, err
-	}
-
-	// In case the key does not exist.
-	if len(value) == 0 {
-		return Value{}, txnID, err
-	}
-
-	if value[0] == valueDeletedPrefix {
-		return Value{}, txnID, nil
 	}
 
 	// TODO(Jiang-Ming): use unwrapChecksum here and return the real timestamp.
@@ -165,7 +157,8 @@ func (mvcc *MVCC) putInternal(key Key, timestamp hlc.HLTimestamp, value []byte, 
 			return &writeIntentError{TxnID: keyMeta.TxnID}
 		}
 
-		if keyMeta.Timestamp.Less(timestamp) {
+		if keyMeta.Timestamp.Less(timestamp) ||
+			(timestamp.Equal(keyMeta.Timestamp) && txnID == keyMeta.TxnID) {
 			// Update key metadata.
 			putI(mvcc.engine, key, &keyMetadata{TxnID: txnID, Timestamp: timestamp})
 		} else {
@@ -183,22 +176,118 @@ func (mvcc *MVCC) putInternal(key Key, timestamp hlc.HLTimestamp, value []byte, 
 	return mvcc.engine.put(MakeKey(key, encodeTimestamp(timestamp)), value)
 }
 
+// conditionalPut sets the value for a specified key only if
+// the expected value matches. If not, the return value contains
+// the actual value.
+func (mvcc *MVCC) conditionalPut(key Key, timestamp hlc.HLTimestamp, value Value, expValue Value, txnID string) (Value, error) {
+	// Handle check for non-existence of key. In order to detect
+	// the potential write intent by another concurrent transaction
+	// with a newer timestamp, we need to use the max timestamp
+	// while reading.
+	val, _, err := mvcc.get(key, hlc.MaxHLTimestamp, txnID)
+	if err != nil {
+		return Value{}, err
+	}
+
+	if expValue.Bytes == nil && val.Bytes != nil {
+		return Value{}, util.Errorf("key %q already exists", key)
+	} else if expValue.Bytes != nil {
+		// Handle check for existence when there is no key.
+		if val.Bytes == nil {
+			return Value{}, util.Errorf("key %q does not exist", key)
+		} else if !bytes.Equal(expValue.Bytes, val.Bytes) {
+			return val, util.Errorf("key %q does not match existing", key)
+		}
+	}
+
+	err = mvcc.put(key, timestamp, value, txnID)
+	return Value{}, err
+}
+
 // deleteRange deletes the range of key/value pairs specified by
-// start and end keys.
-func (mvcc *MVCC) deleteRange(key Key, endKey Key, timestamp hlc.HLTimestamp, txID string) error {
-	return util.Error("unimplemented")
+// start and end keys. Specify max=0 for unbounded deletes.
+func (mvcc *MVCC) deleteRange(key Key, endKey Key, max int64, timestamp hlc.HLTimestamp, txnID string) ([]Key, error) {
+	// In order to detect the potential write intent by another
+	// concurrent transaction with a newer timestamp, we need
+	// to use the max timestamp for scan.
+	kvs, txnID, err := mvcc.scan(key, endKey, max, hlc.MaxHLTimestamp, txnID)
+	if err != nil {
+		return []Key{}, err
+	}
+
+	keys := []Key{}
+	for _, kv := range kvs {
+		err = mvcc.delete(kv.Key, timestamp, txnID)
+		if err != nil {
+			return keys, err
+		}
+		keys = append(keys, kv.Key)
+	}
+	return keys, nil
 }
 
 // scan scans the key range specified by start key through end key up
-// to some maximum number of results. The last key of the iteration is
-// returned with the reply.
-func (mvcc *MVCC) scan(key Key, endKey Key, timestamp hlc.HLTimestamp) ([]Value, string, error) {
-	return []Value{}, "", util.Error("unimplemented")
+// to some maximum number of results. Specify max=0 for unbounded scans.
+func (mvcc *MVCC) scan(key Key, endKey Key, max int64, timestamp hlc.HLTimestamp, txnID string) ([]KeyValue, string, error) {
+	nextKey := key
+	// TODO(Jiang-Ming): remove this after we put everything via MVCC.
+	// Currently, we need to skip the series of reserved system
+	// key / value pairs covering accounting, range metadata, node
+	// accounting and permissions before the actual key / value pairs
+	// since they don't have keyMetadata.
+	if nextKey.Less(PrefixEndKey(Key("\x00"))) {
+		nextKey = PrefixEndKey(Key("\x00"))
+	}
+
+	res := []KeyValue{}
+	for {
+		kvs, err := mvcc.engine.scan(nextKey, endKey, 1)
+		if err != nil {
+			return nil, "", err
+		}
+		// No more keys exists in the given range.
+		if len(kvs) == 0 {
+			break
+		}
+
+		currentKey := kvs[0].key
+		value, _, err := mvcc.get(currentKey, timestamp, txnID)
+		if err != nil {
+			return res, "", err
+		}
+
+		if value.Bytes != nil {
+			res = append(res, KeyValue{Key: currentKey, Value: value})
+		}
+
+		if max != 0 && max == int64(len(res)) {
+			break
+		}
+
+		// In order to efficiently skip the possibly long list of
+		// old versions for this key, we move instead to the next
+		// highest key and the for loop continues by scanning again
+		// with nextKey.
+		// Let's say you have:
+		// a
+		// a<T=2>
+		// a<T=1>
+		// aa
+		// aa<T=3>
+		// aa<T=2>
+		// b
+		// b<T=5>
+		// In this case, if we scan from "a"-"b", we wish to skip
+		// a<T=2> and a<T=1> and find "aa'.
+		nextKey = NextKey(MakeKey(currentKey, encodeTimestamp(hlc.MinHLTimestamp)))
+	}
+
+	return res, txnID, nil
 }
 
 // endTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (mvcc *MVCC) endTransaction(key Key, txID string, commit bool) error {
+func (mvcc *MVCC) endTransaction(key Key, txnID string, commit bool) error {
 	return util.Error("unimplemented")
 }
 

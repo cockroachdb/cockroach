@@ -22,6 +22,7 @@
 package hlc
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -46,6 +47,14 @@ type HLTimestamp struct {
 	// and nearly impossible to overflow.
 	Logical int64
 }
+
+// HLTimestamp constant values.
+var (
+	// MaxHLTimestamp is the max value allowed for HLTimestamp.
+	MaxHLTimestamp = HLTimestamp{WallTime: math.MaxInt64, Logical: math.MaxInt64}
+	// MinHLTimestamp is the min value allowed for HLTimestamp.
+	MinHLTimestamp = HLTimestamp{WallTime: 0, Logical: 0}
+)
 
 // Less implements the util.Ordered interface, allowing
 // the comparison of timestamps.
