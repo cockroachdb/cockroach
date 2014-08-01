@@ -21,9 +21,12 @@ import (
 	"bytes"
 	"encoding/gob"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 )
 
 var (
@@ -83,7 +86,8 @@ func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 		Desc:     testRangeDescriptor,
 	}
 	g := gossip.New()
-	r := NewRange(rm, engine, nil, g)
+	clock := hlc.NewHLClock(hlc.UnixNano)
+	r := NewRange(rm, clock, engine, nil, g)
 	r.Start()
 	return r, g
 }
@@ -238,4 +242,192 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 
 func TestInternalRangeLookup(t *testing.T) {
 	// TODO(Spencer): test, esp. for correct key range scanned
+}
+
+// A blockingEngine allows us to delay writes in order to test the
+// pending read queue.
+type blockingEngine struct {
+	*InMem
+	mu    sync.Mutex
+	cvar  *sync.Cond
+	block bool
+}
+
+func newBlockingEngine() *blockingEngine {
+	be := &blockingEngine{
+		InMem: NewInMem(Attributes{}, 1<<20),
+	}
+	be.cvar = sync.NewCond(&be.mu)
+	return be
+}
+
+func (be *blockingEngine) setBlock(block bool) {
+	be.mu.Lock()
+	defer be.mu.Unlock()
+	be.block = block
+	if !be.block {
+		be.cvar.Broadcast()
+	}
+}
+
+func (be *blockingEngine) put(key Key, value []byte) error {
+	be.mu.Lock()
+	defer be.mu.Unlock()
+	for be.block {
+		be.cvar.Wait()
+	}
+	return be.InMem.put(key, value)
+}
+
+// createTestRange creates a range using a blocking engine. Returns
+// the range clock's manual unix nanos time and the range.
+func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *blockingEngine) {
+	manual := hlc.ManualClock(0)
+	clock := hlc.NewHLClock(manual.UnixNano)
+	engine := newBlockingEngine()
+	rng := NewRange(RangeMetadata{}, clock, engine, nil, nil)
+	rng.Start()
+	return rng, &manual, engine
+}
+
+// getArgs returns a GetRequest and GetResponse pair addressed to
+// the default replica for the specified key.
+func getArgs(key string, rangeID int64) (*GetRequest, *GetResponse) {
+	args := &GetRequest{
+		RequestHeader: RequestHeader{
+			Key:     []byte(key),
+			Replica: Replica{RangeID: rangeID},
+		},
+	}
+	reply := &GetResponse{}
+	return args, reply
+}
+
+// putArgs returns a PutRequest and PutResponse pair addressed to
+// the default replica for the specified key / value.
+func putArgs(key, value string, rangeID int64) (*PutRequest, *PutResponse) {
+	args := &PutRequest{
+		RequestHeader: RequestHeader{
+			Key:     []byte(key),
+			Replica: Replica{RangeID: rangeID},
+		},
+		Value: Value{
+			Bytes: []byte(value),
+		},
+	}
+	reply := &PutResponse{}
+	return args, reply
+}
+
+// TestRangeUpdateTSCache verifies that reads update the read
+// timestamp cache.
+func TestRangeUpdateTSCache(t *testing.T) {
+	rng, mc, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+	// Set clock to time 1s and do the read.
+	t0 := 1 * time.Second
+	*mc = hlc.ManualClock(t0.Nanoseconds())
+	args, reply := getArgs("a", 0)
+	args.Timestamp = rng.tsCache.clock.Now()
+	err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+	if err != nil {
+		t.Error(err)
+	}
+	// Verify the read timestamp cache has 1sec for "a".
+	ts := rng.tsCache.GetMax(Key("a"), nil)
+	if ts.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected wall time to have 1s, but got %+v", ts)
+	}
+	// Verify another key ("b") has 0sec in timestamp cache.
+	ts = rng.tsCache.GetMax(Key("b"), nil)
+	if ts.WallTime != 0 {
+		t.Errorf("expected wall time to have 0s, but got %+v", ts)
+	}
+}
+
+// TestRangeReadQueue verifies that reads must wait for writes to
+// complete through Raft before being executed on range.
+func TestRangeReadQueue(t *testing.T) {
+	rng, _, be := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	// Asynchronously put a value to the rng with blocking enabled.
+	be.setBlock(true)
+	writeDone := make(chan struct{})
+	go func() {
+		args, reply := putArgs("a", "value", 0)
+		err := rng.ReadWriteCmd("Put", &args.RequestHeader, args, reply)
+		if err != nil {
+			t.Fatal(err)
+		}
+		close(writeDone)
+	}()
+
+	// First, try a read for a non-impacted key ("b").
+	readBDone := make(chan struct{})
+	go func() {
+		args, reply := getArgs("b", 0)
+		err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+		if err != nil {
+			t.Error(err)
+		}
+		close(readBDone)
+	}()
+
+	// Next, try a read for same key being written to verify it blocks.
+	readADone := make(chan struct{})
+	go func() {
+		args, reply := getArgs("a", 0)
+		err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+		if err != nil {
+			t.Error(err)
+		}
+		close(readADone)
+	}()
+
+	// Verify read of "b" finishes but not "a".
+	select {
+	case <-readADone:
+		t.Fatal("should not have been able to read \"a\"")
+	case <-readBDone:
+		// success.
+	case <-writeDone:
+		t.Fatal("should not have been able to write \"a\" while blocked")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("waited 500ms for read of \"b\"")
+	}
+
+	// Now, unblock write.
+	be.setBlock(false)
+
+	select {
+	case <-readADone:
+		// success.
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("waited 500ms for read of \"a\"")
+	}
+}
+
+// TestRangeUseTSCache verifies that write timestamps are upgraded
+// based on the read timestamp cache.
+func TestRangeUseTSCache(t *testing.T) {
+	rng, mc, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+	// Set clock to time 1s and do the read.
+	t0 := 1 * time.Second
+	*mc = hlc.ManualClock(t0.Nanoseconds())
+	args, reply := getArgs("a", 0)
+	args.Timestamp = rng.tsCache.clock.Now()
+	err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+	if err != nil {
+		t.Error(err)
+	}
+	pArgs, pReply := putArgs("a", "value", 0)
+	err = rng.ReadWriteCmd("Put", &pArgs.RequestHeader, pArgs, pReply)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pReply.Timestamp.WallTime != rng.tsCache.clock.Timestamp().WallTime {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %+v", pReply.Timestamp)
+	}
 }

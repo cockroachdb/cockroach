@@ -68,10 +68,8 @@ type Store struct {
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Passed to new ranges
 
-	mu      sync.RWMutex        // Protects ranges, readQ & tsCache.
-	ranges  map[int64]*Range    // Map of ranges by range ID
-	readQ   *ReadQueue          // Reads queued behind pending writes
-	tsCache *ReadTimestampCache // Most recent read timestamps for keys / key ranges
+	mu     sync.RWMutex     // Protects ranges
+	ranges map[int64]*Range // Map of ranges by range ID
 }
 
 // NewStore returns a new instance of a store.
@@ -82,8 +80,6 @@ func NewStore(clock *hlc.HLClock, engine Engine, gossip *gossip.Gossip) *Store {
 		allocator: &allocator{},
 		gossip:    gossip,
 		ranges:    make(map[int64]*Range),
-		readQ:     NewReadQueue(),
-		tsCache:   NewReadTimestampCache(clock),
 	}
 }
 
@@ -129,7 +125,7 @@ func (s *Store) Init() error {
 		return err
 	}
 
-	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
+	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip)
 	rng.Start()
 
 	s.mu.Lock()
@@ -204,7 +200,7 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 	if err != nil {
 		return nil, err
 	}
-	rng := NewRange(meta, s.engine, s.allocator, s.gossip)
+	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip)
 	rng.Start()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -272,73 +268,10 @@ func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply int
 		return &NotLeaderError{}
 	}
 
-	// If this is a read-only command, update the read timestamp cache
-	// and wait for any overlapping writes ahead of us to clear via the
-	// read queue.
+	// Differentiate between read-only and read-write.
 	if !NeedWritePerm(method) {
-		s.mu.Lock()
-		s.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
-		var wg sync.WaitGroup
-		s.readQ.AddRead(header.Key, header.EndKey, &wg)
-		s.mu.Unlock()
-		wg.Wait()
-
-		// It's possible that arbitrary delays (e.g. major GC, VM
-		// de-prioritization, etc.) could cause the execution of this read
-		// to happen AFTER the range replica has lost leadership.
-		//
-		// There is a chance that we waited on writes, and although they
-		// were committed to the log, they weren't successfully applied to
-		// this replica's state machine. However, we avoid this being a
-		// problem because Range.executeCmd verifies leadership again.
-		//
-		// Keep in mind that it's impossible for any writes to occur to
-		// keys we're reading here with timestamps before this read's
-		// timestamp. This is because the read-timestamp-cache prevents it
-		// for the active leader and leadership changes force the
-		// read-timestamp-cache to reset its high water mark.
-		return rng.executeCmd(method, args, reply)
+		return rng.ReadOnlyCmd(method, header, args, reply)
 	}
 
-	// Otherwise, we have a mutating (read-write/write-only)
-	// command. One of the prime invariants of Cockroach is that a
-	// mutating command cannot write a key with an earlier timestamp
-	// than the most recent read of the same key. So first order of
-	// business here is to check the read timestamp cache for reads
-	// which are more recent than the timestamp of this write. If more
-	// recent, we simply update the write's timestamp before enqueuing
-	// it for execution. When the write returns, the updated timestamp
-	// will inform the final commit timestamp.
-	s.mu.Lock()
-	if ts := s.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
-		// Update both the incoming request and outgoing reply timestamps.
-		ts.Logical += 1 // increment logical component by one to differentiate.
-		header.Timestamp = ts
-		replyVal := reflect.ValueOf(reply)
-		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(ts))
-	}
-
-	// The next step is to add the write to the read queue to inform
-	// subsequent reads that there is a pending write. Reads which
-	// overlap pending writes must wait for those writes to complete.
-	wKey := s.readQ.AddWrite(header.Key, header.EndKey)
-	s.mu.Unlock()
-
-	// Create command and enqueue for Raft.
-	cmd := &Cmd{
-		Method:   method,
-		Args:     args,
-		Reply:    reply,
-		ReadOnly: !NeedWritePerm(method),
-		done:     make(chan error, 1),
-	}
-	// This waits for the command to complete.
-	err = rng.EnqueueCmd(cmd)
-
-	// Now that the command has completed, remove the pending write.
-	s.mu.Lock()
-	s.readQ.RemoveWrite(wKey)
-	s.mu.Unlock()
-
-	return err
+	return rng.ReadWriteCmd(method, header, args, reply)
 }

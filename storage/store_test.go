@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-	"sync"
 	"testing"
 	"time"
 
@@ -118,94 +117,30 @@ func TestRangeSliceSort(t *testing.T) {
 	}
 }
 
-// A mockEngine allows us to delay writes in order to test the pending
-// read queue.
-type mockEngine struct {
-	*InMem
-	mu    sync.Mutex
-	cvar  *sync.Cond
-	block bool
-}
-
-func newMockEngine() *mockEngine {
-	me := &mockEngine{
-		InMem: NewInMem(Attributes{}, 1<<20),
-	}
-	me.cvar = sync.NewCond(&me.mu)
-	return me
-}
-
-func (me *mockEngine) setBlock(block bool) {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	me.block = block
-	if !me.block {
-		me.cvar.Broadcast()
-	}
-}
-
-func (me *mockEngine) put(key Key, value []byte) error {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	for me.block {
-		me.cvar.Wait()
-	}
-	return me.InMem.put(key, value)
-}
-
-// createTestStore creates a test store using a mockEngine. Returns
-// the store clock's manual unix nanos time and the store. A single
-// range from key "a" to key "z" is setup in the store with a default
-// replica descriptor (i.e. StoreID = 0, RangeID = 1, etc.). The caller
-// is responsible for closing the store on exit.
-func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *mockEngine) {
+// createTestStore creates a test store using an in-memory
+// engine. Returns the store clock's manual unix nanos time and the
+// store. A single range from key "a" to key "z" is setup in the store
+// with a default replica descriptor (i.e. StoreID = 0, RangeID = 1,
+// etc.). The caller is responsible for closing the store on exit.
+func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
-	engine := newMockEngine()
+	engine := NewInMem(Attributes{}, 1<<20)
 	store := NewStore(clock, engine, nil)
 	replica := Replica{RangeID: 1}
 	_, err := store.CreateRange(Key("a"), Key("z"), []Replica{replica})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store, &manual, engine
-}
-
-// getArgs returns a GetRequest and GetResponse pair addressed to
-// the default replica for the specified key.
-func getArgs(key string) (*GetRequest, *GetResponse) {
-	args := &GetRequest{
-		RequestHeader: RequestHeader{
-			Key:     []byte(key),
-			Replica: Replica{RangeID: 1},
-		},
-	}
-	reply := &GetResponse{}
-	return args, reply
-}
-
-// putArgs returns a PutRequest and PutResponse pair addressed to
-// the default replica for the specified key / value.
-func putArgs(key, value string) (*PutRequest, *PutResponse) {
-	args := &PutRequest{
-		RequestHeader: RequestHeader{
-			Key:     []byte(key),
-			Replica: Replica{RangeID: 1},
-		},
-		Value: Value{
-			Bytes: []byte(value),
-		},
-	}
-	reply := &PutResponse{}
-	return args, reply
+	return store, &manual
 }
 
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {
-	store, _, _ := createTestStore(t)
+	store, _ := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a")
+	args, reply := getArgs("a", 1)
 
 	// Try a successful get request.
 	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
@@ -216,9 +151,9 @@ func TestStoreExecuteCmd(t *testing.T) {
 
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
 func TestStoreExecuteCmdUpdateTime(t *testing.T) {
-	store, _, _ := createTestStore(t)
+	store, _ := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a")
+	args, reply := getArgs("a", 1)
 	args.Timestamp = store.clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
 	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
@@ -234,9 +169,9 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 // TestStoreExecuteCmdWithZeroTime verifies that no timestamp causes
 // the command to assume the node's wall time.
 func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
-	store, mc, _ := createTestStore(t)
+	store, mc := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a")
+	args, reply := getArgs("a", 1)
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
@@ -256,9 +191,9 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 // specifies a timestamp further into the future than the node's
 // maximum allowed clock drift, the cmd fails with an error.
 func TestStoreExecuteCmdWithClockDrift(t *testing.T) {
-	store, mc, _ := createTestStore(t)
+	store, mc := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a")
+	args, reply := getArgs("a", 1)
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
@@ -276,10 +211,10 @@ func TestStoreExecuteCmdWithClockDrift(t *testing.T) {
 
 // TestStoreExecuteCmdBadRange passes a bad range replica.
 func TestStoreExecuteCmdBadRange(t *testing.T) {
-	store, _, _ := createTestStore(t)
+	store, _ := createTestStore(t)
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
-	args, reply := getArgs("0")
+	args, reply := getArgs("0", 1)
 	args.Replica.RangeID = 2
 	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
 	if err == nil {
@@ -290,123 +225,12 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 // TestStoreExecuteCmdOutOfRange passes a key not contained
 // within the range's key range.
 func TestStoreExecuteCmdOutOfRange(t *testing.T) {
-	store, _, _ := createTestStore(t)
+	store, _ := createTestStore(t)
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
-	args, reply := getArgs("0")
+	args, reply := getArgs("0", 1)
 	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
 	if err == nil {
 		t.Error("expected key to be out of range")
-	}
-}
-
-// TestStoreExecuteCmdUpdateTSCache verifies that reads update
-// the read timestamp cache.
-func TestStoreExecuteCmdUpdateTSCache(t *testing.T) {
-	store, mc, _ := createTestStore(t)
-	defer store.Close()
-	// Set clock to time 1s and do the read.
-	t0 := 1 * time.Second
-	*mc = hlc.ManualClock(t0.Nanoseconds())
-	args, reply := getArgs("a")
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
-	if err != nil {
-		t.Error(err)
-	}
-	// Verify the read timestamp cache has 1s for "a" and 0s for other keys.
-	ts := store.tsCache.GetMax(Key("a"), nil)
-	if ts.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected wall time to have 1s, but got %+v", ts)
-	}
-	// Verify other key has 0s in timestamp cache.
-	ts = store.tsCache.GetMax(Key("b"), nil)
-	if ts.WallTime != 0 {
-		t.Errorf("expected wall time to have 0s, but got %+v", ts)
-	}
-}
-
-// TestStoreExecuteCmdReadQueue verifies that reads must wait for
-// writes to complete through Raft before being executed on range.
-func TestStoreExecuteCmdReadQueue(t *testing.T) {
-	store, _, me := createTestStore(t)
-	defer store.Close()
-
-	// Asynchronously put a value to the store with blocking enabled.
-	me.setBlock(true)
-	writeDone := make(chan struct{})
-	go func() {
-		args, reply := putArgs("a", "value")
-		err := store.ExecuteCmd("Put", &args.RequestHeader, args, reply)
-		if err != nil {
-			t.Fatal(err)
-		}
-		close(writeDone)
-	}()
-
-	// First, try a read for a non-impacted key ("b").
-	readBDone := make(chan struct{})
-	go func() {
-		args, reply := getArgs("b")
-		err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
-		if err != nil {
-			t.Error(err)
-		}
-		close(readBDone)
-	}()
-
-	// Next, try a read for same key being written to verify it blocks.
-	readADone := make(chan struct{})
-	go func() {
-		args, reply := getArgs("a")
-		err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
-		if err != nil {
-			t.Error(err)
-		}
-		close(readADone)
-	}()
-
-	// Verify read of "b" finishes but not "a".
-	select {
-	case <-readADone:
-		t.Fatal("should not have been able to read \"a\"")
-	case <-readBDone:
-		// success.
-	case <-writeDone:
-		t.Fatal("should not have been able to write \"a\" while blocked")
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("waited 500ms for read of \"b\"")
-	}
-
-	// Now, unblock write.
-	me.setBlock(false)
-
-	select {
-	case <-readADone:
-		// success.
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("waited 500ms for read of \"a\"")
-	}
-}
-
-// TestStoreExecuteCmdUseTSCache verifies that write timestamps
-// are upgraded based on the read timestamp cache.
-func TestStoreExecuteCmdUseTSCache(t *testing.T) {
-	store, mc, _ := createTestStore(t)
-	defer store.Close()
-	// Set clock to time 1s and do the read.
-	t0 := 1 * time.Second
-	*mc = hlc.ManualClock(t0.Nanoseconds())
-	args, reply := getArgs("a")
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
-	if err != nil {
-		t.Error(err)
-	}
-	pArgs, pReply := putArgs("a", "value")
-	err = store.ExecuteCmd("Put", &pArgs.RequestHeader, pArgs, pReply)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pReply.Timestamp.WallTime != store.clock.Timestamp().WallTime {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %+v", pReply.Timestamp)
 	}
 }

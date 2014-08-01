@@ -21,9 +21,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -137,17 +139,24 @@ type Range struct {
 	gossip    *gossip.Gossip // Range may gossip based on contents
 	raft      chan *Cmd      // Raft commands
 	closer    chan struct{}  // Channel for closing the range
+
+	mu      sync.RWMutex        // Protects readQ & tsCache.
+	readQ   *ReadQueue          // Reads queued behind pending writes
+	tsCache *ReadTimestampCache // Most recent read timestamps for keys / key ranges
 }
 
 // NewRange initializes the range starting at key.
-func NewRange(meta RangeMetadata, engine Engine, allocator *allocator, gossip *gossip.Gossip) *Range {
+func NewRange(meta RangeMetadata, clock *hlc.HLClock, engine Engine,
+	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,
 		engine:    engine,
 		allocator: allocator,
 		gossip:    gossip,
-		raft:      make(chan *Cmd, 10 /* TODO(spencer): what's correct value? */),
+		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
 		closer:    make(chan struct{}),
+		readQ:     NewReadQueue(),
+		tsCache:   NewReadTimestampCache(clock),
 	}
 	return r
 }
@@ -158,8 +167,11 @@ func (r *Range) Start() {
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs()
-	go r.processRaft()
-	go r.startGossip()
+	go r.processRaft() // TODO(spencer): remove
+	// Only start gossiping if this range is the first range.
+	if r.IsFirstRange() {
+		go r.startGossip()
+	}
 }
 
 // Stop ends the log processing loop.
@@ -200,6 +212,81 @@ func (r *Range) ContainsKeyRange(start, end Key) bool {
 func (r *Range) EnqueueCmd(cmd *Cmd) error {
 	r.raft <- cmd
 	return <-cmd.done
+}
+
+// ReadOnlyCmd updates the read timestamp cache and waits for any
+// overlapping writes currently processing through Raft ahead of us to
+// clear via the read queue.
+func (r *Range) ReadOnlyCmd(method string, header *RequestHeader, args, reply interface{}) error {
+	r.mu.Lock()
+	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
+	var wg sync.WaitGroup
+	r.readQ.AddRead(header.Key, header.EndKey, &wg)
+	r.mu.Unlock()
+	wg.Wait()
+
+	// It's possible that arbitrary delays (e.g. major GC, VM
+	// de-prioritization, etc.) could cause the execution of this read
+	// command to occur AFTER the range replica has lost leadership.
+	//
+	// There is a chance that we waited on writes, and although they
+	// were committed to the log, they weren't successfully applied to
+	// this replica's state machine. However, we avoid this being a
+	// problem because Range.executeCmd verifies leadership again.
+	//
+	// Keep in mind that it's impossible for any writes to occur to
+	// keys we're reading here with timestamps before this read's
+	// timestamp. This is because the read-timestamp-cache prevents it
+	// for the active leader and leadership changes force the
+	// read-timestamp-cache to reset its high water mark.
+	return r.executeCmd(method, args, reply)
+}
+
+// ReadWriteCmd consults the read timestamp cache to set a low water
+// mark on this command's timestamp, adds the pending write to the
+// read queue, and submits the command to Raft. Upon completion, the
+// write is removed from teh read queue.
+func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply interface{}) error {
+	// One of the prime invariants of Cockroach is that a mutating command
+	// cannot write a key with an earlier timestamp than the most recent
+	// read of the same key. So first order of business here is to check
+	// the read timestamp cache for reads which are more recent than the
+	// timestamp of this write. If more recent, we simply update the
+	// write's timestamp before enqueuing it for execution. When the write
+	// returns, the updated timestamp will inform the final commit
+	// timestamp.
+	r.mu.Lock()
+	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
+		// Update both the incoming request and outgoing reply timestamps.
+		ts.Logical += 1 // increment logical component by one to differentiate.
+		header.Timestamp = ts
+		replyVal := reflect.ValueOf(reply)
+		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(ts))
+	}
+
+	// The next step is to add the write to the read queue to inform
+	// subsequent reads that there is a pending write. Reads which
+	// overlap pending writes must wait for those writes to complete.
+	wKey := r.readQ.AddWrite(header.Key, header.EndKey)
+	r.mu.Unlock()
+
+	// Create command and enqueue for Raft.
+	cmd := &Cmd{
+		Method:   method,
+		Args:     args,
+		Reply:    reply,
+		ReadOnly: !NeedWritePerm(method),
+		done:     make(chan error, 1),
+	}
+	// This waits for the command to complete.
+	err := r.EnqueueCmd(cmd)
+
+	// Now that the command has completed, remove the pending write.
+	r.mu.Lock()
+	r.readQ.RemoveWrite(wKey)
+	r.mu.Unlock()
+
+	return err
 }
 
 // processRaft processes read/write commands, sending them to the Raft
@@ -243,6 +330,7 @@ func (r *Range) startGossip() {
 		select {
 		case <-ticker.C:
 			r.maybeGossipClusterID()
+			r.maybeGossipFirstRange()
 		case <-r.closer:
 			return
 		}
