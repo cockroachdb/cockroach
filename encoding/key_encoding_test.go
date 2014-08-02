@@ -76,6 +76,74 @@ func prettyBytes(b []byte) string {
 	return str
 }
 
+func TestIntMandE(t *testing.T) {
+	testCases := []struct {
+		Value int64
+		E     int
+		M     []byte
+	}{
+		{1, 1, []byte{0x02}},
+		{-1, 1, []byte{0x02}},
+		{10, 1, []byte{0x14}},
+		{99, 1, []byte{0xc6}},
+		{-99, 1, []byte{0xc6}},
+		{100, 2, []byte{0x03, 0x00}},
+		{110, 2, []byte{0x03, 0x14}},
+		{999, 2, []byte{0x13, 0xc6}},
+		{1234, 2, []byte{0x19, 0x44}},
+		{9999, 2, []byte{0xc7, 0xc6}},
+		{10000, 3, []byte{0x03, 0x01, 0x00}},
+		{10001, 3, []byte{0x03, 0x01, 0x02}},
+		{12345, 3, []byte{0x03, 0x2f, 0x5a}},
+		{123450, 3, []byte{0x19, 0x45, 0x64}},
+		{9223372036854775807, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
+	}
+	for _, c := range testCases {
+		if e, m := intMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
+			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v", c.Value, c.E, c.M, e, m)
+		}
+	}
+}
+
+func TestEncodeInt(t *testing.T) {
+	testCases := []struct {
+		Value    int64
+		Encoding []byte
+	}{
+		{-9223372036854775808, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xef}},
+		{-9223372036854775807, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xf1}},
+		{-10000, []byte{0x10, 0xfc, 0xfe, 0xff}},
+		{-9999, []byte{0x11, 0x38, 0x39}},
+		{-100, []byte{0x11, 0xfc, 0xff}},
+		{-99, []byte{0x12, 0x39}},
+		{-1, []byte{0x12, 0xfd}},
+		{1, []byte{0x18, 0x02}},
+		{10, []byte{0x18, 0x14}},
+		{99, []byte{0x18, 0xc6}},
+		{100, []byte{0x19, 0x03, 0x00}},
+		{110, []byte{0x19, 0x03, 0x14}},
+		{999, []byte{0x19, 0x13, 0xc6}},
+		{1234, []byte{0x19, 0x19, 0x44}},
+		{9999, []byte{0x19, 0xc7, 0xc6}},
+		{10000, []byte{0x1a, 0x03, 0x01, 0x00}},
+		{10001, []byte{0x1a, 0x03, 0x01, 0x02}},
+		{12345, []byte{0x1a, 0x03, 0x2f, 0x5a}},
+		{123450, []byte{0x1a, 0x19, 0x45, 0x64}},
+		{9223372036854775807, []byte{0x21, 0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
+	}
+	for i, c := range testCases {
+		enc := EncodeInt(c.Value)
+		if !bytes.Equal(enc, c.Encoding) {
+			t.Errorf("unexpected mismatch for %v. expected %v, got %v", c.Value, c.Encoding, enc)
+		}
+		if i > 0 {
+			if bytes.Compare(testCases[i-1].Encoding, enc) >= 0 {
+				t.Errorf("expected %v to be less than %v", testCases[i-1].Encoding, enc)
+			}
+		}
+	}
+}
+
 func disabledTestFloatMandE(t *testing.T) {
 	testCases := []struct {
 		Value float64

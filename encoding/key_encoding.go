@@ -154,6 +154,57 @@ func EncodeBinaryFinal(b []byte) []byte {
 	return buf
 }
 
+// EncodeInt encodes an int64 and returns the result
+// as a byte slice. See the notes for EncodeFloat for
+// a complete description.
+func EncodeInt(i int64) []byte {
+	if i == 0 {
+		return []byte{orderedEncodingZero}
+	}
+	e, m := intMandE(i)
+	if e <= 0 {
+		panic("integer values should not have negative exponents")
+	}
+	buf := make([]byte, len(m)+maxVarintSize+1)
+	switch {
+	case e > 0 && e <= 10:
+		return encodeMediumNumber(i < 0, e, m, buf)
+	case e >= 11:
+		return encodeLargeNumber(i < 0, e, m, buf)
+	}
+	return nil
+}
+
+// intMandE computes and returns the mantissa M and exponent E for i.
+//
+// See the comments in floatMandE for more details of the representation
+// of M. This method computes E and M in a simpler loop.
+func intMandE(i int64) (int, []byte) {
+	var e int
+	var buf bytes.Buffer
+	for v := i; v != 0; v /= 100 {
+		mod := v % 100
+		if mod < 0 {
+			buf.WriteByte(byte(2*-mod + 1))
+		} else {
+			buf.WriteByte(byte(2*mod + 1))
+		}
+		e++
+	}
+	m := buf.Bytes()
+	// Reverse the mantissa so highest byte sorts first.
+	for i := range m {
+		j := len(m) - i - 1
+		if i >= j {
+			break
+		}
+		m[i], m[j] = m[j], m[i]
+	}
+	// The last byte is encoded as 2n+0.
+	m[len(m)-1] -= 1
+	return e, m
+}
+
 // EncodeFloat encodes a float64 and returns the result
 // as a byte slice.
 //
@@ -190,31 +241,11 @@ func EncodeFloat(f float64) []byte {
 	buf := make([]byte, len(m)+maxVarintSize+1)
 	switch {
 	case e < 0:
-		if f < 0 {
-			buf[0] = 0x14
-		} else {
-			buf[0] = 0x16
-		}
-		n := PutUvarint(buf[1:], uint64(-e))
-		copy(buf[n+1:], m)
-		return buf[:1+n+len(m)]
+		return encodeSmallNumber(f < 0, e, m, buf)
 	case e >= 0 && e <= 10:
-		if f < 0 {
-			buf[0] = 0x13 - byte(e)
-		} else {
-			buf[0] = 0x17 + byte(e)
-		}
-		copy(buf[1:], m)
-		return buf[:1+len(m)]
+		return encodeMediumNumber(f < 0, e, m, buf)
 	case e >= 11:
-		if f < 0 {
-			buf[0] = 0x08
-		} else {
-			buf[0] = 0x22
-		}
-		n := PutUvarint(buf[1:], uint64(e))
-		copy(buf[n+1:], m)
-		return buf[:1+n+len(m)]
+		return encodeLargeNumber(f < 0, e, m, buf)
 	}
 	return nil
 }
@@ -274,4 +305,50 @@ func floatMandE(f float64) (int, []byte) {
 	// The last byte is encoded as 2n+0.
 	b[len(b)-1] -= 1
 	return i, b
+}
+
+// onesComplement inverts each byte in buf from index start to end.
+func onesComplement(buf []byte, start, end int) {
+	for i := start; i < end; i++ {
+		buf[i] = ^buf[i]
+	}
+}
+
+func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
+	n := PutUvarint(buf[1:], uint64(-e))
+	copy(buf[n+1:], m)
+	l := 1 + n + len(m)
+	if negative {
+		buf[0] = 0x14
+		onesComplement(buf, n, l) // ones complement of mantissa
+	} else {
+		buf[0] = 0x16
+		onesComplement(buf, 1, n) // ones complement of exponent
+	}
+	return buf[:l]
+}
+
+func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
+	copy(buf[1:], m)
+	l := 1 + len(m)
+	if negative {
+		buf[0] = 0x13 - byte(e)
+		onesComplement(buf, 1, l)
+	} else {
+		buf[0] = 0x17 + byte(e)
+	}
+	return buf[:l]
+}
+
+func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
+	n := PutUvarint(buf[1:], uint64(e))
+	copy(buf[n+1:], m)
+	l := 1 + n + len(m)
+	if negative {
+		buf[0] = 0x08
+		onesComplement(buf, 1, l)
+	} else {
+		buf[0] = 0x22
+	}
+	return buf[:l]
 }
