@@ -57,11 +57,9 @@ func (db *LocalDB) addTestRange(start, end storage.Key) *storage.Range {
 	r := storage.Range{}
 	rep := storage.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(db.ranges) + 1)}
 	r.Meta = storage.RangeMetadata{
-		ClusterID: "some-cluster",
-		RangeID:   rep.RangeID,
-		StartKey:  start,
-		EndKey:    end,
-		Desc:      storage.RangeDescriptor{StartKey: start, Replicas: []storage.Replica{rep}},
+		ClusterID:       "some-cluster",
+		RangeID:         rep.RangeID,
+		RangeDescriptor: storage.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []storage.Replica{rep}},
 	}
 	db.ranges = append(db.ranges, &r)
 	return &r

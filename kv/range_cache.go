@@ -50,12 +50,12 @@ func rangeCacheShouldEvict(size int, k, v interface{}) bool {
 
 // RangeMetadataDB is a type which can query metadata range information from an
 // underlying datastore. This interface is used by RangeMetadataCache to
-// initially retrieve information which will be cached. Unlike RangeMetataCache,
-// this interface directly exposes access to metadata ranges at both the first
-// and second level.
+// initially retrieve information which will be cached.
 type RangeMetadataDB interface {
-	GetLevelOneMetadata(storage.Key) (storage.Key, *storage.RangeDescriptor, error)
-	GetLevelTwoMetadata(storage.Key, *storage.RangeDescriptor) (storage.Key, *storage.RangeDescriptor, error)
+	// Lookup metadata for the range containing the given key.  This method
+	// should return the RangeDescriptor containing the key, along with the
+	// Metadata key at which the RangeDescriptor's value was stored.
+	LookupRangeMetadata(storage.Key) (storage.Key, *storage.RangeDescriptor, error)
 }
 
 // RangeMetadataCache is used to retrieve range metadata for arbitrary keys.
@@ -64,7 +64,7 @@ type RangeMetadataDB interface {
 type RangeMetadataCache struct {
 	// RangeMetadataDB is used to retrieve metadata range information from the
 	// database, which will be cached by this structure.
-	RangeMetadataDB
+	db RangeMetadataDB
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
@@ -77,7 +77,7 @@ type RangeMetadataCache struct {
 // RangeMetadataDB as the underlying source of range metadata.
 func NewRangeMetadataCache(db RangeMetadataDB) *RangeMetadataCache {
 	return &RangeMetadataCache{
-		RangeMetadataDB: db,
+		db: db,
 		rangeCache: util.NewOrderedCache(util.CacheConfig{
 			Policy:      util.CacheLRU,
 			ShouldEvict: rangeCacheShouldEvict,
@@ -98,43 +98,28 @@ func NewRangeMetadataCache(db RangeMetadataDB) *RangeMetadataCache {
 // This method returns the RangeDescriptor for the range containing the key's
 // data, or an error if any occurred.
 func (rmc *RangeMetadataCache) LookupRangeMetadata(key storage.Key) (*storage.RangeDescriptor, error) {
-	// Check cache for second-level metadata, which may already be present
-	_, meta2range := rmc.getCachedRangeMetadata(storage.KeyMeta2Prefix, key)
-	if meta2range != nil {
-		return meta2range, nil
+	metadataKey := storage.RangeMetaKey(key)
+	if len(metadataKey) == 0 {
+		// The description of the first range is gossiped, and thus does not
+		// need to be cached.  Just ask the underlying db, which will return
+		// immediately.
+		_, r, err := rmc.db.LookupRangeMetadata(key)
+		return r, err
 	}
 
-	// If not present, retrieve first-level metadata range, consulting the cache
-	// before the server.
-	_, meta1range := rmc.getCachedRangeMetadata(storage.KeyMeta1Prefix, key)
-	if meta1range == nil {
-		k, v, err := rmc.GetLevelOneMetadata(key)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.HasPrefix(k, storage.KeyMeta1Prefix) {
-			return nil, util.Errorf("got invalid meta1 key from lookup: %s",
-				string(k))
-		}
-		rmc.rangeCacheMu.Lock()
-		rmc.rangeCache.Add(rangeCacheKey(k), v)
-		rmc.rangeCacheMu.Unlock()
-		meta1range = v
+	_, r := rmc.getCachedRangeMetadata(key)
+	if r != nil {
+		return r, nil
 	}
 
-	// Retrieve second-level metadata, cache and return.
-	k, meta2range, err := rmc.GetLevelTwoMetadata(key, meta1range)
+	k, r, err := rmc.db.LookupRangeMetadata(key)
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(k, storage.KeyMeta2Prefix) {
-		return nil, util.Errorf("got invalid meta2 key from lookup: %s",
-			string(k))
-	}
 	rmc.rangeCacheMu.Lock()
-	rmc.rangeCache.Add(rangeCacheKey(k), meta2range)
+	rmc.rangeCache.Add(rangeCacheKey(k), r)
 	rmc.rangeCacheMu.Unlock()
-	return meta2range, nil
+	return r, nil
 }
 
 // EvictCachedRangeMetadata will evict any cached metadata range descriptors for
@@ -142,42 +127,41 @@ func (rmc *RangeMetadataCache) LookupRangeMetadata(key storage.Key) (*storage.Ra
 // RangeMetadataCache when the returned range metadata is discovered to be
 // stale.
 func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key storage.Key) {
-	k, _ := rmc.getCachedRangeMetadata(storage.KeyMeta1Prefix, key)
-	if k != nil {
-		rmc.rangeCacheMu.Lock()
-		rmc.rangeCache.Del(k)
-		rmc.rangeCacheMu.Unlock()
-	}
-	k, _ = rmc.getCachedRangeMetadata(storage.KeyMeta2Prefix, key)
-	if k != nil {
-		rmc.rangeCacheMu.Lock()
-		rmc.rangeCache.Del(k)
-		rmc.rangeCacheMu.Unlock()
+	for {
+		k, _ := rmc.getCachedRangeMetadata(key)
+		if k != nil {
+			rmc.rangeCacheMu.Lock()
+			rmc.rangeCache.Del(k)
+			rmc.rangeCacheMu.Unlock()
+		}
+		// Retrieve the metadata range key for the next level of metadata, and
+		// evict that key as well.  This loop ends after the meta1 range, which
+		// returns KeyMin as its metadata key.
+		key = storage.RangeMetaKey(key)
+		if len(key) == 0 {
+			break
+		}
 	}
 }
 
-// getCachedRangeMetadata is a helper function to retrieve a cached metadata
+// getCachedRangeMetadata is a helper function to retrieve the metadata
 // range which contains the given key, if present in the cache.
-func (rmc *RangeMetadataCache) getCachedRangeMetadata(prefix storage.Key, key storage.Key) (
+func (rmc *RangeMetadataCache) getCachedRangeMetadata(key storage.Key) (
 	rangeCacheKey, *storage.RangeDescriptor) {
+	metaKey := storage.RangeMetaKey(key)
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
 
-	cacheKey := rangeCacheKey(storage.MakeKey(prefix, key))
-	k, v, ok := rmc.rangeCache.Ceil(cacheKey)
+	k, v, ok := rmc.rangeCache.Ceil(rangeCacheKey(metaKey))
 	if !ok {
 		return nil, nil
 	}
-	endkey := k.(rangeCacheKey)
-	val := v.(*storage.RangeDescriptor)
+	metaEndKey := k.(rangeCacheKey)
+	rd := v.(*storage.RangeDescriptor)
 
-	// Candidate key should have same metadata prefix
-	if !bytes.HasPrefix(endkey, prefix) {
+	// Check that key actually belongs to range
+	if !rd.ContainsKey(key) {
 		return nil, nil
 	}
-	// Check that key actually belongs to range:
-	if cacheKey.Compare(rangeCacheKey(val.StartKey)) < 0 {
-		return nil, nil
-	}
-	return endkey, val
+	return metaEndKey, rd
 }

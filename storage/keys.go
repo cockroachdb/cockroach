@@ -66,6 +66,23 @@ func NextKey(k Key) Key {
 	return MakeKey(k, Key{0})
 }
 
+// RangeMetaKey returns a range metadata key for the given key.  For ordinary
+// keys this returns a level 2 metadata key - for level 2 keys, it returns a
+// level 1 key.  For level 1 keys and local keys, KeyMin is returned.
+func RangeMetaKey(key Key) Key {
+	if len(key) == 0 {
+		return KeyMin
+	}
+	if !bytes.HasPrefix(key, KeyReplicatedPrefix) {
+		return MakeKey(KeyMeta2Prefix, key)
+	}
+	if bytes.HasPrefix(key, KeyMeta2Prefix) {
+		return MakeKey(KeyMeta1Prefix, key[len(KeyMeta2Prefix):])
+	}
+
+	return KeyMin
+}
+
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMin is a minimum key value which sorts before all other keys.
@@ -108,6 +125,10 @@ var (
 	// KeyMeta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
 	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, Key("2"))
+
+	// KeyMetaMax is the end of the range of addressing keys.
+	KeyMetaMax = Key("\x00\x01")
+
 	// KeyConfigAccountingPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
 	KeyConfigAccountingPrefix = Key("\x00acct")

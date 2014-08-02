@@ -262,9 +262,9 @@ func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 	return info.(net.Addr), nil
 }
 
-// lookupRangeMetadata dispatches an InternalRangeLookup request for the given
+// internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
-func (db *DistDB) lookupRangeMetadata(key storage.Key,
+func (db *DistDB) internalRangeLookup(key storage.Key,
 	info *storage.RangeDescriptor) (storage.Key, *storage.RangeDescriptor, error) {
 	args := &storage.InternalRangeLookupRequest{
 		RequestHeader: storage.RequestHeader{
@@ -280,26 +280,30 @@ func (db *DistDB) lookupRangeMetadata(key storage.Key,
 	return reply.EndKey, &reply.Range, nil
 }
 
-// GetLevelOneMetadata retrieves first-level metadata for the given key.  The
-// returned metadata describes the range which contains the key's second-level
-// metadata.  This method is intended primarily for use by RangeMetadataCache.
-func (db *DistDB) GetLevelOneMetadata(key storage.Key) (storage.Key, *storage.RangeDescriptor, error) {
-	info, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
-	if err != nil {
-		return nil, nil, firstRangeMissingError{err}
+// LookupRangeMetadata retrieves the range metadata for the range containing the
+// given key.  Because range metadata in cockroach is stored using a multi-level
+// lookup table, this method may be called recursively to look up higher-level
+// ranges.  Recursive lookups are dispatched through the metadata range cache.
+func (db *DistDB) LookupRangeMetadata(key storage.Key) (storage.Key, *storage.RangeDescriptor, error) {
+	metadataKey := storage.RangeMetaKey(key)
+	if len(metadataKey) == 0 {
+		// Metadata range is the first range, the description of which is always
+		// gossiped.
+		infoI, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
+		if err != nil {
+			return nil, nil, firstRangeMissingError{err}
+		}
+		info := infoI.(storage.RangeDescriptor)
+		return storage.KeyMin, &info, nil
 	}
-	infoRange := info.(storage.RangeDescriptor)
-	metadataKey := storage.MakeKey(storage.KeyMeta1Prefix, key)
-	return db.lookupRangeMetadata(metadataKey, &infoRange)
-}
 
-// GetLevelTwoMetadata retrieves the second-level metadata for the given key,
-// which must be located in the first-level range specified.  The returned
-// metadata describes the range which contains the key's actual value.  This
-// method is intended primarily for use by RangeMetadataCache.
-func (db *DistDB) GetLevelTwoMetadata(key storage.Key, meta1range *storage.RangeDescriptor) (storage.Key, *storage.RangeDescriptor, error) {
-	metadataKey := storage.MakeKey(storage.KeyMeta2Prefix, key)
-	return db.lookupRangeMetadata(metadataKey, meta1range)
+	// Look up the range containing metadataKey in the cache, which will
+	// recursively call into db.LookupRangeMetadata if it is not cached.
+	metadataRange, err := db.rangeCache.LookupRangeMetadata(metadataKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db.internalRangeLookup(metadataKey, metadataRange)
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied

@@ -105,7 +105,11 @@ func TestRangeSliceSort(t *testing.T) {
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
 		key := Key(fmt.Sprintf("foo%d", i))
-		rs = append(rs, &Range{Meta: RangeMetadata{StartKey: key}})
+		rs = append(rs, &Range{
+			Meta: RangeMetadata{
+				RangeDescriptor: RangeDescriptor{StartKey: key},
+			},
+		})
 	}
 
 	sort.Sort(rs)

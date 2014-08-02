@@ -116,14 +116,50 @@ func NeedWritePerm(method string) bool {
 	return ok
 }
 
-// A RangeMetadata holds information about the range, including
-// range ID and start and end keys, and replicas slice.
+// RangeDescriptor is the value stored in a range metadata key.
+// A range is described using an inclusive start key, a non-inclusive end key,
+// and a list of replicas where the range is stored.
+type RangeDescriptor struct {
+	// StartKey is the first key which may be contained by this range.
+	StartKey Key
+	// EndKey marks the end of the range's possible keys.  EndKey itself is not
+	// contained in this range - it will be contained in the immediately
+	// subsequent range.
+	EndKey Key
+	// List of replicas where this range is stored
+	Replicas []Replica
+}
+
+// ContainsKey returns whether this RangeDescriptor contains the specified key.
+func (r *RangeDescriptor) ContainsKey(key Key) bool {
+	return !key.Less(r.StartKey) && key.Less(r.EndKey)
+}
+
+// ContainsKeyRange returns whether this RangeDescriptor contains the specified
+// key range from start to end.
+func (r *RangeDescriptor) ContainsKeyRange(start, end Key) bool {
+	if len(end) == 0 {
+		end = start
+	}
+	if end.Less(start) {
+		glog.Errorf("start key is larger than end key %q > %q", string(start), string(end))
+		return false
+	}
+	return !start.Less(r.StartKey) && !r.EndKey.Less(end)
+}
+
+// LookupKey returns the metadata key at which this range descriptor should be
+// stored as a value.
+func (r *RangeDescriptor) LookupKey() Key {
+	return RangeMetaKey(r.EndKey)
+}
+
+// A RangeMetadata holds information about the range.  This includes the cluster
+// ID, the range ID, and a RangeDescriptor describing the contents of the range.
 type RangeMetadata struct {
+	RangeDescriptor
 	ClusterID string
 	RangeID   int64
-	StartKey  Key
-	EndKey    Key // non-inclusive, this key is held by the next range
-	Desc      RangeDescriptor
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -192,20 +228,13 @@ func (r *Range) IsLeader() bool {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key Key) bool {
-	return !key.Less(r.Meta.StartKey) && key.Less(r.Meta.EndKey)
+	return r.Meta.ContainsKey(key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end Key) bool {
-	if len(end) == 0 {
-		end = start
-	}
-	if end.Less(start) {
-		glog.Errorf("start key is larger than end key %q > %q", string(start), string(end))
-		return false
-	}
-	return !start.Less(r.Meta.StartKey) && !r.Meta.EndKey.Less(end)
+	return r.Meta.ContainsKeyRange(start, end)
 }
 
 // EnqueueCmd enqueues a command to Raft.
@@ -258,7 +287,7 @@ func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply i
 	r.mu.Lock()
 	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
 		// Update both the incoming request and outgoing reply timestamps.
-		ts.Logical += 1 // increment logical component by one to differentiate.
+		ts.Logical++ // increment logical component by one to differentiate.
 		header.Timestamp = ts
 		replyVal := reflect.ValueOf(reply)
 		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(ts))
@@ -351,7 +380,7 @@ func (r *Range) maybeGossipClusterID() {
 // the start of the key space and the raft leader.
 func (r *Range) maybeGossipFirstRange() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
-		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.Desc, 0*time.Second); err != nil {
+		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.RangeDescriptor, 0*time.Second); err != nil {
 			glog.Errorf("failed to gossip first range metadata: %v", err)
 		}
 	}

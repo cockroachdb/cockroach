@@ -120,9 +120,9 @@ func (db *LocalDB) lookupReplica(key storage.Key) *storage.Replica {
 	}
 
 	// Search the Replicas for the one that references our local Range. See executeCmd() as well.
-	for i, repl := range db.ranges[n].Meta.Desc.Replicas {
+	for i, repl := range db.ranges[n].Meta.Replicas {
 		if repl.RangeID == db.ranges[n].Meta.RangeID {
-			return &db.ranges[n].Meta.Desc.Replicas[i]
+			return &db.ranges[n].Meta.Replicas[i]
 		}
 	}
 	return nil

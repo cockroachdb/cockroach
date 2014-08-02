@@ -32,6 +32,7 @@ import (
 var (
 	testRangeDescriptor = RangeDescriptor{
 		StartKey: KeyMin,
+		EndKey:   KeyMax,
 		Replicas: []Replica{
 			{
 				NodeID:  1,
@@ -80,10 +81,8 @@ func createTestEngine(t *testing.T) Engine {
 // of the keyspace. The gossip instance is also returned for testing.
 func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 	rm := RangeMetadata{
-		RangeID:  0,
-		StartKey: KeyMin,
-		EndKey:   KeyMax,
-		Desc:     testRangeDescriptor,
+		RangeID:         0,
+		RangeDescriptor: testRangeDescriptor,
 	}
 	g := gossip.New()
 	clock := hlc.NewHLClock(hlc.UnixNano)

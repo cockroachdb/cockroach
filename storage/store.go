@@ -189,10 +189,9 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 	meta := RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
 		RangeID:   rangeID,
-		StartKey:  startKey,
-		EndKey:    endKey,
-		Desc: RangeDescriptor{
+		RangeDescriptor: RangeDescriptor{
 			StartKey: startKey,
+			EndKey:   endKey,
 			Replicas: replicas,
 		},
 	}
