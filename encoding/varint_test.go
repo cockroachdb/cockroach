@@ -94,7 +94,7 @@ func TestVarintOrdering(t *testing.T) {
 		encoded := make([]byte, maxVarintSize)
 		PutUvarint(encoded, v)
 		if !bytes.Equal(encoded, varints[i]) {
-			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", prettyBytes(varints[i]), prettyBytes(encoded))
+			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(varints[i]), prettyBytes(encoded))
 		}
 	}
 }
