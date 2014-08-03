@@ -22,7 +22,10 @@ package encoding
 
 import (
 	"bytes"
+	"math/rand"
+	"sort"
 	"testing"
+	"time"
 )
 
 func TestVarint(t *testing.T) {
@@ -50,6 +53,48 @@ func TestVarint(t *testing.T) {
 		}
 		if !bytes.Equal(buf, c.encoded) {
 			t.Errorf("byte mismatch: expected %v, got %v", c.encoded, buf)
+		}
+	}
+}
+
+// uint64Slice attaches the methods of sort.Interface to []uint64,
+// sorting in increasing order.
+type uint64Slice []uint64
+
+func (p uint64Slice) Len() int           { return len(p) }
+func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+// byteSlice attaches the methods of sort.Interface to [][]byte,
+// sorting in increasing lexicographical order.
+type byteSlice [][]byte
+
+func (p byteSlice) Len() int           { return len(p) }
+func (p byteSlice) Less(i, j int) bool { return bytes.Compare(p[i], p[j]) < 0 }
+func (p byteSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+// TestVarintOrdering ensures that lexicographical and numeric ordering
+// for varints are the same
+func TestVarintOrdering(t *testing.T) {
+	rand.Seed(time.Now().Unix())
+	ints := make(uint64Slice, 50)
+	varints := make(byteSlice, 50)
+	for i := range ints {
+		// rand.Uint64() doesn't exist within the stdlib.
+		// https://groups.google.com/forum/#!topic/golang-nuts/Kle874lT1Eo
+		val := uint64(rand.Uint32())
+		val = uint64(rand.Uint32()) + val<<32
+		ints[i] = val
+		varints[i] = make([]byte, maxVarintSize)
+		PutUvarint(varints[i], val)
+	}
+	sort.Sort(ints)
+	sort.Sort(varints)
+	for i, v := range ints {
+		encoded := make([]byte, maxVarintSize)
+		PutUvarint(encoded, v)
+		if !bytes.Equal(encoded, varints[i]) {
+			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", prettyBytes(varints[i]), prettyBytes(encoded))
 		}
 	}
 }
