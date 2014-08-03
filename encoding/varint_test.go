@@ -94,11 +94,10 @@ func TestVarintOrdering(t *testing.T) {
 	}
 	sort.Sort(ints)
 	sort.Sort(varints)
-	for i, v := range ints {
-		encoded := make([]byte, maxVarintSize)
-		PutUvarint(encoded, v)
-		if !bytes.Equal(encoded, varints[i]) {
-			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(varints[i]), prettyBytes(encoded))
+	for i := range ints {
+		decoded := GetVarint(varints[i])
+		if decoded != ints[i] {
+			t.Errorf("mismatched ordering at index %d: expected: %d, got %d", i, ints[i], decoded)
 		}
 	}
 }
