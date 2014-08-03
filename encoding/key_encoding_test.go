@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-func TestEncodeString(t *testing.T) {
+func TestEncodeDecodeString(t *testing.T) {
 	testCases := []struct {
 		text   string
 		length int
@@ -33,7 +33,7 @@ func TestEncodeString(t *testing.T) {
 		{"bazz", 6},
 	}
 	for _, c := range testCases {
-		buf := EncodeString(c.text)
+		buf := EncodeString(nil, c.text)
 		n := len(buf)
 		if n != c.length {
 			t.Errorf("short write: %d bytes written; %d expected", n, c.length)
@@ -41,12 +41,29 @@ func TestEncodeString(t *testing.T) {
 		if buf[n-1] != orderedEncodingTerminator {
 			t.Errorf("expected terminating byte (%#x), got %#x", orderedEncodingTerminator, buf[n-1])
 		}
+		s := DecodeString(buf)
+		if s != c.text {
+			t.Errorf("error decoding string: expected %q, got %q", c.text, s)
+		}
 	}
-	invalid := string([]byte{0x00, 0x01, 0x02})
-	buf := EncodeString(invalid)
-	if buf != nil {
-		t.Errorf("expected buf to be nil due to invalud utf8 string %s, got %v", invalid, buf)
-	}
+}
+
+func TestStringNullBytePanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic due to intervening 0x00 byte in string")
+		}
+	}()
+	EncodeString(nil, string([]byte{0x00, 0x01, 0x02}))
+}
+
+func TestStringNoTerminatorPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic due to absence of terminator byte in encoded string")
+		}
+	}()
+	DecodeString([]byte{orderedEncodingText, byte('a')})
 }
 
 func TestEncodeBinary(t *testing.T) {
@@ -57,7 +74,6 @@ func TestEncodeBinary(t *testing.T) {
 	}
 	for _, c := range testCases {
 		b := EncodeBinary(c.blob)
-		println(prettyBytes(b))
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
 		}

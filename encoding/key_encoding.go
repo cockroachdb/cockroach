@@ -25,8 +25,6 @@ import (
 	"bytes"
 	"math"
 	"unicode/utf8"
-
-	"github.com/golang/glog"
 )
 
 // Direct mappings or prefixes of encoded data dependent on the type.
@@ -47,8 +45,10 @@ func EncodeNil() []byte {
 	return []byte{orderedEncodingNil}
 }
 
-// EncodeString returns the resulting byte slice with s encoded.
-// If s is not a valid utf8-encoded string, it will return nil.
+// EncodeString returns the resulting byte slice with s encoded
+// and appended to b. If b is nil, it is treated as an empty
+// byte slice. If s is not a valid utf8-encoded string or
+// contains an intervening 0x00 byte, EncodeString will panic.
 //
 // Each value that is TEXT begins with a single byte of 0x24
 // and ends with a single byte of 0x00. There are zero or more
@@ -67,22 +67,33 @@ func EncodeNil() []byte {
 // The text encoding ends in 0x00 in order to ensure that when there
 // are two strings where one is a prefix of the other that the shorter
 // string will sort first.
-func EncodeString(s string) []byte {
+func EncodeString(b []byte, s string) []byte {
 	if !utf8.ValidString(s) {
-		glog.Warningf("invalid utf8 string passed: %v", s)
-		return nil
+		panic("invalid utf8 string passed")
 	}
 	buf := make([]byte, len(s)+2)
 	buf[0] = orderedEncodingText
 	for i, v := range []byte(s) {
 		if v == 0x00 {
-			glog.Warning("string contains intervening 0x00 byte")
-			return nil
+			panic("string contains intervening 0x00 byte")
 		}
 		buf[i+1] = v
 	}
 	buf[len(s)+1] = orderedEncodingTerminator
-	return buf
+	return append(b, buf...)
+}
+
+// DecodeString returns the string encoded within b.
+func DecodeString(b []byte) string {
+	if b[0] != orderedEncodingText {
+		panic("first byte of encoded string must be 0x24")
+	}
+	for i, v := range b[1:] {
+		if v == orderedEncodingTerminator {
+			return string(b[1 : 1+i])
+		}
+	}
+	panic("encoded string must have terminator byte")
 }
 
 // EncodeBinary encodes b and returns the result.
@@ -146,9 +157,6 @@ func EncodeBinaryFinal(b []byte) []byte {
 	buf := make([]byte, 1+len(b))
 	buf[0] = orderedEncodingBinaryNoTermination
 	for i, v := range b {
-		if v == 0x00 {
-			panic("blob contains intervening 0x00 byte")
-		}
 		buf[i+1] = v
 	}
 	return buf
