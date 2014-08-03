@@ -16,20 +16,6 @@
 // A varint encoding scheme based on sqlite4's varint encoding:
 // http://sqlite.org/src4/doc/trunk/www/varint.wiki
 //
-// Author: Andrew Bonventre (andybons@gmail.com)
-
-package encoding
-
-// writeBigEndian writes x into buf as a big-endian n-byte
-// integer. If the buffer is too small, a panic will ensue.
-func writeBigEndian(buf []byte, x uint64, n int) {
-	for i := 1; i <= n; i++ {
-		buf[i-1] = byte(x >> uint(8*(n-i)))
-	}
-}
-
-const maxVarintSize = 9
-
 // A variable length integer is an encoding of 64-bit unsigned integers
 // into between 1 and 9 bytes. The encoding has the following properties:
 //
@@ -48,51 +34,48 @@ const maxVarintSize = 9
 //
 // The encoding is described by algorithms to decode (convert from varint to
 // 8-byte unsigned integer) and to encode (convert from 8-byte unsigned
-// integer to varint). Treat each byte of the encoding as an unsigned integer
-// between 0 and 255. Let the bytes of the encoding be called A0, A1, A2, ..., A8.
+// integer to varint).
 //
-// Decode
-//
-// If A0 is between 0 and 240 inclusive, then the result is the value of A0.
-// If A0 is between 241 and 248 inclusive, then the result is 240+256*(A0-241)+A1.
-// If A0 is 249 then the result is 2288+256*A1+A2.
-// If A0 is 250 then the result is A1..A3 as a 3-byte big-ending integer.
-// If A0 is 251 then the result is A1..A4 as a 4-byte big-ending integer.
-// If A0 is 252 then the result is A1..A5 as a 5-byte big-ending integer.
-// If A0 is 253 then the result is A1..A6 as a 6-byte big-ending integer.
-// If A0 is 254 then the result is A1..A7 as a 7-byte big-ending integer.
-// If A0 is 255 then the result is A1..A8 as a 8-byte big-ending integer.
-//
-// Encode
-//
-// Let the input value be V.
-//
-// If V<=240 then output a single by A0 equal to V.
-// If V<=2287 then output A0 as (V-240)/256 + 241 and A1 as (V-240)%256.
-// If V<=67823 then output A0 as 249, A1 as (V-2288)/256, and A2 as (V-2288)%256.
-// If V<=16777215 then output A0 as 250 and A1 through A3 as a big-endian 3-byte integer.
-// If V<=4294967295 then output A0 as 251 and A1..A4 as a big-ending 4-byte integer.
-// If V<=1099511627775 then output A0 as 252 and A1..A5 as a big-ending 5-byte integer.
-// If V<=281474976710655 then output A0 as 253 and A1..A6 as a big-ending 6-byte integer.
-// If V<=72057594037927935 then output A0 as 254 and A1..A7 as a big-ending 7-byte integer.
-// Otherwise then output A0 as 255 and A1..A8 as a big-ending 8-byte integer.
-// Other information
-//
-// Bytes Max Value Digits
-// 1	   240       2.3
-// 2     2287	     3.3
-// 3     67823     4.8
-// 4     224-1     7.2
-// 5     232-1     9.6
-// 6     240-1     12.0
-// 7     248-1     14.4
-// 8     256-1     16.8
-// 9     264-1     19.2
+// Author: Andrew Bonventre (andybons@gmail.com)
+
+package encoding
+
+// writeBigEndian writes x into buf as a big-endian n-byte
+// integer. If the buffer is too small, a panic will ensue.
+func writeBigEndian(buf []byte, x uint64, n int) {
+	for i := 1; i <= n; i++ {
+		buf[i-1] = byte(x >> uint(8*(n-i)))
+	}
+}
+
+// readBigEndian reads buf as a big-endian integer and returns
+// the result.
+func readBigEndian(buf []byte) uint64 {
+	var x uint64
+	for i := 1; i <= len(buf); i++ {
+		x |= uint64(buf[i-1]) << uint(8*(len(buf)-i))
+	}
+	return x
+}
+
+const maxVarintSize = 9
 
 // PutUvarint encodes a uint64 into buf and returns the
 // number of bytes written. If the buffer is too small,
 // a panic will ensue.
 func PutUvarint(buf []byte, x uint64) int {
+	// Treat each byte of the encoding as an unsigned integer
+	// between 0 and 255.
+	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
+	// If x<=240 then output a single by A0 equal to x.
+	// If x<=2287 then output A0 as (x-240)/256 + 241 and A1 as (x-240)%256.
+	// If x<=67823 then output A0 as 249, A1 as (x-2288)/256, and A2 as (x-2288)%256.
+	// If x<=16777215 then output A0 as 250 and A1 through A3 as a big-endian 3-byte integer.
+	// If x<=4294967295 then output A0 as 251 and A1..A4 as a big-ending 4-byte integer.
+	// If x<=1099511627775 then output A0 as 252 and A1..A5 as a big-ending 5-byte integer.
+	// If x<=281474976710655 then output A0 as 253 and A1..A6 as a big-ending 6-byte integer.
+	// If x<=72057594037927935 then output A0 as 254 and A1..A7 as a big-ending 7-byte integer.
+	// Otherwise then output A0 as 255 and A1..A8 as a big-ending 8-byte integer.
 	switch {
 	case x <= 240:
 		buf[0] = byte(x)
@@ -133,4 +116,40 @@ func PutUvarint(buf []byte, x uint64) int {
 	}
 }
 
-// TODO(andybons): Decode.
+// GetVarint decodes a varint-encoded byte slice and returns the result.
+func GetVarint(b []byte) uint64 {
+	// Treat each byte of the encoding as an unsigned integer
+	// between 0 and 255.
+	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
+	// If A0 is between 0 and 240 inclusive, then the result is the value of A0.
+	// If A0 is between 241 and 248 inclusive, then the result is 240+256*(A0-241)+A1.
+	// If A0 is 249 then the result is 2288+256*A1+A2.
+	// If A0 is 250 then the result is A1..A3 as a 3-byte big-ending integer.
+	// If A0 is 251 then the result is A1..A4 as a 4-byte big-ending integer.
+	// If A0 is 252 then the result is A1..A5 as a 5-byte big-ending integer.
+	// If A0 is 253 then the result is A1..A6 as a 6-byte big-ending integer.
+	// If A0 is 254 then the result is A1..A7 as a 7-byte big-ending integer.
+	// If A0 is 255 then the result is A1..A8 as a 8-byte big-ending integer.
+	switch {
+	case b[0] >= 0 && b[0] <= 240:
+		return uint64(b[0])
+	case b[0] >= 241 && b[0] <= 248:
+		return 240 + 256*(uint64(b[0])-241) + uint64(b[1])
+	case b[0] == 249:
+		return 2288 + 256*uint64(b[1]) + uint64(b[2])
+	case b[0] == 250:
+		return readBigEndian(b[1:4])
+	case b[0] == 251:
+		return readBigEndian(b[1:5])
+	case b[0] == 252:
+		return readBigEndian(b[1:6])
+	case b[0] == 253:
+		return readBigEndian(b[1:7])
+	case b[0] == 254:
+		return readBigEndian(b[1:8])
+	case b[0] == 255:
+		return readBigEndian(b[1:9])
+	default:
+		panic("varint: invalid format given")
+	}
+}

@@ -54,6 +54,10 @@ func TestVarint(t *testing.T) {
 		if !bytes.Equal(buf, c.encoded) {
 			t.Errorf("byte mismatch: expected %v, got %v", c.encoded, buf)
 		}
+		decoded := GetVarint(buf)
+		if decoded != c.val {
+			t.Errorf("decoded value mismatch: expected %v, got %v", c.val, decoded)
+		}
 	}
 }
 
