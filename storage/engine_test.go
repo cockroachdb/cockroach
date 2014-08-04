@@ -69,12 +69,12 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	test(rocksdb, t)
 }
 
-// TestEngineWriteBatch writes a batch containing 50K rows (all the
+// TestEngineWriteBatch writes a batch containing 10K rows (all the
 // same key) and concurrently attempts to read the value in a tight
 // loop. The test verifies that either there is no value for the key
 // or it contains the final value, but never a value in between.
 func TestEngineWriteBatch(t *testing.T) {
-	numWrites := 50000
+	numWrites := 10000
 	key := Key("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
 
