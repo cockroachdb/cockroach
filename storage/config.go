@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -70,6 +71,43 @@ type Replica struct {
 	StoreID int32
 	RangeID int64
 	Attrs   Attributes // combination of node & store attributes
+}
+
+// RangeDescriptor is the value stored in a range metadata key.
+// A range is described using an inclusive start key, a non-inclusive end key,
+// and a list of replicas where the range is stored.
+type RangeDescriptor struct {
+	// StartKey is the first key which may be contained by this range.
+	StartKey Key
+	// EndKey marks the end of the range's possible keys.  EndKey itself is not
+	// contained in this range - it will be contained in the immediately
+	// subsequent range.
+	EndKey Key
+	// List of replicas where this range is stored
+	Replicas []Replica
+}
+
+// ContainsKey returns whether this RangeDescriptor contains the specified key.
+func (r *RangeDescriptor) ContainsKey(key Key) bool {
+	return !key.Less(r.StartKey) && key.Less(r.EndKey)
+}
+
+// ContainsKeyRange returns whether this RangeDescriptor contains the specified
+// key range from start to end.
+func (r *RangeDescriptor) ContainsKeyRange(start, end Key) bool {
+	if len(end) == 0 {
+		end = start
+	}
+	if end.Less(start) {
+		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
+	}
+	return !start.Less(r.StartKey) && !r.EndKey.Less(end)
+}
+
+// LookupKey returns the metadata key at which this range descriptor should be
+// stored as a value.
+func (r *RangeDescriptor) LookupKey() Key {
+	return RangeMetaKey(r.EndKey)
 }
 
 // StoreCapacity contains capacity information for a storage device.

@@ -46,12 +46,40 @@ type KeyValue struct {
 	Value
 }
 
+// ClientCmdID provides a unique ID for client commands. Clients which
+// provide ClientCmdID gain operation idempotence. In other words,
+// clients can submit the same command multiple times and always
+// receive the same response. This is common on retries over flaky
+// networks. However, the system imposes a limit on how long
+// idempotence is provided. Retries over an hour old are not
+// guaranteed idempotence and may be executed more than once with
+// potentially different results.
+//
+// ClientCmdID contains the client's timestamp and a client-generated
+// random number. The client Timestamp is specified in unix
+// nanoseconds and is used for some uniqueness but also to provide a
+// rough ordering of requests, useful for data locality on the
+// server. The Random is specified for additional uniqueness.
+// NOTE: An accurate time signal IS NOT required for correctness.
+type ClientCmdID struct {
+	WallTime int64 // Nanoseconds since Unix epoch
+	Random   int64
+}
+
+// IsEmpty returns true if the client command ID has zero values.
+func (ccid ClientCmdID) IsEmpty() bool {
+	return ccid.WallTime == 0 && ccid.Random == 0
+}
+
 // RequestHeader is supplied with every storage node request.
 type RequestHeader struct {
 	// Timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
 	Timestamp hlc.HLTimestamp
+	// CmdID is optionally specified for request idempotence
+	// (i.e. replay protection).
+	CmdID ClientCmdID
 
 	// The following values are set internally and should not be set
 	// manually.

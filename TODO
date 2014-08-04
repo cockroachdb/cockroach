@@ -5,6 +5,13 @@
   - Error if Put/Get used on a counter
   - Should Scan return counters?
 
+* Construct a base handler for all HTTP servers to glog.Fatal the
+  process with a deferred recover func to prevent HTTP from swallowing
+  panics which might otherwise be holding locks, etc.
+
+* Add Request/Response interfaces to avoid reflection in getting/setting
+  errors or fetching the Request/Response headers.
+
 * Transactions
 
   - Transaction ID: generated via allocation of block of transaction
@@ -211,3 +218,5 @@
     from the RangeDescriptor. The store which owns a removed replica
     is responsible for clearing the relevant portion of the key space
     as well as any other housekeeping details.
+
+* Move mvcc + engine files out of storage and into mvcc/

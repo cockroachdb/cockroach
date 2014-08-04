@@ -318,6 +318,20 @@ func putArgs(key, value string, rangeID int64) (*PutRequest, *PutResponse) {
 	return args, reply
 }
 
+// incrementArgs returns a IncrementRequest and IncrementResponse pair
+// addressed to the default replica for the specified key / value.
+func incrementArgs(key string, inc int64, rangeID int64) (*IncrementRequest, *IncrementResponse) {
+	args := &IncrementRequest{
+		RequestHeader: RequestHeader{
+			Key:     []byte(key),
+			Replica: Replica{RangeID: rangeID},
+		},
+		Increment: inc,
+	}
+	reply := &IncrementResponse{}
+	return args, reply
+}
+
 // TestRangeUpdateTSCache verifies that reads update the read
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
@@ -428,5 +442,48 @@ func TestRangeUseTSCache(t *testing.T) {
 	}
 	if pReply.Timestamp.WallTime != rng.tsCache.clock.Timestamp().WallTime {
 		t.Errorf("expected write timestamp to upgrade to 1s; got %+v", pReply.Timestamp)
+	}
+}
+
+// TestRangeIdempotence verifies that a retry increment with
+// same client command ID receives same reply.
+func TestRangeIdempotence(t *testing.T) {
+	rng, _, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	// Run the same increment 100 times, 50 with identical command ID,
+	// interleaved with 50 using a sequence of different command IDs.
+	goldenArgs, _ := incrementArgs("a", 1, 0)
+	incDones := make([]chan struct{}, 100)
+	for i := range incDones {
+		incDones[i] = make(chan struct{})
+		idx := i
+		go func() {
+			var args IncrementRequest
+			var reply IncrementResponse
+			args = *goldenArgs
+			if idx%2 == 0 {
+				args.CmdID = ClientCmdID{1, 1}
+			} else {
+				args.CmdID = ClientCmdID{1, int64(idx + 100)}
+			}
+			err := rng.ReadWriteCmd("Increment", &args.RequestHeader, &args, &reply)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if idx%2 == 0 && reply.NewValue != 1 {
+				t.Error("expected all incremented values to be 1; got %d", reply.NewValue)
+			}
+			close(incDones[idx])
+		}()
+	}
+	// Wait for all to complete.
+	for _, done := range incDones {
+		select {
+		case <-done:
+			// Success.
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("had to wait for increment to complete")
+		}
 	}
 }

@@ -116,42 +116,9 @@ func NeedWritePerm(method string) bool {
 	return ok
 }
 
-// RangeDescriptor is the value stored in a range metadata key.
-// A range is described using an inclusive start key, a non-inclusive end key,
-// and a list of replicas where the range is stored.
-type RangeDescriptor struct {
-	// StartKey is the first key which may be contained by this range.
-	StartKey Key
-	// EndKey marks the end of the range's possible keys.  EndKey itself is not
-	// contained in this range - it will be contained in the immediately
-	// subsequent range.
-	EndKey Key
-	// List of replicas where this range is stored
-	Replicas []Replica
-}
-
-// ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r *RangeDescriptor) ContainsKey(key Key) bool {
-	return !key.Less(r.StartKey) && key.Less(r.EndKey)
-}
-
-// ContainsKeyRange returns whether this RangeDescriptor contains the specified
-// key range from start to end.
-func (r *RangeDescriptor) ContainsKeyRange(start, end Key) bool {
-	if len(end) == 0 {
-		end = start
-	}
-	if end.Less(start) {
-		glog.Errorf("start key is larger than end key %q > %q", string(start), string(end))
-		return false
-	}
-	return !start.Less(r.StartKey) && !r.EndKey.Less(end)
-}
-
-// LookupKey returns the metadata key at which this range descriptor should be
-// stored as a value.
-func (r *RangeDescriptor) LookupKey() Key {
-	return RangeMetaKey(r.EndKey)
+// IsReadOnly returns true if the specified method only requires read permissions.
+func IsReadOnly(method string) bool {
+	return !NeedWritePerm(method)
 }
 
 // A RangeMetadata holds information about the range.  This includes the cluster
@@ -176,9 +143,10 @@ type Range struct {
 	raft      chan *Cmd      // Raft commands
 	closer    chan struct{}  // Channel for closing the range
 
-	mu      sync.RWMutex        // Protects readQ & tsCache.
-	readQ   *ReadQueue          // Reads queued behind pending writes
-	tsCache *ReadTimestampCache // Most recent read timestamps for keys / key ranges
+	sync.RWMutex                     // Protects readQ, tsCache & respCache.
+	readQ        *ReadQueue          // Reads queued behind pending writes
+	tsCache      *ReadTimestampCache // Most recent read timestamps for keys / key ranges
+	respCache    *ResponseCache      // Provides idempotence for retries
 }
 
 // NewRange initializes the range starting at key.
@@ -193,6 +161,7 @@ func NewRange(meta RangeMetadata, clock *hlc.HLClock, engine Engine,
 		closer:    make(chan struct{}),
 		readQ:     NewReadQueue(),
 		tsCache:   NewReadTimestampCache(clock),
+		respCache: NewResponseCache(meta.RangeID, engine),
 	}
 	return r
 }
@@ -247,11 +216,11 @@ func (r *Range) EnqueueCmd(cmd *Cmd) error {
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Range) ReadOnlyCmd(method string, header *RequestHeader, args, reply interface{}) error {
-	r.mu.Lock()
+	r.Lock()
 	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
 	var wg sync.WaitGroup
 	r.readQ.AddRead(header.Key, header.EndKey, &wg)
-	r.mu.Unlock()
+	r.Unlock()
 	wg.Wait()
 
 	// It's possible that arbitrary delays (e.g. major GC, VM
@@ -260,22 +229,49 @@ func (r *Range) ReadOnlyCmd(method string, header *RequestHeader, args, reply in
 	//
 	// There is a chance that we waited on writes, and although they
 	// were committed to the log, they weren't successfully applied to
-	// this replica's state machine. However, we avoid this being a
-	// problem because Range.executeCmd verifies leadership again.
+	// this replica's state machine. We re-verify leadership before
+	// reading to make sure that all pending writes are persisted.
 	//
-	// Keep in mind that it's impossible for any writes to occur to
-	// keys we're reading here with timestamps before this read's
-	// timestamp. This is because the read-timestamp-cache prevents it
+	// There are some elaborate cases where we might have lost
+	// leadership and then regained it during the delay, but this is ok
+	// because any writes during that period necessarily had higher
+	// timestamps. This is because the read-timestamp-cache prevents it
 	// for the active leader and leadership changes force the
 	// read-timestamp-cache to reset its high water mark.
+	if !r.IsLeader() {
+		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
+		return &NotLeaderError{}
+	}
 	return r.executeCmd(method, args, reply)
 }
 
-// ReadWriteCmd consults the read timestamp cache to set a low water
-// mark on this command's timestamp, adds the pending write to the
-// read queue, and submits the command to Raft. Upon completion, the
-// write is removed from teh read queue.
+// ReadWriteCmd first consults the response cache to determine whether
+// this command has already been sent to the range. If a response is
+// found, it's returned immediately and not submitted to raft. Next,
+// the read timestamp cache is checked to determine if any newer reads
+// to this command's affected keys have been made. If so, this
+// command's timestamp is moved forward. Finally the keys affected by
+// this command are added as pending writes to the read queue and the
+// command is submitted to Raft. Upon completion, the write is removed
+// from the read queue and the reply is added to the repsonse cache.
 func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply interface{}) error {
+	// Check the response cache in case this is a replay. This call
+	// may block if the same command is already underway.
+	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
+		if ok { // this is a replay! extract error for return
+			err := reflect.ValueOf(reply).Elem().FieldByName("Error").Interface()
+			if err != nil {
+				return err.(error)
+			}
+			return nil
+		}
+		// In this case there was an error reading from the response
+		// cache. Instead of failing the request just because we can't
+		// decode the reply in the response cache, we proceed as though
+		// idempotence has expired.
+		glog.Errorf("unable to read result for %+v from the response cache: %v", args, err)
+	}
+
 	// One of the prime invariants of Cockroach is that a mutating command
 	// cannot write a key with an earlier timestamp than the most recent
 	// read of the same key. So first order of business here is to check
@@ -284,7 +280,7 @@ func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply i
 	// write's timestamp before enqueuing it for execution. When the write
 	// returns, the updated timestamp will inform the final commit
 	// timestamp.
-	r.mu.Lock()
+	r.Lock() // Protect access to timestamp cache and read queue.
 	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
 		// Update both the incoming request and outgoing reply timestamps.
 		ts.Logical++ // increment logical component by one to differentiate.
@@ -297,23 +293,23 @@ func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply i
 	// subsequent reads that there is a pending write. Reads which
 	// overlap pending writes must wait for those writes to complete.
 	wKey := r.readQ.AddWrite(header.Key, header.EndKey)
-	r.mu.Unlock()
+	r.Unlock()
 
 	// Create command and enqueue for Raft.
 	cmd := &Cmd{
 		Method:   method,
 		Args:     args,
 		Reply:    reply,
-		ReadOnly: !NeedWritePerm(method),
+		ReadOnly: IsReadOnly(method),
 		done:     make(chan error, 1),
 	}
 	// This waits for the command to complete.
 	err := r.EnqueueCmd(cmd)
 
 	// Now that the command has completed, remove the pending write.
-	r.mu.Lock()
+	r.Lock()
 	r.readQ.RemoveWrite(wKey)
-	r.mu.Unlock()
+	r.Unlock()
 
 	return err
 }
@@ -332,7 +328,8 @@ func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply i
 //     - Push noop command to raft followers in order to verify the
 //       committed entries in the log.
 //     - Apply all committed log entries to the state machine.
-//     - Signal the range to clear its read timestamp cache
+//     - Signal the range to clear its read timestamp, response caches
+//       and pending read queue.
 //     - Signal the range that it's now the leader with the duration
 //       of its leader lease.
 //   If we don't do this, then a read which was previously gated on
@@ -436,10 +433,6 @@ func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigM
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
 func (r *Range) executeCmd(method string, args, reply interface{}) error {
-	if !r.IsLeader() {
-		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		return &NotLeaderError{}
-	}
 	switch method {
 	case Contains:
 		r.Contains(args.(*ContainsRequest), reply.(*ContainsResponse))
@@ -472,6 +465,19 @@ func (r *Range) executeCmd(method string, args, reply interface{}) error {
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
+
+	// Add this command's result to the response cache if this is a
+	// read/write method. This must be done as part of the execution of
+	// raft commands so that every replica maintains the same responses
+	// to continue request idempotence when leadership changes.
+	if !IsReadOnly(method) {
+		cmdID := reflect.ValueOf(args).Elem().FieldByName("CmdID").Interface().(ClientCmdID)
+		if putErr := r.respCache.PutResponse(cmdID, reply); putErr != nil {
+			glog.Errorf("unable to write result of %+v: %+v to the response cache: %v",
+				args, reply, putErr)
+		}
+	}
+
 	// Return the error (if any) set in the reply.
 	err := reflect.ValueOf(reply).Elem().FieldByName("Error").Interface()
 	if err != nil {

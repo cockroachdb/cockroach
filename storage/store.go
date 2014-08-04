@@ -268,7 +268,7 @@ func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply int
 	}
 
 	// Differentiate between read-only and read-write.
-	if !NeedWritePerm(method) {
+	if IsReadOnly(method) {
 		return rng.ReadOnlyCmd(method, header, args, reply)
 	}
 

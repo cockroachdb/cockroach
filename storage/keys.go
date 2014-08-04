@@ -112,6 +112,9 @@ var (
 	// KeyLocalRangeSamplePrefix is the prefix for keys storing range write
 	// samples.
 	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("keysample-"))
+	// KeyLocalRangeResponseCache is the prefix for keys storing command
+	// responses used to guarantee idempotency (see ResponseCache).
+	KeyLocalRangeResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("respcache-"))
 
 	// KeyReplicatedPrefix indicates the beginning of the key range
 	// that is replicated across the cluster.
