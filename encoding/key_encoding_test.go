@@ -31,12 +31,18 @@ func TestEncodeDecodeString(t *testing.T) {
 		{"foo", 5},
 		{"baaaar", 8},
 		{"bazz", 6},
+		{"Hello, 世界", 15},
+		{"", 2},
+		{"abcd", 6},
+		{"☺☻☹", 11},
+		{"日a本b語ç日ð本Ê語þ日¥本¼語i日©", 49},
+		{"日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©", 143},
 	}
 	for _, c := range testCases {
 		buf := EncodeString(nil, c.text)
 		n := len(buf)
 		if n != c.length {
-			t.Errorf("short write: %d bytes written; %d expected", n, c.length)
+			t.Errorf("short write for %q: %d bytes written; %d expected", c.text, n, c.length)
 		}
 		if buf[n-1] != orderedEncodingTerminator {
 			t.Errorf("expected terminating byte (%#x), got %#x", orderedEncodingTerminator, buf[n-1])
@@ -46,6 +52,15 @@ func TestEncodeDecodeString(t *testing.T) {
 			t.Errorf("error decoding string: expected %q, got %q", c.text, s)
 		}
 	}
+}
+
+func TestInvalidUTF8String(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic due to invalid utf-8 string")
+		}
+	}()
+	EncodeString(nil, "\x80\x80\x80\x80")
 }
 
 func TestStringNullBytePanic(t *testing.T) {
@@ -71,6 +86,7 @@ func TestEncodeBinary(t *testing.T) {
 	testCases := []struct{ blob, encoded []byte }{
 		{[]byte{}, []byte{orderedEncodingBinary, orderedEncodingTerminator}},
 		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0x40}},
+		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x18}},
 	}
 	for _, c := range testCases {
 		b := EncodeBinary(c.blob)
