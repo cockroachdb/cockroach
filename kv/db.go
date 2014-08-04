@@ -310,7 +310,7 @@ func (db *DistDB) LookupRangeMetadata(key storage.Key) (storage.Key, *storage.Ra
 // storage.Replica slice. First, replicas which have gossipped
 // addresses are corraled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
-func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args, replyChanI interface{}) error {
+func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args storage.Request, replyChanI interface{}) error {
 	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
 	}
@@ -345,14 +345,13 @@ func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args, reply
 // specified options. routeRPC sends asynchronously and returns a
 // channel which receives the reply struct when the call is
 // complete. Returns a channel of the same type as "reply".
-func (db *DistDB) routeRPC(method string, header *storage.RequestHeader, args, reply interface{}) interface{} {
+func (db *DistDB) routeRPC(method string, args storage.Request, reply storage.Response) interface{} {
 	chanVal := reflect.MakeChan(reflect.ChanOf(reflect.BothDir, reflect.TypeOf(reply)), 1)
 
 	// Verify permissions.
-	if err := db.verifyPermissions(method, header); err != nil {
-		replyVal := reflect.ValueOf(reply)
-		reflect.Indirect(replyVal).FieldByName("Error").Set(reflect.ValueOf(err))
-		chanVal.Send(replyVal)
+	if err := db.verifyPermissions(method, args.Header()); err != nil {
+		reply.Header().Error = err
+		chanVal.Send(reflect.ValueOf(reply))
 		return chanVal.Interface()
 	}
 
@@ -366,13 +365,13 @@ func (db *DistDB) routeRPC(method string, header *storage.RequestHeader, args, r
 			MaxAttempts: 0, // retry indefinitely
 		}
 		err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
-			rangeMeta, err := db.rangeCache.LookupRangeMetadata(header.Key)
+			rangeMeta, err := db.rangeCache.LookupRangeMetadata(args.Header().Key)
 			if err == nil {
 				err = db.sendRPC(rangeMeta.Replicas, method, args, chanVal.Interface())
 			}
 			if err != nil {
 				// Range metadata might be out of date - evict it.
-				db.rangeCache.EvictCachedRangeMetadata(header.Key)
+				db.rangeCache.EvictCachedRangeMetadata(args.Header().Key)
 
 				// If retryable, allow outer loop to retry.
 				if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
@@ -385,9 +384,8 @@ func (db *DistDB) routeRPC(method string, header *storage.RequestHeader, args, r
 			return true, err
 		})
 		if err != nil {
-			replyVal := reflect.ValueOf(reply)
-			reflect.Indirect(replyVal).FieldByName("Error").Set(reflect.ValueOf(err))
-			chanVal.Send(replyVal)
+			reply.Header().Error = err
+			chanVal.Send(reflect.ValueOf(reply))
 		}
 	}()
 
@@ -396,58 +394,58 @@ func (db *DistDB) routeRPC(method string, header *storage.RequestHeader, args, r
 
 // Contains checks for the existence of a key.
 func (db *DistDB) Contains(args *storage.ContainsRequest) <-chan *storage.ContainsResponse {
-	return db.routeRPC("Node.Contains", &args.RequestHeader,
+	return db.routeRPC("Node.Contains",
 		args, &storage.ContainsResponse{}).(chan *storage.ContainsResponse)
 }
 
 // Get .
 func (db *DistDB) Get(args *storage.GetRequest) <-chan *storage.GetResponse {
-	return db.routeRPC("Node.Get", &args.RequestHeader,
+	return db.routeRPC("Node.Get",
 		args, &storage.GetResponse{}).(chan *storage.GetResponse)
 }
 
 // Put .
 func (db *DistDB) Put(args *storage.PutRequest) <-chan *storage.PutResponse {
-	return db.routeRPC("Node.Put", &args.RequestHeader,
+	return db.routeRPC("Node.Put",
 		args, &storage.PutResponse{}).(chan *storage.PutResponse)
 }
 
 // ConditionalPut .
 func (db *DistDB) ConditionalPut(args *storage.ConditionalPutRequest) <-chan *storage.ConditionalPutResponse {
-	return db.routeRPC("Node.ConditionalPut", &args.RequestHeader,
+	return db.routeRPC("Node.ConditionalPut",
 		args, &storage.ConditionalPutResponse{}).(chan *storage.ConditionalPutResponse)
 }
 
 // Increment .
 func (db *DistDB) Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse {
-	return db.routeRPC("Node.Increment", &args.RequestHeader,
+	return db.routeRPC("Node.Increment",
 		args, &storage.IncrementResponse{}).(chan *storage.IncrementResponse)
 }
 
 // Delete .
 func (db *DistDB) Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse {
-	return db.routeRPC("Node.Delete", &args.RequestHeader,
+	return db.routeRPC("Node.Delete",
 		args, &storage.DeleteResponse{}).(chan *storage.DeleteResponse)
 }
 
 // DeleteRange .
 func (db *DistDB) DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse {
 	// TODO(spencer): range of keys.
-	return db.routeRPC("Node.DeleteRange", &args.RequestHeader,
+	return db.routeRPC("Node.DeleteRange",
 		args, &storage.DeleteRangeResponse{}).(chan *storage.DeleteRangeResponse)
 }
 
 // Scan .
 func (db *DistDB) Scan(args *storage.ScanRequest) <-chan *storage.ScanResponse {
 	// TODO(spencer): range of keys.
-	return db.routeRPC("Node.Scan", &args.RequestHeader,
+	return db.routeRPC("Node.Scan",
 		args, &storage.ScanResponse{}).(chan *storage.ScanResponse)
 }
 
 // EndTransaction .
 func (db *DistDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *storage.EndTransactionResponse {
 	// TODO(spencer): multiple keys here...
-	return db.routeRPC("Node.EndTransaction", &args.RequestHeader,
+	return db.routeRPC("Node.EndTransaction",
 		args, &storage.EndTransactionResponse{}).(chan *storage.EndTransactionResponse)
 }
 
@@ -456,7 +454,7 @@ func (db *DistDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *st
 // key/value might represent a minute of data. Each would contain 60
 // int64 counts, each representing a second.
 func (db *DistDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storage.AccumulateTSResponse {
-	return db.routeRPC("Node.AccumulateTS", &args.RequestHeader,
+	return db.routeRPC("Node.AccumulateTS",
 		args, &storage.AccumulateTSResponse{}).(chan *storage.AccumulateTSResponse)
 }
 
@@ -466,18 +464,18 @@ func (db *DistDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storag
 // the requested maximum. If fewer than the maximum were returned,
 // then the queue is empty.
 func (db *DistDB) ReapQueue(args *storage.ReapQueueRequest) <-chan *storage.ReapQueueResponse {
-	return db.routeRPC("Node.ReapQueue", &args.RequestHeader,
+	return db.routeRPC("Node.ReapQueue",
 		args, &storage.ReapQueueResponse{}).(chan *storage.ReapQueueResponse)
 }
 
 // EnqueueUpdate enqueues an update for eventual execution.
 func (db *DistDB) EnqueueUpdate(args *storage.EnqueueUpdateRequest) <-chan *storage.EnqueueUpdateResponse {
-	return db.routeRPC("Node.EnqueueUpdate", &args.RequestHeader,
+	return db.routeRPC("Node.EnqueueUpdate",
 		args, &storage.EnqueueUpdateResponse{}).(chan *storage.EnqueueUpdateResponse)
 }
 
 // EnqueueMessage enqueues a message for delivery to an inbox.
 func (db *DistDB) EnqueueMessage(args *storage.EnqueueMessageRequest) <-chan *storage.EnqueueMessageResponse {
-	return db.routeRPC("Node.EnqueueMessage", &args.RequestHeader,
+	return db.routeRPC("Node.EnqueueMessage",
 		args, &storage.EnqueueMessageResponse{}).(chan *storage.EnqueueMessageResponse)
 }

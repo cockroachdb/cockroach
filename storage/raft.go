@@ -23,8 +23,8 @@ package storage
 // and the result returned via the done channel.
 type Cmd struct {
 	Method   string
-	Args     interface{}
-	Reply    interface{}
+	Args     Request
+	Reply    Response
 	ReadOnly bool
 
 	done chan error // Used to signal waiting RPC handler

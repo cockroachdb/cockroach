@@ -20,7 +20,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"strconv"
 	"sync"
 
@@ -236,13 +235,14 @@ func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply interface{}) error {
+func (s *Store) ExecuteCmd(method string, args Request, reply Response) error {
 	// If the request has a zero timestamp, initialize to this node's clock.
+	header := args.Header()
 	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
 		// Update both incoming and outgoing timestamps.
-		header.Timestamp = s.clock.Now()
-		replyVal := reflect.ValueOf(reply)
-		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(header.Timestamp))
+		now := s.clock.Now()
+		args.Header().Timestamp = now
+		reply.Header().Timestamp = now
 	} else {
 		// Otherwise, update our clock with the incoming request. This
 		// advances the local node's clock to a high water mark from
@@ -269,8 +269,8 @@ func (s *Store) ExecuteCmd(method string, header *RequestHeader, args, reply int
 
 	// Differentiate between read-only and read-write.
 	if IsReadOnly(method) {
-		return rng.ReadOnlyCmd(method, header, args, reply)
+		return rng.ReadOnlyCmd(method, args, reply)
 	}
 
-	return rng.ReadWriteCmd(method, header, args, reply)
+	return rng.ReadWriteCmd(method, args, reply)
 }

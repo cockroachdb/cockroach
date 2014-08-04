@@ -343,7 +343,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs("a", 0)
 	args.Timestamp = rng.tsCache.clock.Now()
-	err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
 		t.Error(err)
 	}
@@ -370,7 +370,7 @@ func TestRangeReadQueue(t *testing.T) {
 	writeDone := make(chan struct{})
 	go func() {
 		args, reply := putArgs("a", "value", 0)
-		err := rng.ReadWriteCmd("Put", &args.RequestHeader, args, reply)
+		err := rng.ReadWriteCmd("Put", args, reply)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -381,7 +381,7 @@ func TestRangeReadQueue(t *testing.T) {
 	readBDone := make(chan struct{})
 	go func() {
 		args, reply := getArgs("b", 0)
-		err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+		err := rng.ReadOnlyCmd("Get", args, reply)
 		if err != nil {
 			t.Error(err)
 		}
@@ -392,7 +392,7 @@ func TestRangeReadQueue(t *testing.T) {
 	readADone := make(chan struct{})
 	go func() {
 		args, reply := getArgs("a", 0)
-		err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+		err := rng.ReadOnlyCmd("Get", args, reply)
 		if err != nil {
 			t.Error(err)
 		}
@@ -432,12 +432,12 @@ func TestRangeUseTSCache(t *testing.T) {
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs("a", 0)
 	args.Timestamp = rng.tsCache.clock.Now()
-	err := rng.ReadOnlyCmd("Get", &args.RequestHeader, args, reply)
+	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs, pReply := putArgs("a", "value", 0)
-	err = rng.ReadWriteCmd("Put", &pArgs.RequestHeader, pArgs, pReply)
+	err = rng.ReadWriteCmd("Put", pArgs, pReply)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestRangeIdempotence(t *testing.T) {
 			} else {
 				args.CmdID = ClientCmdID{1, int64(idx + 100)}
 			}
-			err := rng.ReadWriteCmd("Increment", &args.RequestHeader, &args, &reply)
+			err := rng.ReadWriteCmd("Increment", &args, &reply)
 			if err != nil {
 				t.Fatal(err)
 			}

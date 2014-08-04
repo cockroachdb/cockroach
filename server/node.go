@@ -404,81 +404,81 @@ func (n *Node) gossipCapacities() {
 
 // executeCmd looks up the store specified by header.Replica, and runs
 // Store.ExecuteCmd.
-func (n *Node) executeCmd(method string, header *storage.RequestHeader, args, reply interface{}) error {
-	store, err := n.localDB.GetStore(&header.Replica)
+func (n *Node) executeCmd(method string, args storage.Request, reply storage.Response) error {
+	store, err := n.localDB.GetStore(&args.Header().Replica)
 	if err != nil {
 		return err
 	}
-	store.ExecuteCmd(method, header, args, reply)
+	store.ExecuteCmd(method, args, reply)
 	return nil
 }
 
 // Contains .
 func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsResponse) error {
-	return n.executeCmd(storage.Contains, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Contains, args, reply)
 }
 
 // Get .
 func (n *Node) Get(args *storage.GetRequest, reply *storage.GetResponse) error {
-	return n.executeCmd(storage.Get, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Get, args, reply)
 }
 
 // Put .
 func (n *Node) Put(args *storage.PutRequest, reply *storage.PutResponse) error {
-	return n.executeCmd(storage.Put, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Put, args, reply)
 }
 
 // ConditionalPut .
 func (n *Node) ConditionalPut(args *storage.ConditionalPutRequest, reply *storage.ConditionalPutResponse) error {
-	return n.executeCmd(storage.ConditionalPut, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.ConditionalPut, args, reply)
 }
 
 // Increment .
 func (n *Node) Increment(args *storage.IncrementRequest, reply *storage.IncrementResponse) error {
-	return n.executeCmd(storage.Increment, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Increment, args, reply)
 }
 
 // Delete .
 func (n *Node) Delete(args *storage.DeleteRequest, reply *storage.DeleteResponse) error {
-	return n.executeCmd(storage.Delete, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Delete, args, reply)
 }
 
 // DeleteRange .
 func (n *Node) DeleteRange(args *storage.DeleteRangeRequest, reply *storage.DeleteRangeResponse) error {
-	return n.executeCmd(storage.DeleteRange, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.DeleteRange, args, reply)
 }
 
 // Scan .
 func (n *Node) Scan(args *storage.ScanRequest, reply *storage.ScanResponse) error {
-	return n.executeCmd(storage.Scan, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.Scan, args, reply)
 }
 
 // EndTransaction .
 func (n *Node) EndTransaction(args *storage.EndTransactionRequest, reply *storage.EndTransactionResponse) error {
-	return n.executeCmd(storage.EndTransaction, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.EndTransaction, args, reply)
 }
 
 // AccumulateTS .
 func (n *Node) AccumulateTS(args *storage.AccumulateTSRequest, reply *storage.AccumulateTSResponse) error {
-	return n.executeCmd(storage.AccumulateTS, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.AccumulateTS, args, reply)
 }
 
 // ReapQueue .
 func (n *Node) ReapQueue(args *storage.ReapQueueRequest, reply *storage.ReapQueueResponse) error {
-	return n.executeCmd(storage.ReapQueue, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.ReapQueue, args, reply)
 }
 
 // EnqueueUpdate .
 func (n *Node) EnqueueUpdate(args *storage.EnqueueUpdateRequest, reply *storage.EnqueueUpdateResponse) error {
-	return n.executeCmd(storage.EnqueueUpdate, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.EnqueueUpdate, args, reply)
 }
 
 // EnqueueMessage .
 func (n *Node) EnqueueMessage(args *storage.EnqueueMessageRequest, reply *storage.EnqueueMessageResponse) error {
-	return n.executeCmd(storage.EnqueueMessage, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.EnqueueMessage, args, reply)
 }
 
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *storage.InternalRangeLookupRequest, reply *storage.InternalRangeLookupResponse) error {
-	return n.executeCmd(storage.InternalRangeLookup, &args.RequestHeader, args, reply)
+	return n.executeCmd(storage.InternalRangeLookup, args, reply)
 }

@@ -215,7 +215,8 @@ func (r *Range) EnqueueCmd(cmd *Cmd) error {
 // ReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) ReadOnlyCmd(method string, header *RequestHeader, args, reply interface{}) error {
+func (r *Range) ReadOnlyCmd(method string, args Request, reply Response) error {
+	header := args.Header()
 	r.Lock()
 	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
 	var wg sync.WaitGroup
@@ -254,16 +255,13 @@ func (r *Range) ReadOnlyCmd(method string, header *RequestHeader, args, reply in
 // this command are added as pending writes to the read queue and the
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the repsonse cache.
-func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply interface{}) error {
+func (r *Range) ReadWriteCmd(method string, args Request, reply Response) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
+	header := args.Header()
 	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
 		if ok { // this is a replay! extract error for return
-			err := reflect.ValueOf(reply).Elem().FieldByName("Error").Interface()
-			if err != nil {
-				return err.(error)
-			}
-			return nil
+			return reply.Header().Error
 		}
 		// In this case there was an error reading from the response
 		// cache. Instead of failing the request just because we can't
@@ -285,8 +283,7 @@ func (r *Range) ReadWriteCmd(method string, header *RequestHeader, args, reply i
 		// Update both the incoming request and outgoing reply timestamps.
 		ts.Logical++ // increment logical component by one to differentiate.
 		header.Timestamp = ts
-		replyVal := reflect.ValueOf(reply)
-		reflect.Indirect(replyVal).FieldByName("Timestamp").Set(reflect.ValueOf(ts))
+		reply.Header().Timestamp = ts
 	}
 
 	// The next step is to add the write to the read queue to inform
@@ -432,7 +429,7 @@ func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigM
 
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
-func (r *Range) executeCmd(method string, args, reply interface{}) error {
+func (r *Range) executeCmd(method string, args Request, reply Response) error {
 	switch method {
 	case Contains:
 		r.Contains(args.(*ContainsRequest), reply.(*ContainsResponse))
@@ -471,19 +468,14 @@ func (r *Range) executeCmd(method string, args, reply interface{}) error {
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
 	if !IsReadOnly(method) {
-		cmdID := reflect.ValueOf(args).Elem().FieldByName("CmdID").Interface().(ClientCmdID)
-		if putErr := r.respCache.PutResponse(cmdID, reply); putErr != nil {
+		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
 			glog.Errorf("unable to write result of %+v: %+v to the response cache: %v",
 				args, reply, putErr)
 		}
 	}
 
 	// Return the error (if any) set in the reply.
-	err := reflect.ValueOf(reply).Elem().FieldByName("Error").Interface()
-	if err != nil {
-		return err.(error)
-	}
-	return nil
+	return reply.Header().Error
 }
 
 // Contains verifies the existence of a key in the key value store.

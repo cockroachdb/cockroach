@@ -147,7 +147,7 @@ func TestStoreExecuteCmd(t *testing.T) {
 	args, reply := getArgs("a", 1)
 
 	// Try a successful get request.
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	args, reply := getArgs("a", 1)
 	args.Timestamp = store.clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestStoreExecuteCmdWithClockDrift(t *testing.T) {
 	// Set args timestamp to exceed max drift.
 	args.Timestamp = store.clock.Now()
 	args.Timestamp.WallTime += maxDrift.Nanoseconds() + 1
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
 		t.Error("expected max drift clock error")
 	}
@@ -220,7 +220,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	// Range is from "a" to "z", so this value should fail.
 	args, reply := getArgs("0", 1)
 	args.Replica.RangeID = 2
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
 		t.Error("expected invalid range")
 	}
@@ -233,7 +233,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
 	args, reply := getArgs("0", 1)
-	err := store.ExecuteCmd("Get", &args.RequestHeader, args, reply)
+	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
 		t.Error("expected key to be out of range")
 	}

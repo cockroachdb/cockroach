@@ -71,6 +71,18 @@ func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
 }
 
+// Request is an interface providing access to all requests'
+// header structs.
+type Request interface {
+	Header() *RequestHeader
+}
+
+// Response is an interface providing access to all responses' header
+// structs.
+type Response interface {
+	Header() *ResponseHeader
+}
+
 // RequestHeader is supplied with every storage node request.
 type RequestHeader struct {
 	// Timestamp specifies time at which read or writes should be
@@ -99,6 +111,11 @@ type RequestHeader struct {
 	TxID string
 }
 
+// Header implements the Request interface by returning itself.
+func (rh *RequestHeader) Header() *RequestHeader {
+	return rh
+}
+
 // ResponseHeader is returned with every storage node response.
 type ResponseHeader struct {
 	// Error is non-nil if an error occurred.
@@ -113,6 +130,11 @@ type ResponseHeader struct {
 	Timestamp hlc.HLTimestamp
 	// TxID is non-empty if a transaction is underway.
 	TxID string
+}
+
+// Header implements the Response interface by returning itself.
+func (rh *ResponseHeader) Header() *ResponseHeader {
+	return rh
 }
 
 // A ContainsRequest is arguments to the Contains() method.
