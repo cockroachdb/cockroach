@@ -77,9 +77,8 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 	if cmdID.IsEmpty() {
 		return false, nil
 	}
-	rc.Lock()
-	defer rc.Unlock()
 	// If the command is inflight, wait for it to complete.
+	rc.Lock()
 	for {
 		if cond, ok := rc.inflight[cmdID]; ok {
 			cond.Wait()
@@ -87,12 +86,22 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 			break
 		}
 	}
+	// Adding inflight here is preemptive; we don't want to hold lock
+	// while fetching from the on-disk cache. The vast, vast majority of
+	// calls to GetResponse will be cache misses, so this saves us
+	// from acquiring the lock twice: once here and once below in the
+	// event we experience a cache miss.
+	rc.addInflightLocked(cmdID)
+	rc.Unlock()
+
 	// If the response is in the cache or we experienced an error, return.
 	if ok, err := getI(rc.engine, rc.makeKey(cmdID), reply); ok || err != nil {
+		rc.Lock() // Take lock after fetching response from cache.
+		defer rc.Unlock()
+		rc.removeInflightLocked(cmdID)
 		return ok, err
 	}
-	// There's no command result cached for this ID; add inflight.
-	rc.addInflightLocked(cmdID)
+	// There's no command result cached for this ID; but inflight was added above.
 	return false, nil
 }
 
@@ -106,16 +115,16 @@ func (rc *ResponseCache) PutResponse(cmdID ClientCmdID, reply interface{}) error
 	if cmdID.IsEmpty() {
 		return nil
 	}
-	rc.Lock()
-	defer rc.Unlock()
 	// Write the response value to the engine.
 	key := rc.makeKey(cmdID)
 	err := putI(rc.engine, key, reply)
+
+	// Take lock after writing response to cache!
+	rc.Lock()
+	defer rc.Unlock()
 	// Even on error, we remove the entry from the inflight map.
-	if cond, ok := rc.inflight[cmdID]; ok {
-		cond.Broadcast()
-		delete(rc.inflight, cmdID)
-	}
+	rc.removeInflightLocked(cmdID)
+
 	return err
 }
 
@@ -132,6 +141,15 @@ func (rc *ResponseCache) addInflightLocked(cmdID ClientCmdID) {
 	rc.inflight[cmdID] = sync.NewCond(&rc.Mutex)
 }
 
+// removeInflightLocked removes an entry matching cmdID from the
+// inflight map and broadcasts a wakeup to all waiters.
+func (rc *ResponseCache) removeInflightLocked(cmdID ClientCmdID) {
+	if cond, ok := rc.inflight[cmdID]; ok {
+		cond.Broadcast()
+		delete(rc.inflight, cmdID)
+	}
+}
+
 // makeKey encodes the range ID and client command ID into a key
 // for storage in the underlying engine. Note that the prefix for
 // response cache keys sorts them at the very top of the engine's
@@ -143,6 +161,6 @@ func (rc *ResponseCache) makeKey(cmdID ClientCmdID) Key {
 		KeyLocalRangeResponseCachePrefix,
 		encoding.EncodeInt(rc.rangeID),
 		encoding.EncodeInt(cmdID.WallTime), // wall time helps sort for locality
-		encoding.EncodeInt(cmdID.Random),
+		encoding.EncodeInt(cmdID.Random),   // TODO(spencer): encode as Fixed64
 	}, []byte{}))
 }

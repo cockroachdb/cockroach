@@ -22,6 +22,7 @@ import (
 	"encoding/gob"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -455,6 +456,7 @@ func TestRangeIdempotence(t *testing.T) {
 	// interleaved with 50 using a sequence of different command IDs.
 	goldenArgs, _ := incrementArgs("a", 1, 0)
 	incDones := make([]chan struct{}, 100)
+	var count int64
 	for i := range incDones {
 		incDones[i] = make(chan struct{})
 		idx := i
@@ -473,6 +475,8 @@ func TestRangeIdempotence(t *testing.T) {
 			}
 			if idx%2 == 0 && reply.NewValue != 1 {
 				t.Error("expected all incremented values to be 1; got %d", reply.NewValue)
+			} else if idx%2 == 1 {
+				atomic.AddInt64(&count, reply.NewValue)
 			}
 			close(incDones[idx])
 		}()
@@ -485,5 +489,10 @@ func TestRangeIdempotence(t *testing.T) {
 		case <-time.After(500 * time.Millisecond):
 			t.Fatal("had to wait for increment to complete")
 		}
+	}
+	// Verify that all non-repeated client commands incremented the
+	// counter starting at 2 all the way to 51 (sum of sequence = 1325).
+	if count != 1325 {
+		t.Errorf("expected sum of all increments to be 1325; got %d", count)
 	}
 }
