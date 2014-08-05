@@ -80,14 +80,14 @@ func (p byteSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 // TestVarintOrdering ensures that lexicographical and numeric ordering
 // for varints are the same
 func TestVarintOrdering(t *testing.T) {
-	rand.Seed(time.Now().Unix())
+	seed := time.Now().Unix()
+	rand.Seed(seed)
 	ints := make(uint64Slice, 50)
-	varints := make(byteSlice, 50)
+	varints := make(byteSlice, len(ints))
 	for i := range ints {
 		// rand.Uint64() doesn't exist within the stdlib.
 		// https://groups.google.com/forum/#!topic/golang-nuts/Kle874lT1Eo
-		val := uint64(rand.Uint32())
-		val = uint64(rand.Uint32()) + val<<32
+		val := uint64(rand.Uint32())<<32 + uint64(rand.Uint32())
 		ints[i] = val
 		varints[i] = make([]byte, maxVarintSize)
 		PutUvarint(varints[i], val)
@@ -97,7 +97,7 @@ func TestVarintOrdering(t *testing.T) {
 	for i := range ints {
 		decoded := GetUVarint(varints[i])
 		if decoded != ints[i] {
-			t.Errorf("mismatched ordering at index %d: expected: %d, got %d", i, ints[i], decoded)
+			t.Errorf("mismatched ordering at index %d: expected: %d, got %d [seed: %d]", i, ints[i], decoded, seed)
 		}
 	}
 }
