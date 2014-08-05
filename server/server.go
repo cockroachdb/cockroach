@@ -115,7 +115,7 @@ type server struct {
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
 	kvDB           kv.DB
-	kvREST         *rest.RESTServer
+	kvREST         *rest.Server
 	node           *Node
 	admin          *adminServer
 	status         *statusServer

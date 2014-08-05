@@ -447,7 +447,7 @@ func statusText(status int) string {
 
 type kvTestServer struct {
 	db         kv.DB
-	rest       *rest.RESTServer
+	rest       *rest.Server
 	httpServer *httptest.Server
 	firstRange *storage.Range
 }

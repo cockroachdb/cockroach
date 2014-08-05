@@ -43,26 +43,26 @@ const (
 )
 
 // Function signture for an HTTP handler that only takes a writer and a request
-type actionHandler func(*RESTServer, http.ResponseWriter, *http.Request)
+type actionHandler func(*Server, http.ResponseWriter, *http.Request)
 
 // Function signture for an HTTP handler that takes a writer and a request and a storage key
-type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, engine.Key)
+type actionKeyHandler func(*Server, http.ResponseWriter, *http.Request, engine.Key)
 
 // Maps various path + HTTP method combos to specific server methods
 var routingTable = map[string]map[string]actionHandler{
 	EntryPrefix: {
-		"GET":    makeActionWithKey((*RESTServer).handleEntryGetAction),
-		"PUT":    makeActionWithKey((*RESTServer).handleEntryPutAction),
-		"POST":   makeActionWithKey((*RESTServer).handleEntryPutAction),
-		"DELETE": makeActionWithKey((*RESTServer).handleEntryDeleteAction),
-		"HEAD":   makeActionWithKey((*RESTServer).handleEntryHeadAction),
+		"GET":    makeActionWithKey((*Server).handleEntryGetAction),
+		"PUT":    makeActionWithKey((*Server).handleEntryPutAction),
+		"POST":   makeActionWithKey((*Server).handleEntryPutAction),
+		"DELETE": makeActionWithKey((*Server).handleEntryDeleteAction),
+		"HEAD":   makeActionWithKey((*Server).handleEntryHeadAction),
 	},
 	RangePrefix: {
 	// TODO(zbrock + matthew) not supported yet!
 	},
 	CounterPrefix: {
-		"GET":  (*RESTServer).handleIncrementAction,
-		"POST": (*RESTServer).handleIncrementAction,
+		"GET":  (*Server).handleIncrementAction,
+		"POST": (*Server).handleIncrementAction,
 	},
 }
 
@@ -73,13 +73,13 @@ type Server struct {
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db kv.DB) *RESTServer {
-	return &RESTServer{db: db}
+func NewRESTServer(db kv.DB) *Server {
+	return &Server{db: db}
 }
 
 // HandleAction arbitrates requests to the appropriate function
 // based on the request’s HTTP method.
-func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleAction(w http.ResponseWriter, r *http.Request) {
 	for endPoint, epRoutes := range routingTable {
 		if strings.HasPrefix(r.URL.Path, endPoint) {
 			epHandler := epRoutes[r.Method]
@@ -96,7 +96,7 @@ func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func makeActionWithKey(act actionKeyHandler) actionHandler {
-	return func(s *RESTServer, w http.ResponseWriter, r *http.Request) {
+	return func(s *Server, w http.ResponseWriter, r *http.Request) {
 		key, err := dbKey(r.URL.Path, EntryPrefix)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -118,7 +118,7 @@ func dbKey(path, apiPrefix string) (engine.Key, error) {
 	return nil, err
 }
 
-func (s *RESTServer) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
 	key, err := dbKey(r.URL.Path, CounterPrefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -156,7 +156,7 @@ func (s *RESTServer) handleIncrementAction(w http.ResponseWriter, r *http.Reques
 	fmt.Fprintf(w, "%d", gr.NewValue)
 }
 
-func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -177,7 +177,7 @@ func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	gr := <-s.db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -197,7 +197,7 @@ func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request
 	fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
 }
 
-func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	cr := <-s.db.Contains(&storage.ContainsRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -215,7 +215,7 @@ func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *RESTServer) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	dr := <-s.db.Delete(&storage.DeleteRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
