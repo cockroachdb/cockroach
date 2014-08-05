@@ -66,9 +66,9 @@ var routingTable = map[string]map[string]actionHandler{
 	},
 }
 
-// A RESTServer provides a RESTful HTTP API to interact with
+// A Server provides a RESTful HTTP API to interact with
 // an underlying key-value store.
-type RESTServer struct {
+type Server struct {
 	db kv.DB // Key-value database client
 }
 

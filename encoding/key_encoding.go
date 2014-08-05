@@ -173,7 +173,7 @@ func EncodeInt(i int64) []byte {
 	if e <= 0 {
 		panic("integer values should not have negative exponents")
 	}
-	buf := make([]byte, len(m)+maxVarintSize+1)
+	buf := make([]byte, len(m)+maxVarintSize+2)
 	switch {
 	case e > 0 && e <= 10:
 		return encodeMediumNumber(i < 0, e, m, buf)
@@ -181,6 +181,19 @@ func EncodeInt(i int64) []byte {
 		return encodeLargeNumber(i < 0, e, m, buf)
 	}
 	return nil
+}
+
+// EncodeIntDecreasing encodes an int64 and returns
+// the result as a byte slice in decreasing order.
+func EncodeIntDecreasing(i int64) []byte {
+	return EncodeInt(^i)
+}
+
+// DecodeIntDecreasing decodes a byte slice in
+// decreasing order and return an int64.
+func DecodeIntDecreasing(key []byte) int64 {
+	// TODO(Jiang-Ming): implement the real logic.
+	return 0
 }
 
 // intMandE computes and returns the mantissa M and exponent E for i.
@@ -209,8 +222,19 @@ func intMandE(i int64) (int, []byte) {
 		m[i], m[j] = m[j], m[i]
 	}
 	// The last byte is encoded as 2n+0.
-	m[len(m)-1] -= 1
-	return e, m
+	m[len(m)-1]--
+
+	// Trailing X==0 digits are omitted.
+	return e, removeTrailingZeros(m)
+}
+
+func removeTrailingZeros(m []byte) []byte {
+	for i := len(m); i > 0; i-- {
+		if m[i-1] != 0 {
+			return m[:i]
+		}
+	}
+	return []byte{}
 }
 
 // EncodeFloat encodes a float64 and returns the result
@@ -246,7 +270,7 @@ func EncodeFloat(f float64) []byte {
 		return []byte{orderedEncodingZero}
 	}
 	e, m := floatMandE(f)
-	buf := make([]byte, len(m)+maxVarintSize+1)
+	buf := make([]byte, len(m)+maxVarintSize+2)
 	switch {
 	case e < 0:
 		return encodeSmallNumber(f < 0, e, m, buf)
@@ -311,8 +335,10 @@ func floatMandE(f float64) (int, []byte) {
 	}
 	b := buf.Bytes()
 	// The last byte is encoded as 2n+0.
-	b[len(b)-1] -= 1
-	return i, b
+	b[len(b)-1]--
+
+	// Trailing X==0 digits are omitted.
+	return i, removeTrailingZeros(b)
 }
 
 // onesComplement inverts each byte in buf from index start to end.
@@ -333,7 +359,8 @@ func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 		buf[0] = 0x16
 		onesComplement(buf, 1, n) // ones complement of exponent
 	}
-	return buf[:l]
+	buf[l] = orderedEncodingTerminator
+	return buf[:l+1]
 }
 
 func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
@@ -345,7 +372,8 @@ func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	} else {
 		buf[0] = 0x17 + byte(e)
 	}
-	return buf[:l]
+	buf[l] = orderedEncodingTerminator
+	return buf[:l+1]
 }
 
 func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
@@ -358,5 +386,6 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	} else {
 		buf[0] = 0x22
 	}
-	return buf[:l]
+	buf[l] = orderedEncodingTerminator
+	return buf[:l+1]
 }

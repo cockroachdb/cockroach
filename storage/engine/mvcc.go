@@ -20,9 +20,8 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"math"
-	"strconv"
 
+	"github.com/cockroachdb/cockroach/encoding"
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -67,14 +66,14 @@ func (e *writeTimestampTooOldError) Error() string {
 // txnID in the response is used to indicate that the response value
 // belongs to a write intent.
 func (mvcc *MVCC) Get(key Key, timestamp hlc.HLTimestamp, txnID string) (Value, string, error) {
-	value, txnID, err := mvcc.getInternal(key, timestamp, txnID)
+	value, ts, txnID, err := mvcc.getInternal(key, timestamp, txnID)
 	// In case of error, or the key doesn't exist, or the key was deleted.
 	if err != nil || len(value) == 0 || value[0] == valueDeletedPrefix {
 		return Value{}, txnID, err
 	}
 
-	// TODO(Jiang-Ming): use unwrapChecksum here and return the real timestamp.
-	return Value{Bytes: value[1:]}, txnID, nil
+	// TODO(Jiang-Ming): use unwrapChecksum here.
+	return Value{Bytes: value[1:], Timestamp: ts}, txnID, nil
 }
 
 // getInternal implements the actual logic of get function.
@@ -88,34 +87,35 @@ func (mvcc *MVCC) Get(key Key, timestamp hlc.HLTimestamp, txnID string) (Value, 
 // keyA_Timestamp_0 : value of version_0
 // keyB : keyMetadata of keyB
 // ...
-func (mvcc *MVCC) getInternal(key Key, timestamp hlc.HLTimestamp, txnID string) ([]byte, string, error) {
+func (mvcc *MVCC) getInternal(key Key, timestamp hlc.HLTimestamp, txnID string) ([]byte, hlc.HLTimestamp, string, error) {
 	keyMetadata := &keyMetadata{}
 	ok, err := GetI(mvcc.engine, key, keyMetadata)
 	if err != nil || !ok {
-		return nil, "", err
+		return nil, hlc.HLTimestamp{}, "", err
 	}
 
 	// If the read timestamp is greater than the latest one, we can just
 	// fetch the value without a scan.
 	if !timestamp.Less(keyMetadata.Timestamp) {
 		if len(keyMetadata.TxnID) > 0 && (len(txnID) == 0 || keyMetadata.TxnID != txnID) {
-			return nil, "", &writeIntentError{TxnID: keyMetadata.TxnID}
+			return nil, hlc.HLTimestamp{}, "", &writeIntentError{TxnID: keyMetadata.TxnID}
 		}
 
-		latestKey := MakeKey(key, encodeTimestamp(keyMetadata.Timestamp))
+		latestKey := mvccEncodeKey(key, keyMetadata.Timestamp)
 		val, err := mvcc.engine.Get(latestKey)
-		return val, keyMetadata.TxnID, err
+		return val, keyMetadata.Timestamp, keyMetadata.TxnID, err
 	}
 
-	nextKey := MakeKey(key, encodeTimestamp(timestamp))
+	nextKey := mvccEncodeKey(key, timestamp)
 	// We use the PrefixEndKey(key) as the upper bound for scan.
 	// If there is no other version after nextKey, it won't return
 	// the value of the next key.
 	kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(key), 1)
 	if len(kvs) > 0 {
-		return kvs[0].Value, "", err
+		_, ts := mvccDecodeKey(kvs[0].Key)
+		return kvs[0].Value, ts, "", err
 	}
-	return nil, "", err
+	return nil, hlc.HLTimestamp{}, "", err
 }
 
 // Put sets the value for a specified key. It will save the value with
@@ -129,7 +129,7 @@ func (mvcc *MVCC) Put(key Key, timestamp hlc.HLTimestamp, value Value, txnID str
 			value.Timestamp, timestamp)
 	}
 
-	// TODO(Jiang-Ming): use wrapChecksum here and encode the timestamp
+	// TODO(Jiang-Ming): use wrapChecksum here.
 	// into val which need to be used in get response.
 	val := bytes.Join([][]byte{[]byte{valueNormalPrefix}, value.Bytes}, []byte(""))
 	return mvcc.putInternal(key, timestamp, val, txnID)
@@ -173,7 +173,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp hlc.HLTimestamp, value []byte, 
 	}
 
 	// Save the value with the given version (Key + Timestamp).
-	return mvcc.engine.Put(MakeKey(key, encodeTimestamp(timestamp)), value)
+	return mvcc.engine.Put(mvccEncodeKey(key, timestamp), value)
 }
 
 // ConditionalPut sets the value for a specified key only if
@@ -206,24 +206,24 @@ func (mvcc *MVCC) ConditionalPut(key Key, timestamp hlc.HLTimestamp, value Value
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp hlc.HLTimestamp, txnID string) ([]Key, error) {
+func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp hlc.HLTimestamp, txnID string) (int64, error) {
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
 	kvs, txnID, err := mvcc.Scan(key, endKey, max, hlc.MaxHLTimestamp, txnID)
 	if err != nil {
-		return []Key{}, err
+		return 0, err
 	}
 
-	keys := []Key{}
+	num := int64(0)
 	for _, kv := range kvs {
 		err = mvcc.Delete(kv.Key, timestamp, txnID)
 		if err != nil {
-			return keys, err
+			return num, err
 		}
-		keys = append(keys, kv.Key)
+		num++
 	}
-	return keys, nil
+	return num, nil
 }
 
 // Scan scans the key range specified by start key through end key up
@@ -279,22 +279,147 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp hlc.HLTimestamp
 		// b<T=5>
 		// In this case, if we scan from "a"-"b", we wish to skip
 		// a<T=2> and a<T=1> and find "aa'.
-		nextKey = NextKey(MakeKey(currentKey, encodeTimestamp(hlc.MinHLTimestamp)))
+		nextKey = NextKey(mvccEncodeKey(currentKey, hlc.MinHLTimestamp))
 	}
 
 	return res, txnID, nil
 }
 
-// endTransaction either commits or aborts (rolls back) an extant
-// transaction according to the args.Commit parameter.
-func (mvcc *MVCC) endTransaction(key Key, txnID string, commit bool) error {
-	return util.Error("unimplemented")
+// ResolveWriteIntent either commits or aborts (rolls back) an extant
+// write intent for a given txnID according to commit parameter.
+// ResolveWriteIntent will skip write intents of other txnIDs.
+func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID string, commit bool) error {
+	if len(txnID) == 0 {
+		return util.Error("missing txnID in request")
+	}
+
+	keyMeta := &keyMetadata{}
+	ok, err := GetI(mvcc.engine, key, keyMeta)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return util.Errorf("key %q does not exist", key)
+	}
+
+	if len(keyMeta.TxnID) == 0 {
+		return util.Errorf("write intent does not exist", key)
+	}
+	if keyMeta.TxnID != txnID {
+		return util.Errorf("cannot commit another TxnID %s from TxnID %s",
+			keyMeta.TxnID, txnID)
+	}
+
+	if !commit {
+		latestKey := mvccEncodeKey(key, keyMeta.Timestamp)
+		err = mvcc.engine.Clear(latestKey)
+		if err != nil {
+			return err
+		}
+
+		nextKey := NextKey(latestKey)
+		kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(key), 1)
+		if err != nil {
+			return err
+		}
+		// If there is no other version, we should just clean up the key entirely.
+		if len(kvs) == 0 {
+			return mvcc.engine.Clear(key)
+		}
+
+		_, ts := mvccDecodeKey(kvs[0].Key)
+		// Update the keyMetadata with the next version.
+		return PutI(mvcc.engine, key, &keyMetadata{TxnID: "", Timestamp: ts})
+	}
+
+	return PutI(mvcc.engine, key, &keyMetadata{TxnID: "", Timestamp: keyMeta.Timestamp})
 }
 
-// TODO(Jiang-Ming): need to use sqlite4 key ordering once it is ready.
-func encodeTimestamp(timestamp hlc.HLTimestamp) Key {
-	// TODO(jiangmingyang): Need to encode both the hlc "physical" and
-	// "logical" timestamps to the byte array, one after the other for
-	// correct ordering.
-	return []byte(strconv.FormatInt(math.MaxInt64-timestamp.WallTime, 10))
+// ResolveWriteIntentRange commits or aborts (rolls back)
+// the range of write intents specified by start and end
+// keys for a given txnID according to commit parameter.
+// ResolveWriteIntentRange will skip write intents of
+// other txnIDs. Specify max=0 for unbounded resolves.
+func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID string, commit bool) (int64, error) {
+	if len(txnID) == 0 {
+		return 0, util.Error("missing txnID in request")
+	}
+
+	nextKey := key
+	// TODO(Jiang-Ming): remove this after we put everything via MVCC.
+	// Currently, we need to skip the series of reserved system
+	// key / value pairs covering accounting, range metadata, node
+	// accounting and permissions before the actual key / value pairs
+	// since they don't have keyMetadata.
+	if nextKey.Less(PrefixEndKey(Key("\x00"))) {
+		nextKey = PrefixEndKey(Key("\x00"))
+	}
+
+	num := int64(0)
+	for {
+		kvs, err := mvcc.engine.Scan(nextKey, endKey, 1)
+		if err != nil {
+			return num, err
+		}
+		// No more keys exists in the given range.
+		if len(kvs) == 0 {
+			break
+		}
+
+		currentKey := kvs[0].Key
+		_, existingTxnID, err := mvcc.Get(currentKey, hlc.MaxHLTimestamp, txnID)
+		// Return the error unless its a writeIntentError, which
+		// will occur in the event we scan a key with a write
+		// intent belonging to a different transaction.
+		if _, ok := err.(*writeIntentError); err != nil && !ok {
+			return num, err
+		}
+		// endRangTransaction only needs to deal with the write
+		// intents for the given txnID.
+		if err == nil && existingTxnID == txnID {
+			// commits or aborts (rolls back) the write intent of
+			// the given txnID.
+			err = mvcc.ResolveWriteIntent(currentKey, txnID, commit)
+			if err != nil {
+				return num, err
+			}
+			num++
+		}
+
+		if max != 0 && max == num {
+			break
+		}
+
+		// In order to efficiently skip the possibly long list of
+		// old versions for this key, please refer to scan function
+		// for details.
+		nextKey = NextKey(mvccEncodeKey(currentKey, hlc.MinHLTimestamp))
+	}
+
+	return num, nil
+}
+
+// makeKeyTimestamped makes a timestamped key which is the concatenation
+// of the given key and the corresponding timestamp. It assumes the
+// key was already encoded before passed to mvcc layer thus it won't
+// encode the key part again.
+func mvccEncodeKey(key Key, timestamp hlc.HLTimestamp) Key {
+	return Key(bytes.Join([][]byte{key,
+		encoding.EncodeIntDecreasing(timestamp.WallTime),
+		encoding.EncodeIntDecreasing(timestamp.Logical)},
+		[]byte{}))
+}
+
+func mvccDecodeKey(encodedKey []byte) (Key, hlc.HLTimestamp) {
+	// TODO(Jiang-Ming): implement the real DecodeIntDecreasing.
+	l := len(encodedKey)
+	idx0 := bytes.Index(encodedKey, []byte{0x00})
+	idx1 := bytes.LastIndex(encodedKey[:l-1], []byte{0x00})
+	key := encodedKey[:idx0+1]
+	encodedWallTime := encodedKey[idx0+2 : idx1+1]
+	encodedLogical := encodedKey[idx1+2:]
+	wallTime := encoding.DecodeIntDecreasing(encodedWallTime)
+	logical := encoding.DecodeIntDecreasing(encodedLogical)
+
+	return key, hlc.HLTimestamp{WallTime: wallTime, Logical: logical}
 }
