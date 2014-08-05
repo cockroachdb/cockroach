@@ -20,6 +20,7 @@ package encoding
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"testing"
 )
 
@@ -54,6 +55,32 @@ func TestEncodeDecodeString(t *testing.T) {
 	}
 }
 
+func TestStringOrdering(t *testing.T) {
+	strs := []string{
+		"foo",
+		"baaaar",
+		"bazz",
+		"Hello, 世界",
+		"",
+		"abcd",
+		"☺☻☹",
+		"日a本b語ç日ð本Ê語þ日¥本¼語i日©",
+		"日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©",
+	}
+	encodedStrs := make(byteSlice, len(strs))
+	for i := range strs {
+		encodedStrs[i] = EncodeString(nil, strs[i])
+	}
+	sort.Strings(strs)
+	sort.Sort(encodedStrs)
+	for i := range strs {
+		decoded := DecodeString(encodedStrs[i])
+		if decoded != strs[i] {
+			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, strs[i], decoded)
+		}
+	}
+}
+
 func TestInvalidUTF8String(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
@@ -82,16 +109,44 @@ func TestStringNoTerminatorPanic(t *testing.T) {
 }
 
 func TestEncodeBinary(t *testing.T) {
-	// TODO(andybons): Write more of these.
 	testCases := []struct{ blob, encoded []byte }{
 		{[]byte{}, []byte{orderedEncodingBinary, orderedEncodingTerminator}},
 		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0x40}},
+		{[]byte("1"), []byte{orderedEncodingBinary, 0x98, 0x40}},
+		{[]byte("22"), []byte{orderedEncodingBinary, 0x99, 0x8c, 0x40}},
+		{[]byte("333"), []byte{orderedEncodingBinary, 0x99, 0xcc, 0xe6, 0x30}},
+		{[]byte("4444"), []byte{orderedEncodingBinary, 0x9a, 0x8d, 0x86, 0xc3, 0x20}},
+		{[]byte("55555"), []byte{orderedEncodingBinary, 0x9a, 0xcd, 0xa6, 0xd3, 0xa9, 0x54}},
+		{[]byte("666666"), []byte{orderedEncodingBinary, 0x9b, 0x8d, 0xc6, 0xe3, 0xb1, 0xd8, 0x6c}},
+		{[]byte("7777777"), []byte{orderedEncodingBinary, 0x9b, 0xcd, 0xe6, 0xf3, 0xb9, 0xdc, 0xee, 0x37}},
+		{[]byte("88888888"), []byte{orderedEncodingBinary, 0x9c, 0x8e, 0x87, 0x83, 0xc1, 0xe0, 0xf0, 0xb8, 0x9c, 0x0}},
+		{[]byte("Carl"), []byte{orderedEncodingBinary, 0xa1, 0xd8, 0xae, 0xa6, 0x60}},
 		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x18}},
 	}
 	for _, c := range testCases {
 		b := EncodeBinary(c.blob)
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
+		}
+	}
+	blobs := make(byteSlice, len(testCases))
+	encodedBlobs := make(byteSlice, len(testCases))
+	for i, c := range testCases {
+		blobs[i] = c.blob
+		encodedBlobs[i] = c.encoded
+	}
+	sort.Sort(blobs)
+	sort.Sort(encodedBlobs)
+	for i := range encodedBlobs {
+		// TODO(andybons): Use DecodeBinary once that's landed.
+		var decoded []byte
+		for _, c := range testCases {
+			if bytes.Equal(encodedBlobs[i], c.encoded) {
+				decoded = c.blob
+			}
+		}
+		if !bytes.Equal(decoded, blobs[i]) {
+			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(blobs[i]), prettyBytes(decoded))
 		}
 	}
 }
@@ -101,7 +156,7 @@ func prettyBytes(b []byte) string {
 	for i, v := range b {
 		str += fmt.Sprintf("%#x", v)
 		if i < len(b)-1 {
-			str += " "
+			str += ", "
 		}
 	}
 	str += "]"
