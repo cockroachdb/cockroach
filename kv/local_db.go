@@ -20,7 +20,6 @@ package kv
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sort"
 	"sync"
 
@@ -129,120 +128,177 @@ func (db *LocalDB) lookupReplica(key engine.Key) *storage.Replica {
 	return nil
 }
 
-// executeCmd runs Store.ExecuteCmd in a goroutine. A channel with
-// element type equal to the reply type is created and returned
-// immediately. The reply is sent to the channel once the cmd has been
-// executed by the store. The store is looked up from the store map
-// if specified by header.Replica; otherwise, the command is being
-// executed locally, and the replica is determined via lookup of
-// header.Key in the ranges slice.
-func (db *LocalDB) executeCmd(method string, args storage.Request, reply storage.Response) interface{} {
-	chanVal := reflect.MakeChan(reflect.ChanOf(reflect.BothDir, reflect.TypeOf(reply)), 1)
-	replyVal := reflect.ValueOf(reply)
-	go func() {
-		// If the replica isn't specified in the header, look it up.
-		var err error
-
-		var store *storage.Store
-		// If we aren't given a Replica, then a little bending over backwards here. We need to find the Store, but all
-		// we have is the Key. So find its Range locally, and pull out its Replica which we use to find the Store.
-		// This lets us use the same codepath below (store.ExecuteCmd) for both locally and remotely originated
-		// commands.
-		header := args.Header()
-		if header.Replica.NodeID == 0 {
-			if repl := db.lookupReplica(header.Key); repl != nil {
-				header.Replica = *repl
-			} else {
-				err = util.Errorf("unable to lookup range replica for key %q", string(header.Key))
-			}
-		}
-		if err == nil {
-			store, err = db.GetStore(&header.Replica)
-		}
-		if err != nil {
-			reply.Header().Error = err
+// executeCmd synchronously runs Store.ExecuteCmd. The store is looked
+// up from the store map if specified by header.Replica; otherwise,
+// the command is being executed locally, and the replica is
+// determined via lookup of header.Key in the ranges slice.
+func (db *LocalDB) executeCmd(method string, args storage.Request, reply storage.Response) {
+	// If the replica isn't specified in the header, look it up.
+	var err error
+	var store *storage.Store
+	// If we aren't given a Replica, then a little bending over
+	// backwards here. We need to find the Store, but all we have is the
+	// Key. So find its Range locally, and pull out its Replica which we
+	// use to find the Store.  This lets us use the same codepath below
+	// (store.ExecuteCmd) for both locally and remotely originated
+	// commands.
+	header := args.Header()
+	if header.Replica.NodeID == 0 {
+		if repl := db.lookupReplica(header.Key); repl != nil {
+			header.Replica = *repl
 		} else {
-			store.ExecuteCmd(method, args, reply)
+			err = util.Errorf("unable to lookup range replica for key %q", string(header.Key))
 		}
-		chanVal.Send(replyVal)
-	}()
-	return chanVal.Interface()
+	}
+	if err == nil {
+		store, err = db.GetStore(&header.Replica)
+	}
+	if err != nil {
+		reply.Header().Error = err
+	} else {
+		store.ExecuteCmd(method, args, reply)
+	}
 }
 
 // Contains passes through to local range.
 func (db *LocalDB) Contains(args *storage.ContainsRequest) <-chan *storage.ContainsResponse {
-	return db.executeCmd(storage.Contains,
-		args, &storage.ContainsResponse{}).(chan *storage.ContainsResponse)
+	replyChan := make(chan *storage.ContainsResponse, 1)
+	reply := &storage.ContainsResponse{}
+	go func() {
+		db.executeCmd(storage.Contains, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // Get passes through to local range.
 func (db *LocalDB) Get(args *storage.GetRequest) <-chan *storage.GetResponse {
-	return db.executeCmd(storage.Get,
-		args, &storage.GetResponse{}).(chan *storage.GetResponse)
+	replyChan := make(chan *storage.GetResponse, 1)
+	reply := &storage.GetResponse{}
+	go func() {
+		db.executeCmd(storage.Get, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // Put passes through to local range.
 func (db *LocalDB) Put(args *storage.PutRequest) <-chan *storage.PutResponse {
-	return db.executeCmd(storage.Put,
-		args, &storage.PutResponse{}).(chan *storage.PutResponse)
+	replyChan := make(chan *storage.PutResponse, 1)
+	reply := &storage.PutResponse{}
+	go func() {
+		db.executeCmd(storage.Put, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // ConditionalPut passes through to local range.
 func (db *LocalDB) ConditionalPut(args *storage.ConditionalPutRequest) <-chan *storage.ConditionalPutResponse {
-	return db.executeCmd(storage.ConditionalPut,
-		args, &storage.ConditionalPutResponse{}).(chan *storage.ConditionalPutResponse)
+	replyChan := make(chan *storage.ConditionalPutResponse, 1)
+	reply := &storage.ConditionalPutResponse{}
+	go func() {
+		db.executeCmd(storage.ConditionalPut, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // Increment passes through to local range.
 func (db *LocalDB) Increment(args *storage.IncrementRequest) <-chan *storage.IncrementResponse {
-	return db.executeCmd(storage.Increment,
-		args, &storage.IncrementResponse{}).(chan *storage.IncrementResponse)
+	replyChan := make(chan *storage.IncrementResponse, 1)
+	reply := &storage.IncrementResponse{}
+	go func() {
+		db.executeCmd(storage.Increment, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // Delete passes through to local range.
 func (db *LocalDB) Delete(args *storage.DeleteRequest) <-chan *storage.DeleteResponse {
-	return db.executeCmd(storage.Delete,
-		args, &storage.DeleteResponse{}).(chan *storage.DeleteResponse)
+	replyChan := make(chan *storage.DeleteResponse, 1)
+	reply := &storage.DeleteResponse{}
+	go func() {
+		db.executeCmd(storage.Delete, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // DeleteRange passes through to local range.
 func (db *LocalDB) DeleteRange(args *storage.DeleteRangeRequest) <-chan *storage.DeleteRangeResponse {
-	return db.executeCmd(storage.DeleteRange,
-		args, &storage.DeleteRangeResponse{}).(chan *storage.DeleteRangeResponse)
+	replyChan := make(chan *storage.DeleteRangeResponse, 1)
+	reply := &storage.DeleteRangeResponse{}
+	go func() {
+		db.executeCmd(storage.DeleteRange, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // Scan passes through to local range.
 func (db *LocalDB) Scan(args *storage.ScanRequest) <-chan *storage.ScanResponse {
-	return db.executeCmd(storage.Scan,
-		args, &storage.ScanResponse{}).(chan *storage.ScanResponse)
+	replyChan := make(chan *storage.ScanResponse, 1)
+	reply := &storage.ScanResponse{}
+	go func() {
+		db.executeCmd(storage.Scan, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // EndTransaction passes through to local range.
 func (db *LocalDB) EndTransaction(args *storage.EndTransactionRequest) <-chan *storage.EndTransactionResponse {
-	return db.executeCmd(storage.EndTransaction,
-		args, &storage.EndTransactionResponse{}).(chan *storage.EndTransactionResponse)
+	replyChan := make(chan *storage.EndTransactionResponse, 1)
+	reply := &storage.EndTransactionResponse{}
+	go func() {
+		db.executeCmd(storage.EndTransaction, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // AccumulateTS passes through to local range.
 func (db *LocalDB) AccumulateTS(args *storage.AccumulateTSRequest) <-chan *storage.AccumulateTSResponse {
-	return db.executeCmd(storage.AccumulateTS,
-		args, &storage.AccumulateTSResponse{}).(chan *storage.AccumulateTSResponse)
+	replyChan := make(chan *storage.AccumulateTSResponse, 1)
+	reply := &storage.AccumulateTSResponse{}
+	go func() {
+		db.executeCmd(storage.AccumulateTS, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // ReapQueue passes through to local range.
 func (db *LocalDB) ReapQueue(args *storage.ReapQueueRequest) <-chan *storage.ReapQueueResponse {
-	return db.executeCmd(storage.ReapQueue,
-		args, &storage.ReapQueueResponse{}).(chan *storage.ReapQueueResponse)
+	replyChan := make(chan *storage.ReapQueueResponse, 1)
+	reply := &storage.ReapQueueResponse{}
+	go func() {
+		db.executeCmd(storage.ReapQueue, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // EnqueueUpdate passes through to local range.
 func (db *LocalDB) EnqueueUpdate(args *storage.EnqueueUpdateRequest) <-chan *storage.EnqueueUpdateResponse {
-	return db.executeCmd(storage.EnqueueUpdate,
-		args, &storage.EnqueueUpdateResponse{}).(chan *storage.EnqueueUpdateResponse)
+	replyChan := make(chan *storage.EnqueueUpdateResponse, 1)
+	reply := &storage.EnqueueUpdateResponse{}
+	go func() {
+		db.executeCmd(storage.EnqueueUpdate, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
 
 // EnqueueMessage passes through to local range.
 func (db *LocalDB) EnqueueMessage(args *storage.EnqueueMessageRequest) <-chan *storage.EnqueueMessageResponse {
-	return db.executeCmd(storage.EnqueueMessage,
-		args, &storage.EnqueueMessageResponse{}).(chan *storage.EnqueueMessageResponse)
+	replyChan := make(chan *storage.EnqueueMessageResponse, 1)
+	reply := &storage.EnqueueMessageResponse{}
+	go func() {
+		db.executeCmd(storage.EnqueueMessage, args, reply)
+		replyChan <- reply
+	}()
+	return replyChan
 }
