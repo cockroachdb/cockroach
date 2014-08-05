@@ -16,17 +16,14 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
-Package storage provides access to the Store and Range
-abstractions. Each Cockroach node handles one or more stores, each of
-which multiplexes to one or more ranges, identified by [start, end)
-keys. Ranges are contiguous regions of the keyspace. Each range
-implements an instance of the Raft consensus algorithm to synchronize
-participating range replicas.
+The Engine interface provides an API for key-value stores. InMem
+implements an in-memory engine using a sorted map. RocksDB implements
+an engine for data stored to local disk using RocksDB, a variant of
+LevelDB.
 
-Each store is represented by a single engine.Engine instance. The
-ranges hosted by a store all have access to the same engine, but write
-to only a range-limited keyspace within it. Ranges access the
-underlying engine via the MVCC interface, which provides historical
-versioned values.
+MVCC provides a multi-version concurrency control system on top of an
+engine. MVCC is the basis for Cockroach's support for distributed
+transactions. It is intended for direct use from storage.Range
+objects.
 */
-package storage
+package engine

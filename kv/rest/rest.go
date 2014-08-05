@@ -25,8 +25,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 const (
@@ -45,7 +46,7 @@ const (
 type actionHandler func(*RESTServer, http.ResponseWriter, *http.Request)
 
 // Function signture for an HTTP handler that takes a writer and a request and a storage key
-type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, storage.Key)
+type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, engine.Key)
 
 // Maps various path + HTTP method combos to specific server methods
 var routingTable = map[string]map[string]actionHandler{
@@ -105,10 +106,10 @@ func makeActionWithKey(act actionKeyHandler) actionHandler {
 	}
 }
 
-func dbKey(path, apiPrefix string) (storage.Key, error) {
+func dbKey(path, apiPrefix string) (engine.Key, error) {
 	result, err := url.QueryUnescape(strings.TrimPrefix(path, apiPrefix))
 	if err == nil {
-		k := storage.Key(result)
+		k := engine.Key(result)
 		if len(k) == 0 {
 			return nil, fmt.Errorf("empty key not allowed")
 		}
@@ -155,7 +156,7 @@ func (s *RESTServer) handleIncrementAction(w http.ResponseWriter, r *http.Reques
 	fmt.Fprintf(w, "%d", gr.NewValue)
 }
 
-func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
+func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -167,7 +168,7 @@ func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request
 			Key:  key,
 			User: storage.UserRoot,
 		},
-		Value: storage.Value{Bytes: b},
+		Value: engine.Value{Bytes: b},
 	})
 	if pr.Error != nil {
 		http.Error(w, pr.Error.Error(), http.StatusInternalServerError)
@@ -176,7 +177,7 @@ func (s *RESTServer) handleEntryPutAction(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
+func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	gr := <-s.db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -196,7 +197,7 @@ func (s *RESTServer) handleEntryGetAction(w http.ResponseWriter, r *http.Request
 	fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
 }
 
-func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
+func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	cr := <-s.db.Contains(&storage.ContainsRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -214,7 +215,7 @@ func (s *RESTServer) handleEntryHeadAction(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *RESTServer) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key storage.Key) {
+func (s *RESTServer) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	dr := <-s.db.Delete(&storage.DeleteRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,

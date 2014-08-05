@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
 import (
 	"bytes"
@@ -105,7 +105,7 @@ func (es *EngineSampleStorage) Discard() {
 func (es *EngineSampleStorage) Get(i int) interface{} {
 	var ret interface{}
 	key := es.indexToKey(i)
-	ok, err := getI(es.engine, key, &ret)
+	ok, err := GetI(es.engine, key, &ret)
 	if !ok {
 		glog.Warningf("key %v not found", string(key))
 	} else if err != nil {
@@ -121,7 +121,7 @@ func (es *EngineSampleStorage) Put(i int, v interface{}) {
 	if i < 0 || i >= es.Size() {
 		return
 	}
-	err := putI(es.engine, es.indexToKey(i), &v)
+	err := PutI(es.engine, es.indexToKey(i), &v)
 	if err != nil {
 		glog.Warning(err)
 	} else {
@@ -132,7 +132,7 @@ func (es *EngineSampleStorage) Put(i int, v interface{}) {
 // Slice returns the data stored in the underlying storage.
 func (es *EngineSampleStorage) Slice() []interface{} {
 	startKey := MakeKey(es.prefix, keyDataPrefix)
-	res, err := es.engine.scan(
+	res, err := es.engine.Scan(
 		startKey, PrefixEndKey(startKey), es.Seen())
 	if err != nil {
 		glog.Warning(err)
@@ -141,7 +141,7 @@ func (es *EngineSampleStorage) Slice() []interface{} {
 
 	sl := make([]interface{}, len(res))
 	for i, kv := range res {
-		if dv, err := encoding.GobDecode(kv.value); err == nil {
+		if dv, err := encoding.GobDecode(kv.Value); err == nil {
 			sl[i] = dv
 		} else {
 			glog.Warning(err)
@@ -182,7 +182,7 @@ func (es *EngineSampleStorage) incVar(k Key, inc int64) int64 {
 	if ok && inc == 0 {
 		return s
 	}
-	r, err := increment(es.engine, MakeKey(es.prefix, k), inc)
+	r, err := Increment(es.engine, MakeKey(es.prefix, k), inc)
 	if err != nil {
 		glog.Warning(err)
 		// If the increment failed, stick with the old value if possible.

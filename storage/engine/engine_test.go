@@ -16,7 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
 import (
 	"bytes"
@@ -32,18 +32,18 @@ import (
 	"github.com/cockroachdb/cockroach/encoding"
 )
 
-func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []rawKeyValue) {
+func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []RawKeyValue) {
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
 	t.Log("---")
 	for i, kv := range keyvals {
-		t.Logf("index: %d\tk: %q\tv: %q\n", i, kv.key, kv.value)
-		if sortedKeys[i] != string(kv.key) {
-			t.Errorf("key mismatch at index %d: expected %q, got %q", i, sortedKeys[i], kv.key)
+		t.Logf("index: %d\tk: %q\tv: %q\n", i, kv.Key, kv.Value)
+		if sortedKeys[i] != string(kv.Key) {
+			t.Errorf("key mismatch at index %d: expected %q, got %q", i, sortedKeys[i], kv.Key)
 		}
-		if !bytes.Equal(keyMap[sortedKeys[i]], kv.value) {
-			t.Errorf("value mismatch at index %d: expected %q, got %q", i, keyMap[sortedKeys[i]], kv.value)
+		if !bytes.Equal(keyMap[sortedKeys[i]], kv.Value) {
+			t.Errorf("value mismatch at index %d: expected %q, got %q", i, keyMap[sortedKeys[i]], kv.Value)
 		}
 	}
 }
@@ -90,7 +90,7 @@ func TestEngineWriteBatch(t *testing.T) {
 					close(readsDone)
 					return
 				default:
-					val, err := e.get(key)
+					val, err := e.Get(key)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -110,9 +110,9 @@ func TestEngineWriteBatch(t *testing.T) {
 		// Create key/values and put them in a batch to engine.
 		puts := make([]interface{}, numWrites, numWrites)
 		for i := 0; i < numWrites; i++ {
-			puts[i] = BatchPut{key: key, value: []byte(strconv.Itoa(i))}
+			puts[i] = BatchPut{Key: key, Value: []byte(strconv.Itoa(i))}
 		}
-		if err := e.writeBatch(puts); err != nil {
+		if err := e.WriteBatch(puts); err != nil {
 			t.Fatal(err)
 		}
 		close(writesDone)
@@ -126,29 +126,29 @@ func TestEngineBatch(t *testing.T) {
 		key := Key("a")
 		// Those are randomized below.
 		batch := []interface{}{
-			BatchPut{key: key, value: []byte("~ockroachDB")},
-			BatchPut{key: key, value: []byte("C~ckroachDB")},
-			BatchPut{key: key, value: []byte("Co~kroachDB")},
-			BatchPut{key: key, value: []byte("Coc~roachDB")},
-			BatchPut{key: key, value: []byte("Cock~oachDB")},
-			BatchPut{key: key, value: []byte("Cockr~achDB")},
-			BatchPut{key: key, value: []byte("Cockro~chDB")},
-			BatchPut{key: key, value: []byte("Cockroa~hDB")},
-			BatchPut{key: key, value: []byte("Cockroac~DB")},
-			BatchPut{key: key, value: []byte("Cockroach~B")},
-			BatchPut{key: key, value: []byte("CockroachD~")},
+			BatchPut{Key: key, Value: []byte("~ockroachDB")},
+			BatchPut{Key: key, Value: []byte("C~ckroachDB")},
+			BatchPut{Key: key, Value: []byte("Co~kroachDB")},
+			BatchPut{Key: key, Value: []byte("Coc~roachDB")},
+			BatchPut{Key: key, Value: []byte("Cock~oachDB")},
+			BatchPut{Key: key, Value: []byte("Cockr~achDB")},
+			BatchPut{Key: key, Value: []byte("Cockro~chDB")},
+			BatchPut{Key: key, Value: []byte("Cockroa~hDB")},
+			BatchPut{Key: key, Value: []byte("Cockroac~DB")},
+			BatchPut{Key: key, Value: []byte("Cockroach~B")},
+			BatchPut{Key: key, Value: []byte("CockroachD~")},
 			BatchDelete(key),
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("C"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" o"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  c"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" k"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("r"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" o"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  a"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" c"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("h"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender(" D"))},
-			BatchMerge{key: key, value: encoding.MustGobEncode(Appender("  B"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("C"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" o"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  c"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" k"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("r"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" o"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  a"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" c"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("h"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" D"))},
+			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  B"))},
 		}
 
 		for i := 0; i < numShuffles; i++ {
@@ -159,21 +159,21 @@ func TestEngineBatch(t *testing.T) {
 				currentBatch[k] = batch[shuffledIndices[k]]
 			}
 			// Reset the key
-			engine.clear(key)
+			engine.Clear(key)
 			// Run it once with individual operations and remember the result.
 			for _, op := range currentBatch {
-				if err := engine.writeBatch([]interface{}{op}); err != nil {
+				if err := engine.WriteBatch([]interface{}{op}); err != nil {
 					t.Errorf("batch test: %d: op %v: %v", i, op, err)
 					continue
 				}
 			}
-			correctValue, _ := engine.get(key)
+			correctValue, _ := engine.Get(key)
 			// Run the whole thing as a batch and compare.
-			if err := engine.writeBatch(currentBatch); err != nil {
+			if err := engine.WriteBatch(currentBatch); err != nil {
 				t.Errorf("batch test: %d: %v", i, err)
 				continue
 			}
-			actualValue, _ := engine.get(key)
+			actualValue, _ := engine.Get(key)
 			if !bytes.Equal(actualValue, correctValue) {
 				t.Errorf("batch test: %d: result inconsistent")
 			}
@@ -185,19 +185,19 @@ func TestEnginePutGetDelete(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Test for correct handling of empty keys, which should produce errors.
 		for _, err := range []error{
-			engine.put([]byte(""), []byte("")),
-			engine.put(nil, []byte("")),
+			engine.Put([]byte(""), []byte("")),
+			engine.Put(nil, []byte("")),
 			func() error {
-				_, err := engine.get([]byte(""))
+				_, err := engine.Get([]byte(""))
 				return err
 			}(),
-			engine.clear(nil),
+			engine.Clear(nil),
 			func() error {
-				_, err := engine.get(nil)
+				_, err := engine.Get(nil)
 				return err
 			}(),
-			engine.clear(nil),
-			engine.clear([]byte("")),
+			engine.Clear(nil),
+			engine.Clear([]byte("")),
 		} {
 			if err == nil {
 				t.Fatalf("illegal handling of empty key")
@@ -215,27 +215,27 @@ func TestEnginePutGetDelete(t *testing.T) {
 			{[]byte("server"), []byte("42")},
 		}
 		for _, c := range testCases {
-			val, err := engine.get(c.key)
+			val, err := engine.Get(c.key)
 			if err != nil {
 				t.Errorf("get: expected no error, but got %s", err)
 			}
 			if len(val) != 0 {
 				t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
 			}
-			if err := engine.put(c.key, c.value); err != nil {
+			if err := engine.Put(c.key, c.value); err != nil {
 				t.Errorf("put: expected no error, but got %s", err)
 			}
-			val, err = engine.get(c.key)
+			val, err = engine.Get(c.key)
 			if err != nil {
 				t.Errorf("get: expected no error, but got %s", err)
 			}
 			if !bytes.Equal(val, c.value) {
 				t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 			}
-			if err := engine.clear(c.key); err != nil {
+			if err := engine.Clear(c.key); err != nil {
 				t.Errorf("delete: expected no error, but got %s", err)
 			}
-			val, err = engine.get(c.key)
+			val, err = engine.Get(c.key)
 			if err != nil {
 				t.Errorf("get: expected no error, but got %s", err)
 			}
@@ -258,11 +258,11 @@ func TestEngineMerge(t *testing.T) {
 			[]byte(encoding.MustGobEncode(Appender("z"))),
 		}
 		for i, update := range merges {
-			if err := engine.merge(testKey, update); err != nil {
+			if err := engine.Merge(testKey, update); err != nil {
 				t.Fatalf("%d: %v", i, err)
 			}
 		}
-		result, _ := engine.get(testKey)
+		result, _ := engine.Get(testKey)
 		if !bytes.Equal(encoding.MustGobDecode(result).(Appender), Appender("xyz")) {
 			t.Errorf("unexpected append-merge result")
 		}
@@ -283,7 +283,7 @@ func TestEngineScan1(t *testing.T) {
 		}
 		keyMap := map[string][]byte{}
 		for _, c := range testCases {
-			if err := engine.put(c.key, c.value); err != nil {
+			if err := engine.Put(c.key, c.value); err != nil {
 				t.Errorf("could not put key %q: %v", c.key, err)
 			}
 			keyMap[string(c.key)] = c.value
@@ -294,20 +294,20 @@ func TestEngineScan1(t *testing.T) {
 		}
 		sort.Strings(sortedKeys)
 
-		keyvals, err := engine.scan([]byte("chinese"), []byte("german"), 0)
+		keyvals, err := engine.Scan([]byte("chinese"), []byte("german"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 		// Check an end of range which does not equal an existing key.
-		keyvals, err = engine.scan([]byte("chinese"), []byte("german1"), 0)
+		keyvals, err = engine.Scan([]byte("chinese"), []byte("german1"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
-		keyvals, err = engine.scan([]byte("chinese"), []byte("german"), 2)
+		keyvals, err = engine.Scan([]byte("chinese"), []byte("german"), 2)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
@@ -318,7 +318,7 @@ func TestEngineScan1(t *testing.T) {
 		// a special case in engine.scan, that's why we test it here.
 		startKeys := []Key{Key("cat"), Key("")}
 		for _, startKey := range startKeys {
-			keyvals, err := engine.scan(startKey, KeyMax, 0)
+			keyvals, err := engine.Scan(startKey, KeyMax, 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -330,7 +330,7 @@ func TestEngineScan1(t *testing.T) {
 func TestEngineIncrement(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Start with increment of an empty key.
-		val, err := increment(engine, Key("a"), 1)
+		val, err := Increment(engine, Key("a"), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -338,31 +338,31 @@ func TestEngineIncrement(t *testing.T) {
 			t.Errorf("expected increment to be %d; got %d", 1, val)
 		}
 		// Increment same key by 1.
-		if val, err = increment(engine, Key("a"), 1); err != nil {
+		if val, err = Increment(engine, Key("a"), 1); err != nil {
 			t.Fatal(err)
 		}
 		if val != 2 {
 			t.Errorf("expected increment to be %d; got %d", 2, val)
 		}
 		// Increment same key by 2.
-		if val, err = increment(engine, Key("a"), 2); err != nil {
+		if val, err = Increment(engine, Key("a"), 2); err != nil {
 			t.Fatal(err)
 		}
 		if val != 4 {
 			t.Errorf("expected increment to be %d; got %d", 4, val)
 		}
 		// Decrement same key by -1.
-		if val, err = increment(engine, Key("a"), -1); err != nil {
+		if val, err = Increment(engine, Key("a"), -1); err != nil {
 			t.Fatal(err)
 		}
 		if val != 3 {
 			t.Errorf("expected increment to be %d; got %d", 3, val)
 		}
 		// Increment same key by max int64 value to cause overflow; should return error.
-		if val, err = increment(engine, Key("a"), math.MaxInt64); err == nil {
+		if val, err = Increment(engine, Key("a"), math.MaxInt64); err == nil {
 			t.Error("expected an overflow error")
 		}
-		if val, err = increment(engine, Key("a"), 0); err != nil {
+		if val, err = Increment(engine, Key("a"), 0); err != nil {
 			t.Fatal(err)
 		}
 		if val != 3 {
@@ -372,7 +372,7 @@ func TestEngineIncrement(t *testing.T) {
 }
 
 func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *testing.T) {
-	kvs, err := engine.scan(start, end, max)
+	kvs, err := engine.Scan(start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
 	}
@@ -381,9 +381,9 @@ func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *test
 			start, end, len(kvs), len(expKeys), kvs)
 	}
 	for i, kv := range kvs {
-		if !bytes.Equal(kv.key, expKeys[i]) {
+		if !bytes.Equal(kv.Key, expKeys[i]) {
 			t.Errorf("scan %q-%q: expected keys equal %q != %q", string(start), string(end),
-				string(kv.key), string(expKeys[i]))
+				string(kv.Key), string(expKeys[i]))
 		}
 	}
 }
@@ -437,7 +437,7 @@ func TestEngineDeleteRange(t *testing.T) {
 		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := clearRange(engine, Key("aa"), Key("abc"), 0)
+		numDeleted, err := ClearRange(engine, Key("aa"), Key("abc"), 0)
 		// Verify what was deleted
 		if err != nil {
 			t.Error("Not expecting an error")
@@ -450,7 +450,7 @@ func TestEngineDeleteRange(t *testing.T) {
 
 		// Reinstate removed entries
 		insertKeys(keys, engine, t)
-		numDeleted, err = clearRange(engine, Key("aa"), Key("abc"), 2) // Max of 2 entries only
+		numDeleted, err = ClearRange(engine, Key("aa"), Key("abc"), 2) // Max of 2 entries only
 		if err != nil {
 			t.Error("Not expecting an error")
 		}
@@ -465,7 +465,7 @@ func insertKeys(keys []Key, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))
 	for idx := range order {
-		if err := engine.put(keys[idx], []byte("value")); err != nil {
+		if err := engine.Put(keys[idx], []byte("value")); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
 	}

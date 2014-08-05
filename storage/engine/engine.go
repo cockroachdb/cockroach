@@ -14,8 +14,9 @@
 // for names of contributors.
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package engine
 
 import (
 	"bytes"
@@ -26,9 +27,20 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type rawKeyValue struct {
-	key   Key
-	value []byte
+type RawKeyValue struct {
+	Key   Key
+	Value []byte
+}
+
+// StoreCapacity contains capacity information for a storage device.
+type StoreCapacity struct {
+	Capacity  int64
+	Available int64
+}
+
+// PercentAvail computes the percentage of disk space that is available.
+func (sc StoreCapacity) PercentAvail() float64 {
+	return float64(sc.Available) / float64(sc.Capacity)
 }
 
 // Engine is the interface that wraps the core operations of a
@@ -36,53 +48,53 @@ type rawKeyValue struct {
 type Engine interface {
 	// The engine/store attributes.
 	Attrs() Attributes
-	// put sets the given key to the value provided.
-	put(key Key, value []byte) error
-	// get returns the value for the given key, nil otherwise.
-	get(key Key) ([]byte, error)
-	// scan returns up to max key/value objects starting from
+	// Put sets the given key to the value provided.
+	Put(key Key, value []byte) error
+	// Get returns the value for the given key, nil otherwise.
+	Get(key Key) ([]byte, error)
+	// Scan returns up to max key/value objects starting from
 	// start (inclusive) and ending at end (non-inclusive).
 	// Specify max=0 for unbounded scans.
-	scan(start, end Key, max int64) ([]rawKeyValue, error)
-	// clear removes the item from the db with the given key.
+	Scan(start, end Key, max int64) ([]RawKeyValue, error)
+	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
-	clear(key Key) error
-	// writeBatch atomically applies the specified writes, deletions and
-	// merges. The list passed to writeBatch must only contain elements
+	Clear(key Key) error
+	// WriteBatch atomically applies the specified writes, deletions and
+	// merges. The list passed to WriteBatch must only contain elements
 	// of type Batch{Put,Merge,Delete}.
-	writeBatch([]interface{}) error
-	// merge implements a merge operation with counter semantics.
+	WriteBatch([]interface{}) error
+	// Merge implements a merge operation with counter semantics.
 	// See the docs for goMergeInit and goMerge for details.
-	merge(key Key, value []byte) error
-	// capacity returns capacity details for the engine's available storage.
-	capacity() (StoreCapacity, error)
+	Merge(key Key, value []byte) error
+	// Capacity returns capacity details for the engine's available storage.
+	Capacity() (StoreCapacity, error)
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
 type BatchDelete Key
 
 // A BatchPut is a put operation executed as part of an atomic batch.
-type BatchPut rawKeyValue
+type BatchPut RawKeyValue
 
 // A BatchMerge is a merge operation executed as part of an atomic batch.
-type BatchMerge rawKeyValue
+type BatchMerge RawKeyValue
 
-// putI sets the given key to the gob-serialized byte string of the
+// PutI sets the given key to the gob-serialized byte string of the
 // value provided. Used internally.
-func putI(engine Engine, key Key, value interface{}) error {
+func PutI(engine Engine, key Key, value interface{}) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
 		return err
 	}
-	return engine.put(key, buf.Bytes())
+	return engine.Put(key, buf.Bytes())
 }
 
-// getI fetches the specified key and gob-deserializes it into
+// GetI fetches the specified key and gob-deserializes it into
 // "value". Returns true on success or false if the key was not
 // found.
-func getI(engine Engine, key Key, value interface{}) (bool, error) {
-	val, err := engine.get(key)
+func GetI(engine Engine, key Key, value interface{}) (bool, error) {
+	val, err := engine.Get(key)
 	if err != nil {
 		return false, err
 	}
@@ -97,12 +109,12 @@ func getI(engine Engine, key Key, value interface{}) (bool, error) {
 	return true, nil
 }
 
-// increment fetches the varint encoded int64 value specified by key
+// Increment fetches the varint encoded int64 value specified by key
 // and adds "inc" to it then re-encodes as varint. The newly incremented
 // value is returned.
-func increment(engine Engine, key Key, inc int64) (int64, error) {
+func Increment(engine Engine, key Key, inc int64) (int64, error) {
 	// First retrieve existing value.
-	val, err := engine.get(key)
+	val, err := engine.Get(key)
 	if err != nil {
 		return 0, err
 	}
@@ -133,13 +145,13 @@ func increment(engine Engine, key Key, inc int64) (int64, error) {
 	if err != nil {
 		return 0, util.Errorf("error encoding %d", r)
 	}
-	if err = engine.put(key, encoded); err != nil {
+	if err = engine.Put(key, encoded); err != nil {
 		return 0, err
 	}
 	return r, nil
 }
 
-// clearRange removes a set of entries, from start (inclusive)
+// ClearRange removes a set of entries, from start (inclusive)
 // to end (exclusive), up to max entries.  If max is 0, all
 // entries between start and end are deleted.  This function
 // returns the number of entries removed.  Either all entries
@@ -147,8 +159,8 @@ func increment(engine Engine, key Key, inc int64) (int64, error) {
 // an error will be returned.  Note that this function actually
 // removes entries from the storage engine, rather than inserting
 // tombstones.
-func clearRange(engine Engine, start, end Key, max int64) (int, error) {
-	scanned, err := engine.scan(start, end, max)
+func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
+	scanned, err := engine.Scan(start, end, max)
 
 	if err != nil {
 		return 0, err
@@ -158,10 +170,10 @@ func clearRange(engine Engine, start, end Key, max int64) (int, error) {
 	var deletes = make([]interface{}, numElements, numElements)
 	// Loop over the scanned entries and add to a delete batch
 	for idx, kv := range scanned {
-		deletes[idx] = BatchDelete(kv.key)
+		deletes[idx] = BatchDelete(kv.Key)
 	}
 
-	err = engine.writeBatch(deletes)
+	err = engine.WriteBatch(deletes)
 	if err != nil {
 		return 0, err
 	}

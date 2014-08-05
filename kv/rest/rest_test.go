@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/golang/glog"
 )
 
@@ -335,7 +336,7 @@ func TestNullPrefixedKeys(t *testing.T) {
 	// TODO(zbrock + matthew) fix this once sqlite key encoding is finished so we can namespace user keys
 	t.Skip("Internal Meta1 Keys should not be accessible from the HTTP REST API. But they are right now.")
 
-	metaKey := storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax)
+	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
 	s := startNewServer()
 
 	// Precondition: we want to make sure the meta1 key exists.
@@ -389,7 +390,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	})
 	gr := <-s.db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
-			Key:  storage.Key("\x00some/key that encodes世界"),
+			Key:  engine.Key("\x00some/key that encodes世界"),
 			User: storage.UserRoot,
 		},
 	})
@@ -455,8 +456,8 @@ func startNewServer() *kvTestServer {
 	s := &kvTestServer{}
 
 	// Initialize engine, store, and localDB.
-	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	localDB, err := server.BootstrapCluster("test-cluster", engine)
+	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	localDB, err := server.BootstrapCluster("test-cluster", e)
 	if err != nil {
 		panic(err)
 	}
@@ -485,7 +486,7 @@ func startNewServer() *kvTestServer {
 
 // rawGet goes directly to the Range for the Get. The reason is that we don't want any intermediate user land
 // encoding to get in the way. We want the actual stored byte value without any chance of URL-encoding or SQLite-encoding.
-func (s *kvTestServer) rawGet(key storage.Key) ([]byte, error) {
+func (s *kvTestServer) rawGet(key engine.Key) ([]byte, error) {
 	req := &storage.GetRequest{storage.RequestHeader{Key: key, User: storage.UserRoot}}
 	resp := &storage.GetResponse{}
 	s.firstRange.Get(req, resp)

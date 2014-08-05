@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -56,7 +57,7 @@ type DB interface {
 // value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
-func GetI(db DB, key storage.Key, value interface{}) (bool, hlc.HLTimestamp, error) {
+func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.HLTimestamp, error) {
 	gr := <-db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -77,7 +78,7 @@ func GetI(db DB, key storage.Key, value interface{}) (bool, hlc.HLTimestamp, err
 
 // PutI sets the given key to the serialized byte string of the value
 // and the provided timestamp.
-func PutI(db DB, key storage.Key, value interface{}, timestamp hlc.HLTimestamp) error {
+func PutI(db DB, key engine.Key, value interface{}, timestamp hlc.HLTimestamp) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
 		return err
@@ -88,7 +89,7 @@ func PutI(db DB, key storage.Key, value interface{}, timestamp hlc.HLTimestamp) 
 			User:      storage.UserRoot,
 			Timestamp: timestamp,
 		},
-		Value: storage.Value{Bytes: buf.Bytes()},
+		Value: engine.Value{Bytes: buf.Bytes()},
 	})
 	return pr.Error
 }
@@ -97,11 +98,11 @@ func PutI(db DB, key storage.Key, value interface{}, timestamp hlc.HLTimestamp) 
 // using the provided replica.
 func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc.HLTimestamp) error {
 	// Write meta1.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta1Prefix, storage.KeyMax), desc, timestamp); err != nil {
+	if err := PutI(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := PutI(db, storage.MakeKey(storage.KeyMeta2Prefix, storage.KeyMax), desc, timestamp); err != nil {
+	if err := PutI(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	return nil
@@ -115,7 +116,7 @@ func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc
 func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
 	// Accounting config.
 	acctConfig := &storage.AcctConfig{}
-	key := storage.MakeKey(storage.KeyConfigAccountingPrefix, storage.KeyMin)
+	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
 	if err := PutI(db, key, acctConfig, timestamp); err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
 		Read:  []string{storage.UserRoot}, // root user
 		Write: []string{storage.UserRoot}, // root user
 	}
-	key = storage.MakeKey(storage.KeyConfigPermissionPrefix, storage.KeyMin)
+	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
 	if err := PutI(db, key, permConfig, timestamp); err != nil {
 		return err
 	}
@@ -132,15 +133,15 @@ func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
 	// TODO(spencer): change this when zone specifications change to elect for three
 	// replicas with no specific features set.
 	zoneConfig := &storage.ZoneConfig{
-		Replicas: []storage.Attributes{
-			storage.Attributes{},
-			storage.Attributes{},
-			storage.Attributes{},
+		Replicas: []engine.Attributes{
+			engine.Attributes{},
+			engine.Attributes{},
+			engine.Attributes{},
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
 	}
-	key = storage.MakeKey(storage.KeyConfigZonePrefix, storage.KeyMin)
+	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := PutI(db, key, zoneConfig, timestamp); err != nil {
 		return err
 	}
@@ -156,7 +157,7 @@ func UpdateRangeDescriptor(db DB, meta storage.RangeMetadata,
 	// TODO(spencer): a lot more work here to actually implement this.
 
 	// Write meta2.
-	key := storage.MakeKey(storage.KeyMeta2Prefix, meta.EndKey)
+	key := engine.MakeKey(engine.KeyMeta2Prefix, meta.EndKey)
 	if err := PutI(db, key, desc, timestamp); err != nil {
 		return err
 	}
@@ -237,7 +238,7 @@ func (db *DistDB) verifyPermissions(method string, header *storage.RequestHeader
 		end = header.Key
 	}
 	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
-		header.Key, end, func(start, end storage.Key, config interface{}) error {
+		header.Key, end, func(start, end engine.Key, config interface{}) error {
 			perm := config.(*storage.PermConfig)
 			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
 				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
@@ -264,8 +265,8 @@ func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
-func (db *DistDB) internalRangeLookup(key storage.Key,
-	info *storage.RangeDescriptor) (storage.Key, *storage.RangeDescriptor, error) {
+func (db *DistDB) internalRangeLookup(key engine.Key,
+	info *storage.RangeDescriptor) (engine.Key, *storage.RangeDescriptor, error) {
 	args := &storage.InternalRangeLookupRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -284,8 +285,8 @@ func (db *DistDB) internalRangeLookup(key storage.Key,
 // given key.  Because range metadata in cockroach is stored using a multi-level
 // lookup table, this method may be called recursively to look up higher-level
 // ranges.  Recursive lookups are dispatched through the metadata range cache.
-func (db *DistDB) LookupRangeMetadata(key storage.Key) (storage.Key, *storage.RangeDescriptor, error) {
-	metadataKey := storage.RangeMetaKey(key)
+func (db *DistDB) LookupRangeMetadata(key engine.Key) (engine.Key, *storage.RangeDescriptor, error) {
+	metadataKey := engine.RangeMetaKey(key)
 	if len(metadataKey) == 0 {
 		// Metadata range is the first range, the description of which is always
 		// gossiped.
@@ -294,7 +295,7 @@ func (db *DistDB) LookupRangeMetadata(key storage.Key) (storage.Key, *storage.Ra
 			return nil, nil, firstRangeMissingError{err}
 		}
 		info := infoI.(storage.RangeDescriptor)
-		return storage.KeyMin, &info, nil
+		return engine.KeyMin, &info, nil
 	}
 
 	// Look up the range containing metadataKey in the cache, which will

@@ -20,46 +20,14 @@ package storage
 import (
 	"fmt"
 	"net"
-	"sort"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
 
-// Attributes specifies a list of arbitrary strings describing
-// node topology, store type, and machine capabilities.
-type Attributes []string
-
-// IsSubset returns whether attributes list b is a subset of
-// attributes list a.
-func (a Attributes) IsSubset(b Attributes) bool {
-	m := map[string]struct{}{}
-	for _, s := range []string(b) {
-		m[s] = struct{}{}
-	}
-	for _, s := range []string(a) {
-		if _, ok := m[s]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-// SortedString returns a sorted, de-duplicated, comma-separated list
-// of the attributes.
-func (a Attributes) SortedString() string {
-	m := map[string]struct{}{}
-	for _, s := range []string(a) {
-		m[s] = struct{}{}
-	}
-	var attrs []string
-	for a := range m {
-		attrs = append(attrs, a)
-	}
-	sort.Strings(attrs)
-	return strings.Join(attrs, ",")
-}
+// UserRoot is the username for the root user.
+const UserRoot = "root"
 
 // Replica describes a replica location by node ID (corresponds to a
 // host:port via lookup on gossip network), store ID (corresponds to
@@ -70,7 +38,7 @@ type Replica struct {
 	NodeID  int32
 	StoreID int32
 	RangeID int64
-	Attrs   Attributes // combination of node & store attributes
+	Attrs   engine.Attributes // combination of node & store attributes
 }
 
 // RangeDescriptor is the value stored in a range metadata key.
@@ -78,23 +46,23 @@ type Replica struct {
 // and a list of replicas where the range is stored.
 type RangeDescriptor struct {
 	// StartKey is the first key which may be contained by this range.
-	StartKey Key
+	StartKey engine.Key
 	// EndKey marks the end of the range's possible keys.  EndKey itself is not
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
-	EndKey Key
+	EndKey engine.Key
 	// List of replicas where this range is stored
 	Replicas []Replica
 }
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r *RangeDescriptor) ContainsKey(key Key) bool {
+func (r *RangeDescriptor) ContainsKey(key engine.Key) bool {
 	return !key.Less(r.StartKey) && key.Less(r.EndKey)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified
 // key range from start to end.
-func (r *RangeDescriptor) ContainsKeyRange(start, end Key) bool {
+func (r *RangeDescriptor) ContainsKeyRange(start, end engine.Key) bool {
 	if len(end) == 0 {
 		end = start
 	}
@@ -106,44 +74,33 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end Key) bool {
 
 // LookupKey returns the metadata key at which this range descriptor should be
 // stored as a value.
-func (r *RangeDescriptor) LookupKey() Key {
-	return RangeMetaKey(r.EndKey)
-}
-
-// StoreCapacity contains capacity information for a storage device.
-type StoreCapacity struct {
-	Capacity  int64
-	Available int64
-}
-
-// PercentAvail computes the percentage of disk space that is available.
-func (sc StoreCapacity) PercentAvail() float64 {
-	return float64(sc.Available) / float64(sc.Capacity)
+func (r *RangeDescriptor) LookupKey() engine.Key {
+	return engine.RangeMetaKey(r.EndKey)
 }
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
 	NodeID  int32
 	Address net.Addr
-	Attrs   Attributes // node specific attributes (e.g. datacenter, machine info)
+	Attrs   engine.Attributes // node specific attributes (e.g. datacenter, machine info)
 }
 
 // StoreDescriptor holds store information including store attributes,
 // node descriptor and store capacity.
 type StoreDescriptor struct {
 	StoreID  int32
-	Attrs    Attributes // store specific attributes (e.g. ssd, hdd, mem)
+	Attrs    engine.Attributes // store specific attributes (e.g. ssd, hdd, mem)
 	Node     NodeDescriptor
-	Capacity StoreCapacity
+	Capacity engine.StoreCapacity
 }
 
 // CombinedAttrs returns the full list of attributes for the store,
 // including both the node and store attributes.
-func (s *StoreDescriptor) CombinedAttrs() Attributes {
+func (s *StoreDescriptor) CombinedAttrs() engine.Attributes {
 	var a []string
 	a = append(a, []string(s.Node.Attrs)...)
 	a = append(a, []string(s.Attrs)...)
-	return Attributes(a)
+	return engine.Attributes(a)
 }
 
 // Less compares two StoreDescriptors based on percentage of disk available.
@@ -186,9 +143,9 @@ func (p *PermConfig) CanWrite(user string) bool {
 type ZoneConfig struct {
 	// Replicas is a slice of Attributes, each describing required
 	// capabilities of each replica in the zone.
-	Replicas      []Attributes `yaml:"replicas,omitempty,flow"`
-	RangeMinBytes int64        `yaml:"range_min_bytes,omitempty"`
-	RangeMaxBytes int64        `yaml:"range_max_bytes,omitempty"`
+	Replicas      []engine.Attributes `yaml:"replicas,omitempty,flow"`
+	RangeMinBytes int64               `yaml:"range_min_bytes,omitempty"`
+	RangeMaxBytes int64               `yaml:"range_max_bytes,omitempty"`
 }
 
 // ParseZoneConfig parses a YAML serialized ZoneConfig.

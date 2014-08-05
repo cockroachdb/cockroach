@@ -19,32 +19,8 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
-
-// UserRoot is the username for the root user.
-const UserRoot = "root"
-
-// Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp.
-type Value struct {
-	// Bytes is the byte string value.
-	Bytes []byte
-	// Checksum is a CRC-32-IEEE checksum. A Value will only be used in
-	// a write operation by the database if either its checksum is zero
-	// or the CRC checksum of Bytes matches it.
-	// Values returned by the database will contain a checksum of the
-	// contained value.
-	Checksum uint32
-	// Timestamp of value.
-	Timestamp hlc.HLTimestamp
-}
-
-// KeyValue is a pair of Key and Value for returned Key/Value pairs
-// from ScanRequest/ScanResponse. It embeds a Key and a Value.
-type KeyValue struct {
-	Key
-	Value
-}
 
 // ClientCmdID provides a unique ID for client commands. Clients which
 // provide ClientCmdID gain operation idempotence. In other words,
@@ -98,9 +74,9 @@ type RequestHeader struct {
 
 	// The key for request. If the request operates on a range, this
 	// represents the starting key for the range.
-	Key Key
+	Key engine.Key
 	// End key is empty if request spans only a single key.
-	EndKey Key
+	EndKey engine.Key
 	// User is the originating user. Used to lookup priority when
 	// scheduling queued operations at target node.
 	User string
@@ -157,13 +133,13 @@ type GetRequest struct {
 // If the key doesn't exist, returns nil for Value.Bytes.
 type GetResponse struct {
 	ResponseHeader
-	Value Value
+	Value engine.Value
 }
 
 // A PutRequest is arguments to the Put() method.
 type PutRequest struct {
 	RequestHeader
-	Value Value // The value to put
+	Value engine.Value // The value to put
 }
 
 // A PutResponse is the return value from the Put() method.
@@ -178,15 +154,15 @@ type PutResponse struct {
 // - Otherwise, returns error.
 type ConditionalPutRequest struct {
 	RequestHeader
-	Value    Value // The value to put
-	ExpValue Value // ExpValue.Bytes empty to test for non-existence
+	Value    engine.Value // The value to put
+	ExpValue engine.Value // ExpValue.Bytes empty to test for non-existence
 }
 
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 type ConditionalPutResponse struct {
 	ResponseHeader
-	ActualValue *Value // ActualValue.Bytes set if conditional put failed
+	ActualValue *engine.Value // ActualValue.Bytes set if conditional put failed
 }
 
 // An IncrementRequest is arguments to the Increment() method.
@@ -240,7 +216,7 @@ type ScanRequest struct {
 // A ScanResponse is the return value from the Scan() method.
 type ScanResponse struct {
 	ResponseHeader
-	Rows []KeyValue // Empty if no rows were scanned
+	Rows []engine.KeyValue // Empty if no rows were scanned
 }
 
 // An EndTransactionRequest is arguments to the EndTransaction() method.
@@ -287,7 +263,7 @@ type ReapQueueRequest struct {
 // A ReapQueueResponse is the return value from the ReapQueue() method.
 type ReapQueueResponse struct {
 	ResponseHeader
-	Messages []Value
+	Messages []engine.Value
 }
 
 // An EnqueueUpdateRequest is arguments to the EnqueueUpdate() method.
@@ -311,7 +287,7 @@ type EnqueueUpdateResponse struct {
 // byte slice value).
 type EnqueueMessageRequest struct {
 	RequestHeader
-	Message Value // Message value to delivery to inbox
+	Message engine.Value // Message value to delivery to inbox
 }
 
 // An EnqueueMessageResponse is the return value from the
@@ -335,6 +311,6 @@ type InternalRangeLookupRequest struct {
 // info for the range possibly containing the actual key and its value.
 type InternalRangeLookupResponse struct {
 	ResponseHeader
-	EndKey Key // The key in datastore whose value is the Range object.
+	EndKey engine.Key // The key in datastore whose value is the Range object.
 	Range  RangeDescriptor
 }

@@ -17,7 +17,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
 import (
 	"bytes"
@@ -32,18 +32,18 @@ import (
 
 var (
 	llrbNodeSize = int64(unsafe.Sizeof(llrb.Node{}))
-	keyValueSize = int64(unsafe.Sizeof(rawKeyValue{}))
+	keyValueSize = int64(unsafe.Sizeof(RawKeyValue{}))
 )
 
 // computeSize returns the approximate size in bytes that the keyVal
 // object took while stored in the underlying LLRB.
-func computeSize(kv rawKeyValue) int64 {
-	return int64(len(kv.key)) + int64(len(kv.value)) + llrbNodeSize + keyValueSize
+func computeSize(kv RawKeyValue) int64 {
+	return int64(len(kv.Key)) + int64(len(kv.Value)) + llrbNodeSize + keyValueSize
 }
 
 // Compare implements the llrb.Comparable interface for tree nodes.
-func (kv rawKeyValue) Compare(b llrb.Comparable) int {
-	return bytes.Compare(kv.key, b.(rawKeyValue).key)
+func (kv RawKeyValue) Compare(b llrb.Comparable) int {
+	return bytes.Compare(kv.Key, b.(RawKeyValue).Key)
 }
 
 // InMem a simple, in-memory key-value store.
@@ -75,8 +75,8 @@ func (in *InMem) Attrs() Attributes {
 	return in.attrs
 }
 
-// put sets the given key to the value provided.
-func (in *InMem) put(key Key, value []byte) error {
+// Put sets the given key to the value provided.
+func (in *InMem) Put(key Key, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.putLocked(key, value)
@@ -87,12 +87,12 @@ func (in *InMem) putLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	kv := rawKeyValue{key: key, value: value}
+	kv := RawKeyValue{Key: key, Value: value}
 	size := computeSize(kv)
 	// If the key already exists, compute the size change of the
 	// replacement with the new value.
-	if val := in.data.Get(rawKeyValue{key: key}); val != nil {
-		size -= computeSize(val.(rawKeyValue))
+	if val := in.data.Get(RawKeyValue{Key: key}); val != nil {
+		size -= computeSize(val.(RawKeyValue))
 	}
 
 	if size > in.maxBytes-in.usedBytes {
@@ -103,10 +103,10 @@ func (in *InMem) putLocked(key Key, value []byte) error {
 	return nil
 }
 
-// merge implements a merge operation which updates the existing value stored
+// Merge implements a merge operation which updates the existing value stored
 // under key based on the value passed.
 // See the documentation of goMerge and goMergeInit for details.
-func (in *InMem) merge(key Key, value []byte) error {
+func (in *InMem) Merge(key Key, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.mergeLocked(key, value)
@@ -126,8 +126,8 @@ func (in *InMem) mergeLocked(key Key, value []byte) error {
 	return in.putLocked(key, newValue)
 }
 
-// get returns the value for the given key, nil otherwise.
-func (in *InMem) get(key Key) ([]byte, error) {
+// Get returns the value for the given key, nil otherwise.
+func (in *InMem) Get(key Key) ([]byte, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.getLocked(key)
@@ -139,38 +139,38 @@ func (in *InMem) getLocked(key Key) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
-	val := in.data.Get(rawKeyValue{key: key})
+	val := in.data.Get(RawKeyValue{Key: key})
 	if val == nil {
 		return nil, nil
 	}
-	return val.(rawKeyValue).value, nil
+	return val.(RawKeyValue).Value, nil
 }
 
-// scan returns up to max key/value objects starting from
+// Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
-func (in *InMem) scan(start, end Key, max int64) ([]rawKeyValue, error) {
+func (in *InMem) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.scanLocked(start, end, max)
 }
 
 // scanLocked is intended to be called within at least a read lock.
-func (in *InMem) scanLocked(start, end Key, max int64) ([]rawKeyValue, error) {
-	var scanned []rawKeyValue
+func (in *InMem) scanLocked(start, end Key, max int64) ([]RawKeyValue, error) {
+	var scanned []RawKeyValue
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if max != 0 && int64(len(scanned)) >= max {
 			done = true
 			return
 		}
-		scanned = append(scanned, kv.(rawKeyValue))
+		scanned = append(scanned, kv.(RawKeyValue))
 		return
-	}, rawKeyValue{key: start}, rawKeyValue{key: end})
+	}, RawKeyValue{Key: start}, RawKeyValue{Key: end})
 
 	return scanned, nil
 }
 
-// clear removes the item from the db with the given key.
-func (in *InMem) clear(key Key) error {
+// Clear removes the item from the db with the given key.
+func (in *InMem) Clear(key Key) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.clearLocked(key)
@@ -184,17 +184,17 @@ func (in *InMem) clearLocked(key Key) error {
 	// Note: this is approximate. There is likely something missing.
 	// The storage/in_mem_test.go benchmarks this and the measurement
 	// being made seems close enough for government work (tm).
-	if val := in.data.Get(rawKeyValue{key: key}); val != nil {
-		in.usedBytes -= computeSize(val.(rawKeyValue))
+	if val := in.data.Get(RawKeyValue{Key: key}); val != nil {
+		in.usedBytes -= computeSize(val.(RawKeyValue))
 	}
-	in.data.Delete(rawKeyValue{key: key})
+	in.data.Delete(RawKeyValue{Key: key})
 	return nil
 }
 
-// writeBatch atomically applies the specified writes, merges and
+// WriteBatch atomically applies the specified writes, merges and
 // deletions by holding the mutex. The list must only contain
 // elements of type Batch{Put,Merge,Delete}.
-func (in *InMem) writeBatch(cmds []interface{}) error {
+func (in *InMem) WriteBatch(cmds []interface{}) error {
 	if len(cmds) == 0 {
 		return nil
 	}
@@ -209,11 +209,11 @@ func (in *InMem) writeBatch(cmds []interface{}) error {
 				return err
 			}
 		case BatchPut:
-			if err := in.putLocked(v.key, v.value); err != nil {
+			if err := in.putLocked(v.Key, v.Value); err != nil {
 				return err
 			}
 		case BatchMerge:
-			if err := in.mergeLocked(v.key, v.value); err != nil {
+			if err := in.mergeLocked(v.Key, v.Value); err != nil {
 				return err
 			}
 		default:
@@ -223,11 +223,11 @@ func (in *InMem) writeBatch(cmds []interface{}) error {
 	return nil
 }
 
-// capacity formulates available space based on cache size and
+// Capacity formulates available space based on cache size and
 // computed size of cached keys and values. The actual free space may
 // not be entirely accurate due to object storage costs and other
 // internal glue.
-func (in *InMem) capacity() (StoreCapacity, error) {
+func (in *InMem) Capacity() (StoreCapacity, error) {
 	return StoreCapacity{
 		Capacity:  in.maxBytes,
 		Available: in.maxBytes - in.usedBytes,

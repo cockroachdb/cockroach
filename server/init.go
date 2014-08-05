@@ -24,7 +24,7 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/golang/glog"
 )
 
@@ -64,14 +64,14 @@ func runInit(cmd *commander.Command, args []string) {
 		glog.Errorf("Failed to initialize engine %q: %v", args[0], err)
 		return
 	}
-	engine := engines[0]
-	if _, ok := engine.(*storage.InMem); ok {
+	e := engines[0]
+	if _, ok := e.(*engine.InMem); ok {
 		glog.Errorf("Cannot initialize a cluster using an in-memory store")
 		return
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	localDB, err := BootstrapCluster(clusterID, engine)
+	localDB, err := BootstrapCluster(clusterID, e)
 	if err != nil {
 		glog.Errorf("Failed to bootstrap cluster: %v", err)
 		return

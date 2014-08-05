@@ -21,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // waitForReader launches a goroutine to wait on the supplied
@@ -52,14 +54,14 @@ func TestReadQueue(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Try a reader with no writes.
-	rq.AddRead(Key("a"), nil, &wg)
+	rq.AddRead(engine.Key("a"), nil, &wg)
 	wg.Wait()
-	rq.AddRead(Key("a"), Key("b"), &wg)
+	rq.AddRead(engine.Key("a"), engine.Key("b"), &wg)
 	wg.Wait()
 
 	// Add a writer and verify wait group is returned for reader.
-	wk := rq.AddWrite(Key("a"), nil)
-	rq.AddRead(Key("a"), nil, &wg)
+	wk := rq.AddWrite(engine.Key("a"), nil)
+	rq.AddRead(engine.Key("a"), nil, &wg)
 	readDone := waitForReader(&wg)
 	if testReadDone(readDone, 1*time.Millisecond) {
 		t.Fatal("read should not finish with write outstanding")
@@ -75,10 +77,10 @@ func TestReadQueueMultipleWrites(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Add multiple writes and add a read which overlaps them all.
-	wk1 := rq.AddWrite(Key("a"), nil)
-	wk2 := rq.AddWrite(Key("b"), Key("c"))
-	wk3 := rq.AddWrite(Key("0"), Key("d"))
-	rq.AddRead(Key("a"), Key("cc"), &wg)
+	wk1 := rq.AddWrite(engine.Key("a"), nil)
+	wk2 := rq.AddWrite(engine.Key("b"), engine.Key("c"))
+	wk3 := rq.AddWrite(engine.Key("0"), engine.Key("d"))
+	rq.AddRead(engine.Key("a"), engine.Key("cc"), &wg)
 	readDone := waitForReader(&wg)
 	rq.RemoveWrite(wk1)
 	if testReadDone(readDone, 1*time.Millisecond) {
@@ -101,10 +103,10 @@ func TestReadQueueMultipleReads(t *testing.T) {
 	wg3 := sync.WaitGroup{}
 
 	// Add a write which will overlap all reads.
-	wk := rq.AddWrite(Key("a"), Key("d"))
-	rq.AddRead(Key("a"), nil, &wg1)
-	rq.AddRead(Key("b"), nil, &wg2)
-	rq.AddRead(Key("c"), nil, &wg3)
+	wk := rq.AddWrite(engine.Key("a"), engine.Key("d"))
+	rq.AddRead(engine.Key("a"), nil, &wg1)
+	rq.AddRead(engine.Key("b"), nil, &wg2)
+	rq.AddRead(engine.Key("c"), nil, &wg3)
 	rd1 := waitForReader(&wg1)
 	rd2 := waitForReader(&wg2)
 	rd3 := waitForReader(&wg3)
@@ -128,10 +130,10 @@ func TestReadQueueClear(t *testing.T) {
 	wg2 := sync.WaitGroup{}
 
 	// Add multiple writes and reads which access each.
-	rq.AddWrite(Key("a"), nil)
-	rq.AddWrite(Key("b"), nil)
-	rq.AddRead(Key("a"), nil, &wg1)
-	rq.AddRead(Key("b"), nil, &wg2)
+	rq.AddWrite(engine.Key("a"), nil)
+	rq.AddWrite(engine.Key("b"), nil)
+	rq.AddRead(engine.Key("a"), nil, &wg1)
+	rq.AddRead(engine.Key("b"), nil, &wg2)
 	rd1 := waitForReader(&wg1)
 	rd2 := waitForReader(&wg2)
 

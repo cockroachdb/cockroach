@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -51,14 +52,14 @@ const ttlClusterIDGossip = 30 * time.Second
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 var configPrefixes = []struct {
-	keyPrefix Key         // Range key prefix
+	keyPrefix engine.Key  // Range key prefix
 	gossipKey string      // Gossip key
 	configI   interface{} // Config struct interface
 	dirty     bool        // Info in this config has changed; need to re-init and gossip
 }{
-	{KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, AcctConfig{}, true},
-	{KeyConfigPermissionPrefix, gossip.KeyConfigPermission, PermConfig{}, true},
-	{KeyConfigZonePrefix, gossip.KeyConfigZone, ZoneConfig{}, true},
+	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, AcctConfig{}, true},
+	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, PermConfig{}, true},
+	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, ZoneConfig{}, true},
 }
 
 // The following are the method names supported by the KV API.
@@ -137,7 +138,7 @@ type RangeMetadata struct {
 // as appropriate.
 type Range struct {
 	Meta      RangeMetadata
-	engine    Engine         // The underlying key-value store
+	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
 	raft      chan *Cmd      // Raft commands
@@ -150,7 +151,7 @@ type Range struct {
 }
 
 // NewRange initializes the range starting at key.
-func NewRange(meta RangeMetadata, clock *hlc.HLClock, engine Engine,
+func NewRange(meta RangeMetadata, clock *hlc.HLClock, engine engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,
@@ -186,7 +187,7 @@ func (r *Range) Stop() {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Range) IsFirstRange() bool {
-	return bytes.Equal(r.Meta.StartKey, KeyMin)
+	return bytes.Equal(r.Meta.StartKey, engine.KeyMin)
 }
 
 // IsLeader returns true if this range replica is the raft leader.
@@ -196,13 +197,13 @@ func (r *Range) IsLeader() bool {
 }
 
 // ContainsKey returns whether this range contains the specified key.
-func (r *Range) ContainsKey(key Key) bool {
+func (r *Range) ContainsKey(key engine.Key) bool {
 	return r.Meta.ContainsKey(key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
-func (r *Range) ContainsKeyRange(start, end Key) bool {
+func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
 	return r.Meta.ContainsKeyRange(start, end)
 }
 
@@ -407,10 +408,10 @@ func (r *Range) maybeGossipConfigs() {
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map. Prefix configuration maps
 // include accounting, permissions, and zones.
-func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigMap, error) {
+func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	kvs, err := r.engine.scan(keyPrefix, PrefixEndKey(keyPrefix), 0)
+	kvs, err := r.engine.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -419,10 +420,10 @@ func (r *Range) loadConfigMap(keyPrefix Key, configI interface{}) (PrefixConfigM
 		// Instantiate an instance of the config type by unmarshalling
 		// gob encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface()
-		if err := gob.NewDecoder(bytes.NewBuffer(kv.value)).Decode(config); err != nil {
-			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.key), err)
+		if err := gob.NewDecoder(bytes.NewBuffer(kv.Value)).Decode(config); err != nil {
+			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
 		}
-		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.key, keyPrefix), Config: config})
+		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
 	}
 	return NewPrefixConfigMap(configs)
 }
@@ -480,7 +481,7 @@ func (r *Range) executeCmd(method string, args Request, reply Response) error {
 
 // Contains verifies the existence of a key in the key value store.
 func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
-	val, err := r.engine.get(args.Key)
+	val, err := r.engine.Get(args.Key)
 	if err != nil {
 		reply.Error = err
 		return
@@ -492,8 +493,8 @@ func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *GetRequest, reply *GetResponse) {
-	val, err := r.engine.get(args.Key)
-	reply.Value = Value{Bytes: val}
+	val, err := r.engine.Get(args.Key)
+	reply.Value = engine.Value{Bytes: val}
 	reply.Error = err
 }
 
@@ -507,7 +508,7 @@ func (r *Range) Put(args *PutRequest, reply *PutResponse) {
 // the actual value.
 func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPutResponse) {
 	// Handle check for non-existence of key.
-	val, err := r.engine.get(args.Key)
+	val, err := r.engine.Get(args.Key)
 	if err != nil {
 		reply.Error = err
 		return
@@ -522,7 +523,7 @@ func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPu
 			return
 		} else if !bytes.Equal(args.ExpValue.Bytes, val) {
 			// TODO(Jiang-Ming): provide the correct timestamp once switch to use MVCC
-			reply.ActualValue = &Value{Bytes: val}
+			reply.ActualValue = &engine.Value{Bytes: val}
 			reply.Error = util.Errorf("key %q does not match existing", args.Key)
 			return
 		}
@@ -533,11 +534,11 @@ func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPu
 
 // internalPut is the guts of the put method, called from both Put()
 // and ConditionalPut().
-func (r *Range) internalPut(key Key, value Value) error {
+func (r *Range) internalPut(key engine.Key, value engine.Value) error {
 	// Put the value.
 	// TODO(Tobias): Turn this into a writebatch with account stats in a reusable way.
 	// This requires use of RocksDB's merge operator to implement increasable counters
-	if err := r.engine.put(key, value.Bytes); err != nil {
+	if err := r.engine.Put(key, value.Bytes); err != nil {
 		return err
 	}
 	// Check whether this put has modified a configuration map.
@@ -555,12 +556,12 @@ func (r *Range) internalPut(key Key, value Value) error {
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
-	reply.NewValue, reply.Error = increment(r.engine, args.Key, args.Increment)
+	reply.NewValue, reply.Error = engine.Increment(r.engine, args.Key, args.Increment)
 }
 
 // Delete deletes the key and value specified by key.
 func (r *Range) Delete(args *DeleteRequest, reply *DeleteResponse) {
-	if err := r.engine.clear(args.Key); err != nil {
+	if err := r.engine.Clear(args.Key); err != nil {
 		reply.Error = err
 	}
 }
@@ -575,15 +576,15 @@ func (r *Range) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *ScanRequest, reply *ScanResponse) {
-	kvs, err := r.engine.scan(args.Key, args.EndKey, args.MaxResults)
+	kvs, err := r.engine.Scan(args.Key, args.EndKey, args.MaxResults)
 	if err != nil {
 		reply.Error = err
 		return
 	}
-	reply.Rows = make([]KeyValue, len(kvs))
+	reply.Rows = make([]engine.KeyValue, len(kvs))
 	for idx, kv := range kvs {
 		// TODO(Jiang-Ming): provide the correct timestamp and checksum once switch to mvcc
-		reply.Rows[idx] = KeyValue{Key: kv.key, Value: Value{Bytes: kv.value}}
+		reply.Rows[idx] = engine.KeyValue{Key: kv.Key, Value: engine.Value{Bytes: kv.Value}}
 	}
 }
 
@@ -623,7 +624,7 @@ func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessag
 // InternalRangeLookup looks up the metadata info for the given args.Key.
 // args.Key should be a metadata key, which are of the form "\0\0meta[12]<encoded_key>".
 func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
-	if !bytes.HasPrefix(args.Key, KeyMetaPrefix) {
+	if !bytes.HasPrefix(args.Key, engine.KeyMetaPrefix) {
 		reply.Error = util.Errorf("invalid metadata key: %q", args.Key)
 		return
 	}
@@ -636,20 +637,20 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	}
 
 	// We want to search for the metadata key just greater than args.Key.
-	nextKey := NextKey(args.Key)
-	kvs, err := r.engine.scan(nextKey, KeyMax, 1)
+	nextKey := engine.NextKey(args.Key)
+	kvs, err := r.engine.Scan(nextKey, engine.KeyMax, 1)
 	if err != nil {
 		reply.Error = err
 		return
 	}
 	// We should have gotten the key with the same metadata level prefix as we queried.
-	metaPrefix := args.Key[0:len(KeyMeta1Prefix)]
-	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].key, metaPrefix) {
+	metaPrefix := args.Key[0:len(engine.KeyMeta1Prefix)]
+	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].Key, metaPrefix) {
 		reply.Error = util.Errorf("key not found in range %v", r.Meta.RangeID)
 		return
 	}
 
-	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].value)).Decode(&reply.Range); err != nil {
+	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value)).Decode(&reply.Range); err != nil {
 		reply.Error = err
 		return
 	}
@@ -658,5 +659,5 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
 		return
 	}
-	reply.EndKey = kvs[0].key
+	reply.EndKey = kvs[0].Key
 }

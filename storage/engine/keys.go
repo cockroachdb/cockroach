@@ -16,9 +16,13 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/hlc"
+)
 
 // Key defines the key in the key-value datastore.
 type Key []byte
@@ -26,6 +30,28 @@ type Key []byte
 // Less implements the util.Ordered interface.
 func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) == -1
+}
+
+// Value specifies the value at a key. Multiple values at the same key
+// are supported based on timestamp.
+type Value struct {
+	// Bytes is the byte string value.
+	Bytes []byte
+	// Checksum is a CRC-32-IEEE checksum. A Value will only be used in
+	// a write operation by the database if either its checksum is zero
+	// or the CRC checksum of Bytes matches it.
+	// Values returned by the database will contain a checksum of the
+	// contained value.
+	Checksum uint32
+	// Timestamp of value.
+	Timestamp hlc.HLTimestamp
+}
+
+// KeyValue is a pair of Key and Value for returned Key/Value pairs
+// from ScanRequest/ScanResponse. It embeds a Key and a Value.
+type KeyValue struct {
+	Key
+	Value
 }
 
 // MakeKey makes a new key which is the concatenation of the

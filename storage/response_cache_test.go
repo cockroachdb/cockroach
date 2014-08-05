@@ -20,12 +20,14 @@ package storage
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the engine for range ID 1.
 func createTestResponseCache(t *testing.T) *ResponseCache {
-	return NewResponseCache(1, NewInMem(Attributes{}, 1<<20))
+	return NewResponseCache(1, engine.NewInMem(engine.Attributes{}, 1<<20))
 }
 
 func makeCmdID(wallTime, random int64) ClientCmdID {

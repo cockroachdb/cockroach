@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -38,7 +39,7 @@ import (
 // gossip instance, KV database and a node using the specified slice
 // of engines. The server and node are returned. If gossipBS is not
 // nil, the gossip bootstrap address is set to gossipBS.
-func createTestNode(addr net.Addr, engines []storage.Engine, gossipBS net.Addr, t *testing.T) (
+func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node) {
 	rpcServer := rpc.NewServer(addr)
 	if err := rpcServer.Start(); err != nil {
@@ -62,7 +63,7 @@ func createTestNode(addr net.Addr, engines []storage.Engine, gossipBS net.Addr, 
 	return rpcServer, node
 }
 
-func formatKeys(keys []storage.Key) string {
+func formatKeys(keys []engine.Key) string {
 	var buf bytes.Buffer
 	for i, key := range keys {
 		buf.WriteString(fmt.Sprintf("%d: %s\n", i, key))
@@ -73,8 +74,8 @@ func formatKeys(keys []storage.Key) string {
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
-	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", engine)
+	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	localDB, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +84,8 @@ func TestBootstrapCluster(t *testing.T) {
 	// Scan the complete contents of the local database.
 	sr := <-localDB.Scan(&storage.ScanRequest{
 		RequestHeader: storage.RequestHeader{
-			Key:    storage.KeyMin,
-			EndKey: storage.KeyMax,
+			Key:    engine.KeyMin,
+			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,
 		},
 		MaxResults: math.MaxInt64,
@@ -92,21 +93,21 @@ func TestBootstrapCluster(t *testing.T) {
 	if sr.Error != nil {
 		t.Fatal(sr.Error)
 	}
-	var keys []storage.Key
+	var keys []engine.Key
 	for _, kv := range sr.Rows {
 		keys = append(keys, kv.Key)
 	}
-	var expectedKeys = []storage.Key{
-		storage.Key("\x00\x00\x00range-1"),
-		storage.Key("\x00\x00\x00range-id-generator"),
-		storage.Key("\x00\x00\x00store-ident"),
-		storage.Key("\x00\x00meta1\xff"),
-		storage.Key("\x00\x00meta2\xff"),
-		storage.Key("\x00acct"),
-		storage.Key("\x00node-id-generator"),
-		storage.Key("\x00perm"),
-		storage.Key("\x00store-id-generator-1"),
-		storage.Key("\x00zone"),
+	var expectedKeys = []engine.Key{
+		engine.Key("\x00\x00\x00range-1"),
+		engine.Key("\x00\x00\x00range-id-generator"),
+		engine.Key("\x00\x00\x00store-ident"),
+		engine.Key("\x00\x00meta1\xff"),
+		engine.Key("\x00\x00meta2\xff"),
+		engine.Key("\x00acct"),
+		engine.Key("\x00node-id-generator"),
+		engine.Key("\x00perm"),
+		engine.Key("\x00store-id-generator-1"),
+		engine.Key("\x00zone"),
 	}
 	if !reflect.DeepEqual(keys, expectedKeys) {
 		t.Errorf("expected keys mismatch:\n%s\n  -- vs. -- \n\n%s",
@@ -119,18 +120,18 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added.
 func TestBootstrapNewStore(t *testing.T) {
-	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", engine)
+	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	localDB, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
 	}
 	localDB.Close()
 
 	// Start a new node with two new stores which will require bootstrapping.
-	engines := []storage.Engine{
-		engine,
-		storage.NewInMem(storage.Attributes{}, 1<<20),
-		storage.NewInMem(storage.Attributes{}, 1<<20),
+	engines := []engine.Engine{
+		e,
+		engine.NewInMem(engine.Attributes{}, 1<<20),
+		engine.NewInMem(engine.Attributes{}, 1<<20),
 	}
 	server, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer server.Close()
@@ -147,8 +148,8 @@ func TestBootstrapNewStore(t *testing.T) {
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
-	engine := storage.NewInMem(storage.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", engine)
+	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	localDB, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,13 +158,13 @@ func TestNodeJoin(t *testing.T) {
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
 	*gossip.GossipInterval = 10 * time.Millisecond
 	// Start the bootstrap node.
-	engines1 := []storage.Engine{engine}
+	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")
 	server1, node1 := createTestNode(addr1, engines1, addr1, t)
 	defer server1.Close()
 
 	// Create a new node.
-	engines2 := []storage.Engine{storage.NewInMem(storage.Attributes{}, 1<<20)}
+	engines2 := []engine.Engine{engine.NewInMem(engine.Attributes{}, 1<<20)}
 	server2, node2 := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer server2.Close()
 

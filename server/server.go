@@ -16,7 +16,6 @@
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-// Package server implements a basic HTTP server for interacting with a node.
 package server
 
 import (
@@ -40,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
@@ -169,7 +168,7 @@ func runStart(cmd *commander.Command, args []string) {
 // parseAttributes parses a colon-separated list of strings,
 // filtering empty strings (i.e. ",," will yield no attributes.
 // Returns the list of strings as Attributes.
-func parseAttributes(attrsStr string) storage.Attributes {
+func parseAttributes(attrsStr string) engine.Attributes {
 	var filtered []string
 	for _, attr := range strings.Split(attrsStr, ":") {
 		if len(attr) != 0 {
@@ -177,19 +176,19 @@ func parseAttributes(attrsStr string) storage.Attributes {
 		}
 	}
 	sort.Strings(filtered)
-	return storage.Attributes(filtered)
+	return engine.Attributes(filtered)
 }
 
 // initEngines interprets the stores parameter to initialize a slice of
-// storage.Engine objects.
-func initEngines(stores string) ([]storage.Engine, error) {
+// engine.Engine objects.
+func initEngines(stores string) ([]engine.Engine, error) {
 	// Error if regexp doesn't match.
 	storeSpecs := storesRE.FindAllStringSubmatch(stores, -1)
 	if storeSpecs == nil || len(storeSpecs) == 0 {
 		return nil, util.Errorf("invalid or empty engines specification %q", stores)
 	}
 
-	engines := []storage.Engine{}
+	engines := []engine.Engine{}
 	for _, store := range storeSpecs {
 		if len(store) != 4 {
 			return nil, util.Errorf("unable to parse attributes and path from store %q", store[0])
@@ -210,22 +209,22 @@ func initEngines(stores string) ([]storage.Engine, error) {
 // and instantiates an engine based on the dir parameter. If dir parses
 // to an integer, it's taken to mean an in-memory engine; otherwise,
 // dir is treated as a path and a RocksDB engine is created.
-func initEngine(attrsStr, path string) (storage.Engine, error) {
+func initEngine(attrsStr, path string) (engine.Engine, error) {
 	attrs := parseAttributes(attrsStr)
-	var engine storage.Engine
+	var e engine.Engine
 	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
 		if size == 0 {
 			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
 		}
-		engine = storage.NewInMem(attrs, int64(size))
+		e = engine.NewInMem(attrs, int64(size))
 	} else {
-		engine, err = storage.NewRocksDB(attrs, path)
+		e, err = engine.NewRocksDB(attrs, path)
 		if err != nil {
 			return nil, util.Errorf("unable to init rocksdb with data dir %q: %v", path, err)
 		}
 	}
 
-	return engine, nil
+	return e, nil
 }
 
 func newServer() (*server, error) {
@@ -265,7 +264,7 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(clock *hlc.HLClock, engines []storage.Engine, selfBootstrap bool) error {
+func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstrap bool) error {
 	s.rpc.Start() // bind RPC socket and launch goroutine.
 	glog.Infof("Started RPC server at %s", s.rpc.Addr())
 

@@ -17,7 +17,7 @@
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
 /*
 #cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
@@ -74,7 +74,7 @@ func NewRocksDB(attrs Attributes, dir string) (*RocksDB, error) {
 		r.destroyOptions()
 		return nil, charToErr(cErr)
 	}
-	if _, err := r.capacity(); err != nil {
+	if _, err := r.Capacity(); err != nil {
 		if err := r.destroy(); err != nil {
 			glog.Warningf("could not destroy db at %s", dir)
 		}
@@ -168,11 +168,11 @@ func bytesPointer(bytes []byte) *C.char {
 	return (*C.char)(nil)
 }
 
-// put sets the given key to the value provided.
+// Put sets the given key to the value provided.
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
-func (r *RocksDB) put(key Key, value []byte) error {
+func (r *RocksDB) Put(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -196,7 +196,7 @@ func (r *RocksDB) put(key Key, value []byte) error {
 	return nil
 }
 
-// merge implements the RocksDB merge operator using the function goMergeInit
+// Merge implements the RocksDB merge operator using the function goMergeInit
 // to initialize missing values and goMerge to merge the old and the given
 // value into a new value, which is then stored under key.
 // Currently 64-bit counter logic is implemented. See the documentation of
@@ -204,7 +204,7 @@ func (r *RocksDB) put(key Key, value []byte) error {
 //
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
-func (r *RocksDB) merge(key Key, value []byte) error {
+func (r *RocksDB) Merge(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -228,8 +228,8 @@ func (r *RocksDB) merge(key Key, value []byte) error {
 	return nil
 }
 
-// get returns the value for the given key.
-func (r *RocksDB) get(key Key) ([]byte, error) {
+// Get returns the value for the given key.
+func (r *RocksDB) Get(key Key) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -256,8 +256,8 @@ func (r *RocksDB) get(key Key) ([]byte, error) {
 	return C.GoBytes(unsafe.Pointer(cVal), C.int(cValLen)), nil
 }
 
-// clear removes the item from the db with the given key.
-func (r *RocksDB) clear(key Key) error {
+// Clear removes the item from the db with the given key.
+func (r *RocksDB) Clear(key Key) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -275,10 +275,10 @@ func (r *RocksDB) clear(key Key) error {
 	return nil
 }
 
-// scan returns up to max key/value objects starting from
+// Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) scan(start, end Key, max int64) ([]rawKeyValue, error) {
+func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -289,7 +289,7 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]rawKeyValue, error) {
 	it := C.rocksdb_create_iterator(r.rdb, opts)
 	defer C.rocksdb_iter_destroy(it)
 
-	keyVals := []rawKeyValue{}
+	keyVals := []RawKeyValue{}
 	byteCount := len(start)
 	if byteCount == 0 {
 		// start=Key("") needs special treatment since we need
@@ -313,9 +313,9 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]rawKeyValue, error) {
 		}
 		data = C.rocksdb_iter_value(it, &l)
 		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
-		keyVals = append(keyVals, rawKeyValue{
-			key:   k,
-			value: v,
+		keyVals = append(keyVals, RawKeyValue{
+			Key:   k,
+			Value: v,
 		})
 		i++
 	}
@@ -328,10 +328,10 @@ func (r *RocksDB) scan(start, end Key, max int64) ([]rawKeyValue, error) {
 	return keyVals, nil
 }
 
-// writeBatch applies the puts, merges and deletes atomically via
+// WriteBatch applies the puts, merges and deletes atomically via
 // the RocksDB write batch facility. The list must only contain
 // elements of type Batch{Put,Merge,Delete}.
-func (r *RocksDB) writeBatch(cmds []interface{}) error {
+func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 	if len(cmds) == 0 {
 		return nil
 	}
@@ -348,7 +348,7 @@ func (r *RocksDB) writeBatch(cmds []interface{}) error {
 				bytesPointer(v),
 				C.size_t(len(v)))
 		case BatchPut:
-			key, value := v.key, v.value
+			key, value := v.Key, v.Value
 			// We write the batch before returning from this method, so we
 			// don't need to worry about the GC reclaiming the data stored.
 			C.rocksdb_writebatch_put(
@@ -358,7 +358,7 @@ func (r *RocksDB) writeBatch(cmds []interface{}) error {
 				bytesPointer(value),
 				C.size_t(len(value)))
 		case BatchMerge:
-			key, value := v.key, v.value
+			key, value := v.Key, v.Value
 			C.rocksdb_writebatch_merge(
 				batch,
 				bytesPointer(key),
@@ -378,9 +378,9 @@ func (r *RocksDB) writeBatch(cmds []interface{}) error {
 	return nil
 }
 
-// capacity queries the underlying file system for disk capacity
+// Capacity queries the underlying file system for disk capacity
 // information.
-func (r *RocksDB) capacity() (StoreCapacity, error) {
+func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	var fs syscall.Statfs_t
 	var capacity StoreCapacity
 	if err := syscall.Statfs(r.dir, &fs); err != nil {

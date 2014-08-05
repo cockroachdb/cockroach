@@ -23,6 +23,7 @@ import (
 
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -36,7 +37,7 @@ const (
 )
 
 // rangeKey implements interval.Comparable.
-type rangeKey Key
+type rangeKey engine.Key
 
 // Compare implements the llrb.Comparable interface for tree nodes.
 func (rk rangeKey) Compare(b interval.Comparable) int {
@@ -80,9 +81,9 @@ func (rtc *ReadTimestampCache) Clear() {
 // Add the specified read timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only.
-func (rtc *ReadTimestampCache) Add(start, end Key, timestamp hlc.HLTimestamp) {
+func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.HLTimestamp) {
 	if end == nil {
-		end = NextKey(start)
+		end = engine.NextKey(start)
 	}
 	rtc.cache.Add(rtc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
 }
@@ -91,9 +92,9 @@ func (rtc *ReadTimestampCache) Add(start, end Key, timestamp hlc.HLTimestamp) {
 // interval spanning from start to end keys. If no part of the
 // specified range is overlapped by read timestamps in the cache, the
 // high water timestamp is returned.
-func (rtc *ReadTimestampCache) GetMax(start, end Key) hlc.HLTimestamp {
+func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.HLTimestamp {
 	if end == nil {
-		end = NextKey(start)
+		end = engine.NextKey(start)
 	}
 	max := rtc.highWater
 	for _, v := range rtc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {

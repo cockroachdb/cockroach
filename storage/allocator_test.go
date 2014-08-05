@@ -20,53 +20,55 @@ package storage
 import (
 	"math/rand"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 var simpleZoneConfig = ZoneConfig{
-	Replicas: []Attributes{
-		Attributes([]string{"a", "ssd"}),
+	Replicas: []engine.Attributes{
+		engine.Attributes([]string{"a", "ssd"}),
 	},
 }
 
 var multiDisksConfig = ZoneConfig{
-	Replicas: []Attributes{
-		Attributes([]string{"a", "ssd"}),
-		Attributes([]string{"a", "hdd"}),
-		Attributes([]string{"a", "mem"}),
+	Replicas: []engine.Attributes{
+		engine.Attributes([]string{"a", "ssd"}),
+		engine.Attributes([]string{"a", "hdd"}),
+		engine.Attributes([]string{"a", "mem"}),
 	},
 }
 
 var multiDCConfig = ZoneConfig{
-	Replicas: []Attributes{
-		Attributes([]string{"a", "ssd"}),
-		Attributes([]string{"b", "ssd"}),
+	Replicas: []engine.Attributes{
+		engine.Attributes([]string{"a", "ssd"}),
+		engine.Attributes([]string{"b", "ssd"}),
 	},
 }
 
 // filterStores returns just the store descriptors in the supplied
 // stores slice which contain all the specified attributes.
-func filterStores(a Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
+func filterStores(a engine.Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
 	var filtered []*StoreDescriptor
 	for _, s := range stores {
 		b := []string(s.Attrs)
 		b = append(b, []string(s.Node.Attrs)...)
-		if a.IsSubset(Attributes(b)) {
+		if a.IsSubset(engine.Attributes(b)) {
 			filtered = append(filtered, s)
 		}
 	}
 	return filtered, nil
 }
 
-var singleStore = func(a Attributes) ([]*StoreDescriptor, error) {
+var singleStore = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   Attributes([]string{"ssd"}),
+			Attrs:   engine.Attributes([]string{"ssd"}),
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -74,64 +76,64 @@ var singleStore = func(a Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var sameDCStores = func(a Attributes) ([]*StoreDescriptor, error) {
+var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   Attributes([]string{"ssd"}),
+			Attrs:   engine.Attributes([]string{"ssd"}),
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
 		},
 		&StoreDescriptor{
 			StoreID: 2,
-			Attrs:   Attributes([]string{"ssd"}),
+			Attrs:   engine.Attributes([]string{"ssd"}),
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
 		},
 		&StoreDescriptor{
 			StoreID: 3,
-			Attrs:   Attributes([]string{"hdd"}),
+			Attrs:   engine.Attributes([]string{"hdd"}),
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
 		},
 		&StoreDescriptor{
 			StoreID: 4,
-			Attrs:   Attributes([]string{"hdd"}),
+			Attrs:   engine.Attributes([]string{"hdd"}),
 			Node: NodeDescriptor{
 				NodeID: 3,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
 		},
 		&StoreDescriptor{
 			StoreID: 5,
-			Attrs:   Attributes([]string{"mem"}),
+			Attrs:   engine.Attributes([]string{"mem"}),
 			Node: NodeDescriptor{
 				NodeID: 4,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -139,28 +141,28 @@ var sameDCStores = func(a Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var multiDCStores = func(a Attributes) ([]*StoreDescriptor, error) {
+var multiDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   Attributes([]string{"ssd"}),
+			Attrs:   engine.Attributes([]string{"ssd"}),
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  Attributes([]string{"a"}),
+				Attrs:  engine.Attributes([]string{"a"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
 		},
 		&StoreDescriptor{
 			StoreID: 2,
-			Attrs:   Attributes([]string{"ssd"}),
+			Attrs:   engine.Attributes([]string{"ssd"}),
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  Attributes([]string{"b"}),
+				Attrs:  engine.Attributes([]string{"b"}),
 			},
-			Capacity: StoreCapacity{
+			Capacity: engine.StoreCapacity{
 				Capacity:  100,
 				Available: 100,
 			},
@@ -168,7 +170,7 @@ var multiDCStores = func(a Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var noStores = func(a Attributes) ([]*StoreDescriptor, error) {
+var noStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{})
 }
 

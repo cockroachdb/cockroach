@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 )
@@ -69,7 +70,7 @@ type Node struct {
 func allocateNodeID(db kv.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
 		RequestHeader: storage.RequestHeader{
-			Key:  storage.KeyNodeIDGenerator,
+			Key:  engine.KeyNodeIDGenerator,
 			User: storage.UserRoot,
 		},
 		Increment: 1,
@@ -87,7 +88,7 @@ func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
 		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
 		RequestHeader: storage.RequestHeader{
-			Key:  storage.MakeKey(storage.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
+			Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
 			User: storage.UserRoot,
 		},
 		Increment: inc,
@@ -103,7 +104,7 @@ func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
 // all keys. Initial range lookup metadata is populated for the range.
 //
 // Returns a direct-access kv.LocalDB for unittest purposes only.
-func BootstrapCluster(clusterID string, engine storage.Engine) (
+func BootstrapCluster(clusterID string, eng engine.Engine) (
 	*kv.LocalDB, error) {
 	sIdent := storage.StoreIdent{
 		ClusterID: clusterID,
@@ -112,7 +113,7 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (
 	}
 	clock := hlc.NewHLClock(hlc.UnixNano)
 	now := clock.Now()
-	s := storage.NewStore(clock, engine, nil)
+	s := storage.NewStore(clock, eng, nil)
 
 	// Verify the store isn't already part of a cluster.
 	if s.Ident.ClusterID != "" {
@@ -133,9 +134,9 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (
 		NodeID:  1,
 		StoreID: 1,
 		RangeID: 1,
-		Attrs:   storage.Attributes{},
+		Attrs:   engine.Attributes{},
 	}
-	rng, err := s.CreateRange(storage.KeyMin, storage.KeyMax, []storage.Replica{replica})
+	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []storage.Replica{replica})
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func BootstrapCluster(clusterID string, engine storage.Engine) (
 
 	// Initialize range addressing records and default administrative configs.
 	desc := storage.RangeDescriptor{
-		StartKey: storage.KeyMin,
+		StartKey: engine.KeyMin,
 		Replicas: []storage.Replica{replica},
 	}
 	if err := kv.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
@@ -191,7 +192,7 @@ func NewNode(distDB kv.DB, gossip *gossip.Gossip) *Node {
 // initDescriptor initializes the physical/network topology attributes
 // if possible. Datacenter, PDU & Rack values are taken from environment
 // variables or command line flags.
-func (n *Node) initDescriptor(addr net.Addr, attrs storage.Attributes) {
+func (n *Node) initDescriptor(addr net.Addr, attrs engine.Attributes) {
 	n.Descriptor = storage.NodeDescriptor{
 		// NodeID is after invocation of start()
 		Address: addr,
@@ -204,7 +205,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs storage.Attributes) {
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.HLClock,
-	engines []storage.Engine, attrs storage.Attributes) error {
+	engines []engine.Engine, attrs engine.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
@@ -228,11 +229,11 @@ func (n *Node) stop() {
 // Store doesn't yet have a valid ident, it's added to the bootstraps
 // list for initialization once the cluster and node IDs have been
 // determined.
-func (n *Node) initStores(clock *hlc.HLClock, engines []storage.Engine) error {
+func (n *Node) initStores(clock *hlc.HLClock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
-	for _, engine := range engines {
-		s := storage.NewStore(clock, engine, n.gossip)
+	for _, e := range engines {
+		s := storage.NewStore(clock, e, n.gossip)
 		// If not bootstrapped, add to list.
 		if !s.IsBootstrapped() {
 			bootstraps.PushBack(s)

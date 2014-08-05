@@ -17,7 +17,11 @@
 
 package storage
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
+)
 
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
@@ -34,7 +38,7 @@ func (e *NotLeaderError) Error() string {
 // either completely or partially outside the target range's key
 // range.
 type NotInRangeError struct {
-	start, end Key
+	start, end engine.Key
 }
 
 // Error formats error.

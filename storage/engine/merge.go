@@ -15,7 +15,7 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package engine
 
 // #include <stdlib.h>
 import "C"

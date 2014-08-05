@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -109,7 +110,7 @@ func (db *LocalDB) Close() {
 // lookupReplica looks up a replica by key. Lookups are done via
 // binary search over the "ranges" RangeSlice. Returns nil if no range
 // is found for the specified key.
-func (db *LocalDB) lookupReplica(key storage.Key) *storage.Replica {
+func (db *LocalDB) lookupReplica(key engine.Key) *storage.Replica {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	n := sort.Search(len(db.ranges), func(i int) bool {

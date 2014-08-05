@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 var testIdent = StoreIdent{
@@ -38,8 +39,8 @@ var testIdent = StoreIdent{
 func TestStoreInitAndBootstrap(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
-	engine := NewInMem(Attributes{}, 1<<20)
-	store := NewStore(clock, engine, nil)
+	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	store := NewStore(clock, eng, nil)
 	defer store.Close()
 
 	// Can't init as haven't bootstrapped.
@@ -58,7 +59,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Create range and fetch.
-	if _, err := store.CreateRange(KeyMin, KeyMax, []Replica{}); err != nil {
+	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []Replica{}); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
@@ -66,7 +67,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped engine.
-	store = NewStore(clock, engine, nil)
+	store = NewStore(clock, eng, nil)
 	if err := store.Init(); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %v", err)
 	}
@@ -79,15 +80,15 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // TestBootstrapOfNonEmptyStore verifies bootstrap failure if engine
 // is not empty.
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
-	engine := NewInMem(Attributes{}, 1<<20)
+	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
-	if err := engine.put(Key("foo"), []byte("bar")); err != nil {
+	if err := eng.Put(engine.Key("foo"), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %v", err)
 	}
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
-	store := NewStore(clock, engine, nil)
+	store := NewStore(clock, eng, nil)
 	defer store.Close()
 
 	// Can't init as haven't bootstrapped.
@@ -104,7 +105,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 func TestRangeSliceSort(t *testing.T) {
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
-		key := Key(fmt.Sprintf("foo%d", i))
+		key := engine.Key(fmt.Sprintf("foo%d", i))
 		rs = append(rs, &Range{
 			Meta: RangeMetadata{
 				RangeDescriptor: RangeDescriptor{StartKey: key},
@@ -114,7 +115,7 @@ func TestRangeSliceSort(t *testing.T) {
 
 	sort.Sort(rs)
 	for i := 0; i < 5; i++ {
-		expectedKey := Key(fmt.Sprintf("foo%d", i))
+		expectedKey := engine.Key(fmt.Sprintf("foo%d", i))
 		if !bytes.Equal(rs[i].Meta.StartKey, expectedKey) {
 			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Meta.StartKey)
 		}
@@ -129,10 +130,10 @@ func TestRangeSliceSort(t *testing.T) {
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewHLClock(manual.UnixNano)
-	engine := NewInMem(Attributes{}, 1<<20)
-	store := NewStore(clock, engine, nil)
+	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	store := NewStore(clock, eng, nil)
 	replica := Replica{RangeID: 1}
-	_, err := store.CreateRange(Key("a"), Key("z"), []Replica{replica})
+	_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []Replica{replica})
 	if err != nil {
 		t.Fatal(err)
 	}

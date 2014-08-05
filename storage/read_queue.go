@@ -20,6 +20,7 @@ package storage
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -77,9 +78,9 @@ func (rq *ReadQueue) onEvicted(key, value interface{}) {
 // AddWrite is invoked as a mutating command is added to the queue of
 // Raft proposals. As multiple commands may be in the proposal state,
 // writes may overlap.
-func (rq *ReadQueue) AddWrite(start, end Key) interface{} {
+func (rq *ReadQueue) AddWrite(start, end engine.Key) interface{} {
 	if end == nil {
-		end = NextKey(start)
+		end = engine.NextKey(start)
 	}
 	key := rq.cache.NewKey(rangeKey(start), rangeKey(end))
 	rq.cache.Add(key, &write{})
@@ -92,9 +93,9 @@ func (rq *ReadQueue) AddWrite(start, end Key) interface{} {
 // of pending writes with key(s) overlapping the key (start==end) or
 // key range [start, end). The caller should call wg.Wait() to wait
 // for confirmation that all pending writes have completed or failed.
-func (rq *ReadQueue) AddRead(start, end Key, wg *sync.WaitGroup) {
+func (rq *ReadQueue) AddRead(start, end engine.Key, wg *sync.WaitGroup) {
 	if end == nil {
-		end = NextKey(start)
+		end = engine.NextKey(start)
 	}
 	for _, w := range rq.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
 		w := w.(*write)

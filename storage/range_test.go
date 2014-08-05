@@ -28,24 +28,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 var (
 	testRangeDescriptor = RangeDescriptor{
-		StartKey: KeyMin,
-		EndKey:   KeyMax,
+		StartKey: engine.KeyMin,
+		EndKey:   engine.KeyMax,
 		Replicas: []Replica{
 			{
 				NodeID:  1,
 				StoreID: 1,
 				RangeID: 1,
-				Attrs:   Attributes([]string{"dc1", "mem"}),
+				Attrs:   engine.Attributes([]string{"dc1", "mem"}),
 			},
 			{
 				NodeID:  2,
 				StoreID: 1,
 				RangeID: 1,
-				Attrs:   Attributes([]string{"dc2", "mem"}),
+				Attrs:   engine.Attributes([]string{"dc2", "mem"}),
 			},
 		},
 	}
@@ -55,32 +56,32 @@ var (
 		Write: []string{"root"},
 	}
 	testDefaultZoneConfig = ZoneConfig{
-		Replicas: []Attributes{
-			Attributes([]string{"dc1", "mem"}),
-			Attributes([]string{"dc2", "mem"}),
+		Replicas: []engine.Attributes{
+			engine.Attributes([]string{"dc1", "mem"}),
+			engine.Attributes([]string{"dc2", "mem"}),
 		},
 	}
 )
 
 // createTestEngine creates an in-memory engine and initializes some
 // default configuration settings.
-func createTestEngine(t *testing.T) Engine {
-	engine := NewInMem(Attributes([]string{"dc1", "mem"}), 1<<20)
-	if err := putI(engine, KeyConfigAccountingPrefix, testDefaultAcctConfig); err != nil {
+func createTestEngine(t *testing.T) engine.Engine {
+	e := engine.NewInMem(engine.Attributes([]string{"dc1", "mem"}), 1<<20)
+	if err := engine.PutI(e, engine.KeyConfigAccountingPrefix, testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := putI(engine, KeyConfigPermissionPrefix, testDefaultPermConfig); err != nil {
+	if err := engine.PutI(e, engine.KeyConfigPermissionPrefix, testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := putI(engine, KeyConfigZonePrefix, testDefaultZoneConfig); err != nil {
+	if err := engine.PutI(e, engine.KeyConfigZonePrefix, testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
-	return engine
+	return e
 }
 
 // createTestRange creates a new range initialized to the full extent
 // of the keyspace. The gossip instance is also returned for testing.
-func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
+func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip) {
 	rm := RangeMetadata{
 		RangeID:         0,
 		RangeDescriptor: testRangeDescriptor,
@@ -97,28 +98,28 @@ func createTestRange(engine Engine, t *testing.T) (*Range, *gossip.Gossip) {
 func TestRangeContains(t *testing.T) {
 	r, _ := createTestRange(createTestEngine(t), t)
 	defer r.Stop()
-	r.Meta.StartKey = Key("a")
-	r.Meta.EndKey = Key("b")
+	r.Meta.StartKey = engine.Key("a")
+	r.Meta.EndKey = engine.Key("b")
 
 	testData := []struct {
-		start, end Key
+		start, end engine.Key
 		contains   bool
 	}{
 		// Single keys.
-		{Key("a"), Key("a"), true},
-		{Key("aa"), Key("aa"), true},
-		{Key("`"), Key("`"), false},
-		{Key("b"), Key("b"), false},
-		{Key("c"), Key("c"), false},
+		{engine.Key("a"), engine.Key("a"), true},
+		{engine.Key("aa"), engine.Key("aa"), true},
+		{engine.Key("`"), engine.Key("`"), false},
+		{engine.Key("b"), engine.Key("b"), false},
+		{engine.Key("c"), engine.Key("c"), false},
 		// Key ranges.
-		{Key("a"), Key("b"), true},
-		{Key("a"), Key("aa"), true},
-		{Key("aa"), Key("b"), true},
-		{Key("0"), Key("9"), false},
-		{Key("`"), Key("a"), false},
-		{Key("b"), Key("bb"), false},
-		{Key("0"), Key("bb"), false},
-		{Key("aa"), Key("bb"), false},
+		{engine.Key("a"), engine.Key("b"), true},
+		{engine.Key("a"), engine.Key("aa"), true},
+		{engine.Key("aa"), engine.Key("b"), true},
+		{engine.Key("0"), engine.Key("9"), false},
+		{engine.Key("`"), engine.Key("a"), false},
+		{engine.Key("b"), engine.Key("bb"), false},
+		{engine.Key("0"), engine.Key("bb"), false},
+		{engine.Key("aa"), engine.Key("bb"), false},
 	}
 	for _, test := range testData {
 		if bytes.Compare(test.start, test.end) == 0 {
@@ -155,9 +156,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		gossipKey string
 		configs   []*PrefixConfig
 	}{
-		{gossip.KeyConfigAccounting, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultAcctConfig}}},
-		{gossip.KeyConfigPermission, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultPermConfig}}},
-		{gossip.KeyConfigZone, []*PrefixConfig{&PrefixConfig{KeyMin, nil, &testDefaultZoneConfig}}},
+		{gossip.KeyConfigAccounting, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultAcctConfig}}},
+		{gossip.KeyConfigPermission, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigZone, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
 		info, err := g.GetInfo(test.gossipKey)
@@ -175,17 +176,17 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
 // key prefixes for a config are gossipped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
-	engine := createTestEngine(t)
+	e := createTestEngine(t)
 	// Add a permission for a new key prefix.
 	db1Perm := PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
-	if err := putI(engine, key, db1Perm); err != nil {
+	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
+	if err := engine.PutI(e, key, db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	r, g := createTestRange(engine, t)
+	r, g := createTestRange(e, t)
 	defer r.Stop()
 
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
@@ -194,9 +195,9 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		&PrefixConfig{KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{Key("/db1"), nil, &db1Perm},
-		&PrefixConfig{Key("/db2"), KeyMin, &testDefaultPermConfig},
+		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
+		&PrefixConfig{engine.Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{engine.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -213,14 +214,14 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
-	key := MakeKey(KeyConfigPermissionPrefix, Key("/db1"))
+	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
 	reply := &PutResponse{}
 
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	r.Put(&PutRequest{RequestHeader: RequestHeader{Key: key}, Value: Value{Bytes: buf.Bytes()}}, reply)
+	r.Put(&PutRequest{RequestHeader: RequestHeader{Key: key}, Value: engine.Value{Bytes: buf.Bytes()}}, reply)
 	if reply.Error != nil {
 		t.Fatal(reply.Error)
 	}
@@ -231,9 +232,9 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		&PrefixConfig{KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{Key("/db1"), nil, &db1Perm},
-		&PrefixConfig{Key("/db2"), KeyMin, &testDefaultPermConfig},
+		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
+		&PrefixConfig{engine.Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{engine.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -247,7 +248,7 @@ func TestInternalRangeLookup(t *testing.T) {
 // A blockingEngine allows us to delay writes in order to test the
 // pending read queue.
 type blockingEngine struct {
-	*InMem
+	*engine.InMem
 	mu    sync.Mutex
 	cvar  *sync.Cond
 	block bool
@@ -255,7 +256,7 @@ type blockingEngine struct {
 
 func newBlockingEngine() *blockingEngine {
 	be := &blockingEngine{
-		InMem: NewInMem(Attributes{}, 1<<20),
+		InMem: engine.NewInMem(engine.Attributes{}, 1<<20),
 	}
 	be.cvar = sync.NewCond(&be.mu)
 	return be
@@ -270,13 +271,13 @@ func (be *blockingEngine) setBlock(block bool) {
 	}
 }
 
-func (be *blockingEngine) put(key Key, value []byte) error {
+func (be *blockingEngine) put(key engine.Key, value []byte) error {
 	be.mu.Lock()
 	defer be.mu.Unlock()
 	for be.block {
 		be.cvar.Wait()
 	}
-	return be.InMem.put(key, value)
+	return be.InMem.Put(key, value)
 }
 
 // createTestRange creates a range using a blocking engine. Returns
@@ -311,7 +312,7 @@ func putArgs(key, value string, rangeID int64) (*PutRequest, *PutResponse) {
 			Key:     []byte(key),
 			Replica: Replica{RangeID: rangeID},
 		},
-		Value: Value{
+		Value: engine.Value{
 			Bytes: []byte(value),
 		},
 	}
@@ -348,12 +349,12 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the read timestamp cache has 1sec for "a".
-	ts := rng.tsCache.GetMax(Key("a"), nil)
+	ts := rng.tsCache.GetMax(engine.Key("a"), nil)
 	if ts.WallTime != t0.Nanoseconds() {
 		t.Errorf("expected wall time to have 1s, but got %+v", ts)
 	}
 	// Verify another key ("b") has 0sec in timestamp cache.
-	ts = rng.tsCache.GetMax(Key("b"), nil)
+	ts = rng.tsCache.GetMax(engine.Key("b"), nil)
 	if ts.WallTime != 0 {
 		t.Errorf("expected wall time to have 0s, but got %+v", ts)
 	}

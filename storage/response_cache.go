@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // A ResponseCache provides idempotence for request retries. Each
@@ -38,7 +39,7 @@ import (
 // A ResponseCache is safe for concurrent access.
 type ResponseCache struct {
 	rangeID  int64
-	engine   Engine
+	engine   engine.Engine
 	inflight map[ClientCmdID]*sync.Cond
 	sync.Mutex
 }
@@ -47,7 +48,7 @@ type ResponseCache struct {
 // maintains a response cache, not just the leader. However, when a
 // replica loses or gains leadership of the Raft consensus group, the
 // inflight map should be cleared.
-func NewResponseCache(rangeID int64, engine Engine) *ResponseCache {
+func NewResponseCache(rangeID int64, engine engine.Engine) *ResponseCache {
 	return &ResponseCache{
 		rangeID:  rangeID,
 		engine:   engine,
@@ -95,7 +96,7 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 	rc.Unlock()
 
 	// If the response is in the cache or we experienced an error, return.
-	if ok, err := getI(rc.engine, rc.makeKey(cmdID), reply); ok || err != nil {
+	if ok, err := engine.GetI(rc.engine, rc.makeKey(cmdID), reply); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
 		rc.removeInflightLocked(cmdID)
@@ -117,7 +118,7 @@ func (rc *ResponseCache) PutResponse(cmdID ClientCmdID, reply interface{}) error
 	}
 	// Write the response value to the engine.
 	key := rc.makeKey(cmdID)
-	err := putI(rc.engine, key, reply)
+	err := engine.PutI(rc.engine, key, reply)
 
 	// Take lock after writing response to cache!
 	rc.Lock()
@@ -156,9 +157,9 @@ func (rc *ResponseCache) removeInflightLocked(cmdID ClientCmdID) {
 // keyspace.
 // TODO(spencer): going to need to encode the server timestamp
 //   for when the value was written for GC.
-func (rc *ResponseCache) makeKey(cmdID ClientCmdID) Key {
-	return Key(bytes.Join([][]byte{
-		KeyLocalRangeResponseCachePrefix,
+func (rc *ResponseCache) makeKey(cmdID ClientCmdID) engine.Key {
+	return engine.Key(bytes.Join([][]byte{
+		engine.KeyLocalRangeResponseCachePrefix,
 		encoding.EncodeInt(rc.rangeID),
 		encoding.EncodeInt(cmdID.WallTime), // wall time helps sort for locality
 		encoding.EncodeInt(cmdID.Random),   // TODO(spencer): encode as Fixed64

@@ -21,14 +21,16 @@ package storage
 import (
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 var testConfig = ZoneConfig{
-	Replicas: []Attributes{
-		Attributes([]string{"a", "ssd"}),
-		Attributes([]string{"a", "hdd"}),
-		Attributes([]string{"b", "ssd"}),
-		Attributes([]string{"b", "hdd"}),
+	Replicas: []engine.Attributes{
+		engine.Attributes([]string{"a", "ssd"}),
+		engine.Attributes([]string{"a", "hdd"}),
+		engine.Attributes([]string{"b", "ssd"}),
+		engine.Attributes([]string{"b", "hdd"}),
 	},
 	RangeMinBytes: 1 << 20,
 	RangeMaxBytes: 64 << 20,
@@ -65,46 +67,6 @@ func TestZoneConfigYAMLParsing(t *testing.T) {
 	}
 	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
 		t.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
-	}
-}
-
-func TestIsSubset(t *testing.T) {
-	a := Attributes([]string{"a", "b", "c"})
-	b := Attributes([]string{"a", "b"})
-	c := Attributes([]string{"a"})
-	if !b.IsSubset(a) {
-		t.Errorf("expected %+v to be a subset of %+v", b, a)
-	}
-	if !c.IsSubset(a) {
-		t.Errorf("expected %+v to be a subset of %+v", c, a)
-	}
-	if !c.IsSubset(b) {
-		t.Errorf("expected %+v to be a subset of %+v", c, b)
-	}
-	if a.IsSubset(b) {
-		t.Errorf("%+v should not be a subset of %+v", a, b)
-	}
-	if a.IsSubset(c) {
-		t.Errorf("%+v should not be a subset of %+v", a, c)
-	}
-	if b.IsSubset(c) {
-		t.Errorf("%+v should not be a subset of %+v", b, c)
-	}
-}
-
-func TestSortedString(t *testing.T) {
-	a := Attributes([]string{"a", "b", "c"})
-	if a.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", a, a.SortedString())
-	}
-	b := Attributes([]string{"c", "a", "b"})
-	if b.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", b, b.SortedString())
-	}
-	// Duplicates.
-	c := Attributes([]string{"c", "c", "a", "a", "b", "b"})
-	if c.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", c, c.SortedString())
 	}
 }
 

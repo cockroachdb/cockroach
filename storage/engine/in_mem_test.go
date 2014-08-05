@@ -16,7 +16,7 @@
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package engine
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ import (
 func TestInMemCapacity(t *testing.T) {
 	// TODO(Tobias): Test for correct update during put()
 	engine := NewInMem(Attributes{}, 1<<20)
-	c, err := engine.capacity()
+	c, err := engine.Capacity()
 	if err != nil {
 		t.Errorf("unexpected error fetching capacity: %v", err)
 	}
@@ -41,11 +41,11 @@ func TestInMemCapacity(t *testing.T) {
 	bytes := []byte("0123456789")
 
 	// Add a key.
-	err = engine.put(Key(bytes), bytes)
+	err = engine.Put(Key(bytes), bytes)
 	if err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
 	}
-	if c, err = engine.capacity(); err != nil {
+	if c, err = engine.Capacity(); err != nil {
 		t.Errorf("unexpected error fetching capacity: %v", err)
 	}
 	if c.Capacity != 1<<20 {
@@ -56,11 +56,11 @@ func TestInMemCapacity(t *testing.T) {
 	}
 
 	// Remove key.
-	err = engine.clear(Key(bytes))
+	err = engine.Clear(Key(bytes))
 	if err != nil {
 		t.Errorf("delete: expected no error, but got %s", err)
 	}
-	if c, err = engine.capacity(); err != nil {
+	if c, err = engine.Capacity(); err != nil {
 		t.Errorf("unexpected error fetching capacity: %v", err)
 	}
 	if c.Available != 1<<20 {
@@ -72,12 +72,12 @@ func TestInMemOverCapacity(t *testing.T) {
 	value := []byte("0123456789")
 	// Create an engine with enough space for one, but not two, nodes.
 	engine := NewInMem(Attributes{},
-		int64(float64(computeSize(rawKeyValue{key: Key("X"), value: value}))*1.5))
+		int64(float64(computeSize(RawKeyValue{Key: Key("X"), Value: value}))*1.5))
 	var err error
-	if err = engine.put(Key("1"), value); err != nil {
+	if err = engine.Put(Key("1"), value); err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
 	}
-	if err = engine.put(Key("2"), value); err == nil {
+	if err = engine.Put(Key("2"), value); err == nil {
 		t.Error("put: expected error, but got none")
 	}
 }
@@ -86,11 +86,11 @@ func BenchmarkCapacity(b *testing.B) {
 	engine := NewInMem(Attributes{}, 1<<30)
 	bytes := []byte("0123456789")
 	for i := 0; i < b.N; i++ {
-		if err := engine.put(Key(fmt.Sprintf("%d", i)), bytes); err != nil {
+		if err := engine.Put(Key(fmt.Sprintf("%d", i)), bytes); err != nil {
 			b.Fatalf("put: expected no error, but got %s", err)
 		}
 		if i%10000 == 0 {
-			_, err := engine.capacity()
+			_, err := engine.Capacity()
 			if err != nil {
 				b.Errorf("unexpected error fetching capacity: %v", err)
 			}

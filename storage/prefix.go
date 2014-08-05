@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -38,8 +39,8 @@ import (
 // key refers to this "higher-up" PrefixConfig by specifying its prefix
 // so it can be binary searched from within a PrefixConfigMap.
 type PrefixConfig struct {
-	Prefix    Key         // the prefix the config affects
-	Canonical Key         // the prefix for the canonical config, if applicable
+	Prefix    engine.Key  // the prefix the config affects
+	Canonical engine.Key  // the prefix for the canonical config, if applicable
 	Config    interface{} // the config object
 }
 
@@ -51,7 +52,7 @@ type PrefixConfigMap []*PrefixConfig
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
-	start, end Key
+	start, end engine.Key
 	config     interface{}
 }
 
@@ -90,7 +91,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
-	if len(p) == 0 || bytes.Compare(p[0].Prefix, KeyMin) != 0 {
+	if len(p) == 0 || bytes.Compare(p[0].Prefix, engine.KeyMin) != 0 {
 		return nil, util.Errorf("no default prefix specified")
 	}
 
@@ -104,7 +105,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 		}
 		if stack.Len() != 0 {
 			newConfigs = append(newConfigs, &PrefixConfig{
-				Prefix:    PrefixEndKey(entry.Prefix),
+				Prefix:    engine.PrefixEndKey(entry.Prefix),
 				Canonical: stack.Back().Value.(*PrefixConfig).Prefix,
 				Config:    stack.Back().Value.(*PrefixConfig).Config,
 			})
@@ -136,7 +137,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 //
 // To find the longest matching prefix, we take the lower bound of the
 // specified key.
-func (p PrefixConfigMap) MatchByPrefix(key Key) *PrefixConfig {
+func (p PrefixConfigMap) MatchByPrefix(key engine.Key) *PrefixConfig {
 	n := sort.Search(len(p), func(i int) bool {
 		return bytes.Compare(key, p[i].Prefix) < 0
 	})
@@ -162,7 +163,7 @@ func (p PrefixConfigMap) MatchByPrefix(key Key) *PrefixConfig {
 // MatchesByPrefix returns a list of PrefixConfig objects with
 // prefixes satisfying the specified key. The results are returned in
 // order of longest matching prefix to shortest.
-func (p PrefixConfigMap) MatchesByPrefix(key Key) []*PrefixConfig {
+func (p PrefixConfigMap) MatchesByPrefix(key engine.Key) []*PrefixConfig {
 	var configs []*PrefixConfig
 	prefix := key
 	for {
@@ -179,7 +180,8 @@ func (p PrefixConfigMap) MatchesByPrefix(key Key) []*PrefixConfig {
 
 // VisitPrefixes invokes the visitor function for each prefix overlapped
 // by the specified key range [start, end).
-func (p PrefixConfigMap) VisitPrefixes(start, end Key, visitor func(start, end Key, config interface{}) error) error {
+func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
+	visitor func(start, end engine.Key, config interface{}) error) error {
 	comp := bytes.Compare(start, end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
@@ -243,9 +245,9 @@ func (p PrefixConfigMap) VisitPrefixes(start, end Key, visitor func(start, end K
 // prefixes. Lookup start key; that is first config. Lookup end key:
 // that is last config. We then step through the intervening
 // PrefixConfig records and create a RangeResult for each.
-func (p PrefixConfigMap) SplitRangeByPrefixes(start, end Key) ([]*RangeResult, error) {
+func (p PrefixConfigMap) SplitRangeByPrefixes(start, end engine.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
-	err := p.VisitPrefixes(start, end, func(start, end Key, config interface{}) error {
+	err := p.VisitPrefixes(start, end, func(start, end engine.Key, config interface{}) error {
 		results = append(results, &RangeResult{start: start, end: end, config: config})
 		return nil
 	})

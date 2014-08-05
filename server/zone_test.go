@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/golang/glog"
 )
 
@@ -59,13 +59,13 @@ func ExampleSetAndGetZone() {
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
-		prefix storage.Key
+		prefix engine.Key
 		yaml   string
 	}{
-		{storage.KeyMin, testConfig},
-		{storage.Key("db1"), testConfig},
-		{storage.Key("db 2"), testConfig},
-		{storage.Key("\xfe"), testConfig},
+		{engine.KeyMin, testConfig},
+		{engine.Key("db1"), testConfig},
+		{engine.Key("db 2"), testConfig},
+		{engine.Key("\xfe"), testConfig},
 	}
 
 	for _, test := range testData {
@@ -108,12 +108,12 @@ func ExampleLsZones() {
 	testConfigFn := createTestConfigFile()
 	defer os.Remove(testConfigFn)
 
-	keys := []storage.Key{
-		storage.KeyMin,
-		storage.Key("db1"),
-		storage.Key("db2"),
-		storage.Key("db3"),
-		storage.Key("user"),
+	keys := []engine.Key{
+		engine.KeyMin,
+		engine.Key("db1"),
+		engine.Key("db2"),
+		engine.Key("db3"),
+		engine.Key("user"),
 	}
 
 	regexps := []string{
@@ -166,9 +166,9 @@ func ExampleRmZones() {
 	testConfigFn := createTestConfigFile()
 	defer os.Remove(testConfigFn)
 
-	keys := []storage.Key{
-		storage.KeyMin,
-		storage.Key("db1"),
+	keys := []engine.Key{
+		engine.KeyMin,
+		engine.Key("db1"),
 	}
 
 	for _, key := range keys {

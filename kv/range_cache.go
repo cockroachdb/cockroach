@@ -23,6 +23,7 @@ import (
 
 	"code.google.com/p/biogo.store/llrb"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -34,7 +35,7 @@ const (
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
-type rangeCacheKey storage.Key
+type rangeCacheKey engine.Key
 
 // Compare implements the llrb.Comparable interface for rangeCacheKey, so that
 // it can be used as a key for util.OrderedCache.
@@ -55,7 +56,7 @@ type RangeMetadataDB interface {
 	// Lookup metadata for the range containing the given key.  This method
 	// should return the RangeDescriptor containing the key, along with the
 	// Metadata key at which the RangeDescriptor's value was stored.
-	LookupRangeMetadata(storage.Key) (storage.Key, *storage.RangeDescriptor, error)
+	LookupRangeMetadata(engine.Key) (engine.Key, *storage.RangeDescriptor, error)
 }
 
 // RangeMetadataCache is used to retrieve range metadata for arbitrary keys.
@@ -97,8 +98,8 @@ func NewRangeMetadataCache(db RangeMetadataDB) *RangeMetadataCache {
 //
 // This method returns the RangeDescriptor for the range containing the key's
 // data, or an error if any occurred.
-func (rmc *RangeMetadataCache) LookupRangeMetadata(key storage.Key) (*storage.RangeDescriptor, error) {
-	metadataKey := storage.RangeMetaKey(key)
+func (rmc *RangeMetadataCache) LookupRangeMetadata(key engine.Key) (*storage.RangeDescriptor, error) {
+	metadataKey := engine.RangeMetaKey(key)
 	if len(metadataKey) == 0 {
 		// The description of the first range is gossiped, and thus does not
 		// need to be cached.  Just ask the underlying db, which will return
@@ -126,7 +127,7 @@ func (rmc *RangeMetadataCache) LookupRangeMetadata(key storage.Key) (*storage.Ra
 // the given key. It is intended that this method be called from a consumer of
 // RangeMetadataCache when the returned range metadata is discovered to be
 // stale.
-func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key storage.Key) {
+func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key engine.Key) {
 	for {
 		k, _ := rmc.getCachedRangeMetadata(key)
 		if k != nil {
@@ -137,7 +138,7 @@ func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key storage.Key) {
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well.  This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
-		key = storage.RangeMetaKey(key)
+		key = engine.RangeMetaKey(key)
 		if len(key) == 0 {
 			break
 		}
@@ -146,9 +147,9 @@ func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key storage.Key) {
 
 // getCachedRangeMetadata is a helper function to retrieve the metadata
 // range which contains the given key, if present in the cache.
-func (rmc *RangeMetadataCache) getCachedRangeMetadata(key storage.Key) (
+func (rmc *RangeMetadataCache) getCachedRangeMetadata(key engine.Key) (
 	rangeCacheKey, *storage.RangeDescriptor) {
-	metaKey := storage.RangeMetaKey(key)
+	metaKey := engine.RangeMetaKey(key)
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
 

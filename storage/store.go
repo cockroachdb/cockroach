@@ -25,12 +25,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
-func makeRangeKey(rangeID int64) Key {
-	return MakeKey(KeyLocalRangeMetadataPrefix, Key(strconv.FormatInt(rangeID, 10)))
+func makeRangeKey(rangeID int64) engine.Key {
+	return engine.MakeKey(engine.KeyLocalRangeMetadataPrefix, engine.Key(strconv.FormatInt(rangeID, 10)))
 }
 
 // A RangeSlice is a slice of Range pointers used for replica lookups
@@ -63,7 +64,7 @@ type StoreIdent struct {
 type Store struct {
 	Ident     StoreIdent
 	clock     *hlc.HLClock
-	engine    Engine         // The underlying key-value store
+	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Passed to new ranges
 
@@ -72,7 +73,7 @@ type Store struct {
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.HLClock, engine Engine, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.HLClock, engine engine.Engine, gossip *gossip.Gossip) *Store {
 	return &Store{
 		clock:     clock,
 		engine:    engine,
@@ -100,7 +101,7 @@ func (s *Store) String() string {
 // bootstrapped. If the store ident is corrupt, IsBootstrapped will
 // return true; the exact error can be retrieved via a call to Init().
 func (s *Store) IsBootstrapped() bool {
-	ok, err := getI(s.engine, KeyLocalIdent, &s.Ident)
+	ok, err := engine.GetI(s.engine, engine.KeyLocalIdent, &s.Ident)
 	if err != nil || ok {
 		return true
 	}
@@ -109,7 +110,7 @@ func (s *Store) IsBootstrapped() bool {
 
 // Init reads the StoreIdent from the underlying engine.
 func (s *Store) Init() error {
-	ok, err := getI(s.engine, KeyLocalIdent, &s.Ident)
+	ok, err := engine.GetI(s.engine, engine.KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -119,7 +120,7 @@ func (s *Store) Init() error {
 	// TODO(spencer): scan through all range metadata and instantiate
 	//   ranges. Right now we just get range ID hardcoded as 1.
 	var meta RangeMetadata
-	ok, err = getI(s.engine, makeRangeKey(1), &meta)
+	ok, err = engine.GetI(s.engine, makeRangeKey(1), &meta)
 	if err != nil || !ok {
 		return err
 	}
@@ -140,13 +141,13 @@ func (s *Store) Init() error {
 // non-empty engine.
 func (s *Store) Bootstrap(ident StoreIdent) error {
 	s.Ident = ident
-	kvs, err := s.engine.scan(KeyMin, KeyMax, 1 /* only need one entry to fail! */)
+	kvs, err := s.engine.Scan(engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %v", err)
 	} else if len(kvs) > 0 {
-		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].key)
+		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	return putI(s.engine, KeyLocalIdent, s.Ident)
+	return engine.PutI(s.engine, engine.KeyLocalIdent, s.Ident)
 }
 
 // GetRange fetches a range by ID. Returns an error if no range is found.
@@ -175,12 +176,12 @@ func (s *Store) GetRanges() RangeSlice {
 
 // CreateRange allocates a new range ID and stores range metadata.
 // On success, returns the new range.
-func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, error) {
-	rangeID, err := increment(s.engine, KeyLocalRangeIDGenerator, 1)
+func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []Replica) (*Range, error) {
+	rangeID, err := engine.Increment(s.engine, engine.KeyLocalRangeIDGenerator, 1)
 	if err != nil {
 		return nil, err
 	}
-	if ok, _ := getI(s.engine, makeRangeKey(rangeID), nil); ok {
+	if ok, _ := engine.GetI(s.engine, makeRangeKey(rangeID), nil); ok {
 		return nil, util.Error("newly allocated range ID already in use")
 	}
 	// RangeMetadata is stored local to this store only. It is neither
@@ -194,7 +195,7 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 			Replicas: replicas,
 		},
 	}
-	err = putI(s.engine, makeRangeKey(rangeID), meta)
+	err = engine.PutI(s.engine, makeRangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +208,13 @@ func (s *Store) CreateRange(startKey, endKey Key, replicas []Replica) (*Range, e
 }
 
 // Attrs returns the attributes of the underlying store.
-func (s *Store) Attrs() Attributes {
+func (s *Store) Attrs() engine.Attributes {
 	return s.engine.Attrs()
 }
 
 // Capacity returns the capacity of the underlying storage engine.
-func (s *Store) Capacity() (StoreCapacity, error) {
-	return s.engine.capacity()
+func (s *Store) Capacity() (engine.StoreCapacity, error) {
+	return s.engine.Capacity()
 }
 
 // Descriptor returns a StoreDescriptor including current store

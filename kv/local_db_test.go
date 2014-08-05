@@ -22,26 +22,27 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 func TestReplicaLookup(t *testing.T) {
 
 	db := NewLocalDB()
-	r1 := db.addTestRange(storage.KeyMin, storage.Key("C"))
-	r2 := db.addTestRange(storage.Key("C"), storage.Key("X"))
-	r3 := db.addTestRange(storage.Key("X"), storage.KeyMax)
+	r1 := db.addTestRange(engine.KeyMin, engine.Key("C"))
+	r2 := db.addTestRange(engine.Key("C"), engine.Key("X"))
+	r3 := db.addTestRange(engine.Key("X"), engine.KeyMax)
 	if len(db.ranges) != 3 {
 		t.Errorf("Pre-condition failed! Expected ranges to be size 3, got %d", len(db.ranges))
 	}
 
-	assertReplicaForRange(t, db.lookupReplica(storage.KeyMin), r1)
-	assertReplicaForRange(t, db.lookupReplica(storage.Key("B")), r1)
-	assertReplicaForRange(t, db.lookupReplica(storage.Key("C")), r2)
-	assertReplicaForRange(t, db.lookupReplica(storage.Key("M")), r2)
-	assertReplicaForRange(t, db.lookupReplica(storage.Key("X")), r3)
-	assertReplicaForRange(t, db.lookupReplica(storage.Key("Z")), r3)
-	if db.lookupReplica(storage.KeyMax) != nil {
-		t.Errorf("Expected storage.KeyMax to not have an associated Replica.")
+	assertReplicaForRange(t, db.lookupReplica(engine.KeyMin), r1)
+	assertReplicaForRange(t, db.lookupReplica(engine.Key("B")), r1)
+	assertReplicaForRange(t, db.lookupReplica(engine.Key("C")), r2)
+	assertReplicaForRange(t, db.lookupReplica(engine.Key("M")), r2)
+	assertReplicaForRange(t, db.lookupReplica(engine.Key("X")), r3)
+	assertReplicaForRange(t, db.lookupReplica(engine.Key("Z")), r3)
+	if db.lookupReplica(engine.KeyMax) != nil {
+		t.Errorf("Expected engine.KeyMax to not have an associated Replica.")
 	}
 }
 
@@ -53,7 +54,7 @@ func assertReplicaForRange(t *testing.T, repl *storage.Replica, rng *storage.Ran
 	}
 }
 
-func (db *LocalDB) addTestRange(start, end storage.Key) *storage.Range {
+func (db *LocalDB) addTestRange(start, end engine.Key) *storage.Range {
 	r := storage.Range{}
 	rep := storage.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(db.ranges) + 1)}
 	r.Meta = storage.RangeMetadata{

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/golang/glog"
 	yaml "gopkg.in/yaml.v1"
@@ -57,7 +58,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if err != nil {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
-	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
+	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
 	if err := kv.PutI(zh.kvDB, zoneKey, config, hlc.HLTimestamp{}); err != nil {
 		return err
 	}
@@ -77,8 +78,8 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 	if len(path) == 0 {
 		sr := <-zh.kvDB.Scan(&storage.ScanRequest{
 			RequestHeader: storage.RequestHeader{
-				Key:    storage.KeyConfigZonePrefix,
-				EndKey: storage.PrefixEndKey(storage.KeyConfigZonePrefix),
+				Key:    engine.KeyConfigZonePrefix,
+				EndKey: engine.PrefixEndKey(engine.KeyConfigZonePrefix),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,
@@ -92,7 +93,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 		}
 		var prefixes []string
 		for _, kv := range sr.Rows {
-			trimmed := bytes.TrimPrefix(kv.Key, storage.KeyConfigZonePrefix)
+			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigZonePrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// JSON-encode the prefixes array.
@@ -101,7 +102,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("unable to format zone configurations: %v", err)
 		}
 	} else {
-		zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
+		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
 		var ok bool
 		config := &storage.ZoneConfig{}
 		if ok, _, err = kv.GetI(zh.kvDB, zoneKey, config); err != nil {
@@ -137,7 +138,7 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 	if path == "/" {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
-	zoneKey := storage.MakeKey(storage.KeyConfigZonePrefix, storage.Key(path[1:]))
+	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
 	dr := <-zh.kvDB.Delete(&storage.DeleteRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  zoneKey,

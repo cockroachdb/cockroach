@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/hlc"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/golang/glog"
 )
 
@@ -50,7 +50,7 @@ func startServer() *server {
 		if err != nil {
 			glog.Fatal(err)
 		}
-		engines := []storage.Engine{storage.NewInMem(storage.Attributes{}, 1<<20)}
+		engines := []engine.Engine{engine.NewInMem(engine.Attributes{}, 1<<20)}
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			glog.Fatal(err)
 		}
@@ -96,25 +96,25 @@ func TestInitEngine(t *testing.T) {
 	defer resetTestData(tmp)
 
 	testCases := []struct {
-		key       string             // data directory
-		expAttrs  storage.Attributes // attributes for engine
-		wantError bool               // do we expect an error from this key?
-		isMem     bool               // is the engine in-memory?
+		key       string            // data directory
+		expAttrs  engine.Attributes // attributes for engine
+		wantError bool              // do we expect an error from this key?
+		isMem     bool              // is the engine in-memory?
 	}{
-		{"mem=1000", storage.Attributes([]string{"mem"}), false, true},
-		{"ssd=1000", storage.Attributes([]string{"ssd"}), false, true},
-		{fmt.Sprintf("ssd=%s", tmp[0]), storage.Attributes([]string{"ssd"}), false, false},
-		{fmt.Sprintf("hdd=%s", tmp[1]), storage.Attributes([]string{"hdd"}), false, false},
-		{fmt.Sprintf("mem=%s", tmp[2]), storage.Attributes([]string{"mem"}), false, false},
-		{fmt.Sprintf("abc=%s", tmp[3]), storage.Attributes([]string{"abc"}), false, false},
-		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), storage.Attributes([]string{"hdd", "7200rpm"}), false, false},
-		{"hdd=/dev/null", storage.Attributes{}, true, false},
-		{"", storage.Attributes{}, true, false},
-		{"  ", storage.Attributes{}, true, false},
-		{"arbitrarystring", storage.Attributes{}, true, false},
-		{"mem=", storage.Attributes{}, true, false},
-		{"ssd=", storage.Attributes{}, true, false},
-		{"hdd=", storage.Attributes{}, true, false},
+		{"mem=1000", engine.Attributes([]string{"mem"}), false, true},
+		{"ssd=1000", engine.Attributes([]string{"ssd"}), false, true},
+		{fmt.Sprintf("ssd=%s", tmp[0]), engine.Attributes([]string{"ssd"}), false, false},
+		{fmt.Sprintf("hdd=%s", tmp[1]), engine.Attributes([]string{"hdd"}), false, false},
+		{fmt.Sprintf("mem=%s", tmp[2]), engine.Attributes([]string{"mem"}), false, false},
+		{fmt.Sprintf("abc=%s", tmp[3]), engine.Attributes([]string{"abc"}), false, false},
+		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), engine.Attributes([]string{"hdd", "7200rpm"}), false, false},
+		{"hdd=/dev/null", engine.Attributes{}, true, false},
+		{"", engine.Attributes{}, true, false},
+		{"  ", engine.Attributes{}, true, false},
+		{"arbitrarystring", engine.Attributes{}, true, false},
+		{"mem=", engine.Attributes{}, true, false},
+		{"ssd=", engine.Attributes{}, true, false},
+		{"hdd=", engine.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
 		engines, err := initEngines(spec.key)
@@ -125,11 +125,11 @@ func TestInitEngine(t *testing.T) {
 			if len(engines) != 1 {
 				t.Fatalf("unexpected number of engines: %d: %+v", len(engines), spec)
 			}
-			engine := engines[0]
-			if engine.Attrs().SortedString() != spec.expAttrs.SortedString() {
-				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, engine.Attrs(), spec)
+			e := engines[0]
+			if e.Attrs().SortedString() != spec.expAttrs.SortedString() {
+				t.Errorf("wrong engine attributes, expected %v but got %v: %+v", spec.expAttrs, e.Attrs(), spec)
 			}
-			_, ok := engine.(*storage.InMem)
+			_, ok := e.(*engine.InMem)
 			if spec.isMem != ok {
 				t.Errorf("expected in memory? %b, got %b: %+v", spec.isMem, ok, spec)
 			}
@@ -147,13 +147,13 @@ func TestInitEngines(t *testing.T) {
 
 	stores := fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
 	expEngines := []struct {
-		attrs storage.Attributes
+		attrs engine.Attributes
 		isMem bool
 	}{
-		{storage.Attributes([]string{"mem"}), true},
-		{storage.Attributes([]string{"mem", "ddr3"}), true},
-		{storage.Attributes([]string{"ssd"}), false},
-		{storage.Attributes([]string{"hdd", "7200rpm"}), false},
+		{engine.Attributes([]string{"mem"}), true},
+		{engine.Attributes([]string{"mem", "ddr3"}), true},
+		{engine.Attributes([]string{"ssd"}), false},
+		{engine.Attributes([]string{"hdd", "7200rpm"}), false},
 	}
 
 	engines, err := initEngines(stores)
@@ -163,11 +163,11 @@ func TestInitEngines(t *testing.T) {
 	if len(engines) != len(expEngines) {
 		t.Errorf("number of engines parsed %d != expected %d", len(engines), len(expEngines))
 	}
-	for i, engine := range engines {
-		if engine.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
-			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, engine.Attrs(), expEngines[i])
+	for i, e := range engines {
+		if e.Attrs().SortedString() != expEngines[i].attrs.SortedString() {
+			t.Errorf("wrong engine attributes, expected %v but got %v: %+v", expEngines[i].attrs, e.Attrs(), expEngines[i])
 		}
-		_, ok := engine.(*storage.InMem)
+		_, ok := e.(*engine.InMem)
 		if expEngines[i].isMem != ok {
 			t.Errorf("expected in memory? %b, got %b: %+v", expEngines[i].isMem, ok, expEngines[i])
 		}
