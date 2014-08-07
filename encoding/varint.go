@@ -116,8 +116,9 @@ func PutUvarint(buf []byte, x uint64) int {
 	}
 }
 
-// GetUVarint decodes a varint-encoded byte slice and returns the result.
-func GetUVarint(b []byte) uint64 {
+// GetUVarint decodes a varint-encoded byte slice and returns the result
+// and the length of byte slice been used.
+func GetUVarint(b []byte) (uint64, int) {
 	// Treat each byte of the encoding as an unsigned integer
 	// between 0 and 255.
 	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
@@ -132,23 +133,23 @@ func GetUVarint(b []byte) uint64 {
 	// If A0 is 255 then the result is A1..A8 as a 8-byte big-ending integer.
 	switch {
 	case b[0] >= 0 && b[0] <= 240:
-		return uint64(b[0])
+		return uint64(b[0]), 1
 	case b[0] >= 241 && b[0] <= 248:
-		return 240 + 256*(uint64(b[0])-241) + uint64(b[1])
+		return 240 + 256*(uint64(b[0])-241) + uint64(b[1]), 2
 	case b[0] == 249:
-		return 2288 + 256*uint64(b[1]) + uint64(b[2])
+		return 2288 + 256*uint64(b[1]) + uint64(b[2]), 3
 	case b[0] == 250:
-		return readBigEndian(b[1:4])
+		return readBigEndian(b[1:4]), 4
 	case b[0] == 251:
-		return readBigEndian(b[1:5])
+		return readBigEndian(b[1:5]), 5
 	case b[0] == 252:
-		return readBigEndian(b[1:6])
+		return readBigEndian(b[1:6]), 6
 	case b[0] == 253:
-		return readBigEndian(b[1:7])
+		return readBigEndian(b[1:7]), 7
 	case b[0] == 254:
-		return readBigEndian(b[1:8])
+		return readBigEndian(b[1:8]), 8
 	case b[0] == 255:
-		return readBigEndian(b[1:9])
+		return readBigEndian(b[1:9]), 9
 	default:
 		panic("varint: invalid format given")
 	}

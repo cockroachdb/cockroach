@@ -399,27 +399,20 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 	return num, nil
 }
 
-// makeKeyTimestamped makes a timestamped key which is the concatenation
+// mvccEncodeKey makes a timestamped key which is the concatenation
 // of the given key and the corresponding timestamp. It assumes the
 // key was already encoded before passed to mvcc layer thus it won't
 // encode the key part again.
 func mvccEncodeKey(key Key, timestamp hlc.HLTimestamp) Key {
 	return Key(bytes.Join([][]byte{key,
-		encoding.EncodeIntDecreasing(timestamp.WallTime),
-		encoding.EncodeIntDecreasing(timestamp.Logical)},
+		encoding.EncodeIntDecreasing(timestamp.WallTime, timestamp.Logical)},
 		[]byte{}))
 }
 
 func mvccDecodeKey(encodedKey []byte) (Key, hlc.HLTimestamp) {
-	// TODO(Jiang-Ming): implement the real DecodeIntDecreasing.
-	l := len(encodedKey)
-	idx0 := bytes.Index(encodedKey, []byte{0x00})
-	idx1 := bytes.LastIndex(encodedKey[:l-1], []byte{0x00})
-	key := encodedKey[:idx0+1]
-	encodedWallTime := encodedKey[idx0+2 : idx1+1]
-	encodedLogical := encodedKey[idx1+2:]
-	wallTime := encoding.DecodeIntDecreasing(encodedWallTime)
-	logical := encoding.DecodeIntDecreasing(encodedLogical)
+	idx := bytes.Index(encodedKey, []byte{0x00})
+	key := encodedKey[:idx+1]
+	timestamp := encoding.DecodeIntDecreasingSlice(encodedKey[idx+1:])
 
-	return key, hlc.HLTimestamp{WallTime: wallTime, Logical: logical}
+	return key, hlc.HLTimestamp{WallTime: timestamp[0], Logical: timestamp[1]}
 }

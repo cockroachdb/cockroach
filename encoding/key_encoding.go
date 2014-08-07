@@ -162,12 +162,12 @@ func EncodeBinaryFinal(b []byte) []byte {
 	return buf
 }
 
-// EncodeInt encodes an int64 and returns the result
-// as a byte slice. See the notes for EncodeFloat for
-// a complete description.
-func EncodeInt(i int64) []byte {
+// encodeIntInternal encodes an int64 and returns the
+// result as a byte slice. See the notes for EncodeFloat
+// for a complete description.
+func encodeIntInternal(i int64) []byte {
 	if i == 0 {
-		return []byte{orderedEncodingZero}
+		return []byte{orderedEncodingZero, orderedEncodingTerminator}
 	}
 	e, m := intMandE(i)
 	if e <= 0 {
@@ -183,17 +183,86 @@ func EncodeInt(i int64) []byte {
 	return nil
 }
 
-// EncodeIntDecreasing encodes an int64 and returns
-// the result as a byte slice in decreasing order.
-func EncodeIntDecreasing(i int64) []byte {
-	return EncodeInt(^i)
+// EncodeInt encodes an int64 slice and returns the
+// result as a byte slice.
+func EncodeInt(i ...int64) []byte {
+	res := make([][]byte, len(i))
+	for idx, v := range i {
+		res[idx] = encodeIntInternal(v)
+	}
+	return bytes.Join(res, []byte{})
+}
+
+// EncodeIntDecreasing encodes an int64 slice the
+// returns the result as a byte slice in decreasing
+// order.
+func EncodeIntDecreasing(i ...int64) []byte {
+	res := make([][]byte, len(i))
+	for idx, v := range i {
+		res[idx] = encodeIntInternal(^v)
+	}
+	return bytes.Join(res, []byte{})
+}
+
+// DecodeIntSlice decodes a byte slice and return
+// an int64 slice.
+func DecodeIntSlice(buf []byte) []int64 {
+	s := bytes.SplitAfter(buf, []byte{orderedEncodingTerminator})
+	res := make([]int64, len(s))
+	// There will be an empty slice after the last terminator,
+	// thus we have to skip that.
+	for idx := 0; idx < len(s)-1; idx++ {
+		res[idx] = DecodeInt(s[idx])
+	}
+	return res
+}
+
+// DecodeIntDecreasingSlice decodes a byte slice
+// in decreasing order and return an int64 slice.
+func DecodeIntDecreasingSlice(buf []byte) []int64 {
+	s := bytes.SplitAfter(buf, []byte{orderedEncodingTerminator})
+	res := make([]int64, len(s))
+	// There will be an empty slice after the last terminator,
+	// thus we have to skip that.
+	for idx := 0; idx < len(s)-1; idx++ {
+		res[idx] = DecodeIntDecreasing(s[idx])
+	}
+	return res
+}
+
+// DecodeInt decodes a byte slice and return an int64.
+func DecodeInt(buf []byte) int64 {
+	switch {
+	case buf[0] == 0x15:
+		// Zero.
+		return 0
+	case buf[0] == 0x14 || buf[0] == 0x16:
+		// Negative small or positive small.
+		panic("integer values should not have negative exponents")
+	case buf[0] == 0x08:
+		// Negative large.
+		e, m := decodeLargeNumber(true, buf)
+		return makeIntFromMandE(true, e, m)
+	case buf[0] > 0x08 && buf[0] <= 0x13:
+		// Negative medium.
+		e, m := decodeMediumNumber(true, buf)
+		return makeIntFromMandE(true, e, m)
+	case buf[0] == 0x22:
+		// Positive large.
+		e, m := decodeLargeNumber(false, buf)
+		return makeIntFromMandE(false, e, m)
+	case buf[0] >= 0x17 && buf[0] < 0x22:
+		// Positive large.
+		e, m := decodeMediumNumber(false, buf)
+		return makeIntFromMandE(false, e, m)
+	}
+	panic("unknown prefix of the encoded byte slice")
 }
 
 // DecodeIntDecreasing decodes a byte slice in
 // decreasing order and return an int64.
-func DecodeIntDecreasing(key []byte) int64 {
-	// TODO(Jiang-Ming): implement the real logic.
-	return 0
+func DecodeIntDecreasing(buf []byte) int64 {
+	return ^DecodeInt(buf)
 }
 
 // intMandE computes and returns the mantissa M and exponent E for i.
@@ -226,6 +295,30 @@ func intMandE(i int64) (int, []byte) {
 
 	// Trailing X==0 digits are omitted.
 	return e, removeTrailingZeros(m)
+}
+
+// makeIntFromMandE reconstructs the integer from the mantissa M
+// and exponent E.
+func makeIntFromMandE(negative bool, e int, m []byte) int64 {
+	var i int64
+	for v := 0; v < e; v++ {
+		var t int64
+		if v < len(m) {
+			t = int64(m[v])
+		} else {
+			// Trailing X==0 digits were omitted.
+			t = 0
+		}
+		// The last byte was encoded as 2n+0.
+		if v != len(m)-1 {
+			t--
+		}
+		if negative {
+			t = -t
+		}
+		i = i*100 + t/2
+	}
+	return i
 }
 
 func removeTrailingZeros(m []byte) []byte {
@@ -388,4 +481,31 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	}
 	buf[l] = orderedEncodingTerminator
 	return buf[:l+1]
+}
+
+func decodeMediumNumber(negative bool, buf []byte) (int, []byte) {
+	// We don't need the prefix and last terminator.
+	m := make([]byte, len(buf)-2)
+	copy(m, buf[1:len(buf)-1])
+
+	var e int
+	if negative {
+		e = 0x13 - int(buf[0])
+		onesComplement(m, 0, len(m))
+	} else {
+		e = int(buf[0]) - 0x17
+	}
+	return e, m
+}
+
+func decodeLargeNumber(negative bool, buf []byte) (int, []byte) {
+	m := make([]byte, len(buf))
+	copy(m, buf)
+	if negative {
+		onesComplement(m, 1, len(m))
+	}
+	e, l := GetUVarint(m[1:])
+
+	// We don't need the prefix and last terminator.
+	return int(e), m[l+1 : len(m)-1]
 }

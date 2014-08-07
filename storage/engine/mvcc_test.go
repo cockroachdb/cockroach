@@ -631,7 +631,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	}
 }
 
-func disableTestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
+func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey01, makeTS(0, 0), value01, "")
 	err = mvcc.Put(testKey01, makeTS(1, 0), value02, "")
