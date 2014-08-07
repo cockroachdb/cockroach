@@ -37,7 +37,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // defaultCacheSize is the default value for the cacheSize command line flag.
@@ -76,7 +76,7 @@ func NewRocksDB(attrs Attributes, dir string) (*RocksDB, error) {
 	}
 	if _, err := r.Capacity(); err != nil {
 		if err := r.destroy(); err != nil {
-			glog.Warningf("could not destroy db at %s", dir)
+			log.Warningf("could not destroy db at %s", dir)
 		}
 		return nil, err
 	}
@@ -386,7 +386,7 @@ func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	if err := syscall.Statfs(r.dir, &fs); err != nil {
 		return capacity, err
 	}
-	//glog.Infof("stat filesystem: %v", fs)
+	//log.Infof("stat filesystem: %v", fs)
 	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
 	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
 	return capacity, nil

@@ -25,14 +25,14 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // tempUnixFile creates a temporary file for use with a unix domain socket.
 func tempUnixFile() string {
 	f, err := ioutil.TempFile("", "unix-socket")
 	if err != nil {
-		glog.Fatalf("unable to create temp file: %s", err)
+		log.Fatalf("unable to create temp file: %s", err)
 	}
 	f.Close()
 	os.Remove(f.Name())

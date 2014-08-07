@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // An Options structure describes the algorithm for sending RPCs to
@@ -105,8 +105,8 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				continue
 			}
 			reply := reflect.New(reflect.TypeOf(replyChanI).Elem().Elem()).Interface()
-			if glog.V(1) {
-				glog.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
+			if log.V(1) {
+				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
 			go sendOne(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
@@ -116,8 +116,8 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 			switch t := r.(type) {
 			case error:
 				errors++
-				if glog.V(1) {
-					glog.Warningf("%s: error reply: %+v", method, t)
+				if log.V(1) {
+					log.Warningf("%s: error reply: %+v", method, t)
 				}
 				if len(clients)-errors < opts.N {
 					return SendError{util.Errorf("too many errors encountered (%d of %d total): %v",
@@ -129,8 +129,8 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				}
 			default:
 				successes++
-				if glog.V(1) {
-					glog.Infof("%s: successful reply: %+v", method, t)
+				if log.V(1) {
+					log.Infof("%s: successful reply: %+v", method, t)
 				}
 				reflect.ValueOf(replyChanI).Send(reflect.ValueOf(t))
 				if successes == opts.N {

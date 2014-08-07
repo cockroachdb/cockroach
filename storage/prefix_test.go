@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -42,7 +42,7 @@ func buildTestPrefixConfigMap() PrefixConfigMap {
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
-		glog.Fatalf("unexpected error building config map: %v", err)
+		log.Fatalf("unexpected error building config map: %v", err)
 	}
 	return pcc
 }

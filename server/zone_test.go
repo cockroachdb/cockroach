@@ -24,7 +24,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -43,7 +43,7 @@ range_max_bytes: 67108864
 func createTestConfigFile() string {
 	f, err := ioutil.TempFile("", "test-config")
 	if err != nil {
-		glog.Fatalf("failed to open temporary file: %v", err)
+		log.Fatalf("failed to open temporary file: %v", err)
 	}
 	defer f.Close()
 	f.Write([]byte(testConfig))

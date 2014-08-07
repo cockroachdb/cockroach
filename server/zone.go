@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -89,7 +89,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
-			glog.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
+			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
 		}
 		var prefixes []string
 		for _, kv := range sr.Rows {

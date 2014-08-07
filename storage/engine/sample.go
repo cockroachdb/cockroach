@@ -23,12 +23,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/encoding"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
 	// The variables below are used to build the keys used for storage
-	// of state and data of an EngineSampleStorage, where they are
+	// of state and data of an SampleStorage, where they are
 	// appended to a per-sample unique prefix.
 
 	// keyDataPrefix prefixes the keys holding the data sampled.
@@ -39,26 +39,26 @@ var (
 	keySeen = Key("seen")
 )
 
-// EngineSampleStorage implements the util.SampleStorage interface.
+// SampleStorage implements the util.SampleStorage interface.
 // It uses an Engine to persistently store the sampled data and the
 // sampling state.
-type EngineSampleStorage struct {
+type SampleStorage struct {
 	prefix     Key
 	engine     Engine
 	stateCache map[string]int64
 }
 
-// NewEngineSampleStorage creates a new EngineSampleStorage which uses
+// NewSampleStorage creates a new SampleStorage which uses
 // the keyspace prefixed by "prefix" on the given engine and stores
 // up to "size" values.
 // Care must be taken that the prefix does not collide with any existing
 // data and that a stored state will never be reinstantiated with another
 // size (or the state will be reset).
-func NewEngineSampleStorage(engine Engine, prefix Key, size int) util.SampleStorage {
+func NewSampleStorage(engine Engine, prefix Key, size int) util.SampleStorage {
 	if size < 1 {
 		panic("sample storage size must be at least 1")
 	}
-	es := &EngineSampleStorage{
+	es := &SampleStorage{
 		prefix:     prefix,
 		engine:     engine,
 		stateCache: make(map[string]int64),
@@ -73,7 +73,7 @@ func NewEngineSampleStorage(engine Engine, prefix Key, size int) util.SampleStor
 			// We're trying to use old data with a new size,
 			// better to start from scratch.
 			es.Reset()
-			glog.Warningf("existing sample of size %d re-initialized with size %d",
+			log.Warningf("existing sample of size %d re-initialized with size %d",
 				existingSize, size)
 		}
 		es.incVar(keySize, size64)
@@ -82,34 +82,34 @@ func NewEngineSampleStorage(engine Engine, prefix Key, size int) util.SampleStor
 }
 
 // Size returns the number of elements which can be stored.
-func (es *EngineSampleStorage) Size() int {
+func (es *SampleStorage) Size() int {
 	return int(es.incVar(keySize, 0))
 }
 
 // Seen returns the number of elements that have been observed
 // so far. An element is observed each time Discard() or Put()
 // are invoked.
-func (es *EngineSampleStorage) Seen() int64 {
+func (es *SampleStorage) Seen() int64 {
 	return es.incVar(keySeen, 0)
 }
 
 // Discard increases Seen() by one. It corresponds to observing
 // an event in a stream that is being sampled, but not putting it
 // into the sample.
-func (es *EngineSampleStorage) Discard() {
+func (es *SampleStorage) Discard() {
 	es.incVar(keySeen, 1)
 }
 
 // Get returns the data stored at index i. Valid indexes are
 // between 0 and the size of the storage minus one, inclusively.
-func (es *EngineSampleStorage) Get(i int) interface{} {
+func (es *SampleStorage) Get(i int) interface{} {
 	var ret interface{}
 	key := es.indexToKey(i)
 	ok, err := GetI(es.engine, key, &ret)
 	if !ok {
-		glog.Warningf("key %v not found", string(key))
+		log.Warningf("key %v not found", string(key))
 	} else if err != nil {
-		glog.Warning(err)
+		log.Warning(err)
 	} else {
 		return ret
 	}
@@ -117,25 +117,25 @@ func (es *EngineSampleStorage) Get(i int) interface{} {
 }
 
 // Put adds an element to the storage at the index specified.
-func (es *EngineSampleStorage) Put(i int, v interface{}) {
+func (es *SampleStorage) Put(i int, v interface{}) {
 	if i < 0 || i >= es.Size() {
 		return
 	}
 	err := PutI(es.engine, es.indexToKey(i), &v)
 	if err != nil {
-		glog.Warning(err)
+		log.Warning(err)
 	} else {
 		es.incVar(keySeen, 1)
 	}
 }
 
 // Slice returns the data stored in the underlying storage.
-func (es *EngineSampleStorage) Slice() []interface{} {
+func (es *SampleStorage) Slice() []interface{} {
 	startKey := MakeKey(es.prefix, keyDataPrefix)
 	res, err := es.engine.Scan(
 		startKey, PrefixEndKey(startKey), es.Seen())
 	if err != nil {
-		glog.Warning(err)
+		log.Warning(err)
 		return nil
 	}
 
@@ -144,7 +144,7 @@ func (es *EngineSampleStorage) Slice() []interface{} {
 		if dv, err := encoding.GobDecode(kv.Value); err == nil {
 			sl[i] = dv
 		} else {
-			glog.Warning(err)
+			log.Warning(err)
 		}
 	}
 	return sl
@@ -154,7 +154,7 @@ func (es *EngineSampleStorage) Slice() []interface{} {
 // to be reused. This should always be called before abandoning a
 // sample as it removes all data from the underlying engine.
 // TODO(Tobias): It can't do that yet. See comment inside.
-func (es *EngineSampleStorage) Reset() {
+func (es *SampleStorage) Reset() {
 	// TODO(Tobias) clearRange(es.prefix, prefixEndKey(es.prefix)) once D104 has landed.
 	// Until then, workaround: simply mess with the prefix so that we won't
 	// see any of the previous data. That way we can already have the tests in place.
@@ -163,7 +163,7 @@ func (es *EngineSampleStorage) Reset() {
 }
 
 // indexToKey translates slots into key names.
-func (es *EngineSampleStorage) indexToKey(i int) Key {
+func (es *SampleStorage) indexToKey(i int) Key {
 	// TODO(Tobias): Simply use the sqlite4 encoding once it is available.
 	// The only requirement for the created key is that it respects the
 	// integer sorting.
@@ -175,7 +175,7 @@ func (es *EngineSampleStorage) indexToKey(i int) Key {
 // incVar increments the state variable given by k and updates the
 // internal cache. In case of errors, the last value from the cache
 // is returned.
-func (es *EngineSampleStorage) incVar(k Key, inc int64) int64 {
+func (es *SampleStorage) incVar(k Key, inc int64) int64 {
 	// Get the last seen value from the cache.
 	ks := string(k)
 	s, ok := es.stateCache[ks]
@@ -184,7 +184,7 @@ func (es *EngineSampleStorage) incVar(k Key, inc int64) int64 {
 	}
 	r, err := Increment(es.engine, MakeKey(es.prefix, k), inc)
 	if err != nil {
-		glog.Warning(err)
+		log.Warning(err)
 		// If the increment failed, stick with the old value if possible.
 		// This will also make sure that Seen() will get stuck at MaxInt64.
 		if ok {

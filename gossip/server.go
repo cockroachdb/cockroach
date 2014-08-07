@@ -27,7 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // server maintains an array of connected peers to which it gossips
@@ -77,7 +77,7 @@ func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
 
 	// Update infostore with gossipped infos.
 	if args.Delta != nil {
-		glog.V(1).Infof("received delta infostore from client %s: %s", args.Addr, args.Delta)
+		log.V(1).Infof("received delta infostore from client %s: %s", args.Addr, args.Delta)
 		s.is.combine(args.Delta)
 	}
 	// If requested max sequence is not -1, wait for gossip interval to expire.
@@ -93,14 +93,14 @@ func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
 	if delta != nil {
 		// If V(1), double check that we can gob-encode the infostore.
 		// Problems here seem to very confusingly disappear into the RPC internals.
-		if glog.V(1) {
+		if log.V(1) {
 			var buf bytes.Buffer
 			if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
-				glog.Fatalf("infostore could not be encoded: %v", err)
+				log.Fatalf("infostore could not be encoded: %v", err)
 			}
 		}
 		reply.Delta = delta
-		glog.Infof("gossip: client %s sent %d info(s)", args.Addr, delta.infoCount())
+		log.Infof("gossip: client %s sent %d info(s)", args.Addr, delta.infoCount())
 	}
 	return nil
 }

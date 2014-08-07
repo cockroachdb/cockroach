@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // SimulateNetwork creates nodeCount gossip nodes. The network should
@@ -53,14 +53,14 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 	// multiple runs.
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	glog.Infof("simulating network with %d nodes", nodeCount)
+	log.Infof("simulating network with %d nodes", nodeCount)
 	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		addr := util.CreateTestAddr(network)
 		servers[i] = rpc.NewServer(addr)
 		if err := servers[i].Start(); err != nil {
-			glog.Fatal(err)
+			log.Fatal(err)
 		}
 		addrs[i] = servers[i].Addr()
 	}

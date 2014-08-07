@@ -22,7 +22,7 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func init() {
@@ -48,7 +48,7 @@ func main() {
 	// production workloads.
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)
-	glog.V(1).Infof("running using %d processor cores", numCPU)
+	log.V(1).Infof("running using %d processor cores", numCPU)
 
 	c := commander.Commander{
 		Name: "cockroach",
@@ -80,7 +80,7 @@ to precede any additional arguments,
 		os.Args = append(os.Args, "help")
 	}
 	if err := c.Run(os.Args[1:]); err != nil {
-		glog.Errorf("Failed running command \"%s\": %v\n", os.Args[1:], err)
+		log.Errorf("Failed running command \"%s\": %v\n", os.Args[1:], err)
 		os.Exit(1)
 	}
 }

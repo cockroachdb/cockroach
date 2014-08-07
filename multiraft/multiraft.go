@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // NodeID is a unique non-zero identifier for the node within the cluster.
@@ -152,12 +152,12 @@ func (m *MultiRaft) DoRPC(name string, req, resp interface{}) error {
 }
 
 // strictErrorLog panics in strict mode and logs an error otherwise.  Arguments are printf-style
-// and will be passed directly to either glog.Errorf or glog.Fatalf.
+// and will be passed directly to either log.Errorf or log.Fatalf.
 func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 	if m.Strict {
-		glog.Fatalf(format, args...)
+		log.Fatalf(format, args...)
 	} else {
-		glog.Errorf(format, args...)
+		log.Errorf(format, args...)
 	}
 }
 
@@ -359,7 +359,7 @@ func (s *state) nextElectionTimer() *time.Timer {
 }
 
 func (s *state) start() {
-	glog.V(1).Infof("node %v starting", s.nodeID)
+	log.V(1).Infof("node %v starting", s.nodeID)
 	go s.writeTask.start()
 	for {
 		electionTimer := s.nextElectionTimer()
@@ -369,10 +369,10 @@ func (s *state) start() {
 		} else {
 			writeReady = nil
 		}
-		glog.V(6).Infof("node %v: selecting", s.nodeID)
+		log.V(6).Infof("node %v: selecting", s.nodeID)
 		select {
 		case op := <-s.ops:
-			glog.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
 			switch op := op.(type) {
 			case *stopOp:
 				s.stop()
@@ -389,7 +389,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.requests:
-			glog.V(6).Infof("node %v: got request %v", s.nodeID, call)
+			log.V(6).Infof("node %v: got request %v", s.nodeID, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteRequest(call.Args.(*RequestVoteRequest),
@@ -404,7 +404,7 @@ func (s *state) start() {
 			}
 
 		case call := <-s.responses:
-			glog.V(6).Infof("node %v: got response %v", s.nodeID, call)
+			log.V(6).Infof("node %v: got response %v", s.nodeID, call)
 			switch call.ServiceMethod {
 			case requestVoteName:
 				s.requestVoteResponse(call.Args.(*RequestVoteRequest), call.Reply.(*RequestVoteResponse))
@@ -424,7 +424,7 @@ func (s *state) start() {
 			s.handleWriteResponse(resp)
 
 		case now := <-electionTimer.C:
-			glog.V(6).Infof("node %v: got election timer", s.nodeID)
+			log.V(6).Infof("node %v: got election timer", s.nodeID)
 			s.handleElectionTimers(now)
 		}
 		s.Clock.StopElectionTimer(electionTimer)
@@ -432,11 +432,11 @@ func (s *state) start() {
 }
 
 func (s *state) stop() {
-	glog.V(6).Infof("node %v stopping", s.nodeID)
+	log.V(6).Infof("node %v stopping", s.nodeID)
 	for _, n := range s.nodes {
 		err := n.client.conn.Close()
 		if err != nil {
-			glog.Warning("error stopping client:", err)
+			log.Warning("error stopping client:", err)
 		}
 	}
 	s.writeTask.stop()
@@ -444,7 +444,7 @@ func (s *state) stop() {
 }
 
 func (s *state) createGroup(op *createGroupOp) {
-	glog.V(6).Infof("node %v creating group %v", s.nodeID, op.group.groupID)
+	log.V(6).Infof("node %v creating group %v", s.nodeID, op.group.groupID)
 	if _, ok := s.groups[op.group.groupID]; ok {
 		op.ch <- util.Errorf("group %v already exists", op.group.groupID)
 		return
@@ -467,7 +467,7 @@ func (s *state) createGroup(op *createGroupOp) {
 }
 
 func (s *state) submitCommand(op *submitCommandOp) {
-	glog.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
+	log.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
 	g := s.groups[op.groupID]
 	if g.role != RoleLeader {
 		op.ch <- util.Error("TODO(bdarnell): forward commands to leader")
@@ -532,7 +532,7 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 		(len(g.currentMembers.ProposedMembers) == 0 ||
 			hasMajority(g.votes, g.currentMembers.ProposedMembers)) {
 		g.role = RoleLeader
-		glog.V(1).Infof("node %v becoming leader for group %v", s.nodeID, g.groupID)
+		log.V(1).Infof("node %v becoming leader for group %v", s.nodeID, g.groupID)
 		s.sendEvent(&EventLeaderElection{g.groupID, s.nodeID})
 	}
 	s.updateDirtyStatus(g)
@@ -591,7 +591,7 @@ func (s *state) appendEntriesResponse(req *AppendEntriesRequest, resp *AppendEnt
 }
 
 func (s *state) handleWriteReady() {
-	glog.V(6).Infof("node %v write ready, preparing request", s.nodeID)
+	log.V(6).Infof("node %v write ready, preparing request", s.nodeID)
 	writeRequest := newWriteRequest()
 	for groupID, group := range s.dirtyGroups {
 		req := &groupWriteRequest{}
@@ -612,7 +612,7 @@ func (s *state) broadcastEntries(g *group, entries []*LogEntry) {
 	if g.role != RoleLeader {
 		return
 	}
-	glog.V(6).Infof("node %v: broadcasting entries to followers", s.nodeID)
+	log.V(6).Infof("node %v: broadcasting entries to followers", s.nodeID)
 	for _, id := range g.currentMembers.Members {
 		node := s.nodes[id]
 		node.client.appendEntries(&AppendEntriesRequest{
@@ -629,14 +629,14 @@ func (s *state) broadcastEntries(g *group, entries []*LogEntry) {
 }
 
 func (s *state) handleWriteResponse(response *writeResponse) {
-	glog.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
+	log.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
 	for groupID, persistedGroup := range response.groups {
 		g := s.groups[groupID]
 		if persistedGroup.electionState != nil {
 			g.persistedElectionState = persistedGroup.electionState
 		}
 		if persistedGroup.lastIndex != -1 {
-			glog.V(6).Infof("node %v: updating persisted log index to %v", s.nodeID,
+			log.V(6).Infof("node %v: updating persisted log index to %v", s.nodeID,
 				persistedGroup.lastIndex)
 			s.broadcastEntries(g, persistedGroup.entries)
 			g.persistedLastIndex = persistedGroup.lastIndex
@@ -679,7 +679,7 @@ func (s *state) handleElectionTimers(now time.Time) {
 }
 
 func (s *state) becomeCandidate(g *group) {
-	glog.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.nodeID, g.role, g.groupID)
+	log.V(1).Infof("node %v becoming candidate (was %v) for group %s", s.nodeID, g.role, g.groupID)
 	if g.role == RoleLeader {
 		panic("cannot transition from leader to candidate")
 	}
@@ -710,7 +710,7 @@ func (s *state) commitEntries(g *group, leaderCommitIndex int) {
 	} else if leaderCommitIndex < g.commitIndex {
 		// Commit index cannot actually move backwards, but a newly-elected leader might
 		// report stale positions for a short time so just ignore them.
-		glog.V(6).Infof("node %v: ignoring commit index %v because it is behind existing commit %v",
+		log.V(6).Infof("node %v: ignoring commit index %v because it is behind existing commit %v",
 			s.nodeID, leaderCommitIndex, g.commitIndex)
 		return
 	}
@@ -719,17 +719,17 @@ func (s *state) commitEntries(g *group, leaderCommitIndex int) {
 	if index > g.persistedLastIndex {
 		// If we are not caught up with the leader, just commit as far as we can.
 		// We'll continue to commit new entries as we receive AppendEntriesRequests.
-		glog.V(6).Infof("node %v: leader is commited to %v, but capping to %v",
+		log.V(6).Infof("node %v: leader is commited to %v, but capping to %v",
 			s.nodeID, index, g.persistedLastIndex)
 		index = g.persistedLastIndex
 	}
-	glog.V(6).Infof("node %v advancing commit position for group %v from %v to %v",
+	log.V(6).Infof("node %v advancing commit position for group %v from %v to %v",
 		s.nodeID, g.groupID, g.commitIndex, index)
 	// TODO(bdarnell): move storage access (incl. the channel iteration) to a goroutine
 	entries := make(chan *LogEntryState, 100)
 	go s.Storage.GetLogEntries(g.groupID, g.commitIndex+1, index, entries)
 	for entry := range entries {
-		glog.V(6).Infof("node %v: committing %+v", s.nodeID, entry)
+		log.V(6).Infof("node %v: committing %+v", s.nodeID, entry)
 		if entry.Entry.Type == LogEntryCommand {
 			s.sendEvent(&EventCommandCommitted{entry.Entry.Payload})
 		}

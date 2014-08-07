@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -105,7 +105,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 			// TODO(spencer): use crypto.tls.
 			conn, err := net.Dial(addr.Network(), addr.String())
 			if err != nil {
-				glog.Info(err)
+				log.Info(err)
 				return false, nil
 			}
 			c.mu.Lock()
@@ -121,7 +121,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 			}
 
 			// Signal client is ready by closing Ready channel.
-			glog.Infof("client %s connected", addr)
+			log.Infof("client %s connected", addr)
 			close(c.Ready)
 
 			// Launch periodic heartbeat.
@@ -130,7 +130,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 			return true, nil
 		})
 		if err != nil {
-			glog.Errorf("client %s failed to connect", addr)
+			log.Errorf("client %s failed to connect", addr)
 			c.Close()
 		}
 	}()
@@ -184,14 +184,14 @@ func (c *Client) Close() {
 // connection on error. Heartbeats are sent in an infinite loop until
 // an error is encountered.
 func (c *Client) startHeartbeat() {
-	glog.Infof("client %s starting heartbeat", c.Addr())
+	log.Infof("client %s starting heartbeat", c.Addr())
 	// On heartbeat failure, remove this client from cache. A new
 	// client to this address will be created on the next call to
 	// NewClient().
 	for {
 		time.Sleep(heartbeatInterval)
 		if err := c.heartbeat(); err != nil {
-			glog.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
+			log.Infof("client %s heartbeat failed: %v; recycling...", c.Addr(), err)
 			c.Close()
 			break
 		}
@@ -203,7 +203,7 @@ func (c *Client) heartbeat() error {
 	call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
 	select {
 	case <-call.Done:
-		glog.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
+		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		c.mu.Lock()
 		c.healthy = true
 		c.mu.Unlock()
@@ -213,7 +213,7 @@ func (c *Client) heartbeat() error {
 		c.mu.Lock()
 		c.healthy = false
 		c.mu.Unlock()
-		glog.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
+		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	}
 
 	<-call.Done

@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -136,7 +136,7 @@ func (c *client) gossip(g *Gossip) error {
 
 		// Handle remote forwarding.
 		if reply.Alternate != nil {
-			glog.Infof("received forward from %+v to %+v", c.addr, reply.Alternate)
+			log.Infof("received forward from %+v to %+v", c.addr, reply.Alternate)
 			c.forwardAddr = reply.Alternate
 			return nil
 		}
@@ -144,7 +144,7 @@ func (c *client) gossip(g *Gossip) error {
 		// Combine remote node's infostore delta with ours.
 		now := time.Now().UnixNano()
 		if reply.Delta != nil {
-			glog.V(1).Infof("received gossip reply delta from %s: %s", c.addr, reply.Delta)
+			log.V(1).Infof("received gossip reply delta from %s: %s", c.addr, reply.Delta)
 			g.mu.Lock()
 			freshCount := g.is.combine(reply.Delta)
 			if freshCount > 0 {

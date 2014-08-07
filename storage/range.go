@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // init pre-registers RangeDescriptor and PrefixConfigMap types.
@@ -268,7 +268,7 @@ func (r *Range) ReadWriteCmd(method string, args Request, reply Response) error 
 		// cache. Instead of failing the request just because we can't
 		// decode the reply in the response cache, we proceed as though
 		// idempotence has expired.
-		glog.Errorf("unable to read result for %+v from the response cache: %v", args, err)
+		log.Errorf("unable to read result for %+v from the response cache: %v", args, err)
 	}
 
 	// One of the prime invariants of Cockroach is that a mutating command
@@ -366,7 +366,7 @@ func (r *Range) startGossip() {
 func (r *Range) maybeGossipClusterID() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyClusterID, r.Meta.ClusterID, ttlClusterIDGossip); err != nil {
-			glog.Errorf("failed to gossip cluster ID %s: %v", r.Meta.ClusterID, err)
+			log.Errorf("failed to gossip cluster ID %s: %v", r.Meta.ClusterID, err)
 		}
 	}
 }
@@ -376,7 +376,7 @@ func (r *Range) maybeGossipClusterID() {
 func (r *Range) maybeGossipFirstRange() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.RangeDescriptor, 0*time.Second); err != nil {
-			glog.Errorf("failed to gossip first range metadata: %v", err)
+			log.Errorf("failed to gossip first range metadata: %v", err)
 		}
 	}
 }
@@ -391,11 +391,11 @@ func (r *Range) maybeGossipConfigs() {
 			if cp.dirty && r.ContainsKey(cp.keyPrefix) {
 				configMap, err := r.loadConfigMap(cp.keyPrefix, cp.configI)
 				if err != nil {
-					glog.Errorf("failed loading %s config map: %v", cp.gossipKey, err)
+					log.Errorf("failed loading %s config map: %v", cp.gossipKey, err)
 					continue
 				} else {
 					if err := r.gossip.AddInfo(cp.gossipKey, configMap, 0*time.Second); err != nil {
-						glog.Errorf("failed to gossip %s configMap: %v", cp.gossipKey, err)
+						log.Errorf("failed to gossip %s configMap: %v", cp.gossipKey, err)
 						continue
 					}
 				}
@@ -470,7 +470,7 @@ func (r *Range) executeCmd(method string, args Request, reply Response) error {
 	// to continue request idempotence when leadership changes.
 	if !IsReadOnly(method) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
-			glog.Errorf("unable to write result of %+v: %+v to the response cache: %v",
+			log.Errorf("unable to write result of %+v: %+v to the response cache: %v",
 				args, reply, putErr)
 		}
 	}

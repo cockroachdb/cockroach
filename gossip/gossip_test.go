@@ -21,7 +21,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
-	"github.com/golang/glog"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -36,7 +37,7 @@ func isNetworkConnected(nodes map[string]*Gossip) bool {
 		for infoKey := range nodes {
 			_, err := node.GetInfo(infoKey)
 			if err != nil {
-				glog.Infof("error: %v", err)
+				log.Infof("error: %v", err)
 				return false
 			}
 		}

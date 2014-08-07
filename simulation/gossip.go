@@ -72,7 +72,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -144,7 +144,7 @@ func (em edgeMap) addEdge(addr string, e edge) {
 func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edgeSet map[string]edge) string {
 	f, err := os.Create(dotFN)
 	if err != nil {
-		glog.Fatalf("unable to create temp file: %s", err)
+		log.Fatalf("unable to create temp file: %s", err)
 	}
 	defer f.Close()
 
@@ -194,7 +194,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 				continue // skip the node's own info
 			}
 			if val, err := node.GetInfo(infoKey); err != nil {
-				glog.Infof("error getting info for key %q: %s", infoKey, err)
+				log.Infof("error getting info for key %q: %s", infoKey, err)
 				incomplete++
 			} else {
 				totalAge += int64(cycle) - val.(int64)
@@ -203,7 +203,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 
 		var sentinelAge int64
 		if val, err := node.GetInfo(gossip.KeySentinel); err != nil {
-			glog.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
+			log.Infof("error getting info for sentinel gossip key %q: %s", gossip.KeySentinel, err)
 		} else {
 			sentinelAge = int64(cycle) - val.(int64)
 		}
@@ -249,7 +249,7 @@ func main() {
 
 	dirName, err := ioutil.TempDir("", "gossip-simulation-")
 	if err != nil {
-		glog.Fatalf("could not create temporary directory for gossip simulation output: %s", err)
+		log.Fatalf("could not create temporary directory for gossip simulation output: %s", err)
 	}
 
 	// Simulation callbacks to run the simulation for cycleCount
@@ -280,7 +280,7 @@ func main() {
 		numCycles = 20
 		outputEvery = 2
 	default:
-		glog.Fatalf("unknown simulation size: %s", *size)
+		log.Fatalf("unknown simulation size: %s", *size)
 	}
 
 	edgeSet := make(map[string]edge)
@@ -292,7 +292,7 @@ func main() {
 		// Update infos.
 		for addr, node := range nodes {
 			if err := node.AddInfo(addr, int64(cycle), time.Hour); err != nil {
-				glog.Infof("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
+				log.Infof("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
 			}
 		}
 		// Output dot graph periodically.

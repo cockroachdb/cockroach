@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A DB interface provides asynchronous methods to access a key value store.
@@ -321,7 +321,7 @@ func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args storag
 	for _, replica := range replicas {
 		addr, err := db.nodeIDToAddr(replica.NodeID)
 		if err != nil {
-			glog.V(1).Infof("node %d address is not gossipped", replica.NodeID)
+			log.V(1).Infof("node %d address is not gossipped", replica.NodeID)
 			continue
 		}
 		// Copy the args value and set the replica in the header.
@@ -382,7 +382,7 @@ func (db *DistDB) routeRPC(method string, args storage.Request, replyChan interf
 
 				// If retryable, allow outer loop to retry.
 				if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
-					glog.Warningf("failed to invoke %s: %v", method, err)
+					log.Warningf("failed to invoke %s: %v", method, err)
 					return false, nil
 				}
 				// TODO(mtracy): Make sure that errors that clearly result from

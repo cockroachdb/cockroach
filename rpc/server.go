@@ -22,7 +22,7 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Server is a Cockroach-specific RPC server with an embedded go RPC
@@ -75,13 +75,13 @@ func (s *Server) Start() error {
 
 	go func() {
 		// Start serving in a loop until listener is closed.
-		glog.Infof("serving on %+v...", s.Addr())
+		log.Infof("serving on %+v...", s.Addr())
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				s.mu.Lock()
 				if !s.closed {
-					glog.Fatalf("server terminated: %s", err)
+					log.Fatalf("server terminated: %s", err)
 				}
 				s.mu.Unlock()
 				break
@@ -89,7 +89,7 @@ func (s *Server) Start() error {
 			// Serve connection to completion in a goroutine.
 			go s.serveConn(conn)
 		}
-		glog.Infof("done serving on %+v", s.Addr())
+		log.Infof("done serving on %+v", s.Addr())
 	}()
 	return nil
 }

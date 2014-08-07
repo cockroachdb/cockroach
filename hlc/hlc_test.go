@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type Event uint8
@@ -49,15 +49,15 @@ func ExampleNewHLClock() {
 
 	// HLTimestamp implements the util.Ordered interface.
 	if s.Less(t) || !t.Less(s) {
-		glog.Fatalf("The later timestamp is smaller than the earlier one")
+		log.Fatalf("The later timestamp is smaller than the earlier one")
 	}
 
 	if t.WallTime-s.WallTime > 0 {
-		glog.Fatalf("HLC timestamp %d deviates from physical clock %d", s, t)
+		log.Fatalf("HLC timestamp %d deviates from physical clock %d", s, t)
 	}
 
 	if s.Logical > 0 {
-		glog.Fatalf("Trivial timestamp has logical component")
+		log.Fatalf("Trivial timestamp has logical component")
 	}
 
 	fmt.Printf("The Unix Epoch is now approximately %dns old.\n", t.WallTime)
@@ -193,11 +193,11 @@ func ExampleManualClock() {
 	c := NewHLClock(m.UnixNano)
 	c.Now()
 	if c.Timestamp().WallTime != 10 {
-		glog.Fatalf("manual clock error")
+		log.Fatalf("manual clock error")
 	}
 	m = 20
 	c.Now()
 	if c.Timestamp().WallTime != 20 {
-		glog.Fatalf("manual clock error")
+		log.Fatalf("manual clock error")
 	}
 }

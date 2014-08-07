@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // startAdminServer launches a new admin server using minimal engine
@@ -34,7 +34,7 @@ import (
 func startAdminServer() *httptest.Server {
 	db, err := BootstrapCluster("cluster-1", engine.NewInMem(engine.Attributes{}, 1<<20))
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatal(err)
 	}
 	admin := newAdminServer(db)
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

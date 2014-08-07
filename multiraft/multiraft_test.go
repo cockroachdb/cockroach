@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type testCluster struct {
@@ -126,7 +126,7 @@ func TestCommand(t *testing.T) {
 
 	// The command will be committed on each node.
 	for i, events := range cluster.events {
-		glog.Infof("waiting for event to be commited on node %v", i)
+		log.Infof("waiting for event to be commited on node %v", i)
 		commit := <-events.CommandCommitted
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)
@@ -155,7 +155,7 @@ func TestSlowStorage(t *testing.T) {
 	// Even with the third node blocked, the other nodes can make progress.
 	for i := 0; i < 2; i++ {
 		events := cluster.events[i]
-		glog.Infof("waiting for event to be commited on node %v", i)
+		log.Infof("waiting for event to be commited on node %v", i)
 		commit := <-events.CommandCommitted
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)
@@ -172,7 +172,7 @@ func TestSlowStorage(t *testing.T) {
 
 	// After unblocking the third node, it will catch up.
 	cluster.storages[2].Unblock()
-	glog.Infof("waiting for event to be commited on node 2")
+	log.Infof("waiting for event to be commited on node 2")
 	commit := <-cluster.events[2].CommandCommitted
 	if string(commit.Command) != "command" {
 		t.Errorf("unexpected value in committed command: %v", commit.Command)

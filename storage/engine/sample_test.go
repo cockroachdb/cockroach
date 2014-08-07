@@ -26,7 +26,7 @@ import (
 )
 
 func runWithAllStorages(f func(storage util.SampleStorage, size int, t *testing.T), engine Engine, size int, t *testing.T) {
-	ess := NewEngineSampleStorage(engine, Key("dummyPrefix"), size)
+	ess := NewSampleStorage(engine, Key("dummyPrefix"), size)
 	f(ess, size, t)
 	mss := util.NewInMemSampleStorage(size)
 	f(mss, size, t)
@@ -94,7 +94,7 @@ func TestReservoirSampling(t *testing.T) {
 	}, t)
 }
 
-func TestEngineSampleStorage(t *testing.T) {
+func TestSampleStorage(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testFunc := func() {
 			testCases := []struct {
@@ -110,7 +110,7 @@ func TestEngineSampleStorage(t *testing.T) {
 			}
 
 			testSize := len(testCases)
-			es := NewEngineSampleStorage(engine, Key("sampleprefix"), testSize)
+			es := NewSampleStorage(engine, Key("sampleprefix"), testSize)
 			if size := es.Size(); size != testSize {
 				t.Fatalf("size counting is incorrect, wanted %d but got %d", testSize, size)
 			}
@@ -153,7 +153,7 @@ func TestEngineSampleStorage(t *testing.T) {
 				t.Fatalf("overwriting failed: got %v instead of %v", sl2[0], newVal)
 			}
 
-			es2 := NewEngineSampleStorage(engine, Key("sampleprefix"), testSize)
+			es2 := NewSampleStorage(engine, Key("sampleprefix"), testSize)
 			if es2.Size() != es.Size() ||
 				!reflect.DeepEqual(es.Slice(), es2.Slice()) ||
 				es.Seen() != es2.Seen() {

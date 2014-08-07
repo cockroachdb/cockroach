@@ -20,7 +20,7 @@ package util
 import (
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // RetryOptions provides control of retry loop logic via the
@@ -48,7 +48,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (bool, error)) error {
 		if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
 			return Errorf("exceeded maximum retry attempts: %d", opts.MaxAttempts)
 		}
-		glog.Infof("%s failed; retrying in %s", opts.Tag, backoff)
+		log.Infof("%s failed; retrying in %s", opts.Tag, backoff)
 		select {
 		case <-time.After(backoff):
 			// Increase backoff.

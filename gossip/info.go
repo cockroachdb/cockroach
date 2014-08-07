@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // info is the basic unit of information traded over the gossip
@@ -64,7 +64,7 @@ func (i *info) less(b *info) bool {
 		if ord, ok := i.Val.(util.Ordered); ok {
 			return ord.Less(b.Val.(util.Ordered))
 		}
-		glog.Fatalf("unhandled info value type: %s", t)
+		log.Fatalf("unhandled info value type: %s", t)
 	}
 	return false
 }

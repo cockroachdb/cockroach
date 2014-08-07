@@ -21,7 +21,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A Sample is a subset of elements picked from a large set or stream.
@@ -72,7 +72,7 @@ type InMemSampleStorage struct {
 // NewInMemSampleStorage creates a InMemSampleStorage of the given size.
 func NewInMemSampleStorage(size int) SampleStorage {
 	if size < 1 {
-		glog.Fatalf("attempt to create reservoir with illegal size %d", size)
+		log.Fatalf("attempt to create reservoir with illegal size %d", size)
 	}
 	imss := &InMemSampleStorage{size: size}
 	imss.Reset()

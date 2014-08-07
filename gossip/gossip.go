@@ -65,7 +65,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -284,7 +284,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 			addr = strings.TrimSpace(addr)
 			tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
-				glog.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
+				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
 				continue
 			}
 			g.bootstraps.addAddr(tcpAddr)
@@ -292,7 +292,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 	}
 	// If we have no bootstrap hosts, fatal exit.
 	if g.bootstraps.len() == 0 {
-		glog.Fatalf("no hosts specified for gossip network (use -gossip)")
+		log.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
 	if g.bootstraps.hasAddr(g.is.NodeAddr) {
@@ -336,7 +336,7 @@ func (g *Gossip) bootstrap() {
 			if !haveClients || !haveSentinel {
 				// Select a bootstrap address at random and start client.
 				addr := avail.selectRandom()
-				glog.Infof("bootstrapping gossip protocol using host %+v", addr)
+				log.Infof("bootstrapping gossip protocol using host %+v", addr)
 				g.startClient(addr)
 			}
 		}
@@ -365,7 +365,7 @@ func (g *Gossip) manage() {
 		case c := <-g.disconnected:
 			g.mu.Lock()
 			if c.err != nil {
-				glog.Infof("client disconnected: %s", c.err)
+				log.Infof("client disconnected: %s", c.err)
 			}
 			g.outgoing.removeAddr(c.addr)
 
@@ -393,7 +393,7 @@ func (g *Gossip) manage() {
 					// connected.
 					addr := g.is.leastUseful(g.outgoing)
 					if addr != nil {
-						glog.Infof("closing least useful client %+v to tighten network graph", addr)
+						log.Infof("closing least useful client %+v to tighten network graph", addr)
 						g.closeClient(addr)
 					}
 				}
@@ -406,10 +406,10 @@ func (g *Gossip) manage() {
 		hasSentinel := g.is.getInfo(KeySentinel) != nil
 		if g.filterExtant(g.bootstraps).len() > 0 {
 			if g.outgoing.len()+g.incoming.len() == 0 {
-				glog.Infof("no connections; signaling bootstrap")
+				log.Infof("no connections; signaling bootstrap")
 				g.stalled.Signal()
 			} else if !hasSentinel {
-				glog.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
+				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
 				g.stalled.Signal()
 			}
 		}
@@ -456,7 +456,7 @@ func (g *Gossip) maybeWarnAboutInit() {
 		// Otherwise, if all bootstrap hosts are connected and this
 		// node is a bootstrap host, warn.
 		if allConnected && g.isBootstrap {
-			glog.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
+			log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
 				"Use \"cockroach init\" to initialize.")
 		}
 		return false, nil

@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type TestRequest struct {
@@ -423,7 +423,7 @@ func runHTTPTestFixture(t *testing.T, testcases []RequestResponse, args ...*kvTe
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatal(err)
 		}
 		defer resp.Body.Close()
 		b, err := ioutil.ReadAll(resp.Body)

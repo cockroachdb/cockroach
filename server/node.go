@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -251,7 +251,7 @@ func (n *Node) initStores(clock *hlc.HLClock, engines []engine.Engine) error {
 			if err != nil {
 				return err
 			}
-			glog.Infof("initialized store %s: %+v", s, capacity)
+			log.Infof("initialized store %s: %+v", s, capacity)
 			n.localDB.AddStore(s)
 		}
 	}
@@ -298,20 +298,20 @@ func (n *Node) validateStores() error {
 // allocated via a sequence id generator stored at a system key per
 // node.
 func (n *Node) bootstrapStores(bootstraps *list.List) {
-	glog.Infof("bootstrapping %d store(s)", bootstraps.Len())
+	log.Infof("bootstrapping %d store(s)", bootstraps.Len())
 
 	// Allocate a new node ID if necessary.
 	if n.Descriptor.NodeID == 0 {
 		var err error
 		n.Descriptor.NodeID, err = allocateNodeID(n.distDB)
-		glog.Infof("new node allocated ID %d", n.Descriptor.NodeID)
+		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatal(err)
 		}
 		// Gossip node address keyed by node ID.
 		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
 		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
-			glog.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
+			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
 
@@ -320,7 +320,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	inc := int64(bootstraps.Len())
 	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.distDB)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatal(err)
 	}
 	sIdent := storage.StoreIdent{
 		ClusterID: n.ClusterID,
@@ -332,7 +332,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 		s.Bootstrap(sIdent)
 		n.localDB.AddStore(s)
 		sIdent.StoreID++
-		glog.Infof("bootstrapped store %s", s)
+		log.Infof("bootstrapped store %s", s)
 	}
 }
 
@@ -341,28 +341,28 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 // for a match. If not part of a cluster, the cluster ID is set. The
 // node's address is gossipped with node ID as the gossip key.
 func (n *Node) connectGossip() {
-	glog.Infof("connecting to gossip network to verify cluster ID...")
+	log.Infof("connecting to gossip network to verify cluster ID...")
 	<-n.gossip.Connected
 
 	val, err := n.gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil || val == nil {
-		glog.Fatalf("unable to ascertain cluster ID from gossip network: %v", err)
+		log.Fatalf("unable to ascertain cluster ID from gossip network: %v", err)
 	}
 	gossipClusterID := val.(string)
 
 	if n.ClusterID == "" {
 		n.ClusterID = gossipClusterID
 	} else if n.ClusterID != gossipClusterID {
-		glog.Fatalf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
+		log.Fatalf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
-	glog.Infof("node connected via gossip and verified as part of cluster %q", gossipClusterID)
+	log.Infof("node connected via gossip and verified as part of cluster %q", gossipClusterID)
 
 	// Gossip node address keyed by node ID.
 	if n.Descriptor.NodeID != 0 {
 		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
 		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
-			glog.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
+			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
 }
@@ -389,7 +389,7 @@ func (n *Node) gossipCapacities() {
 	n.localDB.VisitStores(func(s *storage.Store) error {
 		storeDesc, err := s.Descriptor(&n.Descriptor)
 		if err != nil {
-			glog.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
+			log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
 			return nil
 		}
 		gossipPrefix := gossip.KeyMaxAvailCapacityPrefix + storeDesc.CombinedAttrs().SortedString()

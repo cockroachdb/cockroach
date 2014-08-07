@@ -21,7 +21,7 @@ import (
 	"net"
 	"net/rpc"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // The Transport interface is supplied by the application to manage communication with
@@ -80,7 +80,7 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 					return
 				}
 			}
-			glog.Errorf("rpc.Serve: accept: %s", err.Error())
+			log.Errorf("rpc.Serve: accept: %s", err.Error())
 		}
 		go server.ServeConn(conn)
 	}

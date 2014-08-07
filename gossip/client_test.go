@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func init() {
@@ -71,7 +71,7 @@ func TestClientGossip(t *testing.T) {
 	local.stop()
 	lserver.Close()
 	rserver.Close()
-	glog.Info("done serving")
+	log.Info("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")
 	}

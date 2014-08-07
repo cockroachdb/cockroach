@@ -19,7 +19,7 @@ package multiraft
 
 import (
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // LogEntryType is the type of a LogEntry.
@@ -267,7 +267,7 @@ func (w *writeTask) start() {
 			return
 		case request = <-w.in:
 		}
-		glog.V(6).Infof("writeTask got request %#v", *request)
+		log.V(6).Infof("writeTask got request %#v", *request)
 		response := &writeResponse{make(map[GroupID]*groupWriteResponse)}
 
 		for groupID, groupReq := range request.groups {

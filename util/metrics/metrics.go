@@ -34,7 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -368,7 +368,7 @@ func processHistograms(name string,
 	for label, p := range labelToPercentile {
 		value, err := percentile(totalCount, proportions, p)
 		if err != nil {
-			glog.Errorf("unable to calculate percentile: %s", err)
+			log.Errorf("unable to calculate percentile: %s", err)
 		} else {
 			output[fmt.Sprintf(label, name)] = value
 		}
@@ -563,10 +563,10 @@ func (ms *MetricSystem) reaper() {
 				delete(ms.rawBadSubscribers, subscriber)
 			default:
 				ms.rawBadSubscribers[subscriber]++
-				glog.Error("a raw subscriber has allowed their channel to fill up. ",
+				log.Error("a raw subscriber has allowed their channel to fill up. ",
 					"dropping their metrics on the floor rather than blocking.")
 				if ms.rawBadSubscribers[subscriber] >= 2 {
-					glog.Error("this raw subscriber has caused dropped metrics at ",
+					log.Error("this raw subscriber has caused dropped metrics at ",
 						"least 3 times in a row.  closing the channel.")
 					delete(ms.rawSubscribers, subscriber)
 					close(subscriber)
@@ -606,10 +606,10 @@ func (ms *MetricSystem) reaper() {
 					delete(ms.processedBadSubscribers, subscriber)
 				default:
 					ms.processedBadSubscribers[subscriber]++
-					glog.Error("a subscriber has allowed their channel to fill up. ",
+					log.Error("a subscriber has allowed their channel to fill up. ",
 						"dropping their metrics on the floor rather than blocking.")
 					if ms.processedBadSubscribers[subscriber] >= 2 {
-						glog.Error("this subscriber has caused dropped metrics at ",
+						log.Error("this subscriber has caused dropped metrics at ",
 							"least 3 times in a row.  closing the channel.")
 						delete(ms.processedSubscribers, subscriber)
 						close(subscriber)
@@ -621,7 +621,7 @@ func (ms *MetricSystem) reaper() {
 		case processChan <- sendProcessed:
 		default:
 			// processChan has filled up, this metric load is not sustainable
-			glog.Errorf("processing of metrics is taking longer than this node can "+
+			log.Errorf("processing of metrics is taking longer than this node can "+
 				"handle.  dropping this entire interval of %s metrics on the "+
 				"floor rather than blocking the reaper.", rawMetrics.Time)
 		}

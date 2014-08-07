@@ -29,7 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -48,23 +48,23 @@ func startServer() *server {
 	serverTestOnce.Do(func() {
 		s, err := newServer()
 		if err != nil {
-			glog.Fatal(err)
+			log.Fatal(err)
 		}
 		engines := []engine.Engine{engine.NewInMem(engine.Attributes{}, 1<<20)}
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
-			glog.Fatal(err)
+			log.Fatal(err)
 		}
 		clock := hlc.NewHLClock(hlc.UnixNano)
 		err = s.start(clock, engines, true) // TODO(spencer): should shutdown server.
 		if err != nil {
-			glog.Fatalf("Could not start server: %s", err)
+			log.Fatalf("Could not start server: %s", err)
 		}
 
 		// Update the configuration variables to reflect the actual
 		// sockets bound during this test.
 		*httpAddr = (*s.httpListener).Addr().String()
 		*rpcAddr = s.rpc.Addr().String()
-		glog.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
+		log.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
 	})
 	return s
 }

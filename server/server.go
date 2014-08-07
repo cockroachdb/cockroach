@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/golang/glog"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -129,10 +129,10 @@ type server struct {
 // of "well-known" hosts used to join this node to the cockroach
 // cluster via the gossip network.
 func runStart(cmd *commander.Command, args []string) {
-	glog.Info("Starting cockroach cluster")
+	log.Info("Starting cockroach cluster")
 	s, err := newServer()
 	if err != nil {
-		glog.Errorf("Failed to start Cockroach server: %v", err)
+		log.Errorf("Failed to start Cockroach server: %v", err)
 		return
 	}
 
@@ -143,18 +143,18 @@ func runStart(cmd *commander.Command, args []string) {
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
-		glog.Errorf("Failed to initialize engines from -stores=%q: %v", *stores, err)
+		log.Errorf("Failed to initialize engines from -stores=%q: %v", *stores, err)
 		return
 	}
 	if len(engines) == 0 {
-		glog.Errorf("No valid engines specified after initializing from -stores=%q", *stores)
+		log.Errorf("No valid engines specified after initializing from -stores=%q", *stores)
 		return
 	}
 
 	err = s.start(clock, engines, false)
 	defer s.stop()
 	if err != nil {
-		glog.Errorf("Cockroach server exited with error: %v", err)
+		log.Errorf("Cockroach server exited with error: %v", err)
 		return
 	}
 
@@ -266,14 +266,14 @@ func newServer() (*server, error) {
 // bootstrap), and starts the node using the supplied engines slice.
 func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstrap bool) error {
 	s.rpc.Start() // bind RPC socket and launch goroutine.
-	glog.Infof("Started RPC server at %s", s.rpc.Addr())
+	log.Infof("Started RPC server at %s", s.rpc.Addr())
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
 	}
 	s.gossip.Start(s.rpc)
-	glog.Infoln("Started gossip instance")
+	log.Infoln("Started gossip instance")
 
 	// Init the engines specified via command line flags if not supplied.
 	if engines == nil {
@@ -290,7 +290,7 @@ func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstra
 	if err := s.node.start(s.rpc, clock, engines, nodeAttrs); err != nil {
 		return err
 	}
-	glog.Infof("Initialized %d storage engine(s)", len(engines))
+	log.Infof("Initialized %d storage engine(s)", len(engines))
 
 	s.initHTTP()
 	if strings.HasPrefix(*httpAddr, ":") {
@@ -303,7 +303,7 @@ func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstra
 	// Obtaining the http end point listener is difficult using
 	// http.ListenAndServe(), so we are storing it with the server
 	s.httpListener = &ln
-	glog.Infof("Starting HTTP server at %s", ln.Addr())
+	log.Infof("Starting HTTP server at %s", ln.Addr())
 	go http.Serve(ln, s)
 	return nil
 }
