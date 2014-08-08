@@ -24,7 +24,6 @@ import (
 	"code.google.com/p/biogo.store/llrb"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 type testMetadataDB struct {
@@ -34,75 +33,75 @@ type testMetadataDB struct {
 }
 
 type testMetadataNode struct {
-	endKey engine.Key
-	desc   *storage.RangeDescriptor
+	*storage.RangeDescriptor
 }
 
-func (a *testMetadataNode) Compare(b llrb.Comparable) int {
-	return bytes.Compare(a.endKey, b.(*testMetadataNode).endKey)
+func (a testMetadataNode) Compare(b llrb.Comparable) int {
+	return bytes.Compare(a.LookupKey(), b.(testMetadataNode).LookupKey())
 }
 
-func (db *testMetadataDB) getMetadata(key engine.Key) (engine.Key, *storage.RangeDescriptor, error) {
-	metadataKey := engine.RangeMetaKey(key)
-	v := db.data.Ceil(&testMetadataNode{endKey: metadataKey})
-	if v == nil {
-		return nil, nil, util.Errorf("Range for key %s not found", key)
+func (db *testMetadataDB) getMetadata(key engine.Key) []*storage.RangeDescriptor {
+	response := make([]*storage.RangeDescriptor, 0, 3)
+	for i := 0; i < 3; i++ {
+		v := db.data.Ceil(testMetadataNode{
+			&storage.RangeDescriptor{
+				EndKey: engine.NextKey(key),
+			},
+		})
+		if v == nil {
+			break
+		}
+		response = append(response, v.(testMetadataNode).RangeDescriptor)
+		key = engine.NextKey(response[i].EndKey)
 	}
-	val := v.(*testMetadataNode)
+	return response
+}
+
+func (db *testMetadataDB) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, error) {
 	db.hitCount++
-	return val.endKey, val.desc, nil
-}
-
-func (db *testMetadataDB) LookupRangeMetadata(key engine.Key) (engine.Key, *storage.RangeDescriptor, error) {
 	metadataKey := engine.RangeMetaKey(key)
 
-	// Recursively call into cache as the real DB would, terminating when the
-	// initial key is encountered.
-	if len(metadataKey) == 0 {
-		return nil, nil, nil
+	// Recursively call into cache as the real DB would, terminating recursion
+	// when a meta1key is encountered.
+	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
+		db.cache.LookupRangeMetadata(metadataKey)
 	}
-	db.cache.LookupRangeMetadata(metadataKey)
-	return db.getMetadata(key)
+	return db.getMetadata(key), nil
 }
 
 func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
-	metadataKey := engine.RangeMetaKey(key)
-	v := db.data.Ceil(&testMetadataNode{endKey: metadataKey})
+	v := db.data.Ceil(testMetadataNode{&storage.RangeDescriptor{EndKey: key}})
 	if v == nil {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
 	}
-	val := v.(*testMetadataNode)
-	if bytes.Compare(val.desc.EndKey, key) == 0 {
+	val := v.(testMetadataNode)
+	if bytes.Compare(val.EndKey, key) == 0 {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
-	db.data.Insert(&testMetadataNode{
-		endKey: metadataKey,
-		desc: &storage.RangeDescriptor{
-			StartKey: val.desc.StartKey,
+	db.data.Insert(testMetadataNode{
+		&storage.RangeDescriptor{
+			StartKey: val.StartKey,
 			EndKey:   key,
 		},
 	})
-	db.data.Insert(&testMetadataNode{
-		endKey: val.endKey,
-		desc: &storage.RangeDescriptor{
+	db.data.Insert(testMetadataNode{
+		&storage.RangeDescriptor{
 			StartKey: key,
-			EndKey:   val.desc.EndKey,
+			EndKey:   val.EndKey,
 		},
 	})
 }
 
 func newTestMetadataDB() *testMetadataDB {
 	db := &testMetadataDB{}
-	db.data.Insert(&testMetadataNode{
-		endKey: engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax),
-		desc: &storage.RangeDescriptor{
+	db.data.Insert(testMetadataNode{
+		&storage.RangeDescriptor{
 			StartKey: engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMin),
 			EndKey:   engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax),
 		},
 	})
-	db.data.Insert(&testMetadataNode{
-		endKey: engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax),
-		desc: &storage.RangeDescriptor{
+	db.data.Insert(testMetadataNode{
+		&storage.RangeDescriptor{
 			StartKey: engine.KeyMetaMax,
 			EndKey:   engine.KeyMax,
 		},
@@ -123,7 +122,7 @@ func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
 		t.Fatalf("Unexpected error from LookupRangeMetadata: %s", err.Error())
 	}
 	if !r.ContainsKey(engine.Key(key)) {
-		t.Fatalf("Returned range did not contain key: %v, %s", r, key)
+		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 }
 
@@ -133,32 +132,48 @@ func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
 // metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	db := newTestMetadataDB()
-	db.splitRange(t, engine.Key("a"))
-	db.splitRange(t, engine.Key("b"))
-	db.splitRange(t, engine.Key("c"))
-	db.splitRange(t, engine.Key("d"))
-	db.splitRange(t, engine.Key("e"))
-	db.splitRange(t, engine.Key("f"))
-	db.splitRange(t, engine.RangeMetaKey(engine.Key("d")))
-	db.hitCount = 0
+	for i, char := range "abcdefghijklmnopqrstuvwx" {
+		db.splitRange(t, engine.Key(string(char)))
+		if i > 0 && i%6 == 0 {
+			db.splitRange(t, engine.RangeMetaKey(engine.Key(string(char))))
+		}
+	}
 
 	rangeCache := NewRangeMetadataCache(db)
 	db.cache = rangeCache
 
-	doLookup(t, rangeCache, "ba")
+	doLookup(t, rangeCache, "aa")
 	db.assertHitCount(t, 2)
-	doLookup(t, rangeCache, "bb")
+
+	// Metadata for the following ranges should be cached
+	doLookup(t, rangeCache, "ab")
 	db.assertHitCount(t, 0)
-	doLookup(t, rangeCache, "ca")
-	db.assertHitCount(t, 1)
+	doLookup(t, rangeCache, "ba")
+	db.assertHitCount(t, 0)
+	doLookup(t, rangeCache, "cz")
+	db.assertHitCount(t, 0)
 
-	// Different metadata one range
-	doLookup(t, rangeCache, "da")
-	db.assertHitCount(t, 2)
+	// Metadata two ranges weren't cached, same metadata 1 range
+	doLookup(t, rangeCache, "d")
+	db.assertHitCount(t, 1)
 	doLookup(t, rangeCache, "fa")
+	db.assertHitCount(t, 0)
+
+	// Metadata two ranges weren't cached, metadata 1 was aggressively cached
+	doLookup(t, rangeCache, "ij")
+	db.assertHitCount(t, 1)
+	doLookup(t, rangeCache, "jk")
+	db.assertHitCount(t, 0)
+	doLookup(t, rangeCache, "pn")
 	db.assertHitCount(t, 1)
 
-	// Evict clears both level 1 and level 2 cache for a key
+	// Totally uncached ranges
+	doLookup(t, rangeCache, "vu")
+	db.assertHitCount(t, 2)
+	doLookup(t, rangeCache, "xx")
+	db.assertHitCount(t, 0)
+
+	// Evict clears one level 1 and one level 2 cache
 	rangeCache.EvictCachedRangeMetadata(engine.Key("da"))
 	doLookup(t, rangeCache, "fa")
 	db.assertHitCount(t, 0)

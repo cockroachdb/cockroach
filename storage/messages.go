@@ -297,20 +297,18 @@ type EnqueueMessageResponse struct {
 }
 
 // An InternalRangeLookupRequest is arguments to the InternalRangeLookup()
-// method. It specifies the key for range lookup, which is a system key prefixed
-// by KeyMeta1Prefix or KeyMeta2Prefix to the user key.
+// method. It specifies the key for which the containing range is being
+// requested, and the maximum number of total ranges that should be returned.
 type InternalRangeLookupRequest struct {
 	RequestHeader
+	MaxRanges int
 }
 
 // An InternalRangeLookupResponse is the return value from the
-// InternalRangeLookup() method. It returns the metadata for the
-// range where the key resides. When looking up 1-level metadata,
-// it returns the info for the range containing the 2-level metadata
-// for the key. And when looking up 2-level metadata, it returns the
-// info for the range possibly containing the actual key and its value.
+// InternalRangeLookup() method.  It returns metadata for the range containing
+// the requested key, optionally returning the metadata for additional
+// consecutive ranges beyond the requested range.
 type InternalRangeLookupResponse struct {
 	ResponseHeader
-	EndKey engine.Key // The key in datastore whose value is the Range object.
-	Range  RangeDescriptor
+	Ranges []*RangeDescriptor
 }

@@ -621,43 +621,78 @@ func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessag
 	reply.Error = util.Error("unimplemented")
 }
 
-// InternalRangeLookup looks up the metadata info for the given args.Key.
-// args.Key should be a metadata key, which are of the form "\0\0meta[12]<encoded_key>".
+// InternalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
+// is a metadata structure which describes the key range and replica locations
+// of a distinct range in the cluster.
+//
+// RangeDescriptors are stored as values in the cockroach cluster's key-value
+// store. However, they are always stored using special "Range Metadata keys",
+// which are "ordinary" keys with a special prefix appended. The Range Metadata
+// Key for an ordinary key can be generated with the `engine.RangeMetaKey(key)`
+// function. The RangeDescriptor for the range which contains a given key can be
+// retrieved by generating its Range Metadata Key and dispatching it to
+// InternalRangeLookup.
+//
+// Note that the Range Metadata Key sent to InternalRangeLookup is NOT the key
+// at which the desired RangeDescriptor is stored. Instead, this method returns
+// the RangeDescriptor stored at the _lowest_ existing key which is _greater_
+// than the given key. The returned RangeDescriptor will thus contain the
+// ordinary key which was originally used to generate the Range Metadata Key
+// sent to InternalRangeLookup.
+//
+// This method has an important optimization: instead of just returning the
+// request RangeDescriptor, it also returns a slice of additional range
+// descriptors immediately consecutive to the desired RangeDescriptor. This is
+// intended to serve as a sort of caching pre-fetch, so that the requesting
+// nodes can aggressively cache RangeDescriptors which are likely to be desired
+// by their current workload.
 func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
-	if !bytes.HasPrefix(args.Key, engine.KeyMetaPrefix) {
-		reply.Error = util.Errorf("invalid metadata key: %q", args.Key)
+	if err := engine.ValidateRangeMetaKey(args.Key); err != nil {
+		reply.Error = err
 		return
 	}
 
-	// Validate that key is not outside the range. A range ends just
-	// before its Meta.EndKey.
-	if !args.Key.Less(r.Meta.EndKey) {
-		reply.Error = util.Errorf("key outside the range %v with end key %q", r.Meta.RangeID, r.Meta.EndKey)
+	rangeCount := int64(args.MaxRanges)
+	if rangeCount < 1 {
+		reply.Error = util.Errorf(
+			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 		return
 	}
 
-	// We want to search for the metadata key just greater than args.Key.
+	// We want to search for the metadata key just greater than args.Key.  Scan
+	// for both the requested key and the keys immediately afterwards, up to
+	// MaxRanges.
+	metaPrefix := args.Key[:len(engine.KeyMeta1Prefix)]
 	nextKey := engine.NextKey(args.Key)
-	kvs, err := r.engine.Scan(nextKey, engine.KeyMax, 1)
+	kvs, err := r.engine.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount)
 	if err != nil {
 		reply.Error = err
 		return
 	}
-	// We should have gotten the key with the same metadata level prefix as we queried.
-	metaPrefix := args.Key[0:len(engine.KeyMeta1Prefix)]
-	if len(kvs) != 1 || !bytes.HasPrefix(kvs[0].Key, metaPrefix) {
-		reply.Error = util.Errorf("key not found in range %v", r.Meta.RangeID)
+
+	// The initial key must have the same metadata level prefix as we queried.
+	if len(kvs) == 0 {
+		// At this point the range has been verified to contain the requested
+		// key, but no matching results were returned from the scan. This could
+		// indicate a very bad system error, but for now we will just treat it
+		// as a retryable Key Mismatch error.
+		reply.Error = NewRangeKeyMismatchError(args.Key, args.Key, r.Meta)
+		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s",
+			reply.Error.Error())
 		return
 	}
 
-	if err = gob.NewDecoder(bytes.NewBuffer(kvs[0].Value)).Decode(&reply.Range); err != nil {
-		reply.Error = err
-		return
+	// Decode all scanned range descriptors, stopping if a range is encountered
+	// which does not have the same metadata prefix as the queried key.
+	rds := make([]*RangeDescriptor, 0, len(kvs))
+	for i := range kvs {
+		rds = append(rds, &RangeDescriptor{})
+		if err = gob.NewDecoder(bytes.NewBuffer(kvs[i].Value)).Decode(rds[i]); err != nil {
+			reply.Error = err
+			return
+		}
 	}
-	if args.Key.Less(reply.Range.StartKey) {
-		// args.Key doesn't belong to this range. We are perhaps searching the wrong node?
-		reply.Error = util.Errorf("no range found for key %q in range: %+v", args.Key, r.Meta)
-		return
-	}
-	reply.EndKey = kvs[0].Key
+
+	reply.Ranges = rds
+	return
 }

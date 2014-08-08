@@ -184,6 +184,10 @@ const (
 	defaultRPCTimeout      = 15 * time.Second
 	retryBackoff           = 1 * time.Second
 	maxRetryBackoff        = 30 * time.Second
+
+	// Maximum number of ranges to return from an internal range lookup.
+	// TODO(mrtracy): This value should be configurable.
+	rangeLookupMaxRanges = 8
 )
 
 // A firstRangeMissingError indicates that the first range has not yet
@@ -266,44 +270,77 @@ func (db *DistDB) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
 func (db *DistDB) internalRangeLookup(key engine.Key,
-	info *storage.RangeDescriptor) (engine.Key, *storage.RangeDescriptor, error) {
+	info *storage.RangeDescriptor) ([]*storage.RangeDescriptor, error) {
 	args := &storage.InternalRangeLookupRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
+		MaxRanges: rangeLookupMaxRanges,
 	}
 	replyChan := make(chan *storage.InternalRangeLookupResponse, len(info.Replicas))
 	if err := db.sendRPC(info.Replicas, "Node.InternalRangeLookup", args, replyChan); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	reply := <-replyChan
-	return reply.EndKey, &reply.Range, nil
+	if reply.Error != nil {
+		return nil, reply.Error
+	}
+	return reply.Ranges, nil
 }
 
-// LookupRangeMetadata retrieves the range metadata for the range containing the
-// given key.  Because range metadata in cockroach is stored using a multi-level
-// lookup table, this method may be called recursively to look up higher-level
-// ranges.  Recursive lookups are dispatched through the metadata range cache.
-func (db *DistDB) LookupRangeMetadata(key engine.Key) (engine.Key, *storage.RangeDescriptor, error) {
-	metadataKey := engine.RangeMetaKey(key)
+// getFirstRangeDescriptor returns the RangeDescriptor for the first range on
+// the cluster, which is retrieved from the gossip protocol instead of the
+// datastore.
+func (db *DistDB) getFirstRangeDescriptor() (*storage.RangeDescriptor, error) {
+	infoI, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
+	if err != nil {
+		return nil, firstRangeMissingError{err}
+	}
+	info := infoI.(storage.RangeDescriptor)
+	return &info, nil
+}
+
+// getRangeMetadata retrieves metadata for the range containing the given key
+// from storage. This function returns a sorted slice of RangeDescriptors for a
+// set of consecutive ranges, the first which must contain the requested key.
+// The additional RangeDescriptors are returned with the intent of pre-caching
+// subsequent ranges which are likely to be requested soon by the current
+// workload.
+func (db *DistDB) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, error) {
+	var (
+		// metadataKey is sent to InternalRangeLookup to find the
+		// RangeDescriptor which contains key.
+		metadataKey = engine.RangeMetaKey(key)
+		// metadataRange is the RangeDescriptor for the range which contains
+		// metadataKey.
+		metadataRange *storage.RangeDescriptor
+		err           error
+	)
 	if len(metadataKey) == 0 {
-		// Metadata range is the first range, the description of which is always
-		// gossiped.
-		infoI, err := db.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
+		// In this case, the requested key is stored in the cluster's first
+		// range.  Return the first range, which is always gossiped and not
+		// queried from the datastore.
+		rd, err := db.getFirstRangeDescriptor()
 		if err != nil {
-			return nil, nil, firstRangeMissingError{err}
+			return nil, err
 		}
-		info := infoI.(storage.RangeDescriptor)
-		return engine.KeyMin, &info, nil
+		return []*storage.RangeDescriptor{rd}, nil
+	}
+	if bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
+		// In this case, metadataRange is the cluster's first range.
+		if metadataRange, err = db.getFirstRangeDescriptor(); err != nil {
+			return nil, err
+		}
+	} else {
+		// Look up metadataRange from the cache, which will recursively call
+		// into db.getRangeMetadata if it is not cached.
+		metadataRange, err = db.rangeCache.LookupRangeMetadata(metadataKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Look up the range containing metadataKey in the cache, which will
-	// recursively call into db.LookupRangeMetadata if it is not cached.
-	metadataRange, err := db.rangeCache.LookupRangeMetadata(metadataKey)
-	if err != nil {
-		return nil, nil, err
-	}
 	return db.internalRangeLookup(metadataKey, metadataRange)
 }
 
@@ -385,8 +422,6 @@ func (db *DistDB) routeRPC(method string, args storage.Request, replyChan interf
 					log.Warningf("failed to invoke %s: %v", method, err)
 					return false, nil
 				}
-				// TODO(mtracy): Make sure that errors that clearly result from
-				// a stale metadata cache are retryable.
 			}
 			return true, err
 		})

@@ -109,6 +109,37 @@ func RangeMetaKey(key Key) Key {
 	return KeyMin
 }
 
+// ValidateRangeMetaKey validates that the given key is a valid Range Metadata
+// key.  It must have an appropriate metadata range prefix, and the original key
+// value must be less thas KeyMax.  As a special case, KeyMin is considered a
+// valid Range Metadata Key.
+func ValidateRangeMetaKey(key Key) error {
+	// KeyMin is a valid key.
+	if len(key) == 0 {
+		return nil
+	}
+	// Key must be at least as long as KeyMeta1Prefix.
+	if len(key) < len(KeyMeta1Prefix) {
+		return NewInvalidRangeMetaKeyError(key)
+	}
+
+	prefix, body := key[:len(KeyMeta1Prefix)], key[len(KeyMeta1Prefix):]
+
+	// The prefix must be equal to KeyMeta1Prefix or KeyMeta2Prefix
+	if !bytes.HasPrefix(key, KeyMetaPrefix) {
+		return NewInvalidRangeMetaKeyError(key)
+	}
+	if lvl := string(prefix[len(KeyMetaPrefix)]); lvl != "1" && lvl != "2" {
+		return NewInvalidRangeMetaKeyError(key)
+	}
+	// Body of the key must sort before KeyMax
+	if !body.Less(KeyMax) {
+		return NewInvalidRangeMetaKeyError(key)
+	}
+
+	return nil
+}
+
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMin is a minimum key value which sorts before all other keys.
@@ -138,7 +169,7 @@ var (
 	// KeyLocalRangeSamplePrefix is the prefix for keys storing range write
 	// samples.
 	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("keysample-"))
-	// KeyLocalRangeResponseCache is the prefix for keys storing command
+	// KeyLocalRangeResponseCachePrefix is the prefix for keys storing command
 	// responses used to guarantee idempotency (see ResponseCache).
 	KeyLocalRangeResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("respcache-"))
 

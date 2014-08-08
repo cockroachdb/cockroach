@@ -157,7 +157,7 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
 	}
-	return nil, util.Errorf("range %d not found on store", rangeID)
+	return nil, NewRangeNotFoundError(rangeID)
 }
 
 // GetRanges fetches all ranges.
@@ -261,7 +261,7 @@ func (s *Store) ExecuteCmd(method string, args Request, reply Response) error {
 		return err
 	}
 	if !rng.ContainsKeyRange(header.Key, header.EndKey) {
-		return &NotInRangeError{start: rng.Meta.StartKey, end: rng.Meta.EndKey}
+		return NewRangeKeyMismatchError(header.Key, header.EndKey, rng.Meta)
 	}
 	if !rng.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.

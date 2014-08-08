@@ -49,23 +49,26 @@ func rangeCacheShouldEvict(size int, k, v interface{}) bool {
 	return size > rangeCacheSize
 }
 
-// RangeMetadataDB is a type which can query metadata range information from an
+// rangeMetadataDB is a type which can query metadata range information from an
 // underlying datastore. This interface is used by RangeMetadataCache to
 // initially retrieve information which will be cached.
-type RangeMetadataDB interface {
-	// Lookup metadata for the range containing the given key.  This method
-	// should return the RangeDescriptor containing the key, along with the
-	// Metadata key at which the RangeDescriptor's value was stored.
-	LookupRangeMetadata(engine.Key) (engine.Key, *storage.RangeDescriptor, error)
+type rangeMetadataDB interface {
+	// getRangeMetadata retrieves metadata for the range containing the given
+	// key from storage.  This function returns a sorted slice of
+	// RangeDescriptors for a set of consecutive ranges, the first which must
+	// contain the requested key.  The additional RangeDescriptors are returned
+	// with the intent of pre-caching subsequent ranges which are likely to be
+	// requested soon by the current workload.
+	getRangeMetadata(engine.Key) ([]*storage.RangeDescriptor, error)
 }
 
 // RangeMetadataCache is used to retrieve range metadata for arbitrary keys.
-// Metadata is initially queried from storage using a RangeMetadataDB, but is
+// Metadata is initially queried from storage using a rangeMetadataDB, but is
 // cached for subsequent lookups.
 type RangeMetadataCache struct {
-	// RangeMetadataDB is used to retrieve metadata range information from the
+	// rangeMetadataDB is used to retrieve metadata range information from the
 	// database, which will be cached by this structure.
-	db RangeMetadataDB
+	db rangeMetadataDB
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
@@ -75,8 +78,8 @@ type RangeMetadataCache struct {
 }
 
 // NewRangeMetadataCache returns a new RangeMetadataCache which uses the given
-// RangeMetadataDB as the underlying source of range metadata.
-func NewRangeMetadataCache(db RangeMetadataDB) *RangeMetadataCache {
+// rangeMetadataDB as the underlying source of range metadata.
+func NewRangeMetadataCache(db rangeMetadataDB) *RangeMetadataCache {
 	return &RangeMetadataCache{
 		db: db,
 		rangeCache: util.NewOrderedCache(util.CacheConfig{
@@ -99,28 +102,21 @@ func NewRangeMetadataCache(db RangeMetadataDB) *RangeMetadataCache {
 // This method returns the RangeDescriptor for the range containing the key's
 // data, or an error if any occurred.
 func (rmc *RangeMetadataCache) LookupRangeMetadata(key engine.Key) (*storage.RangeDescriptor, error) {
-	metadataKey := engine.RangeMetaKey(key)
-	if len(metadataKey) == 0 {
-		// The description of the first range is gossiped, and thus does not
-		// need to be cached.  Just ask the underlying db, which will return
-		// immediately.
-		_, r, err := rmc.db.LookupRangeMetadata(key)
-		return r, err
-	}
-
 	_, r := rmc.getCachedRangeMetadata(key)
 	if r != nil {
 		return r, nil
 	}
 
-	k, r, err := rmc.db.LookupRangeMetadata(key)
+	rs, err := rmc.db.getRangeMetadata(key)
 	if err != nil {
 		return nil, err
 	}
 	rmc.rangeCacheMu.Lock()
-	rmc.rangeCache.Add(rangeCacheKey(k), r)
+	for _, r := range rs {
+		rmc.rangeCache.Add(rangeCacheKey(r.LookupKey()), r)
+	}
 	rmc.rangeCacheMu.Unlock()
-	return r, nil
+	return rs[0], nil
 }
 
 // EvictCachedRangeMetadata will evict any cached metadata range descriptors for
