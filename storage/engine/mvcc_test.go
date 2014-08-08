@@ -652,7 +652,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	}
 	if !bytes.Equal(value02.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value02.Bytes, value.Bytes)
+			value.Bytes, value02.Bytes)
 	}
 	if len(txnID) != 0 {
 		t.Fatal("the txnID should be empty")

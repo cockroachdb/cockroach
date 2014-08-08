@@ -93,7 +93,6 @@ func (mvcc *MVCC) getInternal(key Key, timestamp hlc.HLTimestamp, txnID string) 
 	if err != nil || !ok {
 		return nil, hlc.HLTimestamp{}, "", err
 	}
-
 	// If the read timestamp is greater than the latest one, we can just
 	// fetch the value without a scan.
 	if !timestamp.Less(keyMetadata.Timestamp) {
@@ -326,7 +325,6 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID string, commit bool) error {
 		if len(kvs) == 0 {
 			return mvcc.engine.Clear(key)
 		}
-
 		_, ts := mvccDecodeKey(kvs[0].Key)
 		// Update the keyMetadata with the next version.
 		return PutI(mvcc.engine, key, &keyMetadata{TxnID: "", Timestamp: ts})
@@ -404,15 +402,19 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 // key was already encoded before passed to mvcc layer thus it won't
 // encode the key part again.
 func mvccEncodeKey(key Key, timestamp hlc.HLTimestamp) Key {
-	return Key(bytes.Join([][]byte{key,
-		encoding.EncodeIntDecreasing(timestamp.WallTime, timestamp.Logical)},
-		[]byte{}))
+	// The max length of encoded int is 12.
+	k := make([]byte, 0, len(key)+2*12)
+	k = append(k, key...)
+	k = encoding.EncodeIntDecreasing(k, timestamp.WallTime)
+	k = encoding.EncodeIntDecreasing(k, timestamp.Logical)
+	return k
 }
 
 func mvccDecodeKey(encodedKey []byte) (Key, hlc.HLTimestamp) {
 	idx := bytes.Index(encodedKey, []byte{0x00})
 	key := encodedKey[:idx+1]
-	timestamp := encoding.DecodeIntDecreasingSlice(encodedKey[idx+1:])
-
-	return key, hlc.HLTimestamp{WallTime: timestamp[0], Logical: timestamp[1]}
+	encodedKey = encodedKey[idx+1:]
+	encodedKey, walltime := encoding.DecodeIntDecreasing(encodedKey)
+	encodedKey, logical := encoding.DecodeIntDecreasing(encodedKey)
+	return key, hlc.HLTimestamp{WallTime: walltime, Logical: logical}
 }

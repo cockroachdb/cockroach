@@ -18,7 +18,6 @@
 package storage
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 
@@ -158,10 +157,11 @@ func (rc *ResponseCache) removeInflightLocked(cmdID ClientCmdID) {
 // TODO(spencer): going to need to encode the server timestamp
 //   for when the value was written for GC.
 func (rc *ResponseCache) makeKey(cmdID ClientCmdID) engine.Key {
-	return engine.Key(bytes.Join([][]byte{
-		engine.KeyLocalRangeResponseCachePrefix,
-		encoding.EncodeInt(rc.rangeID),
-		encoding.EncodeInt(cmdID.WallTime), // wall time helps sort for locality
-		encoding.EncodeInt(cmdID.Random),   // TODO(spencer): encode as Fixed64
-	}, []byte{}))
+	// The max length of encoded int is 12.
+	b := make([]byte, 0, len(engine.KeyLocalRangeResponseCachePrefix)+3*12)
+	b = append(b, engine.KeyLocalRangeResponseCachePrefix...)
+	b = encoding.EncodeInt(b, rc.rangeID)
+	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
+	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64
+	return b
 }

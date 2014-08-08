@@ -71,32 +71,32 @@ func EncodeString(b []byte, s string) []byte {
 	if !utf8.ValidString(s) {
 		panic("invalid utf8 string passed")
 	}
-	buf := make([]byte, len(s)+2)
-	buf[0] = orderedEncodingText
-	for i, v := range []byte(s) {
+	b = append(b, orderedEncodingText)
+	for _, v := range []byte(s) {
 		if v == 0x00 {
 			panic("string contains intervening 0x00 byte")
 		}
-		buf[i+1] = v
+		b = append(b, v)
 	}
-	buf[len(s)+1] = orderedEncodingTerminator
-	return append(b, buf...)
+	return append(b, orderedEncodingTerminator)
 }
 
-// DecodeString returns the string encoded within b.
-func DecodeString(b []byte) string {
+// DecodeString returns the remaining byte slice after decoding and the
+// decoded string from b.
+func DecodeString(b []byte) ([]byte, string) {
 	if b[0] != orderedEncodingText {
 		panic("first byte of encoded string must be 0x24")
 	}
 	for i, v := range b[1:] {
 		if v == orderedEncodingTerminator {
-			return string(b[1 : 1+i])
+			return b[1+i:], string(b[1 : 1+i])
 		}
 	}
 	panic("encoded string must have terminator byte")
 }
 
-// EncodeBinary encodes b and returns the result.
+// EncodeBinary returns the resulting byte slice with i encoded
+// and appended to b.
 //
 // The encoding of binaries fields is different depending
 // on whether or not the value to be encoded is the last value
@@ -124,30 +124,30 @@ func DecodeString(b []byte) string {
 // The initial byte of a binary value, 0x25 or 0x26, is larger than
 // the initial byte of a text value, 0x24, ensuring that every binary
 // value will sort after every text value.
-func EncodeBinary(b []byte) []byte {
-	if len(b) == 0 {
-		return []byte{orderedEncodingBinary, orderedEncodingTerminator}
+func EncodeBinary(b []byte, i []byte) []byte {
+	if len(i) == 0 {
+		return append(b, orderedEncodingBinary, orderedEncodingTerminator)
 	}
-	buf := bytes.NewBuffer([]byte{orderedEncodingBinary})
+	b = append(b, orderedEncodingBinary)
 	s := uint(1)
 	t := byte(0)
-	for _, v := range b {
-		buf.WriteByte(0x80 | t | ((v & 0xff) >> s))
+	for _, v := range i {
+		b = append(b, byte(0x80|t|((v&0xff)>>s)))
 		if s < 7 {
 			t = v << (7 - s)
 			s++
 		} else {
-			buf.WriteByte(0x80 | v)
+			b = append(b, byte(0x80|v))
 			s = 1
 			t = 0
 		}
 	}
 	if s > 1 {
-		buf.WriteByte(0x7f & t)
+		b = append(b, byte(0x7f&t))
 	} else {
-		buf.Bytes()[buf.Len()-1] &= 0x7f
+		b[len(b)-1] &= 0x7f
 	}
-	return buf.Bytes()
+	return b
 }
 
 // EncodeBinaryFinal encodes a byte slice and returns
@@ -162,12 +162,11 @@ func EncodeBinaryFinal(b []byte) []byte {
 	return buf
 }
 
-// encodeIntInternal encodes an int64 and returns the
-// result as a byte slice. See the notes for EncodeFloat
-// for a complete description.
-func encodeIntInternal(i int64) []byte {
+// EncodeInt returns the resulting byte slice with the encoded int64 and
+// appended to b. See the notes for EncodeFloat for a complete description.
+func EncodeInt(b []byte, i int64) []byte {
 	if i == 0 {
-		return []byte{orderedEncodingZero, orderedEncodingTerminator}
+		return append(b, orderedEncodingZero)
 	}
 	e, m := intMandE(i)
 	if e <= 0 {
@@ -176,93 +175,56 @@ func encodeIntInternal(i int64) []byte {
 	buf := make([]byte, len(m)+maxVarintSize+2)
 	switch {
 	case e > 0 && e <= 10:
-		return encodeMediumNumber(i < 0, e, m, buf)
+		return append(b, encodeMediumNumber(i < 0, e, m, buf)...)
 	case e >= 11:
-		return encodeLargeNumber(i < 0, e, m, buf)
+		return append(b, encodeLargeNumber(i < 0, e, m, buf)...)
 	}
-	return nil
+	panic("unexpected value e")
 }
 
-// EncodeInt encodes an int64 slice and returns the
-// result as a byte slice.
-func EncodeInt(i ...int64) []byte {
-	res := make([][]byte, len(i))
-	for idx, v := range i {
-		res[idx] = encodeIntInternal(v)
-	}
-	return bytes.Join(res, []byte{})
+// EncodeIntDecreasing returns the resulting byte slice with the
+// encoded int64 values in decreasing order and appended to b.
+func EncodeIntDecreasing(b []byte, i int64) []byte {
+	return EncodeInt(b, ^i)
 }
 
-// EncodeIntDecreasing encodes an int64 slice the
-// returns the result as a byte slice in decreasing
-// order.
-func EncodeIntDecreasing(i ...int64) []byte {
-	res := make([][]byte, len(i))
-	for idx, v := range i {
-		res[idx] = encodeIntInternal(^v)
+// DecodeInt returns the remaining byte slice after decoding and the decoded
+// int64 from buf.
+func DecodeInt(buf []byte) ([]byte, int64) {
+	if buf[0] == 0x15 {
+		return buf[1:], 0
 	}
-	return bytes.Join(res, []byte{})
-}
-
-// DecodeIntSlice decodes a byte slice and return
-// an int64 slice.
-func DecodeIntSlice(buf []byte) []int64 {
-	s := bytes.SplitAfter(buf, []byte{orderedEncodingTerminator})
-	res := make([]int64, len(s))
-	// There will be an empty slice after the last terminator,
-	// thus we have to skip that.
-	for idx := 0; idx < len(s)-1; idx++ {
-		res[idx] = DecodeInt(s[idx])
-	}
-	return res
-}
-
-// DecodeIntDecreasingSlice decodes a byte slice
-// in decreasing order and return an int64 slice.
-func DecodeIntDecreasingSlice(buf []byte) []int64 {
-	s := bytes.SplitAfter(buf, []byte{orderedEncodingTerminator})
-	res := make([]int64, len(s))
-	// There will be an empty slice after the last terminator,
-	// thus we have to skip that.
-	for idx := 0; idx < len(s)-1; idx++ {
-		res[idx] = DecodeIntDecreasing(s[idx])
-	}
-	return res
-}
-
-// DecodeInt decodes a byte slice and return an int64.
-func DecodeInt(buf []byte) int64 {
-	switch {
-	case buf[0] == 0x15:
-		// Zero.
-		return 0
-	case buf[0] == 0x14 || buf[0] == 0x16:
+	if buf[0] == 0x14 || buf[0] == 0x16 {
 		// Negative small or positive small.
 		panic("integer values should not have negative exponents")
+	}
+	idx := bytes.Index(buf, []byte{orderedEncodingTerminator})
+	switch {
 	case buf[0] == 0x08:
 		// Negative large.
-		e, m := decodeLargeNumber(true, buf)
-		return makeIntFromMandE(true, e, m)
+		e, m := decodeLargeNumber(true, buf[:idx+1])
+		return buf[idx+1:], makeIntFromMandE(true, e, m)
 	case buf[0] > 0x08 && buf[0] <= 0x13:
 		// Negative medium.
-		e, m := decodeMediumNumber(true, buf)
-		return makeIntFromMandE(true, e, m)
+		e, m := decodeMediumNumber(true, buf[:idx+1])
+		return buf[idx+1:], makeIntFromMandE(true, e, m)
 	case buf[0] == 0x22:
 		// Positive large.
-		e, m := decodeLargeNumber(false, buf)
-		return makeIntFromMandE(false, e, m)
+		e, m := decodeLargeNumber(false, buf[:idx+1])
+		return buf[idx+1:], makeIntFromMandE(false, e, m)
 	case buf[0] >= 0x17 && buf[0] < 0x22:
 		// Positive large.
-		e, m := decodeMediumNumber(false, buf)
-		return makeIntFromMandE(false, e, m)
+		e, m := decodeMediumNumber(false, buf[:idx+1])
+		return buf[idx+1:], makeIntFromMandE(false, e, m)
 	}
 	panic("unknown prefix of the encoded byte slice")
 }
 
-// DecodeIntDecreasing decodes a byte slice in
-// decreasing order and return an int64.
-func DecodeIntDecreasing(buf []byte) int64 {
-	return ^DecodeInt(buf)
+// DecodeIntDecreasing returns the remaining byte slice after decoding and
+// the decoded int64 in decreasing order from buf.
+func DecodeIntDecreasing(buf []byte) ([]byte, int64) {
+	b, v := DecodeInt(buf)
+	return b, ^v
 }
 
 // intMandE computes and returns the mantissa M and exponent E for i.

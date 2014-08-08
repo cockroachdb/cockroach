@@ -48,7 +48,8 @@ func TestEncodeDecodeString(t *testing.T) {
 		if buf[n-1] != orderedEncodingTerminator {
 			t.Errorf("expected terminating byte (%#x), got %#x", orderedEncodingTerminator, buf[n-1])
 		}
-		s := DecodeString(buf)
+		_, s := DecodeString(buf)
+
 		if s != c.text {
 			t.Errorf("error decoding string: expected %q, got %q", c.text, s)
 		}
@@ -74,7 +75,7 @@ func TestStringOrdering(t *testing.T) {
 	sort.Strings(strs)
 	sort.Sort(encodedStrs)
 	for i := range strs {
-		decoded := DecodeString(encodedStrs[i])
+		_, decoded := DecodeString(encodedStrs[i])
 		if decoded != strs[i] {
 			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, strs[i], decoded)
 		}
@@ -124,7 +125,7 @@ func TestEncodeBinary(t *testing.T) {
 		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x18}},
 	}
 	for _, c := range testCases {
-		b := EncodeBinary(c.blob)
+		b := EncodeBinary([]byte{}, c.blob)
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
 		}
@@ -212,7 +213,7 @@ func TestEncodeInt(t *testing.T) {
 		{-100, []byte{0x11, 0xfc, 0x00}},
 		{-99, []byte{0x12, 0x39, 0x00}},
 		{-1, []byte{0x12, 0xfd, 0x00}},
-		{0, []byte{0x15, 0x00}},
+		{0, []byte{0x15}},
 		{1, []byte{0x18, 0x02, 0x00}},
 		{10, []byte{0x18, 0x14, 0x00}},
 		{99, []byte{0x18, 0xc6, 0x00}},
@@ -228,7 +229,7 @@ func TestEncodeInt(t *testing.T) {
 		{9223372036854775807, []byte{0x21, 0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e, 0x00}},
 	}
 	for i, c := range testCases {
-		enc := EncodeInt(c.Value)
+		enc := EncodeInt([]byte{}, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
 			t.Errorf("unexpected mismatch for %v. expected %v, got %v", c.Value, c.Encoding, enc)
 		}
@@ -237,75 +238,9 @@ func TestEncodeInt(t *testing.T) {
 				t.Errorf("expected %v to be less than %v", testCases[i-1].Encoding, enc)
 			}
 		}
-		dec := DecodeInt(enc)
+		_, dec := DecodeInt(enc)
 		if dec != c.Value {
 			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
-		}
-	}
-}
-
-func TestEncodeIntSlice(t *testing.T) {
-	testCases := []struct {
-		Value    int64
-		Encoding []byte
-	}{
-		{-9223372036854775808, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xef, 0x00}},
-		{-9223372036854775807, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xf1, 0x00}},
-		{-10000, []byte{0x10, 0xfc, 0xfe, 0x00}},
-		{-9999, []byte{0x11, 0x38, 0x39, 0x00}},
-		{-100, []byte{0x11, 0xfc, 0x00}},
-		{-99, []byte{0x12, 0x39, 0x00}},
-		{-1, []byte{0x12, 0xfd, 0x00}},
-		{0, []byte{0x15, 0x00}},
-		{1, []byte{0x18, 0x02, 0x00}},
-		{10, []byte{0x18, 0x14, 0x00}},
-		{99, []byte{0x18, 0xc6, 0x00}},
-		{100, []byte{0x19, 0x03, 0x00}},
-		{110, []byte{0x19, 0x03, 0x14, 0x00}},
-		{999, []byte{0x19, 0x13, 0xc6, 0x00}},
-		{1234, []byte{0x19, 0x19, 0x44, 0x00}},
-		{9999, []byte{0x19, 0xc7, 0xc6, 0x00}},
-		{10000, []byte{0x1a, 0x03, 0x01, 0x00}},
-		{10001, []byte{0x1a, 0x03, 0x01, 0x02, 0x00}},
-		{12345, []byte{0x1a, 0x03, 0x2f, 0x5a, 0x00}},
-		{123450, []byte{0x1a, 0x19, 0x45, 0x64, 0x00}},
-		{9223372036854775807, []byte{0x21, 0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e, 0x00}},
-	}
-	expected := make([][]byte, len(testCases))
-	for idx, c := range testCases {
-		expected[idx] = c.Encoding
-	}
-
-	r := EncodeInt(
-		-9223372036854775808,
-		-9223372036854775807,
-		-10000,
-		-9999,
-		-100,
-		-99,
-		-1,
-		0,
-		1,
-		10,
-		99,
-		100,
-		110,
-		999,
-		1234,
-		9999,
-		10000,
-		10001,
-		12345,
-		123450,
-		9223372036854775807)
-	if !bytes.Equal(r, bytes.Join(expected, []byte{})) {
-		t.Errorf("unexpected mismatch. expected %v, got %v", expected, r)
-	}
-
-	d := DecodeIntSlice(r)
-	for idx, c := range testCases {
-		if d[idx] != c.Value {
-			t.Errorf("unexpected mismatch. expected %v, got %v", c.Value, d[idx])
 		}
 	}
 }
