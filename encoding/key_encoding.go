@@ -236,7 +236,9 @@ func intMandE(i int64) (int, []byte) {
 	var buf bytes.Buffer
 	for v := i; v != 0; v /= 100 {
 		mod := v % 100
-		if mod < 0 {
+		if mod == 0 && buf.Len() == 0 {
+			// Trailing X==0 digits are omitted.
+		} else if mod < 0 {
 			buf.WriteByte(byte(2*-mod + 1))
 		} else {
 			buf.WriteByte(byte(2*mod + 1))
@@ -255,8 +257,7 @@ func intMandE(i int64) (int, []byte) {
 	// The last byte is encoded as 2n+0.
 	m[len(m)-1]--
 
-	// Trailing X==0 digits are omitted.
-	return e, removeTrailingZeros(m)
+	return e, m
 }
 
 // makeIntFromMandE reconstructs the integer from the mantissa M
@@ -292,8 +293,8 @@ func removeTrailingZeros(m []byte) []byte {
 	return []byte{}
 }
 
-// EncodeFloat encodes a float64 and returns the result
-// as a byte slice.
+// EncodeFloat returns the resulting byte slice with the encoded
+// float64 and appended to b.
 //
 // Values are classified as large, medium, or small
 // according to the value of E. If E is 11 or more,
@@ -312,27 +313,27 @@ func removeTrailingZeros(m []byte) []byte {
 // followed by the ones-complement of M. Large negative values
 // consist of the single byte 0x08 followed by the ones-complement
 // of the varint encoding of E followed by the ones-complement of M.
-func EncodeFloat(f float64) []byte {
+func EncodeFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
-		return []byte{orderedEncodingNaN}
+		return append(b, orderedEncodingNaN)
 	case math.IsInf(f, 1):
-		return []byte{orderedEncodingInfinity}
+		return append(b, orderedEncodingInfinity)
 	case math.IsInf(f, -1):
-		return []byte{orderedEncodingNegativeInfinity}
+		return append(b, orderedEncodingNegativeInfinity)
 	case f == 0:
-		return []byte{orderedEncodingZero}
+		return append(b, orderedEncodingZero)
 	}
 	e, m := floatMandE(f)
 	buf := make([]byte, len(m)+maxVarintSize+2)
 	switch {
 	case e < 0:
-		return encodeSmallNumber(f < 0, e, m, buf)
+		return append(b, encodeSmallNumber(f < 0, e, m, buf)...)
 	case e >= 0 && e <= 10:
-		return encodeMediumNumber(f < 0, e, m, buf)
+		return append(b, encodeMediumNumber(f < 0, e, m, buf)...)
 	case e >= 11:
-		return encodeLargeNumber(f < 0, e, m, buf)
+		return append(b, encodeLargeNumber(f < 0, e, m, buf)...)
 	}
 	return nil
 }

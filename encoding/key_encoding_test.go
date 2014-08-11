@@ -172,20 +172,20 @@ func TestIntMandE(t *testing.T) {
 	}{
 		{-9223372036854775808, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x10}},
 		{-9223372036854775807, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
-		{-10000, 3, []byte{0x03, 0x01}},
+		{-10000, 3, []byte{0x02}},
 		{-9999, 2, []byte{0xc7, 0xc6}},
-		{-100, 2, []byte{0x03}},
+		{-100, 2, []byte{0x02}},
 		{-99, 1, []byte{0xc6}},
 		{-1, 1, []byte{0x02}},
 		{1, 1, []byte{0x02}},
 		{10, 1, []byte{0x14}},
 		{99, 1, []byte{0xc6}},
-		{100, 2, []byte{0x03}},
+		{100, 2, []byte{0x02}},
 		{110, 2, []byte{0x03, 0x14}},
 		{999, 2, []byte{0x13, 0xc6}},
 		{1234, 2, []byte{0x19, 0x44}},
 		{9999, 2, []byte{0xc7, 0xc6}},
-		{10000, 3, []byte{0x03, 0x01}},
+		{10000, 3, []byte{0x02}},
 		{10001, 3, []byte{0x03, 0x01, 0x02}},
 		{12345, 3, []byte{0x03, 0x2f, 0x5a}},
 		{123450, 3, []byte{0x19, 0x45, 0x64}},
@@ -193,10 +193,10 @@ func TestIntMandE(t *testing.T) {
 	}
 	for _, c := range testCases {
 		if e, m := intMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
-			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v", c.Value, c.E, c.M, e, m)
+			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v", c.Value, c.E, prettyBytes(c.M), e, prettyBytes(m))
 		}
 		if v := makeIntFromMandE(c.Value < 0, c.E, c.M); v != c.Value {
-			t.Errorf("unexpected mismatch in Value for E=%v and M=%+v. expected value=%v, got value=%v", c.E, c.M, c.Value, v)
+			t.Errorf("unexpected mismatch in Value for E=%v and M=%+v. expected value=%v, got value=%v", c.E, prettyBytes(c.M), c.Value, v)
 		}
 	}
 }
@@ -208,21 +208,21 @@ func TestEncodeInt(t *testing.T) {
 	}{
 		{-9223372036854775808, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xef, 0x00}},
 		{-9223372036854775807, []byte{0x09, 0xec, 0xd2, 0xbc, 0x6e, 0xf8, 0x76, 0x92, 0x64, 0x8a, 0xf1, 0x00}},
-		{-10000, []byte{0x10, 0xfc, 0xfe, 0x00}},
+		{-10000, []byte{0x10, 0xfd, 0x0}},
 		{-9999, []byte{0x11, 0x38, 0x39, 0x00}},
-		{-100, []byte{0x11, 0xfc, 0x00}},
+		{-100, []byte{0x11, 0xfd, 0x00}},
 		{-99, []byte{0x12, 0x39, 0x00}},
 		{-1, []byte{0x12, 0xfd, 0x00}},
 		{0, []byte{0x15}},
 		{1, []byte{0x18, 0x02, 0x00}},
 		{10, []byte{0x18, 0x14, 0x00}},
 		{99, []byte{0x18, 0xc6, 0x00}},
-		{100, []byte{0x19, 0x03, 0x00}},
+		{100, []byte{0x19, 0x02, 0x00}},
 		{110, []byte{0x19, 0x03, 0x14, 0x00}},
 		{999, []byte{0x19, 0x13, 0xc6, 0x00}},
 		{1234, []byte{0x19, 0x19, 0x44, 0x00}},
 		{9999, []byte{0x19, 0xc7, 0xc6, 0x00}},
-		{10000, []byte{0x1a, 0x03, 0x01, 0x00}},
+		{10000, []byte{0x1a, 0x02, 0x00}},
 		{10001, []byte{0x1a, 0x03, 0x01, 0x02, 0x00}},
 		{12345, []byte{0x1a, 0x03, 0x2f, 0x5a, 0x00}},
 		{123450, []byte{0x1a, 0x19, 0x45, 0x64, 0x00}},
@@ -231,11 +231,11 @@ func TestEncodeInt(t *testing.T) {
 	for i, c := range testCases {
 		enc := EncodeInt([]byte{}, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
-			t.Errorf("unexpected mismatch for %v. expected %v, got %v", c.Value, c.Encoding, enc)
+			t.Errorf("unexpected mismatch for %v. expected %v, got %v", c.Value, prettyBytes(c.Encoding), prettyBytes(enc))
 		}
 		if i > 0 {
 			if bytes.Compare(testCases[i-1].Encoding, enc) >= 0 {
-				t.Errorf("expected %v to be less than %v", testCases[i-1].Encoding, enc)
+				t.Errorf("expected %v to be less than %v", prettyBytes(testCases[i-1].Encoding), prettyBytes(enc))
 			}
 		}
 		_, dec := DecodeInt(enc)
@@ -283,7 +283,7 @@ func disabledTestFloatMandE(t *testing.T) {
 	}
 	for _, c := range testCases {
 		if e, m := floatMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
-			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v", c.Value, c.E, c.M, e, m)
+			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v", c.Value, c.E, prettyBytes(c.M), e, prettyBytes(m))
 		}
 	}
 }
