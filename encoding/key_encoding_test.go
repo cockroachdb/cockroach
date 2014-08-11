@@ -113,6 +113,7 @@ func TestEncodeBinary(t *testing.T) {
 	testCases := []struct{ blob, encoded []byte }{
 		{[]byte{}, []byte{orderedEncodingBinary, orderedEncodingTerminator}},
 		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0x40}},
+		{[]byte{0x00}, []byte{orderedEncodingBinary, 0x80, 0x0}},
 		{[]byte("1"), []byte{orderedEncodingBinary, 0x98, 0x40}},
 		{[]byte("22"), []byte{orderedEncodingBinary, 0x99, 0x8c, 0x40}},
 		{[]byte("333"), []byte{orderedEncodingBinary, 0x99, 0xcc, 0xe6, 0x30}},
@@ -129,6 +130,10 @@ func TestEncodeBinary(t *testing.T) {
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
 		}
+		d := DecodeBinary(c.encoded)
+		if !bytes.Equal(d, c.blob) {
+			t.Errorf("unexpected mismatch of decoded value: expected %s, got %s", prettyBytes(c.blob), prettyBytes(d))
+		}
 	}
 	blobs := make(byteSlice, len(testCases))
 	encodedBlobs := make(byteSlice, len(testCases))
@@ -139,13 +144,7 @@ func TestEncodeBinary(t *testing.T) {
 	sort.Sort(blobs)
 	sort.Sort(encodedBlobs)
 	for i := range encodedBlobs {
-		// TODO(andybons): Use DecodeBinary once that's landed.
-		var decoded []byte
-		for _, c := range testCases {
-			if bytes.Equal(encodedBlobs[i], c.encoded) {
-				decoded = c.blob
-			}
-		}
+		decoded := DecodeBinary(encodedBlobs[i])
 		if !bytes.Equal(decoded, blobs[i]) {
 			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(blobs[i]), prettyBytes(decoded))
 		}

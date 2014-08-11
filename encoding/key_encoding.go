@@ -150,6 +150,57 @@ func EncodeBinary(b []byte, i []byte) []byte {
 	return b
 }
 
+// DecodeBinary decodes the given key-encoded byte slice,
+// returning the original BLOB value. (see documentation
+// for EncodeBinary for more details).
+func DecodeBinary(buf []byte) []byte {
+	if buf[0] != orderedEncodingBinary {
+		panic("doesn't begin with binary encoding byte")
+	}
+	var end int
+	// Will panic if the terminator doesn't occur before end of the byte slice.
+	for end = 1; (buf[end] & 0x80) != orderedEncodingTerminator; end++ {
+	}
+	end++
+	out := new(bytes.Buffer)
+	out.Grow(end)
+	s := uint(6)
+	t := (buf[1] << 1) & 0xff
+	for i := 2; i < end; i++ {
+		if s == 7 {
+			out.WriteByte(t | (buf[i] & 0x7f))
+			i++
+		} else {
+			out.WriteByte(t | ((buf[i] & 0x7f) >> s))
+		}
+		if i == end {
+			break
+		}
+		t = (buf[i] << (8 - s)) & 0xff
+		if s == 1 {
+			s = 7
+		} else {
+			s--
+		}
+	}
+	if t != 0 {
+		panic("unexpected bits remaining after decoding blob")
+	}
+	return out.Bytes()
+}
+
+// DecodeBinaryFinal decodes a byte slice and returns the
+// result presuming that it is the last part of the buffer
+// (see documentation for EncodeBinary for more details).
+func DecodeBinaryFinal(buf []byte) []byte {
+	if buf[0] != orderedEncodingBinaryNoTermination {
+		panic("doesn't begin with binary encoding byte")
+	}
+	out := make([]byte, len(buf)-1)
+	copy(buf[1:], out)
+	return out
+}
+
 // EncodeBinaryFinal encodes a byte slice and returns
 // the result presuming that the byte slice is the last
 // portion of the buffer (see the comment for EncodeBinary).
