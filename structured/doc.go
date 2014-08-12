@@ -168,7 +168,7 @@ specifications.
   }
 
   // Get the schema from the go struct declarations.
-	sm := map[string]interface{}{
+  sm := map[string]interface{}{
     'us': User{},
     'id': Identity{},
   }

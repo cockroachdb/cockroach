@@ -353,11 +353,11 @@ func TestMetricSystemStop(t *testing.T) {
 	metricSystem.Start()
 	metricSystem.Stop()
 
-	time.Sleep(100 * time.Microsecond)
-
-	endRoutines := runtime.NumGoroutine()
-	if startingRoutines < endRoutines {
-		t.Errorf("lingering goroutines have not been cleaned up: "+
-			"before: %d, after: %d\n", startingRoutines, endRoutines)
+	for i := 0; startingRoutines > runtime.NumGoroutine(); i++ {
+		// Max tries before giving up and reporting failure.
+		if i > 50000 {
+			t.Errorf("lingering goroutines have not been cleaned up: "+
+				"before: %d, after: %d\n", startingRoutines, runtime.NumGoroutine())
+		}
 	}
 }

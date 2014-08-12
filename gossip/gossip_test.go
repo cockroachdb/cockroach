@@ -25,10 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-const (
-	// Compressed simulation time scale for testing.
-	testGossipInterval = time.Millisecond * 10
-)
+// testGossipInterval is the compressed simulation time scale for testing.
+const testGossipInterval = 10 * time.Millisecond
 
 // isNetworkConnected returns true if the network is fully connected with
 // no partitions.
@@ -67,9 +65,11 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 }
 
 // TestConvergence verifies a 10 node gossip network
-// converges within 5 cycles.
+// converges within 10 cycles.
+// TODO(spencer): During race detector tests, it can take >= 8 cycles.
+// Figure out a more deterministic setup.
 func TestConvergence(t *testing.T) {
-	verifyConvergence(10, 5, t)
+	verifyConvergence(10, 10, t)
 }
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.

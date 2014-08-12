@@ -106,7 +106,8 @@ type MetricSystem struct {
 	// subscription channels regularly.
 	rawBadSubscribers map[chan *RawMetricSet]int
 	// processedSubscribers stores current subscribers to ProcessedMetrics
-	processedSubscribers map[chan *ProcessedMetricSet]struct{}
+	processedSubscribers   map[chan *ProcessedMetricSet]struct{}
+	processedSubscribersMu sync.RWMutex
 	// processedBadSubscribers tracks misbehaving subscribers who do not clear
 	// their subscription channels regularly.
 	processedBadSubscribers map[chan *ProcessedMetricSet]int
@@ -115,20 +116,16 @@ type MetricSystem struct {
 	counterStoreMu sync.RWMutex
 	// counterCache aggregates new Counters until they are collected by reaper().
 	counterCache map[string]*uint64
-	// counterMu controls access to counterCache.
-	counterMu sync.RWMutex
+	counterMu    sync.RWMutex
 	// histogramCache aggregates Histograms until they are collected by reaper().
 	histogramCache map[string]map[int16]*uint64
-	// histogramMu controls access to histogramCache.
-	histogramMu sync.RWMutex
+	histogramMu    sync.RWMutex
 	// histogramCountStore keeps track of aggregate counts and sums for aggregate
 	// mean calculation.
 	histogramCountStore map[string]*uint64
-	// histogramCountMu controls access to the histogramCountStore.
-	histogramCountMu sync.RWMutex
+	histogramCountMu    sync.RWMutex
 	// gaugeFuncs maps metrics to functions used for calculating their value
-	gaugeFuncs map[string]func() float64
-	// gaugeFuncsMu controls access to the gaugeFuncs map.
+	gaugeFuncs   map[string]func() float64
 	gaugeFuncsMu sync.Mutex
 	// Has reaper() been started?
 	reaping bool
@@ -507,7 +504,9 @@ func (ms *MetricSystem) updateSubscribers() {
 		case subscriber := <-ms.subscribeToProcessedMetrics:
 			ms.processedSubscribers[subscriber] = struct{}{}
 		case unsubscriber := <-ms.unsubscribeFromProcessedMetrics:
+			ms.processedSubscribersMu.Lock()
 			delete(ms.processedSubscribers, unsubscriber)
+			ms.processedSubscribersMu.Unlock()
 		default: // no changes in subscribers, race exists somewhere
 		}
 	}
@@ -600,6 +599,7 @@ func (ms *MetricSystem) reaper() {
 			}
 
 			// broadcast processed metrics
+			ms.processedSubscribersMu.Lock()
 			for subscriber := range ms.processedSubscribers {
 				select {
 				case subscriber <- processedMetrics:
@@ -616,6 +616,7 @@ func (ms *MetricSystem) reaper() {
 					}
 				}
 			}
+			ms.processedSubscribersMu.Unlock()
 		}
 		select {
 		case processChan <- sendProcessed:

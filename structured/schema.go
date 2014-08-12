@@ -101,7 +101,7 @@ type Column struct {
 	// PrimaryKey specifies this column is the primary key for the table
 	// or part of a composite primary key. The order in which primary
 	// key columns are declared dictates the order in which their values
-	// are concatenated to form the key.  This has obvious implications
+	// are concatenated to form the key. This has obvious implications
 	// for range queries.
 	PrimaryKey bool `yaml:"primary_key,omitempty"`
 
