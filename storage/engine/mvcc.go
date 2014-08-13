@@ -21,7 +21,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/util"
 )

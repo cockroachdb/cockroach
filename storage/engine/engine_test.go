@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []RawKeyValue) {

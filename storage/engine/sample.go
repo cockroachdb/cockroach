@@ -21,7 +21,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )

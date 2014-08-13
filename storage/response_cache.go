@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 

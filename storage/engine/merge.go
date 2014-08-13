@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/encoding"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util"
 )
 
