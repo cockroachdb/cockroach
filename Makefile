@@ -24,13 +24,13 @@ build: rocksdb
 goget:
 	$(CGO_FLAGS) $(GO) get ./...
 
-test:
+test: rocksdb
 	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-testrace:
+testrace: rocksdb
 	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-coverage:
+coverage: rocksdb
 	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 clean:
