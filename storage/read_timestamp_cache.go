@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"code.google.com/p/biogo.store/interval"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -54,13 +54,13 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 // the current system time plus the maximum clock skew.
 type ReadTimestampCache struct {
 	cache     *util.IntervalCache
-	clock     *hlc.HLClock
-	highWater hlc.HLTimestamp
+	clock     *hlc.Clock
+	highWater hlc.Timestamp
 }
 
 // NewReadTimestampCache returns a new read timestamp cache with
 // supplied hybrid clock.
-func NewReadTimestampCache(clock *hlc.HLClock) *ReadTimestampCache {
+func NewReadTimestampCache(clock *hlc.Clock) *ReadTimestampCache {
 	rtc := &ReadTimestampCache{
 		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheFIFO}),
 		clock: clock,
@@ -81,7 +81,7 @@ func (rtc *ReadTimestampCache) Clear() {
 // Add the specified read timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only.
-func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.HLTimestamp) {
+func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -92,13 +92,13 @@ func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.HLTimest
 // interval spanning from start to end keys. If no part of the
 // specified range is overlapped by read timestamps in the cache, the
 // high water timestamp is returned.
-func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.HLTimestamp {
+func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
 	max := rtc.highWater
 	for _, v := range rtc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
-		ts := v.(hlc.HLTimestamp)
+		ts := v.(hlc.Timestamp)
 		if max.Less(ts) {
 			max = ts
 		}
@@ -109,7 +109,7 @@ func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.HLTimestamp {
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
 func (rtc *ReadTimestampCache) shouldEvict(size int, key, value interface{}) bool {
-	ts := value.(hlc.HLTimestamp)
+	ts := value.(hlc.Timestamp)
 	// Compute the edge of the cache window.
 	edge := rtc.clock.Now()
 	edge.WallTime -= minCacheWindow.Nanoseconds()

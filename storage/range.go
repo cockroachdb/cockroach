@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -151,7 +151,7 @@ type Range struct {
 }
 
 // NewRange initializes the range starting at key.
-func NewRange(meta RangeMetadata, clock *hlc.HLClock, engine engine.Engine,
+func NewRange(meta RangeMetadata, clock *hlc.Clock, engine engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,

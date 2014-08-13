@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -31,7 +31,7 @@ const (
 
 func TestReadTimestampCache(t *testing.T) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 
@@ -98,7 +98,7 @@ func TestReadTimestampCache(t *testing.T) {
 // read timestamp cache entries after minCacheWindow interval.
 func TestReadTimestampCacheEviction(t *testing.T) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 
@@ -122,7 +122,7 @@ func TestReadTimestampCacheEviction(t *testing.T) {
 // layered over each other.
 func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
@@ -171,7 +171,7 @@ func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 
 func TestReadTimestampCacheClear(t *testing.T) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
 	rtc := NewReadTimestampCache(clock)
 

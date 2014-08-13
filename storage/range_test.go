@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -87,7 +87,7 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 		RangeDescriptor: testRangeDescriptor,
 	}
 	g := gossip.New()
-	clock := hlc.NewHLClock(hlc.UnixNano)
+	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(rm, clock, engine, nil, g)
 	r.Start()
 	return r, g
@@ -284,7 +284,7 @@ func (be *blockingEngine) put(key engine.Key, value []byte) error {
 // the range clock's manual unix nanos time and the range.
 func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *blockingEngine) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
 	rng := NewRange(RangeMetadata{}, clock, engine, nil, nil)
 	rng.Start()

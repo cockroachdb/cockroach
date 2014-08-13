@@ -24,7 +24,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -63,7 +63,7 @@ type StoreIdent struct {
 // to one physical device.
 type Store struct {
 	Ident     StoreIdent
-	clock     *hlc.HLClock
+	clock     *hlc.Clock
 	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Passed to new ranges
@@ -73,7 +73,7 @@ type Store struct {
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.HLClock, engine engine.Engine, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.Clock, engine engine.Engine, gossip *gossip.Gossip) *Store {
 	return &Store{
 		clock:     clock,
 		engine:    engine,

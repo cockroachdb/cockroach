@@ -21,7 +21,7 @@ package engine
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // Key defines the key in the key-value datastore.
@@ -44,7 +44,7 @@ type Value struct {
 	// contained value.
 	Checksum uint32
 	// Timestamp of value.
-	Timestamp hlc.HLTimestamp
+	Timestamp hlc.Timestamp
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs

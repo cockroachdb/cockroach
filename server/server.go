@@ -35,7 +35,7 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -137,7 +137,7 @@ func runStart(cmd *commander.Command, args []string) {
 	}
 
 	// Create a new hybrid-logical clock using the internal clock.
-	clock := hlc.NewHLClock(hlc.UnixNano)
+	clock := hlc.NewClock(hlc.UnixNano)
 	clock.SetMaxDrift(*maxDrift)
 
 	// Init engines from -stores.
@@ -264,7 +264,7 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstrap bool) error {
+func (s *server) start(clock *hlc.Clock, engines []engine.Engine, selfBootstrap bool) error {
 	s.rpc.Start() // bind RPC socket and launch goroutine.
 	log.Infof("Started RPC server at %s", s.rpc.Addr())
 

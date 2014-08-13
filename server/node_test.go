@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -56,7 +56,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 	db := kv.NewDB(g)
 	node := NewNode(db, g)
-	clock := hlc.NewHLClock(hlc.UnixNano)
+	clock := hlc.NewClock(hlc.UnixNano)
 	if err := node.start(rpcServer, clock, engines, nil); err != nil {
 		t.Fatal(err)
 	}

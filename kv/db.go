@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -57,7 +57,7 @@ type DB interface {
 // value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
-func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.HLTimestamp, error) {
+func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.Timestamp, error) {
 	gr := <-db.Get(&storage.GetRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  key,
@@ -65,10 +65,10 @@ func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.HLTimestamp, erro
 		},
 	})
 	if gr.Error != nil {
-		return false, hlc.HLTimestamp{}, gr.Error
+		return false, hlc.Timestamp{}, gr.Error
 	}
 	if len(gr.Value.Bytes) == 0 {
-		return false, hlc.HLTimestamp{}, nil
+		return false, hlc.Timestamp{}, nil
 	}
 	if err := gob.NewDecoder(bytes.NewBuffer(gr.Value.Bytes)).Decode(value); err != nil {
 		return true, gr.Value.Timestamp, err
@@ -78,7 +78,7 @@ func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.HLTimestamp, erro
 
 // PutI sets the given key to the serialized byte string of the value
 // and the provided timestamp.
-func PutI(db DB, key engine.Key, value interface{}, timestamp hlc.HLTimestamp) error {
+func PutI(db DB, key engine.Key, value interface{}, timestamp hlc.Timestamp) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
 		return err
@@ -96,7 +96,7 @@ func PutI(db DB, key engine.Key, value interface{}, timestamp hlc.HLTimestamp) e
 
 // BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc.HLTimestamp) error {
+func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc.Timestamp) error {
 	// Write meta1.
 	if err := PutI(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc, timestamp); err != nil {
 		return err
@@ -113,7 +113,7 @@ func BootstrapRangeDescriptor(db DB, desc storage.RangeDescriptor, timestamp hlc
 // prefix, meaning they apply to the entire database. Permissions are
 // granted to all users and the zone requires three replicas with no
 // other specifications.
-func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
+func BootstrapConfigs(db DB, timestamp hlc.Timestamp) error {
 	// Accounting config.
 	acctConfig := &storage.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
@@ -153,7 +153,7 @@ func BootstrapConfigs(db DB, timestamp hlc.HLTimestamp) error {
 // to "meta2", and may require a write to "meta1", in the event that
 // meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
 func UpdateRangeDescriptor(db DB, meta storage.RangeMetadata,
-	desc storage.RangeDescriptor, timestamp hlc.HLTimestamp) error {
+	desc storage.RangeDescriptor, timestamp hlc.Timestamp) error {
 	// TODO(spencer): a lot more work here to actually implement this.
 
 	// Write meta2.

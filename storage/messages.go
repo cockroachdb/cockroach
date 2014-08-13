@@ -18,7 +18,7 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -64,7 +64,7 @@ type RequestHeader struct {
 	// Timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
-	Timestamp hlc.HLTimestamp
+	Timestamp hlc.Timestamp
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
 	CmdID ClientCmdID
@@ -103,7 +103,7 @@ type ResponseHeader struct {
 	// here. Additionally, in the case of writes, this value may be
 	// increased from the timestamp passed with the RequestHeader when
 	// the key being written was either read or updated more recently.
-	Timestamp hlc.HLTimestamp
+	Timestamp hlc.Timestamp
 	// TxID is non-empty if a transaction is underway.
 	TxID string
 }
@@ -234,7 +234,7 @@ type EndTransactionRequest struct {
 // distributed node to maintain consistency.
 type EndTransactionResponse struct {
 	ResponseHeader
-	CommitTimestamp hlc.HLTimestamp
+	CommitTimestamp hlc.Timestamp
 	CommitWait      int64 // Remaining with (us)
 }
 

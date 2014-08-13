@@ -24,7 +24,7 @@ import (
 	"net/url"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -59,7 +59,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
-	if err := kv.PutI(zh.kvDB, zoneKey, config, hlc.HLTimestamp{}); err != nil {
+	if err := kv.PutI(zh.kvDB, zoneKey, config, hlc.Timestamp{}); err != nil {
 		return err
 	}
 	return nil

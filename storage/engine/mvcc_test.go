@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -48,8 +48,8 @@ func createTestMVCC(t *testing.T) *MVCC {
 }
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos, logical int64) hlc.HLTimestamp {
-	return hlc.HLTimestamp{
+func makeTS(nanos, logical int64) hlc.Timestamp {
+	return hlc.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
 	}

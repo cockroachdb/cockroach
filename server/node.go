@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -111,7 +111,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (
 		NodeID:    1,
 		StoreID:   1,
 	}
-	clock := hlc.NewHLClock(hlc.UnixNano)
+	clock := hlc.NewClock(hlc.UnixNano)
 	now := clock.Now()
 	s := storage.NewStore(clock, eng, nil)
 
@@ -204,7 +204,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs engine.Attributes) {
 // attributes gleaned from the environment and initializing stores
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, clock *hlc.HLClock,
+func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	engines []engine.Engine, attrs engine.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
@@ -229,7 +229,7 @@ func (n *Node) stop() {
 // Store doesn't yet have a valid ident, it's added to the bootstraps
 // list for initialization once the cluster and node IDs have been
 // determined.
-func (n *Node) initStores(clock *hlc.HLClock, engines []engine.Engine) error {
+func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
 	for _, e := range engines {

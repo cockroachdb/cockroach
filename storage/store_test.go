@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -38,7 +38,7 @@ var testIdent = StoreIdent{
 // bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil)
 	defer store.Close()
@@ -87,7 +87,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 		t.Errorf("failure putting key foo into engine: %v", err)
 	}
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	store := NewStore(clock, eng, nil)
 	defer store.Close()
 
@@ -129,7 +129,7 @@ func TestRangeSliceSort(t *testing.T) {
 // etc.). The caller is responsible for closing the store on exit.
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil)
 	replica := Replica{RangeID: 1}
