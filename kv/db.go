@@ -26,11 +26,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -176,12 +176,15 @@ type DistDB struct {
 	gossip *gossip.Gossip
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache *RangeMetadataCache
+	// coordinator coordinates the transaction states for clients.
+	coordinator *coordinator
 }
 
 // Default constants for timeouts.
 const (
 	defaultSendNextTimeout = 1 * time.Second
 	defaultRPCTimeout      = 15 * time.Second
+	defaultClientTimeout   = 10 * time.Second
 	retryBackoff           = 1 * time.Second
 	maxRetryBackoff        = 30 * time.Second
 
@@ -216,6 +219,7 @@ func NewDB(gossip *gossip.Gossip) *DistDB {
 		gossip: gossip,
 	}
 	db.rangeCache = NewRangeMetadataCache(db)
+	db.coordinator = NewCoordinator(db, hlc.NewClock(hlc.UnixNano))
 	return db
 }
 
@@ -393,6 +397,13 @@ func sendErrorReply(err error, replyChan interface{}) {
 // response value on the replyChan channel when the call is
 // complete.
 func (db *DistDB) routeRPC(method string, args storage.Request, replyChan interface{}) {
+	if isTransactional(method) {
+		db.coordinator.addRequest(args.Header())
+	}
+	db.routeRPCInternal(method, args, replyChan)
+}
+
+func (db *DistDB) routeRPCInternal(method string, args storage.Request, replyChan interface{}) {
 	// Verify permissions.
 	if err := db.verifyPermissions(method, args.Header()); err != nil {
 		sendErrorReply(err, replyChan)

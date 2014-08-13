@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"code.google.com/p/biogo.store/interval"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 const (

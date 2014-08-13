@@ -24,11 +24,11 @@ import (
 	"net/url"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	yaml "gopkg.in/yaml.v1"
 )

@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // A ResponseCache provides idempotence for request retries. Each

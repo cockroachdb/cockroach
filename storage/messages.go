@@ -18,8 +18,8 @@
 package storage
 
 import (
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // ClientCmdID provides a unique ID for client commands. Clients which
@@ -311,4 +311,21 @@ type InternalRangeLookupRequest struct {
 type InternalRangeLookupResponse struct {
 	ResponseHeader
 	Ranges []*RangeDescriptor
+}
+
+// A HeartbeatTransactionRequest is arguments to the HeartbeatTransaction()
+// method.  It is supposed to be sent by the transaction coordinator to let the
+// system know that the transaction is still ongoing. Note that the heartbeat
+// message is different from the heartbeat message in the gossip protocol.
+type HeartbeatTransactionRequest struct {
+	RequestHeader
+}
+
+// A HeartbeatTransactionResponse is the return value from the
+// HeartbeatTransaction() method. It returns the transaction status as well. So
+// the transaction coordinator will know quickly when the transaction has been
+// aborted by another one.
+type HeartbeatTransactionResponse struct {
+	ResponseHeader
+	Status TransactionStatus
 }

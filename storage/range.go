@@ -25,13 +25,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// init pre-registers RangeDescriptor and PrefixConfigMap types.
+// init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
 func init() {
 	gob.Register(RangeDescriptor{})
 	gob.Register(StoreDescriptor{})
@@ -39,6 +39,7 @@ func init() {
 	gob.Register(&AcctConfig{})
 	gob.Register(&PermConfig{})
 	gob.Register(&ZoneConfig{})
+	gob.Register(Transaction{})
 }
 
 // ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
@@ -64,20 +65,21 @@ var configPrefixes = []struct {
 
 // The following are the method names supported by the KV API.
 const (
-	Contains            = "Contains"
-	Get                 = "Get"
-	Put                 = "Put"
-	ConditionalPut      = "ConditionalPut"
-	Increment           = "Increment"
-	Scan                = "Scan"
-	Delete              = "Delete"
-	DeleteRange         = "DeleteRange"
-	EndTransaction      = "EndTransaction"
-	AccumulateTS        = "AccumulateTS"
-	ReapQueue           = "ReapQueue"
-	EnqueueUpdate       = "EnqueueUpdate"
-	EnqueueMessage      = "EnqueueMessage"
-	InternalRangeLookup = "InternalRangeLookup"
+	Contains             = "Contains"
+	Get                  = "Get"
+	Put                  = "Put"
+	ConditionalPut       = "ConditionalPut"
+	Increment            = "Increment"
+	Scan                 = "Scan"
+	Delete               = "Delete"
+	DeleteRange          = "DeleteRange"
+	EndTransaction       = "EndTransaction"
+	AccumulateTS         = "AccumulateTS"
+	ReapQueue            = "ReapQueue"
+	EnqueueUpdate        = "EnqueueUpdate"
+	EnqueueMessage       = "EnqueueMessage"
+	InternalRangeLookup  = "InternalRangeLookup"
+	HeartbeatTransaction = "HeartbeatTransaction"
 )
 
 // readMethods specifies the set of methods which read and return data.
@@ -93,16 +95,17 @@ var readMethods = map[string]struct{}{
 
 // writeMethods specifies the set of methods which write data.
 var writeMethods = map[string]struct{}{
-	Put:            struct{}{},
-	ConditionalPut: struct{}{},
-	Increment:      struct{}{},
-	Delete:         struct{}{},
-	DeleteRange:    struct{}{},
-	EndTransaction: struct{}{},
-	AccumulateTS:   struct{}{},
-	ReapQueue:      struct{}{},
-	EnqueueUpdate:  struct{}{},
-	EnqueueMessage: struct{}{},
+	Put:                  struct{}{},
+	ConditionalPut:       struct{}{},
+	Increment:            struct{}{},
+	Delete:               struct{}{},
+	DeleteRange:          struct{}{},
+	EndTransaction:       struct{}{},
+	AccumulateTS:         struct{}{},
+	ReapQueue:            struct{}{},
+	EnqueueUpdate:        struct{}{},
+	EnqueueMessage:       struct{}{},
+	HeartbeatTransaction: struct{}{},
 }
 
 // NeedReadPerm returns true if the specified method requires read permissions.
@@ -460,6 +463,8 @@ func (r *Range) executeCmd(method string, args Request, reply Response) error {
 		r.EnqueueMessage(args.(*EnqueueMessageRequest), reply.(*EnqueueMessageResponse))
 	case InternalRangeLookup:
 		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
+	case HeartbeatTransaction:
+		r.HeartbeatTransaction(args.(*HeartbeatTransactionRequest), reply.(*HeartbeatTransactionResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -695,4 +700,27 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 
 	reply.Ranges = rds
 	return
+}
+
+// HeartbeatTransaction updates the transaction status and heartbeat timestamp
+// on heartbeat message from a txn coordinator. The range will return the
+// current status of this transaction to the coordinator.
+func (r *Range) HeartbeatTransaction(args *HeartbeatTransactionRequest, reply *HeartbeatTransactionResponse) {
+	var txn Transaction
+	_, err := engine.GetI(r.engine, args.Key, &txn)
+	if err != nil {
+		reply.Error = err
+		return
+	}
+	if txn.Status == PENDING {
+		if !args.Timestamp.Less(txn.LastHeartbeat) {
+			txn.LastHeartbeat = args.Timestamp
+		}
+		if err := engine.PutI(r.engine, args.Key, txn); err != nil {
+			reply.Error = err
+			return
+		}
+	}
+
+	reply.Status = txn.Status
 }

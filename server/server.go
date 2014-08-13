@@ -35,13 +35,13 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 

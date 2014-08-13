@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 const (

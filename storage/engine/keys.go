@@ -198,6 +198,9 @@ var (
 	// KeyConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	KeyConfigZonePrefix = Key("\x00zone")
+	// KeyTransactionPrefix specifies the key prefix for transaction
+	// records. The suffix is the transaction id.
+	KeyTransactionPrefix = Key("\x00tx")
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
 	KeyNodeIDGenerator = Key("\x00node-id-generator")
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
