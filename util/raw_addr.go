@@ -13,24 +13,30 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf <tobias.schottdorf@gmail.com>
+// Author: jqmp (jaqueramaphan@gmail.com)
+
+// TODO(jqmp): Needs testing.
 
 package util
 
-import (
-	"reflect"
-	"sort"
-	"testing"
-)
+// RawAddr is a super-simple implementation of net.Addr.
+type RawAddr struct {
+	// These fields are only exported so that gob can see them.
+	NetworkField string
+	StringField  string
+}
 
-// TODO(jqmp): I'm not sure any testing is going on here.
-func TestMapKeys(t *testing.T) {
-	// For an uninitialized map, an empty slice should be returned.
-	var nilMap map[uint]bool
-	reflect.DeepEqual(MapKeys(nilMap).([]uint), []uint{})
-	reflect.DeepEqual(MapKeys(map[string]struct{}{"a": {}}).([]string), []string{"a"})
-	// Multiple elements need to be sorted to check equality.
-	m := map[int]string{9: "Hola", 1: "Señor", 2: "Espencie"}
-	sort.Ints(MapKeys(m).([]int))
-	reflect.DeepEqual(m, []int{1, 2, 9})
+// MakeRawAddr creates a new RawAddr from a network and raw address string.
+func MakeRawAddr(network string, str string) RawAddr {
+	return RawAddr{NetworkField: network, StringField: str}
+}
+
+// Network returns the address's network name.
+func (a RawAddr) Network() string {
+	return a.NetworkField
+}
+
+// String returns the address's string form.
+func (a RawAddr) String() string {
+	return a.StringField
 }

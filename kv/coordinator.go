@@ -89,6 +89,7 @@ type txnMetadata struct {
 	closer chan struct{}
 }
 
+// NewCoordinator TODO(jiajia) Add a comment!
 func NewCoordinator(db *DistDB, clock *hlc.Clock) *coordinator {
 	tc := &coordinator{
 		db:             db,

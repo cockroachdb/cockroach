@@ -35,14 +35,20 @@ func init() {
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
+	tlsConfig := rpc.LoadInsecureTLSConfig()
+
 	laddr := util.CreateTestAddr("unix")
-	lserver = rpc.NewServer(laddr)
-	lserver.Start()
-	local = New()
+	lserver = rpc.NewServer(laddr, tlsConfig)
+	if err := lserver.Start(); err != nil {
+		t.Fatal(err)
+	}
+	local = New(tlsConfig)
 	raddr := util.CreateTestAddr("unix")
-	rserver = rpc.NewServer(raddr)
-	rserver.Start()
-	remote = New()
+	rserver = rpc.NewServer(raddr, tlsConfig)
+	if err := rserver.Start(); err != nil {
+		t.Fatal(err)
+	}
+	remote = New(tlsConfig)
 	local.start(lserver)
 	remote.start(rserver)
 	time.Sleep(time.Millisecond)

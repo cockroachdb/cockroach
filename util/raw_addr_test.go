@@ -13,24 +13,25 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf <tobias.schottdorf@gmail.com>
+// Author: jqmp (jaqueramaphan@gmail.com)
 
 package util
 
 import (
-	"reflect"
-	"sort"
 	"testing"
 )
 
-// TODO(jqmp): I'm not sure any testing is going on here.
-func TestMapKeys(t *testing.T) {
-	// For an uninitialized map, an empty slice should be returned.
-	var nilMap map[uint]bool
-	reflect.DeepEqual(MapKeys(nilMap).([]uint), []uint{})
-	reflect.DeepEqual(MapKeys(map[string]struct{}{"a": {}}).([]string), []string{"a"})
-	// Multiple elements need to be sorted to check equality.
-	m := map[int]string{9: "Hola", 1: "Señor", 2: "Espencie"}
-	sort.Ints(MapKeys(m).([]int))
-	reflect.DeepEqual(m, []int{1, 2, 9})
+func TestRawAddr(t *testing.T) {
+	network := "tcp"
+	str := "host:1234"
+
+	addr := MakeRawAddr(network, str)
+
+	// TODO(jqmp): Is this really how we test things in Go?
+	if addr.Network() != network {
+		t.Error("Expected addr.Network() to be %s; got %s", network, addr.Network())
+	}
+	if addr.String() != str {
+		t.Error("Expected addr.String() to be %s; got %s", str, addr.String())
+	}
 }

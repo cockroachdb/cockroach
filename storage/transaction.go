@@ -21,18 +21,25 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
+// IsolationType TODO(jiajia) Needs documentation.
 type IsolationType int
 
 const (
+	// SERIALIZABLE TODO(jiajia) Needs documentation.
 	SERIALIZABLE IsolationType = iota
+	// SNAPSHOT TODO(jiajia) Needs documentation.
 	SNAPSHOT
 )
 
+// TransactionStatus TODO(jiajia) Needs documentation.
 type TransactionStatus int
 
 const (
+	// PENDING TODO(jiajia) Needs documentation.
 	PENDING TransactionStatus = iota
+	// COMMITTED TODO(jiajia) Needs documentation.
 	COMMITTED
+	// ABORTED TODO(jiajia) Needs documentation.
 	ABORTED
 )
 

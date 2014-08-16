@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -86,7 +87,7 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 		RangeID:         0,
 		RangeDescriptor: testRangeDescriptor,
 	}
-	g := gossip.New()
+	g := gossip.New(rpc.LoadInsecureTLSConfig())
 	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(rm, clock, engine, nil, g)
 	r.Start()

@@ -49,6 +49,8 @@ var (
 	rpcAddr  = flag.String("rpc", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
 	httpAddr = flag.String("http", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
 
+	certDir = flag.String("certs", "", "directory containing RSA key and x509 certs")
+
 	// stores is specified to enable durable storage via RocksDB-backed
 	// key-value stores. Memory-backed key value stores may be
 	// optionally specified via mem=<integer byte size>.
@@ -81,6 +83,7 @@ var (
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
+		"-certs=<cert-dir>" +
 		"-stores=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short: "start node by joining the gossip network",
 	Long: fmt.Sprintf(`
@@ -238,18 +241,28 @@ func newServer() (*server, error) {
 	if strings.HasPrefix(*rpcAddr, ":") {
 		*rpcAddr = host + *rpcAddr
 	}
-	addr, err := net.ResolveTCPAddr("tcp", *rpcAddr)
+	_, err = net.ResolveTCPAddr("tcp", *rpcAddr)
 	if err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", *rpcAddr, err)
+	}
+
+	var tlsConfig *rpc.TLSConfig
+	if *certDir == "" {
+		tlsConfig = rpc.LoadInsecureTLSConfig()
+	} else {
+		var err error
+		if tlsConfig, err = rpc.LoadTLSConfig(*certDir); err != nil {
+			return nil, util.Errorf("unable to load TLS config: %v", err)
+		}
 	}
 
 	s := &server{
 		host: host,
 		mux:  http.NewServeMux(),
-		rpc:  rpc.NewServer(addr),
+		rpc:  rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig),
 	}
 
-	s.gossip = gossip.New()
+	s.gossip = gossip.New(tlsConfig)
 	s.kvDB = kv.NewDB(s.gossip)
 	s.kvREST = rest.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
@@ -265,7 +278,10 @@ func newServer() (*server, error) {
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
 func (s *server) start(clock *hlc.Clock, engines []engine.Engine, selfBootstrap bool) error {
-	s.rpc.Start() // bind RPC socket and launch goroutine.
+	// Bind RPC socket and launch goroutine.
+	if err := s.rpc.Start(); err != nil {
+		return err
+	}
 	log.Infof("Started RPC server at %s", s.rpc.Addr())
 
 	// Handle self-bootstrapping case for a single node.

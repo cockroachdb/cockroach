@@ -41,11 +41,16 @@ import (
 // nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node) {
-	rpcServer := rpc.NewServer(addr)
+	tlsConfig, err := rpc.LoadTestTLSConfig("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rpcServer := rpc.NewServer(addr, tlsConfig)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New()
+	g := gossip.New(tlsConfig)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {

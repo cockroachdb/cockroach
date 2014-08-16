@@ -379,7 +379,7 @@ func (db *DistDB) sendRPC(replicas []storage.Replica, method string, args storag
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
 	}
-	return rpc.Send(argsMap, method, replyChanI, rpcOpts)
+	return rpc.Send(argsMap, method, replyChanI, rpcOpts, db.gossip.TLSConfig())
 }
 
 // sendErrorReply instantiates a new reply value according to the
