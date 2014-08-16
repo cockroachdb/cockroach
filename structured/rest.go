@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Andrew Bonventre (andybons@gmail.com)
 
 package structured
 
@@ -22,14 +23,24 @@ import (
 	"net/http"
 )
 
-const (
-	// StructuredKeyPrefix is the prefix for RESTful endpoints used to
-	// interact with structured data schemas.
-	StructuredKeyPrefix = "/structured/"
-)
+// StructuredKeyPrefix is the prefix for RESTful endpoints used to
+// interact with structured data schemas.
+const StructuredKeyPrefix = "/structured/"
 
 // A RESTServer provides a RESTful HTTP API to interact with
-// an underlying key-value store.
+// structured data schemas.
+//
+// A resource is represented using the following URL scheme:
+//   /structured/<schema key>/<table key>/<primary key>?<name>=<value>
+// Some examples:
+//   /structured/pdb/us/531 -> <data for user 531>
+//   /structured/pdb/us/?email=andybons@gmail.com -> <data for user with email andybons@gmail.com>
+//
+// Depending on the name/value tuple provided, multiple results may be
+// returned. All results are returned as JSON-serialized objects.
+//
+// TODO(andybons): Provide a limit/continuation field for paging.
+// TODO(andybons): Allow the user to provide more than one name/value pair.
 type RESTServer struct {
 	db *DB // Structured database client
 }
@@ -44,13 +55,25 @@ func NewRESTServer(db *DB) *RESTServer {
 func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		//s.handleGetAction(w, r)
+		s.handleGetAction(w, r)
 	case "PUT", "POST":
-		//s.handlePutAction(w, r)
+		s.handlePutAction(w, r)
 	case "DELETE":
-		//s.handleDeleteAction(w, r)
+		s.handleDeleteAction(w, r)
 	default:
 		errStr := fmt.Sprintf("unhandled HTTP method %s: %s", r.Method, http.StatusText(http.StatusBadRequest))
 		http.Error(w, errStr, http.StatusBadRequest)
 	}
+}
+
+func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
+	panic("not implemented")
+}
+
+func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request) {
+	panic("not implemented")
+}
+
+func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
+	panic("not implemented")
 }
