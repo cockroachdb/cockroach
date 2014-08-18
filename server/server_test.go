@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -54,8 +53,7 @@ func startServer() *server {
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			log.Fatal(err)
 		}
-		clock := hlc.NewClock(hlc.UnixNano)
-		err = s.start(clock, engines, true) // TODO(spencer): should shutdown server.
+		err = s.start(engines, true) // TODO(spencer): should shutdown server.
 		if err != nil {
 			log.Fatalf("Could not start server: %s", err)
 		}

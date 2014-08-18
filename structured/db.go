@@ -17,17 +17,17 @@
 
 package structured
 
-import "github.com/cockroachdb/cockroach/kv"
+import "github.com/cockroachdb/cockroach/storage"
 
 // A DB implements the structured data API using the Cockroach kv
 // client API.
 type DB struct {
 	// kvDB is a client to the monolithic key-value map.
-	kvDB kv.DB
+	db storage.DB
 }
 
 // NewDB returns a key-value datastore client which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDB(kvDB kv.DB) *DB {
-	return &DB{kvDB: kvDB}
+func NewDB(db storage.DB) *DB {
+	return &DB{db: db}
 }

@@ -65,21 +65,22 @@ var configPrefixes = []struct {
 
 // The following are the method names supported by the KV API.
 const (
-	Contains             = "Contains"
-	Get                  = "Get"
-	Put                  = "Put"
-	ConditionalPut       = "ConditionalPut"
-	Increment            = "Increment"
-	Scan                 = "Scan"
-	Delete               = "Delete"
-	DeleteRange          = "DeleteRange"
-	EndTransaction       = "EndTransaction"
-	AccumulateTS         = "AccumulateTS"
-	ReapQueue            = "ReapQueue"
-	EnqueueUpdate        = "EnqueueUpdate"
-	EnqueueMessage       = "EnqueueMessage"
-	InternalRangeLookup  = "InternalRangeLookup"
-	HeartbeatTransaction = "HeartbeatTransaction"
+	Contains              = "Contains"
+	Get                   = "Get"
+	Put                   = "Put"
+	ConditionalPut        = "ConditionalPut"
+	Increment             = "Increment"
+	Scan                  = "Scan"
+	Delete                = "Delete"
+	DeleteRange           = "DeleteRange"
+	EndTransaction        = "EndTransaction"
+	AccumulateTS          = "AccumulateTS"
+	ReapQueue             = "ReapQueue"
+	EnqueueUpdate         = "EnqueueUpdate"
+	EnqueueMessage        = "EnqueueMessage"
+	InternalRangeLookup   = "InternalRangeLookup"
+	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
+	InternalResolveIntent = "InternalResolveIntent"
 )
 
 // readMethods specifies the set of methods which read and return data.
@@ -95,17 +96,18 @@ var readMethods = map[string]struct{}{
 
 // writeMethods specifies the set of methods which write data.
 var writeMethods = map[string]struct{}{
-	Put:                  struct{}{},
-	ConditionalPut:       struct{}{},
-	Increment:            struct{}{},
-	Delete:               struct{}{},
-	DeleteRange:          struct{}{},
-	EndTransaction:       struct{}{},
-	AccumulateTS:         struct{}{},
-	ReapQueue:            struct{}{},
-	EnqueueUpdate:        struct{}{},
-	EnqueueMessage:       struct{}{},
-	HeartbeatTransaction: struct{}{},
+	Put:                   struct{}{},
+	ConditionalPut:        struct{}{},
+	Increment:             struct{}{},
+	Delete:                struct{}{},
+	DeleteRange:           struct{}{},
+	EndTransaction:        struct{}{},
+	AccumulateTS:          struct{}{},
+	ReapQueue:             struct{}{},
+	EnqueueUpdate:         struct{}{},
+	EnqueueMessage:        struct{}{},
+	InternalHeartbeatTxn:  struct{}{},
+	InternalResolveIntent: struct{}{},
 }
 
 // NeedReadPerm returns true if the specified method requires read permissions.
@@ -463,8 +465,10 @@ func (r *Range) executeCmd(method string, args Request, reply Response) error {
 		r.EnqueueMessage(args.(*EnqueueMessageRequest), reply.(*EnqueueMessageResponse))
 	case InternalRangeLookup:
 		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
-	case HeartbeatTransaction:
-		r.HeartbeatTransaction(args.(*HeartbeatTransactionRequest), reply.(*HeartbeatTransactionResponse))
+	case InternalHeartbeatTxn:
+		r.InternalHeartbeatTxn(args.(*InternalHeartbeatTxnRequest), reply.(*InternalHeartbeatTxnResponse))
+	case InternalResolveIntent:
+		r.InternalResolveIntent(args.(*InternalResolveIntentRequest), reply.(*InternalResolveIntentResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -702,25 +706,34 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	return
 }
 
-// HeartbeatTransaction updates the transaction status and heartbeat timestamp
-// on heartbeat message from a txn coordinator. The range will return the
-// current status of this transaction to the coordinator.
-func (r *Range) HeartbeatTransaction(args *HeartbeatTransactionRequest, reply *HeartbeatTransactionResponse) {
+// InternalHeartbeatTxn updates the transaction status and heartbeat
+// timestamp after receiving transaction heartbeat messages from
+// coordinator.  The range will return the current status for this
+// transaction to the coordinator.
+func (r *Range) InternalHeartbeatTxn(args *InternalHeartbeatTxnRequest, reply *InternalHeartbeatTxnResponse) {
+	// Create the actual key to the system-local transaction table.
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
 	var txn Transaction
-	_, err := engine.GetI(r.engine, args.Key, &txn)
-	if err != nil {
+	if _, err := engine.GetI(r.engine, key, &txn); err != nil {
 		reply.Error = err
 		return
 	}
 	if txn.Status == PENDING {
-		if !args.Timestamp.Less(txn.LastHeartbeat) {
-			txn.LastHeartbeat = args.Timestamp
+		if !args.Header().Timestamp.Less(txn.LastHeartbeat) {
+			txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.PutI(r.engine, args.Key, txn); err != nil {
+		if err := engine.PutI(r.engine, key, txn); err != nil {
 			reply.Error = err
 			return
 		}
 	}
-
 	reply.Status = txn.Status
+}
+
+// InternalResolveIntent updates the transaction status and heartbeat
+// timestamp after receiving transaction heartbeat messages from
+// coordinator.  The range will return the current status for this
+// transaction to the coordinator.
+func (r *Range) InternalResolveIntent(args *InternalResolveIntentRequest, reply *InternalResolveIntentResponse) {
+	reply.Error = util.Error("unimplemented")
 }

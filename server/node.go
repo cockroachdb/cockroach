@@ -51,15 +51,15 @@ const (
 // them by directing the commands contained within RPCs to local
 // stores, which in turn direct the commands to specific ranges.  Each
 // node has access to the global, monolithic Key-Value abstraction via
-// its "distDB" reference. Nodes use this to allocate node and store
+// its kv.DB reference. Nodes use this to allocate node and store
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
 	ClusterID  string                 // UUID for Cockroach cluster
 	Descriptor storage.NodeDescriptor // Node ID, network/physical topology
 	gossip     *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
-	distDB     kv.DB                  // Global KV DB; used to access global id generators
-	localDB    *kv.LocalDB            // Local KV DB for access to node-local stores
+	db         *kv.DB                 // Global KV DB; used to access global id generators
+	localKV    *kv.LocalKV            // Local KV impl. for access to node-local stores
 	closer     chan struct{}
 
 	maxAvailPrefix string // Prefix for max avail capacity gossip topic
@@ -67,7 +67,7 @@ type Node struct {
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db kv.DB) (int32, error) {
+func allocateNodeID(db storage.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
 		RequestHeader: storage.RequestHeader{
 			Key:  engine.KeyNodeIDGenerator,
@@ -84,7 +84,7 @@ func allocateNodeID(db kv.DB) (int32, error) {
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
+func allocateStoreIDs(nodeID int32, inc int64, db storage.DB) (int32, error) {
 	ir := <-db.Increment(&storage.IncrementRequest{
 		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
 		RequestHeader: storage.RequestHeader{
@@ -103,9 +103,8 @@ func allocateStoreIDs(nodeID int32, inc int64, db kv.DB) (int32, error) {
 // cluster ID. The bootstrapped store contains a single range spanning
 // all keys. Initial range lookup metadata is populated for the range.
 //
-// Returns a direct-access kv.LocalDB for unittest purposes only.
-func BootstrapCluster(clusterID string, eng engine.Engine) (
-	*kv.LocalDB, error) {
+// Returns a kv.DB for unittest purposes only.
+func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	sIdent := storage.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
@@ -144,21 +143,22 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (
 		return nil, util.Errorf("expected range id of 1, got %d", rng.Meta.RangeID)
 	}
 
-	// Create a local DB to directly modify the new range.
-	localDB := kv.NewLocalDB()
-	localDB.AddStore(s)
+	// Create a KV DB with a local KV to directly modify the new range.
+	localKV := kv.NewLocalKV()
+	localKV.AddStore(s)
+	localDB := kv.NewDB(localKV, clock)
 
 	// Initialize range addressing records and default administrative configs.
 	desc := storage.RangeDescriptor{
 		StartKey: engine.KeyMin,
 		Replicas: []storage.Replica{replica},
 	}
-	if err := kv.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
+	if err := storage.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
 		return nil, err
 	}
 
 	// Write default configs to local DB.
-	if err := kv.BootstrapConfigs(localDB, now); err != nil {
+	if err := storage.BootstrapConfigs(localDB, now); err != nil {
 		return nil, err
 	}
 
@@ -179,11 +179,11 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (
 // NewNode returns a new instance of Node, interpreting command line
 // flags to initialize the appropriate Store or set of
 // Stores. Registers the storage instance for the RPC service "Node".
-func NewNode(distDB kv.DB, gossip *gossip.Gossip) *Node {
+func NewNode(db *kv.DB, gossip *gossip.Gossip) *Node {
 	n := &Node{
 		gossip:  gossip,
-		distDB:  distDB,
-		localDB: kv.NewLocalDB(),
+		db:      db,
+		localKV: kv.NewLocalKV(),
 		closer:  make(chan struct{}),
 	}
 	return n
@@ -220,11 +220,11 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 // stop cleanly stops the node.
 func (n *Node) stop() {
 	close(n.closer)
-	n.localDB.Close()
+	n.localKV.Close()
 }
 
 // initStores initializes the Stores map from id to Store. Stores are
-// added to the localDB if already bootstrapped. A bootstrapped Store
+// added to the localKV if already bootstrapped. A bootstrapped Store
 // has a valid ident with cluster, node and Store IDs set. If the
 // Store doesn't yet have a valid ident, it's added to the bootstraps
 // list for initialization once the cluster and node IDs have been
@@ -252,7 +252,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 				return err
 			}
 			log.Infof("initialized store %s: %+v", s, capacity)
-			n.localDB.AddStore(s)
+			n.localKV.AddStore(s)
 		}
 	}
 
@@ -277,7 +277,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 // cluster ID and node ID. The node's ident is initialized based on
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
-	return n.localDB.VisitStores(func(s *storage.Store) error {
+	return n.localKV.VisitStores(func(s *storage.Store) error {
 		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
 			return util.Errorf("unidentified store in store map: %s", s)
 		}
@@ -303,7 +303,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	// Allocate a new node ID if necessary.
 	if n.Descriptor.NodeID == 0 {
 		var err error
-		n.Descriptor.NodeID, err = allocateNodeID(n.distDB)
+		n.Descriptor.NodeID, err = allocateNodeID(n.db)
 		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 		if err != nil {
 			log.Fatal(err)
@@ -318,7 +318,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.distDB)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
 		s.Bootstrap(sIdent)
-		n.localDB.AddStore(s)
+		n.localKV.AddStore(s)
 		sIdent.StoreID++
 		log.Infof("bootstrapped store %s", s)
 	}
@@ -386,7 +386,7 @@ func (n *Node) startGossip() {
 // gossipCapacities calls capacity on each store and adds it to the
 // gossip network.
 func (n *Node) gossipCapacities() {
-	n.localDB.VisitStores(func(s *storage.Store) error {
+	n.localKV.VisitStores(func(s *storage.Store) error {
 		storeDesc, err := s.Descriptor(&n.Descriptor)
 		if err != nil {
 			log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
@@ -406,7 +406,7 @@ func (n *Node) gossipCapacities() {
 // executeCmd looks up the store specified by header.Replica, and runs
 // Store.ExecuteCmd.
 func (n *Node) executeCmd(method string, args storage.Request, reply storage.Response) error {
-	store, err := n.localDB.GetStore(&args.Header().Replica)
+	store, err := n.localKV.GetStore(&args.Header().Replica)
 	if err != nil {
 		return err
 	}
@@ -482,4 +482,14 @@ func (n *Node) EnqueueMessage(args *storage.EnqueueMessageRequest, reply *storag
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *storage.InternalRangeLookupRequest, reply *storage.InternalRangeLookupResponse) error {
 	return n.executeCmd(storage.InternalRangeLookup, args, reply)
+}
+
+// InternalHeartbeatTxn .
+func (n *Node) InternalHeartbeatTxn(args *storage.InternalHeartbeatTxnRequest, reply *storage.InternalHeartbeatTxnResponse) error {
+	return n.executeCmd(storage.InternalHeartbeatTxn, args, reply)
+}
+
+// InternalResolveIntent .
+func (n *Node) InternalResolveIntent(args *storage.InternalResolveIntentRequest, reply *storage.InternalResolveIntentResponse) error {
+	return n.executeCmd(storage.InternalResolveIntent, args, reply)
 }

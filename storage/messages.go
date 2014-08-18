@@ -68,10 +68,6 @@ type RequestHeader struct {
 	// CmdID is optionally specified for request idempotence
 	// (i.e. replay protection).
 	CmdID ClientCmdID
-
-	// The following values are set internally and should not be set
-	// manually.
-
 	// The key for request. If the request operates on a range, this
 	// represents the starting key for the range.
 	Key engine.Key
@@ -82,9 +78,9 @@ type RequestHeader struct {
 	User string
 	// Replica specifies the destination for the request. See config.go.
 	Replica Replica
-	// TxID is set non-empty if a transaction is underway. Empty string
+	// TxnID is set non-empty if a transaction is underway. Empty string
 	// to start a new transaction.
-	TxID string
+	TxnID engine.Key
 }
 
 // Header implements the Request interface by returning itself.
@@ -104,8 +100,8 @@ type ResponseHeader struct {
 	// increased from the timestamp passed with the RequestHeader when
 	// the key being written was either read or updated more recently.
 	Timestamp hlc.Timestamp
-	// TxID is non-empty if a transaction is underway.
-	TxID string
+	// TxnID is non-empty if a transaction is underway.
+	TxnID engine.Key
 }
 
 // Header implements the Response interface by returning itself.
@@ -227,13 +223,16 @@ type EndTransactionRequest struct {
 }
 
 // An EndTransactionResponse is the return value from the
-// EndTransaction() method. It specifies the commit timestamp for the
-// final transaction (all writes will have this timestamp). It further
-// specifies the commit wait, which is the remaining time the client
-// MUST wait before signalling completion of the transaction to another
-// distributed node to maintain consistency.
+// EndTransaction() method. Status specifies the final status of the
+// transaction. CommitTimestamp specifies the timestamp at which the
+// transaction is committed (all values written during the txn will
+// have this timestamp). CommitWait specifies the commit wait, which
+// is the remaining time the client MUST wait before signalling
+// completion of the transaction to another distributed node to
+// maintain consistency.
 type EndTransactionResponse struct {
 	ResponseHeader
+	Status          TransactionStatus
 	CommitTimestamp hlc.Timestamp
 	CommitWait      int64 // Remaining with (us)
 }
@@ -313,19 +312,35 @@ type InternalRangeLookupResponse struct {
 	Ranges []*RangeDescriptor
 }
 
-// A HeartbeatTransactionRequest is arguments to the HeartbeatTransaction()
-// method.  It is supposed to be sent by the transaction coordinator to let the
-// system know that the transaction is still ongoing. Note that the heartbeat
-// message is different from the heartbeat message in the gossip protocol.
-type HeartbeatTransactionRequest struct {
+// An InternalHeartbeatTxnRequest is arguments to the
+// InternalHeartbeatTxn() method. It is sent by transaction
+// coordinators to let the system know that the transaction is still
+// ongoing. Note that this heartbeat message is different from the
+// heartbeat message in the gossip protocol.
+type InternalHeartbeatTxnRequest struct {
 	RequestHeader
 }
 
-// A HeartbeatTransactionResponse is the return value from the
-// HeartbeatTransaction() method. It returns the transaction status as well. So
-// the transaction coordinator will know quickly when the transaction has been
-// aborted by another one.
-type HeartbeatTransactionResponse struct {
+// An InternalHeartbeatTxnResponse is the return value from the
+// InternalHeartbeatTxn() method. It returns the transaction status as
+// well. So the transaction coordinator will know quickly when the
+// transaction is aborted by another one.
+type InternalHeartbeatTxnResponse struct {
 	ResponseHeader
 	Status TransactionStatus
+}
+
+// An InternalResolveIntentRequest is arguments to the
+// InternalResolveIntent() method. It is sent by transaction
+// coordinators to clean up write intents: either to remove them or
+// commit them.
+type InternalResolveIntentRequest struct {
+	RequestHeader
+	Commit bool // True to commit, false to remove.
+}
+
+// An InternalResolveIntentResponse is the return value from the
+// InternalResolveIntent() method.
+type InternalResolveIntentResponse struct {
+	ResponseHeader
 }

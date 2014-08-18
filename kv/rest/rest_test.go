@@ -22,6 +22,7 @@ package rest_test
 
 import (
 	"bytes"
+	"encoding/gob"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -331,29 +332,36 @@ func TestCounterAndEntryInteraction(t *testing.T) {
 	})
 }
 
-// TestNullPrefixedKeys makes sure that the internal system keys are not accessible through the HTTP API.
-func TestNullPrefixedKeys(t *testing.T) {
-	// TODO(zbrock + matthew) fix this once sqlite key encoding is finished so we can namespace user keys
-	t.Skip("Internal Meta1 Keys should not be accessible from the HTTP REST API. But they are right now.")
-
+// TestSystemKeys makes sure that the internal system keys are
+// accessible through the HTTP API.
+// TODO(spencer): we need to ensure proper permissions through the
+//   HTTP API.
+func TestSystemKeys(t *testing.T) {
 	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
 	s := startNewServer()
 
-	// Precondition: we want to make sure the meta1 key exists.
-	initialVal, err := s.rawGet(metaKey)
-	if err != nil {
-		t.Fatalf("Precondition Failed! Unable to fetch %+v from local db", metaKey)
+	// Compute expected system key.
+	desc := &storage.RangeDescriptor{
+		StartKey: engine.KeyMin,
+		Replicas: []storage.Replica{
+			storage.Replica{
+				NodeID:  1,
+				StoreID: 1,
+				RangeID: 1,
+			},
+		},
 	}
-	if initialVal == nil {
-		t.Fatalf("Precondition Failed! Expected meta1 key to exist in the underlying store, but no value found")
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(desc); err != nil {
+		t.Fatal(err)
 	}
 
-	// Try to manipulate the meta1 key.
+	// Manipulate the meta1 key.
 	encMeta1Key := url.QueryEscape(string(metaKey))
 	runHTTPTestFixture(t, []RequestResponse{
 		{
 			NewRequest("GET", encMeta1Key),
-			NewResponse(404),
+			NewResponse(200, string(buf.Bytes()), "application/octet-stream"),
 		},
 		{
 			NewRequest("POST", encMeta1Key, "cool"),
@@ -364,15 +372,6 @@ func TestNullPrefixedKeys(t *testing.T) {
 			NewResponse(200, "cool", "application/octet-stream"),
 		},
 	}, s)
-
-	// Postcondition: the meta1 key is untouched.
-	afterVal, err := s.rawGet(metaKey)
-	if err != nil {
-		t.Errorf("Unable to fetch %+v from local db", metaKey)
-	}
-	if !bytes.Equal(afterVal, initialVal) {
-		t.Errorf("Expected meta1 to be unchanged, but it differed: %+v", afterVal)
-	}
 }
 
 func TestKeysAndBodyArePreserved(t *testing.T) {
@@ -446,10 +445,9 @@ func statusText(status int) string {
 }
 
 type kvTestServer struct {
-	db         kv.DB
+	db         *kv.DB
 	rest       *rest.Server
 	httpServer *httptest.Server
-	firstRange *storage.Range
 }
 
 func startNewServer() *kvTestServer {
@@ -457,23 +455,11 @@ func startNewServer() *kvTestServer {
 
 	// Initialize engine, store, and localDB.
 	e := engine.NewInMem(engine.Attributes{}, 1<<20)
-	localDB, err := server.BootstrapCluster("test-cluster", e)
+	db, err := server.BootstrapCluster("test-cluster", e)
 	if err != nil {
 		panic(err)
 	}
-	s.db = localDB
-
-	// Rip through the stores (should be just one) and grab the first range (there should also just be one).
-	localDB.VisitStores(func(store *storage.Store) error {
-		rs := store.GetRanges()
-		if len(rs) > 0 {
-			s.firstRange = rs[0]
-		}
-		return nil
-	})
-	if s.firstRange == nil {
-		panic("Internal Error: Expected to find a range while initializing test server!")
-	}
+	s.db = db
 
 	// Initialize the REST server.
 	s.rest = rest.NewRESTServer(s.db)
@@ -482,16 +468,4 @@ func startNewServer() *kvTestServer {
 	}))
 
 	return s
-}
-
-// rawGet goes directly to the Range for the Get. The reason is that we don't want any intermediate user land
-// encoding to get in the way. We want the actual stored byte value without any chance of URL-encoding or SQLite-encoding.
-func (s *kvTestServer) rawGet(key engine.Key) ([]byte, error) {
-	req := &storage.GetRequest{storage.RequestHeader{Key: key, User: storage.UserRoot}}
-	resp := &storage.GetResponse{}
-	s.firstRange.Get(req, resp)
-	if resp.Error != nil {
-		return nil, resp.Error
-	}
-	return resp.Value.Bytes, nil
 }

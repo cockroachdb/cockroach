@@ -27,6 +27,12 @@ import (
 // Key defines the key in the key-value datastore.
 type Key []byte
 
+// KeyRange provides a key range from start to end.  If end is nil,
+// the key range is defined only for a single key: start.
+type KeyRange struct {
+	Start, End Key
+}
+
 // Less implements the util.Ordered interface.
 func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) == -1
@@ -99,7 +105,7 @@ func RangeMetaKey(key Key) Key {
 	if len(key) == 0 {
 		return KeyMin
 	}
-	if !bytes.HasPrefix(key, KeyReplicatedPrefix) {
+	if !bytes.HasPrefix(key, KeySystemPrefix) {
 		return MakeKey(KeyMeta2Prefix, key)
 	}
 	if bytes.HasPrefix(key, KeyMeta2Prefix) {
@@ -149,12 +155,17 @@ var (
 	// storage/encoding.go), they will never start with \xff.
 	KeyMax = Key("\xff")
 
-	// KeyLocalPrefix is the prefix for keys which hold data local to
-	// a RocksDB instance (and is not replicated), such as accounting
-	// information relevant to the load of ranges. It is chosen to sort before
-	// KeyReplicatedPrefix. Data at these keys is local to this store and is
-	// not replicated via raft nor is it available via access to the global
-	// key-value store.
+	// KeyLocalPrefix is the prefix for keys which hold data local to a
+	// RocksDB instance, such as range accounting information (e.g. key
+	// samples), response cache values and transaction records. Some
+	// local data are replicated, such as transaction rows, but are
+	// located in the local area so that they remain in proximity to one
+	// or more keys which they affect, but without unnecessarily
+	// polluting the key space.
+	//
+	// The local key prefix has been deliberately chosen to sort before
+	// the KeySystemPrefix, because these local keys are not addressable
+	// via the meta range addressing indexes.
 	KeyLocalPrefix = Key("\x00\x00\x00")
 
 	// KeyLocalIdent stores an immutable identifier for this store,
@@ -172,13 +183,18 @@ var (
 	// KeyLocalRangeResponseCachePrefix is the prefix for keys storing command
 	// responses used to guarantee idempotency (see ResponseCache).
 	KeyLocalRangeResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("respcache-"))
+	// KeyLocalTransactionPrefix specifies the key prefix for transaction
+	// records. The suffix is the transaction id.
+	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("tx-"))
 
-	// KeyReplicatedPrefix indicates the beginning of the key range
-	// that is replicated across the cluster.
-	KeyReplicatedPrefix = Key("\x00\x00")
+	// KeySystemPrefix indicates the beginning of the key range for
+	// global, system data which are replicated across the cluster.
+	KeySystemPrefix = Key("\x00")
 
-	// KeyMetaPrefix is the prefix for range metadata keys.
-	KeyMetaPrefix = MakeKey(KeyReplicatedPrefix, Key("meta"))
+	// KeyMetaPrefix is the prefix for range metadata keys. Notice that
+	// an extra null character in the prefix causes all range addressing
+	// records to sort before any system tables which they might describe.
+	KeyMetaPrefix = MakeKey(KeySystemPrefix, Key("\x00meta"))
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
 	KeyMeta1Prefix = MakeKey(KeyMetaPrefix, Key("1"))
@@ -187,23 +203,23 @@ var (
 	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, Key("2"))
 
 	// KeyMetaMax is the end of the range of addressing keys.
-	KeyMetaMax = Key("\x00\x01")
+	KeyMetaMax = MakeKey(KeySystemPrefix, Key("\x01"))
 
 	// KeyConfigAccountingPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigAccountingPrefix = Key("\x00acct")
+	KeyConfigAccountingPrefix = MakeKey(KeySystemPrefix, Key("acct"))
 	// KeyConfigPermissionPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigPermissionPrefix = Key("\x00perm")
+	KeyConfigPermissionPrefix = MakeKey(KeySystemPrefix, Key("perm"))
 	// KeyConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigZonePrefix = Key("\x00zone")
+	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, Key("zone"))
 	// KeyTransactionPrefix specifies the key prefix for transaction
 	// records. The suffix is the transaction id.
-	KeyTransactionPrefix = Key("\x00tx")
+	KeyTransactionPrefix = MakeKey(KeySystemPrefix, Key("tx"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
-	KeyNodeIDGenerator = Key("\x00node-id-generator")
+	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-id-generator"))
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
-	KeyStoreIDGeneratorPrefix = Key("\x00store-id-generator-")
+	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, Key("store-id-generator-"))
 )

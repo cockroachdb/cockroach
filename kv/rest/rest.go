@@ -24,8 +24,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
@@ -69,11 +67,11 @@ var routingTable = map[string]map[string]actionHandler{
 // A Server provides a RESTful HTTP API to interact with
 // an underlying key-value store.
 type Server struct {
-	db kv.DB // Key-value database client
+	db storage.DB // Key-value database client
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db kv.DB) *Server {
+func NewRESTServer(db storage.DB) *Server {
 	return &Server{db: db}
 }
 

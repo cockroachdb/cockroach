@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/storage"
 )
 
 const (
@@ -51,13 +51,13 @@ const (
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	kvDB kv.DB
+	db storage.DB
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(kvDB kv.DB) *statusServer {
+func newStatusServer(db storage.DB) *statusServer {
 	return &statusServer{
-		kvDB: kvDB,
+		db: db,
 	}
 }
 

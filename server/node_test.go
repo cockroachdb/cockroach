@@ -59,9 +59,9 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetBootstrap([]net.Addr{gossipBS})
 		g.Start(rpcServer)
 	}
-	db := kv.NewDB(g)
-	node := NewNode(db, g)
 	clock := hlc.NewClock(hlc.UnixNano)
+	db := kv.NewDB(kv.NewDistKV(g), clock)
+	node := NewNode(db, g)
 	if err := node.start(rpcServer, clock, engines, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 10ms) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.localDB.GetStoreCount() == 3 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.localKV.GetStoreCount() == 3 }, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }
@@ -154,11 +154,11 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(engine.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	db, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
 	}
-	localDB.Close()
+	db.Close()
 
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
 	*gossip.GossipInterval = 10 * time.Millisecond
@@ -174,7 +174,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.localDB.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.localKV.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 

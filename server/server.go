@@ -115,9 +115,10 @@ A node exports an HTTP API with the following endpoints:
 type server struct {
 	host           string
 	mux            *http.ServeMux
+	clock          *hlc.Clock
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
-	kvDB           kv.DB
+	kvDB           *kv.DB
 	kvREST         *rest.Server
 	node           *Node
 	admin          *adminServer
@@ -139,10 +140,6 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	// Create a new hybrid-logical clock using the internal clock.
-	clock := hlc.NewClock(hlc.UnixNano)
-	clock.SetMaxDrift(*maxDrift)
-
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
@@ -154,7 +151,7 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	err = s.start(clock, engines, false)
+	err = s.start(engines, false)
 	defer s.stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)
@@ -257,13 +254,15 @@ func newServer() (*server, error) {
 	}
 
 	s := &server{
-		host: host,
-		mux:  http.NewServeMux(),
-		rpc:  rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig),
+		host:  host,
+		mux:   http.NewServeMux(),
+		clock: hlc.NewClock(hlc.UnixNano),
+		rpc:   rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig),
 	}
+	s.clock.SetMaxDrift(*maxDrift)
 
 	s.gossip = gossip.New(tlsConfig)
-	s.kvDB = kv.NewDB(s.gossip)
+	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
 	s.kvREST = rest.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
@@ -277,7 +276,7 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(clock *hlc.Clock, engines []engine.Engine, selfBootstrap bool) error {
+func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
 	// Bind RPC socket and launch goroutine.
 	if err := s.rpc.Start(); err != nil {
 		return err
@@ -303,7 +302,7 @@ func (s *server) start(clock *hlc.Clock, engines []engine.Engine, selfBootstrap 
 	// Init the node attributes from the -attrs command line flag.
 	nodeAttrs := parseAttributes(*attrs)
 
-	if err := s.node.start(s.rpc, clock, engines, nodeAttrs); err != nil {
+	if err := s.node.start(s.rpc, s.clock, engines, nodeAttrs); err != nil {
 		return err
 	}
 	log.Infof("Initialized %d storage engine(s)", len(engines))
@@ -347,6 +346,7 @@ func (s *server) stop() {
 	s.node.stop()
 	s.gossip.Stop()
 	s.rpc.Close()
+	s.kvDB.Close()
 }
 
 type gzipResponseWriter struct {
