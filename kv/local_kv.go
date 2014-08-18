@@ -38,9 +38,7 @@ type LocalKV struct {
 
 // NewLocalKV returns a local-only KV DB for direct access to a store.
 func NewLocalKV() *LocalKV {
-	return &LocalKV{
-		storeMap: make(map[int32]*storage.Store),
-	}
+	return &LocalKV{storeMap: map[int32]*storage.Store{}}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
@@ -109,7 +107,7 @@ func (kv *LocalKV) ExecuteCmd(method string, args storage.Request, replyChan int
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. We need to find the Store, but all we have is the
 	// Key. So find its Range locally, and pull out its Replica which we
-	// use to find the Store.  This lets us use the same codepath below
+	// use to find the Store. This lets us use the same codepath below
 	// (store.ExecuteCmd) for both locally and remotely originated
 	// commands.
 	header := args.Header()

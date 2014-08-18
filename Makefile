@@ -19,7 +19,7 @@ rocksdb:
 	cd $(ROCKSDB); make static_lib
 
 build: rocksdb
-	$(CGO_FLAGS) $(GO) build
+	$(CGO_FLAGS) $(GO) build -o cockroach
 
 goget:
 	$(CGO_FLAGS) $(GO) get ./...

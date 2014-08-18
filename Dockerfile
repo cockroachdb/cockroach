@@ -13,7 +13,7 @@ RUN groupadd -r cockroach && useradd -r -g cockroach cockroach
 RUN apt-get update
 RUN apt-get install -y build-essential
 RUN apt-get install -y curl git bzr mercurial
-RUN curl -L -s http://golang.org/dl/go1.3.linux-amd64.tar.gz | tar -v -C /usr/local/ -xz
+RUN curl -L -s http://golang.org/dl/go1.3.1.linux-amd64.tar.gz | tar -v -C /usr/local/ -xz
 
 ENV PATH  /usr/local/go/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 ENV GOPATH  /go

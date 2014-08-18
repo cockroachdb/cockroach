@@ -222,4 +222,7 @@ var (
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
 	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, Key("store-id-generator-"))
+
+	// KeySchemaPrefix specifies key prefixes for schema definitions.
+	KeySchemaPrefix = MakeKey(KeySystemPrefix, Key("schema"))
 )

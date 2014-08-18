@@ -18,136 +18,134 @@
 package structured
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func ExampleNewGoSchema() {
+func TestNewGoSchema(t *testing.T) {
 	s, err := createTestSchema()
 	if err != nil {
-		log.Fatalf("failed building schema: %s", err)
+		t.Fatalf("failed building schema: %s", err)
 	}
-
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %s", err)
+		t.Fatalf("failed converting to yaml: %s", err)
 	}
-	fmt.Println(string(yaml))
-	// Output:
-	// db: PhotoDB
-	// db_key: pdb
-	// tables:
-	// - table: Comment
-	//   table_key: co
-	//   columns:
-	//   - column: PhotoStreamID
-	//     column_key: si
-	//     type: integer
-	//     foreign_key: PhotoStream.ID
-	//     interleave: true
-	//     ondelete: cascade
-	//     primary_key: true
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//     auto_increment: 1
-	//   - column: UserID
-	//     column_key: ui
-	//     type: integer
-	//     foreign_key: User.ID
-	//     ondelete: setnull
-	//   - column: Message
-	//     column_key: me
-	//     type: string
-	//     index: fulltext
-	//   - column: Timestamp
-	//     column_key: ti
-	//     type: integer
-	// - table: Identity
-	//   table_key: id
-	//   columns:
-	//   - column: Key
-	//     column_key: ke
-	//     type: string
-	//     primary_key: true
-	//     scatter: true
-	//   - column: UserID
-	//     column_key: ui
-	//     type: integer
-	//     foreign_key: User.ID
-	//     ondelete: setnull
-	// - table: Photo
-	//   table_key: ph
-	//   columns:
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//     scatter: true
-	//     auto_increment: 10000
-	//   - column: UserID
-	//     column_key: ui
-	//     type: integer
-	//     foreign_key: User.ID
-	//     ondelete: setnull
-	//   - column: Location
-	//     column_key: lo
-	//     type: latlong
-	//     index: location
-	// - table: PhotoStream
-	//   table_key: ps
-	//   columns:
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//     scatter: true
-	//     auto_increment: 1
-	//   - column: UserID
-	//     column_key: ui
-	//     type: integer
-	//     foreign_key: User.ID
-	//     ondelete: setnull
-	//   - column: Title
-	//     column_key: ti
-	//     type: string
-	//     index: fulltext
-	// - table: StreamPost
-	//   table_key: sp
-	//   columns:
-	//   - column: PhotoStreamID
-	//     column_key: si
-	//     type: integer
-	//     foreign_key: PhotoStream.ID
-	//     interleave: true
-	//     ondelete: cascade
-	//     primary_key: true
-	//   - column: PhotoID
-	//     column_key: pi
-	//     type: integer
-	//     foreign_key: Photo.ID
-	//     ondelete: setnull
-	//     primary_key: true
-	//   - column: Timestamp
-	//     column_key: ti
-	//     type: integer
-	// - table: User
-	//   table_key: us
-	//   columns:
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//     scatter: true
-	//     auto_increment: 1
-	//   - column: Name
-	//     column_key: na
-	//     type: string
+	expected := `db: PhotoDB
+db_key: pdb
+tables:
+- table: Comment
+  table_key: co
+  columns:
+  - column: PhotoStreamID
+    column_key: si
+    type: integer
+    foreign_key: PhotoStream.ID
+    interleave: true
+    ondelete: cascade
+    primary_key: true
+  - column: ID
+    column_key: id
+    type: integer
+    primary_key: true
+    auto_increment: 1
+  - column: UserID
+    column_key: ui
+    type: integer
+    foreign_key: User.ID
+    ondelete: setnull
+  - column: Message
+    column_key: me
+    type: string
+    index: fulltext
+  - column: Timestamp
+    column_key: ti
+    type: integer
+- table: Identity
+  table_key: id
+  columns:
+  - column: Key
+    column_key: ke
+    type: string
+    primary_key: true
+    scatter: true
+  - column: UserID
+    column_key: ui
+    type: integer
+    foreign_key: User.ID
+    ondelete: setnull
+- table: Photo
+  table_key: ph
+  columns:
+  - column: ID
+    column_key: id
+    type: integer
+    primary_key: true
+    scatter: true
+    auto_increment: 10000
+  - column: UserID
+    column_key: ui
+    type: integer
+    foreign_key: User.ID
+    ondelete: setnull
+  - column: Location
+    column_key: lo
+    type: latlong
+    index: location
+- table: PhotoStream
+  table_key: ps
+  columns:
+  - column: ID
+    column_key: id
+    type: integer
+    primary_key: true
+    scatter: true
+    auto_increment: 1
+  - column: UserID
+    column_key: ui
+    type: integer
+    foreign_key: User.ID
+    ondelete: setnull
+  - column: Title
+    column_key: ti
+    type: string
+    index: fulltext
+- table: StreamPost
+  table_key: sp
+  columns:
+  - column: PhotoStreamID
+    column_key: si
+    type: integer
+    foreign_key: PhotoStream.ID
+    interleave: true
+    ondelete: cascade
+    primary_key: true
+  - column: PhotoID
+    column_key: pi
+    type: integer
+    foreign_key: Photo.ID
+    ondelete: setnull
+    primary_key: true
+  - column: Timestamp
+    column_key: ti
+    type: integer
+- table: User
+  table_key: us
+  columns:
+  - column: ID
+    column_key: id
+    type: integer
+    primary_key: true
+    scatter: true
+    auto_increment: 1
+  - column: Name
+    column_key: na
+    type: string
+`
+	if string(yaml) != expected {
+		t.Errorf("unexpected yaml; expected %s, got %s", expected, yaml)
+	}
 }
 
 // A struct with every structured schema data type.
@@ -169,73 +167,75 @@ type KitchenSink struct {
 	SM       StringMap  `roach:"sm"`
 }
 
-func ExampleToYAML() {
+func TestToYAML(t *testing.T) {
 	sm := map[string]interface{}{
 		"ks": KitchenSink{},
 	}
 	s, err := NewGoSchema("Test", "t", sm)
 	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
+		t.Fatalf("failed building schema: %v", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+		t.Fatalf("failed converting to yaml: %v", err)
 	}
-	fmt.Println(string(yaml))
-	// Output:
-	// db: Test
-	// db_key: t
-	// tables:
-	// - table: KitchenSink
-	//   table_key: ks
-	//   columns:
-	//   - column: ID
-	//     column_key: id
-	//     type: integer
-	//     primary_key: true
-	//   - column: Bool
-	//     column_key: bo
-	//     type: integer
-	//   - column: Int
-	//     column_key: i
-	//     type: integer
-	//   - column: Int8
-	//     column_key: i8
-	//     type: integer
-	//   - column: Int16
-	//     column_key: i16
-	//     type: integer
-	//   - column: Int32
-	//     column_key: i32
-	//     type: integer
-	//   - column: Int64
-	//     column_key: i64
-	//     type: integer
-	//   - column: String
-	//     column_key: str
-	//     type: string
-	//   - column: Blob
-	//     column_key: bl
-	//     type: blob
-	//   - column: Time
-	//     column_key: ti
-	//     type: time
-	//   - column: Location
-	//     column_key: lo
-	//     type: latlong
-	//   - column: IS
-	//     column_key: is
-	//     type: integerset
-	//   - column: SS
-	//     column_key: ss
-	//     type: stringset
-	//   - column: IM
-	//     column_key: im
-	//     type: integermap
-	//   - column: SM
-	//     column_key: sm
-	//     type: stringmap
+	expected := `db: Test
+db_key: t
+tables:
+- table: KitchenSink
+  table_key: ks
+  columns:
+  - column: ID
+    column_key: id
+    type: integer
+    primary_key: true
+  - column: Bool
+    column_key: bo
+    type: integer
+  - column: Int
+    column_key: i
+    type: integer
+  - column: Int8
+    column_key: i8
+    type: integer
+  - column: Int16
+    column_key: i16
+    type: integer
+  - column: Int32
+    column_key: i32
+    type: integer
+  - column: Int64
+    column_key: i64
+    type: integer
+  - column: String
+    column_key: str
+    type: string
+  - column: Blob
+    column_key: bl
+    type: blob
+  - column: Time
+    column_key: ti
+    type: time
+  - column: Location
+    column_key: lo
+    type: latlong
+  - column: IS
+    column_key: is
+    type: integerset
+  - column: SS
+    column_key: ss
+    type: stringset
+  - column: IM
+    column_key: im
+    type: integermap
+  - column: SM
+    column_key: sm
+    type: stringmap
+`
+	if string(yaml) != expected {
+		t.Errorf("unexpected yaml; expected %s, got %s", expected, yaml)
+	}
 }
 
 // TestYAMLRoundTrip converts from YAML directly back into a schema
@@ -246,18 +246,18 @@ func TestYAMLRoundTrip(t *testing.T) {
 	}
 	s, err := NewGoSchema("Test", "t", sm)
 	if err != nil {
-		log.Fatalf("failed building schema: %v", err)
+		t.Fatalf("failed building schema: %v", err)
 	}
 
 	yaml, err := s.ToYAML()
 	if err != nil {
-		log.Fatalf("failed converting to yaml: %v", err)
+		t.Fatalf("failed converting to yaml: %v", err)
 	}
 	s2, err := NewYAMLSchema([]byte(yaml))
 	if err != nil {
-		log.Fatalf("failed to convert from yaml to a schema: %v", err)
+		t.Fatalf("failed to convert from yaml to a schema: %v", err)
 	}
 	if !reflect.DeepEqual(s, s2) {
-		log.Fatal("yaml round trip schemas differ")
+		t.Fatal("yaml round trip schemas differ")
 	}
 }
