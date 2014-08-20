@@ -23,8 +23,9 @@ import (
 	"encoding/gob"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 type RawKeyValue struct {
@@ -90,6 +91,16 @@ func PutI(engine Engine, key Key, value interface{}) error {
 	return engine.Put(key, buf.Bytes())
 }
 
+// PutProto sets the given key to the protobuf-serialized byte string
+// of msg and the provided timestamp.
+func PutProto(engine Engine, key Key, msg gogoproto.Message) error {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return engine.Put(key, data)
+}
+
 // GetI fetches the specified key and gob-deserializes it into
 // "value". Returns true on success or false if the key was not
 // found.
@@ -103,6 +114,25 @@ func GetI(engine Engine, key Key, value interface{}) (bool, error) {
 	}
 	if value != nil {
 		if err = gob.NewDecoder(bytes.NewBuffer(val)).Decode(value); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+// GetProto fetches the value at the specified key and unmarshals it
+// using a protobuf decoder. Returns true on success or false if the
+// key was not found.
+func GetProto(engine Engine, key Key, msg gogoproto.Message) (bool, error) {
+	val, err := engine.Get(key)
+	if err != nil {
+		return false, err
+	}
+	if val == nil {
+		return false, nil
+	}
+	if msg != nil {
+		if err := gogoproto.Unmarshal(val, msg); err != nil {
 			return true, err
 		}
 	}

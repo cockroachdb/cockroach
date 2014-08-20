@@ -24,10 +24,10 @@ import (
 	"net/url"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -58,7 +58,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
-	if err := storage.PutI(zh.db, zoneKey, config, hlc.Timestamp{}); err != nil {
+	if err := storage.PutI(zh.db, zoneKey, config, proto.Timestamp{}); err != nil {
 		return err
 	}
 	return nil
@@ -75,8 +75,8 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all zones if the key is empty.
 	if len(path) == 0 {
-		sr := <-zh.db.Scan(&storage.ScanRequest{
-			RequestHeader: storage.RequestHeader{
+		sr := <-zh.db.Scan(&proto.ScanRequest{
+			RequestHeader: proto.RequestHeader{
 				Key:    engine.KeyConfigZonePrefix,
 				EndKey: engine.PrefixEndKey(engine.KeyConfigZonePrefix),
 				User:   storage.UserRoot,
@@ -84,7 +84,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			MaxResults: maxGetResults,
 		})
 		if sr.Error != nil {
-			err = sr.Error
+			err = sr.GoError()
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
@@ -138,14 +138,14 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
-	dr := <-zh.db.Delete(&storage.DeleteRequest{
-		RequestHeader: storage.RequestHeader{
+	dr := <-zh.db.Delete(&proto.DeleteRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  zoneKey,
 			User: storage.UserRoot,
 		},
 	})
 	if dr.Error != nil {
-		return dr.Error
+		return dr.GoError()
 	}
 	return nil
 }

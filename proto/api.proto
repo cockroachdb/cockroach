@@ -1,0 +1,371 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied.  See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
+
+package proto;
+
+import "config.proto";
+import "data.proto";
+import "errors.proto";
+import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+
+// ClientCmdID provides a unique ID for client commands. Clients which
+// provide ClientCmdID gain operation idempotence. In other words,
+// clients can submit the same command multiple times and always
+// receive the same response. This is common on retries over flaky
+// networks. However, the system imposes a limit on how long
+// idempotence is provided. Retries over an hour old are not
+// guaranteed idempotence and may be executed more than once with
+// potentially different results.
+//
+// ClientCmdID contains the client's timestamp and a client-generated
+// random number. The client Timestamp is specified in unix
+// nanoseconds and is used for some uniqueness but also to provide a
+// rough ordering of requests, useful for data locality on the
+// server. The Random is specified for additional uniqueness.
+// NOTE: An accurate time signal IS NOT required for correctness.
+message ClientCmdID {
+  // Nanoseconds since Unix epoch.
+  optional int64 wall_time = 1 [(gogoproto.nullable) = false];
+  optional int64 random = 2 [(gogoproto.nullable) = false];
+}
+
+// RequestHeader is supplied with every storage node request.
+message RequestHeader {
+  // Timestamp specifies time at which read or writes should be
+  // performed. If the timestamp is set to zero value, its value
+  // is initialized to the wall time of the receiving node.
+  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  // CmdID is optionally specified for request idempotence
+  // (i.e. replay protection).
+  optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+  // The key for request. If the request operates on a range, this
+  // represents the starting key for the range.
+  optional bytes key = 3 [(gogoproto.nullable) = false];
+  // End key is empty if request spans only a single key.
+  optional bytes end_key = 4 [(gogoproto.nullable) = false];
+  // User is the originating user. Used to lookup priority when
+  // scheduling queued operations at target node.
+  optional string user = 5 [(gogoproto.nullable) = false];
+  // Replica specifies the destination for the request. See config.go.
+  optional Replica replica = 6 [(gogoproto.nullable) = false];
+  // TxnID is set non-empty if a transaction is underway. Empty string
+  // to start a new transaction.
+  optional bytes txn_id = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+}
+
+// ResponseHeader is returned with every storage node response.
+message ResponseHeader {
+  // Error is non-nil if an error occurred.
+  optional Error error = 1;
+  // Timestamp specifies time at which read or write actually was
+  // performed. In the case of both reads and writes, if the supplied
+  // timestamp is 0, the node servicing the request will use its
+  // timestamp for the operation and its value will be set
+  // here. Additionally, in the case of writes, this value may be
+  // increased from the timestamp passed with the RequestHeader when
+  // the key being written was either read or updated more recently.
+  optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // TxnID is non-empty if a transaction is underway.
+  optional bytes txn_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+}
+
+// A ContainsRequest is arguments to the Contains() method.
+message ContainsRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ContainsResponse is the return value of the Contains() method.
+message ContainsResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bool exists = 2 [(gogoproto.nullable) = false];
+}
+
+// A GetRequest is arguments to the Get() method.
+message GetRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A GetResponse is the return value from the Get() method.
+// If the key doesn't exist, returns nil for Value.Bytes.
+message GetResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// A PutRequest is arguments to the Put() method.
+message PutRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// A PutResponse is the return value from the Put() method.
+message PutResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ConditionalPutRequest is arguments to the ConditionalPut()
+// method.
+// - Returns true and sets value if ExpValue equals existing value.
+// - If key doesn't exist and ExpValue is empty, sets value.
+// - Otherwise, returns error.
+message ConditionalPutRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The value to put.
+  optional Value value = 2 [(gogoproto.nullable) = false];
+  // ExpValue.Bytes empty to test for non-existence.
+  optional Value exp_value = 3 [(gogoproto.nullable) = false];
+}
+
+// A ConditionalPutResponse is the return value from the
+// ConditionalPut() method.
+message ConditionalPutResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ActualValue.Bytes set if conditional put failed.
+  optional Value actual_value = 2;
+}
+
+// An IncrementRequest is arguments to the Increment() method.  It
+// increments the value for key, and returns the new value.
+// IncrementRequest cannot be called on a key set by Put() or
+// ConditionalPut(). Similarly, Get(), Put() and ConditionalPut()
+// cannot be invoked on an incremented key.
+message IncrementRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int64 increment = 2 [(gogoproto.nullable) = false];
+}
+
+// An IncrementResponse is the return value from the Increment
+// method. The new value after increment is specified in NewValue. If
+// the value could not be decoded as specified, Error will be set.
+message IncrementResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int64 new_value = 2 [(gogoproto.nullable) = false];
+}
+
+// A DeleteRequest is arguments to the Delete() method.
+message DeleteRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A DeleteResponse is the return value from the Delete() method.
+message DeleteResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A DeleteRangeRequest is arguments to the DeleteRange method. It
+// specifies the range of keys to delete.
+message DeleteRangeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // If 0, *all* entries between Key (inclusive) and EndKey
+  // (exclusive) are deleted. Must be >= 0
+  optional int64 max_entries_to_delete = 2 [(gogoproto.nullable) = false];
+}
+
+// A DeleteRangeResponse is the return value from the DeleteRange()
+// method.
+message DeleteRangeResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Number of entries removed.
+  optional int64 num_deleted = 2 [(gogoproto.nullable) = false];
+}
+
+// A ScanRequest is arguments to the Scan() method. It specifies the
+// start and end keys for the scan and the maximum number of results.
+message ScanRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Must be > 0.
+  optional int64 max_results = 2 [(gogoproto.nullable) = false];
+}
+
+// A ScanResponse is the return value from the Scan() method.
+message ScanResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Empty if no rows were scanned.
+  repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+}
+
+// An EndTransactionRequest is arguments to the EndTransaction() method.
+// It specifies whether to commit or roll back an extant transaction.
+message EndTransactionRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // False to abort and rollback.
+  optional bool commit = 2 [(gogoproto.nullable) = false];
+}
+
+// An EndTransactionResponse is the return value from the
+// EndTransaction() method. Status specifies the final status of the
+// transaction. CommitTimestamp specifies the timestamp at which the
+// transaction is committed (all values written during the txn will
+// have this timestamp). CommitWait specifies the commit wait, which
+// is the remaining time the client MUST wait before signalling
+// completion of the transaction to another distributed node to
+// maintain consistency.
+message EndTransactionResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional TransactionStatus status = 2 [(gogoproto.nullable) = false];
+  optional Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
+  // Remaining with (us).
+  optional int64 commit_wait = 4 [(gogoproto.nullable) = false];
+}
+
+// An AccumulateTSRequest is arguments to the AccumulateTS() method.
+// It specifies the key at which to accumulate TS values, and the
+// time series counts for this discrete time interval.
+message AccumulateTSRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // One per discrete subtime period (e.g. one/minute or one/second)
+  repeated int64 counts = 2 [(gogoproto.nullable) = false];
+}
+
+// An AccumulateTSResponse is the return value from the AccumulateTS()
+// method.
+message AccumulateTSResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ReapQueueRequest is arguments to the ReapQueue() method. It
+// specifies the recipient inbox key to which messages are waiting
+// to be reapted and also the maximum number of results to return.
+message ReapQueueRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Maximum results to return; must be > 0.
+  optional int64 max_results = 2 [(gogoproto.nullable) = false];
+}
+
+// A ReapQueueResponse is the return value from the ReapQueue() method.
+message ReapQueueResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated Value messages = 2 [(gogoproto.nullable) = false];
+}
+
+// An EnqueueUpdateRequest is arguments to the EnqueueUpdate() method.
+// It specifies the update to enqueue for asynchronous execution.
+// Update is an instance of one of the following messages: PutRequest,
+// IncrementRequest, DeleteRequest, DeleteRangeRequest, or
+// AccountingRequest.
+message EnqueueUpdateRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // TODO(spencer): add union type here.
+}
+
+// An EnqueueUpdateResponse is the return value from the
+// EnqueueUpdate() method.
+message EnqueueUpdateResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An EnqueueMessageRequest is arguments to the EnqueueMessage() method.
+// It specifies the recipient inbox key and the message (an arbitrary
+// byte slice value).
+message EnqueueMessageRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Message value to delivery to inbox.
+  optional Value msg = 2 [(gogoproto.nullable) = false];
+}
+
+// An EnqueueMessageResponse is the return value from the
+// EnqueueMessage() method.
+message EnqueueMessageResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An InternalRangeLookupRequest is arguments to the InternalRangeLookup()
+// method. It specifies the key for which the containing range is being
+// requested, and the maximum number of total ranges that should be returned.
+message InternalRangeLookupRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalRangeLookupResponse is the return value from the
+// InternalRangeLookup() method. It returns metadata for the range containing
+// the requested key, optionally returning the metadata for additional
+// consecutive ranges beyond the requested range.
+message InternalRangeLookupResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalHeartbeatTxnRequest is arguments to the
+// InternalHeartbeatTxn() method. It is sent by transaction
+// coordinators to let the system know that the transaction is still
+// ongoing. Note that this heartbeat message is different from the
+// heartbeat message in the gossip protocol.
+message InternalHeartbeatTxnRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An InternalHeartbeatTxnResponse is the return value from the
+// InternalHeartbeatTxn() method. It returns the transaction status as
+// well. So the transaction coordinator will know quickly when the
+// transaction is aborted by another one.
+message InternalHeartbeatTxnResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional TransactionStatus status = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalResolveIntentRequest is arguments to the
+// InternalResolveIntent() method. It is sent by transaction
+// coordinators to clean up write intents: either to remove them or
+// commit them.
+message InternalResolveIntentRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // True to commit, false to remove.
+  optional bool commit = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalResolveIntentResponse is the return value from the
+// InternalResolveIntent() method.
+message InternalResolveIntentResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A ReadWriteCmdRequest is a union type containing instances of all
+// mutating commands.
+message ReadWriteCmdRequest {
+  option (gogoproto.onlyone) = true;
+  optional PutRequest put = 1;
+  optional ConditionalPutRequest conditional_put = 2;
+  optional IncrementRequest increment = 3;
+  optional DeleteRequest delete = 4;
+  optional DeleteRangeRequest delete_range = 5;
+  optional EndTransactionRequest end_transaction = 6;
+  optional AccumulateTSRequest accumulate_ts = 7 [(gogoproto.customname) = "AccumulateTS"];
+  optional ReapQueueRequest reap_queue = 8;
+  optional EnqueueUpdateRequest enqueue_update = 9;
+  optional EnqueueMessageRequest enqueue_message = 10;
+  optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 11;
+  optional InternalResolveIntentRequest internal_resolve_intent = 12;
+}
+
+// A ReadWriteCmdResponse is a union type containing instances of all
+// mutating commands.
+message ReadWriteCmdResponse {
+  option (gogoproto.onlyone) = true;
+  optional PutResponse put = 1;
+  optional ConditionalPutResponse conditional_put = 2;
+  optional IncrementResponse increment = 3;
+  optional DeleteResponse delete = 4;
+  optional DeleteRangeResponse delete_range = 5;
+  optional EndTransactionResponse end_transaction = 6;
+  optional AccumulateTSResponse accumulate_ts = 7 [(gogoproto.customname) = "AccumulateTS"];
+  optional ReapQueueResponse reap_queue = 8;
+  optional EnqueueUpdateResponse enqueue_update = 9;
+  optional EnqueueMessageResponse enqueue_message = 10;
+  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 11;
+  optional InternalResolveIntentResponse internal_resolve_intent = 12;
+}

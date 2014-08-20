@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -87,8 +88,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer localDB.Close()
 
 	// Scan the complete contents of the local database.
-	sr := <-localDB.Scan(&storage.ScanRequest{
-		RequestHeader: storage.RequestHeader{
+	sr := <-localDB.Scan(&proto.ScanRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:    engine.KeyMin,
 			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,

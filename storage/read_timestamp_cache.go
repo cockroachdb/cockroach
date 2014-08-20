@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"code.google.com/p/biogo.store/interval"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -55,7 +56,7 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 type ReadTimestampCache struct {
 	cache     *util.IntervalCache
 	clock     *hlc.Clock
-	highWater hlc.Timestamp
+	highWater proto.Timestamp
 }
 
 // NewReadTimestampCache returns a new read timestamp cache with
@@ -81,7 +82,7 @@ func (rtc *ReadTimestampCache) Clear() {
 // Add the specified read timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only.
-func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.Timestamp) {
+func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -92,13 +93,13 @@ func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp hlc.Timestam
 // interval spanning from start to end keys. If no part of the
 // specified range is overlapped by read timestamps in the cache, the
 // high water timestamp is returned.
-func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.Timestamp {
+func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
 	max := rtc.highWater
 	for _, v := range rtc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
-		ts := v.(hlc.Timestamp)
+		ts := v.(proto.Timestamp)
 		if max.Less(ts) {
 			max = ts
 		}
@@ -109,7 +110,7 @@ func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) hlc.Timestamp {
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
 func (rtc *ReadTimestampCache) shouldEvict(size int, key, value interface{}) bool {
-	ts := value.(hlc.Timestamp)
+	ts := value.(proto.Timestamp)
 	// Compute the edge of the cache window.
 	edge := rtc.clock.Now()
 	edge.WallTime -= minCacheWindow.Nanoseconds()

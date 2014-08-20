@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -101,7 +102,7 @@ func NewDistKV(gossip *gossip.Gossip) *DistKV {
 // for permission. For example, if a scan crosses two permission
 // configs, both configs must allow read permissions or the entire
 // scan will fail.
-func (kv *DistKV) verifyPermissions(method string, header *storage.RequestHeader) error {
+func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) error {
 	// Get permissions map from gossip.
 	permMap, err := kv.gossip.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
@@ -145,21 +146,21 @@ func (kv *DistKV) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
 func (kv *DistKV) internalRangeLookup(key engine.Key,
-	info *storage.RangeDescriptor) ([]*storage.RangeDescriptor, error) {
-	args := &storage.InternalRangeLookupRequest{
-		RequestHeader: storage.RequestHeader{
+	info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+	args := &proto.InternalRangeLookupRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 		MaxRanges: rangeLookupMaxRanges,
 	}
-	replyChan := make(chan *storage.InternalRangeLookupResponse, len(info.Replicas))
+	replyChan := make(chan *proto.InternalRangeLookupResponse, len(info.Replicas))
 	if err := kv.sendRPC(info.Replicas, "Node.InternalRangeLookup", args, replyChan); err != nil {
 		return nil, err
 	}
 	reply := <-replyChan
 	if reply.Error != nil {
-		return nil, reply.Error
+		return nil, reply.GoError()
 	}
 	return reply.Ranges, nil
 }
@@ -167,12 +168,12 @@ func (kv *DistKV) internalRangeLookup(key engine.Key,
 // getFirstRangeDescriptor returns the RangeDescriptor for the first range on
 // the cluster, which is retrieved from the gossip protocol instead of the
 // datastore.
-func (kv *DistKV) getFirstRangeDescriptor() (*storage.RangeDescriptor, error) {
+func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
 	infoI, err := kv.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
 	if err != nil {
 		return nil, firstRangeMissingError{}
 	}
-	info := infoI.(storage.RangeDescriptor)
+	info := infoI.(proto.RangeDescriptor)
 	return &info, nil
 }
 
@@ -182,14 +183,14 @@ func (kv *DistKV) getFirstRangeDescriptor() (*storage.RangeDescriptor, error) {
 // The additional RangeDescriptors are returned with the intent of pre-caching
 // subsequent ranges which are likely to be requested soon by the current
 // workload.
-func (kv *DistKV) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, error) {
+func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
 		metadataKey = engine.RangeMetaKey(key)
 		// metadataRange is the RangeDescriptor for the range which contains
 		// metadataKey.
-		metadataRange *storage.RangeDescriptor
+		metadataRange *proto.RangeDescriptor
 		err           error
 	)
 	if len(metadataKey) == 0 {
@@ -200,7 +201,7 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, 
 		if err != nil {
 			return nil, err
 		}
-		return []*storage.RangeDescriptor{rd}, nil
+		return []proto.RangeDescriptor{*rd}, nil
 	}
 	if bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
 		// In this case, metadataRange is the cluster's first range.
@@ -220,10 +221,10 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, 
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied
-// storage.Replica slice. First, replicas which have gossipped
+// proto.Replica slice. First, replicas which have gossipped
 // addresses are corraled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
-func (kv *DistKV) sendRPC(replicas []storage.Replica, method string, args storage.Request, replyChan interface{}) error {
+func (kv *DistKV) sendRPC(replicas []proto.Replica, method string, args proto.Request, replyChan interface{}) error {
 	if len(replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
 	}
@@ -257,7 +258,7 @@ func (kv *DistKV) sendRPC(replicas []storage.Replica, method string, args storag
 // based on the supplied key and sends the RPC according to the
 // specified options. executeRPC sends asynchronously and returns a
 // response value on the replyChan channel when the call is complete.
-func (kv *DistKV) ExecuteCmd(method string, args storage.Request, replyChan interface{}) {
+func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
 	// Augment method with "Node." prefix.
 	method = "Node." + method
 
@@ -305,6 +306,6 @@ func (kv *DistKV) Close() {}
 // error to err before sending the new reply on the channel.
 func sendErrorReply(err error, replyChan interface{}) {
 	replyVal := reflect.New(reflect.TypeOf(replyChan).Elem().Elem())
-	replyVal.Interface().(storage.Response).Header().Error = err
+	replyVal.Interface().(proto.Response).Header().SetGoError(err)
 	reflect.ValueOf(replyChan).Send(replyVal)
 }

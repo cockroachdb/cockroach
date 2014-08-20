@@ -21,9 +21,22 @@ import (
 	"fmt"
 	"sync"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
+
+type cmdIDKey struct {
+	walltime, random int64
+}
+
+func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
+	return cmdIDKey{
+		walltime: cmdID.WallTime,
+		random:   cmdID.Random,
+	}
+}
 
 // A ResponseCache provides idempotence for request retries. Each
 // request to a range specifies a ClientCmdID in the request header
@@ -39,7 +52,7 @@ import (
 type ResponseCache struct {
 	rangeID  int64
 	engine   engine.Engine
-	inflight map[ClientCmdID]*sync.Cond
+	inflight map[cmdIDKey]*sync.Cond
 	sync.Mutex
 }
 
@@ -51,7 +64,7 @@ func NewResponseCache(rangeID int64, engine engine.Engine) *ResponseCache {
 	return &ResponseCache{
 		rangeID:  rangeID,
 		engine:   engine,
-		inflight: make(map[ClientCmdID]*sync.Cond),
+		inflight: map[cmdIDKey]*sync.Cond{},
 	}
 }
 
@@ -63,7 +76,7 @@ func (rc *ResponseCache) ClearInflight() {
 	for _, cond := range rc.inflight {
 		cond.Broadcast()
 	}
-	rc.inflight = map[ClientCmdID]*sync.Cond{}
+	rc.inflight = map[cmdIDKey]*sync.Cond{}
 }
 
 // GetResponse looks up a response matching the specified cmdID and
@@ -72,7 +85,7 @@ func (rc *ResponseCache) ClearInflight() {
 // false. If a command is pending already for the cmdID, then this
 // method will block until the the command is completed or the
 // response cache is cleared.
-func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool, error) {
+func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{}) (bool, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return false, nil
@@ -80,7 +93,7 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 	// If the command is inflight, wait for it to complete.
 	rc.Lock()
 	for {
-		if cond, ok := rc.inflight[cmdID]; ok {
+		if cond, ok := rc.inflight[makeCmdIDKey(cmdID)]; ok {
 			cond.Wait()
 		} else {
 			break
@@ -95,10 +108,14 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 	rc.Unlock()
 
 	// If the response is in the cache or we experienced an error, return.
-	if ok, err := engine.GetI(rc.engine, rc.makeKey(cmdID), reply); ok || err != nil {
+	rwResp := proto.ReadWriteCmdResponse{}
+	if ok, err := engine.GetProto(rc.engine, rc.makeKey(cmdID), &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
 		rc.removeInflightLocked(cmdID)
+		if err == nil && rwResp.GetValue() != nil {
+			gogoproto.Merge(reply.(gogoproto.Message), rwResp.GetValue().(gogoproto.Message))
+		}
 		return ok, err
 	}
 	// There's no command result cached for this ID; but inflight was added above.
@@ -110,14 +127,16 @@ func (rc *ResponseCache) GetResponse(cmdID ClientCmdID, reply interface{}) (bool
 // inflight map. Any requests waiting on the outcome of the inflight
 // command will be signaled to wakeup and read the command response
 // from the cache.
-func (rc *ResponseCache) PutResponse(cmdID ClientCmdID, reply interface{}) error {
+func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{}) error {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return nil
 	}
 	// Write the response value to the engine.
 	key := rc.makeKey(cmdID)
-	err := engine.PutI(rc.engine, key, reply)
+	rwResp := &proto.ReadWriteCmdResponse{}
+	rwResp.SetValue(reply)
+	err := engine.PutProto(rc.engine, key, rwResp)
 
 	// Take lock after writing response to cache!
 	rc.Lock()
@@ -133,20 +152,21 @@ func (rc *ResponseCache) PutResponse(cmdID ClientCmdID, reply interface{}) error
 // command will block on the inflight cond var until either the
 // response cache is cleared or this command is removed via
 // PutResponse().
-func (rc *ResponseCache) addInflightLocked(cmdID ClientCmdID) {
-	if _, ok := rc.inflight[cmdID]; ok {
+func (rc *ResponseCache) addInflightLocked(cmdID proto.ClientCmdID) {
+	if _, ok := rc.inflight[makeCmdIDKey(cmdID)]; ok {
 		panic(fmt.Sprintf("command %+v is already inflight; GetResponse() should have been "+
 			"invoked first", cmdID))
 	}
-	rc.inflight[cmdID] = sync.NewCond(&rc.Mutex)
+	rc.inflight[makeCmdIDKey(cmdID)] = sync.NewCond(&rc.Mutex)
 }
 
 // removeInflightLocked removes an entry matching cmdID from the
 // inflight map and broadcasts a wakeup to all waiters.
-func (rc *ResponseCache) removeInflightLocked(cmdID ClientCmdID) {
-	if cond, ok := rc.inflight[cmdID]; ok {
+func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
+	key := makeCmdIDKey(cmdID)
+	if cond, ok := rc.inflight[key]; ok {
 		cond.Broadcast()
-		delete(rc.inflight, cmdID)
+		delete(rc.inflight, key)
 	}
 }
 
@@ -156,7 +176,7 @@ func (rc *ResponseCache) removeInflightLocked(cmdID ClientCmdID) {
 // keyspace.
 // TODO(spencer): going to need to encode the server timestamp
 //   for when the value was written for GC.
-func (rc *ResponseCache) makeKey(cmdID ClientCmdID) engine.Key {
+func (rc *ResponseCache) makeKey(cmdID proto.ClientCmdID) engine.Key {
 	// The max length of encoded int is 12.
 	b := make([]byte, 0, len(engine.KeyLocalRangeResponseCachePrefix)+3*12)
 	b = append(b, engine.KeyLocalRangeResponseCachePrefix...)

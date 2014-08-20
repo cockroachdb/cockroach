@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -68,8 +69,8 @@ type Node struct {
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(db storage.DB) (int32, error) {
-	ir := <-db.Increment(&storage.IncrementRequest{
-		RequestHeader: storage.RequestHeader{
+	ir := <-db.Increment(&proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  engine.KeyNodeIDGenerator,
 			User: storage.UserRoot,
 		},
@@ -85,9 +86,9 @@ func allocateNodeID(db storage.DB) (int32, error) {
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID int32, inc int64, db storage.DB) (int32, error) {
-	ir := <-db.Increment(&storage.IncrementRequest{
+	ir := <-db.Increment(&proto.IncrementRequest{
 		// The Key is a concatenation of StoreIDGeneratorPrefix and this node's ID.
-		RequestHeader: storage.RequestHeader{
+		RequestHeader: proto.RequestHeader{
 			Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
 			User: storage.UserRoot,
 		},
@@ -129,13 +130,13 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	}
 
 	// Create first range.
-	replica := storage.Replica{
+	replica := proto.Replica{
 		NodeID:  1,
 		StoreID: 1,
 		RangeID: 1,
 		Attrs:   engine.Attributes{},
 	}
-	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []storage.Replica{replica})
+	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
 	if err != nil {
 		return nil, err
 	}
@@ -149,9 +150,9 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	localDB := kv.NewDB(localKV, clock)
 
 	// Initialize range addressing records and default administrative configs.
-	desc := storage.RangeDescriptor{
+	desc := &proto.RangeDescriptor{
 		StartKey: engine.KeyMin,
-		Replicas: []storage.Replica{replica},
+		Replicas: []proto.Replica{replica},
 	}
 	if err := storage.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
 		return nil, err
@@ -405,7 +406,7 @@ func (n *Node) gossipCapacities() {
 
 // executeCmd looks up the store specified by header.Replica, and runs
 // Store.ExecuteCmd.
-func (n *Node) executeCmd(method string, args storage.Request, reply storage.Response) error {
+func (n *Node) executeCmd(method string, args proto.Request, reply proto.Response) error {
 	store, err := n.localKV.GetStore(&args.Header().Replica)
 	if err != nil {
 		return err
@@ -414,82 +415,84 @@ func (n *Node) executeCmd(method string, args storage.Request, reply storage.Res
 	return nil
 }
 
+// TODO(spencer): fill in method comments below.
+
 // Contains .
-func (n *Node) Contains(args *storage.ContainsRequest, reply *storage.ContainsResponse) error {
+func (n *Node) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
 	return n.executeCmd(storage.Contains, args, reply)
 }
 
 // Get .
-func (n *Node) Get(args *storage.GetRequest, reply *storage.GetResponse) error {
+func (n *Node) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
 	return n.executeCmd(storage.Get, args, reply)
 }
 
 // Put .
-func (n *Node) Put(args *storage.PutRequest, reply *storage.PutResponse) error {
+func (n *Node) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
 	return n.executeCmd(storage.Put, args, reply)
 }
 
 // ConditionalPut .
-func (n *Node) ConditionalPut(args *storage.ConditionalPutRequest, reply *storage.ConditionalPutResponse) error {
+func (n *Node) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
 	return n.executeCmd(storage.ConditionalPut, args, reply)
 }
 
 // Increment .
-func (n *Node) Increment(args *storage.IncrementRequest, reply *storage.IncrementResponse) error {
+func (n *Node) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
 	return n.executeCmd(storage.Increment, args, reply)
 }
 
 // Delete .
-func (n *Node) Delete(args *storage.DeleteRequest, reply *storage.DeleteResponse) error {
+func (n *Node) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
 	return n.executeCmd(storage.Delete, args, reply)
 }
 
 // DeleteRange .
-func (n *Node) DeleteRange(args *storage.DeleteRangeRequest, reply *storage.DeleteRangeResponse) error {
+func (n *Node) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
 	return n.executeCmd(storage.DeleteRange, args, reply)
 }
 
 // Scan .
-func (n *Node) Scan(args *storage.ScanRequest, reply *storage.ScanResponse) error {
+func (n *Node) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
 	return n.executeCmd(storage.Scan, args, reply)
 }
 
 // EndTransaction .
-func (n *Node) EndTransaction(args *storage.EndTransactionRequest, reply *storage.EndTransactionResponse) error {
+func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
 	return n.executeCmd(storage.EndTransaction, args, reply)
 }
 
 // AccumulateTS .
-func (n *Node) AccumulateTS(args *storage.AccumulateTSRequest, reply *storage.AccumulateTSResponse) error {
+func (n *Node) AccumulateTS(args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) error {
 	return n.executeCmd(storage.AccumulateTS, args, reply)
 }
 
 // ReapQueue .
-func (n *Node) ReapQueue(args *storage.ReapQueueRequest, reply *storage.ReapQueueResponse) error {
+func (n *Node) ReapQueue(args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) error {
 	return n.executeCmd(storage.ReapQueue, args, reply)
 }
 
 // EnqueueUpdate .
-func (n *Node) EnqueueUpdate(args *storage.EnqueueUpdateRequest, reply *storage.EnqueueUpdateResponse) error {
+func (n *Node) EnqueueUpdate(args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) error {
 	return n.executeCmd(storage.EnqueueUpdate, args, reply)
 }
 
 // EnqueueMessage .
-func (n *Node) EnqueueMessage(args *storage.EnqueueMessageRequest, reply *storage.EnqueueMessageResponse) error {
+func (n *Node) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) error {
 	return n.executeCmd(storage.EnqueueMessage, args, reply)
 }
 
 // InternalRangeLookup .
-func (n *Node) InternalRangeLookup(args *storage.InternalRangeLookupRequest, reply *storage.InternalRangeLookupResponse) error {
+func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(storage.InternalRangeLookup, args, reply)
 }
 
 // InternalHeartbeatTxn .
-func (n *Node) InternalHeartbeatTxn(args *storage.InternalHeartbeatTxnRequest, reply *storage.InternalHeartbeatTxnResponse) error {
+func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
 	return n.executeCmd(storage.InternalHeartbeatTxn, args, reply)
 }
 
 // InternalResolveIntent .
-func (n *Node) InternalResolveIntent(args *storage.InternalResolveIntentRequest, reply *storage.InternalResolveIntentResponse) error {
+func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
 	return n.executeCmd(storage.InternalResolveIntent, args, reply)
 }

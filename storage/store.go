@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -119,13 +120,13 @@ func (s *Store) Init() error {
 
 	// TODO(spencer): scan through all range metadata and instantiate
 	//   ranges. Right now we just get range ID hardcoded as 1.
-	var meta RangeMetadata
-	ok, err = engine.GetI(s.engine, makeRangeKey(1), &meta)
+	var meta proto.RangeMetadata
+	ok, err = engine.GetProto(s.engine, makeRangeKey(1), &meta)
 	if err != nil || !ok {
 		return err
 	}
 
-	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip)
+	rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip)
 	rng.Start()
 
 	s.mu.Lock()
@@ -157,7 +158,7 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
 	}
-	return nil, NewRangeNotFoundError(rangeID)
+	return nil, proto.NewRangeNotFoundError(rangeID)
 }
 
 // GetRanges fetches all ranges.
@@ -176,26 +177,26 @@ func (s *Store) GetRanges() RangeSlice {
 
 // CreateRange allocates a new range ID and stores range metadata.
 // On success, returns the new range.
-func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []Replica) (*Range, error) {
+func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error) {
 	rangeID, err := engine.Increment(s.engine, engine.KeyLocalRangeIDGenerator, 1)
 	if err != nil {
 		return nil, err
 	}
-	if ok, _ := engine.GetI(s.engine, makeRangeKey(rangeID), nil); ok {
+	if ok, _ := engine.GetProto(s.engine, makeRangeKey(rangeID), nil); ok {
 		return nil, util.Error("newly allocated range ID already in use")
 	}
 	// RangeMetadata is stored local to this store only. It is neither
 	// replicated via raft nor available via the global kv store.
-	meta := RangeMetadata{
+	meta := &proto.RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
 		RangeID:   rangeID,
-		RangeDescriptor: RangeDescriptor{
+		RangeDescriptor: proto.RangeDescriptor{
 			StartKey: startKey,
 			EndKey:   endKey,
 			Replicas: replicas,
 		},
 	}
-	err = engine.PutI(s.engine, makeRangeKey(rangeID), meta)
+	err = engine.PutProto(s.engine, makeRangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +237,7 @@ func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(method string, args Request, reply Response) error {
+func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Response) error {
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
@@ -261,11 +262,11 @@ func (s *Store) ExecuteCmd(method string, args Request, reply Response) error {
 		return err
 	}
 	if !rng.ContainsKeyRange(header.Key, header.EndKey) {
-		return NewRangeKeyMismatchError(header.Key, header.EndKey, rng.Meta)
+		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, rng.Meta)
 	}
 	if !rng.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		return &NotLeaderError{}
+		return &proto.NotLeaderError{}
 	}
 
 	// Differentiate between read-only and read-write.

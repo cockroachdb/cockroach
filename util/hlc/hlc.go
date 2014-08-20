@@ -22,10 +22,10 @@
 package hlc
 
 import (
-	"math"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -33,39 +33,6 @@ import (
 // history of the physical clock and react if it jumps backwards
 // repeatedly. This is expected during NTP updates, but may
 // indicate a broken clock in some cases.
-
-// Timestamp represents a state of the hybrid
-// logical clock.
-type Timestamp struct {
-	// Holds a wall time, typically a unix epoch time
-	// expressed in nanoseconds.
-	WallTime int64
-	// The logical component captures causality for
-	// events whose wall times are equal. It is
-	// effectively bounded by
-	// (maximum clock skew)/(minimal ns between events)
-	// and nearly impossible to overflow.
-	Logical int64
-}
-
-// Timestamp constant values.
-var (
-	// MaxTimestamp is the max value allowed for Timestamp.
-	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt64}
-	// MinTimestamp is the min value allowed for Timestamp.
-	MinTimestamp = Timestamp{WallTime: 0, Logical: 0}
-)
-
-// Less implements the util.Ordered interface, allowing
-// the comparison of timestamps.
-func (t Timestamp) Less(s Timestamp) bool {
-	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
-}
-
-// Equal returns whether two timestamps are the same.
-func (t Timestamp) Equal(s Timestamp) bool {
-	return t.WallTime == s.WallTime && t.Logical == s.Logical
-}
 
 // Clock is a hybrid logical clock. Objects of this
 // type model causality while maintaining a relation
@@ -83,7 +50,7 @@ type Clock struct {
 	// Clock contains a mutex used to lock the below
 	// fields while methods operate on them.
 	sync.Mutex
-	state Timestamp
+	state proto.Timestamp
 	// maxDrift specifies how far ahead of the physical
 	// clock the wall time can be.
 	// See SetMaxDrift.
@@ -145,7 +112,7 @@ func (c *Clock) MaxDrift() time.Duration {
 
 // Timestamp returns a copy of the clock's current timestamp,
 // without performing a clock adjustment.
-func (c *Clock) Timestamp() Timestamp {
+func (c *Clock) Timestamp() proto.Timestamp {
 	c.Lock()
 	defer c.Unlock()
 	return c.timestamp()
@@ -153,8 +120,8 @@ func (c *Clock) Timestamp() Timestamp {
 
 // timestamp returns the state as a timestamp, without
 // a lock on the clock's state, for internal usage.
-func (c *Clock) timestamp() Timestamp {
-	return Timestamp{
+func (c *Clock) timestamp() proto.Timestamp {
+	return proto.Timestamp{
 		WallTime: c.state.WallTime,
 		Logical:  c.state.Logical,
 	}
@@ -165,7 +132,7 @@ func (c *Clock) timestamp() Timestamp {
 // of the distributed network. This is the counterpart
 // of Update, which is passed a timestamp received from
 // another member of the distributed network.
-func (c *Clock) Now() (result Timestamp) {
+func (c *Clock) Now() (result proto.Timestamp) {
 	c.Lock()
 	defer c.Unlock()
 	defer func() {
@@ -193,7 +160,7 @@ func (c *Clock) Now() (result Timestamp) {
 // in which case the state of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
-func (c *Clock) Update(rt Timestamp) (result Timestamp, err error) {
+func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 	c.Lock()
 	defer c.Unlock()
 	defer func() {

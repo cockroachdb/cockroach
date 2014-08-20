@@ -24,7 +24,9 @@ import (
 	"sync"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -33,13 +35,13 @@ import (
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
 func init() {
-	gob.Register(RangeDescriptor{})
 	gob.Register(StoreDescriptor{})
 	gob.Register(PrefixConfigMap{})
 	gob.Register(&AcctConfig{})
 	gob.Register(&PermConfig{})
 	gob.Register(&ZoneConfig{})
-	gob.Register(Transaction{})
+	gob.Register(proto.RangeDescriptor{})
+	gob.Register(proto.Transaction{})
 }
 
 // ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
@@ -127,12 +129,14 @@ func IsReadOnly(method string) bool {
 	return !NeedWritePerm(method)
 }
 
-// A RangeMetadata holds information about the range.  This includes the cluster
-// ID, the range ID, and a RangeDescriptor describing the contents of the range.
-type RangeMetadata struct {
-	RangeDescriptor
-	ClusterID string
-	RangeID   int64
+// A Cmd holds method, args, reply and a done channel for a command
+// sent to Raft. Once committed to the Raft log, the command is
+// executed and the result returned via the done channel.
+type Cmd struct {
+	Method string
+	Args   proto.Request
+	Reply  proto.Response
+	done   chan error // Used to signal waiting RPC handler
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -142,7 +146,7 @@ type RangeMetadata struct {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	Meta      RangeMetadata
+	Meta      *proto.RangeMetadata
 	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
@@ -156,7 +160,7 @@ type Range struct {
 }
 
 // NewRange initializes the range starting at key.
-func NewRange(meta RangeMetadata, clock *hlc.Clock, engine engine.Engine,
+func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, engine engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,
@@ -221,7 +225,7 @@ func (r *Range) EnqueueCmd(cmd *Cmd) error {
 // ReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) ReadOnlyCmd(method string, args Request, reply Response) error {
+func (r *Range) ReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 	r.Lock()
 	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
@@ -247,7 +251,7 @@ func (r *Range) ReadOnlyCmd(method string, args Request, reply Response) error {
 	// read-timestamp-cache to reset its high water mark.
 	if !r.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		return &NotLeaderError{}
+		return &proto.NotLeaderError{}
 	}
 	return r.executeCmd(method, args, reply)
 }
@@ -261,13 +265,13 @@ func (r *Range) ReadOnlyCmd(method string, args Request, reply Response) error {
 // this command are added as pending writes to the read queue and the
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the repsonse cache.
-func (r *Range) ReadWriteCmd(method string, args Request, reply Response) error {
+func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Response) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
 	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
 		if ok { // this is a replay! extract error for return
-			return reply.Header().Error
+			return reply.Header().GoError()
 		}
 		// In this case there was an error reading from the response
 		// cache. Instead of failing the request just because we can't
@@ -300,11 +304,10 @@ func (r *Range) ReadWriteCmd(method string, args Request, reply Response) error 
 
 	// Create command and enqueue for Raft.
 	cmd := &Cmd{
-		Method:   method,
-		Args:     args,
-		Reply:    reply,
-		ReadOnly: IsReadOnly(method),
-		done:     make(chan error, 1),
+		Method: method,
+		Args:   args,
+		Reply:  reply,
+		done:   make(chan error, 1),
 	}
 	// This waits for the command to complete.
 	err := r.EnqueueCmd(cmd)
@@ -435,40 +438,40 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
-func (r *Range) executeCmd(method string, args Request, reply Response) error {
+func (r *Range) executeCmd(method string, args proto.Request, reply proto.Response) error {
 	switch method {
 	case Contains:
-		r.Contains(args.(*ContainsRequest), reply.(*ContainsResponse))
+		r.Contains(args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
 	case Get:
-		r.Get(args.(*GetRequest), reply.(*GetResponse))
+		r.Get(args.(*proto.GetRequest), reply.(*proto.GetResponse))
 	case Put:
-		r.Put(args.(*PutRequest), reply.(*PutResponse))
+		r.Put(args.(*proto.PutRequest), reply.(*proto.PutResponse))
 	case ConditionalPut:
-		r.ConditionalPut(args.(*ConditionalPutRequest), reply.(*ConditionalPutResponse))
+		r.ConditionalPut(args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
 	case Increment:
-		r.Increment(args.(*IncrementRequest), reply.(*IncrementResponse))
+		r.Increment(args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
 	case Delete:
-		r.Delete(args.(*DeleteRequest), reply.(*DeleteResponse))
+		r.Delete(args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
 	case DeleteRange:
-		r.DeleteRange(args.(*DeleteRangeRequest), reply.(*DeleteRangeResponse))
+		r.DeleteRange(args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
 	case Scan:
-		r.Scan(args.(*ScanRequest), reply.(*ScanResponse))
+		r.Scan(args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case EndTransaction:
-		r.EndTransaction(args.(*EndTransactionRequest), reply.(*EndTransactionResponse))
+		r.EndTransaction(args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
 	case AccumulateTS:
-		r.AccumulateTS(args.(*AccumulateTSRequest), reply.(*AccumulateTSResponse))
+		r.AccumulateTS(args.(*proto.AccumulateTSRequest), reply.(*proto.AccumulateTSResponse))
 	case ReapQueue:
-		r.ReapQueue(args.(*ReapQueueRequest), reply.(*ReapQueueResponse))
+		r.ReapQueue(args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
 	case EnqueueUpdate:
-		r.EnqueueUpdate(args.(*EnqueueUpdateRequest), reply.(*EnqueueUpdateResponse))
+		r.EnqueueUpdate(args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
 	case EnqueueMessage:
-		r.EnqueueMessage(args.(*EnqueueMessageRequest), reply.(*EnqueueMessageResponse))
+		r.EnqueueMessage(args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
 	case InternalRangeLookup:
-		r.InternalRangeLookup(args.(*InternalRangeLookupRequest), reply.(*InternalRangeLookupResponse))
+		r.InternalRangeLookup(args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case InternalHeartbeatTxn:
-		r.InternalHeartbeatTxn(args.(*InternalHeartbeatTxnRequest), reply.(*InternalHeartbeatTxnResponse))
+		r.InternalHeartbeatTxn(args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case InternalResolveIntent:
-		r.InternalResolveIntent(args.(*InternalResolveIntentRequest), reply.(*InternalResolveIntentResponse))
+		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -485,14 +488,14 @@ func (r *Range) executeCmd(method string, args Request, reply Response) error {
 	}
 
 	// Return the error (if any) set in the reply.
-	return reply.Header().Error
+	return reply.Header().GoError()
 }
 
 // Contains verifies the existence of a key in the key value store.
-func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
+func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) {
 	val, err := r.engine.Get(args.Key)
 	if err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 		return
 	}
 	if val != nil {
@@ -501,49 +504,49 @@ func (r *Range) Contains(args *ContainsRequest, reply *ContainsResponse) {
 }
 
 // Get returns the value for a specified key.
-func (r *Range) Get(args *GetRequest, reply *GetResponse) {
+func (r *Range) Get(args *proto.GetRequest, reply *proto.GetResponse) {
 	val, err := r.engine.Get(args.Key)
-	reply.Value = engine.Value{Bytes: val}
-	reply.Error = err
+	reply.Value = proto.Value{Bytes: val}
+	reply.SetGoError(err)
 }
 
 // Put sets the value for a specified key.
-func (r *Range) Put(args *PutRequest, reply *PutResponse) {
-	reply.Error = r.internalPut(args.Key, args.Value)
+func (r *Range) Put(args *proto.PutRequest, reply *proto.PutResponse) {
+	reply.SetGoError(r.internalPut(args.Key, args.Value))
 }
 
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Range) ConditionalPut(args *ConditionalPutRequest, reply *ConditionalPutResponse) {
+func (r *Range) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
 	// Handle check for non-existence of key.
 	val, err := r.engine.Get(args.Key)
 	if err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 		return
 	}
 	if args.ExpValue.Bytes == nil && val != nil {
-		reply.Error = util.Errorf("key %q already exists", args.Key)
+		reply.SetGoError(util.Errorf("key %q already exists", args.Key))
 		return
 	} else if args.ExpValue.Bytes != nil {
 		// Handle check for existence when there is no key.
 		if val == nil {
-			reply.Error = util.Errorf("key %q does not exist", args.Key)
+			reply.SetGoError(util.Errorf("key %q does not exist", args.Key))
 			return
 		} else if !bytes.Equal(args.ExpValue.Bytes, val) {
 			// TODO(Jiang-Ming): provide the correct timestamp once switch to use MVCC
-			reply.ActualValue = &engine.Value{Bytes: val}
-			reply.Error = util.Errorf("key %q does not match existing", args.Key)
+			reply.ActualValue = &proto.Value{Bytes: val}
+			reply.SetGoError(util.Errorf("key %q does not match existing", args.Key))
 			return
 		}
 	}
 
-	reply.Error = r.internalPut(args.Key, args.Value)
+	reply.SetGoError(r.internalPut(args.Key, args.Value))
 }
 
 // internalPut is the guts of the put method, called from both Put()
 // and ConditionalPut().
-func (r *Range) internalPut(key engine.Key, value engine.Value) error {
+func (r *Range) internalPut(key engine.Key, value proto.Value) error {
 	// Put the value.
 	// TODO(Tobias): Turn this into a writebatch with account stats in a reusable way.
 	// This requires use of RocksDB's merge operator to implement increasable counters
@@ -564,55 +567,57 @@ func (r *Range) internalPut(key engine.Key, value engine.Value) error {
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Range) Increment(args *IncrementRequest, reply *IncrementResponse) {
-	reply.NewValue, reply.Error = engine.Increment(r.engine, args.Key, args.Increment)
+func (r *Range) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) {
+	value, err := engine.Increment(r.engine, args.Key, args.Increment)
+	reply.NewValue = value
+	reply.SetGoError(err)
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Range) Delete(args *DeleteRequest, reply *DeleteResponse) {
+func (r *Range) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) {
 	if err := r.engine.Clear(args.Key); err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 	}
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Range) DeleteRange(args *DeleteRangeRequest, reply *DeleteRangeResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
-func (r *Range) Scan(args *ScanRequest, reply *ScanResponse) {
+func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
 	kvs, err := r.engine.Scan(args.Key, args.EndKey, args.MaxResults)
 	if err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 		return
 	}
-	reply.Rows = make([]engine.KeyValue, len(kvs))
+	reply.Rows = make([]proto.KeyValue, len(kvs))
 	for idx, kv := range kvs {
 		// TODO(Jiang-Ming): provide the correct timestamp and checksum once switch to mvcc
-		reply.Rows[idx] = engine.KeyValue{Key: kv.Key, Value: engine.Value{Bytes: kv.Value}}
+		reply.Rows[idx] = proto.KeyValue{Key: kv.Key, Value: proto.Value{Bytes: kv.Value}}
 	}
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(args *EndTransactionRequest, reply *EndTransactionResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // AccumulateTS is used internally to aggregate statistics over key
 // ranges throughout the distributed cluster.
-func (r *Range) AccumulateTS(args *AccumulateTSRequest, reply *AccumulateTSResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) AccumulateTS(args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // ReapQueue destructively queries messages from a delivery inbox
 // queue. This method must be called from within a transaction.
-func (r *Range) ReapQueue(args *ReapQueueRequest, reply *ReapQueueResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) ReapQueue(args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // EnqueueUpdate sidelines an update for asynchronous execution.
@@ -620,14 +625,14 @@ func (r *Range) ReapQueue(args *ReapQueueRequest, reply *ReapQueueResponse) {
 // are also built using update queues. Crucially, the enqueue happens
 // as part of the caller's transaction, so is guaranteed to be
 // executed if the transaction succeeded.
-func (r *Range) EnqueueUpdate(args *EnqueueUpdateRequest, reply *EnqueueUpdateResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) EnqueueUpdate(args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // EnqueueMessage enqueues a message (Value) for delivery to a
 // recipient inbox.
-func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessageResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // InternalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
@@ -655,16 +660,16 @@ func (r *Range) EnqueueMessage(args *EnqueueMessageRequest, reply *EnqueueMessag
 // intended to serve as a sort of caching pre-fetch, so that the requesting
 // nodes can aggressively cache RangeDescriptors which are likely to be desired
 // by their current workload.
-func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *InternalRangeLookupResponse) {
+func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
 	if err := engine.ValidateRangeMetaKey(args.Key); err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 		return
 	}
 
 	rangeCount := int64(args.MaxRanges)
 	if rangeCount < 1 {
-		reply.Error = util.Errorf(
-			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
+		reply.SetGoError(util.Errorf(
+			"Range lookup specified invalid maximum range count %d: must be > 0", rangeCount))
 		return
 	}
 
@@ -675,7 +680,7 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 	nextKey := engine.NextKey(args.Key)
 	kvs, err := r.engine.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount)
 	if err != nil {
-		reply.Error = err
+		reply.SetGoError(err)
 		return
 	}
 
@@ -685,19 +690,18 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 		// key, but no matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just treat it
 		// as a retryable Key Mismatch error.
-		reply.Error = NewRangeKeyMismatchError(args.Key, args.Key, r.Meta)
-		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s",
-			reply.Error.Error())
+		err := proto.NewRangeKeyMismatchError(args.Key, args.Key, r.Meta)
+		reply.SetGoError(err)
+		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
 		return
 	}
 
 	// Decode all scanned range descriptors, stopping if a range is encountered
 	// which does not have the same metadata prefix as the queried key.
-	rds := make([]*RangeDescriptor, 0, len(kvs))
+	rds := make([]proto.RangeDescriptor, len(kvs))
 	for i := range kvs {
-		rds = append(rds, &RangeDescriptor{})
-		if err = gob.NewDecoder(bytes.NewBuffer(kvs[i].Value)).Decode(rds[i]); err != nil {
-			reply.Error = err
+		if err = gogoproto.Unmarshal(kvs[i].Value, &rds[i]); err != nil {
+			reply.SetGoError(err)
 			return
 		}
 	}
@@ -708,22 +712,22 @@ func (r *Range) InternalRangeLookup(args *InternalRangeLookupRequest, reply *Int
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
-// coordinator.  The range will return the current status for this
+// coordinator. The range will return the current status for this
 // transaction to the coordinator.
-func (r *Range) InternalHeartbeatTxn(args *InternalHeartbeatTxnRequest, reply *InternalHeartbeatTxnResponse) {
+func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Create the actual key to the system-local transaction table.
 	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
-	var txn Transaction
-	if _, err := engine.GetI(r.engine, key, &txn); err != nil {
-		reply.Error = err
+	var txn proto.Transaction
+	if _, err := engine.GetProto(r.engine, key, &txn); err != nil {
+		reply.SetGoError(err)
 		return
 	}
-	if txn.Status == PENDING {
+	if txn.Status == proto.PENDING {
 		if !args.Header().Timestamp.Less(txn.LastHeartbeat) {
 			txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.PutI(r.engine, key, txn); err != nil {
-			reply.Error = err
+		if err := engine.PutProto(r.engine, key, &txn); err != nil {
+			reply.SetGoError(err)
 			return
 		}
 	}
@@ -734,6 +738,6 @@ func (r *Range) InternalHeartbeatTxn(args *InternalHeartbeatTxnRequest, reply *I
 // timestamp after receiving transaction heartbeat messages from
 // coordinator.  The range will return the current status for this
 // transaction to the coordinator.
-func (r *Range) InternalResolveIntent(args *InternalResolveIntentRequest, reply *InternalResolveIntentResponse) {
-	reply.Error = util.Error("unimplemented")
+func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
+	reply.SetGoError(util.Error("unimplemented"))
 }

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -44,7 +45,7 @@ func ExampleNewClock() {
 	// Update the state of the hybrid clock.
 	s := c.Now()
 	time.Sleep(50 * time.Nanosecond)
-	t := Timestamp{WallTime: UnixNano()}
+	t := proto.Timestamp{WallTime: UnixNano()}
 	// The sanity checks below will usually never be triggered.
 
 	// Timestamp implements the util.Ordered interface.
@@ -112,29 +113,29 @@ func TestClock(t *testing.T) {
 		wallClock int64
 		event     Event
 		// If this is a receive event, this holds the "input" timestamp.
-		input *Timestamp
+		input *proto.Timestamp
 		// The expected timestamp generated from the input.
-		expected Timestamp
+		expected proto.Timestamp
 	}{
 		// A few valid steps to warm up.
-		{5, SEND, nil, Timestamp{5, 0}},
-		{6, SEND, nil, Timestamp{6, 0}},
-		{10, RECV, &Timestamp{10, 5}, Timestamp{10, 6}},
+		{5, SEND, nil, proto.Timestamp{WallTime: 5, Logical: 0}},
+		{6, SEND, nil, proto.Timestamp{WallTime: 6, Logical: 0}},
+		{10, RECV, &proto.Timestamp{WallTime: 10, Logical: 5}, proto.Timestamp{WallTime: 10, Logical: 6}},
 		// Our clock mysteriously jumps back.
-		{7, SEND, nil, Timestamp{10, 7}},
+		{7, SEND, nil, proto.Timestamp{WallTime: 10, Logical: 7}},
 		// Wall clocks coincide, but the local logical clock wins.
-		{8, RECV, &Timestamp{10, 4}, Timestamp{10, 8}},
+		{8, RECV, &proto.Timestamp{WallTime: 10, Logical: 4}, proto.Timestamp{WallTime: 10, Logical: 8}},
 		// The next message comes from a faulty clock and should
 		// be discarded.
-		{9, RECV, &Timestamp{1100, 888}, Timestamp{10, 8}},
+		{9, RECV, &proto.Timestamp{WallTime: 1100, Logical: 888}, proto.Timestamp{WallTime: 10, Logical: 8}},
 		// Wall clocks coincide, but the remote logical clock wins.
-		{10, RECV, &Timestamp{10, 99}, Timestamp{10, 100}},
+		{10, RECV, &proto.Timestamp{WallTime: 10, Logical: 99}, proto.Timestamp{WallTime: 10, Logical: 100}},
 		// The physical clock has caught up and takes over.
-		{11, RECV, &Timestamp{10, 31}, Timestamp{11, 0}},
-		{11, SEND, nil, Timestamp{11, 1}},
+		{11, RECV, &proto.Timestamp{WallTime: 10, Logical: 31}, proto.Timestamp{WallTime: 11, Logical: 0}},
+		{11, SEND, nil, proto.Timestamp{WallTime: 11, Logical: 1}},
 	}
 
-	var current Timestamp
+	var current proto.Timestamp
 	var err error
 	for i, step := range expectedHistory {
 		m = ManualClock(step.wallClock)
@@ -146,11 +147,11 @@ func TestClock(t *testing.T) {
 		default:
 			previous := c.Timestamp()
 			current, err = c.Update(*step.input)
-			if current == previous && err == nil {
+			if current.Equal(previous) && err == nil {
 				t.Errorf("%d: clock not updated even though no error occurred", i)
 			}
 		}
-		if current != step.expected {
+		if !current.Equal(step.expected) {
 			t.Fatalf("HLC error: %d expected %v, got %v", i, step.expected, current)
 		}
 	}
@@ -174,13 +175,13 @@ func TestSetMaxDrift(t *testing.T) {
 	if c.Timestamp().WallTime != int64(m) {
 		t.Fatalf("unexpected clock value")
 	}
-	_, err := c.Update(Timestamp{WallTime: skewedTime})
+	_, err := c.Update(proto.Timestamp{WallTime: skewedTime})
 	if err == nil {
 		t.Fatalf("clock drift not recognized")
 	}
 	// Disable drift checking.
 	c.SetMaxDrift(0)
-	_, err = c.Update(Timestamp{WallTime: skewedTime})
+	_, err = c.Update(proto.Timestamp{WallTime: skewedTime})
 	if err != nil || c.Timestamp().WallTime != skewedTime {
 		t.Fatalf("failed to disable drift checking")
 	}

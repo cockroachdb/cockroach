@@ -17,6 +17,12 @@ $provisioner = <<SCRIPT
   wget https://gflags.googlecode.com/files/libgflags-dev_2.0-1_amd64.deb
   sudo dpkg -i libgflags-dev_2.0-1_amd64.deb
 
+  # Protocol buffers.
+  wget https://protobuf.googlecode.com/files/protobuf-2.5.0.tar.bz2
+  bunzip2 protobuf-2.5.0.tar.bz2
+  tar xvf protobuf-2.5.0.tar
+  cd protobuf-2.5.0 && ./configure && make && sudo make install && cd ../
+
   # Go time.
   curl -s https://storage.googleapis.com/golang/go1.3.1.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
   echo "export PATH=/usr/local/go/bin:\\$PATH" >> .bashrc

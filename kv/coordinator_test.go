@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -36,8 +37,8 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
 	store := storage.NewStore(clock, eng, nil)
 	store.Ident.StoreID = 1
-	replica := storage.Replica{StoreID: 1, RangeID: 1}
-	_, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []storage.Replica{replica})
+	replica := proto.Replica{StoreID: 1, RangeID: 1}
+	_, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,15 +48,15 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	return db, clock, &manual
 }
 
-// creatPutReq returns a ready-made request using the
+// creatPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
-func createPutRequest(key engine.Key, value, txnID []byte) *storage.PutRequest {
-	return &storage.PutRequest{
-		RequestHeader: storage.RequestHeader{
+func createPutRequest(key engine.Key, value, txnID []byte) *proto.PutRequest {
+	return &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:   key,
 			TxnID: txnID,
 		},
-		Value: engine.Value{Bytes: value},
+		Value: proto.Value{Bytes: value},
 	}
 }
 
@@ -121,11 +122,11 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
 
 	// Verify 3 heartbeats.
-	var heartbeatTS hlc.Timestamp
+	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			txn := storage.Transaction{}
-			if ok, _, err := storage.GetI(db, engine.MakeKey(engine.KeyLocalTransactionPrefix, txnID), &txn); !ok || err != nil {
+			txn := proto.Transaction{}
+			if ok, _, err := storage.GetProto(db, engine.MakeKey(engine.KeyLocalTransactionPrefix, txnID), &txn); !ok || err != nil {
 				return false
 			}
 			// Advance clock by 1ns.

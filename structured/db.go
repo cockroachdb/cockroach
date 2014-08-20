@@ -19,9 +19,9 @@
 package structured
 
 import (
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // A DB implements the structured data API using the Cockroach kv
@@ -44,16 +44,16 @@ func (db *DB) PutSchema(s *Schema) error {
 		return err
 	}
 	k := engine.MakeKey(engine.KeySchemaPrefix, engine.Key(s.Key))
-	return storage.PutI(db.kvDB, k, s, hlc.Timestamp{})
+	return storage.PutI(db.kvDB, k, s, proto.Timestamp{})
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *DB) DeleteSchema(s *Schema) error {
-	return (<-db.kvDB.Delete(&storage.DeleteRequest{
-		RequestHeader: storage.RequestHeader{
+	return (<-db.kvDB.Delete(&proto.DeleteRequest{
+		RequestHeader: proto.RequestHeader{
 			Key: engine.MakeKey(engine.KeySchemaPrefix, engine.Key(s.Key)),
 		},
-	})).Error
+	})).GoError()
 }
 
 // GetSchema returns the Schema with the given key, or nil if

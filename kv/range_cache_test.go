@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"code.google.com/p/biogo.store/llrb"
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -33,31 +33,33 @@ type testMetadataDB struct {
 }
 
 type testMetadataNode struct {
-	*storage.RangeDescriptor
+	*proto.RangeDescriptor
 }
 
 func (a testMetadataNode) Compare(b llrb.Comparable) int {
-	return bytes.Compare(a.LookupKey(), b.(testMetadataNode).LookupKey())
+	aKey := engine.RangeMetadataLookupKey(a.RangeDescriptor)
+	bKey := engine.RangeMetadataLookupKey(b.(testMetadataNode).RangeDescriptor)
+	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testMetadataDB) getMetadata(key engine.Key) []*storage.RangeDescriptor {
-	response := make([]*storage.RangeDescriptor, 0, 3)
+func (db *testMetadataDB) getMetadata(key engine.Key) []proto.RangeDescriptor {
+	response := make([]proto.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testMetadataNode{
-			&storage.RangeDescriptor{
+			&proto.RangeDescriptor{
 				EndKey: engine.NextKey(key),
 			},
 		})
 		if v == nil {
 			break
 		}
-		response = append(response, v.(testMetadataNode).RangeDescriptor)
+		response = append(response, *(v.(testMetadataNode).RangeDescriptor))
 		key = engine.NextKey(response[i].EndKey)
 	}
 	return response
 }
 
-func (db *testMetadataDB) getRangeMetadata(key engine.Key) ([]*storage.RangeDescriptor, error) {
+func (db *testMetadataDB) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
 	metadataKey := engine.RangeMetaKey(key)
 
@@ -70,7 +72,7 @@ func (db *testMetadataDB) getRangeMetadata(key engine.Key) ([]*storage.RangeDesc
 }
 
 func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
-	v := db.data.Ceil(testMetadataNode{&storage.RangeDescriptor{EndKey: key}})
+	v := db.data.Ceil(testMetadataNode{&proto.RangeDescriptor{EndKey: key}})
 	if v == nil {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
 	}
@@ -79,13 +81,13 @@ func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
 	db.data.Insert(testMetadataNode{
-		&storage.RangeDescriptor{
+		&proto.RangeDescriptor{
 			StartKey: val.StartKey,
 			EndKey:   key,
 		},
 	})
 	db.data.Insert(testMetadataNode{
-		&storage.RangeDescriptor{
+		&proto.RangeDescriptor{
 			StartKey: key,
 			EndKey:   val.EndKey,
 		},
@@ -95,13 +97,13 @@ func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
 func newTestMetadataDB() *testMetadataDB {
 	db := &testMetadataDB{}
 	db.data.Insert(testMetadataNode{
-		&storage.RangeDescriptor{
+		&proto.RangeDescriptor{
 			StartKey: engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMin),
 			EndKey:   engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax),
 		},
 	})
 	db.data.Insert(testMetadataNode{
-		&storage.RangeDescriptor{
+		&proto.RangeDescriptor{
 			StartKey: engine.KeyMetaMax,
 			EndKey:   engine.KeyMax,
 		},
@@ -126,10 +128,10 @@ func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
 	}
 }
 
-// TestRangeCache is a simple test which verifies that metadata ranges are being
-// cached and retrieved properly.  It sets up a fake backing store for the
-// cache, and measures how often that backing store is accessed when looking up
-// metadata keys through the cache.
+// TestRangeCache is a simple test which verifies that metadata ranges
+// are being cached and retrieved properly. It sets up a fake backing
+// store for the cache, and measures how often that backing store is
+// accessed when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
 	db := newTestMetadataDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {

@@ -59,34 +59,34 @@ func TestReadTimestampCache(t *testing.T) {
 	rtc.Add(engine.Key("b"), engine.Key("c"), ts)
 
 	// Verify all permutations of direct and range access.
-	if rtc.GetMax(engine.Key("b"), nil) != ts {
-		t.Error("expected current time for key \"b\"; got %+v", rtc.GetMax(engine.Key("b"), nil))
+	if !rtc.GetMax(engine.Key("b"), nil).Equal(ts) {
+		t.Errorf("expected current time for key \"b\"; got %+v", rtc.GetMax(engine.Key("b"), nil))
 	}
-	if rtc.GetMax(engine.Key("bb"), nil) != ts {
+	if !rtc.GetMax(engine.Key("bb"), nil).Equal(ts) {
 		t.Error("expected current time for key \"bb\"")
 	}
 	if rtc.GetMax(engine.Key("c"), nil).WallTime != maxClockSkew.Nanoseconds() {
 		t.Error("expected maxClockSkew for key \"c\"")
 	}
-	if rtc.GetMax(engine.Key("b"), engine.Key("c")) != ts {
+	if !rtc.GetMax(engine.Key("b"), engine.Key("c")).Equal(ts) {
 		t.Error("expected current time for key \"b\"-\"c\"")
 	}
-	if rtc.GetMax(engine.Key("bb"), engine.Key("bz")) != ts {
+	if !rtc.GetMax(engine.Key("bb"), engine.Key("bz")).Equal(ts) {
 		t.Error("expected current time for key \"bb\"-\"bz\"")
 	}
 	if rtc.GetMax(engine.Key("a"), engine.Key("b")).WallTime != maxClockSkew.Nanoseconds() {
 		t.Error("expected maxClockSkew for key \"a\"-\"b\"")
 	}
-	if rtc.GetMax(engine.Key("a"), engine.Key("bb")) != ts {
+	if !rtc.GetMax(engine.Key("a"), engine.Key("bb")).Equal(ts) {
 		t.Error("expected current time for key \"a\"-\"bb\"")
 	}
-	if rtc.GetMax(engine.Key("a"), engine.Key("d")) != ts {
+	if !rtc.GetMax(engine.Key("a"), engine.Key("d")).Equal(ts) {
 		t.Error("expected current time for key \"a\"-\"d\"")
 	}
-	if rtc.GetMax(engine.Key("bz"), engine.Key("c")) != ts {
+	if !rtc.GetMax(engine.Key("bz"), engine.Key("c")).Equal(ts) {
 		t.Error("expected current time for key \"bz\"-\"c\"")
 	}
-	if rtc.GetMax(engine.Key("bz"), engine.Key("d")) != ts {
+	if !rtc.GetMax(engine.Key("bz"), engine.Key("d")).Equal(ts) {
 		t.Error("expected current time for key \"bz\"-\"d\"")
 	}
 	if rtc.GetMax(engine.Key("c"), engine.Key("d")).WallTime != maxClockSkew.Nanoseconds() {
@@ -112,7 +112,7 @@ func TestReadTimestampCacheEviction(t *testing.T) {
 	rtc.Add(engine.Key("b"), nil, clock.Now())
 
 	// Verify looking up key "c" returns the new high water mark ("a"'s timestamp).
-	if rtc.GetMax(engine.Key("c"), nil) != aTS {
+	if !rtc.GetMax(engine.Key("c"), nil).Equal(aTS) {
 		t.Error("expected high water mark %+v, got %+v", aTS, rtc.GetMax(engine.Key("c"), nil))
 	}
 }
@@ -137,34 +137,34 @@ func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 	rtc.Add(engine.Key("c"), nil, cTS)
 
 	// Try different sub ranges.
-	if rtc.GetMax(engine.Key("a"), nil) != adTS {
+	if !rtc.GetMax(engine.Key("a"), nil).Equal(adTS) {
 		t.Error("expected \"a\" to have adTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("b"), nil) != beTS {
+	if !rtc.GetMax(engine.Key("b"), nil).Equal(beTS) {
 		t.Error("expected \"b\" to have beTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("c"), nil) != cTS {
+	if !rtc.GetMax(engine.Key("c"), nil).Equal(cTS) {
 		t.Error("expected \"b\" to have cTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("d"), nil) != beTS {
+	if !rtc.GetMax(engine.Key("d"), nil).Equal(beTS) {
 		t.Error("expected \"d\" to have beTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("a"), engine.Key("b")) != adTS {
+	if !rtc.GetMax(engine.Key("a"), engine.Key("b")).Equal(adTS) {
 		t.Error("expected \"a\"-\"b\" to have adTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("a"), engine.Key("c")) != beTS {
+	if !rtc.GetMax(engine.Key("a"), engine.Key("c")).Equal(beTS) {
 		t.Error("expected \"a\"-\"c\" to have beTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("a"), engine.Key("d")) != cTS {
+	if !rtc.GetMax(engine.Key("a"), engine.Key("d")).Equal(cTS) {
 		t.Error("expected \"a\"-\"d\" to have cTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("b"), engine.Key("d")) != cTS {
+	if !rtc.GetMax(engine.Key("b"), engine.Key("d")).Equal(cTS) {
 		t.Error("expected \"b\"-\"d\" to have cTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("c"), engine.Key("d")) != cTS {
+	if !rtc.GetMax(engine.Key("c"), engine.Key("d")).Equal(cTS) {
 		t.Error("expected \"c\"-\"d\" to have cTS timestamp")
 	}
-	if rtc.GetMax(engine.Key("c0"), engine.Key("d")) != beTS {
+	if !rtc.GetMax(engine.Key("c0"), engine.Key("d")).Equal(beTS) {
 		t.Error("expected \"c0\"-\"d\" to have beTS timestamp")
 	}
 }
@@ -187,7 +187,7 @@ func TestReadTimestampCacheClear(t *testing.T) {
 	// Fetching any keys should give current time + maxClockSkew
 	expTS := clock.Timestamp()
 	expTS.WallTime += maxClockSkew.Nanoseconds()
-	if rtc.GetMax(engine.Key("a"), nil) != expTS {
+	if !rtc.GetMax(engine.Key("a"), nil).Equal(expTS) {
 		t.Error("expected \"a\" to have cleared timestamp")
 	}
 }

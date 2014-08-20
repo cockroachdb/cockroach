@@ -22,7 +22,6 @@ package rest_test
 
 import (
 	"bytes"
-	"encoding/gob"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -30,8 +29,10 @@ import (
 	"strings"
 	"testing"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -341,18 +342,18 @@ func TestSystemKeys(t *testing.T) {
 	s := startNewServer()
 
 	// Compute expected system key.
-	desc := &storage.RangeDescriptor{
+	desc := &proto.RangeDescriptor{
 		StartKey: engine.KeyMin,
-		Replicas: []storage.Replica{
-			storage.Replica{
+		Replicas: []proto.Replica{
+			proto.Replica{
 				NodeID:  1,
 				StoreID: 1,
 				RangeID: 1,
 			},
 		},
 	}
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(desc); err != nil {
+	protoBytes, err := gogoproto.Marshal(desc)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -361,7 +362,7 @@ func TestSystemKeys(t *testing.T) {
 	runHTTPTestFixture(t, []RequestResponse{
 		{
 			NewRequest("GET", encMeta1Key),
-			NewResponse(200, string(buf.Bytes()), "application/octet-stream"),
+			NewResponse(200, string(protoBytes), "application/octet-stream"),
 		},
 		{
 			NewRequest("POST", encMeta1Key, "cool"),
@@ -387,8 +388,8 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 			NewResponse(200, encBody, "application/octet-stream"),
 		},
 	})
-	gr := <-s.db.Get(&storage.GetRequest{
-		RequestHeader: storage.RequestHeader{
+	gr := <-s.db.Get(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  engine.Key("\x00some/key that encodes世界"),
 			User: storage.UserRoot,
 		},

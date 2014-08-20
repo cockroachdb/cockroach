@@ -21,8 +21,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
+
+var incR = proto.IncrementResponse{
+	NewValue: 1,
+}
 
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the engine for range ID 1.
@@ -30,8 +35,8 @@ func createTestResponseCache(t *testing.T) *ResponseCache {
 	return NewResponseCache(1, engine.NewInMem(engine.Attributes{}, 1<<20))
 }
 
-func makeCmdID(wallTime, random int64) ClientCmdID {
-	return ClientCmdID{
+func makeCmdID(wallTime, random int64) proto.ClientCmdID {
+	return proto.ClientCmdID{
 		WallTime: wallTime,
 		Random:   random,
 	}
@@ -41,17 +46,17 @@ func makeCmdID(wallTime, random int64) ClientCmdID {
 func TestResponseCachePutAndGet(t *testing.T) {
 	rc := createTestResponseCache(t)
 	cmdID := makeCmdID(1, 1)
-	var val int64
+	val := proto.IncrementResponse{}
 	// Start with a get for an unseen cmdID.
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("expected no response for id %+v; got %+v, %v", cmdID, val, err)
 	}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(cmdID, int64(1)); err != nil {
+	if err := rc.PutResponse(cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	// Get should now return 1.
-	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val != 1 {
+	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
 		t.Errorf("unexpected failure getting response: %b, %v, %+v", ok, err, val)
 	}
 }
@@ -60,10 +65,10 @@ func TestResponseCachePutAndGet(t *testing.T) {
 // command id. All calls should be noops.
 func TestResponseCacheEmptyCmdID(t *testing.T) {
 	rc := createTestResponseCache(t)
-	cmdID := ClientCmdID{}
-	var val int64
+	cmdID := proto.ClientCmdID{}
+	val := proto.IncrementResponse{}
 	// Put value of 1 for test response.
-	if err := rc.PutResponse(cmdID, int64(1)); err != nil {
+	if err := rc.PutResponse(cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	// Add inflight, which would otherwise block the get.
@@ -82,7 +87,7 @@ func TestResponseCacheInflight(t *testing.T) {
 	rc := createTestResponseCache(t)
 	cmdID1 := makeCmdID(1, 1)
 	cmdID2 := makeCmdID(1, 2)
-	var val int64
+	val := proto.IncrementResponse{}
 	// Add inflight for cmdID1.
 	if ok, err := rc.GetResponse(cmdID1, &val); ok || err != nil {
 		t.Errorf("unexpected response or error: %b, %v", ok, err)
@@ -96,7 +101,7 @@ func TestResponseCacheInflight(t *testing.T) {
 	for _, done := range doneChans {
 		doneChan := done
 		go func() {
-			if ok, err := rc.GetResponse(cmdID1, &val); !ok || err != nil || val != 1 {
+			if ok, err := rc.GetResponse(cmdID1, &val); !ok || err != nil || val.NewValue != 1 {
 				t.Errorf("unexpected error: %b, %v, %+v", ok, err, val)
 			}
 			close(doneChan)
@@ -109,7 +114,7 @@ func TestResponseCacheInflight(t *testing.T) {
 	case <-doneChans[1]:
 		t.Fatal("2nd get should not complete; it blocks until we put")
 	case <-time.After(2 * time.Millisecond):
-		if err := rc.PutResponse(cmdID1, int64(1)); err != nil {
+		if err := rc.PutResponse(cmdID1, &incR); err != nil {
 			t.Fatalf("unexpected error putting responpse: %v", err)
 		}
 	}
@@ -143,7 +148,7 @@ func TestResponseCacheTwoInflights(t *testing.T) {
 func TestResponseCacheClear(t *testing.T) {
 	rc := createTestResponseCache(t)
 	cmdID := makeCmdID(1, 1)
-	var val int64
+	val := proto.IncrementResponse{}
 	// Add inflight for cmdID.
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("unexpected error: %b, %v", ok, err)

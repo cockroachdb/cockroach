@@ -21,7 +21,7 @@ package engine
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // Key defines the key in the key-value datastore.
@@ -50,7 +50,7 @@ type Value struct {
 	// contained value.
 	Checksum uint32
 	// Timestamp of value.
-	Timestamp hlc.Timestamp
+	Timestamp proto.Timestamp
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
@@ -113,6 +113,12 @@ func RangeMetaKey(key Key) Key {
 	}
 
 	return KeyMin
+}
+
+// RangeMetadataLookupKey returns the metadata key at which this range
+// descriptor should be stored as a value.
+func RangeMetadataLookupKey(r *proto.RangeDescriptor) Key {
+	return RangeMetaKey(r.EndKey)
 }
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata

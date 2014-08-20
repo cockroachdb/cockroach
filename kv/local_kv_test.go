@@ -21,6 +21,7 @@ package kv
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
@@ -45,7 +46,7 @@ func TestReplicaLookup(t *testing.T) {
 	}
 }
 
-func assertReplicaForRange(t *testing.T, repl *storage.Replica, rng *storage.Range) {
+func assertReplicaForRange(t *testing.T, repl *proto.Replica, rng *storage.Range) {
 	if repl == nil {
 		t.Errorf("No replica returned!")
 	} else if repl.RangeID != rng.Meta.RangeID {
@@ -55,11 +56,11 @@ func assertReplicaForRange(t *testing.T, repl *storage.Replica, rng *storage.Ran
 
 func addTestRange(kv *LocalKV, start, end engine.Key) *storage.Range {
 	r := storage.Range{}
-	rep := storage.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(kv.ranges) + 1)}
-	r.Meta = storage.RangeMetadata{
+	rep := proto.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(kv.ranges) + 1)}
+	r.Meta = &proto.RangeMetadata{
 		ClusterID:       "some-cluster",
 		RangeID:         rep.RangeID,
-		RangeDescriptor: storage.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []storage.Replica{rep}},
+		RangeDescriptor: proto.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []proto.Replica{rep}},
 	}
 	kv.ranges = append(kv.ranges, &r)
 	return &r

@@ -24,6 +24,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -58,7 +59,7 @@ func (kv *LocalKV) HasStore(storeID int32) bool {
 
 // GetStore looks up the store by Replica.StoreID. Returns an error
 // if not found.
-func (kv *LocalKV) GetStore(r *storage.Replica) (*storage.Store, error) {
+func (kv *LocalKV) GetStore(r *proto.Replica) (*storage.Store, error) {
 	kv.mu.RLock()
 	store, ok := kv.storeMap[r.StoreID]
 	kv.mu.RUnlock()
@@ -100,7 +101,7 @@ func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
 // up from the store map if specified by header.Replica; otherwise,
 // the command is being executed locally, and the replica is
 // determined via lookup of header.Key in the ranges slice.
-func (kv *LocalKV) ExecuteCmd(method string, args storage.Request, replyChan interface{}) {
+func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
 	// If the replica isn't specified in the header, look it up.
 	var err error
 	var store *storage.Store
@@ -121,9 +122,9 @@ func (kv *LocalKV) ExecuteCmd(method string, args storage.Request, replyChan int
 	if err == nil {
 		store, err = kv.GetStore(&header.Replica)
 	}
-	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(storage.Response)
+	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
 	if err != nil {
-		reply.Header().Error = err
+		reply.Header().SetGoError(err)
 	} else {
 		store.ExecuteCmd(method, args, reply)
 	}
@@ -142,7 +143,7 @@ func (kv *LocalKV) Close() {
 // lookupReplica looks up a replica by key. Lookups are done via
 // binary search over the "ranges" RangeSlice. Returns nil if no range
 // is found for the specified key.
-func (kv *LocalKV) lookupReplica(key engine.Key) *storage.Replica {
+func (kv *LocalKV) lookupReplica(key engine.Key) *proto.Replica {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
 	n := sort.Search(len(kv.ranges), func(i int) bool {

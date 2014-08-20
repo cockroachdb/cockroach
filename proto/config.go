@@ -13,19 +13,28 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package proto
 
-// A Cmd provides serialization for a read-only or read/write
-// command. Once committed to the Raft log, the command is executed
-// and the result returned via the done channel.
-type Cmd struct {
-	Method   string
-	Args     Request
-	Reply    Response
-	ReadOnly bool
+import (
+	"bytes"
+	"fmt"
+)
 
-	done chan error // Used to signal waiting RPC handler
+// ContainsKey returns whether this RangeDescriptor contains the specified key.
+func (r *RangeDescriptor) ContainsKey(key []byte) bool {
+	return bytes.Compare(key, r.StartKey) >= 0 && bytes.Compare(key, r.EndKey) < 0
+}
+
+// ContainsKeyRange returns whether this RangeDescriptor contains the specified
+// key range from start to end.
+func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
+	if len(end) == 0 {
+		end = start
+	}
+	if bytes.Compare(end, start) < 0 {
+		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
+	}
+	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
 }

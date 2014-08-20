@@ -1,0 +1,56 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied.  See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
+
+package proto;
+
+import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+
+// Replica describes a replica location by node ID (corresponds to a
+// host:port via lookup on gossip network), store ID (corresponds to
+// a physical device, unique per node) and range ID. Datacenter and
+// DiskType are provided to optimize reads. Replicas are stored in
+// Range lookup records (meta1, meta2).
+message Replica {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
+  optional int32 store_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+  // combination of node & store attributes.
+  repeated string attrs = 4 [(gogoproto.nullable) = false];
+}
+
+// RangeDescriptor is the value stored in a range metadata key.
+// A range is described using an inclusive start key, a non-inclusive end key,
+// and a list of replicas where the range is stored.
+message RangeDescriptor {
+  // StartKey is the first key which may be contained by this range.
+  optional bytes start_key = 1 [(gogoproto.nullable) = false];
+  // EndKey marks the end of the range's possible keys.  EndKey itself is not
+  // contained in this range - it will be contained in the immediately
+  // subsequent range.
+  optional bytes end_key = 2 [(gogoproto.nullable) = false];
+  // List of replicas where this range is stored.
+  repeated Replica replicas = 3 [(gogoproto.nullable) = false];
+}
+
+// A RangeMetadata holds information about the range. This includes
+// the cluster ID, the range ID, and a RangeDescriptor describing the
+// contents of the range.
+message RangeMetadata {
+  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional string cluster_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
+  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+}

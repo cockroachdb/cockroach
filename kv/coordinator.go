@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -81,7 +82,7 @@ type txnMetadata struct {
 
 	// lastUpdateTS is the latest time when the client sent transaction
 	// operations to this coordinator.
-	lastUpdateTS hlc.Timestamp
+	lastUpdateTS proto.Timestamp
 
 	// timeoutDuration is the time after which the transaction should be
 	// considered abandoned by the client. That is, when
@@ -139,7 +140,7 @@ func (tc *coordinator) Close() {
 // abandoned and garbage collected. Read/write mutating requests have
 // their key(s) added to the transaction's keys slice for eventual
 // cleanup via resolved write intents.
-func (tc *coordinator) AddRequest(method string, header *storage.RequestHeader) {
+func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 	// Ignore non-transactional requests.
 	if len(header.TxnID) == 0 || !isTransactional(method) {
 		return
@@ -187,8 +188,8 @@ func (tc *coordinator) EndTxn(txnID engine.Key, commit bool) {
 	for _, rng := range txnMeta.keys {
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget.
-		tc.db.InternalResolveIntent(&storage.InternalResolveIntentRequest{
-			RequestHeader: storage.RequestHeader{
+		tc.db.InternalResolveIntent(&proto.InternalResolveIntentRequest{
+			RequestHeader: proto.RequestHeader{
 				Key:    rng.Start,
 				EndKey: rng.End,
 				User:   storage.UserRoot,
@@ -225,8 +226,8 @@ func (tc *coordinator) hasClientAbandonedCoord(txnID engine.Key) bool {
 // aborted or committed or if the coordinator is closed.
 func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 	ticker := time.NewTicker(tc.heartbeatInterval)
-	request := &storage.InternalHeartbeatTxnRequest{
-		RequestHeader: storage.RequestHeader{
+	request := &proto.InternalHeartbeatTxnRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  txnID,
 			User: storage.UserRoot,
 		},
@@ -251,12 +252,12 @@ func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 			// the heartbeat. It's either aborted or commited, and we resolve
 			// write intents accordingly.
 			switch reply.Status {
-			case storage.PENDING:
+			case proto.PENDING:
 				// Heartbeat continues...
-			case storage.COMMITTED:
+			case proto.COMMITTED:
 				tc.EndTxn(request.Header().TxnID, true)
 				return
-			case storage.ABORTED:
+			case proto.ABORTED:
 				tc.EndTxn(request.Header().TxnID, false)
 				return
 			}

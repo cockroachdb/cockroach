@@ -21,8 +21,9 @@ import (
 	"bytes"
 	"encoding/gob"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // A DB interface provides asynchronous methods to access a key value
@@ -31,75 +32,115 @@ import (
 // event commands collide with existing write intents, and process
 // message queues.
 type DB interface {
-	Contains(args *ContainsRequest) <-chan *ContainsResponse
-	Get(args *GetRequest) <-chan *GetResponse
-	Put(args *PutRequest) <-chan *PutResponse
-	ConditionalPut(args *ConditionalPutRequest) <-chan *ConditionalPutResponse
-	Increment(args *IncrementRequest) <-chan *IncrementResponse
-	Delete(args *DeleteRequest) <-chan *DeleteResponse
-	DeleteRange(args *DeleteRangeRequest) <-chan *DeleteRangeResponse
-	Scan(args *ScanRequest) <-chan *ScanResponse
-	EndTransaction(args *EndTransactionRequest) <-chan *EndTransactionResponse
-	AccumulateTS(args *AccumulateTSRequest) <-chan *AccumulateTSResponse
-	ReapQueue(args *ReapQueueRequest) <-chan *ReapQueueResponse
-	EnqueueUpdate(args *EnqueueUpdateRequest) <-chan *EnqueueUpdateResponse
-	EnqueueMessage(args *EnqueueMessageRequest) <-chan *EnqueueMessageResponse
-	InternalHeartbeatTxn(args *InternalHeartbeatTxnRequest) <-chan *InternalHeartbeatTxnResponse
-	InternalResolveIntent(args *InternalResolveIntentRequest) <-chan *InternalResolveIntentResponse
+	Contains(args *proto.ContainsRequest) <-chan *proto.ContainsResponse
+	Get(args *proto.GetRequest) <-chan *proto.GetResponse
+	Put(args *proto.PutRequest) <-chan *proto.PutResponse
+	ConditionalPut(args *proto.ConditionalPutRequest) <-chan *proto.ConditionalPutResponse
+	Increment(args *proto.IncrementRequest) <-chan *proto.IncrementResponse
+	Delete(args *proto.DeleteRequest) <-chan *proto.DeleteResponse
+	DeleteRange(args *proto.DeleteRangeRequest) <-chan *proto.DeleteRangeResponse
+	Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse
+	EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.EndTransactionResponse
+	AccumulateTS(args *proto.AccumulateTSRequest) <-chan *proto.AccumulateTSResponse
+	ReapQueue(args *proto.ReapQueueRequest) <-chan *proto.ReapQueueResponse
+	EnqueueUpdate(args *proto.EnqueueUpdateRequest) <-chan *proto.EnqueueUpdateResponse
+	EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *proto.EnqueueMessageResponse
+	InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) <-chan *proto.InternalHeartbeatTxnResponse
+	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 }
 
-// GetI fetches the value at the specified key and deserializes it
+// GetI fetches the value at the specified key and gob-deserializes it
 // into "value". Returns true on success or false if the key was not
 // found. The timestamp of the write is returned as the second return
 // value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
-func GetI(db DB, key engine.Key, value interface{}) (bool, hlc.Timestamp, error) {
-	gr := <-db.Get(&GetRequest{
-		RequestHeader: RequestHeader{
+func GetI(db DB, key engine.Key, iface interface{}) (bool, proto.Timestamp, error) {
+	ok, value, err := getInternal(db, key)
+	if !ok || err != nil {
+		return false, proto.Timestamp{}, err
+	}
+	if err := gob.NewDecoder(bytes.NewBuffer(value.Bytes)).Decode(iface); err != nil {
+		return true, value.Timestamp, err
+	}
+	return true, value.Timestamp, nil
+}
+
+// GetProto fetches the value at the specified key and unmarshals it
+// using a protobuf decoder. See comments for GetI for details on
+// return values.
+func GetProto(db DB, key engine.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
+	ok, value, err := getInternal(db, key)
+	if !ok || err != nil {
+		return false, proto.Timestamp{}, err
+	}
+	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
+		return true, value.Timestamp, err
+	}
+	return true, value.Timestamp, nil
+}
+
+// getInternal fetches the requested key and returns the value.
+func getInternal(db DB, key engine.Key) (bool, proto.Value, error) {
+	gr := <-db.Get(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: UserRoot,
 		},
 	})
 	if gr.Error != nil {
-		return false, hlc.Timestamp{}, gr.Error
+		return false, proto.Value{}, gr.GoError()
 	}
 	if len(gr.Value.Bytes) == 0 {
-		return false, hlc.Timestamp{}, nil
+		return false, proto.Value{}, nil
 	}
-	if err := gob.NewDecoder(bytes.NewBuffer(gr.Value.Bytes)).Decode(value); err != nil {
-		return true, gr.Value.Timestamp, err
-	}
-	return true, gr.Value.Timestamp, nil
+	return true, gr.Value, nil
 }
 
-// PutI sets the given key to the serialized byte string of the value
+// PutI sets the given key to the gob-serialized byte string of value
 // and the provided timestamp.
-func PutI(db DB, key engine.Key, value interface{}, timestamp hlc.Timestamp) error {
+func PutI(db DB, key engine.Key, iface interface{}, timestamp proto.Timestamp) error {
 	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
+	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
 		return err
 	}
-	pr := <-db.Put(&PutRequest{
-		RequestHeader: RequestHeader{
+	// TODO(spencer): set checksum.
+	return putInternal(db, key, proto.Value{Bytes: buf.Bytes(), Timestamp: timestamp})
+}
+
+// PutProto sets the given key to the protobuf-serialized byte string
+// of msg and the provided timestamp.
+func PutProto(db DB, key engine.Key, msg gogoproto.Message, timestamp proto.Timestamp) error {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	// TODO(spencer): set checksum.
+	return putInternal(db, key, proto.Value{Bytes: data, Timestamp: timestamp})
+}
+
+// putInternal writes the specified value to key.
+func putInternal(db DB, key engine.Key, value proto.Value) error {
+	pr := <-db.Put(&proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			User:      UserRoot,
-			Timestamp: timestamp,
+			Timestamp: value.Timestamp,
 		},
-		Value: engine.Value{Bytes: buf.Bytes()},
+		Value: value,
 	})
-	return pr.Error
+	return pr.GoError()
 }
 
 // BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeDescriptor(db DB, desc RangeDescriptor, timestamp hlc.Timestamp) error {
+func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor, timestamp proto.Timestamp) error {
 	// Write meta1.
-	if err := PutI(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc, timestamp); err != nil {
+	if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := PutI(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc, timestamp); err != nil {
+	if err := PutProto(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc, timestamp); err != nil {
 		return err
 	}
 	return nil
@@ -110,7 +151,7 @@ func BootstrapRangeDescriptor(db DB, desc RangeDescriptor, timestamp hlc.Timesta
 // prefix, meaning they apply to the entire database. Permissions are
 // granted to all users and the zone requires three replicas with no
 // other specifications.
-func BootstrapConfigs(db DB, timestamp hlc.Timestamp) error {
+func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
 	// Accounting config.
 	acctConfig := &AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
@@ -149,13 +190,13 @@ func BootstrapConfigs(db DB, timestamp hlc.Timestamp) error {
 // range specified by the meta parameter. This always involves a write
 // to "meta2", and may require a write to "meta1", in the event that
 // meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
-func UpdateRangeDescriptor(db DB, meta RangeMetadata,
-	desc RangeDescriptor, timestamp hlc.Timestamp) error {
+func UpdateRangeDescriptor(db DB, meta proto.RangeMetadata,
+	desc *proto.RangeDescriptor, timestamp proto.Timestamp) error {
 	// TODO(spencer): a lot more work here to actually implement this.
 
 	// Write meta2.
 	key := engine.MakeKey(engine.KeyMeta2Prefix, meta.EndKey)
-	if err := PutI(db, key, desc, timestamp); err != nil {
+	if err := PutProto(db, key, desc, timestamp); err != nil {
 		return err
 	}
 	return nil

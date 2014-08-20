@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -59,7 +60,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Create range and fetch.
-	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []Replica{}); err != nil {
+	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{}); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
@@ -107,8 +108,8 @@ func TestRangeSliceSort(t *testing.T) {
 	for i := 4; i >= 0; i-- {
 		key := engine.Key(fmt.Sprintf("foo%d", i))
 		rs = append(rs, &Range{
-			Meta: RangeMetadata{
-				RangeDescriptor: RangeDescriptor{StartKey: key},
+			Meta: &proto.RangeMetadata{
+				RangeDescriptor: proto.RangeDescriptor{StartKey: key},
 			},
 		})
 	}
@@ -132,8 +133,8 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil)
-	replica := Replica{RangeID: 1}
-	_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []Replica{replica})
+	replica := proto.Replica{RangeID: 1}
+	_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []proto.Replica{replica})
 	if err != nil {
 		t.Fatal(err)
 	}

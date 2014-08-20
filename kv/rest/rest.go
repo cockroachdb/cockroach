@@ -24,6 +24,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
@@ -140,15 +142,15 @@ func (s *Server) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	gr := <-s.db.Increment(&storage.IncrementRequest{
-		RequestHeader: storage.RequestHeader{
+	gr := <-s.db.Increment(&proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 		Increment: inputVal,
 	})
 	if gr.Error != nil {
-		http.Error(w, gr.Error.Error(), http.StatusInternalServerError)
+		http.Error(w, gr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	fmt.Fprintf(w, "%d", gr.NewValue)
@@ -161,29 +163,29 @@ func (s *Server) handleEntryPutAction(w http.ResponseWriter, r *http.Request, ke
 		return
 	}
 	defer r.Body.Close()
-	pr := <-s.db.Put(&storage.PutRequest{
-		RequestHeader: storage.RequestHeader{
+	pr := <-s.db.Put(&proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
-		Value: engine.Value{Bytes: b},
+		Value: proto.Value{Bytes: b},
 	})
 	if pr.Error != nil {
-		http.Error(w, pr.Error.Error(), http.StatusInternalServerError)
+		http.Error(w, pr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
-	gr := <-s.db.Get(&storage.GetRequest{
-		RequestHeader: storage.RequestHeader{
+	gr := <-s.db.Get(&proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 	})
 	if gr.Error != nil {
-		http.Error(w, gr.Error.Error(), http.StatusInternalServerError)
+		http.Error(w, gr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	// An empty key will not be nil, but have zero length.
@@ -196,14 +198,14 @@ func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, ke
 }
 
 func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
-	cr := <-s.db.Contains(&storage.ContainsRequest{
-		RequestHeader: storage.RequestHeader{
+	cr := <-s.db.Contains(&proto.ContainsRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 	})
 	if cr.Error != nil {
-		http.Error(w, cr.Error.Error(), http.StatusInternalServerError)
+		http.Error(w, cr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	if !cr.Exists {
@@ -214,14 +216,14 @@ func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, k
 }
 
 func (s *Server) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
-	dr := <-s.db.Delete(&storage.DeleteRequest{
-		RequestHeader: storage.RequestHeader{
+	dr := <-s.db.Delete(&proto.DeleteRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 	})
 	if dr.Error != nil {
-		http.Error(w, dr.Error.Error(), http.StatusInternalServerError)
+		http.Error(w, dr.GoError().Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
