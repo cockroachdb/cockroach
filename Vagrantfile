@@ -9,24 +9,25 @@ $provisioner = <<SCRIPT
   sudo apt-get install -qy python-software-properties
   sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   sudo apt-get update -qq
-  sudo apt-get install -y -qq gcc-4.8 g++-4.8 zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev curl make
+  sudo apt-get install -y -qq gcc-4.8 g++-4.8 zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev libprotobuf-dev protobuf-compiler clang curl make
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
   wget https://gflags.googlecode.com/files/libgflags0_2.0-1_amd64.deb
   sudo dpkg -i libgflags0_2.0-1_amd64.deb
   wget https://gflags.googlecode.com/files/libgflags-dev_2.0-1_amd64.deb
   sudo dpkg -i libgflags-dev_2.0-1_amd64.deb
+  rm -rf libgflags*
 
   # Protocol buffers.
   wget https://protobuf.googlecode.com/files/protobuf-2.5.0.tar.bz2
   bunzip2 protobuf-2.5.0.tar.bz2
   tar xvf protobuf-2.5.0.tar
-  cd protobuf-2.5.0 && ./configure && make && sudo make install && cd ../
+  cd protobuf-2.5.0 && ./configure && make && sudo make install && cd ../ && rm -rf protobuf*
 
   # Go time.
   curl -s https://storage.googleapis.com/golang/go1.3.1.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
-  echo "export PATH=/usr/local/go/bin:\\$PATH" >> .bashrc
-  echo "export GOPATH=/vagrant_gopath" >> .bashrc
+  echo "export GOPATH=/home/vagrant/go" >> .bashrc
+  echo "export PATH=/usr/local/go/bin:/home/vagrant/go/bin:\\$PATH" >> .bashrc
 SCRIPT
 
 Vagrant.require_version '>= 1.5.0'
@@ -39,7 +40,7 @@ Vagrant.configure("2") do |config|
   # the path on the host to the actual folder. The second argument is
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
-  config.vm.synced_folder "../../../../", "/vagrant_gopath"
+  config.vm.synced_folder "../../../../", "/home/vagrant/go"
 
   config.vm.provision "shell", inline: $provisioner
 end
