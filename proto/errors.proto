@@ -1,0 +1,57 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied.  See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
+
+package proto;
+
+import "config.proto";
+import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+
+// A GenericError is a generic representation of a go error including
+// the string message and whether or not the error is retryable.
+message GenericError {
+  optional string message = 1 [(gogoproto.nullable) = false];
+  optional bool retryable = 2 [(gogoproto.nullable) = false];
+}
+
+// A NotLeaderError indicates that the current range is not the
+// leader. If the leader is known, its Replica is set in the error.
+message NotLeaderError {
+  optional Replica leader = 1 [(gogoproto.nullable) = false];
+}
+
+// RangeNotFoundError indicates that a command was sent to a range
+// which is not hosted on this store.
+message RangeNotFoundError {
+  optional int64 range_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+}
+
+// RangeKeyMismatchError indicates that a command was sent to a range which did
+// not contain the key(s) specified by the command.
+message RangeKeyMismatchError {
+  optional bytes request_start_key = 1 [(gogoproto.nullable) = false];
+  optional bytes request_end_key = 2 [(gogoproto.nullable) = false];
+  optional RangeMetadata range = 3 [(gogoproto.nullable) = false];
+}
+
+// Error is a union type containing all available errors.  message and
+// whether or not the error is retryable.
+message Error {
+  optional GenericError generic = 1;
+  optional NotLeaderError not_leader = 2;
+  optional RangeNotFoundError range_not_found = 3;
+  optional RangeKeyMismatchError range_key_mismatch = 4;
+}

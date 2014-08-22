@@ -18,10 +18,12 @@
 package rpc
 
 import (
+	"fmt"
 	"net"
 	"net/rpc"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -35,6 +37,8 @@ type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
 
+	tlsConfig *TLSConfig // The config we need for tls.Listen
+
 	mu             sync.RWMutex          // Mutex protects the fields below
 	addr           net.Addr              // Server address; may change if picking unused port
 	closed         bool                  // Set upon invocation of Close()
@@ -42,10 +46,11 @@ type Server struct {
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(addr net.Addr) *Server {
+func NewServer(addr net.Addr, tlsConfig *TLSConfig) *Server {
 	s := &Server{
-		Server: rpc.NewServer(),
-		addr:   addr,
+		Server:    rpc.NewServer(),
+		tlsConfig: tlsConfig,
+		addr:      addr,
 	}
 	heartbeat := &HeartbeatService{}
 	s.RegisterName("Heartbeat", heartbeat)
@@ -63,14 +68,19 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 // Start runs the RPC server. After this method returns, the socket
 // will have been bound. Use Server.Addr() to ascertain server address.
 func (s *Server) Start() error {
-	ln, err := net.Listen(s.addr.Network(), s.addr.String())
+	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.tlsConfig)
 	if err != nil {
 		return err
 	}
 	s.listener = ln
 
+	addr, err := updatedAddr(s.addr, ln.Addr())
+	if err != nil {
+		s.Close()
+		return err
+	}
 	s.mu.Lock()
-	s.addr = ln.Addr()
+	s.addr = addr
 	s.mu.Unlock()
 
 	go func() {
@@ -81,7 +91,7 @@ func (s *Server) Start() error {
 			if err != nil {
 				s.mu.Lock()
 				if !s.closed {
-					log.Fatalf("server terminated: %s", err)
+					log.Fatalf("server terminated: %v", err)
 				}
 				s.mu.Unlock()
 				break
@@ -92,6 +102,46 @@ func (s *Server) Start() error {
 		log.Infof("done serving on %+v", s.Addr())
 	}()
 	return nil
+}
+
+// updatedAddr returns our "official" address based on the address we asked for
+// (oldAddr) and the address we successfully bound to (newAddr). It's kind of
+// hacky, but necessary to make TLS work.
+func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
+	switch oldAddr.Network() {
+	case "tcp", "tcp4", "tcp6":
+		// After binding, it's possible that our host and/or port will be
+		// different from what we requested. If the hostname is different, we
+		// want to keep the original one since it's more likely to match our
+		// TLS certificate. But if the port is different, it should be because
+		// we asked for ":0" and got an arbitrary unused port; that needs to be
+		// reflected in our addr.
+		oldHost, oldPort, err := net.SplitHostPort(oldAddr.String())
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse original addr '%s': %v",
+				oldAddr.String(), err)
+		}
+		_, newPort, err := net.SplitHostPort(newAddr.String())
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse new addr '%s': %v",
+				newAddr.String(), err)
+		}
+
+		if newPort != oldPort && oldPort != "0" {
+			log.Warningf("Asked for port %s, got %s", oldPort, newPort)
+		}
+
+		return util.MakeRawAddr("tcp", net.JoinHostPort(oldHost, newPort)), nil
+
+	case "unix":
+		if oldAddr.String() != newAddr.String() {
+			return nil, fmt.Errorf("Asked for unix addr %s, got %s", oldAddr, newAddr)
+		}
+		return newAddr, nil
+
+	default:
+		return nil, fmt.Errorf("Unexpected network type: %s", oldAddr.Network())
+	}
 }
 
 // Addr returns the server's network address.
@@ -106,7 +156,10 @@ func (s *Server) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = true
-	s.listener.Close()
+	// If the server didn't start properly, it might not have a listener.
+	if s.listener != nil {
+		s.listener.Close()
+	}
 }
 
 // serveConn synchronously serves a single connection. When the

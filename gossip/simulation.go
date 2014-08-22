@@ -53,12 +53,14 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 	// multiple runs.
 	rand.Seed(time.Now().UTC().UnixNano())
 
+	tlsConfig := rpc.LoadInsecureTLSConfig()
+
 	log.Infof("simulating network with %d nodes", nodeCount)
 	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		addr := util.CreateTestAddr(network)
-		servers[i] = rpc.NewServer(addr)
+		servers[i] = rpc.NewServer(addr, tlsConfig)
 		if err := servers[i].Start(); err != nil {
 			log.Fatal(err)
 		}
@@ -73,7 +75,7 @@ func SimulateNetwork(nodeCount int, network string, gossipInterval time.Duration
 
 	nodes := make(map[string]*Gossip, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := New()
+		node := New(tlsConfig)
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)

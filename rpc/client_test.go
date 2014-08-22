@@ -33,13 +33,20 @@ func init() {
 }
 
 func TestClientHeartbeat(t *testing.T) {
+	tlsConfig, err := LoadTestTLSConfig("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	addr := util.CreateTestAddr("tcp")
-	s := NewServer(addr)
-	s.Start()
-	c := NewClient(s.Addr(), nil)
+	s := NewServer(addr, tlsConfig)
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	c := NewClient(s.Addr(), nil, tlsConfig)
 	time.Sleep(heartbeatInterval * 2)
-	if c != NewClient(s.Addr(), nil) {
-		t.Error("expected cached client to be returned while healthy")
+	if c != NewClient(s.Addr(), nil, tlsConfig) {
+		t.Fatal("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
 	s.Close()
@@ -48,18 +55,26 @@ func TestClientHeartbeat(t *testing.T) {
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
+	tlsConfig, err := LoadTestTLSConfig("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	addr := util.CreateTestAddr("tcp")
 	// Create a server which doesn't support heartbeats.
 	s := &Server{
 		Server:         rpc.NewServer(),
+		tlsConfig:      tlsConfig,
 		addr:           addr,
 		closeCallbacks: make([]func(conn net.Conn), 0, 1),
 	}
-	s.Start()
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.
-	c := NewClient(s.Addr(), nil)
+	c := NewClient(s.Addr(), nil, tlsConfig)
 	select {
 	case <-c.Ready:
 		t.Error("unexpected client heartbeat success")

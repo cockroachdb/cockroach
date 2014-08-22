@@ -10,35 +10,28 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied.  See the License for the specific language governing
-// permissions and limitations under the L:loicense. See the AUTHORS file
+// permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+package proto
 
-import (
-	"encoding/gob"
-	"fmt"
+import "fmt"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
-)
+// Error implements the Go error interface.
+func (ge *GenericError) Error() string {
+	return ge.Message
+}
 
-// A NotLeaderError indicates that the current range is not the
-// leader. If the leader is known, its Replica is set in the error.
-type NotLeaderError struct {
-	leader Replica
+// CanRetry implements the util/Retryable interface.
+func (ge *GenericError) CanRetry() bool {
+	return ge.Retryable
 }
 
 // Error formats error.
 func (e *NotLeaderError) Error() string {
-	return fmt.Sprintf("range not leader; leader is %+v", e.leader)
-}
-
-// RangeNotFoundError indicates that a command was sent to a range which
-// is not hosted on this store.
-type RangeNotFoundError struct {
-	RangeID int64
+	return fmt.Sprintf("range not leader; leader is %+v", e.Leader)
 }
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
@@ -58,21 +51,12 @@ func (e *RangeNotFoundError) CanRetry() bool {
 	return true
 }
 
-// RangeKeyMismatchError indicates that a command was sent to a range which did
-// not contain the key(s) specified by the command.
-type RangeKeyMismatchError struct {
-	RequestStartKey engine.Key
-	RequestEndKey   engine.Key
-	Range           RangeMetadata
-}
-
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end engine.Key,
-	metadata RangeMetadata) *RangeKeyMismatchError {
+func NewRangeKeyMismatchError(start, end []byte, meta *RangeMetadata) *RangeKeyMismatchError {
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		Range:           metadata,
+		Range:           *meta,
 	}
 }
 
@@ -87,11 +71,4 @@ func (e *RangeKeyMismatchError) Error() string {
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
 func (e *RangeKeyMismatchError) CanRetry() bool {
 	return true
-}
-
-// Init registers storage error types with Gob.
-func init() {
-	gob.Register(&NotLeaderError{})
-	gob.Register(&RangeNotFoundError{})
-	gob.Register(&RangeKeyMismatchError{})
 }

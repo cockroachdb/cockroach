@@ -27,15 +27,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 var (
-	testRangeDescriptor = RangeDescriptor{
+	testRangeDescriptor = proto.RangeDescriptor{
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
-		Replicas: []Replica{
+		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
 				StoreID: 1,
@@ -82,56 +84,15 @@ func createTestEngine(t *testing.T) engine.Engine {
 // createTestRange creates a new range initialized to the full extent
 // of the keyspace. The gossip instance is also returned for testing.
 func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip) {
-	rm := RangeMetadata{
+	rm := &proto.RangeMetadata{
 		RangeID:         0,
 		RangeDescriptor: testRangeDescriptor,
 	}
-	g := gossip.New()
-	clock := hlc.NewHLClock(hlc.UnixNano)
+	g := gossip.New(rpc.LoadInsecureTLSConfig())
+	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(rm, clock, engine, nil, g)
 	r.Start()
 	return r, g
-}
-
-// TestRangeContains verifies methods to check whether a key or key range
-// is contained within the range.
-func TestRangeContains(t *testing.T) {
-	r, _ := createTestRange(createTestEngine(t), t)
-	defer r.Stop()
-	r.Meta.StartKey = engine.Key("a")
-	r.Meta.EndKey = engine.Key("b")
-
-	testData := []struct {
-		start, end engine.Key
-		contains   bool
-	}{
-		// Single keys.
-		{engine.Key("a"), engine.Key("a"), true},
-		{engine.Key("aa"), engine.Key("aa"), true},
-		{engine.Key("`"), engine.Key("`"), false},
-		{engine.Key("b"), engine.Key("b"), false},
-		{engine.Key("c"), engine.Key("c"), false},
-		// Key ranges.
-		{engine.Key("a"), engine.Key("b"), true},
-		{engine.Key("a"), engine.Key("aa"), true},
-		{engine.Key("aa"), engine.Key("b"), true},
-		{engine.Key("0"), engine.Key("9"), false},
-		{engine.Key("`"), engine.Key("a"), false},
-		{engine.Key("b"), engine.Key("bb"), false},
-		{engine.Key("0"), engine.Key("bb"), false},
-		{engine.Key("aa"), engine.Key("bb"), false},
-	}
-	for _, test := range testData {
-		if bytes.Compare(test.start, test.end) == 0 {
-			if r.ContainsKey(test.start) != test.contains {
-				t.Errorf("expected key %q within range", test.start)
-			}
-		} else {
-			if r.ContainsKeyRange(test.start, test.end) != test.contains {
-				t.Errorf("expected key range %q-%q within range", test.start, test.end)
-			}
-		}
-	}
 }
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
@@ -142,8 +103,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(info.(RangeDescriptor), testRangeDescriptor) {
-		t.Errorf("expected gossipped range locations to be equal: %s vs %s", info.(RangeDescriptor), testRangeDescriptor)
+	if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
+		t.Errorf("expected gossipped range locations to be equal: %s vs %s", info.(proto.RangeDescriptor), testRangeDescriptor)
 	}
 }
 
@@ -215,15 +176,15 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
-	reply := &PutResponse{}
+	reply := &proto.PutResponse{}
 
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	r.Put(&PutRequest{RequestHeader: RequestHeader{Key: key}, Value: engine.Value{Bytes: buf.Bytes()}}, reply)
+	r.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: buf.Bytes()}}, reply)
 	if reply.Error != nil {
-		t.Fatal(reply.Error)
+		t.Fatal(reply.GoError())
 	}
 
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
@@ -284,53 +245,53 @@ func (be *blockingEngine) put(key engine.Key, value []byte) error {
 // the range clock's manual unix nanos time and the range.
 func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *blockingEngine) {
 	manual := hlc.ManualClock(0)
-	clock := hlc.NewHLClock(manual.UnixNano)
+	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
-	rng := NewRange(RangeMetadata{}, clock, engine, nil, nil)
+	rng := NewRange(&proto.RangeMetadata{}, clock, engine, nil, nil)
 	rng.Start()
 	return rng, &manual, engine
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key string, rangeID int64) (*GetRequest, *GetResponse) {
-	args := &GetRequest{
-		RequestHeader: RequestHeader{
+func getArgs(key string, rangeID int64) (*proto.GetRequest, *proto.GetResponse) {
+	args := &proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:     []byte(key),
-			Replica: Replica{RangeID: rangeID},
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 	}
-	reply := &GetResponse{}
+	reply := &proto.GetResponse{}
 	return args, reply
 }
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value string, rangeID int64) (*PutRequest, *PutResponse) {
-	args := &PutRequest{
-		RequestHeader: RequestHeader{
+func putArgs(key, value string, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
+	args := &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:     []byte(key),
-			Replica: Replica{RangeID: rangeID},
+			Replica: proto.Replica{RangeID: rangeID},
 		},
-		Value: engine.Value{
+		Value: proto.Value{
 			Bytes: []byte(value),
 		},
 	}
-	reply := &PutResponse{}
+	reply := &proto.PutResponse{}
 	return args, reply
 }
 
 // incrementArgs returns a IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key string, inc int64, rangeID int64) (*IncrementRequest, *IncrementResponse) {
-	args := &IncrementRequest{
-		RequestHeader: RequestHeader{
+func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
+	args := &proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:     []byte(key),
-			Replica: Replica{RangeID: rangeID},
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 		Increment: inc,
 	}
-	reply := &IncrementResponse{}
+	reply := &proto.IncrementResponse{}
 	return args, reply
 }
 
@@ -462,13 +423,13 @@ func TestRangeIdempotence(t *testing.T) {
 		incDones[i] = make(chan struct{})
 		idx := i
 		go func() {
-			var args IncrementRequest
-			var reply IncrementResponse
+			var args proto.IncrementRequest
+			var reply proto.IncrementResponse
 			args = *goldenArgs
 			if idx%2 == 0 {
-				args.CmdID = ClientCmdID{1, 1}
+				args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
 			} else {
-				args.CmdID = ClientCmdID{1, int64(idx + 100)}
+				args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 			}
 			err := rng.ReadWriteCmd("Increment", &args, &reply)
 			if err != nil {

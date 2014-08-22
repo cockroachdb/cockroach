@@ -35,19 +35,21 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
 	rpcAddr  = flag.String("rpc", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
 	httpAddr = flag.String("http", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
+
+	certDir = flag.String("certs", "", "directory containing RSA key and x509 certs")
 
 	// stores is specified to enable durable storage via RocksDB-backed
 	// key-value stores. Memory-backed key value stores may be
@@ -81,6 +83,7 @@ var (
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
+		"-certs=<cert-dir>" +
 		"-stores=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short: "start node by joining the gossip network",
 	Long: fmt.Sprintf(`
@@ -112,9 +115,10 @@ A node exports an HTTP API with the following endpoints:
 type server struct {
 	host           string
 	mux            *http.ServeMux
+	clock          *hlc.Clock
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
-	kvDB           kv.DB
+	kvDB           *kv.DB
 	kvREST         *rest.Server
 	node           *Node
 	admin          *adminServer
@@ -136,10 +140,6 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	// Create a new hybrid-logical clock using the internal clock.
-	clock := hlc.NewHLClock(hlc.UnixNano)
-	clock.SetMaxDrift(*maxDrift)
-
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
@@ -151,7 +151,7 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	err = s.start(clock, engines, false)
+	err = s.start(engines, false)
 	defer s.stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)
@@ -238,19 +238,31 @@ func newServer() (*server, error) {
 	if strings.HasPrefix(*rpcAddr, ":") {
 		*rpcAddr = host + *rpcAddr
 	}
-	addr, err := net.ResolveTCPAddr("tcp", *rpcAddr)
+	_, err = net.ResolveTCPAddr("tcp", *rpcAddr)
 	if err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", *rpcAddr, err)
 	}
 
-	s := &server{
-		host: host,
-		mux:  http.NewServeMux(),
-		rpc:  rpc.NewServer(addr),
+	var tlsConfig *rpc.TLSConfig
+	if *certDir == "" {
+		tlsConfig = rpc.LoadInsecureTLSConfig()
+	} else {
+		var err error
+		if tlsConfig, err = rpc.LoadTLSConfig(*certDir); err != nil {
+			return nil, util.Errorf("unable to load TLS config: %v", err)
+		}
 	}
 
-	s.gossip = gossip.New()
-	s.kvDB = kv.NewDB(s.gossip)
+	s := &server{
+		host:  host,
+		mux:   http.NewServeMux(),
+		clock: hlc.NewClock(hlc.UnixNano),
+		rpc:   rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig),
+	}
+	s.clock.SetMaxDrift(*maxDrift)
+
+	s.gossip = gossip.New(tlsConfig)
+	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
 	s.kvREST = rest.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
@@ -264,8 +276,11 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstrap bool) error {
-	s.rpc.Start() // bind RPC socket and launch goroutine.
+func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
+	// Bind RPC socket and launch goroutine.
+	if err := s.rpc.Start(); err != nil {
+		return err
+	}
 	log.Infof("Started RPC server at %s", s.rpc.Addr())
 
 	// Handle self-bootstrapping case for a single node.
@@ -287,7 +302,7 @@ func (s *server) start(clock *hlc.HLClock, engines []engine.Engine, selfBootstra
 	// Init the node attributes from the -attrs command line flag.
 	nodeAttrs := parseAttributes(*attrs)
 
-	if err := s.node.start(s.rpc, clock, engines, nodeAttrs); err != nil {
+	if err := s.node.start(s.rpc, s.clock, engines, nodeAttrs); err != nil {
 		return err
 	}
 	log.Infof("Initialized %d storage engine(s)", len(engines))
@@ -331,6 +346,7 @@ func (s *server) stop() {
 	s.node.stop()
 	s.gossip.Stop()
 	s.rpc.Close()
+	s.kvDB.Close()
 }
 
 type gzipResponseWriter struct {

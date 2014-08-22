@@ -21,32 +21,32 @@ package kv
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 func TestReplicaLookup(t *testing.T) {
-
-	db := NewLocalDB()
-	r1 := db.addTestRange(engine.KeyMin, engine.Key("C"))
-	r2 := db.addTestRange(engine.Key("C"), engine.Key("X"))
-	r3 := db.addTestRange(engine.Key("X"), engine.KeyMax)
-	if len(db.ranges) != 3 {
-		t.Errorf("Pre-condition failed! Expected ranges to be size 3, got %d", len(db.ranges))
+	kv := NewLocalKV()
+	r1 := addTestRange(kv, engine.KeyMin, engine.Key("C"))
+	r2 := addTestRange(kv, engine.Key("C"), engine.Key("X"))
+	r3 := addTestRange(kv, engine.Key("X"), engine.KeyMax)
+	if len(kv.ranges) != 3 {
+		t.Errorf("Pre-condition failed! Expected ranges to be size 3, got %d", len(kv.ranges))
 	}
 
-	assertReplicaForRange(t, db.lookupReplica(engine.KeyMin), r1)
-	assertReplicaForRange(t, db.lookupReplica(engine.Key("B")), r1)
-	assertReplicaForRange(t, db.lookupReplica(engine.Key("C")), r2)
-	assertReplicaForRange(t, db.lookupReplica(engine.Key("M")), r2)
-	assertReplicaForRange(t, db.lookupReplica(engine.Key("X")), r3)
-	assertReplicaForRange(t, db.lookupReplica(engine.Key("Z")), r3)
-	if db.lookupReplica(engine.KeyMax) != nil {
+	assertReplicaForRange(t, kv.lookupReplica(engine.KeyMin), r1)
+	assertReplicaForRange(t, kv.lookupReplica(engine.Key("B")), r1)
+	assertReplicaForRange(t, kv.lookupReplica(engine.Key("C")), r2)
+	assertReplicaForRange(t, kv.lookupReplica(engine.Key("M")), r2)
+	assertReplicaForRange(t, kv.lookupReplica(engine.Key("X")), r3)
+	assertReplicaForRange(t, kv.lookupReplica(engine.Key("Z")), r3)
+	if kv.lookupReplica(engine.KeyMax) != nil {
 		t.Errorf("Expected engine.KeyMax to not have an associated Replica.")
 	}
 }
 
-func assertReplicaForRange(t *testing.T, repl *storage.Replica, rng *storage.Range) {
+func assertReplicaForRange(t *testing.T, repl *proto.Replica, rng *storage.Range) {
 	if repl == nil {
 		t.Errorf("No replica returned!")
 	} else if repl.RangeID != rng.Meta.RangeID {
@@ -54,14 +54,14 @@ func assertReplicaForRange(t *testing.T, repl *storage.Replica, rng *storage.Ran
 	}
 }
 
-func (db *LocalDB) addTestRange(start, end engine.Key) *storage.Range {
+func addTestRange(kv *LocalKV, start, end engine.Key) *storage.Range {
 	r := storage.Range{}
-	rep := storage.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(db.ranges) + 1)}
-	r.Meta = storage.RangeMetadata{
+	rep := proto.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(kv.ranges) + 1)}
+	r.Meta = &proto.RangeMetadata{
 		ClusterID:       "some-cluster",
 		RangeID:         rep.RangeID,
-		RangeDescriptor: storage.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []storage.Replica{rep}},
+		RangeDescriptor: proto.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []proto.Replica{rep}},
 	}
-	db.ranges = append(db.ranges, &r)
+	kv.ranges = append(kv.ranges, &r)
 	return &r
 }

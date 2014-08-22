@@ -18,9 +18,9 @@
 package storage
 
 import (
-	"fmt"
 	"net"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
@@ -28,55 +28,6 @@ import (
 
 // UserRoot is the username for the root user.
 const UserRoot = "root"
-
-// Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network), store ID (corresponds to
-// a physical device, unique per node) and range ID. Datacenter and
-// DiskType are provided to optimize reads. Replicas are stored in
-// Range lookup records (meta1, meta2).
-type Replica struct {
-	NodeID  int32
-	StoreID int32
-	RangeID int64
-	Attrs   engine.Attributes // combination of node & store attributes
-}
-
-// RangeDescriptor is the value stored in a range metadata key.
-// A range is described using an inclusive start key, a non-inclusive end key,
-// and a list of replicas where the range is stored.
-type RangeDescriptor struct {
-	// StartKey is the first key which may be contained by this range.
-	StartKey engine.Key
-	// EndKey marks the end of the range's possible keys.  EndKey itself is not
-	// contained in this range - it will be contained in the immediately
-	// subsequent range.
-	EndKey engine.Key
-	// List of replicas where this range is stored
-	Replicas []Replica
-}
-
-// ContainsKey returns whether this RangeDescriptor contains the specified key.
-func (r *RangeDescriptor) ContainsKey(key engine.Key) bool {
-	return !key.Less(r.StartKey) && key.Less(r.EndKey)
-}
-
-// ContainsKeyRange returns whether this RangeDescriptor contains the specified
-// key range from start to end.
-func (r *RangeDescriptor) ContainsKeyRange(start, end engine.Key) bool {
-	if len(end) == 0 {
-		end = start
-	}
-	if end.Less(start) {
-		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
-	}
-	return !start.Less(r.StartKey) && !r.EndKey.Less(end)
-}
-
-// LookupKey returns the metadata key at which this range descriptor should be
-// stored as a value.
-func (r *RangeDescriptor) LookupKey() engine.Key {
-	return engine.RangeMetaKey(r.EndKey)
-}
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
@@ -161,7 +112,7 @@ func (z *ZoneConfig) ToYAML() ([]byte, error) {
 }
 
 // ChooseRandomReplica returns a replica selected at random or nil if none exist.
-func ChooseRandomReplica(replicas []Replica) *Replica {
+func ChooseRandomReplica(replicas []proto.Replica) *proto.Replica {
 	if len(replicas) == 0 {
 		return nil
 	}

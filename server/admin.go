@@ -24,7 +24,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/storage"
 )
 
 const (
@@ -46,16 +46,16 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	kvDB kv.DB // Key-value database client
+	db   storage.DB // Key-value database client
 	zone *zoneHandler
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(kvDB kv.DB) *adminServer {
+func newAdminServer(db storage.DB) *adminServer {
 	return &adminServer{
-		kvDB: kvDB,
-		zone: &zoneHandler{kvDB: kvDB},
+		db:   db,
+		zone: &zoneHandler{db: db},
 	}
 }
 

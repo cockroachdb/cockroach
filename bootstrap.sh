@@ -22,6 +22,9 @@ go get github.com/golang/lint/golint
 go get code.google.com/p/go.tools/cmd/vet
 go get code.google.com/p/go.tools/cmd/goimports
 
+# Grab gogoprotobuf package.
+go get -u code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
+
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
   rm .git/hooks/$(basename $f)

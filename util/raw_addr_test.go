@@ -13,19 +13,25 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Andrew Bonventre (andybons@gmail.com)
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: jqmp (jaqueramaphan@gmail.com)
 
-package storage
+package util
 
-// A Cmd provides serialization for a read-only or read/write
-// command. Once committed to the Raft log, the command is executed
-// and the result returned via the done channel.
-type Cmd struct {
-	Method   string
-	Args     Request
-	Reply    Response
-	ReadOnly bool
+import (
+	"testing"
+)
 
-	done chan error // Used to signal waiting RPC handler
+func TestRawAddr(t *testing.T) {
+	network := "tcp"
+	str := "host:1234"
+
+	addr := MakeRawAddr(network, str)
+
+	// TODO(jqmp): Is this really how we test things in Go?
+	if addr.Network() != network {
+		t.Error("Expected addr.Network() to be %s; got %s", network, addr.Network())
+	}
+	if addr.String() != str {
+		t.Error("Expected addr.String() to be %s; got %s", str, addr.String())
+	}
 }

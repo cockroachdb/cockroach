@@ -79,7 +79,7 @@ type Client struct {
 // and completed one successful heartbeat. The Closed channel is
 // closed if the client fails to connect or if the client's Close()
 // method is invoked.
-func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
+func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Client {
 	clientMu.Lock()
 	if c, ok := clients[addr.String()]; ok {
 		clientMu.Unlock()
@@ -102,12 +102,12 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 
 	go func() {
 		err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
-			// TODO(spencer): use crypto.tls.
-			conn, err := net.Dial(addr.Network(), addr.String())
+			conn, err := tlsDial(addr.Network(), addr.String(), tlsConfig)
 			if err != nil {
 				log.Info(err)
 				return false, nil
 			}
+
 			c.mu.Lock()
 			c.Client = rpc.NewClient(conn)
 			c.lAddr = conn.LocalAddr()
@@ -130,7 +130,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions) *Client {
 			return true, nil
 		})
 		if err != nil {
-			log.Errorf("client %s failed to connect", addr)
+			log.Errorf("client %s failed to connect: %v", addr, err)
 			c.Close()
 		}
 	}()

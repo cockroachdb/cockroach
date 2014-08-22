@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -179,7 +180,7 @@ func TestSimpleRetrieval(t *testing.T) {
 		storeFinder: singleStore,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(simpleZoneConfig.Replicas[0], []Replica{})
+	result, err := a.allocate(simpleZoneConfig.Replicas[0], []proto.Replica{})
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestNoAvailableDisks(t *testing.T) {
 		storeFinder: noStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(simpleZoneConfig.Replicas[0], []Replica{})
+	result, err := a.allocate(simpleZoneConfig.Replicas[0], []proto.Replica{})
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -207,15 +208,15 @@ func TestThreeDisksSameDC(t *testing.T) {
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result1, err := a.allocate(multiDisksConfig.Replicas[0], []Replica{})
+	result1, err := a.allocate(multiDisksConfig.Replicas[0], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if result1.StoreID != 2 {
 		t.Errorf("Expected store 2; got %+v", result1)
 	}
-	exReplicas := []Replica{
-		Replica{
+	exReplicas := []proto.Replica{
+		proto.Replica{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
 			Attrs:   multiDisksConfig.Replicas[0],
@@ -231,7 +232,7 @@ func TestThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.allocate(multiDisksConfig.Replicas[2], []Replica{})
+	result3, err := a.allocate(multiDisksConfig.Replicas[2], []proto.Replica{})
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -245,11 +246,11 @@ func TestTwoDatacenters(t *testing.T) {
 		storeFinder: multiDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result1, err := a.allocate(multiDCConfig.Replicas[0], []Replica{})
+	result1, err := a.allocate(multiDCConfig.Replicas[0], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.allocate(multiDCConfig.Replicas[1], []Replica{})
+	result2, err := a.allocate(multiDCConfig.Replicas[1], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -257,8 +258,8 @@ func TestTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.allocate(multiDCConfig.Replicas[1], []Replica{
-		Replica{
+	_, err = a.allocate(multiDCConfig.Replicas[1], []proto.Replica{
+		proto.Replica{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
 			Attrs:   multiDCConfig.Replicas[1],
@@ -274,8 +275,8 @@ func TestExistingReplica(t *testing.T) {
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(multiDisksConfig.Replicas[1], []Replica{
-		Replica{
+	result, err := a.allocate(multiDisksConfig.Replicas[1], []proto.Replica{
+		proto.Replica{
 			NodeID:  1,
 			StoreID: 1,
 			Attrs:   multiDisksConfig.Replicas[0],

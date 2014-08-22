@@ -23,6 +23,7 @@ import (
 	"testing"
 )
 
+// TODO(jqmp): I'm not sure any testing is going on here.
 func TestMapKeys(t *testing.T) {
 	// For an uninitialized map, an empty slice should be returned.
 	var nilMap map[uint]bool

@@ -1,3 +1,7 @@
+* Create a new DB type in kv/ which uses a storage.DB implementation,
+  either one of DistDB or LocalDB. The kv.DB deals with coordinator,
+  intercepts, etc.
+
 * Encode basic key value types:
   - Counter
   - Bag o' bytes

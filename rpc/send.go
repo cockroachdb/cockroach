@@ -18,8 +18,11 @@
 package rpc
 
 import (
+	"fmt"
+	"io"
 	"math/rand"
 	"net"
+	"net/rpc"
 	"reflect"
 	"time"
 
@@ -41,14 +44,33 @@ type Options struct {
 	Timeout time.Duration
 }
 
+// An rpcError indicates a failure to send the RPC. rpcErrors are
+// retryable.
+type rpcError struct {
+	errMsg string
+}
+
+// Error implements the error interface.
+func (r rpcError) Error() string { return r.errMsg }
+
+// CanRetry implements the Retryable interface.
+func (r rpcError) CanRetry() bool { return true }
+
 // A SendError indicates that too many RPCs to the replica
 // set failed to achieve requested number of successful responses.
+// canRetry is set depending on the types of errors encountered.
 type SendError struct {
-	error
+	errMsg   string
+	canRetry bool
+}
+
+// Error implements the error interface.
+func (s SendError) Error() string {
+	return "failed to send RPC: " + s.errMsg
 }
 
 // CanRetry implements the Retryable interface.
-func (s SendError) CanRetry() bool { return true }
+func (s SendError) CanRetry() bool { return s.canRetry }
 
 // Send sends one or more RPCs to clients specified by the keys of
 // argsMap (with corresponding values of the map as arguments)
@@ -58,15 +80,18 @@ func (s SendError) CanRetry() bool { return true }
 // failure. Note that on error, some replies may have been sent on the
 // channel. Send returns an error if the number of errors exceeds the
 // possibility of attaining the required successful responses.
-func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{}, opts Options) error {
+func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{}, opts Options, tlsConfig *TLSConfig) error {
 	if opts.N < len(argsMap) {
-		return SendError{util.Errorf("insufficient replicas (%d) to satisfy send request of %d", len(argsMap), opts.N)}
+		return SendError{
+			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(argsMap), opts.N),
+			canRetry: false,
+		}
 	}
 
 	// Build the slice of clients.
 	var healthy, unhealthy []*Client
 	for addr, args := range argsMap {
-		client := NewClient(addr, nil)
+		client := NewClient(addr, nil, tlsConfig)
 		delete(argsMap, addr)
 		argsMap[client.Addr()] = args
 		if client.IsHealthy() {
@@ -94,6 +119,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 	helperChan := make(chan interface{}, len(clients))
 	N := opts.N
 	errors := 0
+	retryableErrors := 0
 	successes := 0
 	index := 0
 	for {
@@ -116,12 +142,18 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 			switch t := r.(type) {
 			case error:
 				errors++
+				if retryErr, ok := t.(util.Retryable); ok && retryErr.CanRetry() {
+					retryableErrors++
+				}
 				if log.V(1) {
 					log.Warningf("%s: error reply: %+v", method, t)
 				}
-				if len(clients)-errors < opts.N {
-					return SendError{util.Errorf("too many errors encountered (%d of %d total): %v",
-						errors, len(clients), t)}
+				remainingRPCs := len(clients) - errors
+				if remainingRPCs < opts.N {
+					return SendError{
+						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), t),
+						canRetry: retryableErrors+remainingRPCs > len(clients),
+					}
 				}
 				// Send to additional replicas if available.
 				if N < len(clients) {
@@ -157,13 +189,22 @@ func sendOne(client *Client, timeout time.Duration, method string, args, reply i
 	select {
 	case <-call.Done:
 		if call.Error != nil {
-			c <- call.Error
+			// Handle cases which are retryable.
+			switch call.Error {
+			case rpc.ErrShutdown: // client connection fails: rpc/client.go
+				fallthrough
+			case io.ErrUnexpectedEOF: // server connection fails: rpc/client.go
+				c <- rpcError{call.Error.Error()}
+			default:
+				// Otherwise, not retryable; just return error.
+				c <- call.Error
+			}
 		} else {
 			c <- reply
 		}
 	case <-client.Closed:
-		c <- util.Errorf("rpc to %s failed as client connection was closed", method)
+		c <- rpcError{fmt.Sprintf("rpc to %s failed as client connection was closed", method)}
 	case <-time.After(timeout):
-		c <- util.Errorf("rpc to %s timed out after %s", method, timeout)
+		c <- rpcError{fmt.Sprintf("rpc to %s timed out after %s", method, timeout)}
 	}
 }

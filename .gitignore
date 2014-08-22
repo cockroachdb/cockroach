@@ -6,6 +6,11 @@
 .#*
 *.test
 
+# Protobuf generated files
+*.pb.go
+*.pb.cc
+*.pb.h
+
 # Folders
 _obj
 _test

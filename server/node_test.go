@@ -27,12 +27,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/hlc"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -41,11 +42,16 @@ import (
 // nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node) {
-	rpcServer := rpc.NewServer(addr)
+	tlsConfig, err := rpc.LoadTestTLSConfig("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rpcServer := rpc.NewServer(addr, tlsConfig)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New()
+	g := gossip.New(tlsConfig)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
@@ -54,9 +60,9 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetBootstrap([]net.Addr{gossipBS})
 		g.Start(rpcServer)
 	}
-	db := kv.NewDB(g)
+	clock := hlc.NewClock(hlc.UnixNano)
+	db := kv.NewDB(kv.NewDistKV(g), clock)
 	node := NewNode(db, g)
-	clock := hlc.NewHLClock(hlc.UnixNano)
 	if err := node.start(rpcServer, clock, engines, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -82,8 +88,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer localDB.Close()
 
 	// Scan the complete contents of the local database.
-	sr := <-localDB.Scan(&storage.ScanRequest{
-		RequestHeader: storage.RequestHeader{
+	sr := <-localDB.Scan(&proto.ScanRequest{
+		RequestHeader: proto.RequestHeader{
 			Key:    engine.KeyMin,
 			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,
@@ -140,7 +146,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 10ms) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.localDB.GetStoreCount() == 3 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.localKV.GetStoreCount() == 3 }, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 }
@@ -149,11 +155,11 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(engine.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	db, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
 	}
-	localDB.Close()
+	db.Close()
 
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
 	*gossip.GossipInterval = 10 * time.Millisecond
@@ -169,7 +175,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.localDB.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.localKV.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 

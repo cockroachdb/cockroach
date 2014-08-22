@@ -50,6 +50,7 @@ type localRPCTransport struct {
 // sharing the same local Transport can find and communicate with each other by ID (which
 // can be an arbitrary string).  Each instance binds to a different unused port on
 // localhost.
+// Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
 	return &localRPCTransport{make(map[NodeID]net.Listener)}
 }

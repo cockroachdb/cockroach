@@ -22,8 +22,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/encoding"
-	"github.com/cockroachdb/cockroach/hlc"
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -48,8 +48,8 @@ func createTestMVCC(t *testing.T) *MVCC {
 }
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos, logical int64) hlc.HLTimestamp {
-	return hlc.HLTimestamp{
+func makeTS(nanos, logical int64) proto.Timestamp {
+	return proto.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
 	}
@@ -201,9 +201,9 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	// other words, if we're looking for a<T=2>, and we have the
 	// following keys:
 	//
-	// a: keyMetadata(a)
+	// a: MVCCMetadata(a)
 	// a<T=3>
-	// b: keyMetadata(b)
+	// b: MVCCMetadata(b)
 	// b<T=1>
 	//
 	// If we search for a<T=2>, the scan should not return "b".
@@ -622,12 +622,12 @@ func TestMVCCAbortTxn(t *testing.T) {
 	if len(txnID) != 0 {
 		t.Fatal("the txnID should be empty")
 	}
-	keyMeta, err := mvcc.engine.Get(testKey01)
+	meta, err := mvcc.engine.Get(testKey01)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(keyMeta) != 0 {
-		t.Fatalf("expected no more keyMetadata")
+	if len(meta) != 0 {
+		t.Fatalf("expected no more MVCCMetadata")
 	}
 }
 
@@ -638,12 +638,12 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	err = mvcc.Put(testKey01, makeTS(2, 0), value03, txn01)
 	err = mvcc.ResolveWriteIntent(testKey01, txn01, false)
 
-	keyMeta, err := mvcc.engine.Get(testKey01)
+	meta, err := mvcc.engine.Get(testKey01)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(keyMeta) == 0 {
-		t.Fatalf("expected the keyMetadata")
+	if len(meta) == 0 {
+		t.Fatalf("expected the MVCCMetadata")
 	}
 
 	value, txnID, err := mvcc.Get(testKey01, makeTS(3, 0), "")

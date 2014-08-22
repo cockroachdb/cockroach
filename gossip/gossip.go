@@ -107,6 +107,7 @@ type Gossip struct {
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
+	tlsConfig    *rpc.TLSConfig     // Config for RPC TLS
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
@@ -118,9 +119,10 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New() *Gossip {
+func New(tlsConfig *rpc.TLSConfig) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
+		tlsConfig:    tlsConfig,
 		server:       newServer(*GossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
@@ -282,12 +284,12 @@ func (g *Gossip) parseBootstrapAddresses() {
 		addresses := strings.Split(*GossipBootstrap, ",")
 		for _, addr := range addresses {
 			addr = strings.TrimSpace(addr)
-			tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+			_, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
 				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
 				continue
 			}
-			g.bootstraps.addAddr(tcpAddr)
+			g.bootstraps.addAddr(util.MakeRawAddr("tcp", addr))
 		}
 	}
 	// If we have no bootstrap hosts, fatal exit.
@@ -497,4 +499,10 @@ func (g *Gossip) closeClient(addr net.Addr) {
 		delete(g.clients, addr.String())
 	}
 	g.clientsMu.Unlock()
+}
+
+// TLSConfig returns the Gossip's TLS config; this is a bit hacky but reduces
+// the number of places we have to pass the config around.
+func (g *Gossip) TLSConfig() *rpc.TLSConfig {
+	return g.tlsConfig
 }
