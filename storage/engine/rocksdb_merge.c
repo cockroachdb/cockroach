@@ -22,38 +22,38 @@
 #include <limits.h>             // For LLONG_{MIN,MAX}
 #include <errno.h>
 #include "rocksdb/c.h"
-#include "merge.h"
+#include "rocksdb_merge.h"
 #include "_cgo_export.h"
 
-void IncMergeOperatorDestroy(void *arg)
+void inc_merge_operator_destroy(void* arg)
 {
 }
 
-const char *IncMergeOperatorName(void *arg)
+const char* inc_merge_operator_name(void* arg)
 {
-  return "IncMergeOperator";
+  return "cockroach.inc_merge_operator";
 }
 
-char *IncMergeOperatorFullMerge(void *arg,
-                                const char *key, size_t key_length,
-                                const char *existing_value,
-                                size_t existing_value_length,
-                                const char *const *operands_list,
-                                const size_t * operands_list_length,
-                                int num_operands, unsigned char *success,
-                                size_t * new_value_length)
+char* inc_merge_operator_full_merge(void* arg,
+                                    const char* key, size_t key_length,
+                                    const char* existing_value,
+                                    size_t existing_value_length,
+                                    const char* const* operands_list,
+                                    const size_t* operands_list_length,
+                                    int num_operands, unsigned char* success,
+                                    size_t* new_value_length)
 {
   int i;
-  char *result = NULL;
+  char* result = NULL;
   int64_t resultInt;
-  char *endptr;
+  char* endptr;
   struct merge_return current_result;
   if (existing_value != NULL) {
     // The existing value is freed by the caller, so we make our own
     // copy to do with it as we please.
     // Note that the input may be \0-terminated, but we don't care if
     // it is or not.
-    current_result.r0 = malloc(existing_value_length);
+    current_result.r0 = (char*)malloc(existing_value_length);
     memcpy(current_result.r0, existing_value, existing_value_length);
     current_result.r1 = existing_value_length;
   } else {
@@ -69,7 +69,7 @@ char *IncMergeOperatorFullMerge(void *arg,
     old_result = current_result;
     // r0 is the char*, r1 the corresponding number of characters.
     current_result =
-      merge(old_result.r0, (char *) (operands_list)[i], old_result.r1,
+      merge(old_result.r0, (char*)(operands_list)[i], old_result.r1,
             operands_list_length[i]);
 
     // Free the (now outdated) previous intermediate result.
@@ -103,32 +103,32 @@ fail:
   // asynchronous manner.
   *success = 0;
   *new_value_length = 1;
-  result = malloc(1);
+  result = (char*)malloc(1);
   memcpy(result, "0", 1);
   return result;
 }
 
-char *IncMergeOperatorPartialMerge(void *arg,
-                                   const char *key, size_t key_length,
-                                   const char *const *operands_list,
-                                   const size_t * operands_list_length,
-                                   int num_operands, unsigned char *success,
-                                   size_t * new_value_length)
+char* inc_merge_operator_partial_merge(void* arg,
+                                       const char* key, size_t key_length,
+                                       const char* const* operands_list,
+                                       const size_t* operands_list_length,
+                                       int num_operands, unsigned char* success,
+                                       size_t* new_value_length)
 {
-  char *result = IncMergeOperatorFullMerge(arg, key, key_length,
-                                           NULL, 0,     // no existing value & length
-                                           operands_list, operands_list_length,
-                                           num_operands,
-                                           success, new_value_length);
+  char* result = inc_merge_operator_full_merge(arg, key, key_length,
+                                               NULL, 0,     // no existing value & length
+                                               operands_list, operands_list_length,
+                                               num_operands,
+                                               success, new_value_length);
   return result;
 }
 
-rocksdb_mergeoperator_t *MakeMergeOperator()
+rocksdb_mergeoperator_t* make_merge_operator()
 {
-  rocksdb_mergeoperator_t *op =
-    rocksdb_mergeoperator_create(NULL, IncMergeOperatorDestroy,
-                                 IncMergeOperatorFullMerge,
-                                 IncMergeOperatorPartialMerge, NULL,
-                                 IncMergeOperatorName);
+  rocksdb_mergeoperator_t* op =
+    rocksdb_mergeoperator_create(NULL, inc_merge_operator_destroy,
+                                 inc_merge_operator_full_merge,
+                                 inc_merge_operator_partial_merge, NULL,
+                                 inc_merge_operator_name);
   return op;
 }

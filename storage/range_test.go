@@ -243,13 +243,13 @@ func (be *blockingEngine) put(key engine.Key, value []byte) error {
 
 // createTestRange creates a range using a blocking engine. Returns
 // the range clock's manual unix nanos time and the range.
-func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *blockingEngine) {
+func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Clock, *blockingEngine) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
 	rng := NewRange(&proto.RangeMetadata{}, clock, engine, nil, nil)
 	rng.Start()
-	return rng, &manual, engine
+	return rng, &manual, clock, engine
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
@@ -298,13 +298,13 @@ func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementReques
 // TestRangeUpdateTSCache verifies that reads update the read
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
-	rng, mc, _ := createTestRangeWithClock(t)
+	rng, mc, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs("a", 0)
-	args.Timestamp = rng.tsCache.clock.Now()
+	args.Timestamp = clock.Now()
 	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
 		t.Error(err)
@@ -324,7 +324,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // TestRangeReadQueue verifies that reads must wait for writes to
 // complete through Raft before being executed on range.
 func TestRangeReadQueue(t *testing.T) {
-	rng, _, be := createTestRangeWithClock(t)
+	rng, _, _, be := createTestRangeWithClock(t)
 	defer rng.Stop()
 
 	// Asynchronously put a value to the rng with blocking enabled.
@@ -387,13 +387,13 @@ func TestRangeReadQueue(t *testing.T) {
 // TestRangeUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestRangeUseTSCache(t *testing.T) {
-	rng, mc, _ := createTestRangeWithClock(t)
+	rng, mc, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs("a", 0)
-	args.Timestamp = rng.tsCache.clock.Now()
+	args.Timestamp = clock.Now()
 	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
 		t.Error(err)
@@ -403,7 +403,7 @@ func TestRangeUseTSCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pReply.Timestamp.WallTime != rng.tsCache.clock.Timestamp().WallTime {
+	if pReply.Timestamp.WallTime != clock.Timestamp().WallTime {
 		t.Errorf("expected write timestamp to upgrade to 1s; got %+v", pReply.Timestamp)
 	}
 }
@@ -411,7 +411,7 @@ func TestRangeUseTSCache(t *testing.T) {
 // TestRangeIdempotence verifies that a retry increment with
 // same client command ID receives same reply.
 func TestRangeIdempotence(t *testing.T) {
-	rng, _, _ := createTestRangeWithClock(t)
+	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
 	// Run the same increment 100 times, 50 with identical command ID,
@@ -426,6 +426,7 @@ func TestRangeIdempotence(t *testing.T) {
 			var args proto.IncrementRequest
 			var reply proto.IncrementResponse
 			args = *goldenArgs
+			args.Header().Timestamp = clock.Now()
 			if idx%2 == 0 {
 				args.CmdID = proto.ClientCmdID{WallTime: 1, Random: 1}
 			} else {

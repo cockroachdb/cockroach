@@ -179,19 +179,23 @@ var (
 	KeyLocalIdent = MakeKey(KeyLocalPrefix, Key("store-ident"))
 	// KeyLocalRangeIDGenerator is a range ID generator sequence. Range IDs
 	// must be unique per node ID.
-	KeyLocalRangeIDGenerator = MakeKey(KeyLocalPrefix, Key("range-id-generator"))
+	KeyLocalRangeIDGenerator = MakeKey(KeyLocalPrefix, Key("range-idgen"))
 	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
 	// The value is a struct of type RangeMetadata.
 	KeyLocalRangeMetadataPrefix = MakeKey(KeyLocalPrefix, Key("range-"))
 	// KeyLocalRangeSamplePrefix is the prefix for keys storing range write
 	// samples.
-	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("keysample-"))
+	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("sample-"))
 	// KeyLocalRangeResponseCachePrefix is the prefix for keys storing command
-	// responses used to guarantee idempotency (see ResponseCache).
+	// responses used to guarantee idempotency (see ResponseCache). This key
+	// prefix is duplicated in rocksdb_compaction.cc and must be kept in sync
+	// if modified here.
 	KeyLocalRangeResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("respcache-"))
-	// KeyLocalTransactionPrefix specifies the key prefix for transaction
-	// records. The suffix is the transaction id.
-	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("tx-"))
+	// KeyLocalTransactionPrefix specifies the key prefix for
+	// transaction records. The suffix is the transaction id. This key
+	// prefix is duplicated in rocksdb_compaction.cc and must be kept in
+	// sync if modified here.
+	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("txn-"))
 
 	// KeySystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
@@ -224,11 +228,10 @@ var (
 	// records. The suffix is the transaction id.
 	KeyTransactionPrefix = MakeKey(KeySystemPrefix, Key("tx"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
-	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-id-generator"))
-	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
-	// generators, one per node, for store IDs.
-	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, Key("store-id-generator-"))
-
+	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.
 	KeySchemaPrefix = MakeKey(KeySystemPrefix, Key("schema"))
+	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
+	// generators, one per node, for store IDs.
+	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, Key("store-idgen-"))
 )

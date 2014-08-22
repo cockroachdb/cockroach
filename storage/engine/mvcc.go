@@ -56,19 +56,28 @@ func (e *writeTimestampTooOldError) Error() string {
 	return fmt.Sprintf("cannot write with a timestamp older than %+v", e.Timestamp)
 }
 
-// Get returns the value for the key specified in the request and it
-// needs to satisfy the given timestamp condition.
-// txnID in the response is used to indicate that the response value
-// belongs to a write intent.
-func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txnID string) (Value, string, error) {
-	value, ts, txnID, err := mvcc.getInternal(key, timestamp, txnID)
+// NewMVCC returns a new instance of MVCC.
+func NewMVCC(engine Engine) *MVCC {
+	return &MVCC{
+		engine: engine,
+	}
+}
+
+// Get returns the value for the key specified in the request, while
+// satisfying the given timestamp condition. The key may be
+// arbitrarily encoded; it will be binary-encoded to remove any
+// internal null characters. txnID in the response is used to indicate
+// that the response value belongs to a write intent.
+func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txnID string) (Value, error) {
+	binKey := encoding.EncodeBinary(nil, key)
+	value, ts, _, err := mvcc.getInternal(binKey, timestamp, txnID)
 	// In case of error, or the key doesn't exist, or the key was deleted.
 	if err != nil || len(value) == 0 || value[0] == valueDeletedPrefix {
-		return Value{}, txnID, err
+		return Value{}, err
 	}
 
 	// TODO(Jiang-Ming): use unwrapChecksum here.
-	return Value{Bytes: value[1:], Timestamp: ts}, txnID, nil
+	return Value{Bytes: value[1:], Timestamp: ts}, nil
 }
 
 // getInternal implements the actual logic of get function.
@@ -106,7 +115,7 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID string) 
 	// the value of the next key.
 	kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(key), 1)
 	if len(kvs) > 0 {
-		_, ts := mvccDecodeKey(kvs[0].Key)
+		_, ts, _ := mvccDecodeKey(kvs[0].Key)
 		return kvs[0].Value, ts, "", err
 	}
 	return nil, proto.Timestamp{}, "", err
@@ -117,6 +126,7 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID string) 
 // We assume the range will check for an existing write intent before
 // executing any Put action at the MVCC level.
 func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value Value, txnID string) error {
+	binKey := encoding.EncodeBinary(nil, key)
 	if !value.Timestamp.Equal(proto.Timestamp{}) && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
 			"the timestamp %+v provided in value does not match the timestamp %+v in request",
@@ -126,12 +136,13 @@ func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value Value, txnID str
 	// TODO(Jiang-Ming): use wrapChecksum here.
 	// into val which need to be used in get response.
 	val := bytes.Join([][]byte{[]byte{valueNormalPrefix}, value.Bytes}, []byte(""))
-	return mvcc.putInternal(key, timestamp, val, txnID)
+	return mvcc.putInternal(binKey, timestamp, val, txnID)
 }
 
 // Delete marks the key deleted and will not return in the next get response.
 func (mvcc *MVCC) Delete(key Key, timestamp proto.Timestamp, txnID string) error {
-	return mvcc.putInternal(key, timestamp, []byte{valueDeletedPrefix}, txnID)
+	binKey := encoding.EncodeBinary(nil, key)
+	return mvcc.putInternal(binKey, timestamp, []byte{valueDeletedPrefix}, txnID)
 }
 
 func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value []byte, txnID string) error {
@@ -184,7 +195,7 @@ func (mvcc *MVCC) ConditionalPut(key Key, timestamp proto.Timestamp, value Value
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
-	val, _, err := mvcc.Get(key, proto.MaxTimestamp, txnID)
+	val, err := mvcc.Get(key, proto.MaxTimestamp, txnID)
 	if err != nil {
 		return Value{}, err
 	}
@@ -229,19 +240,13 @@ func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp proto.Ti
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. Specify max=0 for unbounded scans.
 func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp, txnID string) ([]KeyValue, string, error) {
-	nextKey := key
-	// TODO(Jiang-Ming): remove this after we put everything via MVCC.
-	// Currently, we need to skip the series of reserved system
-	// key / value pairs covering accounting, range metadata, node
-	// accounting and permissions before the actual key / value pairs
-	// since they don't have MVCCMetadata.
-	if nextKey.Less(PrefixEndKey(Key("\x00"))) {
-		nextKey = PrefixEndKey(Key("\x00"))
-	}
+	binKey := encoding.EncodeBinary(nil, key)
+	binEndKey := encoding.EncodeBinary(nil, endKey)
+	nextKey := binKey
 
 	res := []KeyValue{}
 	for {
-		kvs, err := mvcc.engine.Scan(nextKey, endKey, 1)
+		kvs, err := mvcc.engine.Scan(nextKey, binEndKey, 1)
 		if err != nil {
 			return nil, "", err
 		}
@@ -250,8 +255,11 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 			break
 		}
 
-		currentKey := kvs[0].Key
-		value, _, err := mvcc.Get(currentKey, timestamp, txnID)
+		remainder, currentKey := encoding.DecodeBinary(kvs[0].Key)
+		if len(remainder) != 0 {
+			return nil, "", util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
+		}
+		value, err := mvcc.Get(currentKey, timestamp, txnID)
 		if err != nil {
 			return res, "", err
 		}
@@ -279,7 +287,7 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 		// b<T=5>
 		// In this case, if we scan from "a"-"b", we wish to skip
 		// a<T=2> and a<T=1> and find "aa'.
-		nextKey = NextKey(mvccEncodeKey(currentKey, proto.MinTimestamp))
+		nextKey = encoding.EncodeBinary(nil, NextKey(currentKey))
 	}
 
 	return res, txnID, nil
@@ -293,8 +301,9 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID string, commit bool) error {
 		return util.Error("missing txnID in request")
 	}
 
+	binKey := encoding.EncodeBinary(nil, key)
 	meta := &proto.MVCCMetadata{}
-	ok, err := GetProto(mvcc.engine, key, meta)
+	ok, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil {
 		return err
 	}
@@ -311,52 +320,52 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID string, commit bool) error {
 	}
 
 	if !commit {
-		latestKey := mvccEncodeKey(key, meta.Timestamp)
+		latestKey := mvccEncodeKey(binKey, meta.Timestamp)
 		err = mvcc.engine.Clear(latestKey)
 		if err != nil {
 			return err
 		}
 
+		// Compute the next possible mvcc value for this key.
 		nextKey := NextKey(latestKey)
-		kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(key), 1)
+		// Compute the last possible mvcc value for this key.
+		endScanKey := encoding.EncodeBinary(nil, NextKey(key))
+		kvs, err := mvcc.engine.Scan(nextKey, endScanKey, 1)
 		if err != nil {
 			return err
 		}
 		// If there is no other version, we should just clean up the key entirely.
 		if len(kvs) == 0 {
-			return mvcc.engine.Clear(key)
+			return mvcc.engine.Clear(binKey)
 		}
-		_, ts := mvccDecodeKey(kvs[0].Key)
-		// Update the MVCCMetadata with the next version.
-		return PutProto(mvcc.engine, key, &proto.MVCCMetadata{TxnID: "", Timestamp: ts})
+		_, ts, isValue := mvccDecodeKey(kvs[0].Key)
+		if !isValue {
+			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
+		}
+		// Update the keyMetadata with the next version.
+		return PutProto(mvcc.engine, binKey, &proto.MVCCMetadata{TxnID: "", Timestamp: ts})
 	}
 
-	return PutProto(mvcc.engine, key, &proto.MVCCMetadata{TxnID: "", Timestamp: meta.Timestamp})
+	return PutProto(mvcc.engine, binKey, &proto.MVCCMetadata{TxnID: "", Timestamp: meta.Timestamp})
 }
 
-// ResolveWriteIntentRange commits or aborts (rolls back)
-// the range of write intents specified by start and end
-// keys for a given txnID according to commit parameter.
-// ResolveWriteIntentRange will skip write intents of
-// other txnIDs. Specify max=0 for unbounded resolves.
+// ResolveWriteIntentRange commits or aborts (rolls back) the range of
+// write intents specified by start and end keys for a given txnID
+// according to commit parameter.  ResolveWriteIntentRange will skip
+// write intents of other txnIDs. Specify max=0 for unbounded
+// resolves.
 func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID string, commit bool) (int64, error) {
 	if len(txnID) == 0 {
 		return 0, util.Error("missing txnID in request")
 	}
 
-	nextKey := key
-	// TODO(Jiang-Ming): remove this after we put everything via MVCC.
-	// Currently, we need to skip the series of reserved system
-	// key / value pairs covering accounting, range metadata, node
-	// accounting and permissions before the actual key / value pairs
-	// since they don't have MVCCMetadata.
-	if nextKey.Less(PrefixEndKey(Key("\x00"))) {
-		nextKey = PrefixEndKey(Key("\x00"))
-	}
+	binKey := encoding.EncodeBinary(nil, key)
+	binEndKey := encoding.EncodeBinary(nil, endKey)
+	nextKey := binKey
 
 	num := int64(0)
 	for {
-		kvs, err := mvcc.engine.Scan(nextKey, endKey, 1)
+		kvs, err := mvcc.engine.Scan(nextKey, binEndKey, 1)
 		if err != nil {
 			return num, err
 		}
@@ -365,15 +374,18 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 			break
 		}
 
-		currentKey := kvs[0].Key
-		_, existingTxnID, err := mvcc.Get(currentKey, proto.MaxTimestamp, txnID)
+		remainder, currentKey := encoding.DecodeBinary(kvs[0].Key)
+		if len(remainder) != 0 {
+			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
+		}
+		_, _, existingTxnID, err := mvcc.getInternal(kvs[0].Key, proto.MaxTimestamp, txnID)
 		// Return the error unless its a writeIntentError, which
 		// will occur in the event we scan a key with a write
 		// intent belonging to a different transaction.
 		if _, ok := err.(*writeIntentError); err != nil && !ok {
 			return num, err
 		}
-		// endRangTransaction only needs to deal with the write
+		// ResolveWriteIntent only needs to deal with the write
 		// intents for the given txnID.
 		if err == nil && existingTxnID == txnID {
 			// commits or aborts (rolls back) the write intent of
@@ -390,32 +402,41 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 		}
 
 		// In order to efficiently skip the possibly long list of
-		// old versions for this key, please refer to scan function
-		// for details.
-		nextKey = NextKey(mvccEncodeKey(currentKey, proto.MinTimestamp))
+		// old versions for this key; refer to Scan for details.
+		nextKey = encoding.EncodeBinary(nil, NextKey(currentKey))
 	}
 
 	return num, nil
 }
 
-// mvccEncodeKey makes a timestamped key which is the concatenation
-// of the given key and the corresponding timestamp. It assumes the
-// key was already encoded before passed to mvcc layer thus it won't
-// encode the key part again.
+// mvccEncodeKey makes a timestamped key which is the concatenation of
+// the given key and the corresponding timestamp. The key is expected
+// to have been encoded using EncodeBinary.
 func mvccEncodeKey(key Key, timestamp proto.Timestamp) Key {
-	// The max length of encoded int is 12.
-	k := make([]byte, 0, len(key)+2*12)
-	k = append(k, key...)
-	k = encoding.EncodeIntDecreasing(k, timestamp.WallTime)
-	k = encoding.EncodeIntDecreasing(k, timestamp.Logical)
+	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
+		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
+	}
+	k := append([]byte{}, key...)
+	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.WallTime))
+	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.Logical))
 	return k
 }
 
-func mvccDecodeKey(encodedKey []byte) (Key, proto.Timestamp) {
-	idx := bytes.Index(encodedKey, []byte{0x00})
-	key := encodedKey[:idx+1]
-	encodedKey = encodedKey[idx+1:]
-	encodedKey, walltime := encoding.DecodeIntDecreasing(encodedKey)
-	encodedKey, logical := encoding.DecodeIntDecreasing(encodedKey)
-	return key, proto.Timestamp{WallTime: walltime, Logical: logical}
+// mvccDecodeKey decodes encodedKey into key and Timestamp. The final
+// returned bool is true if this is an MVCC value and false if this is
+// MVCC metadata. Note that the returned key is exactly the value of
+// key passed to mvccEncodeKey. A separate DecodeBinary step must be
+// carried out to decode it if necessary.
+func mvccDecodeKey(encodedKey []byte) (Key, proto.Timestamp, bool) {
+	tsBytes, _ := encoding.DecodeBinary(encodedKey)
+	key := encodedKey[:len(encodedKey)-len(tsBytes)]
+	if len(tsBytes) == 0 {
+		return key, proto.Timestamp{}, false
+	}
+	tsBytes, walltime := encoding.DecodeUint64Decreasing(tsBytes)
+	tsBytes, logical := encoding.DecodeUint64Decreasing(tsBytes)
+	if len(tsBytes) > 0 {
+		panic(fmt.Sprintf("leftover bytes on mvcc key decode: %s", tsBytes))
+	}
+	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int64(logical)}, true
 }

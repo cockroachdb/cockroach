@@ -160,18 +160,18 @@ type Range struct {
 }
 
 // NewRange initializes the range starting at key.
-func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, engine engine.Engine,
+func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,
-		engine:    engine,
+		engine:    eng,
 		allocator: allocator,
 		gossip:    gossip,
 		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
 		closer:    make(chan struct{}),
 		readQ:     NewReadQueue(),
 		tsCache:   NewReadTimestampCache(clock),
-		respCache: NewResponseCache(meta.RangeID, engine),
+		respCache: NewResponseCache(meta.RangeID, eng),
 	}
 	return r
 }
@@ -481,7 +481,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
 	if !IsReadOnly(method) {
-		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
+		header := args.Header()
+		if putErr := r.respCache.PutResponse(header.CmdID, reply); putErr != nil {
 			log.Errorf("unable to write result of %+v: %+v to the response cache: %v",
 				args, reply, putErr)
 		}

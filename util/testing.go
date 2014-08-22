@@ -45,6 +45,15 @@ func tempLocalhostAddr() string {
 	return "127.0.0.1:0"
 }
 
+// CreateTempDirectory creates a temporary directory or fails trying.
+func CreateTempDirectory() string {
+	loc, err := ioutil.TempDir("", "rocksdb_test")
+	if err != nil {
+		panic(fmt.Sprintf("%v", err))
+	}
+	return loc
+}
+
 // CreateTestAddr creates an unused address for testing. The "network"
 // parameter should be one of "tcp" or "unix".
 func CreateTestAddr(network string) net.Addr {

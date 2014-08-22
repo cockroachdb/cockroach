@@ -23,14 +23,19 @@ GO ?= go
 GOPATH      := $(CURDIR)/_vendor:$(GOPATH)
 ROCKSDB     := $(CURDIR)/_vendor/rocksdb
 ROACH_PROTO := $(CURDIR)/proto
+ROACH_LIB   := $(CURDIR)/roachlib
 
-CGO_CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib $(CFLAGS)"
-CGO_CPPFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib $(CPPFLAGS)"
-CGO_LDFLAGS  := "-L$(ROCKSDB) -L$(ROACH_PROTO)/lib $(LDFLAGS)"
+CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
+CPPFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CPPFLAGS)"
+LDFLAGS  := "-L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
 
-CGO_FLAGS := CGO_LDFLAGS=$(CGO_LDFLAGS) \
-             CGO_CFLAGS=$(CGO_CFLAGS) \
-             CGO_CPPFLAGS=$(CGO_CPPFLAGS)
+FLAGS := LDFLAGS=$(LDFLAGS) \
+         CFLAGS=$(CFLAGS) \
+         CPPFLAGS=$(CPPFLAGS)
+
+CGO_FLAGS := CGO_LDFLAGS=$(LDFLAGS) \
+             CGO_CFLAGS=$(CFLAGS) \
+             CGO_CPPFLAGS=$(CPPFLAGS)
 
 PKG       := "./..."
 TESTS     := ".*"
@@ -38,14 +43,17 @@ TESTFLAGS := -logtostderr -timeout 10s
 
 all: build test
 
+build: rocksdb roach_proto roach_lib
+	$(CGO_FLAGS) $(GO) build -o cockroach
+
 rocksdb:
 	cd $(ROCKSDB); make static_lib
 
-roachproto:
-	cd $(ROACH_PROTO); make static_lib
+roach_proto:
+	cd $(ROACH_PROTO); $(FLAGS) make static_lib
 
-build: rocksdb roachproto
-	$(CGO_FLAGS) $(GO) build -o cockroach
+roach_lib:
+	cd $(ROACH_LIB); $(FLAGS) make static_lib
 
 goget:
 	$(CGO_FLAGS) $(GO) get ./...

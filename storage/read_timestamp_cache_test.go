@@ -182,7 +182,7 @@ func TestReadTimestampCacheClear(t *testing.T) {
 
 	// Clear the cache, which will reset the high water mark to
 	// the current time + maxClockSkew.
-	rtc.Clear()
+	rtc.Clear(clock)
 
 	// Fetching any keys should give current time + maxClockSkew
 	expTS := clock.Timestamp()

@@ -106,7 +106,6 @@ func TestInitEngine(t *testing.T) {
 		{fmt.Sprintf("mem=%s", tmp[2]), engine.Attributes([]string{"mem"}), false, false},
 		{fmt.Sprintf("abc=%s", tmp[3]), engine.Attributes([]string{"abc"}), false, false},
 		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), engine.Attributes([]string{"hdd", "7200rpm"}), false, false},
-		{"hdd=/dev/null", engine.Attributes{}, true, false},
 		{"", engine.Attributes{}, true, false},
 		{"  ", engine.Attributes{}, true, false},
 		{"arbitrarystring", engine.Attributes{}, true, false},

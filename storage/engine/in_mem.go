@@ -68,6 +68,11 @@ func (in *InMem) String() string {
 	return fmt.Sprintf("%s=%d", in.attrs, in.maxBytes)
 }
 
+// Start is a noop for the InMem engine.
+func (in *InMem) Start() error {
+	return nil
+}
+
 // Attrs returns the list of attributes describing this engine.  This
 // includes the disk type (always "mem") and potentially other labels
 // to identify important attributes of the engine.
@@ -157,6 +162,9 @@ func (in *InMem) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 // scanLocked is intended to be called within at least a read lock.
 func (in *InMem) scanLocked(start, end Key, max int64) ([]RawKeyValue, error) {
 	var scanned []RawKeyValue
+	if bytes.Compare(start, end) >= 0 {
+		return scanned, nil
+	}
 	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if max != 0 && int64(len(scanned)) >= max {
 			done = true
@@ -233,3 +241,6 @@ func (in *InMem) Capacity() (StoreCapacity, error) {
 		Available: in.maxBytes - in.usedBytes,
 	}, nil
 }
+
+// SetGCTimeouts is a noop for the InMem engine.
+func (in *InMem) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {}

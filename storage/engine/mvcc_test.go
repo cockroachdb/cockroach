@@ -28,10 +28,10 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey01 = Key(encoding.EncodeString([]byte{}, "/db1"))
-	testKey02 = Key(encoding.EncodeString([]byte{}, "/db2"))
-	testKey03 = Key(encoding.EncodeString([]byte{}, "/db3"))
-	testKey04 = Key(encoding.EncodeString([]byte{}, "/db4"))
+	testKey01 = Key("/db1")
+	testKey02 = Key("/db2")
+	testKey03 = Key("/db3")
+	testKey04 = Key("/db4")
 	txn01     = "Txn01"
 	txn02     = "Txn02"
 	value01   = Value{Bytes: []byte("testValue01")}
@@ -57,15 +57,12 @@ func makeTS(nanos, logical int64) proto.Timestamp {
 
 func TestMVCCGetNotExist(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	value, txnID, err := mvcc.Get(testKey01, makeTS(0, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(0, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(value.Bytes) != 0 {
 		t.Fatal("the value should be empty")
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 }
 
@@ -76,16 +73,13 @@ func TestMVCCPutWithTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(value01.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
-	}
-	if len(txnID) == 0 {
-		t.Fatal("the txnID should not be empty")
 	}
 }
 
@@ -96,16 +90,13 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(value01.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 }
 
@@ -116,7 +107,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, _, err := mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +122,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	}
 
 	// Read the latest version.
-	value, _, err = mvcc.Get(testKey01, makeTS(3, 0), "")
+	value, err = mvcc.Get(testKey01, makeTS(3, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +132,7 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 	}
 
 	// Read the old version.
-	value, _, err = mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err = mvcc.Get(testKey01, makeTS(1, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,30 +203,24 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	err := mvcc.Put(testKey01, makeTS(3, 0), value01, "")
 	err = mvcc.Put(testKey02, makeTS(1, 0), value02, "")
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(2, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(2, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(value.Bytes) != 0 {
 		t.Fatal("the value should be empty")
 	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
-	}
 }
 
 func TestMVCCGetAndDelete(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey01, makeTS(1, 0), value01, "")
-	value, txnID, err := mvcc.Get(testKey01, makeTS(2, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(2, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(value.Bytes) == 0 {
 		t.Fatal("the value should not be empty")
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 
 	err = mvcc.Delete(testKey01, makeTS(3, 0), "")
@@ -244,20 +229,17 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	}
 
 	// Read the latest version which should be deleted.
-	value, txnID, err = mvcc.Get(testKey01, makeTS(4, 0), "")
+	value, err = mvcc.Get(testKey01, makeTS(4, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if value.Bytes != nil {
 		t.Fatal("the value should be empty")
 	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
-	}
 
 	// Read the old version which should still exist.
 	for _, nanos := range []int64{0, math.MaxInt64} {
-		value, txnID, err = mvcc.Get(testKey01, makeTS(2, nanos), "")
+		value, err = mvcc.Get(testKey01, makeTS(2, nanos), "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -270,16 +252,12 @@ func TestMVCCGetAndDelete(t *testing.T) {
 func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey01, makeTS(1, 0), value01, txn01)
-	value, txnID, err := mvcc.Get(testKey01, makeTS(2, 0), txn01)
+	value, err := mvcc.Get(testKey01, makeTS(2, 0), txn01)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(value.Bytes) == 0 {
 		t.Fatal("the value should not be empty")
-	}
-	if txnID != txn01 {
-		t.Fatalf("the received TxnID %s does not match the expected TxnID %s",
-			txnID, txn01)
 	}
 
 	err = mvcc.Delete(testKey01, makeTS(3, 0), txn01)
@@ -288,28 +266,21 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	}
 
 	// Read the latest version which should be deleted.
-	value, txnID, err = mvcc.Get(testKey01, makeTS(4, 0), txn01)
+	value, err = mvcc.Get(testKey01, makeTS(4, 0), txn01)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if value.Bytes != nil {
 		t.Fatal("the value should be empty")
 	}
-	if txnID != txn01 {
-		t.Fatalf("the received TxnID %s does not match the expected TxnID %s",
-			txnID, txn01)
-	}
 
 	// Read the old version which should still exist.
-	value, txnID, err = mvcc.Get(testKey01, makeTS(2, 0), "")
+	value, err = mvcc.Get(testKey01, makeTS(2, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(value.Bytes) == 0 {
 		t.Fatal("the value should not be empty")
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 }
 
@@ -320,12 +291,12 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err = mvcc.Get(testKey01, makeTS(1, 0), "")
+	_, err = mvcc.Get(testKey01, makeTS(1, 0), "")
 	if err == nil {
 		t.Fatal("cannot read the value of a write intent without TxnID")
 	}
 
-	_, _, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
+	_, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
 	if err == nil {
 		t.Fatal("cannot read the value of a write intent from a different TxnID")
 	}
@@ -376,7 +347,7 @@ func TestMVCCScan(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	_, _, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
+	_, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
 	kvs, _, err = mvcc.Scan(KeyMin, testKey02, 0, makeTS(1, 0), "")
 	if err != nil {
 		t.Fatal(err)
@@ -573,7 +544,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, _, err := mvcc.Get(testKey01, makeTS(0, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(0, 0), "")
 	if !bytes.Equal(value02.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
@@ -583,13 +554,10 @@ func TestMVCCConditionalPut(t *testing.T) {
 func TestMVCCResolveTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
-	value, txnID, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
 	if !bytes.Equal(value01.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
-	}
-	if len(txnID) == 0 {
-		t.Fatal("the txnID should not be empty")
 	}
 
 	err = mvcc.ResolveWriteIntent(testKey01, txn01, true)
@@ -597,13 +565,10 @@ func TestMVCCResolveTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, txnID, err = mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err = mvcc.Get(testKey01, makeTS(1, 0), "")
 	if !bytes.Equal(value01.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 }
 
@@ -615,14 +580,11 @@ func TestMVCCAbortTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), "")
 	if len(value.Bytes) != 0 {
 		t.Fatalf("the value should be empty")
 	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
-	}
-	meta, err := mvcc.engine.Get(testKey01)
+	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey01))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,7 +600,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	err = mvcc.Put(testKey01, makeTS(2, 0), value03, txn01)
 	err = mvcc.ResolveWriteIntent(testKey01, txn01, false)
 
-	meta, err := mvcc.engine.Get(testKey01)
+	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey01))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -646,16 +608,13 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 		t.Fatalf("expected the MVCCMetadata")
 	}
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(3, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(3, 0), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(value02.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value.Bytes, value02.Bytes)
-	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
 	}
 }
 
@@ -695,41 +654,27 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatal("expected only one key to be committed")
 	}
 
-	value, txnID, err := mvcc.Get(testKey01, makeTS(1, 0), "")
+	value, err := mvcc.Get(testKey01, makeTS(1, 0), "")
 	if !bytes.Equal(value01.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value01.Bytes, value.Bytes)
 	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
-	}
 
-	value, txnID, err = mvcc.Get(testKey02, makeTS(1, 0), "")
+	value, err = mvcc.Get(testKey02, makeTS(1, 0), "")
 	if !bytes.Equal(value02.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value02.Bytes, value.Bytes)
 	}
-	if len(txnID) != 0 {
-		t.Fatal("the txnID should be empty")
-	}
 
-	value, txnID, err = mvcc.Get(testKey03, makeTS(1, 0), txn02)
+	value, err = mvcc.Get(testKey03, makeTS(1, 0), txn02)
 	if !bytes.Equal(value03.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value03.Bytes, value.Bytes)
 	}
-	if txnID != txn02 {
-		t.Fatalf("the received TxnID %s does not match the expected TxnID %s",
-			txnID, txn02)
-	}
 
-	value, txnID, err = mvcc.Get(testKey04, makeTS(1, 0), txn01)
+	value, err = mvcc.Get(testKey04, makeTS(1, 0), txn01)
 	if !bytes.Equal(value04.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value04.Bytes, value.Bytes)
-	}
-	if txnID != txn01 {
-		t.Fatalf("the received TxnID %s does not match the expected TxnID %s",
-			txnID, txn01)
 	}
 }

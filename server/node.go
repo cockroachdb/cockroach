@@ -210,6 +210,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
+	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(clock, engines); err != nil {
 		return err
 	}
@@ -235,13 +236,13 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 
 	for _, e := range engines {
 		s := storage.NewStore(clock, e, n.gossip)
-		// If not bootstrapped, add to list.
-		if !s.IsBootstrapped() {
-			bootstraps.PushBack(s)
-			continue
-		}
-		// Otherwise, initialize each store in turn.
+		// Initialize each store in turn, handling un-bootstrapped errors by
+		// adding the store to the bootstraps list.
 		if err := s.Init(); err != nil {
+			if _, ok := err.(*storage.NotBootstrappedError); ok {
+				bootstraps.PushBack(s)
+				continue
+			}
 			return err
 		}
 		if s.Ident.ClusterID != "" {

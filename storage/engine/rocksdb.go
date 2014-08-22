@@ -20,14 +20,15 @@
 package engine
 
 /*
-#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy
+#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroachproto -lroach -lprotobuf
 #cgo linux LDFLAGS: -lrt
 #cgo darwin LDFLAGS: -lc++
+#include <stdlib.h>
 #include "rocksdb/c.h"
-#include "merge.h"
+#include "rocksdb_merge.h"
+#include "rocksdb_compaction.h"
 */
 import "C"
-
 import (
 	"bytes"
 	"flag"
@@ -54,48 +55,38 @@ type RocksDB struct {
 	opts          *C.rocksdb_options_t       // Options used when creating or destroying
 	rOpts         *C.rocksdb_readoptions_t   // The default read options
 	wOpts         *C.rocksdb_writeoptions_t  // The default write options
-	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB Merge operator
+	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB merge operator
 
-	attrs Attributes
-	dir   string // The data directory
+	// Custom RocksDB compaction filter.
+	compactionFilterFactory *C.rocksdb_compactionfilterfactory_t
+
+	attrs      Attributes // Attributes for this engine
+	dir        string     // The data directory
+	gcTimeouts func() (minTxnTS, minRCacheTS int64)
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs Attributes, dir string) (*RocksDB, error) {
-	r := &RocksDB{attrs: attrs, dir: dir}
-	r.createOptions()
-
-	cDir := C.CString(dir)
-	defer C.free(unsafe.Pointer(cDir))
-
-	var cErr *C.char
-	if r.rdb = C.rocksdb_open(r.opts, cDir, &cErr); cErr != nil {
-		r.rdb = nil
-		r.destroyOptions()
-		return nil, charToErr(cErr)
+func NewRocksDB(attrs Attributes, dir string) *RocksDB {
+	return &RocksDB{
+		attrs: attrs,
+		dir:   dir,
 	}
-	if _, err := r.Capacity(); err != nil {
-		if err := r.destroy(); err != nil {
-			log.Warningf("could not destroy db at %s", dir)
-		}
-		return nil, err
-	}
-	return r, nil
 }
 
-// destroy destroys the underlying filesystem data associated with the database.
-func (r *RocksDB) destroy() error {
-	cDir := C.CString(r.dir)
-	defer C.free(unsafe.Pointer(cDir))
+//export getGCTimeouts
+// getGCTimeouts returns timestamp values (in unix nanos) for garbage
+// collecting transaction rows and response cache rows respectively.
+func getGCTimeouts(rocksdbPtr unsafe.Pointer) (minTxnTS, minRCacheTS int64) {
+	rocksdb := (*RocksDB)(rocksdbPtr)
+	return rocksdb.gcTimeouts()
+}
 
-	defer r.destroyOptions()
-
-	var cErr *C.char
-	C.rocksdb_destroy_db(r.opts, cDir, &cErr)
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+//export reportGCError
+// reportGCError is a callback for the rocksdb custom compaction filter
+// to log errors encountered while trying to parse response cache entries
+// and transaction entires for garbage collection.
+func reportGCError(errMsg *C.char, key *C.char, keyLen C.int, value *C.char, valueLen C.int) {
+	log.Errorf("%s: key=%q, value=%q", C.GoString(errMsg), C.GoStringN(key, keyLen), C.GoStringN(value, valueLen))
 }
 
 // createOptions sets the default options for creating, reading, and writing
@@ -107,8 +98,11 @@ func (r *RocksDB) createOptions() {
 	C.rocksdb_options_set_create_if_missing(r.opts, 1)
 	// This enables us to use rocksdb_merge with counter semantics.
 	// See rocksdb.{c,h} for the C implementation.
-	r.mergeOperator = C.MakeMergeOperator()
+	r.mergeOperator = C.make_merge_operator()
 	C.rocksdb_options_set_merge_operator(r.opts, r.mergeOperator)
+	// This enables garbage collection of transaction and response cache rows.
+	r.compactionFilterFactory = C.make_gc_compaction_filter_factory(unsafe.Pointer(r))
+	C.rocksdb_options_set_compaction_filter_factory(r.opts, r.compactionFilterFactory)
 
 	r.wOpts = C.rocksdb_writeoptions_create()
 	r.rOpts = C.rocksdb_readoptions_create()
@@ -117,17 +111,19 @@ func (r *RocksDB) createOptions() {
 // destroyOptions destroys the options used for creating, reading, and writing
 // from the db. It is meant to be used in conjunction with createOptions.
 func (r *RocksDB) destroyOptions() {
-	// The merge operator is stored inside of r.opts as a std::shared_ptr,
-	// so it will actually be freed automatically.
-	// Calling rocksdb_mergeoperator_destroy will ignore that shared_ptr,
-	// and a subsequent rocksdb_options_destroy would segfault.
-	// The following line zeroes the shared_ptr instead, effectively
-	// deallocating the merge operator if one is set.
+	// The merge operator and compaction filter are stored inside of
+	// r.opts using std::shared_ptrs, so they'll be freed
+	// automatically. Calling the *_destroy methods directly would
+	// ignore the shared_ptrs, and a subsequent rocksdb_options_destroy
+	// would segfault. The following lines zero the shared_ptrs instead,
+	// which deletes the underlying values.
 	C.rocksdb_options_set_merge_operator(r.opts, nil)
+	C.rocksdb_options_set_compaction_filter_factory(r.opts, nil)
 	C.rocksdb_options_destroy(r.opts)
 	C.rocksdb_readoptions_destroy(r.rOpts)
 	C.rocksdb_writeoptions_destroy(r.wOpts)
 	r.mergeOperator = nil
+	r.compactionFilterFactory = nil
 	r.opts = nil
 	r.rOpts = nil
 	r.wOpts = nil
@@ -136,6 +132,30 @@ func (r *RocksDB) destroyOptions() {
 // String formatter.
 func (r *RocksDB) String() string {
 	return fmt.Sprintf("%s=%s", r.attrs, r.dir)
+}
+
+// Start creates options and opens the database. If the database
+// doesn't yet exist at the specified directory, one is initialized
+// from scratch.
+func (r *RocksDB) Start() error {
+	r.createOptions()
+
+	cDir := C.CString(r.dir)
+	defer C.free(unsafe.Pointer(cDir))
+
+	var cErr *C.char
+	if r.rdb = C.rocksdb_open(r.opts, cDir, &cErr); cErr != nil {
+		r.rdb = nil
+		r.destroyOptions()
+		return charToErr(cErr)
+	}
+	if _, err := r.Capacity(); err != nil {
+		if err := r.Destroy(); err != nil {
+			log.Warningf("could not destroy db at %s", r.dir)
+		}
+		return err
+	}
+	return nil
 }
 
 // Attrs returns the list of attributes describing this engine.  This
@@ -279,6 +299,10 @@ func (r *RocksDB) Clear(key Key) error {
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
 func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
+	var keyVals []RawKeyValue
+	if bytes.Compare(start, end) >= 0 {
+		return keyVals, nil
+	}
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
@@ -289,7 +313,6 @@ func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 	it := C.rocksdb_create_iterator(r.rdb, opts)
 	defer C.rocksdb_iter_destroy(it)
 
-	keyVals := []RawKeyValue{}
 	byteCount := len(start)
 	if byteCount == 0 {
 		// start=Key("") needs special treatment since we need
@@ -392,8 +415,38 @@ func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	return capacity, nil
 }
 
-// close closes the database by deallocating the underlying handle.
-func (r *RocksDB) close() {
+// SetGCTimeouts sets the garbage collector timeouts function.
+func (r *RocksDB) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {
+	r.gcTimeouts = gcTimeouts
+}
+
+// CompactRange compacts the specified key range. Specifying nil for
+// the start key starts the compaction from the start of the database.
+// Similarly, specifying nil for the end key will compact through the
+// last key. Note that the use of the word "Range" here does not refer
+// to Cockroach ranges, just to a generalized key range.
+func (r *RocksDB) CompactRange(start, end Key) {
+	C.rocksdb_compact_range(r.rdb, bytesPointer(start), (C.size_t)(len(start)),
+		bytesPointer(end), (C.size_t)(len(end)))
+}
+
+// Close closes the database by deallocating the underlying handle.
+func (r *RocksDB) Close() {
 	C.rocksdb_close(r.rdb)
 	r.rdb = nil
+}
+
+// Destroy destroys the underlying filesystem data associated with the database.
+func (r *RocksDB) Destroy() error {
+	cDir := C.CString(r.dir)
+	defer C.free(unsafe.Pointer(cDir))
+
+	defer r.destroyOptions()
+
+	var cErr *C.char
+	C.rocksdb_destroy_db(r.opts, cDir, &cErr)
+	if cErr != nil {
+		return charToErr(cErr)
+	}
+	return nil
 }

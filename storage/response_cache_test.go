@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 var incR = proto.IncrementResponse{
@@ -81,28 +82,24 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	}
 }
 
-// TestResponseCacheInflight verifies GetResponse invocations
-// block on inflight requests.
+// TestResponseCacheInflight verifies GetResponse invocations block on
+// inflight requests.
 func TestResponseCacheInflight(t *testing.T) {
 	rc := createTestResponseCache(t)
-	cmdID1 := makeCmdID(1, 1)
-	cmdID2 := makeCmdID(1, 2)
+	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
-	// Add inflight for cmdID1.
-	if ok, err := rc.GetResponse(cmdID1, &val); ok || err != nil {
+	// Add inflight for cmdID.
+	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("unexpected response or error: %t, %v", ok, err)
 	}
-	// No blocking for cmdID2.
-	if ok, err := rc.GetResponse(cmdID2, &val); ok || err != nil {
-		t.Errorf("unexpected success getting response: %v, %v, %+v", ok, err, val)
-	}
-	// Make two blocking requests for response from cmdID1, which is inflight.
+	// Make two blocking requests for response from cmdID, which is inflight.
 	doneChans := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	for _, done := range doneChans {
 		doneChan := done
 		go func() {
-			if ok, err := rc.GetResponse(cmdID1, &val); !ok || err != nil || val.NewValue != 1 {
-				t.Errorf("unexpected error: %t, %v, %+v", ok, err, val)
+			val2 := proto.IncrementResponse{}
+			if ok, err := rc.GetResponse(cmdID, &val2); !ok || err != nil || val2.NewValue != 1 {
+				t.Errorf("unexpected error: %t, %v, %+v", ok, err, val2)
 			}
 			close(doneChan)
 		}()
@@ -114,7 +111,7 @@ func TestResponseCacheInflight(t *testing.T) {
 	case <-doneChans[1]:
 		t.Fatal("2nd get should not complete; it blocks until we put")
 	case <-time.After(2 * time.Millisecond):
-		if err := rc.PutResponse(cmdID1, &incR); err != nil {
+		if err := rc.PutResponse(cmdID, &incR); err != nil {
 			t.Fatalf("unexpected error putting responpse: %v", err)
 		}
 	}
@@ -167,5 +164,50 @@ func TestResponseCacheClear(t *testing.T) {
 		// Success!
 	case <-time.After(500 * time.Millisecond):
 		t.Fatalf("get response failed to complete in 500ms")
+	}
+}
+
+// TestResponseCacheGC verifies that response cache entries are
+// garbage collected periodically.
+func TestResponseCacheGC(t *testing.T) {
+	loc := util.CreateTempDirectory()
+	rocksdb := engine.NewRocksDB(engine.Attributes([]string{"ssd"}), loc)
+	if err := rocksdb.Start(); err != nil {
+		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+	}
+	defer func(t *testing.T) {
+		rocksdb.Close()
+		if err := rocksdb.Destroy(); err != nil {
+			t.Errorf("could not destroy rocksdb db at %s: %v", loc, err)
+		}
+	}(t)
+
+	rc := NewResponseCache(1, rocksdb)
+	cmdID := makeCmdID(1, 1)
+
+	// Add response for cmdID with timestamp at time=1ns.
+	copyIncR := incR
+	copyIncR.Timestamp.WallTime = 1
+	if err := rc.PutResponse(cmdID, &copyIncR); err != nil {
+		t.Fatalf("unexpected error putting responpse: %v", err)
+	}
+	rocksdb.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
+		minRCacheTS = 0 // avoids GC
+		return
+	})
+	rocksdb.CompactRange(nil, nil)
+	val := proto.IncrementResponse{}
+	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
+		t.Fatalf("unexpected response or error: %b, %v, %+v", ok, err, val)
+	}
+
+	// Now set minRCacheTS to 1, which will GC.
+	rocksdb.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
+		minRCacheTS = 1
+		return
+	})
+	rocksdb.CompactRange(nil, nil)
+	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
+		t.Errorf("unexpected response or error: %b, %v", ok, err)
 	}
 }

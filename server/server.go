@@ -211,20 +211,15 @@ func initEngines(stores string) ([]engine.Engine, error) {
 // dir is treated as a path and a RocksDB engine is created.
 func initEngine(attrsStr, path string) (engine.Engine, error) {
 	attrs := parseAttributes(attrsStr)
-	var e engine.Engine
 	if size, err := strconv.ParseUint(path, 10, 64); err == nil {
 		if size == 0 {
 			return nil, util.Errorf("unable to initialize an in-memory store with capacity 0")
 		}
-		e = engine.NewInMem(attrs, int64(size))
-	} else {
-		e, err = engine.NewRocksDB(attrs, path)
-		if err != nil {
-			return nil, util.Errorf("unable to init rocksdb with data dir %q: %v", path, err)
-		}
+		return engine.NewInMem(attrs, int64(size)), nil
+		// TODO(spencer): should be using rocksdb for in-memory stores and
+		// relegate the InMem engine to usage only from unittests.
 	}
-
-	return e, nil
+	return engine.NewRocksDB(attrs, path), nil
 }
 
 func newServer() (*server, error) {

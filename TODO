@@ -188,6 +188,18 @@
 
   - Transactionally rewrite range addressing indexes.
 
+    - Need a range-wide "split" intent which blocks all mutating
+      ops to range.
+
+  - Copy / split range-local metadata:
+
+    - Write new local range metadata
+
+    - Copy response cache
+
+    - Reservoir sample: split at split key, reduce # of elements seen
+      so far by 1/2.
+
 
 * Rebalance range replica. Only fully-replicated ranges may be
   rebalanced.

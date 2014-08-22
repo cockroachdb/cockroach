@@ -23,8 +23,15 @@ package encoding
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"unicode/utf8"
+)
+
+// Maximum sizes for allocating buffers to hold encoded values.
+const (
+	// Maximum encoded integer size in bytes.
+	MaxIntSize = 12
 )
 
 // Direct mappings or prefixes of encoded data dependent on the type.
@@ -102,17 +109,14 @@ func DecodeString(b []byte) ([]byte, string) {
 // on whether or not the value to be encoded is the last value
 // (the right-most value) in the key.
 //
-// Each value that is BINARY that is not the last value of the
-// key begins with a single byte of 0x25 and ends with a single
-// byte with a high-order bit set to 0. There are zero or more
-// intervening bytes that encode the binary value. None of the
-// intervening bytes may be zero. Each of the intervening bytes
-// contains 7 bits of blob content with a 1 in the high-order
-// bit (the 0x80 bit). Each encoded byte thereafter consists
-// of a high-order bit followed by 7 bits of payload. A high-order
-// bit of 1 indicates continuation of the encoding. A high-order
-// bit of 0 indicates this byte contains the last of the payload.
-// An empty input value is encoded as the header byte immediately
+// Each value that is BINARY that is not the last value of the key
+// begins with a single byte of 0x25 and ends with a single terminator
+// byte of 0x00. There are zero or more intervening bytes that encode
+// the binary value. None of the intervening bytes may be zero. Each
+// of the intervening bytes contains 7 bits of blob content with a 1
+// in the high-order bit (the 0x80 bit). Each encoded byte thereafter
+// consists of a high-order bit followed by 7 bits of payload. An
+// empty input value is encoded as the header byte immediately
 // followed by a termination byte 0x00.
 //
 // When the very last value of a key is BINARY, then it is encoded
@@ -125,9 +129,6 @@ func DecodeString(b []byte) ([]byte, string) {
 // the initial byte of a text value, 0x24, ensuring that every binary
 // value will sort after every text value.
 func EncodeBinary(b []byte, i []byte) []byte {
-	if len(i) == 0 {
-		return append(b, orderedEncodingBinary, orderedEncodingTerminator)
-	}
 	b = append(b, orderedEncodingBinary)
 	s := uint(1)
 	t := byte(0)
@@ -143,37 +144,34 @@ func EncodeBinary(b []byte, i []byte) []byte {
 		}
 	}
 	if s > 1 {
-		b = append(b, byte(0x7f&t))
-	} else {
-		b[len(b)-1] &= 0x7f
+		b = append(b, byte(0x80|t))
 	}
-	return b
+	return append(b, orderedEncodingTerminator)
 }
 
-// DecodeBinary decodes the given key-encoded byte slice,
-// returning the original BLOB value. (see documentation
-// for EncodeBinary for more details).
-func DecodeBinary(buf []byte) []byte {
+// DecodeBinary decodes the given key-encoded byte slice, returning
+// the unencoded byte slice value. (see documentation for EncodeBinary
+// for more details). The first return argument is the remainder of
+// the input buffer, after decoding the binary value.
+func DecodeBinary(buf []byte) ([]byte, []byte) {
 	if buf[0] != orderedEncodingBinary {
 		panic("doesn't begin with binary encoding byte")
 	}
-	var end int
-	// Will panic if the terminator doesn't occur before end of the byte slice.
-	for end = 1; (buf[end] & 0x80) != orderedEncodingTerminator; end++ {
-	}
-	end++
 	out := new(bytes.Buffer)
-	out.Grow(end)
 	s := uint(6)
-	t := (buf[1] << 1) & 0xff
-	for i := 2; i < end; i++ {
+	i := int(1)
+	if buf[i] == orderedEncodingTerminator {
+		return buf[2:], out.Bytes()
+	}
+	t := (buf[i] << 1) & 0xff
+	for i = 2; buf[i] != orderedEncodingTerminator; i++ {
 		if s == 7 {
 			out.WriteByte(t | (buf[i] & 0x7f))
 			i++
 		} else {
 			out.WriteByte(t | ((buf[i] & 0x7f) >> s))
 		}
-		if i == end {
+		if buf[i] == orderedEncodingTerminator {
 			break
 		}
 		t = (buf[i] << (8 - s)) & 0xff
@@ -186,7 +184,7 @@ func DecodeBinary(buf []byte) []byte {
 	if t != 0 {
 		panic("unexpected bits remaining after decoding blob")
 	}
-	return out.Bytes()
+	return buf[i+1:], out.Bytes()
 }
 
 // DecodeBinaryFinal decodes a byte slice and returns the
@@ -230,7 +228,7 @@ func EncodeInt(b []byte, i int64) []byte {
 	case e >= 11:
 		return append(b, encodeLargeNumber(i < 0, e, m, buf)...)
 	}
-	panic("unexpected value e")
+	panic(fmt.Sprintf("unexpected value e: %d", e))
 }
 
 // EncodeIntDecreasing returns the resulting byte slice with the
@@ -267,8 +265,9 @@ func DecodeInt(buf []byte) ([]byte, int64) {
 		// Positive large.
 		e, m := decodeMediumNumber(false, buf[:idx+1])
 		return buf[idx+1:], makeIntFromMandE(false, e, m)
+	default:
+		panic(fmt.Sprintf("unknown prefix of the encoded byte slice: %q", buf))
 	}
-	panic("unknown prefix of the encoded byte slice")
 }
 
 // DecodeIntDecreasing returns the remaining byte slice after decoding and

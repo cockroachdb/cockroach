@@ -54,13 +54,14 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	inMem := NewInMem(Attributes{}, 10<<20)
 
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	rocksdb, err := NewRocksDB(Attributes([]string{"ssd"}), loc)
+	rocksdb := NewRocksDB(Attributes([]string{"ssd"}), loc)
+	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
 	defer func(t *testing.T) {
-		rocksdb.close()
-		if err := rocksdb.destroy(); err != nil {
+		rocksdb.Close()
+		if err := rocksdb.Destroy(); err != nil {
 			t.Errorf("could not delete rocksdb db at %s: %v", loc, err)
 		}
 	}(t)

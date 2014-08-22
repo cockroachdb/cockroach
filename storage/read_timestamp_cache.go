@@ -54,9 +54,8 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 // with monotonic increases. The high water mark is initialized to
 // the current system time plus the maximum clock skew.
 type ReadTimestampCache struct {
-	cache     *util.IntervalCache
-	clock     *hlc.Clock
-	highWater proto.Timestamp
+	cache             *util.IntervalCache
+	highWater, latest proto.Timestamp
 }
 
 // NewReadTimestampCache returns a new read timestamp cache with
@@ -64,19 +63,19 @@ type ReadTimestampCache struct {
 func NewReadTimestampCache(clock *hlc.Clock) *ReadTimestampCache {
 	rtc := &ReadTimestampCache{
 		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheFIFO}),
-		clock: clock,
 	}
-	rtc.Clear()
+	rtc.Clear(clock)
 	rtc.cache.CacheConfig.ShouldEvict = rtc.shouldEvict
 	return rtc
 }
 
 // Clear clears the cache and resets the high water mark to the
 // current time plus the maximum clock skew.
-func (rtc *ReadTimestampCache) Clear() {
+func (rtc *ReadTimestampCache) Clear(clock *hlc.Clock) {
 	rtc.cache.Clear()
-	rtc.highWater = rtc.clock.Now()
-	rtc.highWater.WallTime += int64(rtc.clock.MaxDrift())
+	rtc.highWater = clock.Now()
+	rtc.highWater.WallTime += clock.MaxDrift().Nanoseconds()
+	rtc.latest = rtc.highWater
 }
 
 // Add the specified read timestamp to the cache as covering the range of
@@ -85,6 +84,9 @@ func (rtc *ReadTimestampCache) Clear() {
 func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
+	}
+	if rtc.latest.Less(timestamp) {
+		rtc.latest = timestamp
 	}
 	rtc.cache.Add(rtc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
 }
@@ -112,11 +114,11 @@ func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 func (rtc *ReadTimestampCache) shouldEvict(size int, key, value interface{}) bool {
 	ts := value.(proto.Timestamp)
 	// Compute the edge of the cache window.
-	edge := rtc.clock.Now()
+	edge := rtc.latest
 	edge.WallTime -= minCacheWindow.Nanoseconds()
 	// We evict and update the high water mark if the proposed evictee's
-	// timestamp is less than the edge of the window.
-	if ts.Less(edge) {
+	// timestamp is <= than the edge of the window.
+	if !edge.Less(ts) {
 		rtc.highWater = ts
 		return true
 	}

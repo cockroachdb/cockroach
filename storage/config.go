@@ -26,6 +26,8 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
+// TODO(spencer): move all of these into proto.
+
 // UserRoot is the username for the root user.
 const UserRoot = "root"
 
@@ -97,6 +99,7 @@ type ZoneConfig struct {
 	Replicas      []engine.Attributes `yaml:"replicas,omitempty,flow"`
 	RangeMinBytes int64               `yaml:"range_min_bytes,omitempty"`
 	RangeMaxBytes int64               `yaml:"range_max_bytes,omitempty"`
+	GC            *proto.GCPolicy     `yaml:"gc_policy,omitempty"`
 }
 
 // ParseZoneConfig parses a YAML serialized ZoneConfig.

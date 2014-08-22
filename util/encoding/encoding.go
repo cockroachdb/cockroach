@@ -169,3 +169,93 @@ func WillOverflow(a, b int64) bool {
 	}
 	return math.MinInt64-b > a
 }
+
+// EncodeUint64 encodes the uint64 value using a big-endian 8 byte
+// representation. The bytes are appended to the supplied buffer and
+// the final buffer is returned.
+func EncodeUint64(b []byte, v uint64) []byte {
+	enc := make([]byte, 8)
+	for i := 7; i >= 0; i-- {
+		enc[i] = byte(v & 0xff)
+		v >>= 8
+	}
+	return append(b, enc...)
+}
+
+// EncodeUint64Decreasing encodes the uint64 value so that it sorts in
+// reverse order, from largest to smallest.
+func EncodeUint64Decreasing(b []byte, v uint64) []byte {
+	return EncodeUint64(b, ^v)
+}
+
+// DecodeUint64 decodes a uint64 from the input buffer, treating
+// the input as a big-endian 8 byte uint64 representation. The remainder
+// of the input buffer and the decoded uint64 are returned.
+func DecodeUint64(b []byte) ([]byte, uint64) {
+	if len(b) < 8 {
+		panic("insufficient bytes to decode uint64 int value")
+	}
+	var v uint64
+	for i := 0; i < 8; i++ {
+		v = (v << 8) | uint64(b[i])
+	}
+	return b[8:], v
+}
+
+// DecodeUint64Decreasing decodes a uint64 value which was encoded
+// using EncodeUint64Decreasing.
+func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
+	leftover, v := DecodeUint64(b)
+	return leftover, ^v
+}
+
+// EncodeVarUint64 encodes the uint64 value using a variable length
+// (length-prefixed) big-endian 8 byte representation. The bytes are
+// appended to the supplied buffer and the final buffer is returned.
+func EncodeVarUint64(b []byte, v uint64) []byte {
+	enc := make([]byte, 9)
+	var length int
+	for v > 0 {
+		enc[length+1] = byte(v & 0xff)
+		length++
+		v >>= 8
+	}
+	// Reverse the bytes.
+	for i := 0; i < length/2; i++ {
+		enc[i+1], enc[length-i] = enc[length-i], enc[i+1]
+	}
+	enc[0] = byte(length)
+	return append(b, enc[:length+1]...)
+}
+
+// EncodeVarUint64Decreasing encodes the uint64 value so that it sorts in
+// reverse order, from largest to smallest.
+func EncodeVarUint64Decreasing(b []byte, v uint64) []byte {
+	return EncodeVarUint64(b, ^v)
+}
+
+// DecodeVarUint64 decodes a uint64 from the input buffer, treating
+// the input as a big-endian 8 byte uint64 representation. The remainder
+// of the input buffer and the decoded uint64 are returned.
+func DecodeVarUint64(b []byte) ([]byte, uint64) {
+	if len(b) == 0 {
+		panic("insufficient bytes to decode var uint64 int value")
+	}
+	length := int(b[0])
+	b = b[1:] // skip length byte
+	if len(b) < length {
+		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
+	}
+	var v uint64
+	for i := 0; i < length; i++ {
+		v = (v << 8) | uint64(b[i])
+	}
+	return b[length:], v
+}
+
+// DecodeVarUint64Decreasing decodes a uint64 value which was encoded
+// using EncodeVarUint64Decreasing.
+func DecodeVarUint64Decreasing(b []byte) ([]byte, uint64) {
+	leftover, v := DecodeVarUint64(b)
+	return leftover, ^v
+}

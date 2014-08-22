@@ -54,3 +54,16 @@ message RangeMetadata {
   optional string cluster_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
   optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
 }
+
+// GCPolicy defines garbage collection policies which apply to MVCC
+// values within a zone.
+//
+// TODO(spencer): flesh this out to include maximum number of values
+//   as well as whether there's an intersection between max values
+//   and TTL or a union.
+message GCPolicy {
+  // TTLSeconds specifies the maximum age of a value before it's
+  // garbage collected. Only older versions of values are garbage
+  // collected. Specifying <=0 mean older versions are never GC'd.
+  optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
+}

@@ -22,12 +22,19 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+)
+
+const (
+	// GCResponseCacheExpiration is the expiration duration for response
+	// cache entries.
+	GCResponseCacheExpiration = 1 * time.Hour
 )
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
@@ -49,6 +56,15 @@ func (rs RangeSlice) Swap(i, j int) {
 }
 func (rs RangeSlice) Less(i, j int) bool {
 	return bytes.Compare(rs[i].Meta.StartKey, rs[j].Meta.StartKey) < 0
+}
+
+// A NotBootstrapped error indicates that an engine has not yet been
+// bootstrapped due to a store identifier not being present.
+type NotBootstrappedError struct{}
+
+// Error formats error.
+func (e *NotBootstrappedError) Error() string {
+	return "store has not been bootstrapped"
 }
 
 // A StoreIdent uniquely identifies a store in the cluster. The
@@ -98,24 +114,25 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
-// IsBootstrapped returns true if the store has already been
-// bootstrapped. If the store ident is corrupt, IsBootstrapped will
-// return true; the exact error can be retrieved via a call to Init().
-func (s *Store) IsBootstrapped() bool {
-	ok, err := engine.GetI(s.engine, engine.KeyLocalIdent, &s.Ident)
-	if err != nil || ok {
-		return true
-	}
-	return false
-}
-
-// Init reads the StoreIdent from the underlying engine.
+// Init starts the engine, sets the GC and reads the StoreIdent.
 func (s *Store) Init() error {
+	// Start engine and set garbage collector.
+	if err := s.engine.Start(); err != nil {
+		return err
+	}
+	s.engine.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
+		now := s.clock.Now()
+		minTxnTS = 0 // disable GC of transactions until we know minimum write intent age
+		minRCacheTS = now.WallTime - GCResponseCacheExpiration.Nanoseconds()
+		return
+	})
+
+	// Read store ident and return a not-bootstrapped error if necessary.
 	ok, err := engine.GetI(s.engine, engine.KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
-		return util.Error("store has not been bootstrapped")
+		return &NotBootstrappedError{}
 	}
 
 	// TODO(spencer): scan through all range metadata and instantiate

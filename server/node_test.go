@@ -105,14 +105,14 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 	var expectedKeys = []engine.Key{
 		engine.Key("\x00\x00\x00range-1"),
-		engine.Key("\x00\x00\x00range-id-generator"),
+		engine.Key("\x00\x00\x00range-idgen"),
 		engine.Key("\x00\x00\x00store-ident"),
 		engine.Key("\x00\x00meta1\xff"),
 		engine.Key("\x00\x00meta2\xff"),
 		engine.Key("\x00acct"),
-		engine.Key("\x00node-id-generator"),
+		engine.Key("\x00node-idgen"),
 		engine.Key("\x00perm"),
-		engine.Key("\x00store-id-generator-1"),
+		engine.Key("\x00store-idgen-1"),
 		engine.Key("\x00zone"),
 	}
 	if !reflect.DeepEqual(keys, expectedKeys) {

@@ -48,7 +48,9 @@ func (sc StoreCapacity) PercentAvail() float64 {
 // Engine is the interface that wraps the core operations of a
 // key/value store.
 type Engine interface {
-	// The engine/store attributes.
+	// Start initializes and starts the engine.
+	Start() error
+	// Attrs returns the engine/store attributes.
 	Attrs() Attributes
 	// Put sets the given key to the value provided.
 	Put(key Key, value []byte) error
@@ -71,6 +73,13 @@ type Engine interface {
 	Merge(key Key, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (StoreCapacity, error)
+	// SetGCTimeouts sets a function which yields timeout values for GC
+	// compaction of transaction and response cache entries. The return
+	// values are in unix nanoseconds for the minimum transaction row
+	// timestamp and the minimum response cache row timestamp respectively.
+	// Rows with timestamps less than the associated value will be GC'd
+	// during compaction.
+	SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.

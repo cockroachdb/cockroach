@@ -112,25 +112,36 @@ func TestStringNoTerminatorPanic(t *testing.T) {
 func TestEncodeBinary(t *testing.T) {
 	testCases := []struct{ blob, encoded []byte }{
 		{[]byte{}, []byte{orderedEncodingBinary, orderedEncodingTerminator}},
-		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0x40}},
-		{[]byte{0x00}, []byte{orderedEncodingBinary, 0x80, 0x0}},
-		{[]byte("1"), []byte{orderedEncodingBinary, 0x98, 0x40}},
-		{[]byte("22"), []byte{orderedEncodingBinary, 0x99, 0x8c, 0x40}},
-		{[]byte("333"), []byte{orderedEncodingBinary, 0x99, 0xcc, 0xe6, 0x30}},
-		{[]byte("4444"), []byte{orderedEncodingBinary, 0x9a, 0x8d, 0x86, 0xc3, 0x20}},
-		{[]byte("55555"), []byte{orderedEncodingBinary, 0x9a, 0xcd, 0xa6, 0xd3, 0xa9, 0x54}},
-		{[]byte("666666"), []byte{orderedEncodingBinary, 0x9b, 0x8d, 0xc6, 0xe3, 0xb1, 0xd8, 0x6c}},
-		{[]byte("7777777"), []byte{orderedEncodingBinary, 0x9b, 0xcd, 0xe6, 0xf3, 0xb9, 0xdc, 0xee, 0x37}},
-		{[]byte("88888888"), []byte{orderedEncodingBinary, 0x9c, 0x8e, 0x87, 0x83, 0xc1, 0xe0, 0xf0, 0xb8, 0x9c, 0x0}},
-		{[]byte("Carl"), []byte{orderedEncodingBinary, 0xa1, 0xd8, 0xae, 0xa6, 0x60}},
-		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x18}},
+		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0xc0, 0x00}},
+		{[]byte{0x00}, []byte{orderedEncodingBinary, 0x80, 0x80, 0x00}},
+		{[]byte{0x01}, []byte{orderedEncodingBinary, 0x80, 0xc0, 0x00}},
+		{[]byte("1"), []byte{orderedEncodingBinary, 0x98, 0xc0, 0x00}},
+		{[]byte("1\x00"), []byte{orderedEncodingBinary, 0x98, 0xc0, 0x80, 0x00}},
+		{[]byte("2"), []byte{orderedEncodingBinary, 0x99, 0x80, 0x00}},
+		{[]byte("2\x00"), []byte{orderedEncodingBinary, 0x99, 0x80, 0x80, 0x00}},
+		{[]byte("2\x01"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xa0, 0x00}},
+		{[]byte("2\x02"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xc0, 0x00}},
+		{[]byte("2\x03"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xe0, 0x00}},
+		{[]byte("2\x04"), []byte{orderedEncodingBinary, 0x99, 0x81, 0x80, 0x00}},
+		{[]byte("22"), []byte{orderedEncodingBinary, 0x99, 0x8c, 0xc0, 0x00}},
+		{[]byte("333"), []byte{orderedEncodingBinary, 0x99, 0xcc, 0xe6, 0xb0, 0x00}},
+		{[]byte("4444"), []byte{orderedEncodingBinary, 0x9a, 0x8d, 0x86, 0xc3, 0xa0, 0x00}},
+		{[]byte("55555"), []byte{orderedEncodingBinary, 0x9a, 0xcd, 0xa6, 0xd3, 0xa9, 0xd4, 0x00}},
+		{[]byte("666666"), []byte{orderedEncodingBinary, 0x9b, 0x8d, 0xc6, 0xe3, 0xb1, 0xd8, 0xec, 0x00}},
+		{[]byte("7777777"), []byte{orderedEncodingBinary, 0x9b, 0xcd, 0xe6, 0xf3, 0xb9, 0xdc, 0xee, 0xb7, 0x00}},
+		{[]byte("88888888"), []byte{orderedEncodingBinary, 0x9c, 0x8e, 0x87, 0x83, 0xc1, 0xe0, 0xf0, 0xb8, 0x9c, 0x80, 0x00}},
+		{[]byte("Carl"), []byte{orderedEncodingBinary, 0xa1, 0xd8, 0xae, 0xa6, 0xe0, 0x00}},
+		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x98, 0x00}},
 	}
 	for _, c := range testCases {
 		b := EncodeBinary([]byte{}, c.blob)
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
 		}
-		d := DecodeBinary(c.encoded)
+		remainder, d := DecodeBinary(c.encoded)
+		if len(remainder) != 0 {
+			t.Errorf("unexpected remainder: %s", remainder)
+		}
 		if !bytes.Equal(d, c.blob) {
 			t.Errorf("unexpected mismatch of decoded value: expected %s, got %s", prettyBytes(c.blob), prettyBytes(d))
 		}
@@ -144,7 +155,10 @@ func TestEncodeBinary(t *testing.T) {
 	sort.Sort(blobs)
 	sort.Sort(encodedBlobs)
 	for i := range encodedBlobs {
-		decoded := DecodeBinary(encodedBlobs[i])
+		remainder, decoded := DecodeBinary(encodedBlobs[i])
+		if len(remainder) != 0 {
+			t.Errorf("unexpected remainder: %s", remainder)
+		}
 		if !bytes.Equal(decoded, blobs[i]) {
 			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(blobs[i]), prettyBytes(decoded))
 		}

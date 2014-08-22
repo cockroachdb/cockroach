@@ -174,12 +174,9 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 // for storage in the underlying engine. Note that the prefix for
 // response cache keys sorts them at the very top of the engine's
 // keyspace.
-// TODO(spencer): going to need to encode the server timestamp
-//   for when the value was written for GC.
 func (rc *ResponseCache) makeKey(cmdID proto.ClientCmdID) engine.Key {
-	// The max length of encoded int is 12.
-	b := make([]byte, 0, len(engine.KeyLocalRangeResponseCachePrefix)+3*12)
-	b = append(b, engine.KeyLocalRangeResponseCachePrefix...)
+	// Key specifics: range ID & HLC timestamp.
+	b := append([]byte{}, engine.KeyLocalRangeResponseCachePrefix...)
 	b = encoding.EncodeInt(b, rc.rangeID)
 	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
 	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64
