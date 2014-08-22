@@ -28,6 +28,7 @@ static_lib: $(ROACH_LIB)
 $(ROACH_LIB): $(OBJECTS)
 	rm -f $@
 	ar -rs $(ROACH_LIB) $(OBJECTS)
+	ranlib $(ROACH_LIB)
 
 .cc.o:
 	$(CPP) $(CPPFLAGS) -c $< -o $@

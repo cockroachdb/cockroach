@@ -71,3 +71,4 @@ clean:
 	$(GO) clean
 	cd $(ROCKSDB); make clean
 	cd $(ROACH_PROTO); make clean
+	cd $(ROACH_LIB); make clean
