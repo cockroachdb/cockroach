@@ -418,7 +418,7 @@ func mvccEncodeKey(key Key, timestamp proto.Timestamp) Key {
 	}
 	k := append([]byte{}, key...)
 	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.WallTime))
-	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.Logical))
+	k = encoding.EncodeUint32Decreasing(k, uint32(timestamp.Logical))
 	return k
 }
 
@@ -434,9 +434,9 @@ func mvccDecodeKey(encodedKey []byte) (Key, proto.Timestamp, bool) {
 		return key, proto.Timestamp{}, false
 	}
 	tsBytes, walltime := encoding.DecodeUint64Decreasing(tsBytes)
-	tsBytes, logical := encoding.DecodeUint64Decreasing(tsBytes)
+	tsBytes, logical := encoding.DecodeUint32Decreasing(tsBytes)
 	if len(tsBytes) > 0 {
 		panic(fmt.Sprintf("leftover bytes on mvcc key decode: %s", tsBytes))
 	}
-	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int64(logical)}, true
+	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
 }

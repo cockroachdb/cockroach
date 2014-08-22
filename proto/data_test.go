@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func makeTS(walltime, logical int64) Timestamp {
+func makeTS(walltime int64, logical int32) Timestamp {
 	return Timestamp{
 		WallTime: walltime,
 		Logical:  logical,

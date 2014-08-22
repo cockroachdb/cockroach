@@ -170,6 +170,45 @@ func WillOverflow(a, b int64) bool {
 	return math.MinInt64-b > a
 }
 
+// EncodeUint32 encodes the uint32 value using a big-endian 8 byte
+// representation. The bytes are appended to the supplied buffer and
+// the final buffer is returned.
+func EncodeUint32(b []byte, v uint32) []byte {
+	enc := make([]byte, 4)
+	for i := 3; i >= 0; i-- {
+		enc[i] = byte(v & 0xff)
+		v >>= 8
+	}
+	return append(b, enc...)
+}
+
+// EncodeUint32Decreasing encodes the uint32 value so that it sorts in
+// reverse order, from largest to smallest.
+func EncodeUint32Decreasing(b []byte, v uint32) []byte {
+	return EncodeUint32(b, ^v)
+}
+
+// DecodeUint32 decodes a uint32 from the input buffer, treating
+// the input as a big-endian 8 byte uint32 representation. The remainder
+// of the input buffer and the decoded uint32 are returned.
+func DecodeUint32(b []byte) ([]byte, uint32) {
+	if len(b) < 4 {
+		panic("insufficient bytes to decode uint32 int value")
+	}
+	var v uint32
+	for i := 0; i < 4; i++ {
+		v = (v << 8) | uint32(b[i])
+	}
+	return b[4:], v
+}
+
+// DecodeUint32Decreasing decodes a uint32 value which was encoded
+// using EncodeUint32Decreasing.
+func DecodeUint32Decreasing(b []byte) ([]byte, uint32) {
+	leftover, v := DecodeUint32(b)
+	return leftover, ^v
+}
+
 // EncodeUint64 encodes the uint64 value using a big-endian 8 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.

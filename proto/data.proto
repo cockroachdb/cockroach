@@ -29,7 +29,7 @@ message Timestamp {
   // times are equal. It is effectively bounded by (maximum clock
   // skew)/(minimal ns between events) and nearly impossible to
   // overflow.
-  optional int64 logical = 2 [(gogoproto.nullable) = false];
+  optional int32 logical = 2 [(gogoproto.nullable) = false];
 }
 
 // Value specifies the value at a key. Multiple values at the same key

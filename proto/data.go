@@ -22,7 +22,7 @@ import "math"
 // Timestamp constant values.
 var (
 	// MaxTimestamp is the max value allowed for Timestamp.
-	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt64}
+	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
 	// MinTimestamp is the min value allowed for Timestamp.
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 0}
 )

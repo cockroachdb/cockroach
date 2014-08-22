@@ -48,7 +48,7 @@ func createTestMVCC(t *testing.T) *MVCC {
 }
 
 // makeTS creates a new hybrid logical timestamp.
-func makeTS(nanos, logical int64) proto.Timestamp {
+func makeTS(nanos int64, logical int32) proto.Timestamp {
 	return proto.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
@@ -238,8 +238,8 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	}
 
 	// Read the old version which should still exist.
-	for _, nanos := range []int64{0, math.MaxInt64} {
-		value, err = mvcc.Get(testKey01, makeTS(2, nanos), "")
+	for _, logical := range []int32{0, math.MaxInt32} {
+		value, err = mvcc.Get(testKey01, makeTS(2, logical), "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -106,7 +106,73 @@ func TestWillOverflow(t *testing.T) {
 	}
 }
 
-func testBasicEncodeDecode(enc func([]byte, uint64) []byte,
+func testBasicEncodeDecode32(enc func([]byte, uint32) []byte,
+	dec func([]byte) ([]byte, uint32), decreasing bool, t *testing.T) {
+	testCases := []uint32{
+		0, 1,
+		1<<8 - 1, 1 << 8,
+		1<<16 - 1, 1 << 16,
+		1<<24 - 1, 1 << 24,
+		math.MaxUint32 - 1, math.MaxUint32,
+	}
+
+	var lastEnc []byte
+	for i, v := range testCases {
+		enc := enc(nil, v)
+		if i > 0 {
+			if (decreasing && bytes.Compare(enc, lastEnc) >= 0) ||
+				(!decreasing && bytes.Compare(enc, lastEnc) < 0) {
+				t.Errorf("ordered constraint violated for %d: %s vs. %s", v, enc, lastEnc)
+			}
+		}
+		b, decode := dec(enc)
+		if len(b) != 0 {
+			t.Errorf("leftover bytes: %s", b)
+		}
+		if decode != v {
+			t.Errorf("decode yielded different value than input: %d vs. %d", decode, v)
+		}
+		lastEnc = enc
+	}
+}
+
+type testCase32 struct {
+	value  uint32
+	expEnc []byte
+}
+
+func testCustomEncode32(testCases []testCase32, enc func([]byte, uint32) []byte, t *testing.T) {
+	for _, test := range testCases {
+		enc := enc(nil, test.value)
+		if bytes.Compare(enc, test.expEnc) != 0 {
+			t.Errorf("expected %s; got %s", test.expEnc, enc)
+		}
+	}
+}
+
+func TestEncodeDecodeUint32(t *testing.T) {
+	testBasicEncodeDecode32(EncodeUint32, DecodeUint32, false, t)
+	testCases := []testCase32{
+		testCase32{0, []byte{0x00, 0x00, 0x00, 0x00}},
+		testCase32{1, []byte{0x00, 0x00, 0x00, 0x01}},
+		testCase32{1 << 8, []byte{0x00, 0x00, 0x01, 0x00}},
+		testCase32{math.MaxUint32, []byte{0xff, 0xff, 0xff, 0xff}},
+	}
+	testCustomEncode32(testCases, EncodeUint32, t)
+}
+
+func TestEncodeDecodeUint32Decreasing(t *testing.T) {
+	testBasicEncodeDecode32(EncodeUint32Decreasing, DecodeUint32Decreasing, true, t)
+	testCases := []testCase32{
+		testCase32{0, []byte{0xff, 0xff, 0xff, 0xff}},
+		testCase32{1, []byte{0xff, 0xff, 0xff, 0xfe}},
+		testCase32{1 << 8, []byte{0xff, 0xff, 0xfe, 0xff}},
+		testCase32{math.MaxUint32, []byte{0x00, 0x00, 0x00, 0x00}},
+	}
+	testCustomEncode32(testCases, EncodeUint32Decreasing, t)
+}
+
+func testBasicEncodeDecode64(enc func([]byte, uint64) []byte,
 	dec func([]byte) ([]byte, uint64), decreasing bool, t *testing.T) {
 	testCases := []uint64{
 		0, 1,
@@ -140,12 +206,12 @@ func testBasicEncodeDecode(enc func([]byte, uint64) []byte,
 	}
 }
 
-type testCase struct {
+type testCase64 struct {
 	value  uint64
 	expEnc []byte
 }
 
-func testCustomEncode(testCases []testCase, enc func([]byte, uint64) []byte, t *testing.T) {
+func testCustomEncode64(testCases []testCase64, enc func([]byte, uint64) []byte, t *testing.T) {
 	for _, test := range testCases {
 		enc := enc(nil, test.value)
 		if bytes.Compare(enc, test.expEnc) != 0 {
@@ -155,46 +221,46 @@ func testCustomEncode(testCases []testCase, enc func([]byte, uint64) []byte, t *
 }
 
 func TestEncodeDecodeUint64(t *testing.T) {
-	testBasicEncodeDecode(EncodeUint64, DecodeUint64, false, t)
-	testCases := []testCase{
-		testCase{0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
-		testCase{1, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
-		testCase{1 << 8, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00}},
-		testCase{math.MaxUint64, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+	testBasicEncodeDecode64(EncodeUint64, DecodeUint64, false, t)
+	testCases := []testCase64{
+		testCase64{0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+		testCase64{1, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}},
+		testCase64{1 << 8, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00}},
+		testCase64{math.MaxUint64, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
-	testCustomEncode(testCases, EncodeUint64, t)
+	testCustomEncode64(testCases, EncodeUint64, t)
 }
 
 func TestEncodeDecodeUint64Decreasing(t *testing.T) {
-	testBasicEncodeDecode(EncodeUint64Decreasing, DecodeUint64Decreasing, true, t)
-	testCases := []testCase{
-		testCase{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		testCase{1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		testCase{1 << 8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff}},
-		testCase{math.MaxUint64, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+	testBasicEncodeDecode64(EncodeUint64Decreasing, DecodeUint64Decreasing, true, t)
+	testCases := []testCase64{
+		testCase64{0, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		testCase64{1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
+		testCase64{1 << 8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff}},
+		testCase64{math.MaxUint64, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
 	}
-	testCustomEncode(testCases, EncodeUint64Decreasing, t)
+	testCustomEncode64(testCases, EncodeUint64Decreasing, t)
 }
 
 func TestEncodeDecodeVarUint64(t *testing.T) {
-	testBasicEncodeDecode(EncodeVarUint64, DecodeVarUint64, false, t)
-	testCases := []testCase{
-		testCase{0, []byte{0x00}},
-		testCase{1, []byte{0x01, 0x01}},
-		testCase{1 << 8, []byte{0x02, 0x01, 0x00}},
-		testCase{math.MaxUint64, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+	testBasicEncodeDecode64(EncodeVarUint64, DecodeVarUint64, false, t)
+	testCases := []testCase64{
+		testCase64{0, []byte{0x00}},
+		testCase64{1, []byte{0x01, 0x01}},
+		testCase64{1 << 8, []byte{0x02, 0x01, 0x00}},
+		testCase64{math.MaxUint64, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
 	}
-	testCustomEncode(testCases, EncodeVarUint64, t)
+	testCustomEncode64(testCases, EncodeVarUint64, t)
 }
 
 func TestEncodeDecodeVarUint64Decreasing(t *testing.T) {
-	testBasicEncodeDecode(EncodeVarUint64Decreasing, DecodeVarUint64Decreasing, true, t)
-	testCases := []testCase{
-		testCase{0, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
-		testCase{1, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
-		testCase{1 << 8, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff}},
-		testCase{math.MaxUint64 - 1, []byte{0x01, 0x01}},
-		testCase{math.MaxUint64, []byte{0x00}},
+	testBasicEncodeDecode64(EncodeVarUint64Decreasing, DecodeVarUint64Decreasing, true, t)
+	testCases := []testCase64{
+		testCase64{0, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		testCase64{1, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}},
+		testCase64{1 << 8, []byte{0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff}},
+		testCase64{math.MaxUint64 - 1, []byte{0x01, 0x01}},
+		testCase64{math.MaxUint64, []byte{0x00}},
 	}
-	testCustomEncode(testCases, EncodeVarUint64Decreasing, t)
+	testCustomEncode64(testCases, EncodeVarUint64Decreasing, t)
 }
