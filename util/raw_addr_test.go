@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -17,21 +17,17 @@
 
 package util
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestRawAddr(t *testing.T) {
 	network := "tcp"
 	str := "host:1234"
-
 	addr := MakeRawAddr(network, str)
 
-	// TODO(jqmp): Is this really how we test things in Go?
 	if addr.Network() != network {
-		t.Error("Expected addr.Network() to be %s; got %s", network, addr.Network())
+		t.Errorf("Expected addr.Network() to be %s; got %s", network, addr.Network())
 	}
 	if addr.String() != str {
-		t.Error("Expected addr.String() to be %s; got %s", str, addr.String())
+		t.Errorf("Expected addr.String() to be %s; got %s", str, addr.String())
 	}
 }

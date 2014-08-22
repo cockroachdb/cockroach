@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -57,7 +57,7 @@ func TestResponseCachePutAndGet(t *testing.T) {
 	}
 	// Get should now return 1.
 	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Errorf("unexpected failure getting response: %b, %v, %+v", ok, err, val)
+		t.Errorf("unexpected failure getting response: %t, %v, %+v", ok, err, val)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestResponseCacheInflight(t *testing.T) {
 	val := proto.IncrementResponse{}
 	// Add inflight for cmdID1.
 	if ok, err := rc.GetResponse(cmdID1, &val); ok || err != nil {
-		t.Errorf("unexpected response or error: %b, %v", ok, err)
+		t.Errorf("unexpected response or error: %t, %v", ok, err)
 	}
 	// No blocking for cmdID2.
 	if ok, err := rc.GetResponse(cmdID2, &val); ok || err != nil {
@@ -102,7 +102,7 @@ func TestResponseCacheInflight(t *testing.T) {
 		doneChan := done
 		go func() {
 			if ok, err := rc.GetResponse(cmdID1, &val); !ok || err != nil || val.NewValue != 1 {
-				t.Errorf("unexpected error: %b, %v, %+v", ok, err, val)
+				t.Errorf("unexpected error: %t, %v, %+v", ok, err, val)
 			}
 			close(doneChan)
 		}()
@@ -151,12 +151,12 @@ func TestResponseCacheClear(t *testing.T) {
 	val := proto.IncrementResponse{}
 	// Add inflight for cmdID.
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected error: %b, %v", ok, err)
+		t.Errorf("unexpected error: %t, %v", ok, err)
 	}
 	done := make(chan struct{})
 	go func() {
 		if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-			t.Errorf("unexpected error: %b, %v", ok, err)
+			t.Errorf("unexpected error: %t, %v", ok, err)
 		}
 		close(done)
 	}()

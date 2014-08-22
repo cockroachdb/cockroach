@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -129,7 +129,7 @@ func TestInitEngine(t *testing.T) {
 			}
 			_, ok := e.(*engine.InMem)
 			if spec.isMem != ok {
-				t.Errorf("expected in memory? %b, got %b: %+v", spec.isMem, ok, spec)
+				t.Errorf("expected in memory? %t, got %t: %+v", spec.isMem, ok, spec)
 			}
 		} else if !spec.wantError {
 			t.Errorf("expected no error, got %v: %+v", err, spec)
@@ -167,7 +167,7 @@ func TestInitEngines(t *testing.T) {
 		}
 		_, ok := e.(*engine.InMem)
 		if expEngines[i].isMem != ok {
-			t.Errorf("expected in memory? %b, got %b: %+v", expEngines[i].isMem, ok, expEngines[i])
+			t.Errorf("expected in memory? %t, got %t: %+v", expEngines[i].isMem, ok, expEngines[i])
 		}
 	}
 }

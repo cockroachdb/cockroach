@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -25,22 +25,24 @@ import (
 
 // StructuredKeyPrefix is the prefix for RESTful endpoints used to
 // interact with structured data schemas.
-const StructuredKeyPrefix = "/structured/"
+const StructuredKeyPrefix = "/schema/"
 
 // A RESTServer provides a RESTful HTTP API to interact with
 // structured data schemas.
 //
 // A resource is represented using the following URL scheme:
-//   /structured/<schema key>/<table key>/<primary key>?<name>=<value>
+//   /schema/<schema key>/<table key>/<primary key>??[<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]
+//
 // Some examples:
-//   /structured/pdb/us/531 -> <data for user 531>
-//   /structured/pdb/us/?email=andybons@gmail.com -> <data for user with email andybons@gmail.com>
+//   /schema/pdb/us/531 -> <data for user 531>
+//   /schema/pdb/us/?email=andybons@gmail.com -> <data for user with email andybons@gmail.com>
 //
-// Depending on the name/value tuple provided, multiple results may be
-// returned. All results are returned as JSON-serialized objects.
+// A user can provide just the top-level schema key in order to introspect the schema layout:
+//   /schema/pdb -> <schema with key pdb>
 //
-// TODO(andybons): Provide a limit/continuation field for paging.
-// TODO(andybons): Allow the user to provide more than one name/value pair.
+// Results are always returned within a JSON-serialized array (even for only one result)
+// to provide uniformity for responses and to accommodate for multiple entries that may
+// satisfy a query. If the limit param is not provided, a maximum of 50 items is returned.
 type RESTServer struct {
 	db *DB // Structured database client
 }

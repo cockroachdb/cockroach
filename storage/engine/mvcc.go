@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -303,7 +303,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID string, commit bool) error {
 	}
 
 	if len(meta.TxnID) == 0 {
-		return util.Errorf("write intent does not exist", key)
+		return util.Errorf("write intent %q does not exist", key)
 	}
 	if meta.TxnID != txnID {
 		return util.Errorf("cannot commit another TxnID %s from TxnID %s",

@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -186,12 +186,12 @@ func TestNodeJoin(t *testing.T) {
 		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
 			return false
 		} else if val.(net.Addr).String() != server2.Addr().String() {
-			t.Error("addr2 gossip %s doesn't match addr2 address %s", val.(net.Addr).String(), server2.Addr().String())
+			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", val.(net.Addr).String(), server2.Addr().String())
 		}
 		if val, err := node2.gossip.GetInfo(node1Key); err != nil {
 			return false
 		} else if val.(net.Addr).String() != server1.Addr().String() {
-			t.Error("addr1 gossip %s doesn't match addr1 address %s", val.(net.Addr).String(), server1.Addr().String())
+			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", val.(net.Addr).String(), server1.Addr().String())
 		}
 		return true
 	}, 50*time.Millisecond); err != nil {

@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -436,7 +436,7 @@ func TestRangeIdempotence(t *testing.T) {
 				t.Fatal(err)
 			}
 			if idx%2 == 0 && reply.NewValue != 1 {
-				t.Error("expected all incremented values to be 1; got %d", reply.NewValue)
+				t.Errorf("expected all incremented values to be 1; got %d", reply.NewValue)
 			} else if idx%2 == 1 {
 				atomic.AddInt64(&count, reply.NewValue)
 			}

@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -113,7 +113,7 @@ func TestReadTimestampCacheEviction(t *testing.T) {
 
 	// Verify looking up key "c" returns the new high water mark ("a"'s timestamp).
 	if !rtc.GetMax(engine.Key("c"), nil).Equal(aTS) {
-		t.Error("expected high water mark %+v, got %+v", aTS, rtc.GetMax(engine.Key("c"), nil))
+		t.Errorf("expected high water mark %+v, got %+v", aTS, rtc.GetMax(engine.Key("c"), nil))
 	}
 }
 
