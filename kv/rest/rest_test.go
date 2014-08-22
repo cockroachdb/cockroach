@@ -455,7 +455,7 @@ func startNewServer() *kvTestServer {
 	s := &kvTestServer{}
 
 	// Initialize engine, store, and localDB.
-	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	db, err := server.BootstrapCluster("test-cluster", e)
 	if err != nil {
 		panic(err)

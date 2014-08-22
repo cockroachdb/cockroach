@@ -24,6 +24,7 @@ import (
 	"reflect"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -51,7 +52,7 @@ type Engine interface {
 	// Start initializes and starts the engine.
 	Start() error
 	// Attrs returns the engine/store attributes.
-	Attrs() Attributes
+	Attrs() proto.Attributes
 	// Put sets the given key to the value provided.
 	Put(key Key, value []byte) error
 	// Get returns the value for the given key, nil otherwise.

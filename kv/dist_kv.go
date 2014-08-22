@@ -119,7 +119,7 @@ func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) 
 	}
 	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
 		header.Key, end, func(start, end engine.Key, config interface{}) error {
-			perm := config.(*storage.PermConfig)
+			perm := config.(*proto.PermConfig)
 			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
 				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
 					header.User, string(start), string(end), perm)

@@ -34,7 +34,7 @@ import (
 func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := storage.NewStore(clock, eng, nil)
 	store.Ident.StoreID = 1
 	replica := proto.Replica{StoreID: 1, RangeID: 1}

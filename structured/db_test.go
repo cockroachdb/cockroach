@@ -20,6 +20,7 @@ package structured_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
@@ -30,7 +31,7 @@ func TestPutGetDeleteSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create test schema: %v", err)
 	}
-	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := server.BootstrapCluster("test-cluster", e)
 	if err != nil {
 		t.Fatalf("unable to boostrap cluster: %v", err)

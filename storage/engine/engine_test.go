@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -51,10 +52,10 @@ func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byt
 // runWithAllEngines creates a new engine of each supported type and
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
-	inMem := NewInMem(Attributes{}, 10<<20)
+	inMem := NewInMem(proto.Attributes{}, 10<<20)
 
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	rocksdb := NewRocksDB(Attributes([]string{"ssd"}), loc)
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
 	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)

@@ -63,7 +63,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	clock := hlc.NewClock(hlc.UnixNano)
 	db := kv.NewDB(kv.NewDistKV(g), clock)
 	node := NewNode(db, g)
-	if err := node.start(rpcServer, clock, engines, nil); err != nil {
+	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
 		t.Fatal(err)
 	}
 	return rpcServer, node
@@ -80,7 +80,7 @@ func formatKeys(keys []engine.Key) string {
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
-	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added.
 func TestBootstrapNewStore(t *testing.T) {
-	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
@@ -136,8 +136,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
 		e,
-		engine.NewInMem(engine.Attributes{}, 1<<20),
-		engine.NewInMem(engine.Attributes{}, 1<<20),
+		engine.NewInMem(proto.Attributes{}, 1<<20),
+		engine.NewInMem(proto.Attributes{}, 1<<20),
 	}
 	server, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer server.Close()
@@ -154,7 +154,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
-	e := engine.NewInMem(engine.Attributes{}, 1<<20)
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	db, err := BootstrapCluster("cluster-1", e)
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server1.Close()
 
 	// Create a new node.
-	engines2 := []engine.Engine{engine.NewInMem(engine.Attributes{}, 1<<20)}
+	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
 	server2, node2 := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer server2.Close()
 

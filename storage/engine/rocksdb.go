@@ -37,6 +37,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -60,13 +61,13 @@ type RocksDB struct {
 	// Custom RocksDB compaction filter.
 	compactionFilterFactory *C.rocksdb_compactionfilterfactory_t
 
-	attrs      Attributes // Attributes for this engine
-	dir        string     // The data directory
+	attrs      proto.Attributes // Attributes for this engine
+	dir        string           // The data directory
 	gcTimeouts func() (minTxnTS, minRCacheTS int64)
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs Attributes, dir string) *RocksDB {
+func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 	return &RocksDB{
 		attrs: attrs,
 		dir:   dir,
@@ -162,7 +163,7 @@ func (r *RocksDB) Start() error {
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
 // the engine.
-func (r *RocksDB) Attrs() Attributes {
+func (r *RocksDB) Attrs() proto.Attributes {
 	return r.attrs
 }
 

@@ -27,6 +27,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -49,7 +50,7 @@ func startServer() *server {
 		if err != nil {
 			log.Fatal(err)
 		}
-		engines := []engine.Engine{engine.NewInMem(engine.Attributes{}, 1<<20)}
+		engines := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			log.Fatal(err)
 		}
@@ -94,24 +95,24 @@ func TestInitEngine(t *testing.T) {
 	defer resetTestData(tmp)
 
 	testCases := []struct {
-		key       string            // data directory
-		expAttrs  engine.Attributes // attributes for engine
-		wantError bool              // do we expect an error from this key?
-		isMem     bool              // is the engine in-memory?
+		key       string           // data directory
+		expAttrs  proto.Attributes // attributes for engine
+		wantError bool             // do we expect an error from this key?
+		isMem     bool             // is the engine in-memory?
 	}{
-		{"mem=1000", engine.Attributes([]string{"mem"}), false, true},
-		{"ssd=1000", engine.Attributes([]string{"ssd"}), false, true},
-		{fmt.Sprintf("ssd=%s", tmp[0]), engine.Attributes([]string{"ssd"}), false, false},
-		{fmt.Sprintf("hdd=%s", tmp[1]), engine.Attributes([]string{"hdd"}), false, false},
-		{fmt.Sprintf("mem=%s", tmp[2]), engine.Attributes([]string{"mem"}), false, false},
-		{fmt.Sprintf("abc=%s", tmp[3]), engine.Attributes([]string{"abc"}), false, false},
-		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), engine.Attributes([]string{"hdd", "7200rpm"}), false, false},
-		{"", engine.Attributes{}, true, false},
-		{"  ", engine.Attributes{}, true, false},
-		{"arbitrarystring", engine.Attributes{}, true, false},
-		{"mem=", engine.Attributes{}, true, false},
-		{"ssd=", engine.Attributes{}, true, false},
-		{"hdd=", engine.Attributes{}, true, false},
+		{"mem=1000", proto.Attributes{Attrs: []string{"mem"}}, false, true},
+		{"ssd=1000", proto.Attributes{Attrs: []string{"ssd"}}, false, true},
+		{fmt.Sprintf("ssd=%s", tmp[0]), proto.Attributes{Attrs: []string{"ssd"}}, false, false},
+		{fmt.Sprintf("hdd=%s", tmp[1]), proto.Attributes{Attrs: []string{"hdd"}}, false, false},
+		{fmt.Sprintf("mem=%s", tmp[2]), proto.Attributes{Attrs: []string{"mem"}}, false, false},
+		{fmt.Sprintf("abc=%s", tmp[3]), proto.Attributes{Attrs: []string{"abc"}}, false, false},
+		{fmt.Sprintf("hdd:7200rpm=%s", tmp[4]), proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false, false},
+		{"", proto.Attributes{}, true, false},
+		{"  ", proto.Attributes{}, true, false},
+		{"arbitrarystring", proto.Attributes{}, true, false},
+		{"mem=", proto.Attributes{}, true, false},
+		{"ssd=", proto.Attributes{}, true, false},
+		{"hdd=", proto.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
 		engines, err := initEngines(spec.key)
@@ -144,13 +145,13 @@ func TestInitEngines(t *testing.T) {
 
 	stores := fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
 	expEngines := []struct {
-		attrs engine.Attributes
+		attrs proto.Attributes
 		isMem bool
 	}{
-		{engine.Attributes([]string{"mem"}), true},
-		{engine.Attributes([]string{"mem", "ddr3"}), true},
-		{engine.Attributes([]string{"ssd"}), false},
-		{engine.Attributes([]string{"hdd", "7200rpm"}), false},
+		{proto.Attributes{Attrs: []string{"mem"}}, true},
+		{proto.Attributes{Attrs: []string{"mem", "ddr3"}}, true},
+		{proto.Attributes{Attrs: []string{"ssd"}}, false},
+		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
 	engines, err := initEngines(stores)

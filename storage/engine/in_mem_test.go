@@ -22,11 +22,13 @@ import (
 	"fmt"
 	"runtime"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 func TestInMemCapacity(t *testing.T) {
 	// TODO(Tobias): Test for correct update during put()
-	engine := NewInMem(Attributes{}, 1<<20)
+	engine := NewInMem(proto.Attributes{}, 1<<20)
 	c, err := engine.Capacity()
 	if err != nil {
 		t.Errorf("unexpected error fetching capacity: %v", err)
@@ -71,7 +73,7 @@ func TestInMemCapacity(t *testing.T) {
 func TestInMemOverCapacity(t *testing.T) {
 	value := []byte("0123456789")
 	// Create an engine with enough space for one, but not two, nodes.
-	engine := NewInMem(Attributes{},
+	engine := NewInMem(proto.Attributes{},
 		int64(float64(computeSize(RawKeyValue{Key: Key("X"), Value: value}))*1.5))
 	var err error
 	if err = engine.Put(Key("1"), value); err != nil {
@@ -83,7 +85,7 @@ func TestInMemOverCapacity(t *testing.T) {
 }
 
 func BenchmarkCapacity(b *testing.B) {
-	engine := NewInMem(Attributes{}, 1<<30)
+	engine := NewInMem(proto.Attributes{}, 1<<30)
 	bytes := []byte("0123456789")
 	for i := 0; i < b.N; i++ {
 		if err := engine.Put(Key(fmt.Sprintf("%d", i)), bytes); err != nil {

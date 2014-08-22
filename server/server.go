@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
@@ -168,7 +169,7 @@ func runStart(cmd *commander.Command, args []string) {
 // parseAttributes parses a colon-separated list of strings,
 // filtering empty strings (i.e. ",," will yield no attributes.
 // Returns the list of strings as Attributes.
-func parseAttributes(attrsStr string) engine.Attributes {
+func parseAttributes(attrsStr string) proto.Attributes {
 	var filtered []string
 	for _, attr := range strings.Split(attrsStr, ":") {
 		if len(attr) != 0 {
@@ -176,7 +177,7 @@ func parseAttributes(attrsStr string) engine.Attributes {
 		}
 	}
 	sort.Strings(filtered)
-	return engine.Attributes(filtered)
+	return proto.Attributes{Attrs: filtered}
 }
 
 // initEngines interprets the stores parameter to initialize a slice of

@@ -18,14 +18,13 @@
 package storage
 
 import (
-	"bytes"
-	"encoding/gob"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -42,25 +41,25 @@ var (
 				NodeID:  1,
 				StoreID: 1,
 				RangeID: 1,
-				Attrs:   engine.Attributes([]string{"dc1", "mem"}),
+				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
 			{
 				NodeID:  2,
 				StoreID: 1,
 				RangeID: 1,
-				Attrs:   engine.Attributes([]string{"dc2", "mem"}),
+				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
 			},
 		},
 	}
-	testDefaultAcctConfig = AcctConfig{}
-	testDefaultPermConfig = PermConfig{
+	testDefaultAcctConfig = proto.AcctConfig{}
+	testDefaultPermConfig = proto.PermConfig{
 		Read:  []string{"root"},
 		Write: []string{"root"},
 	}
-	testDefaultZoneConfig = ZoneConfig{
-		Replicas: []engine.Attributes{
-			engine.Attributes([]string{"dc1", "mem"}),
-			engine.Attributes([]string{"dc2", "mem"}),
+	testDefaultZoneConfig = proto.ZoneConfig{
+		Replicas: []proto.Attributes{
+			proto.Attributes{Attrs: []string{"dc1", "mem"}},
+			proto.Attributes{Attrs: []string{"dc2", "mem"}},
 		},
 	}
 )
@@ -68,14 +67,14 @@ var (
 // createTestEngine creates an in-memory engine and initializes some
 // default configuration settings.
 func createTestEngine(t *testing.T) engine.Engine {
-	e := engine.NewInMem(engine.Attributes([]string{"dc1", "mem"}), 1<<20)
-	if err := engine.PutI(e, engine.KeyConfigAccountingPrefix, testDefaultAcctConfig); err != nil {
+	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
+	if err := engine.PutProto(e, engine.KeyConfigAccountingPrefix, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.PutI(e, engine.KeyConfigPermissionPrefix, testDefaultPermConfig); err != nil {
+	if err := engine.PutProto(e, engine.KeyConfigPermissionPrefix, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.PutI(e, engine.KeyConfigZonePrefix, testDefaultZoneConfig); err != nil {
+	if err := engine.PutProto(e, engine.KeyConfigZonePrefix, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 	return e
@@ -139,12 +138,12 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	e := createTestEngine(t)
 	// Add a permission for a new key prefix.
-	db1Perm := PermConfig{
+	db1Perm := proto.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
-	if err := engine.PutI(e, key, db1Perm); err != nil {
+	if err := engine.PutProto(e, key, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
 	r, g := createTestRange(e, t)
@@ -171,18 +170,18 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	r, g := createTestRange(createTestEngine(t), t)
 	defer r.Stop()
 	// Add a permission for a new key prefix.
-	db1Perm := PermConfig{
+	db1Perm := proto.PermConfig{
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
 	reply := &proto.PutResponse{}
 
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(db1Perm); err != nil {
+	data, err := gogoproto.Marshal(&db1Perm)
+	if err != nil {
 		t.Fatal(err)
 	}
-	r.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: buf.Bytes()}}, reply)
+	r.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: data}}, reply)
 	if reply.Error != nil {
 		t.Fatal(reply.GoError())
 	}
@@ -217,7 +216,7 @@ type blockingEngine struct {
 
 func newBlockingEngine() *blockingEngine {
 	be := &blockingEngine{
-		InMem: engine.NewInMem(engine.Attributes{}, 1<<20),
+		InMem: engine.NewInMem(proto.Attributes{}, 1<<20),
 	}
 	be.cvar = sync.NewCond(&be.mu)
 	return be

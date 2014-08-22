@@ -37,9 +37,9 @@ import (
 func init() {
 	gob.Register(StoreDescriptor{})
 	gob.Register(PrefixConfigMap{})
-	gob.Register(&AcctConfig{})
-	gob.Register(&PermConfig{})
-	gob.Register(&ZoneConfig{})
+	gob.Register(&proto.AcctConfig{})
+	gob.Register(&proto.PermConfig{})
+	gob.Register(&proto.ZoneConfig{})
 	gob.Register(proto.RangeDescriptor{})
 	gob.Register(proto.Transaction{})
 }
@@ -60,9 +60,9 @@ var configPrefixes = []struct {
 	configI   interface{} // Config struct interface
 	dirty     bool        // Info in this config has changed; need to re-init and gossip
 }{
-	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, AcctConfig{}, true},
-	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, PermConfig{}, true},
-	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, ZoneConfig{}, true},
+	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}, true},
+	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}, true},
+	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}, true},
 }
 
 // The following are the method names supported by the KV API.
@@ -427,8 +427,8 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
 		// gob encoded config from the Value into a new instance of configI.
-		config := reflect.New(reflect.TypeOf(configI)).Interface()
-		if err := gob.NewDecoder(bytes.NewBuffer(kv.Value)).Decode(config); err != nil {
+		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
+		if err := gogoproto.Unmarshal(kv.Value, config); err != nil {
 			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
 		}
 		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})

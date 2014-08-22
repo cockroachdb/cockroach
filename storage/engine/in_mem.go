@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"code.google.com/p/biogo.store/llrb"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -49,14 +50,14 @@ func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 // InMem a simple, in-memory key-value store.
 type InMem struct {
 	sync.RWMutex
-	attrs     Attributes
+	attrs     proto.Attributes
 	maxBytes  int64
 	usedBytes int64
 	data      llrb.Tree
 }
 
 // NewInMem allocates and returns a new InMem object.
-func NewInMem(attrs Attributes, maxBytes int64) *InMem {
+func NewInMem(attrs proto.Attributes, maxBytes int64) *InMem {
 	return &InMem{
 		attrs:    attrs,
 		maxBytes: maxBytes,
@@ -76,7 +77,7 @@ func (in *InMem) Start() error {
 // Attrs returns the list of attributes describing this engine.  This
 // includes the disk type (always "mem") and potentially other labels
 // to identify important attributes of the engine.
-func (in *InMem) Attrs() Attributes {
+func (in *InMem) Attrs() proto.Attributes {
 	return in.attrs
 }
 

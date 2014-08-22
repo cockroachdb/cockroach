@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -32,7 +33,7 @@ import (
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
 func startAdminServer() *httptest.Server {
-	db, err := BootstrapCluster("cluster-1", engine.NewInMem(engine.Attributes{}, 1<<20))
+	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20))
 	if err != nil {
 		log.Fatal(err)
 	}

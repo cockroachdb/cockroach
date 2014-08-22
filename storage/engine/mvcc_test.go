@@ -43,7 +43,7 @@ var (
 // createTestMVCC creates a new MVCC instance with the given engine.
 func createTestMVCC(t *testing.T) *MVCC {
 	return &MVCC{
-		engine: NewInMem(Attributes{}, 1<<20),
+		engine: NewInMem(proto.Attributes{}, 1<<20),
 	}
 }
 

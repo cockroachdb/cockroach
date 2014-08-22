@@ -33,7 +33,7 @@ var incR = proto.IncrementResponse{
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the engine for range ID 1.
 func createTestResponseCache(t *testing.T) *ResponseCache {
-	return NewResponseCache(1, engine.NewInMem(engine.Attributes{}, 1<<20))
+	return NewResponseCache(1, engine.NewInMem(proto.Attributes{}, 1<<20))
 }
 
 func makeCmdID(wallTime, random int64) proto.ClientCmdID {
@@ -171,7 +171,7 @@ func TestResponseCacheClear(t *testing.T) {
 // garbage collected periodically.
 func TestResponseCacheGC(t *testing.T) {
 	loc := util.CreateTempDirectory()
-	rocksdb := engine.NewRocksDB(engine.Attributes([]string{"ssd"}), loc)
+	rocksdb := engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
 	if err := rocksdb.Start(); err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}

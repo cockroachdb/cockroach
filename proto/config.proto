@@ -19,6 +19,12 @@ package proto;
 
 import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
 
+// Attributes specifies a list of arbitrary strings describing
+// node topology, store type, and machine capabilities.
+message Attributes {
+  repeated string attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"attrs,flow\""];
+}
+
 // Replica describes a replica location by node ID (corresponds to a
 // host:port via lookup on gossip network), store ID (corresponds to
 // a physical device, unique per node) and range ID. Datacenter and
@@ -29,7 +35,7 @@ message Replica {
   optional int32 store_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
   optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
   // combination of node & store attributes.
-  repeated string attrs = 4 [(gogoproto.nullable) = false];
+  optional Attributes attrs = 4 [(gogoproto.nullable) = false];
 }
 
 // RangeDescriptor is the value stored in a range metadata key.
@@ -66,4 +72,27 @@ message GCPolicy {
   // garbage collected. Only older versions of values are garbage
   // collected. Specifying <=0 mean older versions are never GC'd.
   optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
+}
+
+// AcctConfig holds accounting configuration.
+message AcctConfig {
+  optional string ClusterID = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
+}
+
+// PermConfig holds permission configuration, specifying read/write ACLs.
+message PermConfig {
+  // ACL lists users with read permissions.
+  repeated string Read= 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"read,omitempty\""];
+  // ACL lists users with write permissions.
+  repeated string Write= 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"write,omitempty\""];
+}
+
+// ZoneConfig holds configuration that is needed for a range of KV pairs.
+message ZoneConfig {
+  // Replicas is a slice of Attributes, each describing required
+  // capabilities of each replica in the zone.
+  repeated Attributes Replicas = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty,flow\""];
+  optional int64 RangeMinBytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
+  optional int64 RangeMaxBytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
+  optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }

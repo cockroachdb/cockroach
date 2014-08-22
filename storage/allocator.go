@@ -22,12 +22,11 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 // StoreFinder finds the disks in a datacenter with the most available capacity.
-type StoreFinder func(engine.Attributes) ([]*StoreDescriptor, error)
+type StoreFinder func(proto.Attributes) ([]*StoreDescriptor, error)
 
 // allocator makes allocation decisions based on a zone configuration,
 // existing range metadata and available stores. Configuration
@@ -44,7 +43,7 @@ type allocator struct {
 // error. It uses the allocator's StoreFinder to select the set of
 // available stores matching attributes for missing replicas and picks
 // using randomly weighted selection based on available capacities.
-func (a *allocator) allocate(required engine.Attributes, existingReplicas []proto.Replica) (
+func (a *allocator) allocate(required proto.Attributes, existingReplicas []proto.Replica) (
 	*StoreDescriptor, error) {
 	// Get a set of current nodes -- we never want to allocate on an existing node.
 	usedNodes := make(map[int32]struct{})

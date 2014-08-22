@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -32,6 +33,8 @@ import (
 )
 
 const (
+	// UserRoot is the username for the root user.
+	UserRoot = "root"
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
@@ -67,19 +70,40 @@ func (e *NotBootstrappedError) Error() string {
 	return "store has not been bootstrapped"
 }
 
-// A StoreIdent uniquely identifies a store in the cluster. The
-// StoreIdent is written to the underlying storage engine at a
-// store-reserved system key (KeyLocalIdent).
-type StoreIdent struct {
-	ClusterID string
-	NodeID    int32
-	StoreID   int32
+// NodeDescriptor holds details on node physical/network topology.
+type NodeDescriptor struct {
+	NodeID  int32
+	Address net.Addr
+	Attrs   proto.Attributes // node specific attributes (e.g. datacenter, machine info)
+}
+
+// StoreDescriptor holds store information including store attributes,
+// node descriptor and store capacity.
+type StoreDescriptor struct {
+	StoreID  int32
+	Attrs    proto.Attributes // store specific attributes (e.g. ssd, hdd, mem)
+	Node     NodeDescriptor
+	Capacity engine.StoreCapacity
+}
+
+// CombinedAttrs returns the full list of attributes for the store,
+// including both the node and store attributes.
+func (s *StoreDescriptor) CombinedAttrs() *proto.Attributes {
+	var a []string
+	a = append(a, s.Node.Attrs.Attrs...)
+	a = append(a, s.Attrs.Attrs...)
+	return &proto.Attributes{Attrs: a}
+}
+
+// Less compares two StoreDescriptors based on percentage of disk available.
+func (s StoreDescriptor) Less(b util.Ordered) bool {
+	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
 }
 
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident     StoreIdent
+	Ident     proto.StoreIdent
 	clock     *hlc.Clock
 	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
@@ -128,7 +152,7 @@ func (s *Store) Init() error {
 	})
 
 	// Read store ident and return a not-bootstrapped error if necessary.
-	ok, err := engine.GetI(s.engine, engine.KeyLocalIdent, &s.Ident)
+	ok, err := engine.GetProto(s.engine, engine.KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -157,7 +181,7 @@ func (s *Store) Init() error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident StoreIdent) error {
+func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	s.Ident = ident
 	kvs, err := s.engine.Scan(engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
 	if err != nil {
@@ -165,7 +189,7 @@ func (s *Store) Bootstrap(ident StoreIdent) error {
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	return engine.PutI(s.engine, engine.KeyLocalIdent, s.Ident)
+	return engine.PutProto(s.engine, engine.KeyLocalIdent, &s.Ident)
 }
 
 // GetRange fetches a range by ID. Returns an error if no range is found.
@@ -226,7 +250,7 @@ func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replic
 }
 
 // Attrs returns the attributes of the underlying store.
-func (s *Store) Attrs() engine.Attributes {
+func (s *Store) Attrs() proto.Attributes {
 	return s.engine.Attrs()
 }
 

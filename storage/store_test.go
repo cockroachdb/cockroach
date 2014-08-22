@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-var testIdent = StoreIdent{
+var testIdent = proto.StoreIdent{
 	ClusterID: "cluster",
 	NodeID:    1,
 	StoreID:   1,
@@ -40,7 +40,7 @@ var testIdent = StoreIdent{
 func TestStoreInitAndBootstrap(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil)
 	defer store.Close()
 
@@ -81,7 +81,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // TestBootstrapOfNonEmptyStore verifies bootstrap failure if engine
 // is not empty.
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
-	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
 	if err := eng.Put(engine.Key("foo"), []byte("bar")); err != nil {
@@ -131,7 +131,7 @@ func TestRangeSliceSort(t *testing.T) {
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(engine.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil)
 	replica := proto.Replica{RangeID: 1}
 	_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []proto.Replica{replica})

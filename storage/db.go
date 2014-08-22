@@ -153,34 +153,34 @@ func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor, timestamp prot
 // other specifications.
 func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
 	// Accounting config.
-	acctConfig := &AcctConfig{}
+	acctConfig := &proto.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
-	if err := PutI(db, key, acctConfig, timestamp); err != nil {
+	if err := PutProto(db, key, acctConfig, timestamp); err != nil {
 		return err
 	}
 	// Permission config.
-	permConfig := &PermConfig{
+	permConfig := &proto.PermConfig{
 		Read:  []string{UserRoot}, // root user
 		Write: []string{UserRoot}, // root user
 	}
 	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
-	if err := PutI(db, key, permConfig, timestamp); err != nil {
+	if err := PutProto(db, key, permConfig, timestamp); err != nil {
 		return err
 	}
 	// Zone config.
 	// TODO(spencer): change this when zone specifications change to elect for three
 	// replicas with no specific features set.
-	zoneConfig := &ZoneConfig{
-		Replicas: []engine.Attributes{
-			engine.Attributes{},
-			engine.Attributes{},
-			engine.Attributes{},
+	zoneConfig := &proto.ZoneConfig{
+		Replicas: []proto.Attributes{
+			proto.Attributes{},
+			proto.Attributes{},
+			proto.Attributes{},
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
-	if err := PutI(db, key, zoneConfig, timestamp); err != nil {
+	if err := PutProto(db, key, zoneConfig, timestamp); err != nil {
 		return err
 	}
 	return nil

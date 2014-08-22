@@ -63,7 +63,7 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 func TestRocksDBCompaction(t *testing.T) {
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(Attributes([]string{"ssd"}), loc)
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
 	rocksdb.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
 		minTxnTS = 1
 		minRCacheTS = 2

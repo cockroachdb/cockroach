@@ -106,7 +106,7 @@ func allocateStoreIDs(nodeID int32, inc int64, db storage.DB) (int32, error) {
 //
 // Returns a kv.DB for unittest purposes only.
 func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
-	sIdent := storage.StoreIdent{
+	sIdent := proto.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
 		StoreID:   1,
@@ -134,7 +134,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 		NodeID:  1,
 		StoreID: 1,
 		RangeID: 1,
-		Attrs:   engine.Attributes{},
+		Attrs:   proto.Attributes{},
 	}
 	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
 	if err != nil {
@@ -193,7 +193,7 @@ func NewNode(db *kv.DB, gossip *gossip.Gossip) *Node {
 // initDescriptor initializes the physical/network topology attributes
 // if possible. Datacenter, PDU & Rack values are taken from environment
 // variables or command line flags.
-func (n *Node) initDescriptor(addr net.Addr, attrs engine.Attributes) {
+func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 	n.Descriptor = storage.NodeDescriptor{
 		// NodeID is after invocation of start()
 		Address: addr,
@@ -206,7 +206,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs engine.Attributes) {
 // for each specified engine. Launches periodic store gossipping
 // in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
-	engines []engine.Engine, attrs engine.Attributes) error {
+	engines []engine.Engine, attrs proto.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	rpcServer.RegisterName("Node", n)
 
@@ -324,7 +324,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	sIdent := storage.StoreIdent{
+	sIdent := proto.StoreIdent{
 		ClusterID: n.ClusterID,
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,

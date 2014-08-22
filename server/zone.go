@@ -53,12 +53,12 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if !utf8.ValidString(configStr) {
 		return util.Errorf("config contents not valid utf8: %q", body)
 	}
-	config, err := storage.ParseZoneConfig(body)
+	config, err := proto.ParseZoneConfig(body)
 	if err != nil {
 		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
-	if err := storage.PutI(zh.db, zoneKey, config, proto.Timestamp{}); err != nil {
+	if err := storage.PutProto(zh.db, zoneKey, config, proto.Timestamp{}); err != nil {
 		return err
 	}
 	return nil
@@ -103,8 +103,8 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 	} else {
 		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
 		var ok bool
-		config := &storage.ZoneConfig{}
-		if ok, _, err = storage.GetI(zh.db, zoneKey, config); err != nil {
+		config := &proto.ZoneConfig{}
+		if ok, _, err = storage.GetProto(zh.db, zoneKey, config); err != nil {
 			return
 		}
 		// On get, if there's no zone config for the requested prefix,

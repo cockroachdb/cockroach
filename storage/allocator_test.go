@@ -25,49 +25,49 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-var simpleZoneConfig = ZoneConfig{
-	Replicas: []engine.Attributes{
-		engine.Attributes([]string{"a", "ssd"}),
+var simpleZoneConfig = proto.ZoneConfig{
+	Replicas: []proto.Attributes{
+		proto.Attributes{Attrs: []string{"a", "ssd"}},
 	},
 }
 
-var multiDisksConfig = ZoneConfig{
-	Replicas: []engine.Attributes{
-		engine.Attributes([]string{"a", "ssd"}),
-		engine.Attributes([]string{"a", "hdd"}),
-		engine.Attributes([]string{"a", "mem"}),
+var multiDisksConfig = proto.ZoneConfig{
+	Replicas: []proto.Attributes{
+		proto.Attributes{Attrs: []string{"a", "ssd"}},
+		proto.Attributes{Attrs: []string{"a", "hdd"}},
+		proto.Attributes{Attrs: []string{"a", "mem"}},
 	},
 }
 
-var multiDCConfig = ZoneConfig{
-	Replicas: []engine.Attributes{
-		engine.Attributes([]string{"a", "ssd"}),
-		engine.Attributes([]string{"b", "ssd"}),
+var multiDCConfig = proto.ZoneConfig{
+	Replicas: []proto.Attributes{
+		proto.Attributes{Attrs: []string{"a", "ssd"}},
+		proto.Attributes{Attrs: []string{"b", "ssd"}},
 	},
 }
 
 // filterStores returns just the store descriptors in the supplied
 // stores slice which contain all the specified attributes.
-func filterStores(a engine.Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
+func filterStores(a proto.Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
 	var filtered []*StoreDescriptor
 	for _, s := range stores {
-		b := []string(s.Attrs)
-		b = append(b, []string(s.Node.Attrs)...)
-		if a.IsSubset(engine.Attributes(b)) {
+		b := s.Attrs.Attrs
+		b = append(b, s.Node.Attrs.Attrs...)
+		if a.IsSubset(proto.Attributes{Attrs: b}) {
 			filtered = append(filtered, s)
 		}
 	}
 	return filtered, nil
 }
 
-var singleStore = func(a engine.Attributes) ([]*StoreDescriptor, error) {
+var singleStore = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   engine.Attributes([]string{"ssd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -77,14 +77,14 @@ var singleStore = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
+var sameDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   engine.Attributes([]string{"ssd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -93,10 +93,10 @@ var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 		},
 		&StoreDescriptor{
 			StoreID: 2,
-			Attrs:   engine.Attributes([]string{"ssd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -105,10 +105,10 @@ var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 		},
 		&StoreDescriptor{
 			StoreID: 3,
-			Attrs:   engine.Attributes([]string{"hdd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -117,10 +117,10 @@ var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 		},
 		&StoreDescriptor{
 			StoreID: 4,
-			Attrs:   engine.Attributes([]string{"hdd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"hdd"}},
 			Node: NodeDescriptor{
 				NodeID: 3,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -129,10 +129,10 @@ var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 		},
 		&StoreDescriptor{
 			StoreID: 5,
-			Attrs:   engine.Attributes([]string{"mem"}),
+			Attrs:   proto.Attributes{Attrs: []string{"mem"}},
 			Node: NodeDescriptor{
 				NodeID: 4,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -142,14 +142,14 @@ var sameDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var multiDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
+var multiDCStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{
 		&StoreDescriptor{
 			StoreID: 1,
-			Attrs:   engine.Attributes([]string{"ssd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
 			Node: NodeDescriptor{
 				NodeID: 1,
-				Attrs:  engine.Attributes([]string{"a"}),
+				Attrs:  proto.Attributes{Attrs: []string{"a"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -158,10 +158,10 @@ var multiDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 		},
 		&StoreDescriptor{
 			StoreID: 2,
-			Attrs:   engine.Attributes([]string{"ssd"}),
+			Attrs:   proto.Attributes{Attrs: []string{"ssd"}},
 			Node: NodeDescriptor{
 				NodeID: 2,
-				Attrs:  engine.Attributes([]string{"b"}),
+				Attrs:  proto.Attributes{Attrs: []string{"b"}},
 			},
 			Capacity: engine.StoreCapacity{
 				Capacity:  100,
@@ -171,7 +171,7 @@ var multiDCStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
 	})
 }
 
-var noStores = func(a engine.Attributes) ([]*StoreDescriptor, error) {
+var noStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 	return filterStores(a, []*StoreDescriptor{})
 }
 

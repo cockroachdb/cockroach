@@ -54,6 +54,15 @@ message KeyValue {
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
+// A StoreIdent uniquely identifies a store in the cluster. The
+// StoreIdent is written to the underlying storage engine at a
+// store-reserved system key (KeyLocalIdent).
+message StoreIdent {
+  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
+  optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
+  optional int32 store_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+}
+
 // IsolationType TODO(jiajia) Needs documentation.
 enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;

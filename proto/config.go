@@ -20,7 +20,41 @@ package proto
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"strings"
+
+	yaml "gopkg.in/yaml.v1"
 )
+
+// IsSubset returns whether attributes list b is a subset of
+// attributes list a.
+func (a Attributes) IsSubset(b Attributes) bool {
+	m := map[string]struct{}{}
+	for _, s := range b.Attrs {
+		m[s] = struct{}{}
+	}
+	for _, s := range a.Attrs {
+		if _, ok := m[s]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// SortedString returns a sorted, de-duplicated, comma-separated list
+// of the attributes.
+func (a Attributes) SortedString() string {
+	m := map[string]struct{}{}
+	for _, s := range a.Attrs {
+		m[s] = struct{}{}
+	}
+	var attrs []string
+	for a := range m {
+		attrs = append(attrs, a)
+	}
+	sort.Strings(attrs)
+	return strings.Join(attrs, ",")
+}
 
 // ContainsKey returns whether this RangeDescriptor contains the specified key.
 func (r *RangeDescriptor) ContainsKey(key []byte) bool {
@@ -37,4 +71,36 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
 	}
 	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
+}
+
+// CanRead does a linear search for user to verify read permission.
+func (p *PermConfig) CanRead(user string) bool {
+	for _, u := range p.Read {
+		if u == user {
+			return true
+		}
+	}
+	return false
+}
+
+// CanWrite does a linear search for user to verify write permission.
+func (p *PermConfig) CanWrite(user string) bool {
+	for _, u := range p.Write {
+		if u == user {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseZoneConfig parses a YAML serialized ZoneConfig.
+func ParseZoneConfig(in []byte) (*ZoneConfig, error) {
+	z := &ZoneConfig{}
+	err := yaml.Unmarshal(in, z)
+	return z, err
+}
+
+// ToYAML serializes a ZoneConfig as YAML.
+func (z *ZoneConfig) ToYAML() ([]byte, error) {
+	return yaml.Marshal(z)
 }
