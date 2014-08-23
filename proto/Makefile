@@ -33,6 +33,7 @@ static_lib: $(PROTO_LIB)
 $(PROTO_LIB): $(PROTO_GO) $(SOURCES) $(LIBOBJECTS)
 	rm -f $@
 	ar -rs $(PROTO_LIB) $(LIBOBJECTS)
+	ranlib $(PROTO_LIB)
 
 $(PROTO_GO): $(PROTOS)
 	protoc --gogo_out=. --cpp_out=lib --proto_path=.:$(PROTO_PATH) $(PROTOS)
