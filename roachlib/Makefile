@@ -14,12 +14,13 @@
 # for names of contributors.
 #
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
+# Author: Andrew Bonventre (andybons@gmail.com)
 
 ROACH_LIB := libroach.a
 SOURCES   := compaction.cc
 OBJECTS   := $(SOURCES:.cc=.o)
 
-CPPFLAGS += -std=c++11 -I../proto/lib
+CXXFLAGS += -std=c++11 -I../proto/lib -I../_vendor/rocksdb/include
 
 all: static_lib
 
@@ -27,11 +28,10 @@ static_lib: $(ROACH_LIB)
 
 $(ROACH_LIB): $(OBJECTS)
 	rm -f $@
-	ar -rs $(ROACH_LIB) $(OBJECTS)
-	ranlib $(ROACH_LIB)
+	ar -rsv $(ROACH_LIB) $(OBJECTS)
 
 .cc.o:
-	$(CPP) $(CPPFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(OBJECTS) $(ROACH_LIB)

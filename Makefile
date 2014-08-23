@@ -26,16 +26,16 @@ ROACH_PROTO := $(CURDIR)/proto
 ROACH_LIB   := $(CURDIR)/roachlib
 
 CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
-CPPFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CPPFLAGS)"
+CXXFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
 LDFLAGS  := "-L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
 
 FLAGS := LDFLAGS=$(LDFLAGS) \
          CFLAGS=$(CFLAGS) \
-         CPPFLAGS=$(CPPFLAGS)
+         CXXFLAGS=$(CXXFLAGS)
 
 CGO_FLAGS := CGO_LDFLAGS=$(LDFLAGS) \
              CGO_CFLAGS=$(CFLAGS) \
-             CGO_CPPFLAGS=$(CPPFLAGS)
+             CGO_CXXFLAGS=$(CXXFLAGS)
 
 PKG       := "./..."
 TESTS     := ".*"

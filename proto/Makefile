@@ -14,6 +14,7 @@
 # for names of contributors.
 #
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
+# Author: Andrew Bonventre (andybons@gmail.com)
 
 PROTO_LIB   := lib/libroachproto.a
 PROTOS      := api.proto config.proto data.proto errors.proto
@@ -23,7 +24,8 @@ SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc li
 HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.h
 LIBOBJECTS  := $(SOURCES:.cc=.o)
 
-CPPFLAGS += "-Ilib/"
+CXXFLAGS += -Ilib
+
 PROTO_PATH := ../../../../:../../../../code.google.com/p/gogoprotobuf/protobuf:../../../../code.google.com/p/gogoprotobuf/gogoproto
 
 all: static_lib
@@ -32,8 +34,7 @@ static_lib: $(PROTO_LIB)
 
 $(PROTO_LIB): $(PROTO_GO) $(SOURCES) $(LIBOBJECTS)
 	rm -f $@
-	ar -rs $(PROTO_LIB) $(LIBOBJECTS)
-	ranlib $(PROTO_LIB)
+	ar -rsv $(PROTO_LIB) $(LIBOBJECTS)
 
 $(PROTO_GO): $(PROTOS)
 	protoc --gogo_out=. --cpp_out=lib --proto_path=.:$(PROTO_PATH) $(PROTOS)
@@ -42,7 +43,7 @@ $(SOURCES): $(GOGO_PROTOS)
 	protoc --cpp_out=lib --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
 
 .cc.o:
-	$(CPP) $(CPPFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(LIBOBJECTS) $(PROTO_LIB) $(PROTO_GO) $(SOURCES) $(HEADERS)

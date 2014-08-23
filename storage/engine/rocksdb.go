@@ -20,7 +20,7 @@
 package engine
 
 /*
-#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroachproto -lroach -lprotobuf
+#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lprotobuf -lroachproto -lroach
 #cgo linux LDFLAGS: -lrt
 #cgo darwin LDFLAGS: -lc++
 #include <stdlib.h>
