@@ -19,16 +19,14 @@ $provisioner = <<SCRIPT
   rm -rf libgflags*
 
   # Protocol buffers.
-  wget https://protobuf.googlecode.com/files/protobuf-2.5.0.tar.bz2
-  bunzip2 protobuf-2.5.0.tar.bz2
-  tar xvf protobuf-2.5.0.tar
+  curl -s https://protobuf.googlecode.com/files/protobuf-2.5.0.tar.gz | tar -v -C . -xz
   cd protobuf-2.5.0 && ./configure && make && sudo make install && cd ../ && rm -rf protobuf*
 
   # Go time.
   curl -s https://storage.googleapis.com/golang/go1.3.1.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
   echo "export GOPATH=/home/vagrant/go" >> .bashrc
   echo "export PATH=/usr/local/go/bin:/home/vagrant/go/bin:\\$PATH" >> .bashrc
-  echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> .bashrc
+  echo "export LD_LIBRARY_PATH=/usr/local/lib:\\$LD_LIBRARY_PATH" >> .bashrc
 SCRIPT
 
 Vagrant.require_version '>= 1.5.0'
