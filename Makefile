@@ -27,7 +27,7 @@ ROACH_LIB   := $(CURDIR)/roachlib
 
 CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
 CXXFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
-LDFLAGS  := "-L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
+LDFLAGS  := "-L/usr/local/lib -L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
 
 FLAGS := LDFLAGS=$(LDFLAGS) \
          CFLAGS=$(CFLAGS) \
@@ -52,7 +52,7 @@ rocksdb:
 roach_proto:
 	cd $(ROACH_PROTO); $(FLAGS) make static_lib
 
-roach_lib:
+roach_lib: roach_proto
 	cd $(ROACH_LIB); $(FLAGS) make static_lib
 
 goget:

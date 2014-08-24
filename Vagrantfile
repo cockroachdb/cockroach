@@ -28,7 +28,7 @@ $provisioner = <<SCRIPT
   curl -s https://storage.googleapis.com/golang/go1.3.1.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
   echo "export GOPATH=/home/vagrant/go" >> .bashrc
   echo "export PATH=/usr/local/go/bin:/home/vagrant/go/bin:\\$PATH" >> .bashrc
-  echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/local/lib" >> .bashrc
+  echo "export LD_LIBRARY_PATH=/usr/local/lib:\$LD_LIBRARY_PATH" >> .bashrc
 SCRIPT
 
 Vagrant.require_version '>= 1.5.0'
