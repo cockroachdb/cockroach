@@ -75,7 +75,7 @@ type resourceRequest struct {
 // that can be used to look up values within the monolithic kv store.
 // If a valid key cannot be constructed, an error is returned.
 func (r *resourceRequest) key() (engine.Key, error) {
-	return engine.MakeKey(""), nil
+	return engine.Key{}, nil
 }
 
 // newResourceRequest allocates and returns a resourceRequest
