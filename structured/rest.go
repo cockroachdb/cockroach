@@ -21,6 +21,10 @@ package structured
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
 // StructuredKeyPrefix is the prefix for RESTful endpoints used to
@@ -31,7 +35,7 @@ const StructuredKeyPrefix = "/schema/"
 // structured data schemas.
 //
 // A resource is represented using the following URL scheme:
-//   /schema/<schema key>/<table key>/<primary key>??[<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]
+//   /schema/<schema key>/<table key>/<primary key>?[<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]
 //
 // Some examples:
 //   /schema/pdb/us/531 -> <data for user 531>
@@ -50,6 +54,77 @@ type RESTServer struct {
 // NewRESTServer allocates and returns a new server.
 func NewRESTServer(db *DB) *RESTServer {
 	return &RESTServer{db: db}
+}
+
+const (
+	componentSchemaKey = iota
+	componentTableKey
+	componentPrimaryKey
+
+	paramLimit  = "limit"
+	paramOffset = "offset"
+)
+
+type resourceRequest struct {
+	schemaKey, tableKey, primaryKey string
+	limit, offset                   int
+	params                          map[string][]string
+}
+
+// key returns the Key value corresponding to the resource request
+// that can be used to look up values within the monolithic kv store.
+// If a valid key cannot be constructed, an error is returned.
+func (r *resourceRequest) key() (engine.Key, error) {
+	return engine.MakeKey(""), nil
+}
+
+// newResourceRequest allocates and returns a resourceRequest
+// with the available information within req.
+func newResourceRequest(req *http.Request) (*resourceRequest, error) {
+	path := req.URL.Path
+	if strings.HasPrefix(path, StructuredKeyPrefix) {
+		path = path[len(StructuredKeyPrefix):]
+	} else {
+		return nil, fmt.Errorf("invalid path: %q", path)
+	}
+	components := strings.Split(path, "/")
+	if len(components) == 0 || len(components) > 3 {
+		return nil, fmt.Errorf("invalid path: %q", req.URL.Path)
+	}
+	if err := req.ParseForm(); err != nil {
+		return nil, fmt.Errorf("error parsing form values: %v", err)
+	}
+	resReq := &resourceRequest{params: req.Form}
+	for i := 0; i < len(components); i++ {
+		switch i {
+		case componentSchemaKey:
+			resReq.schemaKey = components[i]
+		case componentTableKey:
+			resReq.tableKey = components[i]
+		case componentPrimaryKey:
+			resReq.primaryKey = components[i]
+		}
+	}
+	// While these could be deduced via the params field downstream,
+	// they are parsed into their own fields here as a convenience.
+	if _, ok := resReq.params[paramLimit]; ok {
+		var err error
+		if resReq.limit, err = strconv.Atoi(resReq.params[paramLimit][0]); err != nil {
+			return nil, fmt.Errorf("error parsing limit param: %v", err)
+		}
+		delete(resReq.params, paramLimit)
+	}
+	if _, ok := resReq.params[paramOffset]; ok {
+		var err error
+		if resReq.offset, err = strconv.Atoi(resReq.params[paramOffset][0]); err != nil {
+			return nil, fmt.Errorf("error parsing offset param: %v", err)
+		}
+		delete(resReq.params, paramOffset)
+	}
+	if len(resReq.params) == 0 {
+		resReq.params = nil
+	}
+	return resReq, nil
 }
 
 // HandleAction arbitrates requests to the appropriate function

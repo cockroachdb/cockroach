@@ -48,7 +48,7 @@ func newServer(interval time.Duration) *server {
 		is:            newInfoStore(nil),
 		interval:      interval,
 		incoming:      newAddrSet(MaxPeers),
-		clientAddrMap: make(map[string]net.Addr),
+		clientAddrMap: map[string]net.Addr{},
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -57,7 +57,7 @@ func newServer(interval time.Duration) *server {
 // Gossip receives gossipped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
-func (s *server) Gossip(args *GossipRequest, reply *GossipResponse) error {
+func (s *server) Gossip(args *Request, reply *Response) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

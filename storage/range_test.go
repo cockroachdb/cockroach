@@ -103,7 +103,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-		t.Errorf("expected gossipped range locations to be equal: %s vs %s", info.(proto.RangeDescriptor), testRangeDescriptor)
+		t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
 	}
 }
 

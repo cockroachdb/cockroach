@@ -17,12 +17,10 @@
 
 package gossip
 
-import (
-	"net"
-)
+import "net"
 
-// GossipRequest is passed to the Gossip.Gossip RPC.
-type GossipRequest struct {
+// Request is passed to the Gossip.Gossip RPC.
+type Request struct {
 	Addr   net.Addr // Address of requesting node's server
 	LAddr  net.Addr // Local address of client on requesting node
 	MaxSeq int64    // Maximum sequence number of gossip from this peer
@@ -30,9 +28,9 @@ type GossipRequest struct {
 	Delta *infoStore // Reciprocal delta of new info since last gossip
 }
 
-// GossipResponse is returned from the Gossip.Gossip RPC.
+// Response is returned from the Gossip.Gossip RPC.
 // Delta will be nil in the event that Alternate is set.
-type GossipResponse struct {
+type Response struct {
 	Delta     *infoStore // Requested delta of server's infostore
 	Alternate net.Addr   // Non-nil means client should retry with this address
 }

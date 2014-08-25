@@ -123,7 +123,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		gc.now = test.time
 		toDelete := gc.Filter(test.keys, test.values)
 		if !reflect.DeepEqual(toDelete, test.expDelete) {
-			t.Errorf("expected deletions (test %d): %s; got %s", i, test.expDelete, toDelete)
+			t.Errorf("expected deletions (test %d): %v; got %v", i, test.expDelete, toDelete)
 		}
 	}
 }

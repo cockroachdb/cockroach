@@ -62,7 +62,7 @@ func NewRangeKeyMismatchError(start, end []byte, meta *RangeMetadata) *RangeKeyM
 
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
-	return fmt.Sprintf("key range %q-%q outside of bounds of range %d: %q-%q",
+	return fmt.Sprintf("key range %q-%q outside of bounds of range %q: %q-%q",
 		string(e.RequestStartKey), string(e.RequestEndKey),
 		string(e.Range.RangeID),
 		string(e.Range.StartKey), string(e.Range.EndKey))

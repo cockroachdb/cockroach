@@ -30,7 +30,7 @@ import (
 
 // Maximum sizes for allocating buffers to hold encoded values.
 const (
-	// Maximum encoded integer size in bytes.
+	// MaxIntSize is the maximum encoded integer size in bytes.
 	MaxIntSize = 12
 )
 

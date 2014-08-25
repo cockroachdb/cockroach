@@ -32,6 +32,7 @@ type GarbageCollector struct {
 	policyFn func(key Key) *proto.GCPolicy
 }
 
+// NewGarbageCollector allocates and returns a new GC.
 func NewGarbageCollector(now proto.Timestamp, policyFn func(key Key) *proto.GCPolicy) *GarbageCollector {
 	return &GarbageCollector{
 		now:      now,

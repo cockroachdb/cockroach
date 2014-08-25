@@ -198,7 +198,7 @@ func TestResponseCacheGC(t *testing.T) {
 	rocksdb.CompactRange(nil, nil)
 	val := proto.IncrementResponse{}
 	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
-		t.Fatalf("unexpected response or error: %b, %v, %+v", ok, err, val)
+		t.Fatalf("unexpected response or error: %t, %v, %+v", ok, err, val)
 	}
 
 	// Now set minRCacheTS to 1, which will GC.
@@ -208,6 +208,6 @@ func TestResponseCacheGC(t *testing.T) {
 	})
 	rocksdb.CompactRange(nil, nil)
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected response or error: %b, %v", ok, err)
+		t.Errorf("unexpected response or error: %t, %v", ok, err)
 	}
 }

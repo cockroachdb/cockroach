@@ -61,7 +61,7 @@ func (rs RangeSlice) Less(i, j int) bool {
 	return bytes.Compare(rs[i].Meta.StartKey, rs[j].Meta.StartKey) < 0
 }
 
-// A NotBootstrapped error indicates that an engine has not yet been
+// A NotBootstrappedError indicates that an engine has not yet been
 // bootstrapped due to a store identifier not being present.
 type NotBootstrappedError struct{}
 

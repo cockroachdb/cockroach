@@ -113,13 +113,13 @@ func (c *client) gossip(g *Gossip) error {
 		g.mu.Unlock()
 
 		// Send gossip with timeout.
-		args := &GossipRequest{
+		args := &Request{
 			Addr:   g.is.NodeAddr,
 			LAddr:  c.rpcClient.LocalAddr(),
 			MaxSeq: remoteMaxSeq,
 			Delta:  delta,
 		}
-		reply := new(GossipResponse)
+		reply := new(Response)
 		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
 		select {
 		case <-gossipCall.Done:

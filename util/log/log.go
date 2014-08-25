@@ -19,11 +19,11 @@ package log
 
 import "github.com/golang/glog"
 
-// LogFatalOnPanic recovers from a panic and exits the process with a
+// FatalOnPanic recovers from a panic and exits the process with a
 // Fatal log. This is useful for avoiding a panic being caught through
 // a CGo exported function or preventing HTTP handlers from recovering
 // panics and ignoring them.
-func LogFatalOnPanic() {
+func FatalOnPanic() {
 	if r := recover(); r != nil {
 		Fatalf("unexpected panic: %s", r)
 	}
