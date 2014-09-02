@@ -116,7 +116,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	s := storage.NewStore(clock, eng, nil)
 
 	// Verify the store isn't already part of a cluster.
-	if s.Ident.ClusterID != "" {
+	if len(s.Ident.ClusterID) > 0 {
 		return nil, util.Errorf("storage engine already belongs to a cluster (%s)", s.Ident.ClusterID)
 	}
 

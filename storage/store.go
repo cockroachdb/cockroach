@@ -120,7 +120,7 @@ func NewStore(clock *hlc.Clock, engine engine.Engine, gossip *gossip.Gossip) *St
 		engine:    engine,
 		allocator: &allocator{},
 		gossip:    gossip,
-		ranges:    make(map[int64]*Range),
+		ranges:    map[int64]*Range{},
 	}
 }
 
@@ -160,7 +160,7 @@ func (s *Store) Init() error {
 	}
 
 	// TODO(spencer): scan through all range metadata and instantiate
-	//   ranges. Right now we just get range ID hardcoded as 1.
+	// ranges. Right now we just get range ID hardcoded as 1.
 	var meta proto.RangeMetadata
 	ok, err = engine.GetProto(s.engine, makeRangeKey(1), &meta)
 	if err != nil || !ok {
@@ -182,6 +182,9 @@ func (s *Store) Init() error {
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
 func (s *Store) Bootstrap(ident proto.StoreIdent) error {
+	if err := s.engine.Start(); err != nil {
+		return err
+	}
 	s.Ident = ident
 	kvs, err := s.engine.Scan(engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
 	if err != nil {

@@ -137,8 +137,11 @@ func (r *RocksDB) String() string {
 
 // Start creates options and opens the database. If the database
 // doesn't yet exist at the specified directory, one is initialized
-// from scratch.
+// from scratch. Subsequent calls to this method on an open DB are no-ops.
 func (r *RocksDB) Start() error {
+	if r.rdb != nil {
+		return nil
+	}
 	r.createOptions()
 
 	cDir := C.CString(r.dir)
@@ -410,7 +413,6 @@ func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	if err := syscall.Statfs(r.dir, &fs); err != nil {
 		return capacity, err
 	}
-	//log.Infof("stat filesystem: %v", fs)
 	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
 	capacity.Available = int64(fs.Bsize) * int64(fs.Bavail)
 	return capacity, nil

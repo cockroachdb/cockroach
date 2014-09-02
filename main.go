@@ -12,6 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
+//
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package main
 
@@ -80,7 +82,6 @@ to precede any additional arguments,
 		os.Args = append(os.Args, "help")
 	}
 	if err := c.Run(os.Args[1:]); err != nil {
-		log.Errorf("Failed running command \"%s\": %v\n", os.Args[1:], err)
-		os.Exit(1)
+		log.Fatalf("Failed running command %q: %v\n", os.Args[1:], err)
 	}
 }
