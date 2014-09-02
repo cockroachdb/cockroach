@@ -29,16 +29,46 @@ type LogEntryType int8
 // other LogEntryTypes are for internal use.
 const (
 	LogEntryCommand LogEntryType = iota
+	LogEntryChangeMembership
 )
 
-// LogEntry represents a persistent log entry.  Payloads are opaque to the raft system.
-// TODO(bdarnell): we will need both opaque payloads for the application and raft-subsystem
-// payloads for membership changes.
+// LogEntry represents a persistent log entry.  Payloads are interpreted according to
+// the Type field; Payloads of LogEntryCommand are opaque to the raft system.
 type LogEntry struct {
 	Term    int
 	Index   int
 	Type    LogEntryType
 	Payload []byte
+}
+
+// ChangeMembershipOperation indicates the operation being performed by a ChangeMembershipPayload.
+type ChangeMembershipOperation int8
+
+// Values for ChangeMembershipOperation.
+const (
+	// ChangeMembershipAddNonVotingNode adds a non-voting node.  The given node will
+	// retrieve a snapshot and catch up with logs.
+	ChangeMembershipAddNonVotingNode ChangeMembershipOperation = iota
+	// ChangeMembershipRemoveNonVotingNode removes a non-voting node.
+	ChangeMembershipRemoveNonVotingNode
+
+	// ChangeMembershipAddNode add a full (voting) node.  The given node must already be a
+	// non-voting member; it will be removed from the NonVotingMembers list when this
+	// operation is processed.
+	// TODO(bdarnell): enforce the requirement that a node be added as non-voting first.
+	ChangeMembershipAddNode
+
+	// ChangeMembershipRemoveNode removes a voting node.  It is not possible to remove the
+	// last node; the result of attempting to do so is undefined.
+	ChangeMembershipRemoveNode
+)
+
+// ChangeMembershipPayload is the Payload of an entry with Type LogEntryChangeMembership.
+// Nodes are added or removed one at a time to minimize the risk of quorum failures in
+// the new configuration.
+type ChangeMembershipPayload struct {
+	Operation ChangeMembershipOperation
+	Node      NodeID
 }
 
 // GroupElectionState records the votes this node has made so that it will not change its

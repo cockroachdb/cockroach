@@ -188,8 +188,25 @@ func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error 
 // SubmitCommand sends a command (a binary blob) to the cluster.  This method returns
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
+// TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
 func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
-	op := &submitCommandOp{groupID, command, make(chan error)}
+	op := &submitCommandOp{groupID, command, make(chan error, 1)}
+	m.ops <- op
+	return <-op.ch
+}
+
+// ChangeGroupMembership submits a proposed membership change to the cluster.
+// TODO(bdarnell): same concerns as SubmitCommand
+// TODO(bdarnell): do we expose ChangeMembershipAdd{NonVoting,}Node to the application
+// level or does MultiRaft take care of the non-member -> non-voting member -> full member
+// cycle?
+func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMembershipOperation,
+	nodeID NodeID) error {
+	op := &changeGroupMembershipOp{
+		groupID,
+		ChangeMembershipPayload{changeOp, nodeID},
+		make(chan error, 1),
+	}
 	m.ops <- op
 	return <-op.ch
 }
@@ -308,6 +325,12 @@ type submitCommandOp struct {
 	ch      chan error
 }
 
+type changeGroupMembershipOp struct {
+	groupID GroupID
+	payload ChangeMembershipPayload
+	ch      chan error
+}
+
 // node represents a connection to a remote node.
 type node struct {
 	nodeID   NodeID
@@ -369,7 +392,7 @@ func (s *state) start() {
 		} else {
 			writeReady = nil
 		}
-		log.V(6).Infof("node %v: selecting", s.nodeID)
+		log.V(8).Infof("node %v: selecting", s.nodeID)
 		select {
 		case op := <-s.ops:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
@@ -383,6 +406,9 @@ func (s *state) start() {
 
 			case *submitCommandOp:
 				s.submitCommand(op)
+
+			case *changeGroupMembershipOp:
+				s.changeGroupMembership(op)
 
 			default:
 				s.strictErrorLog("unknown op: %#v", op)
@@ -466,24 +492,32 @@ func (s *state) createGroup(op *createGroupOp) {
 	op.ch <- nil
 }
 
-func (s *state) submitCommand(op *submitCommandOp) {
-	log.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
-	g := s.groups[op.groupID]
+func (s *state) addLogEntry(groupID GroupID, entryType LogEntryType, payload []byte) error {
+	g := s.groups[groupID]
 	if g.role != RoleLeader {
-		op.ch <- util.Error("TODO(bdarnell): forward commands to leader")
-		return
+		return util.Error("TODO(bdarnell): forward commands to leader")
 	}
 
 	g.lastLogIndex++
 	entry := &LogEntry{
 		Term:    g.electionState.CurrentTerm,
 		Index:   g.lastLogIndex,
-		Type:    LogEntryCommand,
-		Payload: op.command,
+		Type:    entryType,
+		Payload: payload,
 	}
 	g.pendingEntries = append(g.pendingEntries, entry)
 	s.updateDirtyStatus(g)
-	op.ch <- nil
+	return nil
+}
+
+func (s *state) submitCommand(op *submitCommandOp) {
+	log.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
+	op.ch <- s.addLogEntry(op.groupID, LogEntryCommand, op.command)
+}
+
+func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
+	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
+	op.ch <- s.addLogEntry(op.groupID, LogEntryChangeMembership, nil)
 }
 
 func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteResponse,
@@ -501,8 +535,10 @@ func (s *state) requestVoteRequest(req *RequestVoteRequest, resp *RequestVoteRes
 		g.electionState.CurrentTerm = req.Term
 		resp.VoteGranted = true
 	}
+	log.V(1).Infof("node %v responding %v to vote request from node %v in term %v", s.nodeID,
+		resp.VoteGranted, req.CandidateID, req.Term)
 	resp.Term = g.electionState.CurrentTerm
-	g.pendingCalls.PushBack(&pendingCall{call, g.electionState.CurrentTerm, -1})
+	s.addPendingCall(g, &pendingCall{call, g.electionState.CurrentTerm, -1})
 	s.updateDirtyStatus(g)
 }
 
@@ -521,9 +557,15 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 	if resp.Term < g.electionState.CurrentTerm {
 		return
 	}
+	log.V(2).Infof("node %v received vote %v from node %v", s.nodeID, resp.VoteGranted)
 	if resp.VoteGranted {
 		g.votes[req.DestNode] = resp.VoteGranted
 	}
+	s.countVotes(g)
+	s.updateDirtyStatus(g)
+}
+
+func (s *state) countVotes(g *group) {
 	// We can convert from Candidate to Leader if we have enough votes.  If we are in a
 	// transitional "joint consensus" state, we need a quorum of votes from both the old
 	// and new memberships.
@@ -535,7 +577,6 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 		log.V(1).Infof("node %v becoming leader for group %v", s.nodeID, g.groupID)
 		s.sendEvent(&EventLeaderElection{g.groupID, s.nodeID})
 	}
-	s.updateDirtyStatus(g)
 }
 
 // From the Raft paper:
@@ -566,7 +607,7 @@ func (s *state) appendEntriesRequest(req *AppendEntriesRequest, resp *AppendEntr
 	}
 	s.updateDirtyStatus(g)
 	resp.Success = true
-	g.pendingCalls.PushBack(&pendingCall{call, -1, g.lastLogIndex})
+	s.addPendingCall(g, &pendingCall{call, -1, g.lastLogIndex})
 	s.commitEntries(g, req.LeaderCommit)
 }
 
@@ -651,13 +692,7 @@ func (s *state) handleWriteResponse(response *writeResponse) {
 		var toDelete []*list.Element
 		for e := g.pendingCalls.Front(); e != nil; e = e.Next() {
 			call := e.Value.(*pendingCall)
-			if g.persistedElectionState == nil || g.persistedLastIndex == -1 {
-				continue
-			}
-			if call.term != -1 && call.term > g.persistedElectionState.CurrentTerm {
-				continue
-			}
-			if call.logIndex != -1 && call.logIndex > g.persistedLastIndex {
+			if !s.resolvePendingCall(g, call) {
 				continue
 			}
 			call.call.Done <- call.call
@@ -668,6 +703,26 @@ func (s *state) handleWriteResponse(response *writeResponse) {
 		}
 		s.updateDirtyStatus(g)
 	}
+}
+
+func (s *state) addPendingCall(g *group, call *pendingCall) {
+	if !s.resolvePendingCall(g, call) {
+		g.pendingCalls.PushBack(call)
+	}
+}
+
+func (s *state) resolvePendingCall(g *group, call *pendingCall) bool {
+	if g.persistedElectionState == nil || g.persistedLastIndex == -1 {
+		return false
+	}
+	if call.term != -1 && call.term > g.persistedElectionState.CurrentTerm {
+		return false
+	}
+	if call.logIndex != -1 && call.logIndex > g.persistedLastIndex {
+		return false
+	}
+	call.call.Done <- call.call
+	return true
 }
 
 func (s *state) handleElectionTimers(now time.Time) {
@@ -691,6 +746,12 @@ func (s *state) becomeCandidate(g *group) {
 	g.currentMembers = g.committedMembers
 	s.updateElectionDeadline(g)
 	for _, id := range g.currentMembers.Members {
+		// TODO(bdarnell): send to prospective members too
+
+		// Note that we send ourselves a vote request instead of setting g.votes[s.nodeID]
+		// directly.  This reduces special cases in the code, especially for the case when a
+		// node is removed from the cluster while leader (in which case it must conduct the
+		// election for its replacement).
 		node := s.nodes[id]
 		node.client.requestVote(&RequestVoteRequest{
 			RequestHeader: RequestHeader{s.nodeID, id},
@@ -730,8 +791,12 @@ func (s *state) commitEntries(g *group, leaderCommitIndex int) {
 	go s.Storage.GetLogEntries(g.groupID, g.commitIndex+1, index, entries)
 	for entry := range entries {
 		log.V(6).Infof("node %v: committing %+v", s.nodeID, entry)
-		if entry.Entry.Type == LogEntryCommand {
+		switch entry.Entry.Type {
+		case LogEntryCommand:
 			s.sendEvent(&EventCommandCommitted{entry.Entry.Payload})
+
+		default:
+			log.Fatalf("node %v: committed unknown entry type %v", s.nodeID, entry.Entry.Type)
 		}
 	}
 	g.commitIndex = index

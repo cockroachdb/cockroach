@@ -90,6 +90,13 @@ func (c *testCluster) createGroup(groupID GroupID, numReplicas int) {
 	}
 }
 
+// Trigger an election on node i and wait for it to complete.
+// TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
+func (c *testCluster) waitForElection(i int) {
+	c.clocks[i].triggerElection()
+	<-c.events[i].LeaderElection
+}
+
 func TestInitialLeaderElection(t *testing.T) {
 	// Run the test three times, each time triggering a different node's election clock.
 	// The node that requests an election first should win.
@@ -117,9 +124,7 @@ func TestCommand(t *testing.T) {
 	defer cluster.stop()
 	groupID := GroupID(1)
 	cluster.createGroup(groupID, 3)
-	// TODO(bdarnell): once followers can forward to leaders, don't wait for the election here.
-	cluster.clocks[0].triggerElection()
-	<-cluster.events[0].LeaderElection
+	cluster.waitForElection(0)
 
 	// Submit a command to the leader
 	cluster.nodes[0].SubmitCommand(groupID, []byte("command"))
@@ -140,9 +145,7 @@ func TestSlowStorage(t *testing.T) {
 	groupID := GroupID(1)
 	cluster.createGroup(groupID, 3)
 
-	// TODO(bdarnell): once followers can forward to leaders, don't wait for the election here.
-	cluster.clocks[0].triggerElection()
-	<-cluster.events[0].LeaderElection
+	cluster.waitForElection(0)
 
 	// Block the storage on the last node.
 	// TODO(bdarnell): there appear to still be issues if the storage is blocked during
@@ -176,5 +179,24 @@ func TestSlowStorage(t *testing.T) {
 	commit := <-cluster.events[2].CommandCommitted
 	if string(commit.Command) != "command" {
 		t.Errorf("unexpected value in committed command: %v", commit.Command)
+	}
+}
+
+func TestMembershipChange(t *testing.T) {
+	cluster := newTestCluster(4, t)
+	defer cluster.stop()
+
+	// Create a group with a single member, cluster.nodes[0].
+	groupID := GroupID(1)
+	cluster.createGroup(groupID, 1)
+	cluster.waitForElection(0)
+
+	// Add each of the other three nodes to the cluster.
+	for i := 1; i < 4; i++ {
+		err := cluster.nodes[0].ChangeGroupMembership(groupID, ChangeMembershipAddNode,
+			cluster.nodes[i].nodeID)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
