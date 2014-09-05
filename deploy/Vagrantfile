@@ -1,0 +1,21 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.require_version '>= 1.5.0'
+
+# Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box = "mitchellh/boot2docker"
+
+  config.vm.provider "virtualbox" do |v|
+    # Need the extra memory to install dependencies necessary for building Cockroach.
+    v.memory = 2048
+    v.cpus = 2
+    v.check_guest_additions = false
+    v.functional_vboxsf = false
+  end
+
+  config.vm.synced_folder "../", "/home/docker/cockroach"
+end

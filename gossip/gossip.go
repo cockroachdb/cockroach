@@ -56,6 +56,7 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"encoding/json"
 	"flag"
 	"math"
 	"net"
@@ -172,6 +173,14 @@ func (g *Gossip) GetInfo(key string) (interface{}, error) {
 		return i.Val, nil
 	}
 	return nil, util.Errorf("key %q does not exist or has expired", key)
+}
+
+// GetInfosAsJSON returns the contents of the infostore, marshalled to
+// JSON.
+func (g *Gossip) GetInfosAsJSON() ([]byte, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return json.Marshal(g.is)
 }
 
 // GetGroupInfos returns a slice of info values from specified group,

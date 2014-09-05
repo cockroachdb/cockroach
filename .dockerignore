@@ -1,0 +1,7 @@
+.git
+_vendor
+*/*.o
+*/*.a
+*/*/*.o
+*/*/*.a
+cockroach

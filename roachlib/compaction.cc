@@ -21,6 +21,7 @@
 #include <string.h>             // For memcpy
 #include <limits.h>             // For LLONG_{MIN,MAX}
 #include <errno.h>
+#include <memory>
 #include <string>
 #include "api.pb.h"
 #include "data.pb.h"

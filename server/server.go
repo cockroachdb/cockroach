@@ -34,6 +34,7 @@ import (
 	"time"
 
 	commander "code.google.com/p/go-commander"
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/kv/rest"
@@ -77,17 +78,14 @@ var (
 		"node-to-node links and if any node notices it has clock drift in excess "+
 		"of -max_drift, it will commit suicide.")
 
+	bootstrapOnly = flag.Bool("bootstrap_only", false, "specify --bootstrap_only "+
+		"to avoid starting the server after bootstrapping with the init command.")
+
 	// Regular expression for capturing data directory specifications.
 	storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 )
 
-// A CmdStart command starts nodes by joining the gossip network.
-var CmdStart = &commander.Command{
-	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
-		"-certs=<cert-dir>" +
-		"-stores=(ssd=<data-dir>|hdd=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network",
-	Long: fmt.Sprintf(`
+var cmdStartLongDescription = `
 
 Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
@@ -106,11 +104,77 @@ strictly enforced.
 A node exports an HTTP API with the following endpoints:
 
   Health check:           /healthz
-  Key-value REST:         %s
-  Structured Schema REST: %s
-`, rest.APIPrefix, structured.StructuredKeyPrefix),
-	Run:  runStart,
+  Key-value REST:         ` + rest.APIPrefix + `
+  Structured Schema REST: ` + structured.StructuredKeyPrefix
+
+// A CmdInit command initializes a new Cockroach cluster.
+var CmdInit = &commander.Command{
+	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
+		"-certs=<cert-dir>" +
+		"-stores=(ssd=<data-dir>,hdd|7200rpm=<data-dir>,mem=<capacity-in-bytes>)[,...]",
+	Short: "init new Cockroach cluster and start server",
+	Long: `
+Initialize a new Cockroach cluster on this node using the first
+directory specified in the -stores command line flag as the only
+replica of the first range.
+
+For example:
+
+  cockroach init -gossip=host1:port1,host2:port2 -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+
+If any specified store is already part of a pre-existing cluster, the
+bootstrap will fail.
+
+After bootstrap initialization: ` + cmdStartLongDescription,
+	Run:  runInit,
 	Flag: *flag.CommandLine,
+}
+
+func runInit(cmd *commander.Command, args []string) {
+	// Initialize the engine based on the first argument and
+	// then verify it's not in-memory.
+	engines, err := initEngines(*stores)
+	if err != nil {
+		log.Errorf("Failed to initialize engines from -stores=%s: %v", *stores, err)
+		return
+	}
+	if len(engines) == 0 {
+		log.Errorf("No valid engines specified after initializing from -stores=%s", *stores)
+		return
+	}
+	e := engines[0]
+	if _, ok := e.(*engine.InMem); ok {
+		log.Errorf("Cannot initialize a cluster using an in-memory store")
+		return
+	}
+	// Generate a new UUID for cluster ID and bootstrap the cluster.
+	clusterID := uuid.New()
+	localDB, err := BootstrapCluster(clusterID, e)
+	if err != nil {
+		log.Errorf("Failed to bootstrap cluster: %v", err)
+		return
+	}
+	// Close localDB and bootstrap engine.
+	localDB.Close()
+	e.Stop()
+
+	fmt.Printf("Cockroach cluster %s has been initialized\n", clusterID)
+	if *bootstrapOnly {
+		fmt.Printf("To start the cluster, run \"cockroach start\"\n")
+		return
+	}
+	runStart(cmd, args)
+}
+
+// A CmdStart command starts nodes by joining the gossip network.
+var CmdStart = &commander.Command{
+	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
+		"-certs=<cert-dir>" +
+		"-stores=(ssd=<data-dir>,hdd|7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
+	Short: "start node by joining the gossip network",
+	Long:  cmdStartLongDescription,
+	Run:   runStart,
+	Flag:  *flag.CommandLine,
 }
 
 type server struct {
@@ -144,11 +208,11 @@ func runStart(cmd *commander.Command, args []string) {
 	// Init engines from -stores.
 	engines, err := initEngines(*stores)
 	if err != nil {
-		log.Errorf("Failed to initialize engines from -stores=%q: %v", *stores, err)
+		log.Errorf("Failed to initialize engines from -stores=%s: %v", *stores, err)
 		return
 	}
 	if len(engines) == 0 {
-		log.Errorf("No valid engines specified after initializing from -stores=%q", *stores)
+		log.Errorf("No valid engines specified after initializing from -stores=%s", *stores)
 		return
 	}
 
@@ -230,7 +294,7 @@ func newServer() (*server, error) {
 		host = "127.0.0.1"
 	}
 
-	// Resolve
+	// If the specified rpc address includes no host component, use the hostname.
 	if strings.HasPrefix(*rpcAddr, ":") {
 		*rpcAddr = host + *rpcAddr
 	}
@@ -262,7 +326,7 @@ func newServer() (*server, error) {
 	s.kvREST = rest.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
-	s.status = newStatusServer(s.kvDB)
+	s.status = newStatusServer(s.kvDB, s.gossip)
 	s.structuredDB = structured.NewDB(s.kvDB)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
 

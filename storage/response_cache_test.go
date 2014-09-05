@@ -176,7 +176,7 @@ func TestResponseCacheGC(t *testing.T) {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
 	defer func(t *testing.T) {
-		rocksdb.Close()
+		rocksdb.Stop()
 		if err := rocksdb.Destroy(); err != nil {
 			t.Errorf("could not destroy rocksdb db at %s: %v", loc, err)
 		}

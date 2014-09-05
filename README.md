@@ -1,6 +1,6 @@
 <img style="float: right" src="/resources/doc/color_cockroach.png?raw=true"/>
 
-# Cockroach [![Build Status](https://secure.travis-ci.org/cockroachdb/cockroach.png)](http://travis-ci.org/cockroachdb/cockroach)  [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg) 
+# Cockroach [![Build Status](https://secure.travis-ci.org/cockroachdb/cockroach.png)](http://travis-ci.org/cockroachdb/cockroach)  [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg)
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
@@ -13,16 +13,19 @@ A Scalable, Geo-Replicated, Transactional Datastore
 * Basic Key-Value REST API
 * NO: Raft consensus, range splitting, transactions (!)
 
-## Simple Setup
-
-* node1> ./cockroach init hdd=\<path>
-* node1> ./cockroach start -gossip=:8081 -rpc=:8081 -http=:8080 -stores=hdd=\<path>
-
-* node2> ./cockroach start -gossip=node1:8081 -http=:8080 -stores=hdd=\<path>
-
 ## Next Steps
 
 See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO)
+
+## Instructions for building Cockroach Docker Container
+
+* Follow the [instructions for installing Docker on your host
+system](http://docs.docker.com/installation/).
+*        (cd deploy ; ./build-docker.sh)
+
+## Local Cluster Setup
+
+*        (cd deploy; ./local-cluster.sh [start|stop])
 
 ## Get in touch
 

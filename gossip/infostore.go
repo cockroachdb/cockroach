@@ -39,10 +39,10 @@ import (
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos    infoMap  // Map from key to info
-	Groups   groupMap // Map from key prefix to groups of infos
-	NodeAddr net.Addr // Address of node owning this info store: "host:port"
-	MaxSeq   int64    // Maximum sequence number inserted
+	Infos    infoMap  `json:"infos,omitempty"`  // Map from key to info
+	Groups   groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
+	NodeAddr net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
+	MaxSeq   int64    `json:"-"`                // Maximum sequence number inserted
 	seqGen   int64    // Sequence generator incremented each time info is added
 }
 

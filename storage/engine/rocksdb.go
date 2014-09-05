@@ -162,6 +162,12 @@ func (r *RocksDB) Start() error {
 	return nil
 }
 
+// Stop closes the database by deallocating the underlying handle.
+func (r *RocksDB) Stop() {
+	C.rocksdb_close(r.rdb)
+	r.rdb = nil
+}
+
 // Attrs returns the list of attributes describing this engine.  This
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
@@ -431,12 +437,6 @@ func (r *RocksDB) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
 func (r *RocksDB) CompactRange(start, end Key) {
 	C.rocksdb_compact_range(r.rdb, bytesPointer(start), (C.size_t)(len(start)),
 		bytesPointer(end), (C.size_t)(len(end)))
-}
-
-// Close closes the database by deallocating the underlying handle.
-func (r *RocksDB) Close() {
-	C.rocksdb_close(r.rdb)
-	r.rdb = nil
 }
 
 // Destroy destroys the underlying filesystem data associated with the database.

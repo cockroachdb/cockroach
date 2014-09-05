@@ -1,0 +1,61 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.require_version '>= 1.5.0'
+
+# Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box = "phusion-open-ubuntu-14.04-amd64"
+  config.vm.box_url = "https://oss-binaries.phusionpassenger.com/vagrant/boxes/latest/ubuntu-14.04-amd64-vbox.box"
+
+  # Run the docker provider using:
+  #
+  # % vagrant up --provider=docker
+  #
+  # On systems that can't run Linux containers natively, such as Mac
+  # OS X or Windows, Vagrant automatically spins up a "host VM" to run
+  # Docker. This allows your Docker-based Vagrant environments to
+  # remain portable, without inconsistencies depending on the platform
+  # they are running on.
+  #
+  # Vagrant will spin up a single instance of a host VM and run
+  # multiple containers on this one VM. This means that with the
+  # Docker provider, you only have the overhead of one virtual
+  # machine, and only if it is absolutely necessary.
+  #
+  # By default, the host VM Vagrant spins up is backed by boot2docker,
+  # because it launches quickly and uses minimal resources. We disable
+  # this default by specifying our own Vagrantfile for the host VM. See
+  # the notes below for "d.vagrant_vagrantfile.
+  config.vm.provider "docker" do |d|
+    # The first method that Vagrant can use to source a Docker
+    # container is via an image. This image can be from any Docker
+    # registry.
+    #d.image = "cockroachdb/cockroach"
+
+    # Vagrant can also build and run images based on a local
+    # Dockerfile. This is useful for iterating on an application
+    # locally that is built into an image later.
+    #
+    # When vagrant up --provider=docker is run, Vagrant automatically
+    # builds that Dockerfile and starts a container based on it.
+    #
+    # The Dockerfile is rebuilt when vagrant reload is called.
+    d.build_dir = "."
+
+    # Vagrant expects this container to remain running and will make
+    # sure that it does for a certain amount of time.
+    d.remains_running = true
+
+    # Allow ssh to the Docker container.
+    d.has_ssh = true
+  end
+
+  # Share an additional folder to the guest VM. The first argument is
+  # the path on the host to the actual folder. The second argument is
+  # the path on the guest to mount the folder. And the optional third
+  # argument is a set of non-required options.
+  config.vm.synced_folder "../", "/home/vagrant/cockroach"
+end

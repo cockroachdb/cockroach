@@ -33,10 +33,10 @@ type info struct {
 	// implement the util.Ordered interface to be used with groups.
 	// For single infos any type is allowed.
 	Val       interface{}
-	Timestamp int64    // Wall time at origination (Unix-nanos)
-	TTLStamp  int64    // Wall time before info is discarded (Unix-nanos)
-	Hops      uint32   // Number of hops from originator
-	NodeAddr  net.Addr // Originating node in "host:port" format
+	Timestamp int64    `json:"-"` // Wall time at origination (Unix-nanos)
+	TTLStamp  int64    `json:"-"` // Wall time before info is discarded (Unix-nanos)
+	Hops      uint32   `json:"-"` // Number of hops from originator
+	NodeAddr  net.Addr `json:"-"` // Originating node in "host:port" format
 	peerAddr  net.Addr // Proximate peer which passed us the info
 	seq       int64    // Sequence number for incremental updates
 }

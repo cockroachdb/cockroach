@@ -21,8 +21,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/server/status"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -51,13 +53,15 @@ const (
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	db storage.DB
+	db     storage.DB
+	gossip *gossip.Gossip
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db storage.DB) *statusServer {
+func newStatusServer(db storage.DB, gossip *gossip.Gossip) *statusServer {
 	return &statusServer{
-		db: db,
+		db:     db,
+		gossip: gossip,
 	}
 }
 
@@ -71,6 +75,7 @@ func (s *statusServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	b, err := json.Marshal(cluster)
 	if err != nil {
+		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -87,6 +92,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 
 	b, err := json.Marshal(nodes)
 	if err != nil {
+		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -96,8 +102,12 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 // handleGossipStatus handles GET requests for gossip network status.
 func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	w.Write([]byte(`{}`))
+	b, err := s.gossip.GetInfosAsJSON()
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	w.Write(b)
 }
 
 // handleStoresStatus handles GET requests for store status.

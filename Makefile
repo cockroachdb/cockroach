@@ -20,6 +20,7 @@
 # Cockroach build rules.
 GO ?= go
 
+DEPLOY      := $(CURDIR)/deploy
 GOPATH      := $(CURDIR)/_vendor:$(GOPATH)
 ROCKSDB     := $(CURDIR)/_vendor/rocksdb
 ROACH_PROTO := $(CURDIR)/proto
@@ -58,14 +59,17 @@ roach_lib: roach_proto
 goget:
 	$(CGO_FLAGS) $(GO) get ./...
 
-test: rocksdb
+test: build
 	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-testrace: rocksdb
+testrace: build
 	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-coverage: rocksdb
+coverage: build
 	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
+
+acceptance:
+	cd $(DEPLOY); ./build-docker.sh && ./local-cluster.sh start && ./local-cluster.sh stop
 
 clean:
 	$(GO) clean

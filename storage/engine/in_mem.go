@@ -74,6 +74,10 @@ func (in *InMem) Start() error {
 	return nil
 }
 
+// Stop is a noop for the InMem engine.
+func (in *InMem) Stop() {
+}
+
 // Attrs returns the list of attributes describing this engine.  This
 // includes the disk type (always "mem") and potentially other labels
 // to identify important attributes of the engine.

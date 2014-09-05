@@ -51,6 +51,8 @@ func (sc StoreCapacity) PercentAvail() float64 {
 type Engine interface {
 	// Start initializes and starts the engine.
 	Start() error
+	// Stop closes the engine, freeing up any outstanding resources.
+	Stop()
 	// Attrs returns the engine/store attributes.
 	Attrs() proto.Attributes
 	// Put sets the given key to the value provided.
