@@ -287,22 +287,19 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 // parseBootstrapAddresses parses the gossip bootstrap addresses
 // passed via -gossip command line flag.
 func (g *Gossip) parseBootstrapAddresses() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if *GossipBootstrap != "" {
-		addresses := strings.Split(*GossipBootstrap, ",")
-		for _, addr := range addresses {
-			addr = strings.TrimSpace(addr)
-			_, err := net.ResolveTCPAddr("tcp", addr)
-			if err != nil {
-				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
-				continue
-			}
-			g.bootstraps.addAddr(util.MakeRawAddr("tcp", addr))
+	addresses := strings.Split(*GossipBootstrap, ",")
+	for _, addr := range addresses {
+		addr = strings.TrimSpace(addr)
+		_, err := net.ResolveTCPAddr("tcp", addr)
+		if err != nil {
+			log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
+			continue
 		}
+		g.bootstraps.addAddr(util.MakeRawAddr("tcp", addr))
 	}
+
 	// If we have no bootstrap hosts, fatal exit.
-	if g.bootstraps.len() == 0 {
+	if len(addresses) == 0 && g.bootstraps.len() == 0 {
 		log.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
@@ -332,9 +329,9 @@ func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 //
 // This method will block and should be run via goroutine.
 func (g *Gossip) bootstrap() {
-	g.parseBootstrapAddresses()
 	for {
 		g.mu.Lock()
+		g.parseBootstrapAddresses()
 		if g.closed {
 			break
 		}
@@ -415,7 +412,7 @@ func (g *Gossip) manage() {
 		// and there are still unused bootstrap hosts, signal bootstrapper
 		// to try another.
 		hasSentinel := g.is.getInfo(KeySentinel) != nil
-		if g.filterExtant(g.bootstraps).len() > 0 {
+		if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(*GossipBootstrap) > 0) {
 			if g.outgoing.len()+g.incoming.len() == 0 {
 				log.Infof("no connections; signaling bootstrap")
 				g.stalled.Signal()
