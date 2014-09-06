@@ -125,8 +125,8 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			txn := proto.Transaction{}
-			if ok, _, err := storage.GetProto(db, engine.MakeKey(engine.KeyLocalTransactionPrefix, txnID), &txn); !ok || err != nil {
+			ok, txn, err := getTxn(db, engine.MakeKey(engine.KeyLocalTransactionPrefix, txnID))
+			if !ok || err != nil {
 				return false
 			}
 			// Advance clock by 1ns.
@@ -140,6 +140,19 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 			t.Error("expected initial heartbeat within 50ms")
 		}
 	}
+}
+
+// getTxn fetches the requested key and returns the transaction info.
+func getTxn(db *DB, key engine.Key) (bool, proto.Transaction, error) {
+	hr := <-db.InternalHeartbeatTxn(&proto.InternalHeartbeatTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: key,
+		},
+	})
+	if hr.Error != nil {
+		return false, proto.Transaction{}, hr.GoError()
+	}
+	return true, hr.Txn, nil
 }
 
 // TestCoordinatorEndTxn verifies that ending a transaction

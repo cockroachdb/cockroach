@@ -251,7 +251,7 @@ func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 			// If the transaction is not in pending state, then we can stop
 			// the heartbeat. It's either aborted or commited, and we resolve
 			// write intents accordingly.
-			switch reply.Status {
+			switch reply.Txn.Status {
 			case proto.PENDING:
 				// Heartbeat continues...
 			case proto.COMMITTED:

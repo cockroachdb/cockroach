@@ -310,12 +310,12 @@ message InternalHeartbeatTxnRequest {
 }
 
 // An InternalHeartbeatTxnResponse is the return value from the
-// InternalHeartbeatTxn() method. It returns the transaction status as
+// InternalHeartbeatTxn() method. It returns the transaction info as
 // well. So the transaction coordinator will know quickly when the
 // transaction is aborted by another one.
 message InternalHeartbeatTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional TransactionStatus status = 2 [(gogoproto.nullable) = false];
+  optional Transaction txn = 2 [(gogoproto.nullable) = false];
 }
 
 // An InternalResolveIntentRequest is arguments to the

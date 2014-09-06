@@ -68,13 +68,14 @@ var (
 // default configuration settings.
 func createTestEngine(t *testing.T) engine.Engine {
 	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
-	if err := engine.PutProto(e, engine.KeyConfigAccountingPrefix, &testDefaultAcctConfig); err != nil {
+	mvcc := engine.NewMVCC(e)
+	if err := mvcc.PutProto(engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.PutProto(e, engine.KeyConfigPermissionPrefix, &testDefaultPermConfig); err != nil {
+	if err := mvcc.PutProto(engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.PutProto(e, engine.KeyConfigZonePrefix, &testDefaultZoneConfig); err != nil {
+	if err := mvcc.PutProto(engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 	return e
@@ -137,13 +138,14 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // key prefixes for a config are gossipped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	e := createTestEngine(t)
+	mvcc := engine.NewMVCC(e)
 	// Add a permission for a new key prefix.
 	db1Perm := proto.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
-	if err := engine.PutProto(e, key, &db1Perm); err != nil {
+	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
 	r, g := createTestRange(e, t)

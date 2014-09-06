@@ -147,6 +147,7 @@ type Cmd struct {
 // as appropriate.
 type Range struct {
 	Meta      *proto.RangeMetadata
+	mvcc      *engine.MVCC
 	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Range may gossip based on contents
@@ -164,6 +165,7 @@ func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip) *Range {
 	r := &Range{
 		Meta:      meta,
+		mvcc:      engine.NewMVCC(eng),
 		engine:    eng,
 		allocator: allocator,
 		gossip:    gossip,
@@ -419,7 +421,7 @@ func (r *Range) maybeGossipConfigs() {
 func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	kvs, err := r.engine.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0)
+	kvs, _, err := r.mvcc.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +430,7 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 		// Instantiate an instance of the config type by unmarshalling
 		// gob encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
-		if err := gogoproto.Unmarshal(kv.Value, config); err != nil {
+		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
 			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
 		}
 		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
@@ -494,66 +496,46 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 // Contains verifies the existence of a key in the key value store.
 func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) {
-	val, err := r.engine.Get(args.Key)
+	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.TxnID)
 	if err != nil {
 		reply.SetGoError(err)
 		return
 	}
-	if val != nil {
+	if val.Bytes != nil {
 		reply.Exists = true
 	}
 }
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *proto.GetRequest, reply *proto.GetResponse) {
-	val, err := r.engine.Get(args.Key)
-	reply.Value = proto.Value{Bytes: val}
+	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.TxnID)
+	reply.Value = val
 	reply.SetGoError(err)
 }
 
 // Put sets the value for a specified key.
 func (r *Range) Put(args *proto.PutRequest, reply *proto.PutResponse) {
-	reply.SetGoError(r.internalPut(args.Key, args.Value))
+	err := r.mvcc.Put(args.Key, args.Timestamp, args.Value, args.TxnID)
+	if err == nil {
+		r.updateGossipConfigs(args.Key)
+	}
+	reply.SetGoError(err)
 }
 
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
 func (r *Range) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	// Handle check for non-existence of key.
-	val, err := r.engine.Get(args.Key)
-	if err != nil {
-		reply.SetGoError(err)
-		return
+	val, err := r.mvcc.ConditionalPut(args.Key, args.Timestamp, args.Value, args.ExpValue, args.TxnID)
+	if err == nil {
+		r.updateGossipConfigs(args.Key)
 	}
-	if args.ExpValue.Bytes == nil && val != nil {
-		reply.SetGoError(util.Errorf("key %q already exists", args.Key))
-		return
-	} else if args.ExpValue.Bytes != nil {
-		// Handle check for existence when there is no key.
-		if val == nil {
-			reply.SetGoError(util.Errorf("key %q does not exist", args.Key))
-			return
-		} else if !bytes.Equal(args.ExpValue.Bytes, val) {
-			// TODO(Jiang-Ming): provide the correct timestamp once switch to use MVCC
-			reply.ActualValue = &proto.Value{Bytes: val}
-			reply.SetGoError(util.Errorf("key %q does not match existing", args.Key))
-			return
-		}
-	}
-
-	reply.SetGoError(r.internalPut(args.Key, args.Value))
+	reply.ActualValue = &val
+	reply.SetGoError(err)
 }
 
-// internalPut is the guts of the put method, called from both Put()
-// and ConditionalPut().
-func (r *Range) internalPut(key engine.Key, value proto.Value) error {
-	// Put the value.
-	// TODO(Tobias): Turn this into a writebatch with account stats in a reusable way.
-	// This requires use of RocksDB's merge operator to implement increasable counters
-	if err := r.engine.Put(key, value.Bytes); err != nil {
-		return err
-	}
+// updateGossipConfigs is used to update gossip configs.
+func (r *Range) updateGossipConfigs(key engine.Key) {
 	// Check whether this put has modified a configuration map.
 	for _, cp := range configPrefixes {
 		if bytes.HasPrefix(key, cp.keyPrefix) {
@@ -562,45 +544,37 @@ func (r *Range) internalPut(key engine.Key, value proto.Value) error {
 			break
 		}
 	}
-	return nil
 }
 
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func (r *Range) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) {
-	value, err := engine.Increment(r.engine, args.Key, args.Increment)
-	reply.NewValue = value
+	val, err := r.mvcc.Increment(args.Key, args.Timestamp, args.TxnID, args.Increment)
+	reply.NewValue = val
 	reply.SetGoError(err)
 }
 
 // Delete deletes the key and value specified by key.
 func (r *Range) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) {
-	if err := r.engine.Clear(args.Key); err != nil {
-		reply.SetGoError(err)
-	}
+	reply.SetGoError(r.mvcc.Delete(args.Key, args.Timestamp, args.TxnID))
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func (r *Range) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
+	num, err := r.mvcc.DeleteRange(args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.TxnID)
+	reply.NumDeleted = num
+	reply.SetGoError(err)
 }
 
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
-	kvs, err := r.engine.Scan(args.Key, args.EndKey, args.MaxResults)
-	if err != nil {
-		reply.SetGoError(err)
-		return
-	}
-	reply.Rows = make([]proto.KeyValue, len(kvs))
-	for idx, kv := range kvs {
-		// TODO(Jiang-Ming): provide the correct timestamp and checksum once switch to mvcc
-		reply.Rows[idx] = proto.KeyValue{Key: kv.Key, Value: proto.Value{Bytes: kv.Value}}
-	}
+	kvs, _, err := r.mvcc.Scan(args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.TxnID)
+	reply.Rows = kvs
+	reply.SetGoError(err)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
@@ -679,7 +653,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 	// MaxRanges.
 	metaPrefix := args.Key[:len(engine.KeyMeta1Prefix)]
 	nextKey := engine.NextKey(args.Key)
-	kvs, err := r.engine.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount)
+	kvs, _, err := r.mvcc.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount, args.Timestamp, args.TxnID)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -701,7 +675,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 	// which does not have the same metadata prefix as the queried key.
 	rds := make([]proto.RangeDescriptor, len(kvs))
 	for i := range kvs {
-		if err = gogoproto.Unmarshal(kvs[i].Value, &rds[i]); err != nil {
+		if err = gogoproto.Unmarshal(kvs[i].Value.Bytes, &rds[i]); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -732,7 +706,7 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 			return
 		}
 	}
-	reply.Status = txn.Status
+	reply.Txn = txn
 }
 
 // InternalResolveIntent updates the transaction status and heartbeat
@@ -740,5 +714,5 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // coordinator.  The range will return the current status for this
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
+	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.TxnID, args.Commit))
 }

@@ -104,9 +104,6 @@ func TestBootstrapCluster(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	var expectedKeys = []engine.Key{
-		engine.Key("\x00\x00\x00range-1"),
-		engine.Key("\x00\x00\x00range-idgen"),
-		engine.Key("\x00\x00\x00store-ident"),
 		engine.Key("\x00\x00meta1\xff"),
 		engine.Key("\x00\x00meta2\xff"),
 		engine.Key("\x00acct"),

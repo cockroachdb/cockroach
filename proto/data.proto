@@ -106,6 +106,6 @@ message Transaction {
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
-  optional string txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  optional bytes txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 }
