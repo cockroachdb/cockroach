@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/golang/glog"
 )
 
 // MVCC wraps the mvcc operations of a key/value store.
@@ -161,12 +160,9 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) 
 func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value proto.Value, txnID []byte) error {
 	binKey := encoding.EncodeBinary(nil, key)
 	if !value.Timestamp.Equal(proto.Timestamp{}) && !value.Timestamp.Equal(timestamp) {
-		glog.Errorf("the timestamp %+v provided in value does not match the timestamp %+v in request",
+		return util.Errorf(
+			"the timestamp %+v provided in value does not match the timestamp %+v in request",
 			value.Timestamp, timestamp)
-		// TODO(Jiang-Ming): fix all test cases to have the correct timestamp in value
-		//return util.Errorf(
-		//	"the timestamp %+v provided in value does not match the timestamp %+v in request",
-		//	value.Timestamp, timestamp)
 	}
 
 	// TODO(Jiang-Ming): use wrapChecksum here.

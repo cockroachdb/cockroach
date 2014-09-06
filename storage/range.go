@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/golang/glog"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -292,10 +293,17 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 	// timestamp.
 	r.Lock() // Protect access to timestamp cache and read queue.
 	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
+		glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
 		// Update both the incoming request and outgoing reply timestamps.
 		ts.Logical++ // increment logical component by one to differentiate.
 		header.Timestamp = ts
 		reply.Header().Timestamp = ts
+		switch args.(type) {
+		case *proto.PutRequest:
+			(args.(*proto.PutRequest)).Value.Timestamp = ts
+		case *proto.ConditionalPutRequest:
+			(args.(*proto.ConditionalPutRequest)).Value.Timestamp = ts
+		}
 	}
 
 	// The next step is to add the write to the read queue to inform
