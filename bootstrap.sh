@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 
 # Verify arcanist is installed.
-command -v arc &> /dev/null
-if [ $? -eq 1 ]; then
+
+if ! which arc > /dev/null 2>/dev/null; then
   cat <<EOF
 Please install Arcanist (part of Phabricator):
 
@@ -29,7 +29,7 @@ $GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/goimports
 $GO_GET $GO_GET_FLAGS -u code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
 
 # Create symlinks to all git hooks in your own .git dir.
-for f in $(ls -d githooks/*); do
-  rm .git/hooks/$(basename $f)
-  ln -s ../../$f .git/hooks/$(basename $f)
-done && ls -al .git/hooks | grep githooks
+for f in $(find githooks -mindepth 1 -maxdepth 1); do
+  rm .git/hooks/$(basename "$f")
+  ln -s "../../$f" ".git/hooks/$(basename $f)"
+done && find .git/hooks -regex '*githooks*'
