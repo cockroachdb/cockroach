@@ -18,6 +18,7 @@
 package rest
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -111,7 +112,7 @@ func dbKey(path, apiPrefix string) (engine.Key, error) {
 	if err == nil {
 		k := engine.Key(result)
 		if len(k) == 0 {
-			return nil, fmt.Errorf("empty key not allowed")
+			return nil, errors.New("empty key not allowed")
 		}
 		return k, nil
 	}

@@ -18,10 +18,120 @@
 package structured
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 )
+
+var (
+	serverAddr string
+	once       sync.Once
+)
+
+type testDB struct {
+	sync.RWMutex
+	kv map[string]interface{}
+}
+
+func (db *testDB) PutSchema(s *Schema) error {
+	db.Lock()
+	defer db.Unlock()
+	db.kv["/"+s.Key] = s
+	return nil
+}
+
+func (db *testDB) DeleteSchema(s *Schema) error {
+	db.Lock()
+	defer db.Unlock()
+	delete(db.kv, "/"+s.Key)
+	return nil
+}
+
+func (db *testDB) GetSchema(key string) (*Schema, error) {
+	db.RLock()
+	defer db.RUnlock()
+	v, ok := db.kv["/"+key]
+	if ok {
+		return v.(*Schema), nil
+	}
+	return nil, nil
+}
+
+func newTestDB() *testDB {
+	return &testDB{kv: map[string]interface{}{}}
+}
+
+func startServer(t *testing.T) {
+	server := httptest.NewServer(NewRESTServer(newTestDB()))
+	serverAddr = server.Listener.Addr().String()
+}
+
+func TestGetPutDeleteSchema(t *testing.T) {
+	once.Do(func() { startServer(t) })
+	sch := Schema{
+		Name: "Carl's Blankets",
+		Key:  "foo",
+	}
+	b, err := json.Marshal(sch)
+	if err != nil {
+		t.Fatalf("could not marshal Schema: %v", err)
+	}
+	payload := bytes.NewBuffer(b)
+	testCases := []struct {
+		method     string
+		path       string
+		body       io.Reader
+		statusCode int
+		resp       []Schema
+	}{
+		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
+		{methodGet, "/schema/foo/bar", nil, http.StatusNotFound, nil},
+		{methodGet, "/schema/foo/bar/baz", nil, http.StatusNotFound, nil},
+		{methodGet, "/schema/foo/bar/baz/", nil, http.StatusBadRequest, nil},
+		{methodPut, "/schema/foo", payload, http.StatusOK, nil},
+		{methodGet, "/schema/foo", nil, http.StatusOK, []Schema{sch}},
+		{methodDelete, "/schema/foo", nil, http.StatusOK, nil},
+		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
+	}
+	for _, tc := range testCases {
+		addr := "http://" + serverAddr + tc.path
+		req, err := http.NewRequest(tc.method, addr, tc.body)
+		if err != nil {
+			t.Fatalf("[%s] %s: error creating request: %v", tc.method, tc.path, err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("[%s] %s: error requesting %s: %s", tc.method, tc.path, addr, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != tc.statusCode {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.path, string(b))
+				continue
+			}
+			t.Errorf("[%s] %s: unexpected response status code: expected %d, got %d. Body: %s", tc.method, tc.path, tc.statusCode, resp.StatusCode, string(b))
+			continue
+		}
+		var resResp struct {
+			Data []Schema
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&resResp); err != nil {
+			t.Errorf("[%s] %s: could not decode body into resourceResponse: %v", tc.method, tc.path, err)
+			continue
+		}
+		if !reflect.DeepEqual(resResp.Data, tc.resp) {
+			t.Errorf("[%s] %s: response data is not equal: expected %+v, got %+v", tc.method, tc.path, tc.resp, resResp.Data)
+			continue
+		}
+	}
+}
 
 func TestNewResourceRequest(t *testing.T) {
 	testCases := []struct {
@@ -33,7 +143,8 @@ func TestNewResourceRequest(t *testing.T) {
 		{"/schema/pdb/us", &resourceRequest{schemaKey: "pdb", tableKey: "us"}, false},
 		{"/schema/pdb/us/531", &resourceRequest{schemaKey: "pdb", tableKey: "us", primaryKey: "531"}, false},
 		{"", nil, true},
-		{"/schema", nil, true},
+		{"/schema", &resourceRequest{}, false},
+		{"/schema/", &resourceRequest{}, false},
 		{"/schema/pdb/us/431/fooooooo", nil, true},
 		{"/schema/pdb?limit=100", &resourceRequest{schemaKey: "pdb", limit: 100}, false},
 		{"/schema/pdb?offset=101", &resourceRequest{schemaKey: "pdb", offset: 101}, false},

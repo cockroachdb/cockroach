@@ -19,23 +19,24 @@
 package structured
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // StructuredKeyPrefix is the prefix for RESTful endpoints used to
 // interact with structured data schemas.
-const StructuredKeyPrefix = "/schema/"
+const StructuredKeyPrefix = "/schema"
 
 // A RESTServer provides a RESTful HTTP API to interact with
 // structured data schemas.
 //
 // A resource is represented using the following URL scheme:
-//   /schema/<schema key>/<table key>/<primary key>?[<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]
+//   /schema[/<schema key>][/<table key>][/<primary key>][?<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]
 //
 // Some examples:
 //   /schema/pdb/us/531 -> <data for user 531>
@@ -44,15 +45,18 @@ const StructuredKeyPrefix = "/schema/"
 // A user can provide just the top-level schema key in order to introspect the schema layout:
 //   /schema/pdb -> <schema with key pdb>
 //
+// Or simply provide /schema to list all schemas within the datastore.
+//
 // Results are always returned within a JSON-serialized array (even for only one result)
 // to provide uniformity for responses and to accommodate for multiple entries that may
 // satisfy a query. If the limit param is not provided, a maximum of 50 items is returned.
+// TODO(andybons): Paging?
 type RESTServer struct {
-	db *DB // Structured database client
+	db DB // Structured database client
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db *DB) *RESTServer {
+func NewRESTServer(db DB) *RESTServer {
 	return &RESTServer{db: db}
 }
 
@@ -65,31 +69,33 @@ const (
 	paramOffset = "offset"
 )
 
+// TODO(andybons): need to account for other fields like secondary index
+// keys, full-text indexes, geo-spatial indexes, etc.
 type resourceRequest struct {
 	schemaKey, tableKey, primaryKey string
 	limit, offset                   int
 	params                          map[string][]string
 }
 
-// key returns the Key value corresponding to the resource request
-// that can be used to look up values within the monolithic kv store.
-// If a valid key cannot be constructed, an error is returned.
-func (r *resourceRequest) key() (engine.Key, error) {
-	return engine.Key{}, nil
-}
+// pathSpec is only used in error messages to users of the
+// REST API in the event that an invalid path is specified.
+const pathSpec = "/schema[/<schema key>][/<table key>][/<primary key>]?[<name>=<value>,<name>=<value>...][limit=<int>][offset=<int>]"
 
 // newResourceRequest allocates and returns a resourceRequest
-// with the available information within req.
+// by parsing the HTTP request path and parameters.
 func newResourceRequest(req *http.Request) (*resourceRequest, error) {
 	path := req.URL.Path
 	if strings.HasPrefix(path, StructuredKeyPrefix) {
 		path = path[len(StructuredKeyPrefix):]
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
+		}
 	} else {
-		return nil, fmt.Errorf("invalid path: %q", path)
+		return nil, fmt.Errorf("incorrect specification of path; %s: %q", pathSpec, path)
 	}
 	components := strings.Split(path, "/")
-	if len(components) == 0 || len(components) > 3 {
-		return nil, fmt.Errorf("invalid path: %q", req.URL.Path)
+	if len(components) > 3 {
+		return nil, fmt.Errorf("incorrect specification of path; %s: %q", pathSpec, req.URL.Path)
 	}
 	if err := req.ParseForm(); err != nil {
 		return nil, fmt.Errorf("error parsing form values: %v", err)
@@ -105,19 +111,22 @@ func newResourceRequest(req *http.Request) (*resourceRequest, error) {
 			resReq.primaryKey = components[i]
 		}
 	}
+
 	// While these could be deduced via the params field downstream,
 	// they are parsed into their own fields here as a convenience.
 	if _, ok := resReq.params[paramLimit]; ok {
 		var err error
-		if resReq.limit, err = strconv.Atoi(resReq.params[paramLimit][0]); err != nil {
-			return nil, fmt.Errorf("error parsing limit param: %v", err)
+		param := resReq.params[paramLimit][0]
+		if resReq.limit, err = strconv.Atoi(param); err != nil {
+			return nil, fmt.Errorf("error parsing limit param %q: %v", param, err)
 		}
 		delete(resReq.params, paramLimit)
 	}
 	if _, ok := resReq.params[paramOffset]; ok {
 		var err error
-		if resReq.offset, err = strconv.Atoi(resReq.params[paramOffset][0]); err != nil {
-			return nil, fmt.Errorf("error parsing offset param: %v", err)
+		param := resReq.params[paramOffset][0]
+		if resReq.offset, err = strconv.Atoi(param); err != nil {
+			return nil, fmt.Errorf("error parsing offset param %q: %v", param, err)
 		}
 		delete(resReq.params, paramOffset)
 	}
@@ -127,30 +136,117 @@ func newResourceRequest(req *http.Request) (*resourceRequest, error) {
 	return resReq, nil
 }
 
-// HandleAction arbitrates requests to the appropriate function
-// based on the request’s HTTP method.
-func (s *RESTServer) HandleAction(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		s.handleGetAction(w, r)
-	case "PUT", "POST":
-		s.handlePutAction(w, r)
-	case "DELETE":
-		s.handleDeleteAction(w, r)
+// getResource returns the results from querying the given DB
+// for the desired resourceRequest. If no results are found,
+// a nil error is returned.
+func (r *resourceRequest) getResource(db DB) ([]interface{}, error) {
+	// TODO(andybons): for now, only schemas are supported.
+	// TODO(andybons): return a list of schemas in the case
+	// of an empty resourceRequest.
+	schema, err := db.GetSchema(r.schemaKey)
+	if err != nil {
+		return nil, err
+	}
+	results := []interface{}{}
+	if schema != nil {
+		results = append(results, schema)
+	}
+	return results, nil
+}
+
+func (r *resourceRequest) putResource(db DB, v interface{}) error {
+	switch t := v.(type) {
+	case *Schema:
+		return db.PutSchema(t)
 	default:
-		errStr := fmt.Sprintf("unhandled HTTP method %s: %s", r.Method, http.StatusText(http.StatusBadRequest))
-		http.Error(w, errStr, http.StatusBadRequest)
+		return fmt.Errorf("type %T not supported", t)
 	}
 }
 
-func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request) {
-	panic("not implemented")
+func (r *resourceRequest) deleteResource(db DB, v interface{}) error {
+	switch t := v.(type) {
+	case *Schema:
+		return db.DeleteSchema(t)
+	default:
+		return fmt.Errorf("type %T not supported", t)
+	}
 }
 
-func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request) {
-	panic("not implemented")
+type resourceResponse struct {
+	Meta struct {
+		StatusCode int    `json:"status_code"`
+		Error      string `json:"error,omitempty"`
+	} `json:"meta"`
+	Data []interface{} `json:"data"`
 }
 
-func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request) {
-	panic("not implemented")
+func newResourceResponse(statusCode int, data []interface{}, err error) *resourceResponse {
+	r := &resourceResponse{Data: data}
+	r.Meta.StatusCode = statusCode
+	if err != nil {
+		r.Meta.Error = err.Error()
+	}
+	return r
+}
+
+const (
+	methodGet    = "GET"
+	methodPut    = "PUT"
+	methodPost   = "POST"
+	methodDelete = "DELETE"
+)
+
+var supportedMethods = map[string]struct{}{
+	methodGet:    struct{}{},
+	methodPut:    struct{}{},
+	methodPost:   struct{}{},
+	methodDelete: struct{}{},
+}
+
+// ServeHTTP arbitrates requests to the appropriate function
+// based on the request’s HTTP method.
+func (s *RESTServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if _, supported := supportedMethods[r.Method]; !supported {
+		errStr := fmt.Sprintf("unhandled HTTP method %s: %s", r.Method, http.StatusText(http.StatusBadRequest))
+		http.Error(w, errStr, http.StatusBadRequest)
+		return
+	}
+	resReq, err := newResourceRequest(r)
+	if err != nil {
+		writeResourceResponse(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	var results []interface{}
+	switch r.Method {
+	case methodGet:
+		results, err = resReq.getResource(s.db)
+		if len(results) == 0 {
+			writeResourceResponse(w, http.StatusNotFound, nil, nil)
+			return
+		}
+	case methodPut, methodPost:
+		var sch Schema
+		if err := json.NewDecoder(r.Body).Decode(&sch); err != nil {
+			writeResourceResponse(w, http.StatusInternalServerError, nil, err)
+			return
+		}
+		err = resReq.putResource(s.db, &sch)
+	case methodDelete:
+		err = resReq.deleteResource(s.db, &Schema{Key: resReq.schemaKey})
+	}
+	if err != nil {
+		writeResourceResponse(w, http.StatusInternalServerError, nil, err)
+		return
+	}
+	writeResourceResponse(w, http.StatusOK, results, nil)
+}
+
+func writeResourceResponse(w http.ResponseWriter, statusCode int, data []interface{}, err error) {
+	resp := newResourceResponse(statusCode, data, err)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(resp.Meta.StatusCode)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Warningf("unable to encode response: %v", err)
+		return
+	}
 }

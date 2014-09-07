@@ -188,7 +188,7 @@ type server struct {
 	node           *Node
 	admin          *adminServer
 	status         *statusServer
-	structuredDB   *structured.DB
+	structuredDB   structured.DB
 	structuredREST *structured.RESTServer
 	httpListener   *net.Listener // holds http endpoint information
 }
@@ -376,7 +376,7 @@ func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
 		return util.Errorf("could not listen on %s: %s", *httpAddr, err)
 	}
 	// Obtaining the http end point listener is difficult using
-	// http.ListenAndServe(), so we are storing it with the server
+	// http.ListenAndServe(), so we are storing it with the server.
 	s.httpListener = &ln
 	log.Infof("Starting HTTP server at %s", ln.Addr())
 	go http.Serve(ln, s)
@@ -396,13 +396,12 @@ func (s *server) initHTTP() {
 	s.mux.HandleFunc(statusLocalKeyPrefix, s.status.handleLocalStatus)
 
 	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
+	// TODO(andybons): all servers should satisfy the http.Handler interface.
 	s.mux.HandleFunc(rest.APIPrefix, s.kvREST.HandleAction)
-	s.mux.HandleFunc(structured.StructuredKeyPrefix, s.structuredREST.HandleAction)
+	s.mux.Handle(structured.StructuredKeyPrefix, s.structuredREST)
 }
 
 func (s *server) stop() {
-	// TODO(spencer): the http server should exit; this functionality is
-	// slated for go 1.3.
 	s.node.stop()
 	s.gossip.Stop()
 	s.rpc.Close()

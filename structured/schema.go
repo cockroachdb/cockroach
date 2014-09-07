@@ -162,9 +162,9 @@ func (ts TableSlice) Less(i, j int) bool { return ts[i].Name < ts[j].Name }
 // matters and small is better (for once). Schema Keys must be unique
 // within a Cockroach cluster.
 type Schema struct {
-	Name   string     `yaml:"db"`
-	Key    string     `yaml:"db_key"`
-	Tables TableSlice `yaml:",omitempty"`
+	Name   string     `yaml:"db" json:"db"`
+	Key    string     `yaml:"db_key" json:"db_key"`
+	Tables TableSlice `yaml:",omitempty" json:"tables,omitempty"`
 
 	// byName is a map from table name to *Table.
 	byName map[string]*Table
