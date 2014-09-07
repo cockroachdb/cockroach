@@ -5,65 +5,26 @@
 A working [Go environment](http://golang.org/doc/code.html) and [prerequisites for building
 RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md) are both presumed.
 ```bash
-go get github.com/cockroachdb/cockroach
-cd $GOPATH/src/github.com/cockroachdb/cockroach
+mkdir -p $GOPATH/src/github.com/cockroachdb/
+cd $GOPATH/src/github.com/cockroachdb/
+git clone git@github.com:cockroachdb/cockroach.git
+cd cockroach
 ./bootstrap.sh
 make
 ```
 
-### Bugs, features, and code review
+### Code review workflow
 
-**We use GitHub for everything but code reviews.**
++ Create a local branch to do work on.
 
-We use [Phabricator](http://phabricator.cockroachdb.org/) for code reviews. Phabricator
-uses your GitHub credentials, just click on the "Login or Register" button. The Phabricator
-development model is similar to the GitHub pull request model in that changes are
-typically developed on their own branch and then uploaded for review. When a change is
-uploaded to Phabricator (via `arc diff`), it is not merged with master until
-the review is complete and submitted.
+`git checkout -b andybons/update-readme`
 
-+ Hack away...
-+ Commit your changes locally using `git add` and `git commit`.
-+ Upload your change for review using `arc diff`.
++ Hack away and commit your changes locally using `git add` and `git commit`.
 
-### Installing Arcanist
-To install Arcanist (the code review tool)...
+`git commit -a -m 'update CONTRIBUTING.md'`
 
-Create a dir that will hold the two repos required.
++ When you’re ready for review, create a remote branch from your local branch.
 
-`$ mkdir somewhere`
+`git push -u origin andybons/update-readme`
 
-then clone the required repos into that folder:
-
-```
-somewhere/ $ git clone git://github.com/facebook/libphutil.git
-somewhere/ $ git clone git://github.com/facebook/arcanist.git
-```
-
-Then add somewhere/arcanist/bin/ to your $PATH
-
-Now within the cockroach directory...
-
-```
-$ git checkout -b newbranch
-... make changes ...
-$ git commit -a -m 'my awesome changes'
-$ arc diff
-```
-
-Say you’ve updated your diff to account for some suggestions, you just commit those on the same branch and do:
-
-```
-$ arc diff
-```
-
-again and it will take care of uploading things.
-
-Once you’re ready to land a change (it has been approved).
-
-```
-$ arc land
-```
-
-it will squash all commits, update the commit message with the original headline and description, and have a link back to the review. It will also clean up (delete) your feature branch.
-
++ Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request).
