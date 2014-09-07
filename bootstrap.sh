@@ -1,18 +1,7 @@
 #!/bin/bash
 
-# Verify arcanist is installed.
-command -v arc &> /dev/null
-if [ $? -eq 1 ]; then
-  cat <<EOF
-Please install Arcanist (part of Phabricator):
-
-  http://www.phabricator.com/docs/phabricator/article/Arcanist_User_Guide.html
-EOF
-  exit 1
-fi
-
 GO_GET="go get"
-GO_GET_FLAGS="-v"
+GO_GET_FLAGS="-u -v"
 
 set -e -x
 
@@ -25,8 +14,13 @@ $GO_GET $GO_GET_FLAGS github.com/golang/lint/golint
 $GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/vet
 $GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/goimports
 
-# Grab gogoprotobuf package.
-$GO_GET $GO_GET_FLAGS -u code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
+# Grab dependencies.
+$GO_GET $GO_GET_FLAGS code.google.com/p/biogo.store/llrb
+$GO_GET $GO_GET_FLAGS code.google.com/p/go-commander
+$GO_GET $GO_GET_FLAGS code.google.com/p/go-uuid/uuid
+$GO_GET $GO_GET_FLAGS code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
+$GO_GET $GO_GET_FLAGS github.com/golang/glog
+$GO_GET $GO_GET_FLAGS gopkg.in/yaml.v1
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
