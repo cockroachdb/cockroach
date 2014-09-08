@@ -27,25 +27,19 @@ import (
 	"unsafe"
 
 	"code.google.com/p/biogo.store/llrb"
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 var (
 	llrbNodeSize = int64(unsafe.Sizeof(llrb.Node{}))
-	keyValueSize = int64(unsafe.Sizeof(RawKeyValue{}))
+	keyValueSize = int64(unsafe.Sizeof(proto.RawKeyValue{}))
 )
 
 // computeSize returns the approximate size in bytes that the keyVal
 // object took while stored in the underlying LLRB.
-func computeSize(kv RawKeyValue) int64 {
+func computeSize(kv proto.RawKeyValue) int64 {
 	return int64(len(kv.Key)) + int64(len(kv.Value)) + llrbNodeSize + keyValueSize
-}
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (kv RawKeyValue) Compare(b llrb.Comparable) int {
-	return bytes.Compare(kv.Key, b.(RawKeyValue).Key)
 }
 
 // InMem a simple, in-memory key-value store.
@@ -81,13 +75,15 @@ func (in *InMem) Start() error {
 func (in *InMem) Stop() {
 }
 
-// CreateSnapshot creates a snapshot handle from engine and returns
-// a snapshotID of the created snapshot.
-func (in *InMem) CreateSnapshot() (string, error) {
+// CreateSnapshot creates a snapshot handle from engine.
+func (in *InMem) CreateSnapshot(snapshotID string) error {
+	_, ok := in.snapshots[snapshotID]
+	if ok {
+		return util.Errorf("snapshotID %s already exist", snapshotID)
+	}
 	snapshotHandle := cloneTree(in.data)
-	snapshotID := uuid.New()
 	in.snapshots[snapshotID] = snapshotHandle
-	return snapshotID, nil
+	return nil
 }
 
 func cloneTree(a llrb.Tree) llrb.Tree {
@@ -136,12 +132,12 @@ func (in *InMem) putLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	kv := RawKeyValue{Key: key, Value: value}
+	kv := proto.RawKeyValue{Key: key, Value: value}
 	size := computeSize(kv)
 	// If the key already exists, compute the size change of the
 	// replacement with the new value.
-	if val := in.data.Get(RawKeyValue{Key: key}); val != nil {
-		size -= computeSize(val.(RawKeyValue))
+	if val := in.data.Get(proto.RawKeyValue{Key: key}); val != nil {
+		size -= computeSize(val.(proto.RawKeyValue))
 	}
 
 	if size > in.maxBytes-in.usedBytes {
@@ -199,16 +195,16 @@ func (in *InMem) getLocked(key Key, data llrb.Tree) ([]byte, error) {
 		return nil, emptyKeyError()
 	}
 
-	val := data.Get(RawKeyValue{Key: key})
+	val := data.Get(proto.RawKeyValue{Key: key})
 	if val == nil {
 		return nil, nil
 	}
-	return val.(RawKeyValue).Value, nil
+	return val.(proto.RawKeyValue).Value, nil
 }
 
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
-func (in *InMem) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
+func (in *InMem) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.scanLocked(start, end, max, in.data)
@@ -218,7 +214,7 @@ func (in *InMem) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 // start (inclusive) and ending at end (non-inclusive) from the
 // given snapshotID.
 // Specify max=0 for unbounded scans.
-func (in *InMem) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error) {
+func (in *InMem) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
 	snapshotHandle, ok := in.snapshots[snapshotID]
 	if !ok {
 		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
@@ -227,8 +223,8 @@ func (in *InMem) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]R
 }
 
 // scanLocked is intended to be called within at least a read lock.
-func (in *InMem) scanLocked(start, end Key, max int64, data llrb.Tree) ([]RawKeyValue, error) {
-	var scanned []RawKeyValue
+func (in *InMem) scanLocked(start, end Key, max int64, data llrb.Tree) ([]proto.RawKeyValue, error) {
+	var scanned []proto.RawKeyValue
 	if bytes.Compare(start, end) >= 0 {
 		return scanned, nil
 	}
@@ -237,9 +233,9 @@ func (in *InMem) scanLocked(start, end Key, max int64, data llrb.Tree) ([]RawKey
 			done = true
 			return
 		}
-		scanned = append(scanned, kv.(RawKeyValue))
+		scanned = append(scanned, kv.(proto.RawKeyValue))
 		return
-	}, RawKeyValue{Key: start}, RawKeyValue{Key: end})
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
 
 	return scanned, nil
 }
@@ -259,10 +255,10 @@ func (in *InMem) clearLocked(key Key) error {
 	// Note: this is approximate. There is likely something missing.
 	// The storage/in_mem_test.go benchmarks this and the measurement
 	// being made seems close enough for government work (tm).
-	if val := in.data.Get(RawKeyValue{Key: key}); val != nil {
-		in.usedBytes -= computeSize(val.(RawKeyValue))
+	if val := in.data.Get(proto.RawKeyValue{Key: key}); val != nil {
+		in.usedBytes -= computeSize(val.(proto.RawKeyValue))
 	}
-	in.data.Delete(RawKeyValue{Key: key})
+	in.data.Delete(proto.RawKeyValue{Key: key})
 	return nil
 }
 

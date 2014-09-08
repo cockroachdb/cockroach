@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []RawKeyValue) {
+func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []proto.RawKeyValue) {
 	if len(keyvals) != len(sortedKeys) {
 		t.Errorf("length mismatch. expected %s, got %s", sortedKeys, keyvals)
 	}
@@ -474,7 +474,12 @@ func TestSnapshot(t *testing.T) {
 				val, val1)
 		}
 
-		snapshotID, error := engine.CreateSnapshot()
+		candidateID, err := Increment(engine, KeyLocalSnapshotIDGenerator, 1)
+		if err != nil {
+			t.Fatalf("create snapshotID failed : %s", err)
+		}
+		snapshotID := strconv.FormatInt(candidateID, 10)
+		error := engine.CreateSnapshot(snapshotID)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -495,8 +500,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := engine.Scan(KeyMin, KeyMax, 0)
-		keyvalsSnapshot, error := engine.ScanSnapshot(KeyMin, KeyMax, 0, snapshotID)
+		keyvals, _ := engine.Scan(key, KeyMax, 0)
+		keyvalsSnapshot, error := engine.ScanSnapshot(key, KeyMax, 0, snapshotID)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}

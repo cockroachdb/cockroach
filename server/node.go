@@ -497,3 +497,13 @@ func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, rep
 func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
 	return n.executeCmd(storage.InternalResolveIntent, args, reply)
 }
+
+// InternalRangeScan .
+func (n *Node) InternalRangeScan(args *proto.InternalRangeScanRequest, reply *proto.InternalRangeScanResponse) error {
+	return n.executeCmd(storage.InternalRangeScan, args, reply)
+}
+
+// InternalReleaseSnapshot .
+func (n *Node) InternalReleaseSnapshot(args *proto.InternalReleaseSnapshotRequest, reply *proto.InternalReleaseSnapshotResponse) error {
+	return n.executeCmd(storage.InternalReleaseSnapshot, args, reply)
+}

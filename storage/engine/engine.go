@@ -30,12 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
-// RawKeyValue contains the raw bytes of the value for a key.
-type RawKeyValue struct {
-	Key   Key
-	Value []byte
-}
-
 // StoreCapacity contains capacity information for a storage device.
 type StoreCapacity struct {
 	Capacity  int64
@@ -63,7 +57,7 @@ type Engine interface {
 	// Scan returns up to max key/value objects starting from
 	// start (inclusive) and ending at end (non-inclusive).
 	// Specify max=0 for unbounded scans.
-	Scan(start, end Key, max int64) ([]RawKeyValue, error)
+	Scan(start, end Key, max int64) ([]proto.RawKeyValue, error)
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
@@ -84,9 +78,8 @@ type Engine interface {
 	// Rows with timestamps less than the associated value will be GC'd
 	// during compaction.
 	SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
-	// CreateSnapshot creates a snapshot handle from engine and returns
-	// a snapshotID of the created snapshot.
-	CreateSnapshot() (string, error)
+	// CreateSnapshot creates a snapshot handle from engine.
+	CreateSnapshot(snapshotID string) error
 	// ReleaseSnapshot releases the existing snapshot handle for the
 	// given snapshotID.
 	ReleaseSnapshot(snapshotID string) error
@@ -97,17 +90,17 @@ type Engine interface {
 	// start (inclusive) and ending at end (non-inclusive) from the
 	// given snapshotID.
 	// Specify max=0 for unbounded scans.
-	ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error)
+	ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error)
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
 type BatchDelete Key
 
 // A BatchPut is a put operation executed as part of an atomic batch.
-type BatchPut RawKeyValue
+type BatchPut proto.RawKeyValue
 
 // A BatchMerge is a merge operation executed as part of an atomic batch.
-type BatchMerge RawKeyValue
+type BatchMerge proto.RawKeyValue
 
 // PutI sets the given key to the gob-serialized byte string of the
 // value provided. Used internally.

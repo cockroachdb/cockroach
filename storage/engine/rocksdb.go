@@ -38,7 +38,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -172,16 +171,18 @@ func (r *RocksDB) Stop() {
 	r.rdb = nil
 }
 
-// CreateSnapshot creates a snapshot handle from engine and returns
-// a snapshotID of the created snapshot.
-func (r *RocksDB) CreateSnapshot() (string, error) {
+// CreateSnapshot creates a snapshot handle from engine.
+func (r *RocksDB) CreateSnapshot(snapshotID string) error {
 	if r.rdb == nil {
-		return "", util.Errorf("RocksDB is not initialized yet")
+		return util.Errorf("RocksDB is not initialized yet")
+	}
+	_, ok := r.snapshots[snapshotID]
+	if ok {
+		return util.Errorf("snapshotID %s already exist", snapshotID)
 	}
 	snapshotHandle := C.rocksdb_create_snapshot(r.rdb)
-	snapshotID := uuid.New()
 	r.snapshots[snapshotID] = snapshotHandle
-	return snapshotID, nil
+	return nil
 }
 
 // ReleaseSnapshot releases the existing snapshot handle for the
@@ -358,7 +359,7 @@ func (r *RocksDB) Clear(key Key) error {
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
+func (r *RocksDB) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
 	opts := C.rocksdb_readoptions_create()
 	C.rocksdb_readoptions_set_fill_cache(opts, 0)
 	defer C.rocksdb_readoptions_destroy(opts)
@@ -369,7 +370,7 @@ func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 // start (inclusive) and ending at end (non-inclusive) from the
 // given snapshotID.
 // Specify max=0 for unbounded scans.
-func (r *RocksDB) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error) {
+func (r *RocksDB) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
 		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
@@ -385,8 +386,8 @@ func (r *RocksDB) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]
 // scanInternal returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readoptions_t) ([]RawKeyValue, error) {
-	var keyVals []RawKeyValue
+func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readoptions_t) ([]proto.RawKeyValue, error) {
+	var keyVals []proto.RawKeyValue
 	if bytes.Compare(start, end) >= 0 {
 		return keyVals, nil
 	}
@@ -420,7 +421,7 @@ func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readop
 		}
 		data = C.rocksdb_iter_value(it, &l)
 		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
-		keyVals = append(keyVals, RawKeyValue{
+		keyVals = append(keyVals, proto.RawKeyValue{
 			Key:   k,
 			Value: v,
 		})

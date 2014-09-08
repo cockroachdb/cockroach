@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"bytes"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -296,6 +298,37 @@ func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
+// internalRangeScanArgs returns a InternalRangeScanRequest and
+// InternalRangeScanResponse pair addressed to the default replica
+// for the specified key and endKey.
+func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalRangeScanRequest, *proto.InternalRangeScanResponse) {
+	args := &proto.InternalRangeScanRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			EndKey:  endKey,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		SnapshotId: snapshotID,
+		MaxResults: maxResults,
+	}
+	reply := &proto.InternalRangeScanResponse{}
+	return args, reply
+}
+
+// internalReleaseSnapshotArgs returns a InternalReleaseSnapshotRequest and
+// InternalReleaseSnapshotResponse pair addressed to the default replica
+// for snapshotId.
+func internalReleaseSnapshotArgs(snapshotID string, rangeID int64) (*proto.InternalReleaseSnapshotRequest, *proto.InternalReleaseSnapshotResponse) {
+	args := &proto.InternalReleaseSnapshotRequest{
+		RequestHeader: proto.RequestHeader{
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		SnapshotId: snapshotID,
+	}
+	reply := &proto.InternalReleaseSnapshotResponse{}
+	return args, reply
+}
+
 // TestRangeUpdateTSCache verifies that reads update the read
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
@@ -458,5 +491,105 @@ func TestRangeIdempotence(t *testing.T) {
 	// counter starting at 2 all the way to 51 (sum of sequence = 1325).
 	if count != 1325 {
 		t.Errorf("expected sum of all increments to be 1325; got %d", count)
+	}
+}
+
+// TestRangeSnapshot.
+func TestRangeSnapshot(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	key1 := "a"
+	key2 := "b"
+	val1 := "1"
+	val2 := "2"
+	val3 := "3"
+
+	pArgs, pReply := putArgs(key1, val1, 0)
+	pArgs.Timestamp = clock.Now()
+	err := rng.ReadWriteCmd("Put", pArgs, pReply)
+
+	pArgs, pReply = putArgs(key2, val2, 0)
+	pArgs.Timestamp = clock.Now()
+	err = rng.ReadWriteCmd("Put", pArgs, pReply)
+
+	gArgs, gReply := getArgs(key1, 0)
+	gArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("Get", gArgs, gReply)
+
+	if err != nil {
+		t.Fatalf("error : %s", err)
+	}
+	if !bytes.Equal(gReply.Value.Bytes, []byte(val1)) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			gReply.Value.Bytes, []byte(val1))
+	}
+
+	irsArgs, irsReply := internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	irsArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	if err != nil {
+		t.Fatalf("error : %s", err)
+	}
+	snapshotID := irsReply.SnapshotId
+	var valueNormalPrefix = byte(0)
+	expectedKey := encoding.EncodeBinary(nil, []byte(key1))
+	expectedVal := bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val1)}, []byte(""))
+	if len(irsReply.Rows) != 4 ||
+		!bytes.Equal(irsReply.Rows[0].Key, expectedKey) ||
+		!bytes.Equal(irsReply.Rows[1].Value, expectedVal) {
+		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
+			irsReply.Rows[1].Value, irsReply.Rows[0].Key, expectedVal, expectedKey)
+	}
+
+	pArgs, pReply = putArgs(key2, val3, 0)
+	pArgs.Timestamp = clock.Now()
+	err = rng.ReadWriteCmd("Put", pArgs, pReply)
+
+	// Scan with the previous snapshot will get the old value val2 of key2.
+	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
+	irsArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	if err != nil {
+		t.Fatalf("error : %s", err)
+	}
+	expectedKey = encoding.EncodeBinary(nil, []byte(key2))
+	expectedVal = bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val2)}, []byte(""))
+	if len(irsReply.Rows) != 4 ||
+		!bytes.Equal(irsReply.Rows[2].Key, expectedKey) ||
+		!bytes.Equal(irsReply.Rows[3].Value, expectedVal) {
+		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
+			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
+	}
+
+	// Create a new snapshot to cover the latest value.
+	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	irsArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	if err != nil {
+		t.Fatalf("error : %s", err)
+	}
+	snapshotID2 := irsReply.SnapshotId
+	expectedKey = encoding.EncodeBinary(nil, []byte(key2))
+	expectedVal = bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val3)}, []byte(""))
+	// Expect one more mvcc version.
+	if len(irsReply.Rows) != 5 ||
+		!bytes.Equal(irsReply.Rows[2].Key, expectedKey) ||
+		!bytes.Equal(irsReply.Rows[3].Value, expectedVal) {
+		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
+			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
+	}
+
+	irArgs, irReply := internalReleaseSnapshotArgs(snapshotID, 0)
+	irArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalReleaseSnapshot", irArgs, irReply)
+	if err != nil {
+		t.Fatalf("error : %s", err)
+	}
+	irArgs, irReply = internalReleaseSnapshotArgs(snapshotID2, 0)
+	irArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalReleaseSnapshot", irArgs, irReply)
+	if err != nil {
+		t.Fatalf("error : %s", err)
 	}
 }

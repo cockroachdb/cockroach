@@ -210,3 +210,19 @@ func (db *DB) InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-
 	go db.executeCmd(storage.InternalResolveIntent, args, replyChan)
 	return replyChan
 }
+
+// InternalRangeScan scans the key range specified by start key through
+// end key up to some maximum number of results from the given snapshot_id.
+// It will create a snapshot if snapshot_id is empty.
+func (db *DB) InternalRangeScan(args *proto.InternalRangeScanRequest) <-chan *proto.InternalRangeScanResponse {
+	replyChan := make(chan *proto.InternalRangeScanResponse, 1)
+	go db.executeCmd(storage.InternalRangeScan, args, replyChan)
+	return replyChan
+}
+
+// InternalReleaseSnapshot releases the snapshot handle for snapshot_id.
+func (db *DB) InternalReleaseSnapshot(args *proto.InternalReleaseSnapshotRequest) <-chan *proto.InternalReleaseSnapshotResponse {
+	replyChan := make(chan *proto.InternalReleaseSnapshotResponse, 1)
+	go db.executeCmd(storage.InternalReleaseSnapshot, args, replyChan)
+	return replyChan
+}

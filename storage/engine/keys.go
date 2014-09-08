@@ -196,6 +196,9 @@ var (
 	// prefix is duplicated in rocksdb_compaction.cc and must be kept in
 	// sync if modified here.
 	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("txn-"))
+	// KeyLocalSnapshotIDGenerator is a snapshot ID generator sequence.
+	// Snapshot IDs must be unique per store ID.
+	KeyLocalSnapshotIDGenerator = MakeKey(KeyLocalPrefix, Key("snapshot-idgen"))
 
 	// KeySystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
