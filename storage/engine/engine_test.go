@@ -463,6 +463,56 @@ func TestEngineDeleteRange(t *testing.T) {
 	}, t)
 }
 
+func TestSnapshot(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		key := []byte("a")
+		val1 := []byte("1")
+		engine.Put(key, val1)
+		val, _ := engine.Get(key)
+		if !bytes.Equal(val, val1) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				val, val1)
+		}
+
+		snapshotID, error := engine.CreateSnapshot()
+		if error != nil {
+			t.Fatalf("error : %s", error)
+		}
+
+		val2 := []byte("2")
+		engine.Put(key, val2)
+		val, _ = engine.Get(key)
+		valSnapshot, error := engine.GetSnapshot(key, snapshotID)
+		if error != nil {
+			t.Fatalf("error : %s", error)
+		}
+		if !bytes.Equal(val, val2) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				val, val2)
+		}
+		if !bytes.Equal(valSnapshot, val1) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				valSnapshot, val1)
+		}
+
+		keyvals, _ := engine.Scan(KeyMin, KeyMax, 0)
+		keyvalsSnapshot, error := engine.ScanSnapshot(KeyMin, KeyMax, 0, snapshotID)
+		if error != nil {
+			t.Fatalf("error : %s", error)
+		}
+		if len(keyvals) != 1 || !bytes.Equal(keyvals[0].Value, val2) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				keyvals[0].Value, val2)
+		}
+		if len(keyvalsSnapshot) != 1 || !bytes.Equal(keyvalsSnapshot[0].Value, val1) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				keyvalsSnapshot[0].Value, val1)
+		}
+
+		engine.ReleaseSnapshot(snapshotID)
+	}, t)
+}
+
 func insertKeys(keys []Key, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))

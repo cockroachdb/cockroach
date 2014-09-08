@@ -27,6 +27,7 @@ import (
 	"unsafe"
 
 	"code.google.com/p/biogo.store/llrb"
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -54,13 +55,15 @@ type InMem struct {
 	maxBytes  int64
 	usedBytes int64
 	data      llrb.Tree
+	snapshots map[string]llrb.Tree
 }
 
 // NewInMem allocates and returns a new InMem object.
 func NewInMem(attrs proto.Attributes, maxBytes int64) *InMem {
 	return &InMem{
-		attrs:    attrs,
-		maxBytes: maxBytes,
+		snapshots: map[string]llrb.Tree{},
+		attrs:     attrs,
+		maxBytes:  maxBytes,
 	}
 }
 
@@ -76,6 +79,42 @@ func (in *InMem) Start() error {
 
 // Stop is a noop for the InMem engine.
 func (in *InMem) Stop() {
+}
+
+// CreateSnapshot creates a snapshot handle from engine and returns
+// a snapshotID of the created snapshot.
+func (in *InMem) CreateSnapshot() (string, error) {
+	snapshotHandle := cloneTree(in.data)
+	snapshotID := uuid.New()
+	in.snapshots[snapshotID] = snapshotHandle
+	return snapshotID, nil
+}
+
+func cloneTree(a llrb.Tree) llrb.Tree {
+	var newTree = llrb.Tree{Count: a.Count}
+	newTree.Root = cloneNode(a.Root)
+	return newTree
+}
+
+func cloneNode(a *llrb.Node) *llrb.Node {
+	if a == nil {
+		return nil
+	}
+	var newNode = &llrb.Node{Elem: a.Elem, Color: a.Color}
+	newNode.Left = cloneNode(a.Left)
+	newNode.Right = cloneNode(a.Right)
+	return newNode
+}
+
+// ReleaseSnapshot releases the existing snapshot handle for the
+// given snapshotID.
+func (in *InMem) ReleaseSnapshot(snapshotID string) error {
+	_, ok := in.snapshots[snapshotID]
+	if !ok {
+		return util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+	delete(in.snapshots, snapshotID)
+	return nil
 }
 
 // Attrs returns the list of attributes describing this engine.  This
@@ -127,7 +166,7 @@ func (in *InMem) mergeLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	existingVal, err := in.getLocked(key)
+	existingVal, err := in.getLocked(key, in.data)
 	if err != nil {
 		return err
 	}
@@ -140,16 +179,27 @@ func (in *InMem) mergeLocked(key Key, value []byte) error {
 func (in *InMem) Get(key Key) ([]byte, error) {
 	in.RLock()
 	defer in.RUnlock()
-	return in.getLocked(key)
+	return in.getLocked(key, in.data)
+}
+
+// GetSnapshot returns the value for the given key from the given
+// snapshotID, nil otherwise.
+func (in *InMem) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+	snapshotHandle, ok := in.snapshots[snapshotID]
+	if !ok {
+		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+	return in.getLocked(key, snapshotHandle)
 }
 
 // getLocked performs a get operation assuming that the caller
 // is already holding the mutex.
-func (in *InMem) getLocked(key Key) ([]byte, error) {
+func (in *InMem) getLocked(key Key, data llrb.Tree) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
-	val := in.data.Get(RawKeyValue{Key: key})
+
+	val := data.Get(RawKeyValue{Key: key})
 	if val == nil {
 		return nil, nil
 	}
@@ -161,16 +211,28 @@ func (in *InMem) getLocked(key Key) ([]byte, error) {
 func (in *InMem) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 	in.RLock()
 	defer in.RUnlock()
-	return in.scanLocked(start, end, max)
+	return in.scanLocked(start, end, max, in.data)
+}
+
+// ScanSnapshot returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive) from the
+// given snapshotID.
+// Specify max=0 for unbounded scans.
+func (in *InMem) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error) {
+	snapshotHandle, ok := in.snapshots[snapshotID]
+	if !ok {
+		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+	return in.scanLocked(start, end, max, snapshotHandle)
 }
 
 // scanLocked is intended to be called within at least a read lock.
-func (in *InMem) scanLocked(start, end Key, max int64) ([]RawKeyValue, error) {
+func (in *InMem) scanLocked(start, end Key, max int64, data llrb.Tree) ([]RawKeyValue, error) {
 	var scanned []RawKeyValue
 	if bytes.Compare(start, end) >= 0 {
 		return scanned, nil
 	}
-	in.data.DoRange(func(kv llrb.Comparable) (done bool) {
+	data.DoRange(func(kv llrb.Comparable) (done bool) {
 		if max != 0 && int64(len(scanned)) >= max {
 			done = true
 			return

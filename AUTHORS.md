@@ -10,3 +10,4 @@
 - Tobias Schottdorf <tobias.schottdorf@gmail.com>
 - Zach Brock <zbrock@gmail.com>
 - Matthew O'Connor <matthew.t.oconnor@gmail.com>
+- Jiang-Ming Yang <jiangming.yang@gmail.com>

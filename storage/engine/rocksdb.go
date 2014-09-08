@@ -16,6 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 
 package engine
 
@@ -37,6 +38,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -52,11 +54,12 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb           *C.rocksdb_t               // The DB handle
-	opts          *C.rocksdb_options_t       // Options used when creating or destroying
-	rOpts         *C.rocksdb_readoptions_t   // The default read options
-	wOpts         *C.rocksdb_writeoptions_t  // The default write options
-	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB merge operator
+	rdb           *C.rocksdb_t                     // The DB handle
+	opts          *C.rocksdb_options_t             // Options used when creating or destroying
+	rOpts         *C.rocksdb_readoptions_t         // The default read options
+	wOpts         *C.rocksdb_writeoptions_t        // The default write options
+	mergeOperator *C.rocksdb_mergeoperator_t       // Custom RocksDB merge operator
+	snapshots     map[string]*C.rocksdb_snapshot_t // Map of snapshot handles by snapshot ID
 
 	// Custom RocksDB compaction filter.
 	compactionFilterFactory *C.rocksdb_compactionfilterfactory_t
@@ -69,8 +72,9 @@ type RocksDB struct {
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 	return &RocksDB{
-		attrs: attrs,
-		dir:   dir,
+		snapshots: map[string]*C.rocksdb_snapshot_t{},
+		attrs:     attrs,
+		dir:       dir,
 	}
 }
 
@@ -168,6 +172,33 @@ func (r *RocksDB) Stop() {
 	r.rdb = nil
 }
 
+// CreateSnapshot creates a snapshot handle from engine and returns
+// a snapshotID of the created snapshot.
+func (r *RocksDB) CreateSnapshot() (string, error) {
+	if r.rdb == nil {
+		return "", util.Errorf("RocksDB is not initialized yet")
+	}
+	snapshotHandle := C.rocksdb_create_snapshot(r.rdb)
+	snapshotID := uuid.New()
+	r.snapshots[snapshotID] = snapshotHandle
+	return snapshotID, nil
+}
+
+// ReleaseSnapshot releases the existing snapshot handle for the
+// given snapshotID.
+func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
+	if r.rdb == nil {
+		return util.Errorf("RocksDB is not initialized yet")
+	}
+	snapshotHandle, ok := r.snapshots[snapshotID]
+	if !ok {
+		return util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+	C.rocksdb_release_snapshot(r.rdb, snapshotHandle)
+	delete(r.snapshots, snapshotID)
+	return nil
+}
+
 // Attrs returns the list of attributes describing this engine.  This
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
@@ -260,6 +291,25 @@ func (r *RocksDB) Merge(key Key, value []byte) error {
 
 // Get returns the value for the given key.
 func (r *RocksDB) Get(key Key) ([]byte, error) {
+	return r.getInternal(key, r.rOpts)
+}
+
+// GetSnapshot returns the value for the given key from the given
+// snapshotID, nil otherwise.
+func (r *RocksDB) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+	snapshotHandle, ok := r.snapshots[snapshotID]
+	if !ok {
+		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+
+	opts := C.rocksdb_readoptions_create()
+	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
+	defer C.rocksdb_readoptions_destroy(opts)
+	return r.getInternal(key, opts)
+}
+
+// Get returns the value for the given key.
+func (r *RocksDB) getInternal(key Key, rOpts *C.rocksdb_readoptions_t) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -270,7 +320,7 @@ func (r *RocksDB) Get(key Key) ([]byte, error) {
 
 	cVal := C.rocksdb_get(
 		r.rdb,
-		r.rOpts,
+		rOpts,
 		bytesPointer(key),
 		C.size_t(len(key)),
 		&cValLen,
@@ -309,6 +359,33 @@ func (r *RocksDB) Clear(key Key) error {
 // start (inclusive) and ending at end (non-inclusive).
 // If max is zero then the number of key/values returned is unbounded.
 func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
+	opts := C.rocksdb_readoptions_create()
+	C.rocksdb_readoptions_set_fill_cache(opts, 0)
+	defer C.rocksdb_readoptions_destroy(opts)
+	return r.scanInternal(start, end, max, opts)
+}
+
+// ScanSnapshot returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive) from the
+// given snapshotID.
+// Specify max=0 for unbounded scans.
+func (r *RocksDB) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error) {
+	snapshotHandle, ok := r.snapshots[snapshotID]
+	if !ok {
+		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+	}
+
+	opts := C.rocksdb_readoptions_create()
+	C.rocksdb_readoptions_set_fill_cache(opts, 0)
+	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
+	defer C.rocksdb_readoptions_destroy(opts)
+	return r.scanInternal(start, end, max, opts)
+}
+
+// scanInternal returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive).
+// If max is zero then the number of key/values returned is unbounded.
+func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readoptions_t) ([]RawKeyValue, error) {
 	var keyVals []RawKeyValue
 	if bytes.Compare(start, end) >= 0 {
 		return keyVals, nil
@@ -317,9 +394,6 @@ func (r *RocksDB) Scan(start, end Key, max int64) ([]RawKeyValue, error) {
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
-	opts := C.rocksdb_readoptions_create()
-	C.rocksdb_readoptions_set_fill_cache(opts, 0)
-	defer C.rocksdb_readoptions_destroy(opts)
 	it := C.rocksdb_create_iterator(r.rdb, opts)
 	defer C.rocksdb_iter_destroy(it)
 

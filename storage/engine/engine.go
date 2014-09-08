@@ -15,6 +15,7 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 
 package engine
 
@@ -83,6 +84,20 @@ type Engine interface {
 	// Rows with timestamps less than the associated value will be GC'd
 	// during compaction.
 	SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
+	// CreateSnapshot creates a snapshot handle from engine and returns
+	// a snapshotID of the created snapshot.
+	CreateSnapshot() (string, error)
+	// ReleaseSnapshot releases the existing snapshot handle for the
+	// given snapshotID.
+	ReleaseSnapshot(snapshotID string) error
+	// GetSnapshot returns the value for the given key from the given
+	// snapshotID, nil otherwise.
+	GetSnapshot(key Key, snapshotID string) ([]byte, error)
+	// ScanSnapshot returns up to max key/value objects starting from
+	// start (inclusive) and ending at end (non-inclusive) from the
+	// given snapshotID.
+	// Specify max=0 for unbounded scans.
+	ScanSnapshot(start, end Key, max int64, snapshotID string) ([]RawKeyValue, error)
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
