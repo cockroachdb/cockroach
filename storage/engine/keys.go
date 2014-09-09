@@ -183,9 +183,6 @@ var (
 	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
 	// The value is a struct of type RangeMetadata.
 	KeyLocalRangeMetadataPrefix = MakeKey(KeyLocalPrefix, Key("range-"))
-	// KeyLocalRangeSamplePrefix is the prefix for keys storing range write
-	// samples.
-	KeyLocalRangeSamplePrefix = MakeKey(KeyLocalPrefix, Key("sample-"))
 	// KeyLocalRangeResponseCachePrefix is the prefix for keys storing command
 	// responses used to guarantee idempotency (see ResponseCache). This key
 	// prefix is duplicated in rocksdb_compaction.cc and must be kept in sync
