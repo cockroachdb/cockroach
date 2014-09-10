@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 
 package storage
 
@@ -21,6 +22,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -84,6 +86,7 @@ const (
 	InternalRangeLookup   = "InternalRangeLookup"
 	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
 	InternalResolveIntent = "InternalResolveIntent"
+	InternalRangeScan     = "InternalRangeScan"
 )
 
 // readMethods specifies the set of methods which read and return data.
@@ -95,6 +98,7 @@ var readMethods = map[string]struct{}{
 	Scan:                struct{}{},
 	ReapQueue:           struct{}{},
 	InternalRangeLookup: struct{}{},
+	InternalRangeScan:   struct{}{},
 }
 
 // writeMethods specifies the set of methods which write data.
@@ -482,6 +486,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalHeartbeatTxn(args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case InternalResolveIntent:
 		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
+	case InternalRangeScan:
+		r.InternalRangeScan(args.(*proto.InternalRangeScanRequest), reply.(*proto.InternalRangeScanResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -723,4 +729,37 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
 	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.TxnID, args.Commit))
+}
+
+// InternalRangeScan scans the key range specified by start key through
+// end key up to some maximum number of results from the given snapshot_id.
+// It will create a snapshot if snapshot_id is empty.
+func (r *Range) InternalRangeScan(args *proto.InternalRangeScanRequest, reply *proto.InternalRangeScanResponse) {
+	if len(args.SnapshotId) == 0 {
+		candidateID, err := engine.Increment(r.engine, engine.KeyLocalSnapshotIDGenerator, 1)
+		if err != nil {
+			reply.SetGoError(err)
+			return
+		}
+		snapshotID := strconv.FormatInt(candidateID, 10)
+		err = r.engine.CreateSnapshot(snapshotID)
+		if err != nil {
+			reply.SetGoError(err)
+			return
+		}
+		args.SnapshotId = snapshotID
+	}
+
+	kvs, err := r.engine.ScanSnapshot(args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	if len(kvs) == 0 {
+		err = r.engine.ReleaseSnapshot(args.SnapshotId)
+	}
+
+	reply.Rows = kvs
+	reply.SnapshotId = args.SnapshotId
+	reply.SetGoError(err)
 }

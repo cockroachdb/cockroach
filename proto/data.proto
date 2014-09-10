@@ -54,6 +54,12 @@ message KeyValue {
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
+// RawKeyValue contains the raw bytes of the value for a key.
+message RawKeyValue {
+  optional bytes key = 1 [(gogoproto.nullable) = false];
+  optional bytes value = 2 [(gogoproto.nullable) = false];
+}
+
 // A StoreIdent uniquely identifies a store in the cluster. The
 // StoreIdent is written to the underlying storage engine at a
 // store-reserved system key (KeyLocalIdent).

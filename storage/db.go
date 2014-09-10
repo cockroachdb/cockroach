@@ -47,6 +47,7 @@ type DB interface {
 	EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *proto.EnqueueMessageResponse
 	InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) <-chan *proto.InternalHeartbeatTxnResponse
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
+	InternalRangeScan(args *proto.InternalRangeScanRequest) <-chan *proto.InternalRangeScanResponse
 }
 
 // GetI fetches the value at the specified key and gob-deserializes it

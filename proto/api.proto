@@ -334,6 +334,27 @@ message InternalResolveIntentResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalRangeScanRequest is arguments to the InternalRangeScan()
+// method. It specifies the start and end keys for the scan and the
+// maximum number of results from the given snapshot_id. It will create
+// a snapshot if snapshot_id is empty.
+message InternalRangeScanRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Optional, a new snapshot will be created if it is empty.
+  optional string snapshot_id = 2 [(gogoproto.nullable) = false];
+  // Must be > 0.
+  optional int64 max_results = 3 [(gogoproto.nullable) = false];
+}
+
+// An InternalRangeScanResponse is the return value from the
+// InternalRangeScan() method.
+message InternalRangeScanResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional string snapshot_id = 2 [(gogoproto.nullable) = false];
+  // Empty if no rows were scanned.
+  repeated RawKeyValue rows = 3 [(gogoproto.nullable) = false];
+}
+
 // A ReadWriteCmdRequest is a union type containing instances of all
 // mutating commands.
 message ReadWriteCmdRequest {

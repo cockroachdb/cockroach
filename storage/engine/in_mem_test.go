@@ -74,7 +74,7 @@ func TestInMemOverCapacity(t *testing.T) {
 	value := []byte("0123456789")
 	// Create an engine with enough space for one, but not two, nodes.
 	engine := NewInMem(proto.Attributes{},
-		int64(float64(computeSize(RawKeyValue{Key: Key("X"), Value: value}))*1.5))
+		int64(float64(computeSize(proto.RawKeyValue{Key: Key("X"), Value: value}))*1.5))
 	var err error
 	if err = engine.Put(Key("1"), value); err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
