@@ -197,8 +197,8 @@ func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // TODO(bdarnell): same concerns as SubmitCommand
-// TODO(bdarnell): do we expose ChangeMembershipAdd{NonVoting,}Node to the application
-// level or does MultiRaft take care of the non-member -> non-voting member -> full member
+// TODO(bdarnell): do we expose ChangeMembershipAdd{Member,Observer} to the application
+// level or does MultiRaft take care of the non-member -> observer -> full member
 // cycle?
 func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMembershipOperation,
 	nodeID NodeID) error {
@@ -261,6 +261,8 @@ type group struct {
 	votes            map[NodeID]bool
 
 	// Candidate/leader volatile state.  Reset on conversion to candidate.
+	// currentMembers is the cluster membership including any pending (uncommitted)
+	// membership changes.
 	currentMembers *GroupMembers
 
 	// Leader volatile state.  Reset on election.
@@ -288,23 +290,10 @@ func newGroup(groupID GroupID, members []NodeID) *group {
 }
 
 // findQuorumIndex examines matchIndex to find the largest log index that a quorum has
-// agreed on.  This method is aware of the "joint consensus" state during membership changes
-// and reports the minimum index agreed to by the new and old membership sets (considered
-// separately).
+// agreed on.
 func (g *group) findQuorumIndex() int {
-	oldQuorum := g.findQuorumIndexInNodes(g.currentMembers.Members)
-	if len(g.currentMembers.ProposedMembers) > 0 {
-		newQuorum := g.findQuorumIndexInNodes(g.currentMembers.ProposedMembers)
-		if newQuorum < oldQuorum {
-			return newQuorum
-		}
-	}
-	return oldQuorum
-}
-
-func (g *group) findQuorumIndexInNodes(nodes []NodeID) int {
 	var indices []int
-	for _, nodeID := range nodes {
+	for _, nodeID := range g.currentMembers.Members {
 		indices = append(indices, g.matchIndex[nodeID])
 	}
 	sort.Ints(indices)
@@ -517,6 +506,8 @@ func (s *state) submitCommand(op *submitCommandOp) {
 
 func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
 	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
+	// TODO(bdarnell): update currentMembers.  Should we disallow more than one
+	// membership change in flight at a time, and if so how?
 	op.ch <- s.addLogEntry(op.groupID, LogEntryChangeMembership, nil)
 }
 
@@ -566,13 +557,9 @@ func (s *state) requestVoteResponse(req *RequestVoteRequest, resp *RequestVoteRe
 }
 
 func (s *state) countVotes(g *group) {
-	// We can convert from Candidate to Leader if we have enough votes.  If we are in a
-	// transitional "joint consensus" state, we need a quorum of votes from both the old
-	// and new memberships.
+	// We can convert from Candidate to Leader if we have enough votes.
 	if g.role == RoleCandidate &&
-		hasMajority(g.votes, g.currentMembers.Members) &&
-		(len(g.currentMembers.ProposedMembers) == 0 ||
-			hasMajority(g.votes, g.currentMembers.ProposedMembers)) {
+		hasMajority(g.votes, g.currentMembers.Members) {
 		g.role = RoleLeader
 		log.V(1).Infof("node %v becoming leader for group %v", s.nodeID, g.groupID)
 		s.sendEvent(&EventLeaderElection{g.groupID, s.nodeID})
@@ -654,7 +641,12 @@ func (s *state) broadcastEntries(g *group, entries []*LogEntry) {
 		return
 	}
 	log.V(6).Infof("node %v: broadcasting entries to followers", s.nodeID)
-	for _, id := range g.currentMembers.Members {
+	s.broadcastEntriesToNodes(g, entries, g.currentMembers.Members)
+	s.broadcastEntriesToNodes(g, entries, g.currentMembers.Observers)
+}
+
+func (s *state) broadcastEntriesToNodes(g *group, entries []*LogEntry, nodes []NodeID) {
+	for _, id := range nodes {
 		node := s.nodes[id]
 		node.client.appendEntries(&AppendEntriesRequest{
 			RequestHeader: RequestHeader{s.nodeID, id},
@@ -746,8 +738,6 @@ func (s *state) becomeCandidate(g *group) {
 	g.currentMembers = g.committedMembers
 	s.updateElectionDeadline(g)
 	for _, id := range g.currentMembers.Members {
-		// TODO(bdarnell): send to prospective members too
-
 		// Note that we send ourselves a vote request instead of setting g.votes[s.nodeID]
 		// directly.  This reduces special cases in the code, especially for the case when a
 		// node is removed from the cluster while leader (in which case it must conduct the

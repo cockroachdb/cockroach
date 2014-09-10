@@ -46,21 +46,21 @@ type ChangeMembershipOperation int8
 
 // Values for ChangeMembershipOperation.
 const (
-	// ChangeMembershipAddNonVotingNode adds a non-voting node.  The given node will
+	// ChangeMembershipAddObserver adds a non-voting node. The given node will
 	// retrieve a snapshot and catch up with logs.
-	ChangeMembershipAddNonVotingNode ChangeMembershipOperation = iota
-	// ChangeMembershipRemoveNonVotingNode removes a non-voting node.
-	ChangeMembershipRemoveNonVotingNode
+	ChangeMembershipAddObserver ChangeMembershipOperation = iota
+	// ChangeMembershipRemoveObserver removes a non-voting node.
+	ChangeMembershipRemoveObserver
 
-	// ChangeMembershipAddNode add a full (voting) node.  The given node must already be a
-	// non-voting member; it will be removed from the NonVotingMembers list when this
+	// ChangeMembershipAddMember adds a full (voting) node. The given node must already be an
+	// observer; it will be removed from the Observers list when this
 	// operation is processed.
-	// TODO(bdarnell): enforce the requirement that a node be added as non-voting first.
-	ChangeMembershipAddNode
+	// TODO(bdarnell): enforce the requirement that a node be added as an observer first.
+	ChangeMembershipAddMember
 
-	// ChangeMembershipRemoveNode removes a voting node.  It is not possible to remove the
+	// ChangeMembershipRemoveMember removes a voting node.  It is not possible to remove the
 	// last node; the result of attempting to do so is undefined.
-	ChangeMembershipRemoveNode
+	ChangeMembershipRemoveMember
 )
 
 // ChangeMembershipPayload is the Payload of an entry with Type LogEntryChangeMembership.
@@ -87,22 +87,15 @@ func (g *GroupElectionState) Equal(other *GroupElectionState) bool {
 	return other != nil && g.CurrentTerm == other.CurrentTerm && g.VotedFor == other.VotedFor
 }
 
-// GroupMembers maintains the current and future members of the group.  It is updated when
-// log entries are received rather than when they are committed as a part of the "joint
-// consensus" protocol (section 6 of the Raft paper).
+// GroupMembers maintains the members of the group.
 type GroupMembers struct {
 	// Members contains the current members of the group and is always non-empty.
-	// When ProposedMembers is non-empty, the group is in a "joint consensus" phase and
-	// a quorum must be reached independently among both Members and ProposedMembers.
-	// 'Members' never changes except to be set to the ProposedMembers of the most recently
-	// committed GroupMembers.
-	Members         []NodeID
-	ProposedMembers []NodeID
+	Members []NodeID
 
-	// NonVotingMembers receive logs for the group but do not participate in elections
-	// or quorum decisions.  When a new node is added to the group it is initially
-	// a NonVotingMember until it has caught up to the current log position.
-	NonVotingMembers []NodeID
+	// Observers receive logs for the group but do not participate in elections
+	// or quorum decisions. When a new node is added to the group it is initially
+	// an Observer until it has caught up to the current log position.
+	Observers []NodeID
 }
 
 // GroupPersistentState is a unified view of the readable data (except for log entries)

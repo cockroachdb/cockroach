@@ -193,7 +193,7 @@ func TestMembershipChange(t *testing.T) {
 
 	// Add each of the other three nodes to the cluster.
 	for i := 1; i < 4; i++ {
-		err := cluster.nodes[0].ChangeGroupMembership(groupID, ChangeMembershipAddNode,
+		err := cluster.nodes[0].ChangeGroupMembership(groupID, ChangeMembershipAddMember,
 			cluster.nodes[i].nodeID)
 		if err != nil {
 			t.Fatal(err)
