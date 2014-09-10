@@ -80,37 +80,5 @@ var Fatalf = glog.Fatalf
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
 var Fatalln = glog.Fatalln
 
-// Level is an integer which guards log statements. Only levels at or below the current verbosity level will be logged.
-type Level glog.Level
-
-// Verbose wraps a boolean to indicate whether the following log statement should be executed.
-type Verbose glog.Verbose
-
 // V wraps glog.V. See that documentation for details.
-func V(level Level) Verbose {
-	return Verbose(glog.V(glog.Level(level)))
-}
-
-// Info is equivalent to the global Info function, guarded by the value of v.
-// See the documentation of V for usage.
-func (v Verbose) Info(args ...interface{}) {
-	if v {
-		Info(args...)
-	}
-}
-
-// Infof is equivalent to the global Infof function, guarded by the value of v.
-// See the documentation of V for usage.
-func (v Verbose) Infof(format string, args ...interface{}) {
-	if v {
-		Infof(format, args...)
-	}
-}
-
-// Infoln is equivalent to the global Infoln function, guarded by the value of v.
-// See the documentation of V for usage.
-func (v Verbose) Infoln(args ...interface{}) {
-	if v {
-		Infoln(args...)
-	}
-}
+var V = glog.V
