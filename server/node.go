@@ -498,7 +498,7 @@ func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, r
 	return n.executeCmd(storage.InternalResolveIntent, args, reply)
 }
 
-// InternalRangeScan .
-func (n *Node) InternalRangeScan(args *proto.InternalRangeScanRequest, reply *proto.InternalRangeScanResponse) error {
-	return n.executeCmd(storage.InternalRangeScan, args, reply)
+// InternalSnapshotCopy .
+func (n *Node) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) error {
+	return n.executeCmd(storage.InternalSnapshotCopy, args, reply)
 }
