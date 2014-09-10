@@ -298,11 +298,11 @@ func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
-// internalRangeScanArgs returns a InternalRangeScanRequest and
-// InternalRangeScanResponse pair addressed to the default replica
+// internalRangeScanArgs returns a InternalSnapshotCopyRequest and
+// InternalSnapshotCopyResponse pair addressed to the default replica
 // for the specified key and endKey.
-func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalRangeScanRequest, *proto.InternalRangeScanResponse) {
-	args := &proto.InternalRangeScanRequest{
+func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
+	args := &proto.InternalSnapshotCopyRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			EndKey:  endKey,
@@ -311,7 +311,7 @@ func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshot
 		SnapshotId: snapshotID,
 		MaxResults: maxResults,
 	}
-	reply := &proto.InternalRangeScanResponse{}
+	reply := &proto.InternalSnapshotCopyResponse{}
 	return args, reply
 }
 
@@ -513,7 +513,7 @@ func TestRangeSnapshot(t *testing.T) {
 
 	irsArgs, irsReply := internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
 	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -535,7 +535,7 @@ func TestRangeSnapshot(t *testing.T) {
 	// Scan with the previous snapshot will get the old value val2 of key2.
 	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
 	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -552,7 +552,7 @@ func TestRangeSnapshot(t *testing.T) {
 	// Create a new snapshot to cover the latest value.
 	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
 	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -570,7 +570,7 @@ func TestRangeSnapshot(t *testing.T) {
 
 	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
 	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -579,7 +579,7 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
 	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}

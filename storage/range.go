@@ -86,19 +86,19 @@ const (
 	InternalRangeLookup   = "InternalRangeLookup"
 	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
 	InternalResolveIntent = "InternalResolveIntent"
-	InternalRangeScan     = "InternalRangeScan"
+	InternalSnapshotCopy  = "InternalSnapshotCopy"
 )
 
 // readMethods specifies the set of methods which read and return data.
 var readMethods = map[string]struct{}{
-	Contains:            struct{}{},
-	Get:                 struct{}{},
-	ConditionalPut:      struct{}{},
-	Increment:           struct{}{},
-	Scan:                struct{}{},
-	ReapQueue:           struct{}{},
-	InternalRangeLookup: struct{}{},
-	InternalRangeScan:   struct{}{},
+	Contains:             struct{}{},
+	Get:                  struct{}{},
+	ConditionalPut:       struct{}{},
+	Increment:            struct{}{},
+	Scan:                 struct{}{},
+	ReapQueue:            struct{}{},
+	InternalRangeLookup:  struct{}{},
+	InternalSnapshotCopy: struct{}{},
 }
 
 // writeMethods specifies the set of methods which write data.
@@ -500,8 +500,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalHeartbeatTxn(args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case InternalResolveIntent:
 		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
-	case InternalRangeScan:
-		r.InternalRangeScan(args.(*proto.InternalRangeScanRequest), reply.(*proto.InternalRangeScanResponse))
+	case InternalSnapshotCopy:
+		r.InternalSnapshotCopy(args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -745,10 +745,10 @@ func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, 
 	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.TxnID, args.Commit))
 }
 
-// InternalRangeScan scans the key range specified by start key through
+// InternalSnapshotCopy scans the key range specified by start key through
 // end key up to some maximum number of results from the given snapshot_id.
 // It will create a snapshot if snapshot_id is empty.
-func (r *Range) InternalRangeScan(args *proto.InternalRangeScanRequest, reply *proto.InternalRangeScanResponse) {
+func (r *Range) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
 	if len(args.SnapshotId) == 0 {
 		candidateID, err := engine.Increment(r.engine, engine.KeyLocalSnapshotIDGenerator, 1)
 		if err != nil {
