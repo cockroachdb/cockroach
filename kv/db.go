@@ -219,10 +219,3 @@ func (db *DB) InternalRangeScan(args *proto.InternalRangeScanRequest) <-chan *pr
 	go db.executeCmd(storage.InternalRangeScan, args, replyChan)
 	return replyChan
 }
-
-// InternalReleaseSnapshot releases the snapshot handle for snapshot_id.
-func (db *DB) InternalReleaseSnapshot(args *proto.InternalReleaseSnapshotRequest) <-chan *proto.InternalReleaseSnapshotResponse {
-	replyChan := make(chan *proto.InternalReleaseSnapshotResponse, 1)
-	go db.executeCmd(storage.InternalReleaseSnapshot, args, replyChan)
-	return replyChan
-}

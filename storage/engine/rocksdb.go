@@ -178,7 +178,7 @@ func (r *RocksDB) CreateSnapshot(snapshotID string) error {
 	}
 	_, ok := r.snapshots[snapshotID]
 	if ok {
-		return util.Errorf("snapshotID %s already exist", snapshotID)
+		return util.Errorf("snapshotID %s already exists", snapshotID)
 	}
 	snapshotHandle := C.rocksdb_create_snapshot(r.rdb)
 	r.snapshots[snapshotID] = snapshotHandle

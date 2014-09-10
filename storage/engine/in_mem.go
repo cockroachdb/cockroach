@@ -79,7 +79,7 @@ func (in *InMem) Stop() {
 func (in *InMem) CreateSnapshot(snapshotID string) error {
 	_, ok := in.snapshots[snapshotID]
 	if ok {
-		return util.Errorf("snapshotID %s already exist", snapshotID)
+		return util.Errorf("snapshotID %s already exists", snapshotID)
 	}
 	snapshotHandle := cloneTree(in.data)
 	in.snapshots[snapshotID] = snapshotHandle

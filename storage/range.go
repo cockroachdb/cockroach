@@ -70,37 +70,35 @@ var configPrefixes = []struct {
 
 // The following are the method names supported by the KV API.
 const (
-	Contains                = "Contains"
-	Get                     = "Get"
-	Put                     = "Put"
-	ConditionalPut          = "ConditionalPut"
-	Increment               = "Increment"
-	Scan                    = "Scan"
-	Delete                  = "Delete"
-	DeleteRange             = "DeleteRange"
-	EndTransaction          = "EndTransaction"
-	AccumulateTS            = "AccumulateTS"
-	ReapQueue               = "ReapQueue"
-	EnqueueUpdate           = "EnqueueUpdate"
-	EnqueueMessage          = "EnqueueMessage"
-	InternalRangeLookup     = "InternalRangeLookup"
-	InternalHeartbeatTxn    = "InternalHeartbeatTxn"
-	InternalResolveIntent   = "InternalResolveIntent"
-	InternalRangeScan       = "InternalRangeScan"
-	InternalReleaseSnapshot = "InternalReleaseSnapshot"
+	Contains              = "Contains"
+	Get                   = "Get"
+	Put                   = "Put"
+	ConditionalPut        = "ConditionalPut"
+	Increment             = "Increment"
+	Scan                  = "Scan"
+	Delete                = "Delete"
+	DeleteRange           = "DeleteRange"
+	EndTransaction        = "EndTransaction"
+	AccumulateTS          = "AccumulateTS"
+	ReapQueue             = "ReapQueue"
+	EnqueueUpdate         = "EnqueueUpdate"
+	EnqueueMessage        = "EnqueueMessage"
+	InternalRangeLookup   = "InternalRangeLookup"
+	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
+	InternalResolveIntent = "InternalResolveIntent"
+	InternalRangeScan     = "InternalRangeScan"
 )
 
 // readMethods specifies the set of methods which read and return data.
 var readMethods = map[string]struct{}{
-	Contains:                struct{}{},
-	Get:                     struct{}{},
-	ConditionalPut:          struct{}{},
-	Increment:               struct{}{},
-	Scan:                    struct{}{},
-	ReapQueue:               struct{}{},
-	InternalRangeLookup:     struct{}{},
-	InternalRangeScan:       struct{}{},
-	InternalReleaseSnapshot: struct{}{},
+	Contains:            struct{}{},
+	Get:                 struct{}{},
+	ConditionalPut:      struct{}{},
+	Increment:           struct{}{},
+	Scan:                struct{}{},
+	ReapQueue:           struct{}{},
+	InternalRangeLookup: struct{}{},
+	InternalRangeScan:   struct{}{},
 }
 
 // writeMethods specifies the set of methods which write data.
@@ -490,8 +488,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case InternalRangeScan:
 		r.InternalRangeScan(args.(*proto.InternalRangeScanRequest), reply.(*proto.InternalRangeScanResponse))
-	case InternalReleaseSnapshot:
-		r.InternalReleaseSnapshot(args.(*proto.InternalReleaseSnapshotRequest), reply.(*proto.InternalReleaseSnapshotResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -753,13 +749,17 @@ func (r *Range) InternalRangeScan(args *proto.InternalRangeScanRequest, reply *p
 		}
 		args.SnapshotId = snapshotID
 	}
+
 	kvs, err := r.engine.ScanSnapshot(args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	if len(kvs) == 0 {
+		err = r.engine.ReleaseSnapshot(args.SnapshotId)
+	}
+
 	reply.Rows = kvs
 	reply.SnapshotId = args.SnapshotId
 	reply.SetGoError(err)
-}
-
-// InternalReleaseSnapshot releases the snapshot handle for snapshot_id.
-func (r *Range) InternalReleaseSnapshot(args *proto.InternalReleaseSnapshotRequest, reply *proto.InternalReleaseSnapshotResponse) {
-	reply.SetGoError(r.engine.ReleaseSnapshot(args.SnapshotId))
 }

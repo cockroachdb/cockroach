@@ -315,20 +315,6 @@ func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshot
 	return args, reply
 }
 
-// internalReleaseSnapshotArgs returns a InternalReleaseSnapshotRequest and
-// InternalReleaseSnapshotResponse pair addressed to the default replica
-// for snapshotId.
-func internalReleaseSnapshotArgs(snapshotID string, rangeID int64) (*proto.InternalReleaseSnapshotRequest, *proto.InternalReleaseSnapshotResponse) {
-	args := &proto.InternalReleaseSnapshotRequest{
-		RequestHeader: proto.RequestHeader{
-			Replica: proto.Replica{RangeID: rangeID},
-		},
-		SnapshotId: snapshotID,
-	}
-	reply := &proto.InternalReleaseSnapshotResponse{}
-	return args, reply
-}
-
 // TestRangeUpdateTSCache verifies that reads update the read
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
@@ -561,6 +547,7 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
 	}
+	snapshotLastKey := irsReply.Rows[3].Key
 
 	// Create a new snapshot to cover the latest value.
 	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
@@ -579,17 +566,24 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
 	}
+	snapshot2LastKey := irsReply.Rows[4].Key
 
-	irArgs, irReply := internalReleaseSnapshotArgs(snapshotID, 0)
-	irArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalReleaseSnapshot", irArgs, irReply)
+	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
+	irsArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	irArgs, irReply = internalReleaseSnapshotArgs(snapshotID2, 0)
-	irArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalReleaseSnapshot", irArgs, irReply)
+	if len(irsReply.Rows) != 0 {
+		t.Fatalf("error : %d", len(irsReply.Rows))
+	}
+	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
+	irsArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalRangeScan", irsArgs, irsReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
+	}
+	if len(irsReply.Rows) != 0 {
+		t.Fatalf("error : %d", len(irsReply.Rows))
 	}
 }
