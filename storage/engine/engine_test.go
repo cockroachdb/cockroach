@@ -474,11 +474,7 @@ func TestSnapshot(t *testing.T) {
 				val, val1)
 		}
 
-		candidateID, err := Increment(engine, KeyLocalSnapshotIDGenerator, 1)
-		if err != nil {
-			t.Fatalf("create snapshotID failed : %s", err)
-		}
-		snapshotID := strconv.FormatInt(candidateID, 10)
+		snapshotID := strconv.FormatInt(1, 10)
 		error := engine.CreateSnapshot(snapshotID)
 		if error != nil {
 			t.Fatalf("error : %s", error)
