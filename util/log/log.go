@@ -31,78 +31,54 @@ func FatalOnPanic() {
 
 // Info logs to the INFO log.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-func Info(args ...interface{}) {
-	glog.Info(args...)
-}
+var Info = glog.Info
 
 // Infof logs to the INFO log.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-func Infof(format string, args ...interface{}) {
-	glog.Infof(format, args...)
-}
+var Infof = glog.Infof
 
 // Infoln logs to the INFO log.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-func Infoln(args ...interface{}) {
-	glog.Infoln(args...)
-}
+var Infoln = glog.Infoln
 
 // Warning logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-func Warning(args ...interface{}) {
-	glog.Warning(args...)
-}
+var Warning = glog.Warning
 
 // Warningf logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-func Warningf(format string, args ...interface{}) {
-	glog.Warningf(format, args...)
-}
+var Warningf = glog.Warningf
 
 // Warningln logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-func Warningln(args ...interface{}) {
-	glog.Warningln(args...)
-}
+var Warningln = glog.Warningln
 
 // Error logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-func Error(args ...interface{}) {
-	glog.Error(args...)
-}
+var Error = glog.Error
 
 // Errorf logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-func Errorf(format string, args ...interface{}) {
-	glog.Errorf(format, args...)
-}
+var Errorf = glog.Errorf
 
 // Errorln logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-func Errorln(args ...interface{}) {
-	glog.Errorln(args...)
-}
+var Errorln = glog.Errorln
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
-func Fatal(args ...interface{}) {
-	glog.Fatal(args...)
-}
+var Fatal = glog.Fatal
 
 // Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Printf; a newline is appended if missing.
-func Fatalf(format string, args ...interface{}) {
-	glog.Fatalf(format, args...)
-}
+var Fatalf = glog.Fatalf
 
 // Fatalln logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
-func Fatalln(args ...interface{}) {
-	glog.Fatalln(args...)
-}
+var Fatalln = glog.Fatalln
 
 // Level is an integer which guards log statements. Only levels at or below the current verbosity level will be logged.
 type Level glog.Level
