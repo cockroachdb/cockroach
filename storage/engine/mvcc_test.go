@@ -22,22 +22,24 @@ import (
 	"math"
 	"testing"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey01 = Key("/db1")
-	testKey02 = Key("/db2")
-	testKey03 = Key("/db3")
-	testKey04 = Key("/db4")
-	txn01     = []byte("Txn01")
-	txn02     = []byte("Txn02")
-	value01   = proto.Value{Bytes: []byte("testValue01")}
-	value02   = proto.Value{Bytes: []byte("testValue02")}
-	value03   = proto.Value{Bytes: []byte("testValue03")}
-	value04   = proto.Value{Bytes: []byte("testValue04")}
+	testKey01  = Key("/db1")
+	testKey02  = Key("/db2")
+	testKey03  = Key("/db3")
+	testKey04  = Key("/db4")
+	txn01      = []byte("Txn01")
+	txn02      = []byte("Txn02")
+	value01    = proto.Value{Bytes: []byte("testValue01")}
+	value02    = proto.Value{Bytes: []byte("testValue02")}
+	value03    = proto.Value{Bytes: []byte("testValue03")}
+	value04    = proto.Value{Bytes: []byte("testValue04")}
+	valueEmpty = proto.Value{}
 )
 
 // createTestMVCC creates a new MVCC instance with the given engine.
@@ -61,8 +63,17 @@ func TestMVCCGetNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Bytes) != 0 {
+	if value != nil {
 		t.Fatal("the value should be empty")
+	}
+}
+
+func TestMVCCPutWithBadValue(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	badValue := proto.Value{Bytes: []byte("a"), Integer: gogoproto.Int64(1)}
+	err := mvcc.Put(testKey01, makeTS(0, 0), badValue, nil)
+	if err == nil {
+		t.Fatal("expected an error putting a value with both byte slice and integer components")
 	}
 }
 
@@ -207,7 +218,7 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Bytes) != 0 {
+	if value != nil {
 		t.Fatal("the value should be empty")
 	}
 }
@@ -219,7 +230,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Bytes) == 0 {
+	if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -233,7 +244,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.Bytes != nil {
+	if value != nil {
 		t.Fatal("the value should be empty")
 	}
 
@@ -243,7 +254,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(value.Bytes) == 0 {
+		if value == nil {
 			t.Fatal("the value should not be empty")
 		}
 	}
@@ -256,7 +267,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Bytes) == 0 {
+	if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 
@@ -270,7 +281,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.Bytes != nil {
+	if value != nil {
 		t.Fatal("the value should be empty")
 	}
 
@@ -279,7 +290,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Bytes) == 0 {
+	if value == nil {
 		t.Fatal("the value should not be empty")
 	}
 }
@@ -518,19 +529,41 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 
 func TestMVCCConditionalPut(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	actualVal, err := mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, value02, nil)
+	actualVal, err := mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &value02, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
 	}
+	if actualVal != nil {
+		t.Fatalf("expected missing actual value: %v", actualVal)
+	}
 
-	err = mvcc.Put(testKey01, makeTS(0, 0), value01, nil)
+	// Verify the difference between missing value and empty value.
+	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &valueEmpty, nil)
+	if err == nil {
+		t.Fatal("expected error on key not exists")
+	}
+	if actualVal != nil {
+		t.Fatalf("expected missing actual value: %v", actualVal)
+	}
 
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, proto.Value{}, nil)
+	// Do a conditional put with expectation that the value is completely missing; will succeed.
+	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, nil, nil)
+	if err != nil {
+		t.Fatalf("expected success with condition that key doesn't yet exist: %v", err)
+	}
+
+	// Another conditional put expecting value missing will fail, now that value01 is written.
+	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, nil, nil)
 	if err == nil {
 		t.Fatal("expected error on key already exists")
 	}
+	if !bytes.Equal(actualVal.Bytes, value01.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			actualVal.Bytes, value01.Bytes)
+	}
 
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, value02, nil)
+	// Conditional put expecting wrong value02, will fail.
+	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &value02, nil)
 	if err == nil {
 		t.Fatal("expected error on key does not match")
 	}
@@ -539,11 +572,17 @@ func TestMVCCConditionalPut(t *testing.T) {
 			actualVal.Bytes, value01.Bytes)
 	}
 
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value02, value01, nil)
+	// Move to a empty value. Will succeed.
+	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), valueEmpty, &value01, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	// Now move to value02 from expected empty value.
+	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value02, &valueEmpty, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify we get value02 as expected.
 	value, err := mvcc.Get(testKey01, makeTS(0, 0), nil)
 	if !bytes.Equal(value02.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -581,7 +620,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	}
 
 	value, err := mvcc.Get(testKey01, makeTS(1, 0), nil)
-	if len(value.Bytes) != 0 {
+	if value != nil {
 		t.Fatalf("the value should be empty")
 	}
 	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey01))

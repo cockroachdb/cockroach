@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -257,10 +258,10 @@ func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Cloc
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key string, rangeID int64) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     []byte(key),
+			Key:     key,
 			Replica: proto.Replica{RangeID: rangeID},
 		},
 	}
@@ -270,14 +271,14 @@ func getArgs(key string, rangeID int64) (*proto.GetRequest, *proto.GetResponse) 
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value string, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     []byte(key),
+			Key:     key,
 			Replica: proto.Replica{RangeID: rangeID},
 		},
 		Value: proto.Value{
-			Bytes: []byte(value),
+			Bytes: value,
 		},
 	}
 	reply := &proto.PutResponse{}
@@ -286,10 +287,10 @@ func putArgs(key, value string, rangeID int64) (*proto.PutRequest, *proto.PutRes
 
 // incrementArgs returns a IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     []byte(key),
+			Key:     key,
 			Replica: proto.Replica{RangeID: rangeID},
 		},
 		Increment: inc,
@@ -298,10 +299,10 @@ func incrementArgs(key string, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
-// internalRangeScanArgs returns a InternalSnapshotCopyRequest and
+// internalSnapshotCopyArgs returns a InternalSnapshotCopyRequest and
 // InternalSnapshotCopyResponse pair addressed to the default replica
 // for the specified key and endKey.
-func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
+func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
 	args := &proto.InternalSnapshotCopyRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -315,6 +316,23 @@ func internalRangeScanArgs(key []byte, endKey []byte, maxResults int64, snapshot
 	return args, reply
 }
 
+// getSerializedValue
+func getSerializedValue(value *proto.Value) []byte {
+	var val []byte
+	if value != nil {
+		value.Timestamp = proto.Timestamp{}
+		data, err := gogoproto.Marshal(value)
+		if err != nil {
+			panic("unexpected marshal error")
+		}
+		val = []byte{0}
+		val = append(val, data...)
+	} else {
+		val = []byte{1}
+	}
+	return val
+}
+
 // TestRangeUpdateTSCache verifies that reads update the read
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
@@ -323,7 +341,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
-	args, reply := getArgs("a", 0)
+	args, reply := getArgs([]byte("a"), 0)
 	args.Timestamp = clock.Now()
 	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
@@ -351,7 +369,7 @@ func TestRangeReadQueue(t *testing.T) {
 	be.setBlock(true)
 	writeDone := make(chan struct{})
 	go func() {
-		args, reply := putArgs("a", "value", 0)
+		args, reply := putArgs([]byte("a"), []byte("value"), 0)
 		err := rng.ReadWriteCmd("Put", args, reply)
 		if err != nil {
 			t.Fatal(err)
@@ -362,7 +380,7 @@ func TestRangeReadQueue(t *testing.T) {
 	// First, try a read for a non-impacted key ("b").
 	readBDone := make(chan struct{})
 	go func() {
-		args, reply := getArgs("b", 0)
+		args, reply := getArgs([]byte("b"), 0)
 		err := rng.ReadOnlyCmd("Get", args, reply)
 		if err != nil {
 			t.Error(err)
@@ -373,7 +391,7 @@ func TestRangeReadQueue(t *testing.T) {
 	// Next, try a read for same key being written to verify it blocks.
 	readADone := make(chan struct{})
 	go func() {
-		args, reply := getArgs("a", 0)
+		args, reply := getArgs([]byte("a"), 0)
 		err := rng.ReadOnlyCmd("Get", args, reply)
 		if err != nil {
 			t.Error(err)
@@ -412,13 +430,13 @@ func TestRangeUseTSCache(t *testing.T) {
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
-	args, reply := getArgs("a", 0)
+	args, reply := getArgs([]byte("a"), 0)
 	args.Timestamp = clock.Now()
 	err := rng.ReadOnlyCmd("Get", args, reply)
 	if err != nil {
 		t.Error(err)
 	}
-	pArgs, pReply := putArgs("a", "value", 0)
+	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 0)
 	err = rng.ReadWriteCmd("Put", pArgs, pReply)
 	if err != nil {
 		t.Fatal(err)
@@ -436,7 +454,7 @@ func TestRangeIdempotence(t *testing.T) {
 
 	// Run the same increment 100 times, 50 with identical command ID,
 	// interleaved with 50 using a sequence of different command IDs.
-	goldenArgs, _ := incrementArgs("a", 1, 0)
+	goldenArgs, _ := incrementArgs([]byte("a"), 1, 0)
 	incDones := make([]chan struct{}, 100)
 	var count int64
 	for i := range incDones {
@@ -485,11 +503,11 @@ func TestRangeSnapshot(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	key1 := "a"
-	key2 := "b"
-	val1 := "1"
-	val2 := "2"
-	val3 := "3"
+	key1 := []byte("a")
+	key2 := []byte("b")
+	val1 := []byte("1")
+	val2 := []byte("2")
+	val3 := []byte("3")
 
 	pArgs, pReply := putArgs(key1, val1, 0)
 	pArgs.Timestamp = clock.Now()
@@ -506,26 +524,26 @@ func TestRangeSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	if !bytes.Equal(gReply.Value.Bytes, []byte(val1)) {
+	if !bytes.Equal(gReply.Value.Bytes, val1) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			gReply.Value.Bytes, []byte(val1))
+			gReply.Value.Bytes, val1)
 	}
 
-	irsArgs, irsReply := internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
-	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
+	iscArgs, iscReply := internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	iscArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	snapshotID := irsReply.SnapshotId
-	var valueNormalPrefix = byte(0)
-	expectedKey := encoding.EncodeBinary(nil, []byte(key1))
-	expectedVal := bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val1)}, []byte(""))
-	if len(irsReply.Rows) != 4 ||
-		!bytes.Equal(irsReply.Rows[0].Key, expectedKey) ||
-		!bytes.Equal(irsReply.Rows[1].Value, expectedVal) {
+	snapshotID := iscReply.SnapshotId
+	expectedKey := encoding.EncodeBinary(nil, key1)
+	expectedVal := getSerializedValue(&proto.Value{Bytes: val1})
+	fmt.Println(iscReply)
+	if len(iscReply.Rows) != 4 ||
+		!bytes.Equal(iscReply.Rows[0].Key, expectedKey) ||
+		!bytes.Equal(iscReply.Rows[1].Value, expectedVal) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			irsReply.Rows[1].Value, irsReply.Rows[0].Key, expectedVal, expectedKey)
+			iscReply.Rows[1].Value, iscReply.Rows[0].Key, expectedVal, expectedKey)
 	}
 
 	pArgs, pReply = putArgs(key2, val3, 0)
@@ -533,57 +551,57 @@ func TestRangeSnapshot(t *testing.T) {
 	err = rng.ReadWriteCmd("Put", pArgs, pReply)
 
 	// Scan with the previous snapshot will get the old value val2 of key2.
-	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
-	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
+	iscArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	expectedKey = encoding.EncodeBinary(nil, []byte(key2))
-	expectedVal = bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val2)}, []byte(""))
-	if len(irsReply.Rows) != 4 ||
-		!bytes.Equal(irsReply.Rows[2].Key, expectedKey) ||
-		!bytes.Equal(irsReply.Rows[3].Value, expectedVal) {
+	expectedKey = encoding.EncodeBinary(nil, key2)
+	expectedVal = getSerializedValue(&proto.Value{Bytes: val2})
+	if len(iscReply.Rows) != 4 ||
+		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
+		!bytes.Equal(iscReply.Rows[3].Value, expectedVal) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
+			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshotLastKey := irsReply.Rows[3].Key
+	snapshotLastKey := iscReply.Rows[3].Key
 
 	// Create a new snapshot to cover the latest value.
-	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
-	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	iscArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	snapshotID2 := irsReply.SnapshotId
-	expectedKey = encoding.EncodeBinary(nil, []byte(key2))
-	expectedVal = bytes.Join([][]byte{[]byte{valueNormalPrefix}, []byte(val3)}, []byte(""))
+	snapshotID2 := iscReply.SnapshotId
+	expectedKey = encoding.EncodeBinary(nil, key2)
+	expectedVal = getSerializedValue(&proto.Value{Bytes: val3})
 	// Expect one more mvcc version.
-	if len(irsReply.Rows) != 5 ||
-		!bytes.Equal(irsReply.Rows[2].Key, expectedKey) ||
-		!bytes.Equal(irsReply.Rows[3].Value, expectedVal) {
+	if len(iscReply.Rows) != 5 ||
+		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
+		!bytes.Equal(iscReply.Rows[3].Value, expectedVal) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			irsReply.Rows[3].Value, irsReply.Rows[2].Key, expectedVal, expectedKey)
+			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshot2LastKey := irsReply.Rows[4].Key
+	snapshot2LastKey := iscReply.Rows[4].Key
 
-	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
-	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
+	iscArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	if len(irsReply.Rows) != 0 {
-		t.Fatalf("error : %d", len(irsReply.Rows))
+	if len(iscReply.Rows) != 0 {
+		t.Fatalf("error : %d", len(iscReply.Rows))
 	}
-	irsArgs, irsReply = internalRangeScanArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
-	irsArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", irsArgs, irsReply)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
+	iscArgs.Timestamp = clock.Now()
+	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	if len(irsReply.Rows) != 0 {
-		t.Fatalf("error : %d", len(irsReply.Rows))
+	if len(iscReply.Rows) != 0 {
+		t.Fatalf("error : %d", len(iscReply.Rows))
 	}
 }

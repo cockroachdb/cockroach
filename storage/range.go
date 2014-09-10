@@ -529,7 +529,7 @@ func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsRespo
 		reply.SetGoError(err)
 		return
 	}
-	if val.Bytes != nil {
+	if val != nil {
 		reply.Exists = true
 	}
 }
@@ -558,7 +558,7 @@ func (r *Range) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.C
 	if err == nil {
 		r.updateGossipConfigs(args.Key)
 	}
-	reply.ActualValue = &val
+	reply.ActualValue = val
 	reply.SetGoError(err)
 }
 

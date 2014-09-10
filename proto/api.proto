@@ -103,10 +103,12 @@ message GetRequest {
 // If the key doesn't exist, returns nil for Value.Bytes.
 message GetResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2 [(gogoproto.nullable) = false];
+  optional Value value = 2;
 }
 
-// A PutRequest is arguments to the Put() method.
+// A PutRequest is arguments to the Put() method. Note that to write
+// an empty value, the value parameter is still specified, but both
+// Bytes and Integer are set to nil.
 message PutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Value value = 2 [(gogoproto.nullable) = false];
@@ -126,8 +128,10 @@ message ConditionalPutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   optional Value value = 2 [(gogoproto.nullable) = false];
-  // ExpValue.Bytes empty to test for non-existence.
-  optional Value exp_value = 3 [(gogoproto.nullable) = false];
+  // ExpValue.Bytes empty to test for non-existence. Specify as nil
+  // to indicate there should be no existing entry. This is different
+  // from the expectation that the value exists but is empty.
+  optional Value exp_value = 3;
 }
 
 // A ConditionalPutResponse is the return value from the
