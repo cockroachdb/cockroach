@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // MVCC wraps the mvcc operations of a key/value store.
@@ -40,14 +41,6 @@ type writeIntentError struct {
 type writeTimestampTooOldError struct {
 	Timestamp proto.Timestamp
 }
-
-// Constants for system-reserved value prefix.
-const (
-	// valueNormalPrefix is the prefix for the normal value.
-	valueNormalPrefix = byte(0)
-	// valueDeletedPrefix is the prefix for the deleted value.
-	valueDeletedPrefix = byte(1)
-)
 
 func (e *writeIntentError) Error() string {
 	return fmt.Sprintf("there exists a write intent from transaction %s", e.TxnID)
@@ -129,14 +122,14 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) 
 	// If the read timestamp is greater than the latest one, we can just
 	// fetch the value without a scan.
 	ts := proto.Timestamp{}
-	var val []byte
+	var valBytes []byte
 	if !timestamp.Less(meta.Timestamp) {
 		if len(meta.TxnID) > 0 && (len(txnID) == 0 || !bytes.Equal(meta.TxnID, txnID)) {
 			return nil, nil, &writeIntentError{TxnID: meta.TxnID}
 		}
 
 		latestKey := mvccEncodeKey(key, meta.Timestamp)
-		val, err = mvcc.engine.Get(latestKey)
+		valBytes, err = mvcc.engine.Get(latestKey)
 		ts = meta.Timestamp
 	} else {
 		nextKey := mvccEncodeKey(key, timestamp)
@@ -148,19 +141,23 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) 
 			return nil, nil, err
 		}
 		_, ts, _ = mvccDecodeKey(kvs[0].Key)
-		val = kvs[0].Value
+		valBytes = kvs[0].Value
 	}
-	// Handle missing value or deletion tombstone cases.
-	if val == nil || val[0] == valueDeletedPrefix {
+	if valBytes == nil {
 		return nil, nil, nil
 	}
-	// Unmarshal the value protobuf and verify checksum.
-	value := &proto.Value{}
-	if err := gogoproto.Unmarshal(val[1:], value); err != nil {
+	// Unmarshal the mvcc value.
+	value := &proto.MVCCValue{}
+	if err := gogoproto.Unmarshal(valBytes, value); err != nil {
 		return nil, nil, err
 	}
-	value.Timestamp = ts
-	return value, meta.TxnID, nil
+	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
+	if value.Value != nil {
+		value.Value.Timestamp = &ts
+	} else if !value.Deleted {
+		log.Warningf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value)
+	}
+	return value.Value, meta.TxnID, nil
 }
 
 // Put sets the value for a specified key. It will save the value with
@@ -169,28 +166,24 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) 
 // executing any Put action at the MVCC level.
 func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value proto.Value, txnID []byte) error {
 	binKey := encoding.EncodeBinary(nil, key)
-	if !value.Timestamp.Equal(proto.Timestamp{}) && !value.Timestamp.Equal(timestamp) {
+	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
 			"the timestamp %+v provided in value does not match the timestamp %+v in request",
 			value.Timestamp, timestamp)
 	}
-	return mvcc.putInternal(binKey, timestamp, &value, txnID)
+	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Value: &value}, txnID)
 }
 
 // Delete marks the key deleted and will not return in the next get response.
 func (mvcc *MVCC) Delete(key Key, timestamp proto.Timestamp, txnID []byte) error {
 	binKey := encoding.EncodeBinary(nil, key)
-	return mvcc.putInternal(binKey, timestamp, nil /* nil indicates deletion */, txnID)
+	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Deleted: true}, txnID)
 }
 
 // putInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
-//
-// TODO(Tobias): Turn this into a writebatch with account stats in a
-// reusable way. This requires use of RocksDB's merge operator to
-// implement increasable counters
-func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value *proto.Value, txnID []byte) error {
-	if value != nil && value.Bytes != nil && value.Integer != nil {
+func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MVCCValue, txnID []byte) error {
+	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
 	}
 
@@ -232,22 +225,16 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value *proto.V
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
-	// into the key), then marshal the value and prefix it with the
-	// normal/deleted byte.
-	var val []byte
-	if value != nil {
-		value.Timestamp = proto.Timestamp{}
-		data, err := gogoproto.Marshal(value)
-		if err != nil {
-			return err
-		}
-		val = []byte{valueNormalPrefix}
-		val = append(val, data...)
-	} else {
-		val = []byte{valueDeletedPrefix}
+	// into the key, so don't need it in both places).
+	if value.Value != nil {
+		value.Value.Timestamp = nil
+	}
+	data, err := gogoproto.Marshal(&value)
+	if err != nil {
+		return err
 	}
 	// Save the value with the given version (Key + Timestamp).
-	return mvcc.engine.Put(mvccEncodeKey(key, timestamp), val)
+	return mvcc.engine.Put(mvccEncodeKey(key, timestamp), data)
 }
 
 // Increment fetches the value for key, and assuming the value is an

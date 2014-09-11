@@ -164,14 +164,12 @@ func (s *Server) handleEntryPutAction(w http.ResponseWriter, r *http.Request, ke
 		return
 	}
 	defer r.Body.Close()
-	value := proto.Value{Bytes: b}
-	value.InitChecksum(key)
 	pr := <-s.db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
-		Value: value,
+		Value: proto.Value{Bytes: b},
 	})
 	if pr.Error != nil {
 		http.Error(w, pr.GoError().Error(), http.StatusInternalServerError)
@@ -194,10 +192,6 @@ func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, ke
 	// An empty key will not be nil, but have zero length.
 	if gr.Value == nil {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	if err := gr.Value.VerifyChecksum(key); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")

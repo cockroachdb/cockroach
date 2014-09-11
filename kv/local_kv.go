@@ -127,6 +127,9 @@ func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan inter
 		reply.Header().SetGoError(err)
 	} else {
 		store.ExecuteCmd(method, args, reply)
+		if err := reply.Verify(args); err != nil {
+			reply.Header().SetGoError(err)
+		}
 	}
 	reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
 }

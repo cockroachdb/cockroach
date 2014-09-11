@@ -316,21 +316,21 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 	return args, reply
 }
 
-// getSerializedValue
-func getSerializedValue(value *proto.Value) []byte {
-	var val []byte
+// getSerializedMVCCValue produces a byte slice of the serialized
+// mvcc value. If value is nil, MVCCValue.Deleted is set to true;
+// otherwise MVCCValue.Value is set to value.
+func getSerializedMVCCValue(value *proto.Value) []byte {
+	mvccVal := &proto.MVCCValue{}
 	if value != nil {
-		value.Timestamp = proto.Timestamp{}
-		data, err := gogoproto.Marshal(value)
-		if err != nil {
-			panic("unexpected marshal error")
-		}
-		val = []byte{0}
-		val = append(val, data...)
+		mvccVal.Value = value
 	} else {
-		val = []byte{1}
+		mvccVal.Deleted = true
 	}
-	return val
+	data, err := gogoproto.Marshal(&proto.MVCCValue{Value: value})
+	if err != nil {
+		panic("unexpected marshal error")
+	}
+	return data
 }
 
 // TestRangeUpdateTSCache verifies that reads update the read
@@ -537,7 +537,7 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	snapshotID := iscReply.SnapshotId
 	expectedKey := encoding.EncodeBinary(nil, key1)
-	expectedVal := getSerializedValue(&proto.Value{Bytes: val1})
+	expectedVal := getSerializedMVCCValue(&proto.Value{Bytes: val1})
 	fmt.Println(iscReply)
 	if len(iscReply.Rows) != 4 ||
 		!bytes.Equal(iscReply.Rows[0].Key, expectedKey) ||
@@ -558,7 +558,7 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("error : %s", err)
 	}
 	expectedKey = encoding.EncodeBinary(nil, key2)
-	expectedVal = getSerializedValue(&proto.Value{Bytes: val2})
+	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val2})
 	if len(iscReply.Rows) != 4 ||
 		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
 		!bytes.Equal(iscReply.Rows[3].Value, expectedVal) {
@@ -576,7 +576,7 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	snapshotID2 := iscReply.SnapshotId
 	expectedKey = encoding.EncodeBinary(nil, key2)
-	expectedVal = getSerializedValue(&proto.Value{Bytes: val3})
+	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val3})
 	// Expect one more mvcc version.
 	if len(iscReply.Rows) != 5 ||
 		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||

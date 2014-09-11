@@ -24,16 +24,18 @@ func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
 }
 
-// Request is an interface providing access to all requests'
-// header structs.
+// Request is an interface for RPC requests.
 type Request interface {
+	// Header returns the request header.
 	Header() *RequestHeader
 }
 
-// Response is an interface providing access to all responses' header
-// structs.
+// Response is an interface for RPC responses.
 type Response interface {
+	// Header returns the response header.
 	Header() *ResponseHeader
+	// Verify verifies response integrity, as applicable.
+	Verify(req Request) error
 }
 
 // Header implements the Request interface for RequestHeader.
@@ -41,9 +43,16 @@ func (rh *RequestHeader) Header() *RequestHeader {
 	return rh
 }
 
-// Header implementats the Response interface ResponseHeader.
+// Header implements the Response interface for ResponseHeader.
 func (rh *ResponseHeader) Header() *ResponseHeader {
 	return rh
+}
+
+// Verify implements the Response interface for ResopnseHeader with a
+// default noop. Individual response types should override this method
+// if they contain checksummed data which can be verified.
+func (rh *ResponseHeader) Verify(req Request) error {
+	return nil
 }
 
 // GoError converts the Error field of the response header to a
@@ -92,4 +101,31 @@ func (rh *ResponseHeader) SetGoError(err error) {
 			},
 		}
 	}
+}
+
+// Verify verifies the integrity of the get response value.
+func (gr *GetResponse) Verify(req Request) error {
+	if gr.Value != nil {
+		return gr.Value.Verify(req.Header().Key)
+	}
+	return nil
+}
+
+// Verify verifies the integrity of the conditional put response's
+// actual value, if not nil.
+func (cpr *ConditionalPutResponse) Verify(req Request) error {
+	if cpr.ActualValue != nil {
+		return cpr.ActualValue.Verify(req.Header().Key)
+	}
+	return nil
+}
+
+// Verify verifies the integrity of every value returned in the scan.
+func (sr *ScanResponse) Verify(req Request) error {
+	for _, kv := range sr.Rows {
+		if err := kv.Value.Verify(kv.Key); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -50,9 +50,19 @@ message Value {
   // writes to do end-to-end integrity verification. If the checksum is
   // incorrect, the write operation will fail. If the client does not
   // wish to use end-to-end checksumming, this value should be nil.
-  optional uint32 checksum = 3;
+  optional fixed32 checksum = 3;
   // Timestamp of value.
-  optional Timestamp timestamp = 4 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 4;
+}
+
+// MVCCValue differentiates between normal versioned values and
+// deletion tombstones.
+message MVCCValue {
+  // True to indicate a deletion tombstone. If false, value should not
+  // be nil.
+  optional bool deleted = 1 [(gogoproto.nullable) = false];
+  // The value. Nil if deleted is true; not nil otherwise.
+  optional Value value = 2;
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs

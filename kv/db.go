@@ -84,6 +84,8 @@ func (db *DB) Get(args *proto.GetRequest) <-chan *proto.GetResponse {
 // Put sets the value for a key at the specified timestamp. If the
 // timestamp is 0, the value is set with the current time as timestamp.
 func (db *DB) Put(args *proto.PutRequest) <-chan *proto.PutResponse {
+	// Init the value checksum if not set by requesting client.
+	args.Value.InitChecksum(args.Key)
 	replyChan := make(chan *proto.PutResponse, 1)
 	go db.executeCmd(storage.Put, args, replyChan)
 	return replyChan
@@ -93,6 +95,8 @@ func (db *DB) Put(args *proto.PutRequest) <-chan *proto.PutResponse {
 // matches the value specified in the request. Specifying a null value
 // for existing means the value must not yet exist.
 func (db *DB) ConditionalPut(args *proto.ConditionalPutRequest) <-chan *proto.ConditionalPutResponse {
+	// Init the value checksum if not set by requesting client.
+	args.Value.InitChecksum(args.Key)
 	replyChan := make(chan *proto.ConditionalPutResponse, 1)
 	go db.executeCmd(storage.ConditionalPut, args, replyChan)
 	return replyChan

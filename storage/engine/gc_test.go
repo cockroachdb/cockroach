@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
@@ -46,6 +47,14 @@ var (
 	}
 	keys = append(aKeys, append(bKeys, cKeys...)...)
 )
+
+func serializedMVCCValue(deleted bool, t *testing.T) []byte {
+	data, err := gogoproto.Marshal(&proto.MVCCValue{Deleted: deleted})
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+	return data
+}
 
 // TestGarbageCollectorMVCCPrefix verifies that MVCC variants of same
 // key are grouped together and non-MVCC keys are considered singly.
@@ -87,8 +96,8 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		}
 	})
 	e := []byte{}
-	n := []byte{valueNormalPrefix}
-	d := []byte{valueDeletedPrefix}
+	n := serializedMVCCValue(false, t)
+	d := serializedMVCCValue(true, t)
 	testData := []struct {
 		time      proto.Timestamp
 		keys      []Key

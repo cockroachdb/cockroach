@@ -66,9 +66,9 @@ func GetI(db DB, key engine.Key, iface interface{}) (bool, proto.Timestamp, erro
 		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
 	}
 	if err := gob.NewDecoder(bytes.NewBuffer(value.Bytes)).Decode(iface); err != nil {
-		return true, value.Timestamp, err
+		return true, *value.Timestamp, err
 	}
-	return true, value.Timestamp, nil
+	return true, *value.Timestamp, nil
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
@@ -83,9 +83,9 @@ func GetProto(db DB, key engine.Key, msg gogoproto.Message) (bool, proto.Timesta
 		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
 	}
 	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
-		return true, value.Timestamp, err
+		return true, *value.Timestamp, err
 	}
-	return true, value.Timestamp, nil
+	return true, *value.Timestamp, nil
 }
 
 // getInternal fetches the requested key and returns the value.
@@ -100,7 +100,7 @@ func getInternal(db DB, key engine.Key) (*proto.Value, error) {
 		return nil, gr.GoError()
 	}
 	if gr.Value != nil {
-		return gr.Value, gr.Value.VerifyChecksum(key)
+		return gr.Value, gr.Value.Verify(key)
 	}
 	return nil, nil
 }
@@ -112,7 +112,7 @@ func PutI(db DB, key engine.Key, iface interface{}, timestamp proto.Timestamp) e
 	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
 		return err
 	}
-	return putInternal(db, key, proto.Value{Bytes: buf.Bytes(), Timestamp: timestamp})
+	return putInternal(db, key, proto.Value{Bytes: buf.Bytes()}, timestamp)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
@@ -122,17 +122,17 @@ func PutProto(db DB, key engine.Key, msg gogoproto.Message, timestamp proto.Time
 	if err != nil {
 		return err
 	}
-	return putInternal(db, key, proto.Value{Bytes: data, Timestamp: timestamp})
+	return putInternal(db, key, proto.Value{Bytes: data}, timestamp)
 }
 
 // putInternal writes the specified value to key.
-func putInternal(db DB, key engine.Key, value proto.Value) error {
+func putInternal(db DB, key engine.Key, value proto.Value, timestamp proto.Timestamp) error {
 	value.InitChecksum(key)
 	pr := <-db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			User:      UserRoot,
-			Timestamp: value.Timestamp,
+			Timestamp: timestamp,
 		},
 		Value: value,
 	})

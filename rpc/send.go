@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -198,6 +199,15 @@ func sendOne(client *Client, timeout time.Duration, method string, args, reply i
 				c <- call.Error
 			}
 		} else {
+			// Verify response data integrity if this is a proto response.
+			if resp, ok := reply.(proto.Response); ok {
+				if req, ok := args.(proto.Request); ok {
+					if err := resp.Verify(req); err != nil {
+						c <- err
+						return
+					}
+				}
+			}
 			c <- reply
 		}
 	case <-client.Closed:

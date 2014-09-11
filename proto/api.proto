@@ -119,11 +119,12 @@ message PutResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A ConditionalPutRequest is arguments to the ConditionalPut()
-// method.
+// A ConditionalPutRequest is arguments to the ConditionalPut() method.
+//
 // - Returns true and sets value if ExpValue equals existing value.
-// - If key doesn't exist and ExpValue is empty, sets value.
-// - Otherwise, returns error.
+// - If key doesn't exist and ExpValue is nil, sets value.
+// - If key exists, but value is empty and ExpValue is not nil but empty, sets value.
+// - Otherwise, returns error and the actual value of the key in the response.
 message ConditionalPutRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.

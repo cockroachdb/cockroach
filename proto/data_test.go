@@ -63,18 +63,26 @@ func TestEqual(t *testing.T) {
 	}
 }
 
+func TestValueBothBytesAndIntegerSet(t *testing.T) {
+	k := []byte("key")
+	v := Value{Bytes: []byte("a"), Integer: gogoproto.Int64(0)}
+	if err := v.Verify(k); err == nil {
+		t.Error("expected error with both byte slice and integer fields set")
+	}
+}
+
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}
 	// Before initializing checksum, always works.
-	if err := v.VerifyChecksum(k); err != nil {
+	if err := v.Verify(k); err != nil {
 		t.Error(err)
 	}
-	if err := v.VerifyChecksum([]byte("key2")); err != nil {
+	if err := v.Verify([]byte("key2")); err != nil {
 		t.Error(err)
 	}
 	v.InitChecksum(k)
-	if err := v.VerifyChecksum(k); err != nil {
+	if err := v.Verify(k); err != nil {
 		t.Error(err)
 	}
 }
@@ -83,16 +91,16 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	k := []byte("key")
 	v := Value{Bytes: []byte("abc")}
 	v.InitChecksum(k)
-	if err := v.VerifyChecksum(k); err != nil {
+	if err := v.Verify(k); err != nil {
 		t.Error(err)
 	}
 	// Try a different key; should fail.
-	if err := v.VerifyChecksum([]byte("key2")); err == nil {
+	if err := v.Verify([]byte("key2")); err == nil {
 		t.Error("expected checksum verification failure on different key")
 	}
 	// Mess with value.
 	v.Bytes = []byte("abcd")
-	if err := v.VerifyChecksum(k); err == nil {
+	if err := v.Verify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
 	}
 }
@@ -103,16 +111,16 @@ func TestValueChecksumWithInteger(t *testing.T) {
 	for _, i := range testValues {
 		v := Value{Integer: gogoproto.Int64(i)}
 		v.InitChecksum(k)
-		if err := v.VerifyChecksum(k); err != nil {
+		if err := v.Verify(k); err != nil {
 			t.Error(err)
 		}
 		// Try a different key; should fail.
-		if err := v.VerifyChecksum([]byte("key2")); err == nil {
+		if err := v.Verify([]byte("key2")); err == nil {
 			t.Error("expected checksum verification failure on different key")
 		}
 		// Mess with value.
 		v.Integer = gogoproto.Int64(i + 1)
-		if err := v.VerifyChecksum(k); err == nil {
+		if err := v.Verify(k); err == nil {
 			t.Error("expected checksum verification failure on different value")
 		}
 	}
