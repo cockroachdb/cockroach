@@ -82,7 +82,10 @@ func TestCoordinatorAddRequest(t *testing.T) {
 	}
 
 	// Advance time and send another put request.
+	// Locking the coordinator to prevent a data race.
+	db.coordinator.Lock()
 	*manual = hlc.ManualClock(1)
+	db.coordinator.Unlock()
 	<-db.Put(putReq)
 	if len(db.coordinator.txns) != 1 {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(db.coordinator.txns))
@@ -130,7 +133,10 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 				return false
 			}
 			// Advance clock by 1ns.
+			// Locking the coordinator to prevent a data race.
+			db.coordinator.Lock()
 			*manual = hlc.ManualClock(*manual + 1)
+			db.coordinator.Unlock()
 			if heartbeatTS.Less(txn.LastHeartbeat) {
 				heartbeatTS = txn.LastHeartbeat
 				return true
@@ -186,10 +192,16 @@ func TestCoordinatorGC(t *testing.T) {
 	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
 
 	// Now, advance clock past the default client timeout.
+	// Locking the coordinator to prevent a data race.
+	db.coordinator.Lock()
 	*manual = hlc.ManualClock(defaultClientTimeout.Nanoseconds() + 1)
+	db.coordinator.Unlock()
 
 	if err := util.IsTrueWithin(func() bool {
+		// Locking the coordinator to prevent a data race.
+		db.coordinator.Lock()
 		_, ok := db.coordinator.txns[string(txnID)]
+		db.coordinator.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")

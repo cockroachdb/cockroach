@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"net"
 	"path"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -34,7 +35,19 @@ import (
 // TLSConfig contains the TLS settings for a Cockroach node. Currently it's
 // just a wrapper for tls.Config. If config is nil, we don't use TLS.
 type TLSConfig struct {
+	sync.Mutex
 	config *tls.Config
+}
+
+// Config returns a copy of the TLS configuration.
+func (c *TLSConfig) Config() *tls.Config {
+	c.Lock()
+	defer c.Unlock()
+	if c.config == nil {
+		return nil
+	}
+	cc := *c.config
+	return &cc
 }
 
 // LoadTLSConfig creates a TLSConfig by loading our keys and certs from the
@@ -60,7 +73,7 @@ func LoadTLSConfig(certDir string) (*TLSConfig, error) {
 	}
 
 	if ok := certPool.AppendCertsFromPEM(pemData); !ok {
-		err = errors.New("Failed to parse PEM data to pool")
+		err = errors.New("failed to parse PEM data to pool")
 		log.Info(err)
 		return nil, err
 	}
@@ -95,23 +108,25 @@ func LoadTestTLSConfig(projectRoot string) (*TLSConfig, error) {
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of
 // the passed TLSConfig.
 func tlsListen(network string, address string, config *TLSConfig) (net.Listener, error) {
-	if config.config == nil {
+	cfg := config.Config()
+	if cfg == nil {
 		if network != "unix" {
 			log.Warningf("Listening via %s to %s without TLS", network, address)
 		}
 		return net.Listen(network, address)
 	}
-	return tls.Listen(network, address, config.config)
+	return tls.Listen(network, address, cfg)
 }
 
 // tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of
 // the passed TLSConfig.
 func tlsDial(network string, address string, config *TLSConfig) (net.Conn, error) {
-	if config.config == nil {
+	cfg := config.Config()
+	if cfg == nil {
 		if network != "unix" {
 			log.Warningf("Connecting via %s to %s without TLS", network, address)
 		}
 		return net.Dial(network, address)
 	}
-	return tls.Dial(network, address, config.config)
+	return tls.Dial(network, address, cfg)
 }
