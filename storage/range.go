@@ -15,6 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package storage
 
@@ -734,18 +735,23 @@ func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, 
 	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.TxnID, args.Commit))
 }
 
+// createSnapshot creates a new snapshot, named using an internal counter.
+func (r *Range) createSnapshot() (string, error) {
+	candidateID, err := engine.Increment(r.engine, engine.KeyLocalSnapshotIDGenerator, 1)
+	if err != nil {
+		return "", err
+	}
+	snapshotID := strconv.FormatInt(candidateID, 10)
+	err = r.engine.CreateSnapshot(snapshotID)
+	return snapshotID, err
+}
+
 // InternalSnapshotCopy scans the key range specified by start key through
 // end key up to some maximum number of results from the given snapshot_id.
 // It will create a snapshot if snapshot_id is empty.
 func (r *Range) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
 	if len(args.SnapshotId) == 0 {
-		candidateID, err := engine.Increment(r.engine, engine.KeyLocalSnapshotIDGenerator, 1)
-		if err != nil {
-			reply.SetGoError(err)
-			return
-		}
-		snapshotID := strconv.FormatInt(candidateID, 10)
-		err = r.engine.CreateSnapshot(snapshotID)
+		snapshotID, err := r.createSnapshot()
 		if err != nil {
 			reply.SetGoError(err)
 			return
