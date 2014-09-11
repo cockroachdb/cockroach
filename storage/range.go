@@ -153,12 +153,12 @@ type Cmd struct {
 type Range struct {
 	Meta      *proto.RangeMetadata
 	mvcc      *engine.MVCC
-	engine    engine.Engine   // The underlying key-value store
-	allocator *allocator      // Makes allocation decisions
-	gossip    *gossip.Gossip  // Range may gossip based on contents
-	rba       RebalanceAccess // Makes some store methods available
-	raft      chan *Cmd       // Raft commands
-	closer    chan struct{}   // Channel for closing the range
+	engine    engine.Engine  // The underlying key-value store
+	allocator *allocator     // Makes allocation decisions
+	gossip    *gossip.Gossip // Range may gossip based on contents
+	rm        RangeManager   // Makes some store methods available
+	raft      chan *Cmd      // Raft commands
+	closer    chan struct{}  // Channel for closing the range
 
 	sync.RWMutex                     // Protects readQ, tsCache & respCache.
 	readQ        *ReadQueue          // Reads queued behind pending writes
@@ -171,7 +171,7 @@ type Range struct {
 // operations will fail. Use NewRangeFromStore() instead to create ranges
 // contained within a store.
 func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
-	allocator *allocator, gossip *gossip.Gossip) *Range {
+	allocator *allocator, gossip *gossip.Gossip, rm RangeManager) *Range {
 	r := &Range{
 		Meta:      meta,
 		mvcc:      engine.NewMVCC(eng),
@@ -179,22 +179,13 @@ func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 		allocator: allocator,
 		gossip:    gossip,
 		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
-		rba:       &StubRebalanceAccess{},
+		rm:        rm,
 		closer:    make(chan struct{}),
 		readQ:     NewReadQueue(),
 		tsCache:   NewReadTimestampCache(clock),
 		respCache: NewResponseCache(meta.RangeID, eng),
 	}
 	return r
-}
-
-// NewRangeFromStore initializes a range from the given metadata and the clock,
-// engine, allocator, and gossip from the given store and enables the range to
-// access rebalancing operations from the store.
-func NewRangeFromStore(meta *proto.RangeMetadata, s *Store) *Range {
-	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip)
-	rng.rba = s
-	return rng
 }
 
 // Start begins gossiping and starts the raft command processing

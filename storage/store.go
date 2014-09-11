@@ -167,7 +167,7 @@ func (s *Store) Init() error {
 		return err
 	}
 
-	rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip)
+	rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip, s)
 	rng.Start()
 
 	s.mu.Lock()
@@ -244,7 +244,7 @@ func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replic
 	if err != nil {
 		return nil, err
 	}
-	rng := NewRangeFromStore(meta, s)
+	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
 	rng.Start()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -321,25 +321,10 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	return rng.ReadWriteCmd(method, args, reply)
 }
 
-// RebalanceAccess is an interface satisfied by Store through which ranges
+// RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for rebalancing
 // (i.e. splitting and merging) operations.
 // TODO(Tobias): add necessary operations as we need them.
-type RebalanceAccess interface {
-	GetRange(rangeID int64) (*Range, error)
+type RangeManager interface {
 	CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error)
-}
-
-// StubRebalanceAccess is a trivial implementation of RebalanceAccess that
-// returns an error for every operation.
-type StubRebalanceAccess struct{}
-
-// GetRange .
-func (d *StubRebalanceAccess) GetRange(rangeID int64) (*Range, error) {
-	return nil, util.Errorf("unimplemented")
-}
-
-// CreateRange .
-func (d *StubRebalanceAccess) CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error) {
-	return nil, util.Errorf("unimplemented")
 }
