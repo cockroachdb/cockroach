@@ -53,8 +53,8 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 func createPutRequest(key engine.Key, value, txnID []byte) *proto.PutRequest {
 	return &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:   key,
-			TxnID: txnID,
+			Key: key,
+			Txn: &proto.Transaction{ID: txnID},
 		},
 		Value: proto.Value{Bytes: value},
 	}
@@ -149,14 +149,14 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *DB, key engine.Key) (bool, proto.Transaction, error) {
+func getTxn(db *DB, key engine.Key) (bool, *proto.Transaction, error) {
 	hr := <-db.InternalHeartbeatTxn(&proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
 		},
 	})
 	if hr.Error != nil {
-		return false, proto.Transaction{}, hr.GoError()
+		return false, nil, hr.GoError()
 	}
 	return true, hr.Txn, nil
 }

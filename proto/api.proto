@@ -62,9 +62,11 @@ message RequestHeader {
   optional string user = 5 [(gogoproto.nullable) = false];
   // Replica specifies the destination for the request. See config.go.
   optional Replica replica = 6 [(gogoproto.nullable) = false];
-  // TxnID is set non-empty if a transaction is underway. Empty string
-  // to start a new transaction.
-  optional bytes txn_id = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  // Txn is set non-nil if a transaction is underway. Use an empty
+  // Transaction to start a new transaction; otherwise, Txn should
+  // always be specified using the Txn returned with the previous
+  // response.
+  optional Transaction txn = 7;
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -79,8 +81,13 @@ message ResponseHeader {
   // increased from the timestamp passed with the RequestHeader when
   // the key being written was either read or updated more recently.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // TxnID is non-empty if a transaction is underway.
-  optional bytes txn_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  // Txn is non-nil if a transaction is underway. The returned
+  // transaction should always be sent with subsequent requests which
+  // are part of the same transaction. If multiple requests are sent
+  // in parallel as part of the same transaction, then subsequent
+  // specification of Txn should use the maximum of all returned
+  // Txn.Timestamp values.
+  optional Transaction txn = 3;
 }
 
 // A ContainsRequest is arguments to the Contains() method.
@@ -315,12 +322,12 @@ message InternalHeartbeatTxnRequest {
 }
 
 // An InternalHeartbeatTxnResponse is the return value from the
-// InternalHeartbeatTxn() method. It returns the transaction info as
-// well. So the transaction coordinator will know quickly when the
-// transaction is aborted by another one.
+// InternalHeartbeatTxn() method. It returns the transaction info in
+// the response header. The returned transaction lets the coordinator
+// know the disposition of the transaction (i.e. aborted, committed or
+// pending).
 message InternalHeartbeatTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction txn = 2 [(gogoproto.nullable) = false];
 }
 
 // An InternalResolveIntentRequest is arguments to the

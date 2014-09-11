@@ -34,16 +34,17 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey01  = Key("/db1")
-	testKey02  = Key("/db2")
-	testKey03  = Key("/db3")
-	testKey04  = Key("/db4")
-	txn01      = []byte("Txn01")
-	txn02      = []byte("Txn02")
-	value01    = proto.Value{Bytes: []byte("testValue01")}
-	value02    = proto.Value{Bytes: []byte("testValue02")}
-	value03    = proto.Value{Bytes: []byte("testValue03")}
-	value04    = proto.Value{Bytes: []byte("testValue04")}
+	testKey1   = Key("/db1")
+	testKey2   = Key("/db2")
+	testKey3   = Key("/db3")
+	testKey4   = Key("/db4")
+	txn1       = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1}
+	txn1e2     = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2}
+	txn2       = &proto.Transaction{ID: []byte("Txn2")}
+	value1     = proto.Value{Bytes: []byte("testValue1")}
+	value2     = proto.Value{Bytes: []byte("testValue2")}
+	value3     = proto.Value{Bytes: []byte("testValue3")}
+	value4     = proto.Value{Bytes: []byte("testValue4")}
 	valueEmpty = proto.Value{}
 )
 
@@ -97,7 +98,7 @@ func TestMVCCKeys(t *testing.T) {
 
 func TestMVCCGetNotExist(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	value, err := mvcc.Get(testKey01, makeTS(0, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func TestMVCCGetNotExist(t *testing.T) {
 func TestMVCCPutWithBadValue(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	badValue := proto.Value{Bytes: []byte("a"), Integer: gogoproto.Int64(1)}
-	err := mvcc.Put(testKey01, makeTS(0, 0), badValue, nil)
+	err := mvcc.Put(testKey1, makeTS(0, 0), badValue, nil)
 	if err == nil {
 		t.Fatal("expected an error putting a value with both byte slice and integer components")
 	}
@@ -117,93 +118,93 @@ func TestMVCCPutWithBadValue(t *testing.T) {
 
 func TestMVCCPutWithTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 }
 
 func TestMVCCPutWithoutTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, nil)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 }
 
 func TestMVCCUpdateExistingKey(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, nil)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 
-	err = mvcc.Put(testKey01, makeTS(2, 0), value02, nil)
+	err = mvcc.Put(testKey1, makeTS(2, 0), value2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version.
-	value, err = mvcc.Get(testKey01, makeTS(3, 0), nil)
+	value, err = mvcc.Get(testKey1, makeTS(3, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value02.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value02.Bytes, value.Bytes)
+			value2.Bytes, value.Bytes)
 	}
 
 	// Read the old version.
-	value, err = mvcc.Get(testKey01, makeTS(1, 0), nil)
+	value, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 }
 
 func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 1), value01, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 1), value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Earlier walltime.
-	err = mvcc.Put(testKey01, makeTS(0, 0), value02, nil)
+	err = mvcc.Put(testKey1, makeTS(0, 0), value2, nil)
 	if err == nil {
 		t.Fatal("expected error on old version")
 	}
 	// Earlier logical time.
-	err = mvcc.Put(testKey01, makeTS(1, 0), value02, nil)
+	err = mvcc.Put(testKey1, makeTS(1, 0), value2, nil)
 	if err == nil {
 		t.Fatal("expected error on old version")
 	}
@@ -211,12 +212,12 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 
 func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = mvcc.Put(testKey01, makeTS(1, 0), value01, txn01)
+	err = mvcc.Put(testKey1, makeTS(1, 0), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,12 +225,12 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 
 func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = mvcc.Put(testKey01, makeTS(1, 0), value02, txn02)
+	err = mvcc.Put(testKey1, makeTS(1, 0), value2, txn2)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
@@ -249,10 +250,10 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	// If we search for a<T=2>, the scan should not return "b".
 
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(3, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, nil)
+	err := mvcc.Put(testKey1, makeTS(3, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, nil)
 
-	value, err := mvcc.Get(testKey01, makeTS(2, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,8 +264,8 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 
 func TestMVCCGetAndDelete(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	value, err := mvcc.Get(testKey01, makeTS(2, 0), nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	value, err := mvcc.Get(testKey1, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,13 +273,13 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	err = mvcc.Delete(testKey01, makeTS(3, 0), nil)
+	err = mvcc.Delete(testKey1, makeTS(3, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	value, err = mvcc.Get(testKey01, makeTS(4, 0), nil)
+	value, err = mvcc.Get(testKey1, makeTS(4, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +289,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 
 	// Read the old version which should still exist.
 	for _, logical := range []int32{0, math.MaxInt32} {
-		value, err = mvcc.Get(testKey01, makeTS(2, logical), nil)
+		value, err = mvcc.Get(testKey1, makeTS(2, logical), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -300,8 +301,8 @@ func TestMVCCGetAndDelete(t *testing.T) {
 
 func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, txn01)
-	value, err := mvcc.Get(testKey01, makeTS(2, 0), txn01)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, txn1)
+	value, err := mvcc.Get(testKey1, makeTS(2, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,13 +310,13 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 		t.Fatal("the value should not be empty")
 	}
 
-	err = mvcc.Delete(testKey01, makeTS(3, 0), txn01)
+	err = mvcc.Delete(testKey1, makeTS(3, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	value, err = mvcc.Get(testKey01, makeTS(4, 0), txn01)
+	value, err = mvcc.Get(testKey1, makeTS(4, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +325,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	}
 
 	// Read the old version which should still exist.
-	value, err = mvcc.Get(testKey01, makeTS(2, 0), nil)
+	value, err = mvcc.Get(testKey1, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,17 +336,17 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 
 func TestMVCCGetWriteIntentError(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = mvcc.Get(testKey01, makeTS(1, 0), nil)
+	_, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
 	if err == nil {
 		t.Fatal("cannot read the value of a write intent without TxnID")
 	}
 
-	_, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
+	_, err = mvcc.Get(testKey1, makeTS(1, 0), txn2)
 	if err == nil {
 		t.Fatal("cannot read the value of a write intent from a different TxnID")
 	}
@@ -353,75 +354,75 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 
 func TestMVCCScan(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey01, makeTS(2, 0), value04, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, nil)
-	err = mvcc.Put(testKey02, makeTS(3, 0), value03, nil)
-	err = mvcc.Put(testKey03, makeTS(1, 0), value03, nil)
-	err = mvcc.Put(testKey03, makeTS(4, 0), value02, nil)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
-	err = mvcc.Put(testKey04, makeTS(5, 0), value01, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey1, makeTS(2, 0), value4, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, nil)
+	err = mvcc.Put(testKey2, makeTS(3, 0), value3, nil)
+	err = mvcc.Put(testKey3, makeTS(1, 0), value3, nil)
+	err = mvcc.Put(testKey3, makeTS(4, 0), value2, nil)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
+	err = mvcc.Put(testKey4, makeTS(5, 0), value1, nil)
 
-	kvs, _, err := mvcc.Scan(testKey02, testKey04, 0, makeTS(1, 0), nil)
+	kvs, err := mvcc.Scan(testKey2, testKey4, 0, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, testKey02) ||
-		!bytes.Equal(kvs[1].Key, testKey03) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value02.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value03.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[1].Key, testKey3) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = mvcc.Scan(testKey02, testKey04, 0, makeTS(4, 0), nil)
+	kvs, err = mvcc.Scan(testKey2, testKey4, 0, makeTS(4, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, testKey02) ||
-		!bytes.Equal(kvs[1].Key, testKey03) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value03.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value02.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[1].Key, testKey3) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value3.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = mvcc.Scan(testKey04, KeyMax, 0, makeTS(1, 0), nil)
+	kvs, err = mvcc.Scan(testKey4, KeyMax, 0, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 1 ||
-		!bytes.Equal(kvs[0].Key, testKey04) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value04.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey4) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value4.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	_, err = mvcc.Get(testKey01, makeTS(1, 0), txn02)
-	kvs, _, err = mvcc.Scan(KeyMin, testKey02, 0, makeTS(1, 0), nil)
+	_, err = mvcc.Get(testKey1, makeTS(1, 0), txn2)
+	kvs, err = mvcc.Scan(KeyMin, testKey2, 0, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 1 ||
-		!bytes.Equal(kvs[0].Key, testKey01) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value01.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 }
 
 func TestMVCCScanMaxNum(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, nil)
-	err = mvcc.Put(testKey03, makeTS(1, 0), value03, nil)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, nil)
+	err = mvcc.Put(testKey3, makeTS(1, 0), value3, nil)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
 
-	kvs, _, err := mvcc.Scan(testKey02, testKey04, 1, makeTS(1, 0), nil)
+	kvs, err := mvcc.Scan(testKey2, testKey4, 1, makeTS(1, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 1 ||
-		!bytes.Equal(kvs[0].Key, testKey02) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value02.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 }
@@ -439,13 +440,13 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	err := mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(1, 0), value01, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(2, 0), value02, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(2, 0), value02, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(3, 0), value03, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/b")), makeTS(1, 0), value03, nil)
+	err := mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(1, 0), value1, nil)
+	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(3, 0), value3, nil)
+	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/b")), makeTS(1, 0), value3, nil)
 
-	kvs, _, err := mvcc.Scan(Key(encoding.EncodeString([]byte{}, "/a")),
+	kvs, err := mvcc.Scan(Key(encoding.EncodeString([]byte{}, "/a")),
 		Key(encoding.EncodeString([]byte{}, "/b")), 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -453,32 +454,32 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	if len(kvs) != 2 ||
 		!bytes.Equal(kvs[0].Key, Key(encoding.EncodeString([]byte{}, "/a"))) ||
 		!bytes.Equal(kvs[1].Key, Key(encoding.EncodeString([]byte{}, "/aa"))) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value02.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value02.Bytes) {
+		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 }
 
 func TestMVCCScanInTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, nil)
-	err = mvcc.Put(testKey03, makeTS(1, 0), value03, txn01)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, nil)
+	err = mvcc.Put(testKey3, makeTS(1, 0), value3, txn1)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
 
-	kvs, _, err := mvcc.Scan(testKey02, testKey04, 0, makeTS(1, 0), txn01)
+	kvs, err := mvcc.Scan(testKey2, testKey4, 0, makeTS(1, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, testKey02) ||
-		!bytes.Equal(kvs[1].Key, testKey03) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value02.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value03.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[1].Key, testKey3) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value3.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	kvs, _, err = mvcc.Scan(testKey02, testKey04, 0, makeTS(1, 0), nil)
+	kvs, err = mvcc.Scan(testKey2, testKey4, 0, makeTS(1, 0), nil)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
@@ -486,49 +487,49 @@ func TestMVCCScanInTxn(t *testing.T) {
 
 func TestMVCCDeleteRange(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, nil)
-	err = mvcc.Put(testKey03, makeTS(1, 0), value03, nil)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, nil)
+	err = mvcc.Put(testKey3, makeTS(1, 0), value3, nil)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
 
-	num, err := mvcc.DeleteRange(testKey02, testKey04, 0, makeTS(2, 0), nil)
+	num, err := mvcc.DeleteRange(testKey2, testKey4, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 2 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ := mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
+	kvs, _ := mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, testKey01) ||
-		!bytes.Equal(kvs[1].Key, testKey04) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value01.Bytes) ||
-		!bytes.Equal(kvs[1].Value.Bytes, value04.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[1].Key, testKey4) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) ||
+		!bytes.Equal(kvs[1].Value.Bytes, value4.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = mvcc.DeleteRange(testKey04, KeyMax, 0, makeTS(2, 0), nil)
+	num, err = mvcc.DeleteRange(testKey4, KeyMax, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
+	kvs, _ = mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
 	if len(kvs) != 1 ||
-		!bytes.Equal(kvs[0].Key, testKey01) ||
-		!bytes.Equal(kvs[0].Value.Bytes, value01.Bytes) {
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[0].Value.Bytes, value1.Bytes) {
 		t.Fatal("the value should not be empty")
 	}
 
-	num, err = mvcc.DeleteRange(KeyMin, testKey02, 0, makeTS(2, 0), nil)
+	num, err = mvcc.DeleteRange(KeyMin, testKey2, 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if num != 1 {
 		t.Fatal("the value should not be empty")
 	}
-	kvs, _, _ = mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
+	kvs, _ = mvcc.Scan(KeyMin, KeyMax, 0, makeTS(2, 0), nil)
 	if len(kvs) != 0 {
 		t.Fatal("the value should be empty")
 	}
@@ -536,17 +537,17 @@ func TestMVCCDeleteRange(t *testing.T) {
 
 func TestMVCCDeleteRangeFailed(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, txn01)
-	err = mvcc.Put(testKey03, makeTS(1, 0), value03, txn01)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, txn1)
+	err = mvcc.Put(testKey3, makeTS(1, 0), value3, txn1)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
 
-	_, err = mvcc.DeleteRange(testKey02, testKey04, 0, makeTS(1, 0), nil)
+	_, err = mvcc.DeleteRange(testKey2, testKey4, 0, makeTS(1, 0), nil)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
 
-	_, err = mvcc.DeleteRange(testKey02, testKey04, 0, makeTS(1, 0), txn01)
+	_, err = mvcc.DeleteRange(testKey2, testKey4, 0, makeTS(1, 0), txn1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,12 +555,12 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 
 func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(1, 0), value01, nil)
-	err = mvcc.Put(testKey02, makeTS(1, 0), value02, txn01)
-	err = mvcc.Put(testKey03, makeTS(2, 0), value03, txn02)
-	err = mvcc.Put(testKey04, makeTS(1, 0), value04, nil)
+	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
+	err = mvcc.Put(testKey2, makeTS(1, 0), value2, txn1)
+	err = mvcc.Put(testKey3, makeTS(2, 0), value3, txn2)
+	err = mvcc.Put(testKey4, makeTS(1, 0), value4, nil)
 
-	_, err = mvcc.DeleteRange(testKey02, testKey04, 0, makeTS(1, 0), txn01)
+	_, err = mvcc.DeleteRange(testKey2, testKey4, 0, makeTS(1, 0), txn1)
 	if err == nil {
 		t.Fatal("expected error on uncommitted write intent")
 	}
@@ -567,7 +568,7 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 
 func TestMVCCConditionalPut(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	actualVal, err := mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &value02, nil)
+	actualVal, err := mvcc.ConditionalPut(testKey1, makeTS(0, 0), value1, &value2, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
 	}
@@ -576,7 +577,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 
 	// Verify the difference between missing value and empty value.
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &valueEmpty, nil)
+	actualVal, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), value1, &valueEmpty, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
 	}
@@ -585,83 +586,83 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 
 	// Do a conditional put with expectation that the value is completely missing; will succeed.
-	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, nil, nil)
+	_, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), value1, nil, nil)
 	if err != nil {
 		t.Fatalf("expected success with condition that key doesn't yet exist: %v", err)
 	}
 
-	// Another conditional put expecting value missing will fail, now that value01 is written.
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, nil, nil)
+	// Another conditional put expecting value missing will fail, now that value1 is written.
+	actualVal, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), value1, nil, nil)
 	if err == nil {
 		t.Fatal("expected error on key already exists")
 	}
-	if !bytes.Equal(actualVal.Bytes, value01.Bytes) {
+	if !bytes.Equal(actualVal.Bytes, value1.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			actualVal.Bytes, value01.Bytes)
+			actualVal.Bytes, value1.Bytes)
 	}
 
-	// Conditional put expecting wrong value02, will fail.
-	actualVal, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value01, &value02, nil)
+	// Conditional put expecting wrong value2, will fail.
+	actualVal, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), value1, &value2, nil)
 	if err == nil {
 		t.Fatal("expected error on key does not match")
 	}
-	if !bytes.Equal(actualVal.Bytes, value01.Bytes) {
+	if !bytes.Equal(actualVal.Bytes, value1.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			actualVal.Bytes, value01.Bytes)
+			actualVal.Bytes, value1.Bytes)
 	}
 
 	// Move to a empty value. Will succeed.
-	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), valueEmpty, &value01, nil)
+	_, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), valueEmpty, &value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Now move to value02 from expected empty value.
-	_, err = mvcc.ConditionalPut(testKey01, makeTS(0, 0), value02, &valueEmpty, nil)
+	// Now move to value2 from expected empty value.
+	_, err = mvcc.ConditionalPut(testKey1, makeTS(0, 0), value2, &valueEmpty, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Verify we get value02 as expected.
-	value, err := mvcc.Get(testKey01, makeTS(0, 0), nil)
-	if !bytes.Equal(value02.Bytes, value.Bytes) {
+	// Verify we get value2 as expected.
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)
+	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 }
 
 func TestMVCCResolveTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), txn01)
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 
-	err = mvcc.ResolveWriteIntent(testKey01, txn01, true)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err = mvcc.Get(testKey01, makeTS(1, 0), nil)
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	value, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 }
 
 func TestMVCCAbortTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
-	err = mvcc.ResolveWriteIntent(testKey01, txn01, false)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
 	if value != nil {
 		t.Fatalf("the value should be empty")
 	}
-	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey01))
+	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,12 +673,12 @@ func TestMVCCAbortTxn(t *testing.T) {
 
 func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, nil)
-	err = mvcc.Put(testKey01, makeTS(1, 0), value02, nil)
-	err = mvcc.Put(testKey01, makeTS(2, 0), value03, txn01)
-	err = mvcc.ResolveWriteIntent(testKey01, txn01, false)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
+	err = mvcc.Put(testKey1, makeTS(1, 0), value2, nil)
+	err = mvcc.Put(testKey1, makeTS(2, 0), value3, txn1)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1, false)
 
-	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey01))
+	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -685,74 +686,121 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 		t.Fatalf("expected the MVCCMetadata")
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(3, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(3, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(value02.Bytes, value.Bytes) {
+	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value.Bytes, value02.Bytes)
+			value.Bytes, value2.Bytes)
 	}
 }
 
-func TestMVCCResolveTxnFailure(t *testing.T) {
+func TestMVCCWriteWithEpochs(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	// Start with epoch 1.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	// Now write with epoch 2.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value2, txn1e2); err != nil {
+		t.Fatal(err)
+	}
+	// Try a write with an earlier epoch.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1); err == nil {
+		t.Fatal("expected write too old error")
+	}
+	// Try a write again with same epoch (epoch 2).
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value3, txn1e2); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMVCCResolveWithDiffEpochs(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	err = mvcc.Put(testKey2, makeTS(0, 0), value2, txn1e2)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey2), 2, txn1e2, true)
+	if num != 2 {
+		t.Errorf("expected 2 rows resolved; got %d", num)
+	}
+
+	// Verify key1 is empty, as resolution with epoch 2 would have
+	// aborted the epoch 1 intent.
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)
+	if value != nil || err != nil {
+		t.Errorf("expected value nil, err nil; got %+v, %v", value, err)
+	}
+
+	// Key2 should be committed.
+	value, err = mvcc.Get(testKey2, makeTS(0, 0), nil)
+	if !bytes.Equal(value2.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value2.Bytes, value.Bytes)
+	}
+}
+
+func TestMVCCResolveTxnNoOps(t *testing.T) {
 	mvcc := createTestMVCC(t)
 
-	err := mvcc.ResolveWriteIntent(testKey01, txn01, true)
-	if err == nil {
-		t.Fatal("expected error on key not exist")
+	// Resolve a non existent key; noop.
+	err := mvcc.ResolveWriteIntent(testKey1, txn1, true)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	err = mvcc.Put(testKey01, makeTS(0, 0), value01, nil)
-	err = mvcc.ResolveWriteIntent(testKey01, txn02, true)
-	if err == nil {
-		t.Fatal("expected error on write intent not exist")
+	// Add key and resolve despite there being no intent.
+	err = mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
+	err = mvcc.ResolveWriteIntent(testKey1, txn2, true)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	err = mvcc.Put(testKey01, makeTS(1, 0), value02, txn01)
-	err = mvcc.ResolveWriteIntent(testKey01, txn02, true)
-	if err == nil {
-		t.Fatal("expected error due to other txn")
+	// Write intent and resolve with different txn.
+	err = mvcc.Put(testKey1, makeTS(1, 0), value2, txn1)
+	err = mvcc.ResolveWriteIntent(testKey1, txn2, true)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestMVCCResolveTxnRange(t *testing.T) {
 	mvcc := createTestMVCC(t)
-	err := mvcc.Put(testKey01, makeTS(0, 0), value01, txn01)
-	err = mvcc.Put(testKey02, makeTS(0, 0), value02, nil)
-	err = mvcc.Put(testKey03, makeTS(0, 0), value03, txn02)
-	err = mvcc.Put(testKey04, makeTS(0, 0), value04, txn01)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	err = mvcc.Put(testKey2, makeTS(0, 0), value2, nil)
+	err = mvcc.Put(testKey3, makeTS(0, 0), value3, txn2)
+	err = mvcc.Put(testKey4, makeTS(0, 0), value4, txn1)
 
-	num, err := mvcc.ResolveWriteIntentRange(testKey01, testKey04, 0, txn01, true)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey4), 0, txn1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if num != 1 {
-		t.Fatal("expected only one key to be committed")
+	if num != 4 {
+		t.Fatalf("expected all keys to process for resolution, even though 2 are noops; got %d", num)
 	}
 
-	value, err := mvcc.Get(testKey01, makeTS(1, 0), nil)
-	if !bytes.Equal(value01.Bytes, value.Bytes) {
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value01.Bytes, value.Bytes)
+			value1.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey02, makeTS(1, 0), nil)
-	if !bytes.Equal(value02.Bytes, value.Bytes) {
+	value, err = mvcc.Get(testKey2, makeTS(1, 0), nil)
+	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value02.Bytes, value.Bytes)
+			value2.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey03, makeTS(1, 0), txn02)
-	if !bytes.Equal(value03.Bytes, value.Bytes) {
+	value, err = mvcc.Get(testKey3, makeTS(1, 0), txn2)
+	if !bytes.Equal(value3.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value03.Bytes, value.Bytes)
+			value3.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey04, makeTS(1, 0), txn01)
-	if !bytes.Equal(value04.Bytes, value.Bytes) {
+	value, err = mvcc.Get(testKey4, makeTS(1, 0), nil)
+	if !bytes.Equal(value4.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value04.Bytes, value.Bytes)
+			value4.Bytes, value.Bytes)
 	}
 }
 

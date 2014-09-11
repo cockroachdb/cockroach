@@ -150,10 +150,10 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 		if reply.Error == nil {
 			switch reply.Status {
 			case proto.COMMITTED:
-				db.coordinator.EndTxn(args.Header().TxnID, true)
+				db.coordinator.EndTxn(args.Header().Txn.ID, true)
 				return
 			case proto.ABORTED:
-				db.coordinator.EndTxn(args.Header().TxnID, false)
+				db.coordinator.EndTxn(args.Header().Txn.ID, false)
 				return
 			}
 		}

@@ -142,14 +142,14 @@ func (tc *coordinator) Close() {
 // cleanup via resolved write intents.
 func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 	// Ignore non-transactional requests.
-	if len(header.TxnID) == 0 || !isTransactional(method) {
+	if header.Txn == nil || !isTransactional(method) {
 		return
 	}
 
 	tc.Lock()
 	defer tc.Unlock()
-	if _, ok := tc.txns[string(header.TxnID)]; !ok {
-		tc.txns[string(header.TxnID)] = &txnMetadata{
+	if _, ok := tc.txns[string(header.Txn.ID)]; !ok {
+		tc.txns[string(header.Txn.ID)] = &txnMetadata{
 			lastUpdateTS:    tc.clock.Now(),
 			timeoutDuration: tc.clientTimeout,
 			closer:          make(chan struct{}),
@@ -159,9 +159,9 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 		// for each active transaction. Spencer suggests a heap
 		// containing next heartbeat timeouts which is processed by a
 		// single goroutine.
-		go tc.heartbeat(engine.Key(header.TxnID), tc.txns[string(header.TxnID)].closer)
+		go tc.heartbeat(engine.Key(header.Txn.ID), tc.txns[string(header.Txn.ID)].closer)
 	}
-	txnMeta := tc.txns[string(header.TxnID)]
+	txnMeta := tc.txns[string(header.Txn.ID)]
 	txnMeta.lastUpdateTS = tc.clock.Now()
 
 	// If read-only, exit now; otherwise, store the affected key range.
@@ -255,10 +255,10 @@ func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 			case proto.PENDING:
 				// Heartbeat continues...
 			case proto.COMMITTED:
-				tc.EndTxn(request.Header().TxnID, true)
+				tc.EndTxn(request.Header().Txn.ID, true)
 				return
 			case proto.ABORTED:
-				tc.EndTxn(request.Header().TxnID, false)
+				tc.EndTxn(request.Header().Txn.ID, false)
 				return
 			}
 		case <-closer:

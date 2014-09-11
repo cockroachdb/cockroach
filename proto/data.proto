@@ -114,7 +114,7 @@ enum TransactionStatus {
 // used to decide whether a transaction will be aborted during
 // contention.
 message Transaction {
-  optional string txn_id = 1 [(gogoproto.nullable) = false];
+  optional bytes id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional int32 priority = 2 [(gogoproto.nullable) = false];
   optional IsolationType isolation = 3 [(gogoproto.nullable) = false];
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
@@ -130,6 +130,6 @@ message Transaction {
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
-  optional bytes txn_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  optional Transaction txn = 1;
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
 }
