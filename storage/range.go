@@ -316,12 +316,6 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 		ts.Logical++ // increment logical component by one to differentiate.
 		header.Timestamp = ts
 		reply.Header().Timestamp = ts
-		switch args.(type) {
-		case *proto.PutRequest:
-			(args.(*proto.PutRequest)).Value.Timestamp = ts
-		case *proto.ConditionalPutRequest:
-			(args.(*proto.ConditionalPutRequest)).Value.Timestamp = ts
-		}
 	}
 
 	// The next step is to add the write to the read queue to inform
@@ -529,7 +523,7 @@ func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsRespo
 		reply.SetGoError(err)
 		return
 	}
-	if val.Bytes != nil {
+	if val != nil {
 		reply.Exists = true
 	}
 }
@@ -558,7 +552,7 @@ func (r *Range) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.C
 	if err == nil {
 		r.updateGossipConfigs(args.Key)
 	}
-	reply.ActualValue = &val
+	reply.ActualValue = val
 	reply.SetGoError(err)
 }
 

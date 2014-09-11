@@ -190,12 +190,16 @@ func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, ke
 		return
 	}
 	// An empty key will not be nil, but have zero length.
-	if gr.Value.Bytes == nil {
+	if gr.Value == nil {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
+	if gr.Value.Bytes != nil {
+		fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
+	} else if gr.Value.Integer != nil {
+		fmt.Fprintf(w, "%d", gr.Value.GetInteger())
+	}
 }
 
 func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {

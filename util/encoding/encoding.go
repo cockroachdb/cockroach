@@ -72,8 +72,8 @@ func MustGobEncode(o interface{}) []byte {
 	return oEncoded
 }
 
-// newChecksum returns a CRC32 checksum computed from the input byte slice.
-func newChecksum(b []byte) hash.Hash32 {
+// NewCRC32Checksum returns a CRC32 checksum computed from the input byte slice.
+func NewCRC32Checksum(b []byte) hash.Hash32 {
 	crc := crc32.NewIEEE()
 	crc.Write(b)
 	return crc
@@ -86,7 +86,7 @@ func newChecksum(b []byte) hash.Hash32 {
 // otherwise.
 func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 	// Compute the first part of the expected checksum.
-	c := newChecksum(k)
+	c := NewCRC32Checksum(k)
 	size := c.Size()
 	if size > len(b) {
 		return nil, util.Errorf("not enough bytes for %d character checksum", size)
@@ -107,7 +107,7 @@ func unwrapChecksum(k []byte, b []byte) ([]byte, error) {
 // wrapChecksum computes the checksum of the byte slice b appended to k.
 // The output is b with the checksum appended.
 func wrapChecksum(k []byte, b []byte) []byte {
-	chk := newChecksum(k)
+	chk := NewCRC32Checksum(k)
 	chk.Write(b)
 	return chk.Sum(b)
 }

@@ -24,6 +24,7 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // A DB interface provides asynchronous methods to access a key value
@@ -57,32 +58,38 @@ type DB interface {
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
 func GetI(db DB, key engine.Key, iface interface{}) (bool, proto.Timestamp, error) {
-	ok, value, err := getInternal(db, key)
-	if !ok || err != nil {
+	value, err := getInternal(db, key)
+	if err != nil || value == nil {
 		return false, proto.Timestamp{}, err
 	}
-	if err := gob.NewDecoder(bytes.NewBuffer(value.Bytes)).Decode(iface); err != nil {
-		return true, value.Timestamp, err
+	if value.Integer != nil {
+		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
 	}
-	return true, value.Timestamp, nil
+	if err := gob.NewDecoder(bytes.NewBuffer(value.Bytes)).Decode(iface); err != nil {
+		return true, *value.Timestamp, err
+	}
+	return true, *value.Timestamp, nil
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
 // using a protobuf decoder. See comments for GetI for details on
 // return values.
 func GetProto(db DB, key engine.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
-	ok, value, err := getInternal(db, key)
-	if !ok || err != nil {
+	value, err := getInternal(db, key)
+	if err != nil || value == nil {
 		return false, proto.Timestamp{}, err
 	}
-	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
-		return true, value.Timestamp, err
+	if value.Integer != nil {
+		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
 	}
-	return true, value.Timestamp, nil
+	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
+		return true, *value.Timestamp, err
+	}
+	return true, *value.Timestamp, nil
 }
 
 // getInternal fetches the requested key and returns the value.
-func getInternal(db DB, key engine.Key) (bool, proto.Value, error) {
+func getInternal(db DB, key engine.Key) (*proto.Value, error) {
 	gr := <-db.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -90,12 +97,12 @@ func getInternal(db DB, key engine.Key) (bool, proto.Value, error) {
 		},
 	})
 	if gr.Error != nil {
-		return false, proto.Value{}, gr.GoError()
+		return nil, gr.GoError()
 	}
-	if len(gr.Value.Bytes) == 0 {
-		return false, proto.Value{}, nil
+	if gr.Value != nil {
+		return gr.Value, gr.Value.Verify(key)
 	}
-	return true, gr.Value, nil
+	return nil, nil
 }
 
 // PutI sets the given key to the gob-serialized byte string of value
@@ -105,8 +112,7 @@ func PutI(db DB, key engine.Key, iface interface{}, timestamp proto.Timestamp) e
 	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
 		return err
 	}
-	// TODO(spencer): set checksum.
-	return putInternal(db, key, proto.Value{Bytes: buf.Bytes(), Timestamp: timestamp})
+	return putInternal(db, key, proto.Value{Bytes: buf.Bytes()}, timestamp)
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
@@ -116,17 +122,17 @@ func PutProto(db DB, key engine.Key, msg gogoproto.Message, timestamp proto.Time
 	if err != nil {
 		return err
 	}
-	// TODO(spencer): set checksum.
-	return putInternal(db, key, proto.Value{Bytes: data, Timestamp: timestamp})
+	return putInternal(db, key, proto.Value{Bytes: data}, timestamp)
 }
 
 // putInternal writes the specified value to key.
-func putInternal(db DB, key engine.Key, value proto.Value) error {
+func putInternal(db DB, key engine.Key, value proto.Value, timestamp proto.Timestamp) error {
+	value.InitChecksum(key)
 	pr := <-db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			User:      UserRoot,
-			Timestamp: value.Timestamp,
+			Timestamp: timestamp,
 		},
 		Value: value,
 	})

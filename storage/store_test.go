@@ -146,7 +146,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 func TestStoreExecuteCmd(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a", 1)
+	args, reply := getArgs([]byte("a"), 1)
 
 	// Try a successful get request.
 	err := store.ExecuteCmd("Get", args, reply)
@@ -159,7 +159,7 @@ func TestStoreExecuteCmd(t *testing.T) {
 func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a", 1)
+	args, reply := getArgs([]byte("a"), 1)
 	args.Timestamp = store.clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
 	err := store.ExecuteCmd("Get", args, reply)
@@ -177,7 +177,7 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	store, mc := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a", 1)
+	args, reply := getArgs([]byte("a"), 1)
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
@@ -199,7 +199,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 func TestStoreExecuteCmdWithClockDrift(t *testing.T) {
 	store, mc := createTestStore(t)
 	defer store.Close()
-	args, reply := getArgs("a", 1)
+	args, reply := getArgs([]byte("a"), 1)
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
@@ -220,7 +220,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
-	args, reply := getArgs("0", 1)
+	args, reply := getArgs([]byte("0"), 1)
 	args.Replica.RangeID = 2
 	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
@@ -234,7 +234,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
-	args, reply := getArgs("0", 1)
+	args, reply := getArgs([]byte("0"), 1)
 	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
 		t.Error("expected key to be out of range")

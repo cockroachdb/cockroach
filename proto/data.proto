@@ -33,18 +33,36 @@ message Timestamp {
 }
 
 // Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp.
+// are supported based on timestamp. Values support the union of two
+// basic types: a "bag o' bytes" generic byte slice and an incrementable
+// int64, for use with the Increment API call.
 message Value {
-  // Bytes is the byte string value.
-  optional bytes bytes = 1 [(gogoproto.nullable) = false];
-  // Checksum is a CRC-32-IEEE checksum. A Value will only be used in
-  // a write operation by the database if either its checksum is zero
-  // or the CRC checksum of Bytes matches it.
-  // Values returned by the database will contain a checksum of the
-  // contained value.
-  optional uint32 checksum = 2 [(gogoproto.nullable) = false];
+  // Bytes is the byte slice value. If this value is present,
+  // "integer" should not be.
+  optional bytes bytes = 1;
+  // Integer is an integer value type. If this value is present,
+  // "bytes" should not be. Only Integer values may exist at a key
+  // when making the Increment API call.
+  optional int64 integer = 2;
+  // Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
+  // If this is an integer value, then the value is interpreted as an 8
+  // byte, big-endian encoded value. This value is set by the client on
+  // writes to do end-to-end integrity verification. If the checksum is
+  // incorrect, the write operation will fail. If the client does not
+  // wish to use end-to-end checksumming, this value should be nil.
+  optional fixed32 checksum = 3;
   // Timestamp of value.
-  optional Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 4;
+}
+
+// MVCCValue differentiates between normal versioned values and
+// deletion tombstones.
+message MVCCValue {
+  // True to indicate a deletion tombstone. If false, value should not
+  // be nil.
+  optional bool deleted = 1 [(gogoproto.nullable) = false];
+  // The value. Nil if deleted is true; not nil otherwise.
+  optional Value value = 2;
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
