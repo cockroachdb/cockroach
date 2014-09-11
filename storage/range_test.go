@@ -93,7 +93,7 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 	}
 	g := gossip.New(rpc.LoadInsecureTLSConfig())
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(rm, clock, engine, nil, g)
+	r := NewRange(rm, clock, engine, nil, g, nil)
 	r.Start()
 	return r, g
 }
@@ -251,7 +251,7 @@ func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Cloc
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
-	rng := NewRange(&proto.RangeMetadata{}, clock, engine, nil, nil)
+	rng := NewRange(&proto.RangeMetadata{}, clock, engine, nil, nil, nil)
 	rng.Start()
 	return rng, &manual, clock, engine
 }
