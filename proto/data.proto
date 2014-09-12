@@ -99,11 +99,21 @@ enum IsolationType {
 // TransactionStatus TODO(jiajia) Needs documentation.
 enum TransactionStatus {
   option (gogoproto.goproto_enum_prefix) = false;
-  // PENDING TODO(jiajia) Needs documentation.
+  // PENDING is the default state for a new transaction. Transactions
+  // move from PENDING to one of COMMITTED or ABORTED. Mutations made
+  // as part of a PENDING transactions are recorded as "intents" in
+  // the underlying MVCC model.
   PENDING = 0;
-  // COMMITTED TODO(jiajia) Needs documentation.
+  // COMMITTED is the state for a transaction which has been
+  // committed. Mutations made as part of a transaction which is moved
+  // into COMMITTED state become durable and visible to other
+  // transactions, moving from "intents" to permanent versioned
+  // values.
   COMMITTED = 1;
-  // ABORTED TODO(jiajia) Needs documentation.
+  // ABORTED is the state for a transaction which has been aborted.
+  // Mutations made as part of a transaction which is moved into
+  // ABORTED state are deleted and are never made visible to other
+  // transactions.
   ABORTED = 2;
 }
 
@@ -120,9 +130,12 @@ message Transaction {
   optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
   optional int32 epoch = 5 [(gogoproto.nullable) = false];
-  // 0 to use timestamp at destination.
+  // The proposed timestamp for the transaction. This starts as
+  // the current wall time on the txn coordinator.
   optional Timestamp timestamp = 6 [(gogoproto.nullable) = false];
-  // Timestamp + clock skew; set to Timestamp for historical read.
+  // Timestamp + clock skew. Reads which encounter values with
+  // timestamps between Timestamp and MaxTimestamp trigger a txn
+  // retry error.
   optional Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
   // The last hearbeat timestamp.
   optional Timestamp last_heartbeat = 8 [(gogoproto.nullable) = false];

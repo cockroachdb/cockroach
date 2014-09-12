@@ -135,6 +135,24 @@ func (db *DB) Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse {
 	return replyChan
 }
 
+// BeginTransaction starts a transaction by initializing a new
+// Transaction proto using the contents of the request. Note that this
+// method does not call through to the key value interface but instead
+// services it directly, as creating a new transaction requires only
+// access to the node's clock. Nothing must be read or written.
+func (db *DB) BeginTransaction(args *proto.BeginTransactionRequest) <-chan *proto.BeginTransactionResponse {
+	txn := storage.NewTransaction(args.Key, args.UserPriority, args.Isolation, db.coordinator.clock)
+	reply := &proto.BeginTransactionResponse{
+		ResponseHeader: proto.ResponseHeader{
+			Timestamp: txn.Timestamp,
+		},
+		Txn: txn,
+	}
+	replyChan := make(chan *proto.BeginTransactionResponse, 1)
+	replyChan <- reply
+	return replyChan
+}
+
 // EndTransaction either commits or aborts an ongoing transaction by
 // executing an EndTransaction command on the KV. The reply is
 // intercepted here in order to inform the transaction coordinator of

@@ -458,6 +458,11 @@ func (n *Node) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
 	return n.executeCmd(storage.Scan, args, reply)
 }
 
+// BeginTransaction .
+func (n *Node) BeginTransaction(args *proto.BeginTransactionRequest, reply *proto.BeginTransactionResponse) error {
+	return n.executeCmd(storage.BeginTransaction, args, reply)
+}
+
 // EndTransaction .
 func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
 	return n.executeCmd(storage.EndTransaction, args, reply)

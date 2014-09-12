@@ -19,7 +19,6 @@ package storage
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -538,7 +537,6 @@ func TestRangeSnapshot(t *testing.T) {
 	snapshotID := iscReply.SnapshotId
 	expectedKey := encoding.EncodeBinary(nil, key1)
 	expectedVal := getSerializedMVCCValue(&proto.Value{Bytes: val1})
-	fmt.Println(iscReply)
 	if len(iscReply.Rows) != 4 ||
 		!bytes.Equal(iscReply.Rows[0].Key, expectedKey) ||
 		!bytes.Equal(iscReply.Rows[1].Value, expectedVal) {
