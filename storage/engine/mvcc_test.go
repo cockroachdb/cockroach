@@ -64,9 +64,11 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 // versions:
 //
 // a
+// a<t=max>
 // a<t=1>
 // a<t=0>
 // a\x00
+// a\x00<t=max>
 // a\x00<t=1>
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
@@ -74,9 +76,11 @@ func TestMVCCKeys(t *testing.T) {
 	a0BinKey := encoding.EncodeBinary(nil, []byte("a\x00"))
 	keys := []string{
 		string(aBinKey),
+		string(mvccEncodeKey(aBinKey, makeTS(math.MaxInt64, 0))),
 		string(mvccEncodeKey(aBinKey, makeTS(1, 0))),
 		string(mvccEncodeKey(aBinKey, makeTS(0, 0))),
 		string(a0BinKey),
+		string(mvccEncodeKey(a0BinKey, makeTS(math.MaxInt64, 0))),
 		string(mvccEncodeKey(a0BinKey, makeTS(1, 0))),
 		string(mvccEncodeKey(a0BinKey, makeTS(0, 0))),
 	}
