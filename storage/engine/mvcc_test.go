@@ -20,6 +20,8 @@ package engine
 import (
 	"bytes"
 	"math"
+	"reflect"
+	"sort"
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -54,6 +56,35 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 	return proto.Timestamp{
 		WallTime: nanos,
 		Logical:  logical,
+	}
+}
+
+// Verify the sort ordering of successive keys with metadata and
+// versioned values. In particular, the following sequence of keys /
+// versions:
+//
+// a
+// a<t=1>
+// a<t=0>
+// a\x00
+// a\x00<t=1>
+// a\x00<t=0>
+func TestMVCCKeys(t *testing.T) {
+	aBinKey := encoding.EncodeBinary(nil, []byte("a"))
+	a0BinKey := encoding.EncodeBinary(nil, []byte("a\x00"))
+	keys := []string{
+		string(aBinKey),
+		string(mvccEncodeKey(aBinKey, makeTS(1, 0))),
+		string(mvccEncodeKey(aBinKey, makeTS(0, 0))),
+		string(a0BinKey),
+		string(mvccEncodeKey(a0BinKey, makeTS(1, 0))),
+		string(mvccEncodeKey(a0BinKey, makeTS(0, 0))),
+	}
+	sortKeys := make([]string, len(keys))
+	copy(sortKeys, keys)
+	sort.Strings(sortKeys)
+	if !reflect.DeepEqual(sortKeys, keys) {
+		t.Error("expected keys to sort in order %s, but got %s", keys, sortKeys)
 	}
 }
 
