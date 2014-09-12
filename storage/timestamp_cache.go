@@ -45,23 +45,23 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 	return bytes.Compare(rk, b.(rangeKey))
 }
 
-// A ReadTimestampCache maintains an interval tree FIFO cache of keys
+// A TimestampCache maintains an interval tree FIFO cache of keys
 // or key ranges and the timestamps at which they were most recently
-// read.
+// read or written.
 //
 // The cache also maintains a high-water mark which is the most
 // recently evicted entry's timestamp. This value always ratchets
 // with monotonic increases. The high water mark is initialized to
 // the current system time plus the maximum clock skew.
-type ReadTimestampCache struct {
+type TimestampCache struct {
 	cache             *util.IntervalCache
 	highWater, latest proto.Timestamp
 }
 
-// NewReadTimestampCache returns a new read timestamp cache with
-// supplied hybrid clock.
-func NewReadTimestampCache(clock *hlc.Clock) *ReadTimestampCache {
-	rtc := &ReadTimestampCache{
+// NewTimestampCache returns a new timestamp cache with supplied
+// hybrid clock.
+func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
+	rtc := &TimestampCache{
 		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheFIFO}),
 	}
 	rtc.Clear(clock)
@@ -71,17 +71,17 @@ func NewReadTimestampCache(clock *hlc.Clock) *ReadTimestampCache {
 
 // Clear clears the cache and resets the high water mark to the
 // current time plus the maximum clock skew.
-func (rtc *ReadTimestampCache) Clear(clock *hlc.Clock) {
+func (rtc *TimestampCache) Clear(clock *hlc.Clock) {
 	rtc.cache.Clear()
 	rtc.highWater = clock.Now()
 	rtc.highWater.WallTime += clock.MaxDrift().Nanoseconds()
 	rtc.latest = rtc.highWater
 }
 
-// Add the specified read timestamp to the cache as covering the range of
+// Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only.
-func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
+func (rtc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -91,11 +91,11 @@ func (rtc *ReadTimestampCache) Add(start, end engine.Key, timestamp proto.Timest
 	rtc.cache.Add(rtc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
 }
 
-// GetMax returns the maximum read timestamp covering any part of the
+// GetMax returns the maximum timestamp covering any part of the
 // interval spanning from start to end keys. If no part of the
-// specified range is overlapped by read timestamps in the cache, the
-// high water timestamp is returned.
-func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
+// specified range is overlapped by timestamps in the cache, the high
+// water timestamp is returned.
+func (rtc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -111,7 +111,7 @@ func (rtc *ReadTimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
-func (rtc *ReadTimestampCache) shouldEvict(size int, key, value interface{}) bool {
+func (rtc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
 	ts := value.(proto.Timestamp)
 	// Compute the edge of the cache window.
 	edge := rtc.latest

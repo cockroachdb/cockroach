@@ -160,10 +160,10 @@ type Range struct {
 	raft      chan *Cmd       // Raft commands
 	closer    chan struct{}   // Channel for closing the range
 
-	sync.RWMutex                     // Protects readQ, tsCache & respCache.
-	readQ        *ReadQueue          // Reads queued behind pending writes
-	tsCache      *ReadTimestampCache // Most recent read timestamps for keys / key ranges
-	respCache    *ResponseCache      // Provides idempotence for retries
+	sync.RWMutex                 // Protects readQ, tsCache & respCache.
+	readQ        *ReadQueue      // Reads queued behind pending writes
+	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
+	respCache    *ResponseCache  // Provides idempotence for retries
 }
 
 // NewRange initializes the range using the given metadata. The range will have
@@ -182,7 +182,7 @@ func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 		rba:       &StubRebalanceAccess{},
 		closer:    make(chan struct{}),
 		readQ:     NewReadQueue(),
-		tsCache:   NewReadTimestampCache(clock),
+		tsCache:   NewTimestampCache(clock),
 		respCache: NewResponseCache(meta.RangeID, eng),
 	}
 	return r
@@ -280,10 +280,10 @@ func (r *Range) ReadOnlyCmd(method string, args proto.Request, reply proto.Respo
 // ReadWriteCmd first consults the response cache to determine whether
 // this command has already been sent to the range. If a response is
 // found, it's returned immediately and not submitted to raft. Next,
-// the read timestamp cache is checked to determine if any newer reads
-// to this command's affected keys have been made. If so, this
-// command's timestamp is moved forward. Finally the keys affected by
-// this command are added as pending writes to the read queue and the
+// the timestamp cache is checked to determine if any newer accesses to
+// this command's affected keys have been made. If so, this command's
+// timestamp is moved forward. Finally the keys affected by this
+// command are added as pending writes to the read queue and the
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the repsonse cache.
 func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Response) error {
@@ -304,7 +304,7 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 	// One of the prime invariants of Cockroach is that a mutating command
 	// cannot write a key with an earlier timestamp than the most recent
 	// read of the same key. So first order of business here is to check
-	// the read timestamp cache for reads which are more recent than the
+	// the timestamp cache for reads/writes which are more recent than the
 	// timestamp of this write. If more recent, we simply update the
 	// write's timestamp before enqueuing it for execution. When the write
 	// returns, the updated timestamp will inform the final commit
@@ -317,6 +317,10 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 		header.Timestamp = ts
 		reply.Header().Timestamp = ts
 	}
+	// Just as for reads, we update the timestamp cache with the
+	// timestamp of this write. This ensures a strictly higher timestamp
+	// for successive writes to the same key or key range.
+	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
 
 	// The next step is to add the write to the read queue to inform
 	// subsequent reads that there is a pending write. Reads which
