@@ -29,11 +29,11 @@ const (
 	maxClockSkew = 250 * time.Millisecond
 )
 
-func TestReadTimestampCache(t *testing.T) {
+func TestTimestampCache(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
-	rtc := NewReadTimestampCache(clock)
+	rtc := NewTimestampCache(clock)
 
 	// First simulate a read of just "a" at time 0.
 	rtc.Add(engine.Key("a"), nil, clock.Now())
@@ -94,13 +94,13 @@ func TestReadTimestampCache(t *testing.T) {
 	}
 }
 
-// TestReadTimestampCacheEviction verifies the eviction of
-// read timestamp cache entries after minCacheWindow interval.
-func TestReadTimestampCacheEviction(t *testing.T) {
+// TestTimestampCacheEviction verifies the eviction of
+// timestamp cache entries after minCacheWindow interval.
+func TestTimestampCacheEviction(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
-	rtc := NewReadTimestampCache(clock)
+	rtc := NewTimestampCache(clock)
 
 	// Increment time to the maxClockSkew high water mark + 1.
 	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
@@ -117,14 +117,14 @@ func TestReadTimestampCacheEviction(t *testing.T) {
 	}
 }
 
-// TestReadTimestampCacheLayeredIntervals verifies the maximum
-// timestamp is chosen if previous reads have ranges which are
-// layered over each other.
-func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
+// TestTimestampCacheLayeredIntervals verifies the maximum timestamp
+// is chosen if previous entries have ranges which are layered over
+// each other.
+func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
-	rtc := NewReadTimestampCache(clock)
+	rtc := NewTimestampCache(clock)
 	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
 
 	adTS := clock.Now()
@@ -169,11 +169,11 @@ func TestReadTimestampCacheLayeredIntervals(t *testing.T) {
 	}
 }
 
-func TestReadTimestampCacheClear(t *testing.T) {
+func TestTimestampCacheClear(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxDrift(maxClockSkew)
-	rtc := NewReadTimestampCache(clock)
+	rtc := NewTimestampCache(clock)
 
 	// Increment time to the maxClockSkew high water mark + 1.
 	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
