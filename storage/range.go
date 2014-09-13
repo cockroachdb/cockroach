@@ -98,7 +98,6 @@ var readMethods = map[string]struct{}{
 	ConditionalPut:       struct{}{},
 	Increment:            struct{}{},
 	Scan:                 struct{}{},
-	BeginTransaction:     struct{}{},
 	ReapQueue:            struct{}{},
 	InternalRangeLookup:  struct{}{},
 	InternalSnapshotCopy: struct{}{},
@@ -476,8 +475,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.DeleteRange(args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
 	case Scan:
 		r.Scan(args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
-	case BeginTransaction:
-		r.BeginTransaction(args.(*proto.BeginTransactionRequest), reply.(*proto.BeginTransactionResponse))
 	case EndTransaction:
 		r.EndTransaction(args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
 	case AccumulateTS:
@@ -597,12 +594,6 @@ func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
 	kvs, err := r.mvcc.Scan(args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.Txn)
 	reply.Rows = kvs
 	reply.SetGoError(err)
-}
-
-// BeginTransaction returns an error, as it's handled trivially at
-// any cockroach node and doesn't need to be addressed to a range.
-func (r *Range) BeginTransaction(args *proto.BeginTransactionRequest, reply *proto.BeginTransactionResponse) {
-	reply.SetGoError(util.Error("should never be invoked on range"))
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant

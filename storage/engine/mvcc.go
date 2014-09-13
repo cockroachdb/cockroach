@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package engine
 
@@ -196,6 +197,9 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 		return err
 	}
 
+	// Use a batch because a put involves multiple writes.
+	var batch []interface{}
+
 	// In case the key metadata exists.
 	if ok {
 		// There is an uncommitted write intent and the current Put
@@ -206,14 +210,21 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 			return &writeIntentError{Txn: meta.Txn}
 		}
 
-		// We can update the current metadata as long as the timestamp is
-		// greater than or equal and if there's a transaction underway,
-		// the current epoch must be greater.
+		// We can update the current metadata only if both the timestamp
+		// and epoch of the new intent are greater than or equal to
+		// existing. If either of these conditions doesn't hold, it's
+		// likely the case that an older RPC is arriving out of order.
 		if !timestamp.Less(meta.Timestamp) && (meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
+			// If this is an intent and timestamps have changed, need to remove old version.
+			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
+				batch = append(batch, BatchDelete(mvccEncodeKey(key, meta.Timestamp)))
+			}
 			meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-			if err := PutProto(mvcc.engine, key, meta); err != nil {
+			batchPut, err := MakeBatchPutProto(key, meta)
+			if err != nil {
 				return err
 			}
+			batch = append(batch, batchPut)
 		} else {
 			// In case we receive a Put request to update an old version,
 			// it must be an error since raft should handle any client
@@ -223,9 +234,11 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	} else { // In case the key metadata does not exist yet.
 		// Create key metadata.
 		meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-		if err := PutProto(mvcc.engine, key, meta); err != nil {
+		batchPut, err := MakeBatchPutProto(key, meta)
+		if err != nil {
 			return err
 		}
+		batch = append(batch, batchPut)
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -233,12 +246,12 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	data, err := gogoproto.Marshal(&value)
+	batchPut, err := MakeBatchPutProto(mvccEncodeKey(key, timestamp), &value)
 	if err != nil {
 		return err
 	}
-	// Save the value with the given version (Key + Timestamp).
-	return mvcc.engine.Put(mvccEncodeKey(key, timestamp), data)
+	batch = append(batch, batchPut)
+	return mvcc.engine.WriteBatch(batch)
 }
 
 // Increment fetches the value for key, and assuming the value is an
@@ -388,6 +401,23 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 // ResolveWriteIntent either commits or aborts (rolls back) an extant
 // write intent for a given txn according to commit parameter.
 // ResolveWriteIntent will skip write intents of other txns.
+//
+// Transaction epochs deserve a bit of explanation. The epoch for a
+// transaction is incremented on transaction retry. Transaction retry
+// is different from abort. Retries occur in SSI transactions when the
+// commit timestamp is not equal to the proposed transaction
+// timestamp. This might be because writes to different keys had to
+// use higher timestamps than expected because of existing, committed
+// value, or because reads pushed the transaction's commit timestamp
+// forward. Retries also occur in the event that the txn tries to push
+// another txn in order to write an intent but fails (i.e. it has
+// lower priority).
+//
+// Because successive retries of a transaction may end up writing to
+// different keys, the epochs serve to classify which intents get
+// committed in the event the transaction succeeds (all those with
+// epoch matching the commit epoch), and which intents get aborted,
+// even if the transaction succeeds.
 func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit bool) error {
 	if txn == nil {
 		return util.Error("no txn specified")
@@ -406,8 +436,32 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit boo
 	}
 	// If we're committing the intent and the txn epochs match, the
 	// intent value is good to go and we just set meta.Txn to nil.
+	// We may have to update the actual version value if timestamps
+	// are different between meta and txn.
 	if commit && meta.Txn.Epoch == txn.Epoch {
-		return PutProto(mvcc.engine, binKey, &proto.MVCCMetadata{Txn: nil, Timestamp: meta.Timestamp})
+		// Use a write batch because we may have multiple puts.
+		var batch []interface{}
+		origTimestamp := meta.Timestamp
+		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: txn.Timestamp})
+		if err != nil {
+			return err
+		}
+		batch = append(batch, batchPut)
+		// If timestamp of value changed, need to rewrite versioned value.
+		// TODO(spencer,tobias): think about a new merge operator for
+		// updating key of intent value to new timestamp instead of
+		// read-then-write.
+		if !origTimestamp.Equal(txn.Timestamp) {
+			origKey := mvccEncodeKey(binKey, origTimestamp)
+			newKey := mvccEncodeKey(binKey, txn.Timestamp)
+			valBytes, err := mvcc.engine.Get(origKey)
+			if err != nil {
+				return err
+			}
+			batch = append(batch, BatchDelete(origKey))
+			batch = append(batch, BatchPut(proto.RawKeyValue{Key: newKey, Value: valBytes}))
+		}
+		return mvcc.engine.WriteBatch(batch)
 	}
 
 	// If not committing (this can be the case if commit=true, but the
@@ -440,11 +494,11 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit boo
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
 		// Update the keyMetadata with the next version.
-		data, err := gogoproto.Marshal(&proto.MVCCMetadata{Timestamp: ts})
+		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: ts})
 		if err != nil {
 			return err
 		}
-		batch = append(batch, BatchPut(proto.RawKeyValue{Key: binKey, Value: data}))
+		batch = append(batch, batchPut)
 	}
 
 	return mvcc.engine.WriteBatch(batch)

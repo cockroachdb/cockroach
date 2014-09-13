@@ -55,6 +55,14 @@ func createTestMVCC(t *testing.T) *MVCC {
 	}
 }
 
+// makeTxn creates a new transaction using the specified base
+// txn and timestamp.
+func makeTxn(baseTxn *proto.Transaction, ts proto.Timestamp) *proto.Transaction {
+	txn := gogoproto.Clone(baseTxn).(*proto.Transaction)
+	txn.Timestamp = ts
+	return txn
+}
+
 // makeTS creates a new hybrid logical timestamp.
 func makeTS(nanos int64, logical int32) proto.Timestamp {
 	return proto.Timestamp{
@@ -123,13 +131,15 @@ func TestMVCCPutWithTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+	for _, ts := range []proto.Timestamp{makeTS(0, 0), makeTS(0, 1), makeTS(1, 0)} {
+		value, err := mvcc.Get(testKey1, ts, txn1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.Bytes, value.Bytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.Bytes, value.Bytes)
+		}
 	}
 }
 
@@ -140,13 +150,15 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(value1.Bytes, value.Bytes) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			value1.Bytes, value.Bytes)
+	for _, ts := range []proto.Timestamp{makeTS(0, 0), makeTS(0, 1), makeTS(1, 0)} {
+		value, err := mvcc.Get(testKey1, ts, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(value1.Bytes, value.Bytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.Bytes, value.Bytes)
+		}
 	}
 }
 
@@ -324,13 +336,11 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 		t.Fatal("the value should be empty")
 	}
 
-	// Read the old version which should still exist.
+	// Read the old version which shouldn't exist, as within a
+	// transaction, we delete previous values.
 	value, err = mvcc.Get(testKey1, makeTS(2, 0), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value == nil {
-		t.Fatal("the value should not be empty")
+	if value != nil || err != nil {
+		t.Fatalf("expected value and err to be nil: %+v, %v", value, err)
 	}
 }
 
@@ -632,18 +642,19 @@ func TestMVCCConditionalPut(t *testing.T) {
 func TestMVCCResolveTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
-	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), txn1)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.Bytes, value.Bytes)
 	}
 
+	// Resolve will write with txn1's timestamp which is 0,0.
 	err = mvcc.ResolveWriteIntent(testKey1, txn1, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	value, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
+	value, err = mvcc.Get(testKey1, makeTS(0, 0), nil)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.Bytes, value.Bytes)
@@ -690,29 +701,57 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !value.Timestamp.Equal(makeTS(1, 0)) {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	}
 	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value.Bytes, value2.Bytes)
 	}
 }
 
-func TestMVCCWriteWithEpochs(t *testing.T) {
+func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	// Start with epoch 1.
 	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1); err != nil {
 		t.Fatal(err)
 	}
-	// Now write with epoch 2.
-	if err := mvcc.Put(testKey1, makeTS(0, 0), value2, txn1e2); err != nil {
+	// Now write with greater timestamp and epoch 2.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
-	// Try a write with an earlier epoch.
-	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1); err == nil {
+	// Try a write with an earlier timestamp.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1e2); err == nil {
 		t.Fatal("expected write too old error")
 	}
-	// Try a write again with same epoch (epoch 2).
-	if err := mvcc.Put(testKey1, makeTS(0, 0), value3, txn1e2); err != nil {
+	// Try a write with an earlier epoch.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value1, txn1); err == nil {
+		t.Fatal("expected write too old error")
+	}
+	// Try a write with different value using both later timestamp and epoch.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value3, txn1e2); err != nil {
 		t.Fatal(err)
+	}
+	// Resolve the intent.
+	if err := mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1e2, makeTS(1, 0)), true); err != nil {
+		t.Fatal(err)
+	}
+	// Attempt to read older timestamp; should fail.
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)
+	if value != nil || err != nil {
+		t.Errorf("expected value nil, err nil; got %+v, %v", value, err)
+	}
+	// Read at correct timestamp.
+	value, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !value.Timestamp.Equal(makeTS(1, 0)) {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	}
+	if !bytes.Equal(value3.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value3.Bytes, value.Bytes)
 	}
 }
 
@@ -737,6 +776,36 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value2.Bytes, value.Bytes)
+	}
+}
+
+func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value1.Bytes, value.Bytes)
+	}
+
+	// Resolve with a higher commit timestamp -- this should rewrite the
+	// intent when making it permanent.
+	err = mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1, makeTS(1, 0)), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value, err := mvcc.Get(testKey1, makeTS(0, 0), nil); value != nil || err != nil {
+		t.Fatalf("expected both value and err to be nil: %+v, %v", value, err)
+	}
+
+	value, err = mvcc.Get(testKey1, makeTS(1, 0), nil)
+	if !value.Timestamp.Equal(makeTS(1, 0)) {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	}
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value1.Bytes, value.Bytes)
 	}
 }
 
@@ -779,25 +848,25 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatalf("expected all keys to process for resolution, even though 2 are noops; got %d", num)
 	}
 
-	value, err := mvcc.Get(testKey1, makeTS(1, 0), nil)
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value1.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey2, makeTS(1, 0), nil)
+	value, err = mvcc.Get(testKey2, makeTS(0, 0), nil)
 	if !bytes.Equal(value2.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value2.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey3, makeTS(1, 0), txn2)
+	value, err = mvcc.Get(testKey3, makeTS(0, 0), txn2)
 	if !bytes.Equal(value3.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value3.Bytes, value.Bytes)
 	}
 
-	value, err = mvcc.Get(testKey4, makeTS(1, 0), nil)
+	value, err = mvcc.Get(testKey4, makeTS(0, 0), nil)
 	if !bytes.Equal(value4.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value4.Bytes, value.Bytes)
