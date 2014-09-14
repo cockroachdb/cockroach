@@ -22,6 +22,7 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -305,10 +306,9 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 	r.Lock() // Protect access to timestamp cache and read queue.
 	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
 		glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
-		// Update both the incoming request and outgoing reply timestamps.
+		// Update the request timestamp.
 		ts.Logical++ // increment logical component by one to differentiate.
 		header.Timestamp = ts
-		reply.Header().Timestamp = ts
 	}
 	// Just as for reads, we update the timestamp cache with the
 	// timestamp of this write. This ensures a strictly higher timestamp
@@ -497,13 +497,15 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		return util.Errorf("unrecognized command type: %s", method)
 	}
 
+	// Propagate the request timestamp (which may have changed).
+	reply.Header().Timestamp = args.Header().Timestamp
+
 	// Add this command's result to the response cache if this is a
 	// read/write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
 	if !IsReadOnly(method) {
-		header := args.Header()
-		if putErr := r.respCache.PutResponse(header.CmdID, reply); putErr != nil {
+		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
 			log.Errorf("unable to write result of %+v: %+v to the response cache: %v",
 				args, reply, putErr)
 		}
@@ -599,7 +601,68 @@ func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
 func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
+	// Create the actual key to the system-local transaction table.
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	// Start with supplied transaction, then possibly load from txn record.
+	reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
+
+	// Fetch existing transaction if possible.
+	existTxn := &proto.Transaction{}
+	ok, err := engine.GetProto(r.engine, key, existTxn)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	// If the transaction record already exists, verify that we can either
+	// commit it or abort it (according to args.Commit), and also that the
+	// Timestamp and Epoch have not suffered regression.
+	if ok {
+		if existTxn.Status == proto.COMMITTED {
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already committed"))
+			return
+		} else if existTxn.Status == proto.ABORTED {
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already aborted"))
+			return
+		} else if args.Txn.Epoch < existTxn.Epoch {
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch)))
+			return
+		} else if existTxn.Timestamp.Less(args.Txn.Timestamp) {
+			// The transaction record can only ever be pushed forward, so it's an
+			// error if somehow the transaction record has an earlier timestamp
+			// than the transaction timestamp.
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %+v", args.Txn.Timestamp)))
+			return
+		}
+		// Use the persisted transaction record as final transaction.
+		gogoproto.Merge(reply.Txn, existTxn)
+	}
+
+	// Take max of requested timestamp and possibly "pushed" txn
+	// record timestamp as the final commit timestamp.
+	if reply.Txn.Timestamp.Less(args.Timestamp) {
+		reply.Txn.Timestamp = args.Timestamp
+	}
+
+	// Set transaction status to COMMITTED or ABORTED as per the
+	// args.Commit parameter.
+	if args.Commit {
+		// If the isolation level is SERIALIZABLE, return a transaction
+		// retry error if the commit timestamp isn't equal to the txn
+		// timestamp.
+		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.Timestamp) {
+			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn))
+			return
+		}
+		reply.Txn.Status = proto.COMMITTED
+	} else {
+		reply.Txn.Status = proto.ABORTED
+	}
+
+	// Persist the transaction record with updated status (& possibly timestmap).
+	if err := engine.PutProto(r.engine, key, reply.Txn); err != nil {
+		reply.SetGoError(err)
+		return
+	}
 }
 
 // AccumulateTS is used internally to aggregate statistics over key
@@ -706,19 +769,27 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
-// coordinator. The range will return the current status for this
-// transaction to the coordinator.
+// coordinator. Returns the udpated transaction.
 func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Create the actual key to the system-local transaction table.
 	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
 	var txn proto.Transaction
-	if _, err := engine.GetProto(r.engine, key, &txn); err != nil {
+	ok, err := engine.GetProto(r.engine, key, &txn)
+	if err != nil {
 		reply.SetGoError(err)
 		return
 	}
+	// If no existing transaction record was found, initialize
+	// to the transaction in the request header.
+	if !ok {
+		gogoproto.Merge(&txn, args.Txn)
+	}
 	if txn.Status == proto.PENDING {
-		if !args.Header().Timestamp.Less(txn.LastHeartbeat) {
-			txn.LastHeartbeat = args.Header().Timestamp
+		if txn.LastHeartbeat == nil {
+			txn.LastHeartbeat = &proto.Timestamp{}
+		}
+		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
+			*txn.LastHeartbeat = args.Header().Timestamp
 		}
 		if err := engine.PutProto(r.engine, key, &txn); err != nil {
 			reply.SetGoError(err)

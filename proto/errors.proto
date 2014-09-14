@@ -18,6 +18,7 @@
 package proto;
 
 import "config.proto";
+import "data.proto";
 import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
 
 // A GenericError is a generic representation of a go error including
@@ -47,11 +48,31 @@ message RangeKeyMismatchError {
   optional RangeMetadata range = 3 [(gogoproto.nullable) = false];
 }
 
-// Error is a union type containing all available errors.  message and
-// whether or not the error is retryable.
+// TransactionStatusError indicates that the transaction status is
+// incompatible with the requested operation. This means the
+// transaction has already either been committed or aborted. It might
+// also be the case that the request to modify the transaction failed
+// due to a regression in transaction epoch or timestamp, both of
+// which may only monotonically increase.
+message TransactionStatusError {
+  optional Transaction txn = 1 [(gogoproto.nullable) = false];
+  optional string msg = 2 [(gogoproto.nullable) = false];
+}
+
+// TransactionRetryError indicates that the transaction must be
+// retried, usually with an increased transaction timestamp. The
+// transaction struct to use is returned with the error.
+message TransactionRetryError {
+  optional Transaction txn = 1 [(gogoproto.nullable) = false];
+}
+
+// Error is a union type containing all available errors.
+// NOTE: new error types must be added here.
 message Error {
   optional GenericError generic = 1;
   optional NotLeaderError not_leader = 2;
   optional RangeNotFoundError range_not_found = 3;
   optional RangeKeyMismatchError range_key_mismatch = 4;
+  optional TransactionStatusError transaction_status = 5;
+  optional TransactionRetryError transaction_retry = 6;
 }

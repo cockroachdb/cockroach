@@ -285,10 +285,9 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
-		// Update both incoming and outgoing timestamps.
+		// Update the incoming timestamp.
 		now := s.clock.Now()
 		args.Header().Timestamp = now
-		reply.Header().Timestamp = now
 	} else {
 		// Otherwise, update our clock with the incoming request. This
 		// advances the local node's clock to a high water mark from
@@ -317,7 +316,6 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if IsReadOnly(method) {
 		return rng.ReadOnlyCmd(method, args, reply)
 	}
-
 	return rng.ReadWriteCmd(method, args, reply)
 }
 
