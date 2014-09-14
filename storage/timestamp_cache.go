@@ -61,46 +61,50 @@ type TimestampCache struct {
 // NewTimestampCache returns a new timestamp cache with supplied
 // hybrid clock.
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
-	rtc := &TimestampCache{
+	tc := &TimestampCache{
 		cache: util.NewIntervalCache(util.CacheConfig{Policy: util.CacheFIFO}),
 	}
-	rtc.Clear(clock)
-	rtc.cache.CacheConfig.ShouldEvict = rtc.shouldEvict
-	return rtc
+	tc.Clear(clock)
+	tc.cache.CacheConfig.ShouldEvict = tc.shouldEvict
+	return tc
 }
 
 // Clear clears the cache and resets the high water mark to the
 // current time plus the maximum clock skew.
-func (rtc *TimestampCache) Clear(clock *hlc.Clock) {
-	rtc.cache.Clear()
-	rtc.highWater = clock.Now()
-	rtc.highWater.WallTime += clock.MaxDrift().Nanoseconds()
-	rtc.latest = rtc.highWater
+func (tc *TimestampCache) Clear(clock *hlc.Clock) {
+	tc.cache.Clear()
+	tc.highWater = clock.Now()
+	tc.highWater.WallTime += clock.MaxDrift().Nanoseconds()
+	tc.latest = tc.highWater
 }
 
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only.
-func (rtc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
+func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
-	if rtc.latest.Less(timestamp) {
-		rtc.latest = timestamp
+	if tc.latest.Less(timestamp) {
+		tc.latest = timestamp
 	}
-	rtc.cache.Add(rtc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
+	// Only add to the cache if the timestamp is more recent than the
+	// high water mark.
+	if tc.highWater.Less(timestamp) {
+		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
+	}
 }
 
 // GetMax returns the maximum timestamp covering any part of the
 // interval spanning from start to end keys. If no part of the
 // specified range is overlapped by timestamps in the cache, the high
 // water timestamp is returned.
-func (rtc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
+func (tc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
-	max := rtc.highWater
-	for _, v := range rtc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
+	max := tc.highWater
+	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
 		ts := v.(proto.Timestamp)
 		if max.Less(ts) {
 			max = ts
@@ -111,15 +115,15 @@ func (rtc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
-func (rtc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
+func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
 	ts := value.(proto.Timestamp)
 	// Compute the edge of the cache window.
-	edge := rtc.latest
+	edge := tc.latest
 	edge.WallTime -= minCacheWindow.Nanoseconds()
 	// We evict and update the high water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
 	if !edge.Less(ts) {
-		rtc.highWater = ts
+		tc.highWater = ts
 		return true
 	}
 	return false
