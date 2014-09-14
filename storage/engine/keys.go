@@ -224,9 +224,6 @@ var (
 	// KeyConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, Key("zone"))
-	// KeyTransactionPrefix specifies the key prefix for transaction
-	// records. The suffix is the transaction id.
-	KeyTransactionPrefix = MakeKey(KeySystemPrefix, Key("tx"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
 	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.

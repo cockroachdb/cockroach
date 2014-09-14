@@ -20,11 +20,14 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
+	"math"
 
+	"code.google.com/p/go-uuid/uuid"
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // A DB interface provides asynchronous methods to access a key value
@@ -41,6 +44,7 @@ type DB interface {
 	Delete(args *proto.DeleteRequest) <-chan *proto.DeleteResponse
 	DeleteRange(args *proto.DeleteRangeRequest) <-chan *proto.DeleteRangeResponse
 	Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse
+	BeginTransaction(args *proto.BeginTransactionRequest) <-chan *proto.BeginTransactionResponse
 	EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.EndTransactionResponse
 	AccumulateTS(args *proto.AccumulateTSRequest) <-chan *proto.AccumulateTSResponse
 	ReapQueue(args *proto.ReapQueueRequest) <-chan *proto.ReapQueueResponse
@@ -207,4 +211,32 @@ func UpdateRangeDescriptor(db DB, meta proto.RangeMetadata,
 		return err
 	}
 	return nil
+}
+
+// NewTransaction creates a new transaction. The transaction key is
+// composed using the specified baseKey (for locality with data
+// affected by the transaction) and a random UUID to guarantee
+// uniqueness. The specified user-level priority is combined with
+// a randomly chosen value to yield a final priority, used to settle
+// write conflicts in a way that avoids starvation of long-running
+// transactions (see Range.InternalPushTxn).
+func NewTransaction(baseKey engine.Key, userPriority int32,
+	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
+	// Compute priority by adjusting based on userPriority factor.
+	if userPriority < 1 {
+		userPriority = 1
+	}
+	priority := math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
+	// Compute timestamp and max timestamp.
+	now := clock.Now()
+	max := now
+	max.WallTime += clock.MaxDrift().Nanoseconds()
+
+	return &proto.Transaction{
+		ID:           append(baseKey, []byte(uuid.New())...),
+		Priority:     priority,
+		Isolation:    isolation,
+		Timestamp:    now,
+		MaxTimestamp: max,
+	}
 }

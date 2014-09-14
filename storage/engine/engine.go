@@ -105,6 +105,17 @@ type BatchPut proto.RawKeyValue
 // A BatchMerge is a merge operation executed as part of an atomic batch.
 type BatchMerge proto.RawKeyValue
 
+// MakeBatchPutProto serializes the provided message and returns a
+// BatchPut object for use with WriteBatch. Returns an error on
+// protobuf serialization failure.
+func MakeBatchPutProto(key Key, msg gogoproto.Message) (BatchPut, error) {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return BatchPut(proto.RawKeyValue{}), err
+	}
+	return BatchPut(proto.RawKeyValue{Key: key, Value: data}), err
+}
+
 // PutI sets the given key to the gob-serialized byte string of the
 // value provided. Used internally.
 func PutI(engine Engine, key Key, value interface{}) error {

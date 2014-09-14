@@ -62,9 +62,8 @@ message RequestHeader {
   optional string user = 5 [(gogoproto.nullable) = false];
   // Replica specifies the destination for the request. See config.go.
   optional Replica replica = 6 [(gogoproto.nullable) = false];
-  // TxnID is set non-empty if a transaction is underway. Empty string
-  // to start a new transaction.
-  optional bytes txn_id = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
+  // Txn is set non-nil if a transaction is underway.
+  optional Transaction txn = 7;
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -72,15 +71,16 @@ message ResponseHeader {
   // Error is non-nil if an error occurred.
   optional Error error = 1;
   // Timestamp specifies time at which read or write actually was
-  // performed. In the case of both reads and writes, if the supplied
-  // timestamp is 0, the node servicing the request will use its
-  // timestamp for the operation and its value will be set
-  // here. Additionally, in the case of writes, this value may be
-  // increased from the timestamp passed with the RequestHeader when
-  // the key being written was either read or updated more recently.
+  // performed. In the case of both reads and writes, if the timestamp
+  // supplied to the request was 0, the wall time of the node
+  // servicing the request will be set here. Additionally, in the case
+  // of writes, this value may be increased from the timestamp passed
+  // with the RequestHeader if the key being written was either read
+  // or written more recently. If multiple requests are sent in
+  // parallel as part of the same transaction, then the timestamp
+  // supplied with subsequent requests should use the maximum of all
+  // returned timestamp values.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // TxnID is non-empty if a transaction is underway.
-  optional bytes txn_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TxnID"];
 }
 
 // A ContainsRequest is arguments to the Contains() method.
@@ -203,6 +203,30 @@ message ScanResponse {
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
 
+// A BeginTransactionRequest is arguments to the BeginTransaction()
+// method. It specifies the user priority and isolation level.
+message BeginTransactionRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // UserPriority should be chosen from the range [1, 2^31-1). It's
+  // properly viewed as a multiple for how likely this transaction
+  // will be to prevail if a write conflict occurs. A UserPriority of
+  // 100 makes a transaction 100x less likely to be aborted if a write
+  // conflict occurs with another transaction with a UserPriority of 1.
+  optional int32 user_priority = 2 [(gogoproto.nullable) = false];
+  // Isolation is one of SERIALIZABLE or SNAPSHOT, indicating the
+  // isolation guarantees provided to concurrent transactions.
+  optional IsolationType isolation = 3 [(gogoproto.nullable) = false];
+}
+
+// A BeginTransactionResponse is the return value from the
+// BeginTransaction() method.
+message BeginTransactionResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Txn is non-nil if the transaction was started. Use the returned
+  // value with subsequent requests which are part of this transaction.
+  optional Transaction txn = 2;
+}
+
 // An EndTransactionRequest is arguments to the EndTransaction() method.
 // It specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
@@ -315,12 +339,15 @@ message InternalHeartbeatTxnRequest {
 }
 
 // An InternalHeartbeatTxnResponse is the return value from the
-// InternalHeartbeatTxn() method. It returns the transaction info as
-// well. So the transaction coordinator will know quickly when the
-// transaction is aborted by another one.
+// InternalHeartbeatTxn() method. It returns the transaction info in
+// the response header. The returned transaction lets the coordinator
+// know the disposition of the transaction (i.e. aborted, committed or
+// pending).
 message InternalHeartbeatTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction txn = 2 [(gogoproto.nullable) = false];
+  // Txn is non-nil if the transaction could be heartbeat and contains
+  // the current value of the transaction.
+  optional Transaction txn = 2;
 }
 
 // An InternalResolveIntentRequest is arguments to the
@@ -369,13 +396,14 @@ message ReadWriteCmdRequest {
   optional IncrementRequest increment = 3;
   optional DeleteRequest delete = 4;
   optional DeleteRangeRequest delete_range = 5;
-  optional EndTransactionRequest end_transaction = 6;
-  optional AccumulateTSRequest accumulate_ts = 7 [(gogoproto.customname) = "AccumulateTS"];
-  optional ReapQueueRequest reap_queue = 8;
-  optional EnqueueUpdateRequest enqueue_update = 9;
-  optional EnqueueMessageRequest enqueue_message = 10;
-  optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 11;
-  optional InternalResolveIntentRequest internal_resolve_intent = 12;
+  optional BeginTransactionRequest begin_transaction = 6;
+  optional EndTransactionRequest end_transaction = 7;
+  optional AccumulateTSRequest accumulate_ts = 8 [(gogoproto.customname) = "AccumulateTS"];
+  optional ReapQueueRequest reap_queue = 9;
+  optional EnqueueUpdateRequest enqueue_update = 10;
+  optional EnqueueMessageRequest enqueue_message = 11;
+  optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 12;
+  optional InternalResolveIntentRequest internal_resolve_intent = 13;
 }
 
 // A ReadWriteCmdResponse is a union type containing instances of all
@@ -387,11 +415,12 @@ message ReadWriteCmdResponse {
   optional IncrementResponse increment = 3;
   optional DeleteResponse delete = 4;
   optional DeleteRangeResponse delete_range = 5;
-  optional EndTransactionResponse end_transaction = 6;
-  optional AccumulateTSResponse accumulate_ts = 7 [(gogoproto.customname) = "AccumulateTS"];
-  optional ReapQueueResponse reap_queue = 8;
-  optional EnqueueUpdateResponse enqueue_update = 9;
-  optional EnqueueMessageResponse enqueue_message = 10;
-  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 11;
-  optional InternalResolveIntentResponse internal_resolve_intent = 12;
+  optional BeginTransactionResponse begin_transaction = 6;
+  optional EndTransactionResponse end_transaction = 7;
+  optional AccumulateTSResponse accumulate_ts = 8 [(gogoproto.customname) = "AccumulateTS"];
+  optional ReapQueueResponse reap_queue = 9;
+  optional EnqueueUpdateResponse enqueue_update = 10;
+  optional EnqueueMessageResponse enqueue_message = 11;
+  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 12;
+  optional InternalResolveIntentResponse internal_resolve_intent = 13;
 }

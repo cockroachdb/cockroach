@@ -79,6 +79,7 @@ const (
 	Scan                  = "Scan"
 	Delete                = "Delete"
 	DeleteRange           = "DeleteRange"
+	BeginTransaction      = "BeginTransaction"
 	EndTransaction        = "EndTransaction"
 	AccumulateTS          = "AccumulateTS"
 	ReapQueue             = "ReapQueue"
@@ -437,7 +438,7 @@ func (r *Range) maybeGossipConfigs() {
 func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	kvs, _, err := r.mvcc.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0, proto.MaxTimestamp, nil)
+	kvs, err := r.mvcc.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +515,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 // Contains verifies the existence of a key in the key value store.
 func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) {
-	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.TxnID)
+	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -526,14 +527,14 @@ func (r *Range) Contains(args *proto.ContainsRequest, reply *proto.ContainsRespo
 
 // Get returns the value for a specified key.
 func (r *Range) Get(args *proto.GetRequest, reply *proto.GetResponse) {
-	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.TxnID)
+	val, err := r.mvcc.Get(args.Key, args.Timestamp, args.Txn)
 	reply.Value = val
 	reply.SetGoError(err)
 }
 
 // Put sets the value for a specified key.
 func (r *Range) Put(args *proto.PutRequest, reply *proto.PutResponse) {
-	err := r.mvcc.Put(args.Key, args.Timestamp, args.Value, args.TxnID)
+	err := r.mvcc.Put(args.Key, args.Timestamp, args.Value, args.Txn)
 	if err == nil {
 		r.updateGossipConfigs(args.Key)
 	}
@@ -544,7 +545,7 @@ func (r *Range) Put(args *proto.PutRequest, reply *proto.PutResponse) {
 // the expected value matches. If not, the return value contains
 // the actual value.
 func (r *Range) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	val, err := r.mvcc.ConditionalPut(args.Key, args.Timestamp, args.Value, args.ExpValue, args.TxnID)
+	val, err := r.mvcc.ConditionalPut(args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 	if err == nil {
 		r.updateGossipConfigs(args.Key)
 	}
@@ -568,20 +569,20 @@ func (r *Range) updateGossipConfigs(key engine.Key) {
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
 func (r *Range) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) {
-	val, err := r.mvcc.Increment(args.Key, args.Timestamp, args.TxnID, args.Increment)
+	val, err := r.mvcc.Increment(args.Key, args.Timestamp, args.Txn, args.Increment)
 	reply.NewValue = val
 	reply.SetGoError(err)
 }
 
 // Delete deletes the key and value specified by key.
 func (r *Range) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) {
-	reply.SetGoError(r.mvcc.Delete(args.Key, args.Timestamp, args.TxnID))
+	reply.SetGoError(r.mvcc.Delete(args.Key, args.Timestamp, args.Txn))
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func (r *Range) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
-	num, err := r.mvcc.DeleteRange(args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.TxnID)
+	num, err := r.mvcc.DeleteRange(args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
 	reply.NumDeleted = num
 	reply.SetGoError(err)
 }
@@ -590,7 +591,7 @@ func (r *Range) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteR
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
-	kvs, _, err := r.mvcc.Scan(args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.TxnID)
+	kvs, err := r.mvcc.Scan(args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.Txn)
 	reply.Rows = kvs
 	reply.SetGoError(err)
 }
@@ -671,7 +672,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 	// MaxRanges.
 	metaPrefix := args.Key[:len(engine.KeyMeta1Prefix)]
 	nextKey := engine.NextKey(args.Key)
-	kvs, _, err := r.mvcc.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount, args.Timestamp, args.TxnID)
+	kvs, err := r.mvcc.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -724,7 +725,7 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 			return
 		}
 	}
-	reply.Txn = txn
+	reply.Txn = &txn
 }
 
 // InternalResolveIntent updates the transaction status and heartbeat
@@ -732,7 +733,7 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // coordinator.  The range will return the current status for this
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
-	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.TxnID, args.Commit))
+	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.Txn, args.Commit))
 }
 
 // createSnapshot creates a new snapshot, named using an internal counter.

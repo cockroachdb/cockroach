@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package engine
 
@@ -42,18 +43,22 @@ type MVCC struct {
 
 // writeIntentError is a trivial implementation of error.
 type writeIntentError struct {
-	TxnID []byte
+	Txn *proto.Transaction
 }
 
-type writeTimestampTooOldError struct {
+type writeTooOldError struct {
 	Timestamp proto.Timestamp
+	Txn       *proto.Transaction
 }
 
 func (e *writeIntentError) Error() string {
-	return fmt.Sprintf("there exists a write intent from transaction %s", e.TxnID)
+	return fmt.Sprintf("there exists a write intent from transaction %+v", e.Txn)
 }
 
-func (e *writeTimestampTooOldError) Error() string {
+func (e *writeTooOldError) Error() string {
+	if e.Txn != nil {
+		return fmt.Sprintf("cannot write with a timestamp older than %+v, or older txn epoch: %+v", e.Timestamp, e.Txn)
+	}
 	return fmt.Sprintf("cannot write with a timestamp older than %+v", e.Timestamp)
 }
 
@@ -67,8 +72,8 @@ func NewMVCC(engine Engine) *MVCC {
 // GetProto fetches the value at the specified key and unmarshals it
 // using a protobuf decoder. Returns true on success or false if the
 // key was not found.
-func (mvcc *MVCC) GetProto(key Key, timestamp proto.Timestamp, txnID []byte, msg gogoproto.Message) (bool, error) {
-	value, err := mvcc.Get(key, timestamp, txnID)
+func (mvcc *MVCC) GetProto(key Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) (bool, error) {
+	value, err := mvcc.Get(key, timestamp, txn)
 	if err != nil {
 		return false, err
 	}
@@ -85,14 +90,14 @@ func (mvcc *MVCC) GetProto(key Key, timestamp proto.Timestamp, txnID []byte, msg
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp.
-func (mvcc *MVCC) PutProto(key Key, timestamp proto.Timestamp, txnID []byte, msg gogoproto.Message) error {
+func (mvcc *MVCC) PutProto(key Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) error {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	value := proto.Value{Bytes: data}
 	value.InitChecksum(key)
-	return mvcc.Put(key, timestamp, value, txnID)
+	return mvcc.Put(key, timestamp, value, txn)
 }
 
 // Get returns the value for the key specified in the request, while
@@ -100,13 +105,7 @@ func (mvcc *MVCC) PutProto(key Key, timestamp proto.Timestamp, txnID []byte, msg
 // arbitrarily encoded; it will be binary-encoded to remove any
 // internal null characters. If no value for the key exists, or has
 // been deleted, returns nil for value.
-func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txnID []byte) (*proto.Value, error) {
-	binKey := encoding.EncodeBinary(nil, key)
-	value, _, err := mvcc.getInternal(binKey, timestamp, txnID)
-	return value, err
-}
-
-// getInternal implements the actual logic of get function.
+//
 // The values of multiple versions for the given key should
 // be organized as follows:
 // ...
@@ -117,46 +116,44 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txnID []byte) (*proto.
 // keyA_Timestamp_0 : value of version_0
 // keyB : MVCCMetadata of keyB
 // ...
-//
-// Returns nil for the proto.Value in the event that the key has
-// no value or if the value is a deleted tombstone.
-func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) (*proto.Value, []byte, error) {
+func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction) (*proto.Value, error) {
+	binKey := encoding.EncodeBinary(nil, key)
 	meta := &proto.MVCCMetadata{}
-	ok, err := GetProto(mvcc.engine, key, meta)
+	ok, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil || !ok {
-		return nil, nil, err
+		return nil, err
 	}
 	// If the read timestamp is greater than the latest one, we can just
 	// fetch the value without a scan.
 	ts := proto.Timestamp{}
 	var valBytes []byte
 	if !timestamp.Less(meta.Timestamp) {
-		if len(meta.TxnID) > 0 && (len(txnID) == 0 || !bytes.Equal(meta.TxnID, txnID)) {
-			return nil, nil, &writeIntentError{TxnID: meta.TxnID}
+		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
+			return nil, &writeIntentError{Txn: meta.Txn}
 		}
 
-		latestKey := mvccEncodeKey(key, meta.Timestamp)
+		latestKey := mvccEncodeKey(binKey, meta.Timestamp)
 		valBytes, err = mvcc.engine.Get(latestKey)
 		ts = meta.Timestamp
 	} else {
-		nextKey := mvccEncodeKey(key, timestamp)
+		nextKey := mvccEncodeKey(binKey, timestamp)
 		// We use the PrefixEndKey(key) as the upper bound for scan.
 		// If there is no other version after nextKey, it won't return
 		// the value of the next key.
-		kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(key), 1)
+		kvs, err := mvcc.engine.Scan(nextKey, PrefixEndKey(binKey), 1)
 		if len(kvs) == 0 {
-			return nil, nil, err
+			return nil, err
 		}
 		_, ts, _ = mvccDecodeKey(kvs[0].Key)
 		valBytes = kvs[0].Value
 	}
 	if valBytes == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 	// Unmarshal the mvcc value.
 	value := &proto.MVCCValue{}
 	if err := gogoproto.Unmarshal(valBytes, value); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
 	if value.Value != nil {
@@ -164,32 +161,32 @@ func (mvcc *MVCC) getInternal(key Key, timestamp proto.Timestamp, txnID []byte) 
 	} else if !value.Deleted {
 		log.Warningf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value)
 	}
-	return value.Value, meta.TxnID, nil
+	return value.Value, nil
 }
 
 // Put sets the value for a specified key. It will save the value with
 // different versions according to its timestamp and update the key metadata.
 // We assume the range will check for an existing write intent before
 // executing any Put action at the MVCC level.
-func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value proto.Value, txnID []byte) error {
+func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value proto.Value, txn *proto.Transaction) error {
 	binKey := encoding.EncodeBinary(nil, key)
 	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
 			"the timestamp %+v provided in value does not match the timestamp %+v in request",
 			value.Timestamp, timestamp)
 	}
-	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Value: &value}, txnID)
+	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Value: &value}, txn)
 }
 
 // Delete marks the key deleted and will not return in the next get response.
-func (mvcc *MVCC) Delete(key Key, timestamp proto.Timestamp, txnID []byte) error {
+func (mvcc *MVCC) Delete(key Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	binKey := encoding.EncodeBinary(nil, key)
-	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Deleted: true}, txnID)
+	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Deleted: true}, txn)
 }
 
 // putInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
-func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MVCCValue, txnID []byte) error {
+func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MVCCValue, txn *proto.Transaction) error {
 	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
 	}
@@ -200,35 +197,48 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 		return err
 	}
 
+	// Use a batch because a put involves multiple writes.
+	var batch []interface{}
+
 	// In case the key metadata exists.
 	if ok {
 		// There is an uncommitted write intent and the current Put
 		// operation does not come from the same transaction.
 		// This should not happen since range should check the existing
 		// write intent before executing any Put action at MVCC level.
-		if len(meta.TxnID) > 0 && (len(txnID) == 0 || !bytes.Equal(meta.TxnID, txnID)) {
-			return &writeIntentError{TxnID: meta.TxnID}
+		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
+			return &writeIntentError{Txn: meta.Txn}
 		}
 
-		if meta.Timestamp.Less(timestamp) ||
-			(timestamp.Equal(meta.Timestamp) && bytes.Equal(meta.TxnID, txnID)) {
-			// Update MVCC metadata.
-			meta = &proto.MVCCMetadata{TxnID: txnID, Timestamp: timestamp}
-			if err := PutProto(mvcc.engine, key, meta); err != nil {
+		// We can update the current metadata only if both the timestamp
+		// and epoch of the new intent are greater than or equal to
+		// existing. If either of these conditions doesn't hold, it's
+		// likely the case that an older RPC is arriving out of order.
+		if !timestamp.Less(meta.Timestamp) && (meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
+			// If this is an intent and timestamps have changed, need to remove old version.
+			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
+				batch = append(batch, BatchDelete(mvccEncodeKey(key, meta.Timestamp)))
+			}
+			meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+			batchPut, err := MakeBatchPutProto(key, meta)
+			if err != nil {
 				return err
 			}
+			batch = append(batch, batchPut)
 		} else {
 			// In case we receive a Put request to update an old version,
 			// it must be an error since raft should handle any client
 			// retry from timeout.
-			return &writeTimestampTooOldError{Timestamp: meta.Timestamp}
+			return &writeTooOldError{Timestamp: meta.Timestamp, Txn: meta.Txn}
 		}
 	} else { // In case the key metadata does not exist yet.
 		// Create key metadata.
-		meta = &proto.MVCCMetadata{TxnID: txnID, Timestamp: timestamp}
-		if err := PutProto(mvcc.engine, key, meta); err != nil {
+		meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+		batchPut, err := MakeBatchPutProto(key, meta)
+		if err != nil {
 			return err
 		}
+		batch = append(batch, batchPut)
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -236,23 +246,23 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	data, err := gogoproto.Marshal(&value)
+	batchPut, err := MakeBatchPutProto(mvccEncodeKey(key, timestamp), &value)
 	if err != nil {
 		return err
 	}
-	// Save the value with the given version (Key + Timestamp).
-	return mvcc.engine.Put(mvccEncodeKey(key, timestamp), data)
+	batch = append(batch, batchPut)
+	return mvcc.engine.WriteBatch(batch)
 }
 
 // Increment fetches the value for key, and assuming the value is an
 // "integer" type, increments it by inc and stores the new value. The
 // newly incremented value is returned.
-func (mvcc *MVCC) Increment(key Key, timestamp proto.Timestamp, txnID []byte, inc int64) (int64, error) {
+func (mvcc *MVCC) Increment(key Key, timestamp proto.Timestamp, txn *proto.Transaction, inc int64) (int64, error) {
 	// Handle check for non-existence of key. In order to detect
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
-	value, err := mvcc.Get(key, proto.MaxTimestamp, txnID)
+	value, err := mvcc.Get(key, proto.MaxTimestamp, txn)
 	if err != nil {
 		return 0, err
 	}
@@ -278,18 +288,18 @@ func (mvcc *MVCC) Increment(key Key, timestamp proto.Timestamp, txnID []byte, in
 	r := int64Val + inc
 	value = &proto.Value{Integer: gogoproto.Int64(r)}
 	value.InitChecksum(key)
-	return r, mvcc.Put(key, timestamp, *value, txnID)
+	return r, mvcc.Put(key, timestamp, *value, txn)
 }
 
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (mvcc *MVCC) ConditionalPut(key Key, timestamp proto.Timestamp, value proto.Value, expValue *proto.Value, txnID []byte) (*proto.Value, error) {
+func (mvcc *MVCC) ConditionalPut(key Key, timestamp proto.Timestamp, value proto.Value, expValue *proto.Value, txn *proto.Transaction) (*proto.Value, error) {
 	// Handle check for non-existence of key. In order to detect
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
-	existVal, err := mvcc.Get(key, proto.MaxTimestamp, txnID)
+	existVal, err := mvcc.Get(key, proto.MaxTimestamp, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -307,23 +317,23 @@ func (mvcc *MVCC) ConditionalPut(key Key, timestamp proto.Timestamp, value proto
 		}
 	}
 
-	return nil, mvcc.Put(key, timestamp, value, txnID)
+	return nil, mvcc.Put(key, timestamp, value, txn)
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys. Specify max=0 for unbounded deletes.
-func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp proto.Timestamp, txnID []byte) (int64, error) {
+func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	kvs, txnID, err := mvcc.Scan(key, endKey, max, proto.MaxTimestamp, txnID)
+	kvs, err := mvcc.Scan(key, endKey, max, proto.MaxTimestamp, txn)
 	if err != nil {
 		return 0, err
 	}
 
 	num := int64(0)
 	for _, kv := range kvs {
-		err = mvcc.Delete(kv.Key, timestamp, txnID)
+		err = mvcc.Delete(kv.Key, timestamp, txn)
 		if err != nil {
 			return num, err
 		}
@@ -334,7 +344,7 @@ func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp proto.Ti
 
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. Specify max=0 for unbounded scans.
-func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp, txnID []byte) ([]proto.KeyValue, []byte, error) {
+func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) ([]proto.KeyValue, error) {
 	binKey := encoding.EncodeBinary(nil, key)
 	binEndKey := encoding.EncodeBinary(nil, endKey)
 	nextKey := binKey
@@ -343,7 +353,7 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 	for {
 		kvs, err := mvcc.engine.Scan(nextKey, binEndKey, 1)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		// No more keys exists in the given range.
 		if len(kvs) == 0 {
@@ -352,11 +362,11 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 
 		remainder, currentKey := encoding.DecodeBinary(kvs[0].Key)
 		if len(remainder) != 0 {
-			return nil, nil, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
+			return nil, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
-		value, err := mvcc.Get(currentKey, timestamp, txnID)
+		value, err := mvcc.Get(currentKey, timestamp, txn)
 		if err != nil {
-			return res, nil, err
+			return res, err
 		}
 
 		if value != nil {
@@ -385,15 +395,32 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 		nextKey = encoding.EncodeBinary(nil, NextKey(currentKey))
 	}
 
-	return res, txnID, nil
+	return res, nil
 }
 
 // ResolveWriteIntent either commits or aborts (rolls back) an extant
-// write intent for a given txnID according to commit parameter.
-// ResolveWriteIntent will skip write intents of other txnIDs.
-func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID []byte, commit bool) error {
-	if len(txnID) == 0 {
-		return util.Error("missing txnID in request")
+// write intent for a given txn according to commit parameter.
+// ResolveWriteIntent will skip write intents of other txns.
+//
+// Transaction epochs deserve a bit of explanation. The epoch for a
+// transaction is incremented on transaction retry. Transaction retry
+// is different from abort. Retries occur in SSI transactions when the
+// commit timestamp is not equal to the proposed transaction
+// timestamp. This might be because writes to different keys had to
+// use higher timestamps than expected because of existing, committed
+// value, or because reads pushed the transaction's commit timestamp
+// forward. Retries also occur in the event that the txn tries to push
+// another txn in order to write an intent but fails (i.e. it has
+// lower priority).
+//
+// Because successive retries of a transaction may end up writing to
+// different keys, the epochs serve to classify which intents get
+// committed in the event the transaction succeeds (all those with
+// epoch matching the commit epoch), and which intents get aborted,
+// even if the transaction succeeds.
+func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit bool) error {
+	if txn == nil {
+		return util.Error("no txn specified")
 	}
 
 	binKey := encoding.EncodeBinary(nil, key)
@@ -402,27 +429,48 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID []byte, commit bool) error {
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return util.Errorf("key %q does not exist", key)
+	// For cases where there's no write intent to resolve, or one exists
+	// which we can't resolve, this is a noop.
+	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
+		return nil
+	}
+	// If we're committing the intent and the txn epochs match, the
+	// intent value is good to go and we just set meta.Txn to nil.
+	// We may have to update the actual version value if timestamps
+	// are different between meta and txn.
+	if commit && meta.Txn.Epoch == txn.Epoch {
+		// Use a write batch because we may have multiple puts.
+		var batch []interface{}
+		origTimestamp := meta.Timestamp
+		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: txn.Timestamp})
+		if err != nil {
+			return err
+		}
+		batch = append(batch, batchPut)
+		// If timestamp of value changed, need to rewrite versioned value.
+		// TODO(spencer,tobias): think about a new merge operator for
+		// updating key of intent value to new timestamp instead of
+		// read-then-write.
+		if !origTimestamp.Equal(txn.Timestamp) {
+			origKey := mvccEncodeKey(binKey, origTimestamp)
+			newKey := mvccEncodeKey(binKey, txn.Timestamp)
+			valBytes, err := mvcc.engine.Get(origKey)
+			if err != nil {
+				return err
+			}
+			batch = append(batch, BatchDelete(origKey))
+			batch = append(batch, BatchPut(proto.RawKeyValue{Key: newKey, Value: valBytes}))
+		}
+		return mvcc.engine.WriteBatch(batch)
 	}
 
-	if len(meta.TxnID) == 0 {
-		return util.Errorf("write intent %q does not exist", key)
-	}
-	if !bytes.Equal(meta.TxnID, txnID) {
-		return util.Errorf("cannot commit another TxnID %s from TxnID %s",
-			meta.TxnID, txnID)
-	}
-
-	if commit {
-		return PutProto(mvcc.engine, binKey, &proto.MVCCMetadata{TxnID: nil, Timestamp: meta.Timestamp})
-	}
-
-	// If not committing, we must find the next versioned value and
-	// reset the metadata's latest timestamp. If there are no other
-	// versioned values, we delete the metadata key. Because there are
-	// multiple steps here and we want them all to commit, or none to
-	// commit, we schedule them using a write batch.
+	// If not committing (this can be the case if commit=true, but the
+	// committed epoch is different from this intent's epoch), we must
+	// find the next versioned value and reset the metadata's latest
+	// timestamp. If there are no other versioned values, we delete the
+	// metadata key. Because there are multiple steps here and we want
+	// them all to commit, or none to commit, we schedule them using a
+	// write batch.
 	var batch []interface{}
 
 	// First clear the intent value.
@@ -446,24 +494,23 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txnID []byte, commit bool) error {
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
 		// Update the keyMetadata with the next version.
-		data, err := gogoproto.Marshal(&proto.MVCCMetadata{Timestamp: ts})
+		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: ts})
 		if err != nil {
 			return err
 		}
-		batch = append(batch, BatchPut(proto.RawKeyValue{Key: binKey, Value: data}))
+		batch = append(batch, batchPut)
 	}
 
 	return mvcc.engine.WriteBatch(batch)
 }
 
 // ResolveWriteIntentRange commits or aborts (rolls back) the range of
-// write intents specified by start and end keys for a given txnID
+// write intents specified by start and end keys for a given txn
 // according to commit parameter. ResolveWriteIntentRange will skip
-// write intents of other txnIDs. Specify max=0 for unbounded
-// resolves.
-func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID []byte, commit bool) (int64, error) {
-	if len(txnID) == 0 {
-		return 0, util.Error("missing txnID in request")
+// write intents of other txns. Specify max=0 for unbounded resolves.
+func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *proto.Transaction, commit bool) (int64, error) {
+	if txn == nil {
+		return 0, util.Error("no txn specified")
 	}
 
 	binKey := encoding.EncodeBinary(nil, key)
@@ -485,27 +532,14 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 		if len(remainder) != 0 {
 			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
-		_, existingTxnID, err := mvcc.getInternal(kvs[0].Key, proto.MaxTimestamp, txnID)
-		// Return the error unless its a writeIntentError, which
-		// will occur in the event we scan a key with a write
-		// intent belonging to a different transaction.
-		if _, ok := err.(*writeIntentError); err != nil && !ok {
-			return num, err
-		}
-		// ResolveWriteIntent only needs to deal with the write
-		// intents for the given txnID.
-		if err == nil && bytes.Equal(existingTxnID, txnID) {
-			// commits or aborts (rolls back) the write intent of
-			// the given txnID.
-			err = mvcc.ResolveWriteIntent(currentKey, txnID, commit)
-			if err != nil {
-				return num, err
-			}
+		err = mvcc.ResolveWriteIntent(currentKey, txn, commit)
+		if err != nil {
+			log.Warningf("failed to resolve intent for key %q: %v", currentKey, err)
+		} else {
 			num++
-		}
-
-		if max != 0 && max == num {
-			break
+			if max != 0 && max == num {
+				break
+			}
 		}
 
 		// In order to efficiently skip the possibly long list of
