@@ -19,9 +19,12 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -750,5 +753,32 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	if !bytes.Equal(value04.Bytes, value.Bytes) {
 		t.Fatalf("the value %s in get result does not match the value %s in request",
 			value04.Bytes, value.Bytes)
+	}
+}
+
+func TestFindSplitKey(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	// Generate a reservoir worth of KeyValues, each containing targetLength
+	// bytes, writing key #i to (encoded) key #i through the MVCC facility.
+	// Assuming that this translates roughly into same-length values after MVCC
+	// encoding, the split key should hence be chosen as the middle key of the
+	// interval.
+	for i := 0; i < splitReservoirSize; i++ {
+		k := fmt.Sprintf("%09d", i)
+		v := strings.Repeat("X", 10-len(k))
+		val := proto.Value{Bytes: []byte(v)}
+		// Write the key and value through MVCC.
+		if err := mvcc.Put([]byte(k), makeTS(0, 0), val, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	humanSplitKey, err := mvcc.FindSplitKey(KeyMin, KeyMax, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ind, _ := strconv.Atoi(string(humanSplitKey))
+	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
+		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
 	}
 }

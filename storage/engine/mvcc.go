@@ -28,6 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	// The size of the reservoir used by FindSplitKey.
+	splitReservoirSize = 100
+	// How many keys are read at once when scanning for a split key.
+	splitScanRowCount = int64(1 << 8)
+)
+
 // MVCC wraps the mvcc operations of a key/value store.
 type MVCC struct {
 	engine Engine // The underlying key-value store
@@ -509,11 +516,78 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txnID 
 	return num, nil
 }
 
+// a splitSampleItem wraps a key along with an aggregate over key range
+// preceding it.
+type splitSampleItem struct {
+	Key        Key
+	sizeBefore int
+}
+
+// FindSplitKey suggests a split key from the given user-space key range that
+// aims to roughly cut into half the total number of bytes used (in raw key and
+// value byte strings) in both subranges. It will operate on a snapshot of the
+// underlying engine if a snapshotID is given, and in that case may safely be
+// invoked in a goroutine.
+// TODO(Tobias): leverage the work done here anyways to gather stats.
+func (mvcc *MVCC) FindSplitKey(key Key, endKey Key, snapshotID string) (Key, error) {
+	rs := util.NewWeightedReservoirSample(splitReservoirSize, nil)
+	h := rs.Heap.(*util.WeightedValueHeap)
+
+	// We expect most keys to contain anywhere between 2^4 to 2^14 bytes, so we
+	// normalize to obtain typical weights that are numerically unproblematic.
+	// The relevant expression is rand(0,1)**(1/weight).
+	normalize := float64(1 << 6)
+	binStartKey := encoding.EncodeBinary(nil, key)
+	binEndKey := encoding.EncodeBinary(nil, endKey)
+	totalSize := 0
+	err := iterateRangeSnapshot(mvcc.engine, binStartKey, binEndKey,
+		splitScanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
+			for _, kv := range kvs {
+				byteCount := len(kv.Key) + len(kv.Value)
+				rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
+				totalSize += byteCount
+			}
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	if totalSize == 0 {
+		return nil, util.Errorf("the range is empty")
+	}
+
+	// Inspect the sample to get the closest candidate that has sizeBefore >= totalSize/2.
+	candidate := (*h)[0].Value.(splitSampleItem)
+	cb := candidate.sizeBefore
+	halfSize := totalSize / 2
+	for i := 1; i < len(*h); i++ {
+		if sb := (*h)[i].Value.(splitSampleItem).sizeBefore; (cb < halfSize && cb < sb) ||
+			(cb > halfSize && cb > sb && sb > halfSize) {
+			// The current candidate hasn't yet cracked 50% and the this value
+			// is closer to doing so or we're already above but now we can
+			// decrese the gap.
+			candidate = (*h)[i].Value.(splitSampleItem)
+			cb = candidate.sizeBefore
+		}
+	}
+	// The key is an MVCC key, so to avoid corrupting MVCC we get the
+	// associated sentinel metadata key, which is fine to split in front of.
+	decodedKey, _, _ := mvccDecodeKey(candidate.Key)
+	rest, humanKey := encoding.DecodeBinary(decodedKey)
+	if len(rest) > 0 {
+		return nil, util.Errorf("corrupt key encountered")
+	}
+	return humanKey, nil
+}
+
 // mvccEncodeKey makes a timestamped key which is the concatenation of
 // the given key and the corresponding timestamp. The key is expected
 // to have been encoded using EncodeBinary.
 func mvccEncodeKey(key Key, timestamp proto.Timestamp) Key {
 	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
+		// TODO(Spencer): Reevaluate this panic vs. returning an error, see
+		// https://github.com/cockroachdb/cockroach/pull/50/files#diff-6d2dccecc0623fb6dd5456ae18bbf19eR611
 		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
 	}
 	k := append([]byte{}, key...)
@@ -527,6 +601,7 @@ func mvccEncodeKey(key Key, timestamp proto.Timestamp) Key {
 // MVCC metadata. Note that the returned key is exactly the value of
 // key passed to mvccEncodeKey. A separate DecodeBinary step must be
 // carried out to decode it if necessary.
+// If a decode process fails, a panic ensues.
 func mvccDecodeKey(encodedKey []byte) (Key, proto.Timestamp, bool) {
 	tsBytes, _ := encoding.DecodeBinary(encodedKey)
 	key := encodedKey[:len(encodedKey)-len(tsBytes)]
@@ -536,7 +611,7 @@ func mvccDecodeKey(encodedKey []byte) (Key, proto.Timestamp, bool) {
 	tsBytes, walltime := encoding.DecodeUint64Decreasing(tsBytes)
 	tsBytes, logical := encoding.DecodeUint32Decreasing(tsBytes)
 	if len(tsBytes) > 0 {
-		panic(fmt.Sprintf("leftover bytes on mvcc key decode: %s", tsBytes))
+		panic(fmt.Sprintf("leftover bytes on mvcc key decode: %v", tsBytes))
 	}
 	return key, proto.Timestamp{WallTime: int64(walltime), Logical: int32(logical)}, true
 }
