@@ -43,6 +43,9 @@ func (sc StoreCapacity) PercentAvail() float64 {
 
 // Engine is the interface that wraps the core operations of a
 // key/value store.
+// TODO(Jiang-Ming,Spencer): Remove some of the *Snapshot methods and have
+// their non-snapshot counterparts accept a snapshotID which is used unless
+// empty.
 type Engine interface {
 	// Start initializes and starts the engine.
 	Start() error
@@ -234,8 +237,9 @@ func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
 // iterateRange scans the given key range using the underlying engine in blocks
 // of at most chunkSize results, invoking f for each chunk read, until there
 // are no more results. An error is returned if an underlying scan returns an
-// error, or if f does.
-func iterateRange(eng Engine, startKey, endKey Key, chunkSize int64, snapshotID string, f func([]proto.RawKeyValue) error) error {
+// error, or if f does. The read is executed using the specified snapshotID,
+// which is assumed to be valid and managed by the caller.
+func iterateRangeSnapshot(eng Engine, startKey, endKey Key, chunkSize int64, snapshotID string, f func([]proto.RawKeyValue) error) error {
 	var kvs []proto.RawKeyValue
 	var err error
 	hasSnap := len(snapshotID) > 0

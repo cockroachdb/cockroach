@@ -540,14 +540,15 @@ func (mvcc *MVCC) FindSplitKey(key Key, endKey Key, snapshotID string) (Key, err
 	binStartKey := encoding.EncodeBinary(nil, key)
 	binEndKey := encoding.EncodeBinary(nil, endKey)
 	totalSize := 0
-	err := iterateRange(mvcc.engine, binStartKey, binEndKey, splitScanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
-		for _, kv := range kvs {
-			byteCount := len(kv.Key) + len(kv.Value)
-			rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
-			totalSize += byteCount
-		}
-		return nil
-	})
+	err := iterateRangeSnapshot(mvcc.engine, binStartKey, binEndKey,
+		splitScanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
+			for _, kv := range kvs {
+				byteCount := len(kv.Key) + len(kv.Value)
+				rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
+				totalSize += byteCount
+			}
+			return nil
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -585,6 +586,8 @@ func (mvcc *MVCC) FindSplitKey(key Key, endKey Key, snapshotID string) (Key, err
 // to have been encoded using EncodeBinary.
 func mvccEncodeKey(key Key, timestamp proto.Timestamp) Key {
 	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
+		// TODO(Spencer): Reevaluate this panic vs. returning an error, see
+		// https://github.com/cockroachdb/cockroach/pull/50/files#diff-6d2dccecc0623fb6dd5456ae18bbf19eR611
 		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
 	}
 	k := append([]byte{}, key...)
