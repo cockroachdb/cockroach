@@ -138,7 +138,7 @@ message Transaction {
   // retry error.
   optional Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
   // The last hearbeat timestamp.
-  optional Timestamp last_heartbeat = 8 [(gogoproto.nullable) = false];
+  optional Timestamp last_heartbeat = 8;
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

@@ -18,34 +18,11 @@
 
 * Transactions
 
-  - Transaction ID: generated via allocation of block of transaction
-    IDs. Suggested transaction struct:
-
-    type IsolationType int
-
-    const (
-      SERIALIZABLE IsolationType = iota
-      SNAPSHOT     IsolationType
-    )
-
-    type Transaction struct {
-      ID           int64
-      Priority     int32
-      Isolation    IsolationType
-      Epoch        int32       // incremented on txn retry
-      Timestamp    HLTimestamp // 0 to use timestamp at destination
-      MaxTimestamp HLTimestamp // Timestamp + clock skew; set to Timestamp for historical read
-    }
-
   - Generate random priority, pick candidate timestamp.
 
   - Modified ops:
 
     - Get: logic to support clock skew uncertainty and concurrency.
-
-      If Timestamp on transaction is 0, assign current node's wall
-      clock as Timestamp and MaxTimestamp. This timestamp is returned
-      via the ResponseHeader.
 
       Simple, common case: if most recent timestamp for key is less
       than Timestamp and committed, read value.
@@ -74,39 +51,14 @@
 
     - Put: additions to support intent marker.
 
-      If entry doesn't exist, or does exist and is not an intent and
-      has earlier timestamp than Timestamp, add new put value with
-      intent set to true.
-
-      If entry exists, is committed, but has later timestamp, write
-      put intent with existing timestamp + 1 (this new timestamp is
-      returned with response and becomes the new Timestamp for the txn).
-
       If entry exists but is intent:
 
-        - If intent is owned by this txn, continue; update txn settings
-          for intent, including new Epoch, Priority and Timestamp.
-
-        - Otherwise, if intent owned by another txn, try to push
-          transaction (with "Abort"=true). If result of push is
-          already-committed or aborted, resolve the existing intent
-          and retry put. If push succeeds (meaning the other txn is
-          aborted), delete existing intent and write new intent. If
-          push fails, backoff and retry the transaction.
-
-      If read-timestamp-cache has an entry for the key with a later
-      timestamp, write put intent with read timestamp + 1 (the read
-      timestamp becomes the new Timestamp for the txn).
-
-      TODO(spencer): split this logic up into what happens before raft
-      log write and what happens when raft command is executed.
-
-    - Resolve: clear a key's intent status.
-
-      Either marks a put intent as committed or aborted. On abort the
-      put intent is deleted. The resolve method takes the Txn record
-      which includes the Epoch of the txn. If the Epoch doesn't match,
-      a committed txn will still delete the put intent.
+        - If intent owned by another txn, try to push transaction
+          (with "Abort"=true). If result of push is already-committed
+          or aborted, resolve the existing intent and retry put. If
+          push succeeds (meaning the other txn is aborted), delete
+          existing intent and write new intent. If push fails, backoff
+          and retry the transaction.
 
     New operations on transaction table rows:
 
@@ -142,39 +94,6 @@
       type PushTransactionResponse struct {
         ResponseHeader
       }
-
-    - AbortTransaction: called on transaction abort from client
-      connection.
-
-      If txn isn't yet recorded or alive but not committed, add
-      aborted entry. If txn is committed, returns already-committed
-      error.
-
-    - CommitTransaction: called on final commit from client connection.
-
-      If txn isn't yet recorded, or is alive but not committed:
-
-        - If isolation is snapshot: adds committed entry and returns
-          final timestamp, which is the max of any pushed timestamp
-          and the txn's Timestamp.
-
-        - If isolation is serializable: if there is a pushed timestamp
-          which is greater than the txn's Timestamp, txn must retry;
-          returns retry-txn error. If there is no entry or pushed
-          timestamp is <= txn's Timestamp, adds committed entry.
-
-      If txn aborted, returns already-aborted error. If already
-      committed, returns already-committed error.
-
-  - Transaction coordinator must continually heartbeat the transaction
-    table in order to update liveness of txn. On a PushTransaction,
-    the pusher will always succeed if the pushee has not heartbeat the
-    txn table entry within the allotted timeout.
-
-  - On transaction retry, coordinator checks the txn table to verify
-    txn has not been aborted before proceeding.
-
-  - On transaction conclusion, resolve all known intents.
 
 
 * StoreFinder using Gossip protocol to filter

@@ -72,3 +72,31 @@ func (e *RangeKeyMismatchError) Error() string {
 func (e *RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
+
+// NewTransactionStatusError initializes a new TransactionStatusError.
+func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
+	return &TransactionStatusError{
+		Txn: *txn,
+		Msg: msg,
+	}
+}
+
+// Error formats error.
+func (e *TransactionStatusError) Error() string {
+	return fmt.Sprintf("txn %+v: %s", e.Txn, e.Msg)
+}
+
+// NewTransactionRetryError initializes a new TransactionRetryError.
+func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
+	return &TransactionRetryError{Txn: *txn}
+}
+
+// Error formats error.
+func (e *TransactionRetryError) Error() string {
+	return fmt.Sprintf("retry txn: %+v", e.Txn)
+}
+
+// CanRetry indicates whether or not this TransactionRetryError can be retried.
+func (e *TransactionRetryError) CanRetry() bool {
+	return true
+}

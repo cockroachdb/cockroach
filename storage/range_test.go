@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"reflect"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -284,7 +285,7 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 	return args, reply
 }
 
-// incrementArgs returns a IncrementRequest and IncrementResponse pair
+// incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
 func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
@@ -295,6 +296,36 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 		Increment: inc,
 	}
 	reply := &proto.IncrementResponse{}
+	return args, reply
+}
+
+// endTxnArgs returns request/response pair for EndTransaction RPC
+// addressed to the default replica for the specified key.
+func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
+	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
+	args := &proto.EndTransactionRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     txn.ID,
+			Replica: proto.Replica{RangeID: rangeID},
+			Txn:     txn,
+		},
+		Commit: commit,
+	}
+	reply := &proto.EndTransactionResponse{}
+	return args, reply
+}
+
+// heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
+func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
+	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
+	args := &proto.InternalHeartbeatTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     txn.ID,
+			Replica: proto.Replica{RangeID: rangeID},
+			Txn:     txn,
+		},
+	}
+	reply := &proto.InternalHeartbeatTxnResponse{}
 	return args, reply
 }
 
@@ -601,5 +632,177 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	if len(iscReply.Rows) != 0 {
 		t.Fatalf("error : %d", len(iscReply.Rows))
+	}
+}
+
+// TestEndTransactionBeforeHeartbeat verifies that a transaction
+// can be committed/aborted before being heartbeat.
+func TestEndTransactionBeforeHeartbeat(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	key := []byte("a")
+	for _, commit := range []bool{true, false} {
+		txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		args, reply := endTxnArgs(txn, commit, 0)
+		args.Timestamp = txn.Timestamp
+		if err := rng.ReadWriteCmd("EndTransaction", args, reply); err != nil {
+			t.Error(err)
+		}
+		expStatus := proto.COMMITTED
+		if !commit {
+			expStatus = proto.ABORTED
+		}
+		if reply.Txn.Status != expStatus {
+			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
+		}
+
+		// Try a heartbeat to the already-committed transaction; should get
+		// committed txn back, but without last heartbeat timestamp set.
+		hbArgs, hbReply := heartbeatArgs(txn, 0)
+		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+			t.Error(err)
+		}
+		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		}
+	}
+}
+
+// TestEndTransactionAfterHeartbeat verifies that a transaction
+// can be committed/aborted after being heartbeat.
+func TestEndTransactionAfterHeartbeat(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	key := []byte("a")
+	for _, commit := range []bool{true, false} {
+		txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+
+		// Start out with a heartbeat to the transaction.
+		hbArgs, hbReply := heartbeatArgs(txn, 0)
+		hbArgs.Timestamp = txn.Timestamp
+		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+			t.Error(err)
+		}
+		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
+			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
+		}
+
+		args, reply := endTxnArgs(txn, commit, 0)
+		args.Timestamp = txn.Timestamp
+		if err := rng.ReadWriteCmd("EndTransaction", args, reply); err != nil {
+			t.Error(err)
+		}
+		expStatus := proto.COMMITTED
+		if !commit {
+			expStatus = proto.ABORTED
+		}
+		if reply.Txn.Status != expStatus {
+			t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
+		}
+		if reply.Txn.LastHeartbeat == nil || !reply.Txn.LastHeartbeat.Equal(*hbReply.Txn.LastHeartbeat) {
+			t.Errorf("expected heartbeats to remain equal: %+v != %+v",
+				reply.Txn.LastHeartbeat, hbReply.Txn.LastHeartbeat)
+		}
+	}
+}
+
+// TestEndTransactionWithPushedTimestamp verifies that txn can be
+// ended (both commit or abort) correctly when the commit timestamp is
+// greater than the transaction timestamp, depending on the isolation
+// level.
+func TestEndTransactionWithPushedTimestamp(t *testing.T) {
+	rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	testCases := []struct {
+		commit    bool
+		isolation proto.IsolationType
+		expErr    bool
+	}{
+		{true, proto.SERIALIZABLE, true},
+		{true, proto.SNAPSHOT, false},
+		{false, proto.SERIALIZABLE, false},
+		{false, proto.SNAPSHOT, false},
+	}
+	key := []byte("a")
+	for _, test := range testCases {
+		txn := NewTransaction(key, 1, test.isolation, clock)
+		// End the transaction with args timestamp moved forward in time.
+		args, reply := endTxnArgs(txn, test.commit, 0)
+		*mc = hlc.ManualClock(1)
+		args.Timestamp = clock.Now()
+		err := rng.ReadWriteCmd("EndTransaction", args, reply)
+		if test.expErr {
+			if err == nil {
+				t.Errorf("expected error")
+			}
+			if _, ok := err.(*proto.TransactionRetryError); !ok {
+				t.Errorf("expected retry error; got %s", err)
+			}
+		} else {
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			expStatus := proto.COMMITTED
+			if !test.commit {
+				expStatus = proto.ABORTED
+			}
+			if reply.Txn.Status != expStatus {
+				t.Errorf("expected transaction status to be %s; got %s", expStatus, reply.Txn.Status)
+			}
+		}
+	}
+}
+
+// TestEndTransactionWithErrors verifies various error conditions
+// are checked such as transaction already being committed or
+// aborted, or timestamp or epoch regression.
+func TestEndTransactionWithErrors(t *testing.T) {
+	rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	regressTS := clock.Now()
+	*mc = hlc.ManualClock(1)
+	txn := NewTransaction(engine.Key(""), 1, proto.SERIALIZABLE, clock)
+
+	testCases := []struct {
+		key          engine.Key
+		existStatus  proto.TransactionStatus
+		existEpoch   int32
+		existTS      proto.Timestamp
+		expErrRegexp string
+	}{
+		{engine.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn {.*}: already committed"},
+		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn {.*}: already aborted"},
+		{engine.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn {.*}: epoch regression: 0"},
+		{engine.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn {.*}: timestamp regression: {WallTime:1 Logical:0 .*}"},
+	}
+	for _, test := range testCases {
+		// Establish existing txn state by writing directly to range engine.
+		var existTxn proto.Transaction
+		gogoproto.Merge(&existTxn, txn)
+		existTxn.ID = test.key
+		existTxn.Status = test.existStatus
+		existTxn.Epoch = test.existEpoch
+		existTxn.Timestamp = test.existTS
+		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key)
+		if err := engine.PutProto(rng.engine, txnKey, &existTxn); err != nil {
+			t.Fatal(err)
+		}
+
+		// End the transaction, verify expected error.
+		txn.ID = test.key
+		args, reply := endTxnArgs(txn, true, 0)
+		args.Timestamp = txn.Timestamp
+		err := rng.ReadWriteCmd("EndTransaction", args, reply)
+		if err == nil {
+			t.Errorf("expected error matching %q", test.expErrRegexp)
+		} else {
+			if matched, regexpErr := regexp.MatchString(test.expErrRegexp, err.Error()); !matched || regexpErr != nil {
+				t.Errorf("expected error to match %q (%v): %v", test.expErrRegexp, regexpErr, err.Error())
+			}
+		}
 	}
 }

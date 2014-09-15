@@ -166,12 +166,12 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 		// depending on final state.
 		reply := <-interceptChan
 		if reply.Error == nil {
-			switch reply.Status {
+			switch reply.Txn.Status {
 			case proto.COMMITTED:
-				db.coordinator.EndTxn(args.Header().Txn.ID, true)
+				db.coordinator.EndTxn(reply.Txn, true)
 				return
 			case proto.ABORTED:
-				db.coordinator.EndTxn(args.Header().Txn.ID, false)
+				db.coordinator.EndTxn(reply.Txn, false)
 				return
 			}
 		}

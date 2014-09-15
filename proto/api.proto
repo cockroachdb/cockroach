@@ -236,19 +236,17 @@ message EndTransactionRequest {
 }
 
 // An EndTransactionResponse is the return value from the
-// EndTransaction() method. Status specifies the final status of the
-// transaction. CommitTimestamp specifies the timestamp at which the
-// transaction is committed (all values written during the txn will
-// have this timestamp). CommitWait specifies the commit wait, which
-// is the remaining time the client MUST wait before signalling
-// completion of the transaction to another distributed node to
-// maintain consistency.
+// EndTransaction() method. If successful, the final transaction
+// record is returned. In particular, transaction status and timestamp
+// will be updated to reflect final committed values. CommitWait
+// specifies the commit wait, which is the remaining time the client
+// MUST wait before signalling completion of the transaction to
+// another distributed node to maintain consistency.
 message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional TransactionStatus status = 2 [(gogoproto.nullable) = false];
-  optional Timestamp commit_timestamp = 3 [(gogoproto.nullable) = false];
-  // Remaining with (us).
-  optional int64 commit_wait = 4 [(gogoproto.nullable) = false];
+  optional Transaction txn = 2;
+  // Remaining time (ns).
+  optional int64 commit_wait = 3 [(gogoproto.nullable) = false];
 }
 
 // An AccumulateTSRequest is arguments to the AccumulateTS() method.

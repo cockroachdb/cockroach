@@ -75,6 +75,9 @@ func isTransactional(method string) bool {
 // cleanup. Instead, intents are garbage collected by the ranges
 // periodically on their own.
 type txnMetadata struct {
+	// txn is the transaction struct from the initial AddRequest call.
+	txn proto.Transaction
+
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
@@ -150,6 +153,7 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 	defer tc.Unlock()
 	if _, ok := tc.txns[string(header.Txn.ID)]; !ok {
 		tc.txns[string(header.Txn.ID)] = &txnMetadata{
+			txn:             *header.Txn,
 			lastUpdateTS:    tc.clock.Now(),
 			timeoutDuration: tc.clientTimeout,
 			closer:          make(chan struct{}),
@@ -159,7 +163,7 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 		// for each active transaction. Spencer suggests a heap
 		// containing next heartbeat timeouts which is processed by a
 		// single goroutine.
-		go tc.heartbeat(engine.Key(header.Txn.ID), tc.txns[string(header.Txn.ID)].closer)
+		go tc.heartbeat(header.Txn, tc.txns[string(header.Txn.ID)].closer)
 	}
 	txnMeta := tc.txns[string(header.Txn.ID)]
 	txnMeta.lastUpdateTS = tc.clock.Now()
@@ -178,10 +182,10 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 // EndTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
 // the txns map.
-func (tc *coordinator) EndTxn(txnID engine.Key, commit bool) {
+func (tc *coordinator) EndTxn(txn *proto.Transaction, commit bool) {
 	tc.Lock()
 	defer tc.Unlock()
-	txnMeta, ok := tc.txns[string(txnID)]
+	txnMeta, ok := tc.txns[string(txn.ID)]
 	if !ok {
 		return
 	}
@@ -193,11 +197,12 @@ func (tc *coordinator) EndTxn(txnID engine.Key, commit bool) {
 				Key:    rng.Start,
 				EndKey: rng.End,
 				User:   storage.UserRoot,
+				Txn:    txn,
 			},
 			Commit: commit,
 		})
 	}
-	delete(tc.txns, string(txnID))
+	delete(tc.txns, string(txn.ID))
 	close(txnMeta.closer)
 }
 
@@ -224,12 +229,13 @@ func (tc *coordinator) hasClientAbandonedCoord(txnID engine.Key) bool {
 // heartbeat periodically sends an InternalHeartbeatTxn RPC to an
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the coordinator is closed.
-func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
+func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  txnID,
+			Key:  txn.ID,
 			User: storage.UserRoot,
+			Txn:  txn,
 		},
 	}
 
@@ -242,8 +248,8 @@ func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 		case <-ticker.C:
 			// Before we send a heartbeat, determine whether this transaction
 			// should be considered abandoned. If so, exit heartbeat.
-			if tc.hasClientAbandonedCoord(txnID) {
-				log.V(1).Infof("transaction %q abandoned; stopping heartbeat", txnID)
+			if tc.hasClientAbandonedCoord(txn.ID) {
+				log.V(1).Infof("transaction %q abandoned; stopping heartbeat", txn.ID)
 				return
 			}
 			request.Header().Timestamp = tc.clock.Now()
@@ -255,10 +261,10 @@ func (tc *coordinator) heartbeat(txnID engine.Key, closer chan struct{}) {
 			case proto.PENDING:
 				// Heartbeat continues...
 			case proto.COMMITTED:
-				tc.EndTxn(request.Header().Txn.ID, true)
+				tc.EndTxn(reply.Txn, true)
 				return
 			case proto.ABORTED:
-				tc.EndTxn(request.Header().Txn.ID, false)
+				tc.EndTxn(reply.Txn, false)
 				return
 			}
 		case <-closer:

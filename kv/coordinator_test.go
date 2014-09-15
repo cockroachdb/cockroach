@@ -137,8 +137,8 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 			db.coordinator.Lock()
 			*manual = hlc.ManualClock(*manual + 1)
 			db.coordinator.Unlock()
-			if heartbeatTS.Less(txn.LastHeartbeat) {
-				heartbeatTS = txn.LastHeartbeat
+			if heartbeatTS.Less(*txn.LastHeartbeat) {
+				heartbeatTS = *txn.LastHeartbeat
 				return true
 			}
 			return false
@@ -168,10 +168,12 @@ func TestCoordinatorEndTxn(t *testing.T) {
 	db, _, _ := createTestDB(t)
 	defer db.Close()
 
-	txnID := engine.Key("txn")
-	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
+	txn := &proto.Transaction{
+		ID: engine.Key("txn"),
+	}
+	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txn.ID))
 
-	db.coordinator.EndTxn(txnID, true)
+	db.coordinator.EndTxn(txn, true)
 	if len(db.coordinator.txns) != 0 {
 		t.Errorf("expected empty transactions map; got %d", len(db.coordinator.txns))
 	}
