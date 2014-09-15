@@ -18,9 +18,11 @@
 package server
 
 import (
+	_ "expvar"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"strings"
 
@@ -31,6 +33,11 @@ const (
 	// adminKeyPrefix is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminKeyPrefix = "/_admin/"
+	// debugKeyPrefix is the prefix of golang's standard debug functionality
+	// for access to exported vars and pprof tools.
+	debugKeyPrefix = "/debug/"
+	// healthzKey is the healthz endpoint.
+	healthzKey = adminKeyPrefix + "healthz"
 	// zoneKeyPrefix is the prefix for zone configuration changes.
 	zoneKeyPrefix = adminKeyPrefix + "zones"
 )
@@ -59,10 +66,29 @@ func newAdminServer(db storage.DB) *adminServer {
 	}
 }
 
+// RegisterHandlers registers admin handlers with the supplied
+// serve mux.
+func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
+	// Pass through requests to /debug to the default serve mux so we
+	// get exported variables and pprof tools.
+	mux.HandleFunc(debugKeyPrefix, s.handleDebug)
+	mux.HandleFunc(healthzKey, s.handleHealthz)
+	mux.HandleFunc(zoneKeyPrefix, s.handleZoneAction)
+	mux.HandleFunc(zoneKeyPrefix+"/", s.handleZoneAction)
+}
+
 // handleHealthz responds to health requests from monitoring services.
 func (s *adminServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintln(w, "ok")
+}
+
+// handleDebug passes requests with the debugKeyPrefix onto the default
+// serve mux, which is preconfigured (by import of expvar and net/http/pprof)
+// to serve endpoints which access exported variables and pprof tools.
+func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
+	handler, _ := http.DefaultServeMux.Handler(r)
+	handler.ServeHTTP(w, r)
 }
 
 // handleZoneAction handles actions for zone configuration by method.
