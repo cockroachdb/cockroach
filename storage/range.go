@@ -305,9 +305,11 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 	// timestamp.
 	r.Lock() // Protect access to timestamp cache and read queue.
 	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
-		glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
-		// Update the request timestamp.
+		if glog.V(1) {
+			glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
+		}
 		ts.Logical++ // increment logical component by one to differentiate.
+		// Update the request timestamp.
 		header.Timestamp = ts
 	}
 	// Just as for reads, we update the timestamp cache with the

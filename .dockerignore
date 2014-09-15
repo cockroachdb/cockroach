@@ -1,7 +1,8 @@
 .git
 _vendor
-*/*.o
-*/*.a
-*/*/*.o
-*/*/*.a
+roachlib/*.o
+roachlib/*.a
+proto/*.pb.go
+proto/lib/*
+proto/lib/code.google.com/p/gogoprotobuf/gogoproto/*
 cockroach

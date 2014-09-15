@@ -18,8 +18,6 @@
 package server
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -32,18 +30,18 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// startAdminServer launches a new admin server using minimal engine
+// startStatusServer launches a new status server using minimal engine
 // and local database setup. Returns the new http test server, which
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
-func startAdminServer() *httptest.Server {
+func startStatusServer() *httptest.Server {
 	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20))
 	if err != nil {
 		log.Fatal(err)
 	}
-	admin := newAdminServer(db)
+	status := newStatusServer(db, nil)
 	mux := http.NewServeMux()
-	admin.RegisterHandlers(mux)
+	status.RegisterHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	if strings.HasPrefix(httpServer.URL, "http://") {
 		*kv.Addr = strings.TrimPrefix(httpServer.URL, "http://")
@@ -53,58 +51,16 @@ func startAdminServer() *httptest.Server {
 	return httpServer
 }
 
-// getText fetches the HTTP response body as text in the form of a
-// byte slice from the specified URL.
-func getText(url string) ([]byte, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return ioutil.ReadAll(resp.Body)
-}
-
-// getJSON fetches the JSON from the specified URL and returns
-// it as unmarshaled JSON. Returns an error on any failure to fetch
-// or unmarshal response body.
-func getJSON(url string) (interface{}, error) {
-	body, err := getText(url)
-	if err != nil {
-		return nil, err
-	}
-	var jI interface{}
-	if err := json.Unmarshal(body, &jI); err != nil {
-		return nil, err
-	}
-	return jI, nil
-}
-
-// TestAdminDebugExpVar verifies that cmdline and memstats variables are
-// available via the /debug/vars link.
-func TestAdminDebugExpVar(t *testing.T) {
-	s := startAdminServer()
-	jI, err := getJSON(s.URL + debugKeyPrefix + "vars")
-	if err != nil {
-		t.Fatalf("failed to fetch JSON: %v", err)
-	}
-	j := jI.(map[string]interface{})
-	if _, ok := j["cmdline"]; !ok {
-		t.Error("cmdline not found in JSON response")
-	}
-	if _, ok := j["memstats"]; !ok {
-		t.Error("memstats not found in JSON response")
-	}
-}
-
-// TestAdminDebugPprof verifies that pprof tools are available.
-// via the /debug/pprof/* links.
-func TestAdminDebugPprof(t *testing.T) {
-	s := startAdminServer()
-	body, err := getText(s.URL + debugKeyPrefix + "pprof/block")
+// TestStatusStacks verifies that goroutine stack traces are available
+// via the /_status/stacks endpoint.
+func TestStatusStacks(t *testing.T) {
+	s := startStatusServer()
+	body, err := getText(s.URL + statusLocalStacksKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if matches, err := regexp.MatchString(".*contention:\ncycles/second=.*", string(body)); !matches || err != nil {
+	// Verify match with at least two goroutine stacks.
+	if matches, err := regexp.MatchString("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", string(body)); !matches || err != nil {
 		t.Errorf("expected match: %t; err nil: %v", matches, err)
 	}
 }

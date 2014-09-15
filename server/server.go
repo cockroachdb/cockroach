@@ -385,17 +385,13 @@ func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
 
 func (s *server) initHTTP() {
 	// TODO(shawn) pretty "/" landing page
-	s.mux.HandleFunc(adminKeyPrefix+"healthz", s.admin.handleHealthz)
+
+	// Admin handlers.
+	s.admin.RegisterHandlers(s.mux)
 
 	// Status endpoints:
-	s.mux.HandleFunc(statusKeyPrefix, s.status.handleStatus)
-	s.mux.HandleFunc(statusNodesKeyPrefix, s.status.handleNodeStatus)
-	s.mux.HandleFunc(statusGossipKeyPrefix, s.status.handleGossipStatus)
-	s.mux.HandleFunc(statusStoresKeyPrefix, s.status.handleStoresStatus)
-	s.mux.HandleFunc(statusTransactionsKeyPrefix, s.status.handleTransactionStatus)
-	s.mux.HandleFunc(statusLocalKeyPrefix, s.status.handleLocalStatus)
+	s.status.RegisterHandlers(s.mux)
 
-	s.mux.HandleFunc(zoneKeyPrefix, s.admin.handleZoneAction)
 	// TODO(andybons): all servers should satisfy the http.Handler interface.
 	s.mux.HandleFunc(rest.APIPrefix, s.kvREST.HandleAction)
 	s.mux.Handle(structured.StructuredKeyPrefix, s.structuredREST)
