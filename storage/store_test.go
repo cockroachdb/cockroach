@@ -67,8 +67,10 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	if _, err := store.CreateRange(store.BootstrapRangeMetadata()); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
-	if _, err := store.GetRange(1); err != nil {
+	if rng, err := store.GetRange(1); err != nil {
 		t.Errorf("failure fetching 1st range: %v", err)
+	} else {
+		rng.Start()
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped engine.
@@ -148,10 +150,11 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	meta := store.BootstrapRangeMetadata()
 	meta.StartKey = engine.KeySystemPrefix
 	meta.EndKey = engine.PrefixEndKey(engine.KeySystemPrefix)
-	_, err := store.CreateRange(meta)
+	rng, err := store.CreateRange(meta)
 	if err != nil {
 		t.Fatal(err)
 	}
+	rng.Start()
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +163,8 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	// If requested, create a default range for tests from "a"-"z".
 	if createDefaultRange {
 		replica = proto.Replica{StoreID: 1}
-		_, err := store.CreateRange(store.NewRangeMetadata(engine.Key("a"), engine.Key("z"), []proto.Replica{replica}))
+		rng, err := store.CreateRange(store.NewRangeMetadata(engine.Key("a"), engine.Key("z"), []proto.Replica{replica}))
+		rng.Start()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,13 +177,17 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 func TestStoreExecuteCmd(t *testing.T) {
 	store, _ := createTestStore(true, t)
 	defer store.Close()
-	args, reply := getArgs([]byte("a"), 2)
+	gArgs, gReply := getArgs([]byte("a"), 2)
 
 	// Try a successful get request.
-	err := store.ExecuteCmd("Get", args, reply)
-	if err != nil {
+	if err := store.ExecuteCmd("Get", gArgs, gReply); err != nil {
 		t.Fatal(err)
 	}
+	pArgs, pReply := putArgs([]byte("a"), []byte("aaa"), 2)
+	if err := store.ExecuteCmd("Put", pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
@@ -278,7 +286,7 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 	for i := 0; i < raftIDAllocCount*3; i++ {
 		r := addTestRange(store, engine.Key(fmt.Sprintf("%03d", i)), engine.Key(fmt.Sprintf("%03d", i+1)), t)
 		if r.Meta.RaftID != int64(2+i) {
-			t.Error("expected Raft id %d; got %d", 2+i, r.Meta.RaftID)
+			t.Errorf("expected Raft id %d; got %d", 2+i, r.Meta.RaftID)
 		}
 	}
 }
@@ -291,6 +299,7 @@ func addTestRange(store *Store, start, end engine.Key, t *testing.T) *Range {
 	if err != nil {
 		t.Fatal(err)
 	}
+	r.Start()
 	return r
 }
 
@@ -377,7 +386,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		if wiErr.Resolved && err != nil {
 			t.Errorf("resolvable? %t, expected write to succeed: %v", resolvable, err)
 		} else if !wiErr.Resolved && err == nil {
-			t.Errorf("resolvable? %d, expected write intent error but succeeded", resolvable)
+			t.Errorf("resolvable? %v, expected write intent error but succeeded", resolvable)
 		}
 	}
 }
@@ -601,5 +610,130 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 	if _, ok := err.(*proto.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %v", err)
+	}
+}
+
+// TestStoreRangeSplit executes a split of a range and verifies that the
+// resulting ranges respond to the right key ranges.
+//
+// TODO(Tobias, Spencer): More detailed testing of the transition into the new
+// setup is required, and tests in which internal errors occur while splitting.
+func TestStoreRangeSplit(t *testing.T) {
+	store, _ := createTestStore(true, t)
+	defer store.Close()
+	rangeID := int64(2)
+	splitKey := engine.Key("m")
+	content := engine.Key("asdvb")
+
+	// First, write some values left and right of the proposed split key.
+	pArgs, pReply := putArgs([]byte("c"), content, rangeID)
+	if err := store.ExecuteCmd("Put", pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+	pArgs, pReply = putArgs([]byte("x"), content, rangeID)
+	if err := store.ExecuteCmd("Put", pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Increments are a good way of testing the response cache. Up here, we
+	// address them to the original range, then later to the one that contains
+	// the key.
+	rIncArgs := &proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.Key("wobble"),
+			Replica: proto.Replica{RangeID: rangeID},
+			CmdID: proto.ClientCmdID{
+				WallTime: 12,
+				Random:   42,
+			},
+		},
+		Increment: 10,
+	}
+	rIncReply := &proto.IncrementResponse{}
+	if err := store.ExecuteCmd("Increment", rIncArgs, rIncReply); err != nil {
+		t.Fatal(err)
+	}
+
+	lIncArgs := &proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.Key("apoptosis"),
+			Replica: proto.Replica{RangeID: rangeID},
+			CmdID: proto.ClientCmdID{
+				WallTime: 123,
+				Random:   423,
+			},
+		},
+		Increment: 100,
+	}
+	lIncReply := &proto.IncrementResponse{}
+	if err := store.ExecuteCmd("Increment", lIncArgs, lIncReply); err != nil {
+		t.Fatal(err)
+	}
+
+	args := &proto.InternalSplitRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.Key("b"), // Intentionally off.
+			EndKey:  engine.Key("z"),
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		SplitKey: splitKey,
+	}
+	reply := &proto.InternalSplitResponse{}
+	err := store.ExecuteCmd("InternalSplit", args, reply)
+	if err == nil {
+		t.Fatalf("split succeeded unexpectedly")
+	}
+
+	// Now fix the args and go again, this time expecting success.
+	args.RequestHeader.Key = splitKey
+	reply = &proto.InternalSplitResponse{}
+	if err = store.ExecuteCmd("InternalSplit", args, reply); err != nil {
+		t.Errorf("range split failed: %v", err)
+	}
+	rng, _ := store.GetRange(2)
+	newRange, err := store.GetRange(3)
+	if err != nil {
+		t.Fatalf("no new range was created: %v", err)
+	}
+	nd := newRange.Meta.RangeDescriptor
+	d := rng.Meta.RangeDescriptor
+	if !bytes.Equal(nd.StartKey, splitKey) || !bytes.Equal(splitKey, d.EndKey) {
+		t.Errorf("ranges mismatched, wanted %s=%s=%s", nd.StartKey, splitKey, d.EndKey)
+	}
+	if !bytes.Equal(nd.EndKey, engine.Key("z")) || !bytes.Equal(d.StartKey, engine.Key("a")) {
+		t.Errorf("new ranges do not cover a-z, but only %s-%s", d.StartKey, nd.EndKey)
+	}
+
+	// Try to get values from both left and right of where the split happened.
+	gArgs, gReply := getArgs([]byte("c"), rangeID)
+	if err := store.ExecuteCmd("Get", gArgs, gReply); err != nil ||
+		!bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal(err)
+	}
+	gArgs, gReply = getArgs([]byte("x"), newRange.Meta.RangeID)
+	if err := store.ExecuteCmd("Get", gArgs, gReply); err != nil ||
+		!bytes.Equal(gReply.Value.Bytes, content) {
+		t.Fatal(err)
+	}
+
+	// Send out an increment request copied from above (same ClientCmdID) which
+	// remains in the old range.
+	lIncReply = &proto.IncrementResponse{}
+	if err := store.ExecuteCmd("Increment", lIncArgs, lIncReply); err != nil {
+		t.Fatal(err)
+	}
+	if lIncReply.NewValue != 100 {
+		t.Errorf("response cache broken in old range, expected %d but got %d", lIncArgs.Increment, lIncReply.NewValue)
+	}
+
+	// Send out the same increment copied from above (same ClientCmdID), but
+	// now to the newly created range (which should hold that key).
+	rIncArgs.RequestHeader.Replica.RangeID = newRange.Meta.RangeID
+	rIncReply = &proto.IncrementResponse{}
+	if err := store.ExecuteCmd("Increment", rIncArgs, rIncReply); err != nil {
+		t.Fatal(err)
+	}
+	if rIncReply.NewValue != 10 {
+		t.Errorf("response cache not copied correctly to new range, expected %d but got %d", rIncArgs.Increment, rIncReply.NewValue)
 	}
 }

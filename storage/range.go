@@ -100,6 +100,7 @@ const (
 	InternalPushTxn       = "InternalPushTxn"
 	InternalResolveIntent = "InternalResolveIntent"
 	InternalSnapshotCopy  = "InternalSnapshotCopy"
+	InternalSplit         = "InternalSplit"
 )
 
 // readMethods specifies the set of methods which read and return data.
@@ -129,6 +130,7 @@ var writeMethods = map[string]struct{}{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
+	InternalSplit:         struct{}{},
 }
 
 // ReadMethods lists the read-only methods supported by a range.
@@ -233,6 +235,27 @@ func (r *Range) Start() {
 // Stop ends the log processing loop.
 func (r *Range) Stop() {
 	close(r.closer)
+}
+
+// Update must be called after the metadata of the range have been adapted to
+// make sure the updates are properly taken into account and persisted.
+func (r *Range) Update() error {
+	if r.rm == nil {
+		return nil
+	}
+	return r.rm.UpdateRange(r.Meta.RangeID)
+}
+
+// Destroy must be called for a range that is being dismantled to make sure it
+// is properly handling pending clients and cleans up persisted data.
+//
+// Destroy() will not Stop() the range; this has to be done manually before.
+func (r *Range) Destroy() error {
+	if r.rm == nil {
+		return nil
+	}
+	r.respCache.ClearData() // Ignore the result. If it fails, GC should get it.
+	return r.rm.DropRange(r.Meta.RangeID)
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -524,6 +547,14 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
+//
+// TODO(Spencer): Differentiate between errors caused by the normal culprits --
+// bad inputs from clients, stale information, etc. and errors which might
+// cause the range replicas to diverge -- running out of disk space, underlying
+// rocksdb corruption, etc. Do a careful code audit to make sure we identify
+// errors which should be classified as a ReplicaCorruptionError--when those
+// bubble up to the point where we've just tried to execute a Raft command, the
+// Raft replica would need to stall itself.
 func (r *Range) executeCmd(method string, args proto.Request, reply proto.Response) error {
 	switch method {
 	case Contains:
@@ -562,6 +593,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case InternalSnapshotCopy:
 		r.InternalSnapshotCopy(args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
+	case InternalSplit:
+		r.InternalSplit(args.(*proto.InternalSplitRequest), reply.(*proto.InternalSplitResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
@@ -1072,4 +1105,83 @@ func (r *Range) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, re
 	reply.Rows = kvs
 	reply.SnapshotId = args.SnapshotId
 	reply.SetGoError(err)
+}
+
+// InternalSplit shrinks the given range, using args.SplitKey as its new end.
+// A new range is created, containing the remaining range from args.SplitKey to
+// the original end key of the first range. The split is only carried out if
+// args.Key and args.EndKey match precisely the split key and EndKey of the
+// original range, respectively.
+//
+// TODO(Tobias): This version, as is, is provisional. A correct implementation
+// is much more subtle and requires a transaction. See:
+// https://github.com/cockroachdb/cockroach/pull/64/files#r17667926
+func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.InternalSplitResponse) {
+	var err error
+	if r.rm == nil {
+		reply.SetGoError(util.Error("cannot split without an underlying store"))
+		return
+	}
+	desc := r.Meta.RangeDescriptor
+	// InternalSplit affects the whole range, but in fact only needs to block
+	// everything that is to be moved into the new range beginning at the split
+	// key. To make sure that the range is protecting those and only those
+	// keys, we check that args.Key == splitKey and args.EndKey = desc.EndKey.
+	if !bytes.Equal(args.Key, args.SplitKey) || !bytes.Equal(args.EndKey, desc.EndKey) {
+		reply.SetGoError(util.Error("key range indicated does not match range"))
+		return
+	}
+	splitKey := args.SplitKey
+	if !r.ContainsKey(splitKey) {
+		reply.SetGoError(util.Errorf("split key not contained in range"))
+		return
+	}
+
+	// Lock the range for the duration of the split.
+	r.Lock()
+	defer r.Unlock()
+
+	// Create a new range, beginning with the split key. The new range is
+	// initialized with fresh timestamp cache and read queue, which is the
+	// correct behavior. However, the new response cache must know about cached
+	// data which now belongs to the new queue. Since caching a little
+	// redundant data does not matter, we simply clone the response cache of
+	// the old range.
+
+	meta := r.rm.NewRangeMetadata(splitKey, desc.EndKey, desc.Replicas)
+	newRange, err := r.rm.CreateRange(meta)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	// Initialize the new range's response cache with a copy of the old one.
+	// This may be a little expensive. Note that the new range has not been
+	// started yet and that the original range is serving requests for the keys
+	// that will remain with it, which is roughly 50%.
+	if err = r.respCache.CopyInto(newRange.respCache); err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	// TODO(Tobias): Check for possible problems with temporarily having two
+	// overlapping ranges.
+	newRange.Start()
+	// Only now do we lock the range, blocking process on other writes and
+	// reads in the original half as well.
+	newRange.Lock()
+	defer newRange.Unlock()
+	// Shrink the existing range and commit to disk.
+	oldEndKey := r.Meta.RangeDescriptor.EndKey
+	r.Meta.RangeDescriptor.EndKey = splitKey
+	if err = r.Update(); err != nil {
+		reply.SetGoError(util.Errorf("cannot save range, split aborted: %v", err))
+		r.Meta.RangeDescriptor.EndKey = oldEndKey
+		newRange.Stop()
+		if err = newRange.Destroy(); err != nil {
+			glog.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
+		}
+		return
+	}
+	// TODO(mrtracy): Transactionally update the Meta{1,2} keys so that both
+	// ranges have their correct key spaces reflected.
+	// Special case: This range contains Meta{1,2} keys (-> possible deadlock)
 }

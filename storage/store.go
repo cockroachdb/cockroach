@@ -323,20 +323,55 @@ func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
 			s.Ident.StoreID, meta.Replicas)
 	}
 
-	err := engine.PutProto(s.engine, makeRangeKey(meta.RangeID), meta)
+	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
+	err := s.writeRangeToEngine(rng)
 	if err != nil {
 		return nil, err
 	}
-
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
-	rng.Start()
 	s.ranges[meta.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
+	s.mu.Unlock()
 
 	return rng, nil
+}
+
+// UpdateRange writes the range metadata of a range contained in this store to
+// the engine, overwriting previously stored metadata for the given rangeID.
+func (s *Store) UpdateRange(rangeID int64) error {
+	rng, err := s.GetRange(rangeID)
+	if err != nil {
+		return err
+	}
+	return s.writeRangeToEngine(rng)
+}
+
+// writeRangeToEngine does the actual work for UpdateRange().
+func (s *Store) writeRangeToEngine(rng *Range) error {
+	if rng == nil {
+		return util.Error("no range given")
+	}
+	return engine.PutProto(s.engine, makeRangeKey(rng.Meta.RangeID), rng.Meta)
+}
+
+// DropRange removes the specified range from the store's map, and also
+// depersists the range so that the store will not know about it the next time
+// it is initialized. DropRange does not affect any of the data stored inside
+// the range and it will not Stop() it.
+//
+// For a rangeID that is not known to the store, DropRange is a noop.
+func (s *Store) DropRange(rangeID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rng, ok := s.ranges[rangeID]; ok {
+		rng.Stop()
+	}
+	delete(s.ranges, rangeID)
+	if err := s.engine.Clear(makeRangeKey(rangeID)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Attrs returns the attributes of the underlying store.
@@ -474,4 +509,6 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 type RangeManager interface {
 	NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata
 	CreateRange(meta *proto.RangeMetadata) (*Range, error)
+	UpdateRange(rangeID int64) error
+	DropRange(rangeID int64) error
 }

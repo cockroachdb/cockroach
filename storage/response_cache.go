@@ -24,7 +24,9 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/golang/glog"
 )
 
 type cmdIDKey struct {
@@ -79,6 +81,14 @@ func (rc *ResponseCache) ClearInflight() {
 	rc.inflight = map[cmdIDKey]*sync.Cond{}
 }
 
+// ClearData removes all items stored in the persistent cache. It does not alter
+// the inflight map.
+func (rc *ResponseCache) ClearData() error {
+	p := rc.makePrefix()
+	_, err := engine.ClearRange(rc.engine, p, engine.PrefixEndKey(p), 0)
+	return err
+}
+
 // GetResponse looks up a response matching the specified cmdID and
 // returns true if found. The response is deserialized into the
 // supplied reply parameter. If no response is found, returns
@@ -120,6 +130,38 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 	}
 	// There's no command result cached for this ID; but inflight was added above.
 	return false, nil
+}
+
+// CopyInto copies all the cached results from one response cache into another.
+// The cache will be locked while copying is in progress; failures decoding
+// individual cache entries will only trigger a warning.
+func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
+	if destRC == nil {
+		return util.Errorf("destination response cache missing")
+	}
+	rc.Lock()
+	defer rc.Unlock()
+	prefix := rc.makePrefix()
+	kvs, err := rc.engine.Scan(prefix, engine.PrefixEndKey(prefix), 0)
+	if err != nil {
+		return err
+	}
+	batch := []interface{}(nil)
+	for _, kv := range kvs {
+		// Decode the key into a cmd, skipping on error. Otherwise,
+		// write it to the corresponding key in the new cache.
+		if cmdID, err := rc.decodeKey(kv.Key); err == nil {
+			batch = append(batch, engine.BatchPut{
+				Key: destRC.makeKey(cmdID), Value: kv.Value,
+			})
+			//destRC.engine.Put(destRC.makeKey(cmdID), kv.Value)
+		} else {
+			// This is near impossible to ever happen in practice, so if it happens
+			// we're very interested in finding out.
+			glog.Warningf("could not copy a response cache entry: %v", err)
+		}
+	}
+	return destRC.engine.WriteBatch(batch)
 }
 
 // PutResponse writes a response to the cache for the specified cmdID.
@@ -175,10 +217,36 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 // response cache keys sorts them at the very top of the engine's
 // keyspace.
 func (rc *ResponseCache) makeKey(cmdID proto.ClientCmdID) engine.Key {
-	// Key specifics: range ID & HLC timestamp.
-	b := append([]byte{}, engine.KeyLocalRangeResponseCachePrefix...)
-	b = encoding.EncodeInt(b, rc.rangeID)
+	b := rc.makePrefix()
 	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
 	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64
 	return b
+}
+
+// makePrefix generates the prefix under which all entries for the given range
+// are stored in the engine.
+func (rc *ResponseCache) makePrefix() engine.Key {
+	b := append([]byte{}, engine.KeyLocalRangeResponseCachePrefix...)
+	return encoding.EncodeInt(b, rc.rangeID)
+}
+
+func (rc *ResponseCache) decodeKey(encKey engine.Key) (proto.ClientCmdID, error) {
+	minLen := len(engine.KeyLocalRangeResponseCachePrefix)
+	ret := proto.ClientCmdID{}
+	if len(encKey) < minLen {
+		return ret, util.Errorf("key not long enough to be decoded: %q", encKey)
+	}
+	// First, Cut the prefix and the range ID.
+	binKey := encKey[minLen:]
+	ts, _ := encoding.DecodeInt(binKey)
+	// Second, read the wall time.
+	ts, wt := encoding.DecodeInt(ts)
+	// Third, read the Random component.
+	ts, rd := encoding.DecodeInt(ts)
+	if len(ts) > 0 {
+		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, ts)
+	}
+	ret.WallTime = wt
+	ret.Random = rd
+	return ret, nil
 }

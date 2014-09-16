@@ -429,6 +429,18 @@ message InternalSnapshotCopyResponse {
   repeated RawKeyValue rows = 3 [(gogoproto.nullable) = false];
 }
 
+// An InternalSplitRequest is arguments to the InternalSplit() method.
+message InternalSplitRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bytes split_key = 2 [(gogoproto.nullable) = false];
+}
+
+// An InternalSplitResponse is the return value from the InternalSplit()
+// method.
+message InternalSplitResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A ReadWriteCmdRequest is a union type containing instances of all
 // mutating commands.
 message ReadWriteCmdRequest {

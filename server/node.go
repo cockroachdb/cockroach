@@ -130,6 +130,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	rng.Start()
 
 	// Create a KV DB with a local KV to directly modify the new range.
 	localKV := kv.NewLocalKV()
