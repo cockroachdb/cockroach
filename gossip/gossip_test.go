@@ -23,46 +23,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/util/log"
 )
-
-// testGossipInterval is the compressed simulation time scale for testing.
-const testGossipInterval = 10 * time.Millisecond
-
-// isNetworkConnected returns true if the network is fully connected with
-// no partitions.
-func isNetworkConnected(nodes map[string]*Gossip) bool {
-	for _, node := range nodes {
-		for infoKey := range nodes {
-			_, err := node.GetInfo(infoKey)
-			if err != nil {
-				log.Infof("error: %v", err)
-				return false
-			}
-		}
-	}
-	return true
-}
 
 // verifyConvergence verifies that info from each node is visible from
 // every node in the network within numCycles cycles of the gossip protocol.
 func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
-	var connectedAtCycle int
-	SimulateNetwork(numNodes, "unix", testGossipInterval, func(cycle int, nodes map[string]*Gossip) bool {
-		// Every node should gossip.
-		for addr, node := range nodes {
-			node.AddInfo(addr, int64(cycle), time.Hour)
-		}
-		if isNetworkConnected(nodes) {
-			connectedAtCycle = cycle
-			return false
-		}
-		return true
-	})
+	network := NewSimulationNetwork(numNodes, "unix", DefaultTestGossipInterval)
 
-	if connectedAtCycle > maxCycles {
-		t.Errorf("expected a fully-connected network within 5 cycles; took %d", connectedAtCycle)
+	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
+		t.Errorf("expected a fully-connected network within %d cycles; took %d",
+			maxCycles, connectedCycle)
 	}
+	network.Stop()
 }
 
 // TestConvergence verifies a 10 node gossip network

@@ -120,6 +120,15 @@ var writeMethods = map[string]struct{}{
 	InternalResolveIntent: struct{}{},
 }
 
+// ReadMethods lists the read-only methods supported by a range.
+var ReadMethods = util.MapKeys(readMethods).([]string)
+
+// WriteMethods lists the methods supported by a range which write data.
+var WriteMethods = util.MapKeys(writeMethods).([]string)
+
+// Methods lists all the methods supported by a range.
+var Methods = append(ReadMethods, WriteMethods...)
+
 // NeedReadPerm returns true if the specified method requires read permissions.
 func NeedReadPerm(method string) bool {
 	_, ok := readMethods[method]

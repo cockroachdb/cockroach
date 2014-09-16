@@ -206,7 +206,9 @@ func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
 		return visitor(start, end, p[startIdx-1].Config)
 	}
 	for i := startIdx; i < endIdx; i++ {
-		visitor(start, p[i].Prefix, p[i-1].Config)
+		if err := visitor(start, p[i].Prefix, p[i-1].Config); err != nil {
+			return err
+		}
 		if bytes.Equal(p[i].Prefix, end) {
 			return nil
 		}
