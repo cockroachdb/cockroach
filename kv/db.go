@@ -165,15 +165,9 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 		// Intercept the reply and end transaction on coordinator
 		// depending on final state.
 		reply := <-interceptChan
-		if reply.Error == nil {
-			switch reply.Txn.Status {
-			case proto.COMMITTED:
-				db.coordinator.EndTxn(reply.Txn, true)
-				return
-			case proto.ABORTED:
-				db.coordinator.EndTxn(reply.Txn, false)
-				return
-			}
+		if reply.Error == nil && reply.Txn.Status != proto.PENDING {
+			db.coordinator.EndTxn(reply.Txn)
+			return
 		}
 		// Go ahead and return the result to the client.
 		replyChan <- reply
@@ -222,6 +216,21 @@ func (db *DB) EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *proto.En
 func (db *DB) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) <-chan *proto.InternalHeartbeatTxnResponse {
 	replyChan := make(chan *proto.InternalHeartbeatTxnResponse, 1)
 	go db.executeCmd(storage.InternalHeartbeatTxn, args, replyChan)
+	return replyChan
+}
+
+// InternalPushTxn attempts to resolve read or write conflicts between
+// transactions. Both the pusher (args.Txn) and the pushee
+// (args.PushTxn) are supplied. However, args.Key should be set to the
+// transaction ID of the pushee, as it must be directed to the range
+// containing the pushee's transaction record in order to consult the
+// most up to date txn state. If the conflict resolution can be
+// resolved in favor of the pusher, returns success; otherwise returns
+// an error code either indicating the pusher must retry or abort and
+// restart the transaction.
+func (db *DB) InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse {
+	replyChan := make(chan *proto.InternalPushTxnResponse, 1)
+	go db.executeCmd(storage.InternalPushTxn, args, replyChan)
 	return replyChan
 }
 

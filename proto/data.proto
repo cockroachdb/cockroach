@@ -96,7 +96,7 @@ enum IsolationType {
   SNAPSHOT = 1;
 }
 
-// TransactionStatus TODO(jiajia) Needs documentation.
+// TransactionStatus specifies possible states for a transaction.
 enum TransactionStatus {
   option (gogoproto.goproto_enum_prefix) = false;
   // PENDING is the default state for a new transaction. Transactions

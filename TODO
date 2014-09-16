@@ -1,24 +1,8 @@
-* Create a new DB type in kv/ which uses a storage.DB implementation,
-  either one of DistDB or LocalDB. The kv.DB deals with coordinator,
-  intercepts, etc.
-
-* Encode basic key value types:
-  - Counter
-  - Bag o' bytes
-  - Error if increment is used on a bag o' bytes
-  - Error if Put/Get used on a counter
-  - Should Scan return counters?
-
 * Construct a base handler for all HTTP servers to glog.Fatal the
   process with a deferred recover func to prevent HTTP from swallowing
   panics which might otherwise be holding locks, etc.
 
-* Add Request/Response interfaces to avoid reflection in getting/setting
-  errors or fetching the Request/Response headers.
-
 * Transactions
-
-  - Generate random priority, pick candidate timestamp.
 
   - Modified ops:
 
@@ -60,42 +44,6 @@
           existing intent and write new intent. If push fails, backoff
           and retry the transaction.
 
-    New operations on transaction table rows:
-
-    - PushTransaction: Moves transaction timestamp forwards.
-
-      If existing txn entry isn't present or its LastHeartbeat
-      timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat.
-      If current time - LastHeartbeat > MaxHeartbeatExpiry, then
-      the existing txn should be either pushed forward or aborted,
-      depending on value of Request.Abort.
-
-      If the txn is committed, return already-committed error. If txn
-      has been aborted, noop and return success.
-
-      Otherwise, Compare PushTxn and Txn priorities:
-
-        - If Txn.Priority < PushTxn.Priority, return retry-txn
-          error. Transaction will be retried with priority =
-          max(random, PushTxn.Priority - 1).
-
-        - If Txn.Priority > PushTxn.Priority, set/add txn entry with
-          new timestamp as max(existing timestamp, push timestamp + 1).
-          If Request.Abort is true, set/add ABORTED txn entry.
-
-      type PushTransactionRequest struct {
-        RequestHeader
-        Key     Key         // derivative of txn table prefix & txn ID
-        Abort   bool        // abort txn on successful push--this is done for puts
-        PushTxn Transaction // from encounted txn intent
-        Txn     Transaction // txn which encountered intent
-      }
-
-      type PushTransactionResponse struct {
-        ResponseHeader
-      }
-
-
 * StoreFinder using Gossip protocol to filter
 
 
@@ -107,12 +55,6 @@
 
     - Need a range-wide "split" intent which blocks all mutating
       ops to range.
-
-  - Copy / split range-local metadata:
-
-    - Write new local range metadata
-
-    - Copy response cache
 
 * Rebalance range replica. Only fully-replicated ranges may be
   rebalanced.
@@ -147,5 +89,3 @@
     from the RangeDescriptor. The store which owns a removed replica
     is responsible for clearing the relevant portion of the key space
     as well as any other housekeeping details.
-
-* Move mvcc + engine files out of storage and into mvcc/

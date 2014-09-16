@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"regexp"
 	"sync"
@@ -317,6 +318,24 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
 	return args, reply
 }
 
+// pushTxnArgs returns request/response pair for InternalPushTxn RPC
+// addressed to the default replica for the specified key.
+func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, rangeID int64) (
+	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
+	args := &proto.InternalPushTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       pushee.ID,
+			Timestamp: pusher.Timestamp,
+			Replica:   proto.Replica{RangeID: rangeID},
+			Txn:       pusher,
+		},
+		PushTxn: *pushee,
+		Abort:   abort,
+	}
+	reply := &proto.InternalPushTxnResponse{}
+	return args, reply
+}
+
 // heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
 func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
@@ -363,6 +382,18 @@ func getSerializedMVCCValue(value *proto.Value) []byte {
 		panic("unexpected marshal error")
 	}
 	return data
+}
+
+// verifyErrorMatches checks that the error is not nil and that its
+// error string matches the provided regular expression.
+func verifyErrorMatches(err error, regexpStr string, t *testing.T) {
+	if err == nil {
+		t.Errorf("command did not result in an error")
+	} else {
+		if matched, regexpErr := regexp.MatchString(regexpStr, err.Error()); !matched || regexpErr != nil {
+			t.Errorf("expected error to match %q (%v): %v", regexpStr, regexpErr, err.Error())
+		}
+	}
 }
 
 // TestRangeUpdateTSCache verifies that reads update the read
@@ -798,13 +829,286 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.ID = test.key
 		args, reply := endTxnArgs(txn, true, 0)
 		args.Timestamp = txn.Timestamp
-		err := rng.ReadWriteCmd("EndTransaction", args, reply)
-		if err == nil {
-			t.Errorf("expected error matching %q", test.expErrRegexp)
-		} else {
-			if matched, regexpErr := regexp.MatchString(test.expErrRegexp, err.Error()); !matched || regexpErr != nil {
-				t.Errorf("expected error to match %q (%v): %v", test.expErrRegexp, regexpErr, err.Error())
+		verifyErrorMatches(rng.ReadWriteCmd("EndTransaction", args, reply), test.expErrRegexp, t)
+	}
+}
+
+// TestInternalPushTxnBadKey verifies that args.Key equals args.PushTxn.ID.
+func TestInternalPushTxnBadKey(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+
+	args, reply := pushTxnArgs(pusher, pushee, true, 0)
+	args.Key = pusher.ID
+	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), ".*not addressed.*", t)
+}
+
+// TestInternalPushTxnAlreadyCommitted verifies already-committed
+// error trying to push committed txn.
+func TestInternalPushTxnAlreadyCommitted(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pushee.Status = proto.COMMITTED
+
+	args, reply := pushTxnArgs(pusher, pushee, true, 0)
+	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), "txn {.*}: already committed", t)
+	if reply.PushTxn.Status != proto.COMMITTED {
+		t.Errorf("expected push txn to return with status == COMMITTED; got %+v", reply.PushTxn)
+	}
+}
+
+// TestInternalPushTxnAlreadyAborted verifies success (noop)
+// in event that pushee is aborted.
+func TestInternalPushTxnAlreadyAborted(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pushee.Status = proto.ABORTED
+
+	args, reply := pushTxnArgs(pusher, pushee, true, 0)
+	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+		t.Fatal(err)
+	}
+	if reply.PushTxn.Status != proto.ABORTED {
+		t.Errorf("expected push txn to return with status == ABORTED; got %+v", reply.PushTxn)
+	}
+}
+
+// TestInternalPushTxnUpgradeExistingTxn verifies that pushing
+// a transaction record with a new epoch upgrades the pushee's
+// epoch and timestamp if greater. In all test cases, the
+// priorities are set such that the push will succeed.
+func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	ts1 := proto.Timestamp{WallTime: 1}
+	ts2 := proto.Timestamp{WallTime: 2}
+	testCases := []struct {
+		startEpoch, epoch, expEpoch int32
+		startTS, ts, expTS          proto.Timestamp
+	}{
+		// Move epoch forward.
+		{0, 1, 1, ts1, ts1, ts1},
+		// Move timestamp forward.
+		{0, 0, 0, ts1, ts2, ts2},
+		// Move epoch backwards (has no effect).
+		{1, 0, 1, ts1, ts1, ts1},
+		// Move timestamp backwards (has no effect).
+		{0, 0, 0, ts2, ts1, ts2},
+		// Move both epoch & timestamp forward.
+		{0, 1, 1, ts1, ts2, ts2},
+		// Move both epoch & timestamp backward (has no effect).
+		{1, 0, 1, ts2, ts1, ts2},
+	}
+
+	for i, test := range testCases {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pushee.Priority = 1
+		pusher.Priority = 2 // Pusher will win.
+
+		// First, establish "start" of existing pushee's txn via heartbeat.
+		pushee.Epoch = test.startEpoch
+		pushee.Timestamp = test.startTS
+		hbArgs, hbReply := heartbeatArgs(pushee, 0)
+		hbArgs.Timestamp = pushee.Timestamp
+		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+			t.Fatal(err)
+		}
+
+		// Now, attempt to push the transaction using updated values for epoch & timestamp.
+		pushee.Epoch = test.epoch
+		pushee.Timestamp = test.ts
+		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+			t.Fatal(err)
+		}
+		expTxn := gogoproto.Clone(pushee).(*proto.Transaction)
+		expTxn.Epoch = test.expEpoch
+		expTxn.Timestamp = test.expTS
+		expTxn.Status = proto.ABORTED
+		expTxn.LastHeartbeat = &test.startTS
+
+		if !reflect.DeepEqual(expTxn, reply.PushTxn) {
+			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PushTxn)
+		}
+	}
+}
+
+// TestInternalPushTxnHeartbeatTimeout verifies that a txn which
+// hasn't been heartbeat within 2x the heartbeat interval can be
+// aborted.
+func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
+	rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	ts := proto.Timestamp{WallTime: 1}
+	ns := DefaultHeartbeatInterval.Nanoseconds()
+	testCases := []struct {
+		heartbeat   *proto.Timestamp // nil indicates no heartbeat
+		currentTime int64            // nanoseconds
+		expSuccess  bool
+	}{
+		{nil, 0, false},
+		{nil, ns, false},
+		{nil, ns*2 - 1, false},
+		{nil, ns * 2, false},
+		{&ts, ns*2 + 1, false},
+		{&ts, ns*2 + 2, true},
+	}
+
+	for i, test := range testCases {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pushee.Priority = 2
+		pusher.Priority = 1 // Pusher won't win based on priority.
+
+		// First, establish "start" of existing pushee's txn via heartbeat.
+		if test.heartbeat != nil {
+			hbArgs, hbReply := heartbeatArgs(pushee, 0)
+			hbArgs.Timestamp = *test.heartbeat
+			if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+				t.Fatal(err)
 			}
 		}
+
+		// Now, attempt to push the transaction with clock set to "currentTime".
+		*mc = hlc.ManualClock(test.currentTime)
+		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		if test.expSuccess != (err == nil) {
+			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
+		}
+	}
+}
+
+// TestInternalPushTxnOldEpoch verifies that a txn intent from an
+// older epoch may be pushed.
+func TestInternalPushTxnOldEpoch(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	testCases := []struct {
+		curEpoch, intentEpoch int32
+		expSuccess            bool
+	}{
+		// Same epoch; can't push based on epoch.
+		{0, 0, false},
+		// The intent is newer; definitely can't push.
+		{0, 1, false},
+		// The intent is old; can push.
+		{1, 0, true},
+	}
+
+	for i, test := range testCases {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pushee.Priority = 2
+		pusher.Priority = 1 // Pusher won't win based on priority.
+
+		// First, establish "start" of existing pushee's txn via heartbeat.
+		pushee.Epoch = test.curEpoch
+		hbArgs, hbReply := heartbeatArgs(pushee, 0)
+		hbArgs.Timestamp = pushee.Timestamp
+		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+			t.Fatal(err)
+		}
+
+		// Now, attempt to push the transaction with intent epoch set appropriately.
+		pushee.Epoch = test.intentEpoch
+		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		if test.expSuccess != (err == nil) {
+			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
+		}
+	}
+}
+
+// TestInternalPushTxnPriorities verifies that txns with lower
+// priority are pushed; if priorities are equal, then the txns
+// are ordered by txn timestamp, with the more recent timestamp
+// being pushable.
+func TestInternalPushTxnPriorities(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	ts1 := proto.Timestamp{WallTime: 1}
+	ts2 := proto.Timestamp{WallTime: 2}
+	testCases := []struct {
+		pusherPriority, pusheePriority int32
+		pusherTS, pusheeTS             proto.Timestamp
+		expSuccess                     bool
+	}{
+		// Pusher has higher priority succeeds.
+		{2, 1, ts1, ts1, true},
+		// Pusher has lower priority fails.
+		{1, 2, ts1, ts1, false},
+		// Pusher has lower priority fails, even with older txn timestamp.
+		{1, 2, ts1, ts2, false},
+		// With same priorities, older txn timestamp succeeds.
+		{1, 1, ts1, ts2, true},
+		// With same priorities, same txn timestamp fails.
+		{1, 1, ts1, ts1, false},
+		// With same priorities, newer txn timestamp fails.
+		{1, 1, ts2, ts1, false},
+	}
+
+	for i, test := range testCases {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher.Priority = test.pusherPriority
+		pushee.Priority = test.pusheePriority
+		pusher.Timestamp = test.pusherTS
+		pushee.Timestamp = test.pusheeTS
+
+		// Now, attempt to push the transaction with intent epoch set appropriately.
+		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		if test.expSuccess != (err == nil) {
+			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
+		}
+	}
+}
+
+// TestInternalPushTxnPushTimestamp verifies that with args.Abort is
+// false (i.e. for read/write conflict), the pushed txn keeps status
+// PENDING, but has its txn Timestamp moved forward to the pusher's
+// txn Timestamp + 1.
+func TestInternalPushTxnPushTimestamp(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher.Priority = 2
+	pushee.Priority = 1 // pusher will win
+	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 25}
+	pushee.Timestamp = proto.Timestamp{WallTime: 5, Logical: 1}
+
+	// Now, push the transaction with args.Abort=false.
+	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 0)
+	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+		t.Errorf("unexpected error on push: %v", err)
+	}
+	expTS := pusher.Timestamp
+	expTS.Logical++
+	if !reply.PushTxn.Timestamp.Equal(expTS) {
+		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PushTxn.Timestamp)
+	}
+	if reply.PushTxn.Status != proto.PENDING {
+		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PushTxn.Status)
 	}
 }

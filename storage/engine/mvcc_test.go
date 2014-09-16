@@ -34,18 +34,22 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey1   = Key("/db1")
-	testKey2   = Key("/db2")
-	testKey3   = Key("/db3")
-	testKey4   = Key("/db4")
-	txn1       = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1}
-	txn1e2     = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2}
-	txn2       = &proto.Transaction{ID: []byte("Txn2")}
-	value1     = proto.Value{Bytes: []byte("testValue1")}
-	value2     = proto.Value{Bytes: []byte("testValue2")}
-	value3     = proto.Value{Bytes: []byte("testValue3")}
-	value4     = proto.Value{Bytes: []byte("testValue4")}
-	valueEmpty = proto.Value{}
+	testKey1     = Key("/db1")
+	testKey2     = Key("/db2")
+	testKey3     = Key("/db3")
+	testKey4     = Key("/db4")
+	txn1         = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1}
+	txn1Commit   = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.COMMITTED}
+	txn1Abort    = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.ABORTED}
+	txn1e2       = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2}
+	txn1e2Commit = &proto.Transaction{ID: []byte("Txn1"), Epoch: 2, Status: proto.COMMITTED}
+	txn2         = &proto.Transaction{ID: []byte("Txn2")}
+	txn2Commit   = &proto.Transaction{ID: []byte("Txn2"), Status: proto.COMMITTED}
+	value1       = proto.Value{Bytes: []byte("testValue1")}
+	value2       = proto.Value{Bytes: []byte("testValue2")}
+	value3       = proto.Value{Bytes: []byte("testValue3")}
+	value4       = proto.Value{Bytes: []byte("testValue4")}
+	valueEmpty   = proto.Value{}
 )
 
 // createTestMVCC creates a new MVCC instance with the given engine.
@@ -649,7 +653,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 	}
 
 	// Resolve will write with txn1's timestamp which is 0,0.
-	err = mvcc.ResolveWriteIntent(testKey1, txn1, true)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -664,7 +668,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 func TestMVCCAbortTxn(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
-	err = mvcc.ResolveWriteIntent(testKey1, txn1, false)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1Abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +691,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
 	err = mvcc.Put(testKey1, makeTS(1, 0), value2, nil)
 	err = mvcc.Put(testKey1, makeTS(2, 0), value3, txn1)
-	err = mvcc.ResolveWriteIntent(testKey1, txn1, false)
+	err = mvcc.ResolveWriteIntent(testKey1, txn1Abort)
 
 	meta, err := mvcc.engine.Get(encoding.EncodeBinary(nil, testKey1))
 	if err != nil {
@@ -733,7 +737,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
-	if err := mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1e2, makeTS(1, 0)), true); err != nil {
+	if err := mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Attempt to read older timestamp; should fail.
@@ -759,7 +763,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	err = mvcc.Put(testKey2, makeTS(0, 0), value2, txn1e2)
-	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey2), 2, txn1e2, true)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey2), 2, txn1e2Commit)
 	if num != 2 {
 		t.Errorf("expected 2 rows resolved; got %d", num)
 	}
@@ -790,7 +794,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	err = mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1, makeTS(1, 0)), true)
+	err = mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1Commit, makeTS(1, 0)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -809,25 +813,56 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	}
 }
 
+func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
+	value, err := mvcc.Get(testKey1, makeTS(1, 0), txn1)
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value1.Bytes, value.Bytes)
+	}
+
+	// Resolve with a higher commit timestamp, but with still-pending transaction.
+	// This respresents a straightforward push (i.e. from a read/write conflict).
+	err = mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1, makeTS(1, 0)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if value, err := mvcc.Get(testKey1, makeTS(1, 0), nil); value != nil || err == nil {
+		t.Fatalf("expected both value nil and err to be a writeIntentError: %+v", value)
+	}
+
+	// Can still fetch the value using txn1.
+	value, err = mvcc.Get(testKey1, makeTS(1, 0), txn1)
+	if !value.Timestamp.Equal(makeTS(1, 0)) {
+		t.Fatalf("expected timestamp %+v == %+v", value.Timestamp, makeTS(1, 0))
+	}
+	if !bytes.Equal(value1.Bytes, value.Bytes) {
+		t.Fatalf("the value %s in get result does not match the value %s in request",
+			value1.Bytes, value.Bytes)
+	}
+}
+
 func TestMVCCResolveTxnNoOps(t *testing.T) {
 	mvcc := createTestMVCC(t)
 
 	// Resolve a non existent key; noop.
-	err := mvcc.ResolveWriteIntent(testKey1, txn1, true)
+	err := mvcc.ResolveWriteIntent(testKey1, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add key and resolve despite there being no intent.
 	err = mvcc.Put(testKey1, makeTS(0, 0), value1, nil)
-	err = mvcc.ResolveWriteIntent(testKey1, txn2, true)
+	err = mvcc.ResolveWriteIntent(testKey1, txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write intent and resolve with different txn.
 	err = mvcc.Put(testKey1, makeTS(1, 0), value2, txn1)
-	err = mvcc.ResolveWriteIntent(testKey1, txn2, true)
+	err = mvcc.ResolveWriteIntent(testKey1, txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -840,7 +875,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	err = mvcc.Put(testKey3, makeTS(0, 0), value3, txn2)
 	err = mvcc.Put(testKey4, makeTS(0, 0), value4, txn1)
 
-	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey4), 0, txn1, true)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey4), 0, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}

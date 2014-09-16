@@ -491,6 +491,11 @@ func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, rep
 	return n.executeCmd(storage.InternalHeartbeatTxn, args, reply)
 }
 
+// InternalPushTxn .
+func (n *Node) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
+	return n.executeCmd(storage.InternalPushTxn, args, reply)
+}
+
 // InternalResolveIntent .
 func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
 	return n.executeCmd(storage.InternalResolveIntent, args, reply)
