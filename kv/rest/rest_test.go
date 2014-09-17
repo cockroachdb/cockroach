@@ -343,7 +343,9 @@ func TestSystemKeys(t *testing.T) {
 
 	// Compute expected system key.
 	desc := &proto.RangeDescriptor{
+		RaftID:   1,
 		StartKey: engine.KeyMin,
+		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
 			proto.Replica{
 				NodeID:  1,

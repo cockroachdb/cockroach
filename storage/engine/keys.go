@@ -177,8 +177,8 @@ var (
 	// KeyLocalIdent stores an immutable identifier for this store,
 	// created when the store is first bootstrapped.
 	KeyLocalIdent = MakeKey(KeyLocalPrefix, Key("store-ident"))
-	// KeyLocalRangeIDGenerator is a range ID generator sequence. Range IDs
-	// must be unique per node ID.
+	// KeyLocalRangeIDGenerator is a range ID generator sequence. Range
+	// IDs must be unique per node ID.
 	KeyLocalRangeIDGenerator = MakeKey(KeyLocalPrefix, Key("range-idgen"))
 	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
 	// The value is a struct of type RangeMetadata.
@@ -226,6 +226,8 @@ var (
 	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, Key("zone"))
 	// KeyNodeIDGenerator contains a sequence generator for node IDs.
 	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-idgen"))
+	// KeyRaftIDGenerator is a Raft consensus group ID generator sequence.
+	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, Key("raft-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.
 	KeySchemaPrefix = MakeKey(KeySystemPrefix, Key("schema"))
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence

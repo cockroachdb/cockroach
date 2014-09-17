@@ -113,7 +113,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	}
 	clock := hlc.NewClock(hlc.UnixNano)
 	now := clock.Now()
-	s := storage.NewStore(clock, eng, nil)
+	s := storage.NewStore(clock, eng, nil, nil)
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {
@@ -122,10 +122,6 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 
 	// Bootstrap store to persist the store ident.
 	if err := s.Bootstrap(sIdent); err != nil {
-		return nil, err
-	}
-
-	if err := s.Init(); err != nil {
 		return nil, err
 	}
 
@@ -150,10 +146,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	localDB := kv.NewDB(localKV, clock)
 
 	// Initialize range addressing records and default administrative configs.
-	desc := &proto.RangeDescriptor{
-		StartKey: engine.KeyMin,
-		Replicas: []proto.Replica{replica},
-	}
+	desc := &rng.Meta.RangeDescriptor
 	if err := storage.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
 		return nil, err
 	}
@@ -235,7 +228,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
 	for _, e := range engines {
-		s := storage.NewStore(clock, e, n.gossip)
+		s := storage.NewStore(clock, e, n.db, n.gossip)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Init(); err != nil {
@@ -408,7 +401,7 @@ func (n *Node) gossipCapacities() {
 // executeCmd looks up the store specified by header.Replica, and runs
 // Store.ExecuteCmd.
 func (n *Node) executeCmd(method string, args proto.Request, reply proto.Response) error {
-	store, err := n.localKV.GetStore(&args.Header().Replica)
+	store, err := n.localKV.GetStore(args.Header().Replica.StoreID)
 	if err != nil {
 		return err
 	}

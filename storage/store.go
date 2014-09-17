@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -38,6 +39,8 @@ const (
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
+	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
+	raftIDAllocCount = 10
 )
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
@@ -106,18 +109,23 @@ type Store struct {
 	Ident     proto.StoreIdent
 	clock     *hlc.Clock
 	engine    engine.Engine  // The underlying key-value store
+	db        DB             // Cockroach KV DB
 	allocator *allocator     // Makes allocation decisions
 	gossip    *gossip.Gossip // Passed to new ranges
 
-	mu     sync.RWMutex     // Protects ranges
-	ranges map[int64]*Range // Map of ranges by range ID
+	mu          sync.RWMutex     // Protects variables below...
+	ranges      map[int64]*Range // Map of ranges by range ID
+	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
+	nextRaftID  int64            // Next available Raft ID
+	lastRaftID  int64            // Last available Raft ID in pre-alloc'd block
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.Clock, engine engine.Engine, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.Clock, engine engine.Engine, db DB, gossip *gossip.Gossip) *Store {
 	return &Store{
 		clock:     clock,
 		engine:    engine,
+		db:        db,
 		allocator: &allocator{},
 		gossip:    gossip,
 		ranges:    map[int64]*Range{},
@@ -131,6 +139,8 @@ func (s *Store) Close() {
 	for _, rng := range s.ranges {
 		rng.Stop()
 	}
+	s.ranges = map[int64]*Range{}
+	s.rangesByKey = nil
 }
 
 // String formats a store for debug output.
@@ -144,6 +154,9 @@ func (s *Store) Init() error {
 	if err := s.engine.Start(); err != nil {
 		return err
 	}
+	// GCTimeouts method is called each time an engine compaction is
+	// underway. It sets minimum timeouts for transaction records and
+	// response cache entries.
 	s.engine.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
 		now := s.clock.Now()
 		minTxnTS = 0 // disable GC of transactions until we know minimum write intent age
@@ -162,9 +175,8 @@ func (s *Store) Init() error {
 	// TODO(spencer): scan through all range metadata and instantiate
 	// ranges. Right now we just get range ID hardcoded as 1.
 	var meta proto.RangeMetadata
-	ok, err = engine.GetProto(s.engine, makeRangeKey(1), &meta)
-	if err != nil || !ok {
-		return err
+	if ok, err = engine.GetProto(s.engine, makeRangeKey(1), &meta); err != nil || !ok {
+		return util.Errorf("unable to read range 1: %v", err)
 	}
 
 	rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip, s)
@@ -173,6 +185,7 @@ func (s *Store) Init() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ranges[meta.RangeID] = rng
+	s.rangesByKey = append(s.rangesByKey, rng)
 	return nil
 }
 
@@ -205,41 +218,61 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 	return nil, proto.NewRangeNotFoundError(rangeID)
 }
 
-// GetRanges fetches all ranges.
-func (s *Store) GetRanges() RangeSlice {
+// LookupRange looks up a range via binary search over the sorted
+// "rangesByKey" RangeSlice. Returns nil if no range is found for
+// specified key range.
+func (s *Store) LookupRange(start, end engine.Key) *Range {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var ranges RangeSlice
-	for _, rng := range s.ranges {
-		ranges = append(ranges, rng)
+	n := sort.Search(len(s.rangesByKey), func(i int) bool {
+		return bytes.Compare(start, s.rangesByKey[i].Meta.EndKey) < 0
+	})
+	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Meta.ContainsKeyRange(start, end) {
+		return nil
 	}
-	return ranges
-	// TODO(spencer): any changes to the ranges map will need to also
-	// update the caller of this method. This can probably be done
-	// using a listener for a store's range changes.
+	return s.rangesByKey[n]
 }
 
-// CreateRange allocates a new range ID and stores range metadata.
-// On success, returns the new range.
+// CreateRange creates a new range by allocating a new range ID and
+// storing range metadata. On success, returns the new range.
+//
+// TODO(spencer): this method is temporary and will need to be
+// removed.  In its place, ranges themselves will initiate the
+// creation of a new range. This is done during splits. The range
+// leader calls store.SplitRange, which allocates the raft ID and all
+// range IDs (range IDs will need to be changed from the local ID
+// allocator used here to a global allocator). This way, the complete
+// replica slice will be available for the Raft.InternalSplitRange
+// command to be executed at each of the replicas in the original
+// range, yielding identical results.
 func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error) {
+	if len(replicas) != 1 {
+		panic("CreateRange can only handle a single replica currently")
+	}
+	raftID, err := s.allocateRaftID()
+	if err != nil {
+		return nil, err
+	}
 	rangeID, err := engine.Increment(s.engine, engine.KeyLocalRangeIDGenerator, 1)
 	if err != nil {
 		return nil, err
 	}
 	if ok, _ := engine.GetProto(s.engine, makeRangeKey(rangeID), nil); ok {
-		return nil, util.Error("newly allocated range ID already in use")
+		return nil, util.Error("range ID already in use")
 	}
 	// RangeMetadata is stored local to this store only. It is neither
 	// replicated via raft nor available via the global kv store.
 	meta := &proto.RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
-		RangeID:   rangeID,
 		RangeDescriptor: proto.RangeDescriptor{
+			RaftID:   raftID,
 			StartKey: startKey,
 			EndKey:   endKey,
 			Replicas: replicas,
 		},
+		RangeID: rangeID,
 	}
+	meta.Replicas[0].RangeID = rangeID
 	err = engine.PutProto(s.engine, makeRangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
@@ -249,6 +282,9 @@ func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replic
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ranges[rangeID] = rng
+	// Append new ranges to rangesByKey and keep sorted.
+	s.rangesByKey = append(s.rangesByKey, rng)
+	sort.Sort(s.rangesByKey)
 	return rng, nil
 }
 
@@ -317,6 +353,54 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 		return rng.ReadOnlyCmd(method, args, reply)
 	}
 	return rng.ReadWriteCmd(method, args, reply)
+}
+
+// allocateRaftID allocates a new Raft ID from the global KV DB.
+// Each store allocates blocks of IDS in raftIDAllocCount increments
+// for efficiency.
+func (s *Store) allocateRaftID() (int64, error) {
+	// Handle the bootstrapping case where db is nil; bootstrap raft ID is 1.
+	if s.db == nil {
+		return 1, nil
+	}
+
+	s.mu.Lock()
+	// If we have pre-alloc'd Raft IDs available, return one.
+	if s.nextRaftID < s.lastRaftID {
+		id := s.nextRaftID
+		s.nextRaftID++
+		s.mu.Unlock()
+		return id, nil
+	}
+
+	// Unlock mutex in anticipation of increment.
+	s.mu.Unlock()
+	ir := <-s.db.Increment(&proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:  engine.KeyRaftIDGenerator,
+			User: UserRoot,
+		},
+		Increment: raftIDAllocCount,
+	})
+	if ir.Error != nil {
+		return 0, util.Errorf("unable to allocate raft IDs: %v", ir.Error)
+	}
+	if ir.NewValue <= 1 {
+		return 0, util.Errorf("raft ID allocation returned invalid allocation: %+v", ir)
+	}
+
+	// Re-lock mutex after call to increment.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastRaftID = ir.NewValue + 1
+	s.nextRaftID = ir.NewValue - raftIDAllocCount + 1
+	// Raft ID 1 is reserved for the bootstrap raft group.
+	if s.nextRaftID <= 1 {
+		s.nextRaftID = 2
+	}
+	s.nextRaftID++
+	return s.nextRaftID - 1, nil
+
 }
 
 // RangeManager is an interface satisfied by Store through which ranges

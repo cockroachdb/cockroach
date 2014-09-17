@@ -155,7 +155,7 @@ func (kv *DistKV) internalRangeLookup(key engine.Key,
 		MaxRanges: rangeLookupMaxRanges,
 	}
 	replyChan := make(chan *proto.InternalRangeLookupResponse, len(info.Replicas))
-	if err := kv.sendRPC(info.Replicas, "Node.InternalRangeLookup", args, replyChan); err != nil {
+	if err := kv.sendRPC(info, "Node.InternalRangeLookup", args, replyChan); err != nil {
 		return nil, err
 	}
 	reply := <-replyChan
@@ -224,14 +224,14 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, err
 // proto.Replica slice. First, replicas which have gossipped
 // addresses are corraled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
-func (kv *DistKV) sendRPC(replicas []proto.Replica, method string, args proto.Request, replyChan interface{}) error {
-	if len(replicas) == 0 {
+func (kv *DistKV) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, replyChan interface{}) error {
+	if len(desc.Replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
 	}
 	// Build a map from replica address (if gossipped) to args struct
 	// with replica set in header.
 	argsMap := map[net.Addr]interface{}{}
-	for _, replica := range replicas {
+	for _, replica := range desc.Replicas {
 		addr, err := kv.nodeIDToAddr(replica.NodeID)
 		if err != nil {
 			log.V(1).Infof("node %d address is not gossipped", replica.NodeID)
@@ -277,9 +277,9 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 		MaxAttempts: 0, // retry indefinitely
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
-		rangeMeta, err := kv.rangeCache.LookupRangeMetadata(args.Header().Key)
+		desc, err := kv.rangeCache.LookupRangeMetadata(args.Header().Key)
 		if err == nil {
-			err = kv.sendRPC(rangeMeta.Replicas, method, args, replyChan)
+			err = kv.sendRPC(desc, method, args, replyChan)
 		}
 		if err != nil {
 			// Range metadata might be out of date - evict it.

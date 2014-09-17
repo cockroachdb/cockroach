@@ -104,7 +104,7 @@ func TestRangeDescriptorContains(t *testing.T) {
 }
 
 var testConfig = ZoneConfig{
-	Replicas: []Attributes{
+	ReplicaAttrs: []Attributes{
 		Attributes{Attrs: []string{"a", "ssd"}},
 		Attributes{Attrs: []string{"a", "hdd"}},
 		Attributes{Attrs: []string{"b", "ssd"}},

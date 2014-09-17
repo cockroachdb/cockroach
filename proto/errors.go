@@ -56,16 +56,20 @@ func NewRangeKeyMismatchError(start, end []byte, meta *RangeMetadata) *RangeKeyM
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		Range:           *meta,
+		Range:           meta,
 	}
 }
 
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
-	return fmt.Sprintf("key range %q-%q outside of bounds of range %q: %q-%q",
-		string(e.RequestStartKey), string(e.RequestEndKey),
-		string(e.Range.RangeID),
-		string(e.Range.StartKey), string(e.Range.EndKey))
+	if e.Range != nil {
+		return fmt.Sprintf("key range %q-%q outside of bounds of range %q: %q-%q",
+			string(e.RequestStartKey), string(e.RequestEndKey),
+			string(e.Range.RangeID),
+			string(e.Range.StartKey), string(e.Range.EndKey))
+	}
+	return fmt.Sprintf("key range %q-%q could not be located within a range on store",
+		string(e.RequestStartKey), string(e.RequestEndKey))
 }
 
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.

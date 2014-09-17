@@ -37,6 +37,7 @@ import (
 
 var (
 	testRangeDescriptor = proto.RangeDescriptor{
+		RaftID:   1,
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
@@ -60,7 +61,7 @@ var (
 		Write: []string{"root"},
 	}
 	testDefaultZoneConfig = proto.ZoneConfig{
-		Replicas: []proto.Attributes{
+		ReplicaAttrs: []proto.Attributes{
 			proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			proto.Attributes{Attrs: []string{"dc2", "mem"}},
 		},
@@ -88,8 +89,9 @@ func createTestEngine(t *testing.T) engine.Engine {
 // of the keyspace. The gossip instance is also returned for testing.
 func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip) {
 	rm := &proto.RangeMetadata{
-		RangeID:         0,
+		ClusterID:       "cluster1",
 		RangeDescriptor: testRangeDescriptor,
+		RangeID:         0,
 	}
 	g := gossip.New(rpc.LoadInsecureTLSConfig())
 	clock := hlc.NewClock(hlc.UnixNano)

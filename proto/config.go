@@ -74,6 +74,18 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
 }
 
+// GetReplica returns the replica matching this RangeMetadata's RangeID.
+// Each RangeMetadata is keyed to just one of the replicas based on
+// RangeID. We simply find the matching entry in the replicas slice.
+func (r *RangeMetadata) GetReplica() *Replica {
+	for i := range r.Replicas {
+		if r.Replicas[i].RangeID == r.RangeID {
+			return &r.Replicas[i]
+		}
+	}
+	panic(fmt.Sprintf("could not locate replica matching range %d: %s", r.RangeID, r.Replicas))
+}
+
 // CanRead does a linear search for user to verify read permission.
 func (p *PermConfig) CanRead(user string) bool {
 	for _, u := range p.Read {

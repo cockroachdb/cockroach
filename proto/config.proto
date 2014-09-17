@@ -42,22 +42,23 @@ message Replica {
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 message RangeDescriptor {
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
   // StartKey is the first key which may be contained by this range.
-  optional bytes start_key = 1 [(gogoproto.nullable) = false];
+  optional bytes start_key = 2 [(gogoproto.nullable) = false];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
   // contained in this range - it will be contained in the immediately
   // subsequent range.
-  optional bytes end_key = 2 [(gogoproto.nullable) = false];
+  optional bytes end_key = 3 [(gogoproto.nullable) = false];
   // List of replicas where this range is stored.
-  repeated Replica replicas = 3 [(gogoproto.nullable) = false];
+  repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }
 
 // A RangeMetadata holds information about the range. This includes
-// the cluster ID, the range ID, and a RangeDescriptor describing the
-// contents of the range.
+// the cluster ID, a RangeDescriptor describing the contents of the
+// range, and the range ID which owns the metadata.
 message RangeMetadata {
-  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional string cluster_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
+  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
+  optional RangeDescriptor desc = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
 }
 
@@ -89,10 +90,10 @@ message PermConfig {
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 message ZoneConfig {
-  // Replicas is a slice of Attributes, each describing required
-  // capabilities of each replica in the zone.
-  repeated Attributes Replicas = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty,flow\""];
-  optional int64 RangeMinBytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
-  optional int64 RangeMaxBytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
+  // ReplicaAttrs is a slice of Attributes, each describing required
+  // attributes for each replica in the zone.
+  repeated Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty,flow\""];
+  optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
+  optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
 }

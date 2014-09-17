@@ -26,13 +26,13 @@ import (
 )
 
 var simpleZoneConfig = proto.ZoneConfig{
-	Replicas: []proto.Attributes{
+	ReplicaAttrs: []proto.Attributes{
 		proto.Attributes{Attrs: []string{"a", "ssd"}},
 	},
 }
 
 var multiDisksConfig = proto.ZoneConfig{
-	Replicas: []proto.Attributes{
+	ReplicaAttrs: []proto.Attributes{
 		proto.Attributes{Attrs: []string{"a", "ssd"}},
 		proto.Attributes{Attrs: []string{"a", "hdd"}},
 		proto.Attributes{Attrs: []string{"a", "mem"}},
@@ -40,7 +40,7 @@ var multiDisksConfig = proto.ZoneConfig{
 }
 
 var multiDCConfig = proto.ZoneConfig{
-	Replicas: []proto.Attributes{
+	ReplicaAttrs: []proto.Attributes{
 		proto.Attributes{Attrs: []string{"a", "ssd"}},
 		proto.Attributes{Attrs: []string{"b", "ssd"}},
 	},
@@ -180,7 +180,7 @@ func TestSimpleRetrieval(t *testing.T) {
 		storeFinder: singleStore,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(simpleZoneConfig.Replicas[0], []proto.Replica{})
+	result, err := a.allocate(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{})
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestNoAvailableDisks(t *testing.T) {
 		storeFinder: noStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(simpleZoneConfig.Replicas[0], []proto.Replica{})
+	result, err := a.allocate(simpleZoneConfig.ReplicaAttrs[0], []proto.Replica{})
 	if result != nil {
 		t.Errorf("expected nil result: %+v", result)
 	}
@@ -208,7 +208,7 @@ func TestThreeDisksSameDC(t *testing.T) {
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result1, err := a.allocate(multiDisksConfig.Replicas[0], []proto.Replica{})
+	result1, err := a.allocate(multiDisksConfig.ReplicaAttrs[0], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -219,10 +219,10 @@ func TestThreeDisksSameDC(t *testing.T) {
 		proto.Replica{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
-			Attrs:   multiDisksConfig.Replicas[0],
+			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
 	}
-	result2, err := a.allocate(multiDisksConfig.Replicas[1], exReplicas)
+	result2, err := a.allocate(multiDisksConfig.ReplicaAttrs[1], exReplicas)
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestThreeDisksSameDC(t *testing.T) {
 	if result1.Node.NodeID == result2.Node.NodeID {
 		t.Errorf("Expected node ids to be different %+v vs %+v", result1, result2)
 	}
-	result3, err := a.allocate(multiDisksConfig.Replicas[2], []proto.Replica{})
+	result3, err := a.allocate(multiDisksConfig.ReplicaAttrs[2], []proto.Replica{})
 	if err != nil {
 		t.Errorf("Unable to perform allocation: %v", err)
 	}
@@ -246,11 +246,11 @@ func TestTwoDatacenters(t *testing.T) {
 		storeFinder: multiDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result1, err := a.allocate(multiDCConfig.Replicas[0], []proto.Replica{})
+	result1, err := a.allocate(multiDCConfig.ReplicaAttrs[0], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.allocate(multiDCConfig.Replicas[1], []proto.Replica{})
+	result2, err := a.allocate(multiDCConfig.ReplicaAttrs[1], []proto.Replica{})
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
@@ -258,11 +258,11 @@ func TestTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes 1 & 2: %+v vs %+v", result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	_, err = a.allocate(multiDCConfig.Replicas[1], []proto.Replica{
+	_, err = a.allocate(multiDCConfig.ReplicaAttrs[1], []proto.Replica{
 		proto.Replica{
 			NodeID:  result2.Node.NodeID,
 			StoreID: result2.StoreID,
-			Attrs:   multiDCConfig.Replicas[1],
+			Attrs:   multiDCConfig.ReplicaAttrs[1],
 		},
 	})
 	if err == nil {
@@ -275,11 +275,11 @@ func TestExistingReplica(t *testing.T) {
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
 	}
-	result, err := a.allocate(multiDisksConfig.Replicas[1], []proto.Replica{
+	result, err := a.allocate(multiDisksConfig.ReplicaAttrs[1], []proto.Replica{
 		proto.Replica{
 			NodeID:  1,
 			StoreID: 1,
-			Attrs:   multiDisksConfig.Replicas[0],
+			Attrs:   multiDisksConfig.ReplicaAttrs[0],
 		},
 	})
 	if err != nil {
