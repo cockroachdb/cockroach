@@ -29,7 +29,7 @@ import (
 // network.
 type info struct {
 	Key string // Info key
-	// Info value: must be one of {int65, float64, string} or
+	// Info value: must be one of {int64, float64, string} or
 	// implement the util.Ordered interface to be used with groups.
 	// For single infos any type is allowed.
 	Val       interface{}

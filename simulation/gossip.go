@@ -64,14 +64,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -84,8 +83,8 @@ const (
 )
 
 var (
-	size    = flag.String("size", "medium", "size of network (tiny|small|medium|large|huge|ginormous)")
-	network = flag.String("network", "unix", "test with network type (unix|tcp)")
+	size        = flag.String("size", "medium", "size of network (tiny|small|medium|large|huge|ginormous)")
+	networkType = flag.String("network", "unix", "test with network type (unix|tcp)")
 	// simGossipInterval is the compressed timescale upon which
 	// simulations run.
 	simGossipInterval = time.Millisecond * 150
@@ -141,7 +140,7 @@ func (em edgeMap) addEdge(addr string, e edge) {
 //        node5 -> node2
 //        node5 -> node3
 //   }
-func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edgeSet map[string]edge) string {
+func outputDotFile(dotFN string, cycle int, network *gossip.SimulationNetwork, edgeSet map[string]edge) string {
 	f, err := os.Create(dotFN)
 	if err != nil {
 		log.Fatalf("unable to create temp file: %s", err)
@@ -151,19 +150,17 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 	// Determine maximum number of incoming connections. Create outgoing
 	// edges, keeping track of which are new since last time (added=true).
 	outgoingMap := make(edgeMap)
-	sortedAddresses := util.MapKeys(nodes).([]string)
-	sort.Strings(sortedAddresses)
 	var maxIncoming int
 	// The order the graph file is written influences the arrangement
 	// of nodes in the output image, so it makes sense to eliminate
 	// randomness here. Unfortunately with graphviz it's fairly hard
 	// to get a consistent ordering.
-	for _, addr := range sortedAddresses {
-		node := nodes[addr]
+	for _, simNode := range network.Nodes {
+		node := simNode.Gossip
 		incoming := node.Incoming()
 		for _, iAddr := range incoming {
-			e := edge{dest: addr}
-			key := fmt.Sprintf("%s:%s", iAddr.String(), addr)
+			e := edge{dest: simNode.Addr.String()}
+			key := fmt.Sprintf("%s:%s", iAddr.String(), simNode.Addr)
 			if _, ok := edgeSet[key]; !ok {
 				e.added = true
 			}
@@ -185,12 +182,13 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 
 	f.WriteString("digraph G {\n")
 	f.WriteString("node [shape=record];\n")
-	for _, addr := range sortedAddresses {
-		node := nodes[addr]
+	for _, simNode := range network.Nodes {
+		node := simNode.Gossip
 		var incomplete int
 		var totalAge int64
-		for infoKey := range nodes {
-			if infoKey == addr {
+		for _, addr := range network.Addrs {
+			infoKey := addr.String()
+			if infoKey == simNode.Addr.String() {
 				continue // skip the node's own info
 			}
 			if val, err := node.GetInfo(infoKey); err != nil {
@@ -213,7 +211,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 			nodeColor = "color=red,"
 			age = fmt.Sprintf("missing %d", incomplete)
 		} else {
-			age = strconv.FormatFloat(float64(totalAge)/float64(len(nodes)-1), 'f', 2, 64)
+			age = strconv.FormatFloat(float64(totalAge)/float64(len(network.Nodes)-1), 'f', 2, 64)
 		}
 		fontSize := minDotFontSize
 		if maxIncoming > 0 {
@@ -222,9 +220,13 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 		}
 		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|MH=%d, AA=%s, SA=%d}\"]\n",
 			node.Name, nodeColor, fontSize, node.Name, node.MaxHops(), age, sentinelAge))
-		outgoing := outgoingMap[addr]
+		outgoing := outgoingMap[simNode.Addr.String()]
 		for _, e := range outgoing {
-			dest := nodes[e.dest]
+			destSimNode, ok := network.GetNodeFromAddr(e.dest)
+			if !ok {
+				continue
+			}
+			dest := destSimNode.Gossip
 			style := ""
 			if e.added {
 				style = " [color=green]"
@@ -233,7 +235,7 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 			}
 			f.WriteString(fmt.Sprintf("\t%s -> %s%s\n", node.Name, dest.Name, style))
 			if !e.deleted {
-				edgeSet[fmt.Sprintf("%s:%s", addr, e.dest)] = e
+				edgeSet[fmt.Sprintf("%s:%s", simNode.Addr, e.dest)] = e
 			}
 		}
 	}
@@ -242,6 +244,10 @@ func outputDotFile(dotFN string, cycle int, nodes map[string]*gossip.Gossip, edg
 }
 
 func main() {
+	// Seed the random number generator for non-determinism across
+	// multiple runs.
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	if f := flag.Lookup("alsologtostderr"); f != nil {
 		fmt.Println("Starting simulation. Add -alsologtostderr to see progress.")
 	}
@@ -285,24 +291,30 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	gossip.SimulateNetwork(nodeCount, *network, gossipInterval, func(cycle int, nodes map[string]*gossip.Gossip) bool {
-		if cycle == numCycles {
-			return false
-		}
-		// Update infos.
-		for addr, node := range nodes {
-			if err := node.AddInfo(addr, int64(cycle), time.Hour); err != nil {
-				log.Infof("error updating infos addr: %s cycle: %v: %s", addr, cycle, err)
+	n := gossip.NewSimulationNetwork(nodeCount, *networkType, gossipInterval)
+	n.SimulateNetwork(
+		func(cycle int, network *gossip.SimulationNetwork) bool {
+			if cycle == numCycles {
+				return false
 			}
-		}
-		// Output dot graph periodically.
-		if (cycle+1)%outputEvery == 0 {
-			dotFN := fmt.Sprintf("%s/sim-cycle-%d.dot", dirName, cycle)
-			outputDotFile(dotFN, cycle, nodes, edgeSet)
-		}
+			// Update infos.
+			nodes := network.Nodes
+			for i := 0; i < len(nodes); i++ {
+				node := nodes[i].Gossip
+				if err := node.AddInfo(nodes[i].Addr.String(), int64(cycle), time.Hour); err != nil {
+					log.Infof("error updating infos addr: %s cycle: %v: %s",
+						nodes[i].Addr.String(), cycle, err)
+				}
+			}
+			// Output dot graph periodically.
+			if (cycle+1)%outputEvery == 0 {
+				dotFN := fmt.Sprintf("%s/sim-cycle-%d.dot", dirName, cycle)
+				outputDotFile(dotFN, cycle, network, edgeSet)
+			}
 
-		return true
-	})
+			return true
+		})
+	n.Stop()
 
 	// Output instructions for viewing graphs.
 	fmt.Printf("To view simulation graph output run (you must install graphviz):\n\nfor f in %s/*.dot ; do circo $f -Tpng -o $f.png ; echo $f.png ; done\n", dirName)
