@@ -44,7 +44,9 @@ TESTFLAGS := -logtostderr -timeout 10s
 
 all: build test
 
-build: rocksdb roach_proto roach_lib
+auxiliary: rocksdb roach_proto roach_lib
+
+build: auxiliary
 	$(CGO_FLAGS) $(GO) build -o cockroach
 
 rocksdb:
@@ -59,10 +61,10 @@ roach_lib: roach_proto
 goget:
 	$(CGO_FLAGS) $(GO) get ./...
 
-test: build
+test: auxiliary
 	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-testrace: build
+testrace: auxiliary
 	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 coverage: build
