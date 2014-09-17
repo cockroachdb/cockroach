@@ -257,6 +257,22 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	}
 }
 
+// TestStoreRangeIDAllocation verifies that range IDs are
+// allocated in successive blocks.
+func TestStoreRangeIDAllocation(t *testing.T) {
+	store, _ := createTestStore(false, t)
+	defer store.Close()
+
+	// Range IDs should be allocated from ID 2 (first alloc'd range)
+	// to rangeIDCount * 3 + 1.
+	for i := 0; i < rangeIDAllocCount*3; i++ {
+		r := addTestRange(store, engine.Key(fmt.Sprintf("%03d", i)), engine.Key(fmt.Sprintf("%03d", i+1)), t)
+		if r.Meta.RangeID != int64(2+i) {
+			t.Error("expected range id %d; got %d", 2+i, r.Meta.RangeID)
+		}
+	}
+}
+
 func addTestRange(store *Store, start, end engine.Key, t *testing.T) *Range {
 	replicas := []proto.Replica{
 		proto.Replica{StoreID: store.Ident.StoreID},
