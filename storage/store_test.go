@@ -62,8 +62,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Create range and fetch.
-	replica := proto.Replica{StoreID: store.Ident.StoreID, RangeID: 1}
-	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica}); err != nil {
+	if _, err := store.CreateRange(store.BootstrapRangeMetadata()); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
@@ -137,21 +136,29 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, nil)
-	store.Ident.StoreID = 1
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	db, _ := newTestDB(store)
+	store.db = db
 	replica := proto.Replica{StoreID: 1, RangeID: 1}
 	// Create system key range for allocations.
-	_, err := store.CreateRange(engine.KeySystemPrefix, engine.PrefixEndKey(engine.KeySystemPrefix), []proto.Replica{replica})
+	meta := store.BootstrapRangeMetadata()
+	meta.StartKey = engine.KeySystemPrefix
+	meta.EndKey = engine.PrefixEndKey(engine.KeySystemPrefix)
+	_, err := store.CreateRange(meta)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Now that the system key range is available, set store DB so new
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// Now that the system key range is available, initialize the store. set store DB so new
 	// ranges can be allocated as needed for tests.
-	db, _ := newTestDB(store)
-	store.db = db
 	// If requested, create a default range for tests from "a"-"z".
 	if createDefaultRange {
-		replica = proto.Replica{StoreID: 1, RangeID: 2}
-		_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []proto.Replica{replica})
+		replica = proto.Replica{StoreID: 1}
+		_, err := store.CreateRange(store.NewRangeMetadata(engine.Key("a"), engine.Key("z"), []proto.Replica{replica}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -278,7 +285,7 @@ func addTestRange(store *Store, start, end engine.Key, t *testing.T) *Range {
 	replicas := []proto.Replica{
 		proto.Replica{StoreID: store.Ident.StoreID},
 	}
-	r, err := store.CreateRange(start, end, replicas)
+	r, err := store.CreateRange(store.NewRangeMetadata(start, end, replicas))
 	if err != nil {
 		t.Fatal(err)
 	}

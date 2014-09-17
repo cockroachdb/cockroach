@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -39,8 +40,10 @@ const (
 	// GCResponseCacheExpiration is the expiration duration for response
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
-	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
+	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount = 10
+	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
+	rangeIDAllocCount = 10
 )
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
@@ -106,25 +109,25 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident     proto.StoreIdent
-	clock     *hlc.Clock
-	engine    engine.Engine  // The underlying key-value store
-	db        DB             // Cockroach KV DB
-	allocator *allocator     // Makes allocation decisions
-	gossip    *gossip.Gossip // Passed to new ranges
+	Ident        proto.StoreIdent
+	clock        *hlc.Clock
+	engine       engine.Engine  // The underlying key-value store
+	db           DB             // Cockroach KV DB
+	allocator    *allocator     // Makes allocation decisions
+	gossip       *gossip.Gossip // Passed to new ranges
+	raftIDAlloc  *IDAllocator   // Raft ID allocator
+	rangeIDAlloc *IDAllocator   // Range ID allocator
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by range ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
-	nextRaftID  int64            // Next available Raft ID
-	lastRaftID  int64            // Last available Raft ID in pre-alloc'd block
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.Clock, engine engine.Engine, db DB, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.Clock, eng engine.Engine, db DB, gossip *gossip.Gossip) *Store {
 	return &Store{
 		clock:     clock,
-		engine:    engine,
+		engine:    eng,
 		db:        db,
 		allocator: &allocator{},
 		gossip:    gossip,
@@ -150,10 +153,18 @@ func (s *Store) String() string {
 
 // Init starts the engine, sets the GC and reads the StoreIdent.
 func (s *Store) Init() error {
+	// Close store for idempotency.
+	s.Close()
+
 	// Start engine and set garbage collector.
 	if err := s.engine.Start(); err != nil {
 		return err
 	}
+
+	// Create ID allocators.
+	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2, raftIDAllocCount)
+	s.rangeIDAlloc = NewIDAllocator(engine.KeyRangeIDGenerator, s.db, 2, rangeIDAllocCount)
+
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
 	// response cache entries.
@@ -172,20 +183,35 @@ func (s *Store) Init() error {
 		return &NotBootstrappedError{}
 	}
 
-	// TODO(spencer): scan through all range metadata and instantiate
-	// ranges. Right now we just get range ID hardcoded as 1.
-	var meta proto.RangeMetadata
-	if ok, err = engine.GetProto(s.engine, makeRangeKey(1), &meta); err != nil || !ok {
-		return util.Errorf("unable to read range 1: %v", err)
-	}
-
-	rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip, s)
-	rng.Start()
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ranges[meta.RangeID] = rng
-	s.rangesByKey = append(s.rangesByKey, rng)
+	start := engine.KeyLocalRangeMetadataPrefix
+	end := engine.PrefixEndKey(start)
+	const rows = 64
+	for {
+		kvs, err := s.engine.Scan(start, end, rows)
+		if err != nil {
+			return err
+		}
+		for _, kv := range kvs {
+			var meta proto.RangeMetadata
+			if err := gogoproto.Unmarshal(kv.Value, &meta); err != nil {
+				return err
+			}
+			rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip, s)
+			rng.Start()
+			s.ranges[meta.RangeID] = rng
+			s.rangesByKey = append(s.rangesByKey, rng)
+		}
+		if len(kvs) < rows {
+			break
+		}
+		start = engine.NextKey(kvs[rows-1].Key)
+	}
+
+	// Ensure that ranges are sorted.
+	sort.Sort(s.rangesByKey)
+
 	return nil
 }
 
@@ -233,58 +259,82 @@ func (s *Store) LookupRange(start, end engine.Key) *Range {
 	return s.rangesByKey[n]
 }
 
-// CreateRange creates a new range by allocating a new range ID and
-// storing range metadata. On success, returns the new range.
-//
-// TODO(spencer): this method is temporary and will need to be
-// removed.  In its place, ranges themselves will initiate the
-// creation of a new range. This is done during splits. The range
-// leader calls store.SplitRange, which allocates the raft ID and all
-// range IDs (range IDs will need to be changed from the local ID
-// allocator used here to a global allocator). This way, the complete
-// replica slice will be available for the Raft.InternalSplitRange
-// command to be executed at each of the replicas in the original
-// range, yielding identical results.
-func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error) {
-	if len(replicas) != 1 {
-		panic("CreateRange can only handle a single replica currently")
+// BootstrapRangeMetadata returns a range metadata for the very first range
+// in a cluster.
+func (s *Store) BootstrapRangeMetadata() *proto.RangeMetadata {
+	return &proto.RangeMetadata{
+		ClusterID: s.Ident.ClusterID,
+		RangeDescriptor: proto.RangeDescriptor{
+			RaftID:   1,
+			StartKey: engine.KeyMin,
+			EndKey:   engine.KeyMax,
+			Replicas: []proto.Replica{
+				proto.Replica{
+					NodeID:  1,
+					StoreID: 1,
+					RangeID: 1,
+				},
+			},
+		},
+		RangeID: 1,
 	}
-	raftID, err := s.allocateRaftID()
-	if err != nil {
-		return nil, err
-	}
-	rangeID, err := engine.Increment(s.engine, engine.KeyLocalRangeIDGenerator, 1)
-	if err != nil {
-		return nil, err
-	}
-	if ok, _ := engine.GetProto(s.engine, makeRangeKey(rangeID), nil); ok {
-		return nil, util.Error("range ID already in use")
-	}
-	// RangeMetadata is stored local to this store only. It is neither
-	// replicated via raft nor available via the global kv store.
+}
+
+// NewRangeMetadata creates a new RangeMetadata based on start and
+// end keys and the supplied proto.Replicas slice. It allocates new
+// Raft and range IDs to fill out the supplied RangeMetadata. Returns
+// the new RangeMetadata.
+func (s *Store) NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata {
 	meta := &proto.RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
 		RangeDescriptor: proto.RangeDescriptor{
-			RaftID:   raftID,
-			StartKey: startKey,
-			EndKey:   endKey,
+			RaftID:   s.raftIDAlloc.Allocate(),
+			StartKey: start,
+			EndKey:   end,
 			Replicas: replicas,
 		},
-		RangeID: rangeID,
+		// Note that RangeID is specifically left blank, as it varies
+		// for each replica which belongs to the range.
 	}
-	meta.Replicas[0].RangeID = rangeID
-	err = engine.PutProto(s.engine, makeRangeKey(rangeID), meta)
+
+	// Allocate a range ID for each replica.
+	for i := range meta.Replicas {
+		meta.Replicas[i].RangeID = s.rangeIDAlloc.Allocate()
+	}
+
+	return meta
+}
+
+// CreateRange creates a new Range using the provided RangeMetadata.
+// It persists the metadata locally and adds the new range to the
+// ranges map and sorted rangesByKey slice for doing range lookups
+// by key.
+func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
+	// Set the RangeID for meta based on the replica which matches this store.
+	for _, repl := range meta.Replicas {
+		if repl.StoreID == s.Ident.StoreID {
+			meta.RangeID = repl.RangeID
+			break
+		}
+	}
+	if meta.RangeID == 0 {
+		return nil, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %s",
+			s.Ident.StoreID, meta.Replicas)
+	}
+
+	err := engine.PutProto(s.engine, makeRangeKey(meta.RangeID), meta)
 	if err != nil {
 		return nil, err
 	}
-	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
-	rng.Start()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ranges[rangeID] = rng
-	// Append new ranges to rangesByKey and keep sorted.
+	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
+	rng.Start()
+	s.ranges[meta.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
+
 	return rng, nil
 }
 
@@ -355,58 +405,11 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	return rng.ReadWriteCmd(method, args, reply)
 }
 
-// allocateRaftID allocates a new Raft ID from the global KV DB.
-// Each store allocates blocks of IDS in raftIDAllocCount increments
-// for efficiency.
-func (s *Store) allocateRaftID() (int64, error) {
-	// Handle the bootstrapping case where db is nil; bootstrap raft ID is 1.
-	if s.db == nil {
-		return 1, nil
-	}
-
-	s.mu.Lock()
-	// If we have pre-alloc'd Raft IDs available, return one.
-	if s.nextRaftID < s.lastRaftID {
-		id := s.nextRaftID
-		s.nextRaftID++
-		s.mu.Unlock()
-		return id, nil
-	}
-
-	// Unlock mutex in anticipation of increment.
-	s.mu.Unlock()
-	ir := <-s.db.Increment(&proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  engine.KeyRaftIDGenerator,
-			User: UserRoot,
-		},
-		Increment: raftIDAllocCount,
-	})
-	if ir.Error != nil {
-		return 0, util.Errorf("unable to allocate raft IDs: %v", ir.Error)
-	}
-	if ir.NewValue <= 1 {
-		return 0, util.Errorf("raft ID allocation returned invalid allocation: %+v", ir)
-	}
-
-	// Re-lock mutex after call to increment.
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastRaftID = ir.NewValue + 1
-	s.nextRaftID = ir.NewValue - raftIDAllocCount + 1
-	// Raft ID 1 is reserved for the bootstrap raft group.
-	if s.nextRaftID <= 1 {
-		s.nextRaftID = 2
-	}
-	s.nextRaftID++
-	return s.nextRaftID - 1, nil
-
-}
-
 // RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for rebalancing
 // (i.e. splitting and merging) operations.
 // TODO(Tobias): add necessary operations as we need them.
 type RangeManager interface {
-	CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error)
+	NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata
+	CreateRange(meta *proto.RangeMetadata) (*Range, error)
 }

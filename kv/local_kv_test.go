@@ -100,42 +100,59 @@ func TestLocalKVGetStore(t *testing.T) {
 	}
 }
 
-// createTestStore creates a new Store instance with a single range
-// spanning from start to end.
-func createTestStore(storeID int32, start, end engine.Key, t *testing.T) *storage.Store {
+func TestLocalKVLookupReplica(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	store := storage.NewStore(clock, eng, nil, nil)
-	store.Ident.StoreID = storeID
-	replica := proto.Replica{StoreID: storeID, RangeID: 1}
-	_, err := store.CreateRange(start, end, []proto.Replica{replica})
-	if err != nil {
+	kv := NewLocalKV()
+	db := NewDB(kv, clock)
+	store := storage.NewStore(clock, eng, db, nil)
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	return store
-}
-
-func TestLocalKVLookupReplica(t *testing.T) {
-	kv := NewLocalKV()
-	s1 := createTestStore(1, engine.Key("a"), engine.Key("c"), t)
-	s2 := createTestStore(2, engine.Key("x"), engine.Key("z"), t)
-	kv.AddStore(s1)
-	kv.AddStore(s2)
-
-	if r, err := kv.lookupReplica(engine.Key("a"), engine.Key("c")); r.StoreID != s1.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, r.StoreID, err)
+	kv.AddStore(store)
+	meta := store.BootstrapRangeMetadata()
+	meta.StartKey = engine.KeySystemPrefix
+	meta.EndKey = engine.PrefixEndKey(engine.KeySystemPrefix)
+	if _, err := store.CreateRange(meta); err != nil {
+		t.Fatal(err)
 	}
-	if r, err := kv.lookupReplica(engine.Key("b"), nil); r.StoreID != s1.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, r.StoreID, err)
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// Create two new stores with ranges we care about.
+	var s [2]*storage.Store
+	ranges := []struct {
+		storeID    int32
+		start, end engine.Key
+	}{
+		{2, engine.Key("a"), engine.Key("c")},
+		{3, engine.Key("x"), engine.Key("z")},
+	}
+	for i, rng := range ranges {
+		s[i] = storage.NewStore(clock, eng, db, nil)
+		s[i].Ident.StoreID = rng.storeID
+		replica := proto.Replica{StoreID: rng.storeID}
+		_, err := s[i].CreateRange(store.NewRangeMetadata(rng.start, rng.end, []proto.Replica{replica}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		kv.AddStore(s[i])
+	}
+
+	if r, err := kv.lookupReplica(engine.Key("a"), engine.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
+	}
+	if r, err := kv.lookupReplica(engine.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
 	if r, err := kv.lookupReplica(engine.Key("b"), engine.Key("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if r, err := kv.lookupReplica(engine.Key("x"), engine.Key("z")); r.StoreID != s2.Ident.StoreID {
-		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, r.StoreID, err)
+	if r, err := kv.lookupReplica(engine.Key("x"), engine.Key("z")); r.StoreID != s[1].Ident.StoreID {
+		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := kv.lookupReplica(engine.Key("y"), nil); r.StoreID != s2.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, r.StoreID, err)
+	if r, err := kv.lookupReplica(engine.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 }
