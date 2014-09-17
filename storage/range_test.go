@@ -37,18 +37,20 @@ import (
 
 var (
 	testRangeDescriptor = proto.RangeDescriptor{
-		RangeID:  1,
+		RaftID:   1,
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
 				StoreID: 1,
+				RangeID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
 			{
 				NodeID:  2,
 				StoreID: 1,
+				RangeID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
 			},
 		},
@@ -89,6 +91,7 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 	rm := &proto.RangeMetadata{
 		ClusterID:       "cluster1",
 		RangeDescriptor: testRangeDescriptor,
+		RangeID:         0,
 	}
 	g := gossip.New(rpc.LoadInsecureTLSConfig())
 	clock := hlc.NewClock(hlc.UnixNano)
@@ -261,7 +264,7 @@ func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) 
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 	}
 	reply := &proto.GetResponse{}
@@ -274,7 +277,7 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -290,7 +293,7 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 		Increment: inc,
 	}
@@ -305,7 +308,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 			Txn:     txn,
 		},
 		Commit: commit,
@@ -320,7 +323,7 @@ func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 			Txn:     txn,
 		},
 	}
@@ -336,7 +339,7 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			EndKey:  endKey,
-			RangeID: rangeID,
+			Replica: proto.Replica{RangeID: rangeID},
 		},
 		SnapshotId: snapshotID,
 		MaxResults: maxResults,

@@ -129,6 +129,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	replica := proto.Replica{
 		NodeID:  1,
 		StoreID: 1,
+		RangeID: 1,
 		Attrs:   proto.Attributes{},
 	}
 	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})

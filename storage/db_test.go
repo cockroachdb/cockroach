@@ -40,7 +40,7 @@ func newTestDB(store *Store) (*testDB, *hlc.ManualClock) {
 func (db *testDB) executeCmd(method string, args proto.Request, replyChan interface{}) {
 	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
 	if rng := db.store.LookupRange(args.Header().Key, args.Header().EndKey); rng != nil {
-		args.Header().RangeID = rng.Meta.RangeID
+		args.Header().Replica = *rng.Meta.GetReplica()
 		db.store.ExecuteCmd(method, args, reply)
 	} else {
 		reply.Header().SetGoError(proto.NewRangeKeyMismatchError(args.Header().Key, args.Header().EndKey, nil))

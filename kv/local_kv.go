@@ -92,20 +92,24 @@ func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
 
 // ExecuteCmd synchronously runs Store.ExecuteCmd. The store is looked
 // up from the store map if specified by header.Replica; otherwise,
-// the command is being executed locally, and the range is
+// the command is being executed locally, and the replica is
 // determined via lookup through each of the stores.
 func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
 	// If the replica isn't specified in the header, look it up.
 	var err error
 	var store *storage.Store
-	// If we aren't given a RangeID, then a little bending over
+	// If we aren't given a Replica, then a little bending over
 	// backwards here. We need to find the Store, but all we have is the
 	// Key. So find its Range locally. This lets us use the same
 	// codepath below (store.ExecuteCmd) for both locally and remotely
 	// originated commands.
 	header := args.Header()
-	if header.RangeID == 0 || header.Replica.StoreID == 0 {
-		header.RangeID, header.Replica.StoreID, err = kv.lookupRange(header.Key, header.EndKey)
+	if header.Replica.StoreID == 0 {
+		var repl *proto.Replica
+		repl, err = kv.lookupReplica(header.Key, header.EndKey)
+		if err == nil {
+			header.Replica = *repl
+		}
 	}
 	if err == nil {
 		store, err = kv.GetStore(header.Replica.StoreID)
@@ -131,15 +135,15 @@ func (kv *LocalKV) Close() {
 	}
 }
 
-// lookupRange looks up range ID and store ID. Lookups are done
+// lookupReplica looks up replica by key [range]. Lookups are done
 // by consulting each store in turn via Store.LookupRange(key).
-func (kv *LocalKV) lookupRange(start, end engine.Key) (int64, int32, error) {
+func (kv *LocalKV) lookupReplica(start, end engine.Key) (*proto.Replica, error) {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
 	for _, store := range kv.storeMap {
 		if rng := store.LookupRange(start, end); rng != nil {
-			return rng.Meta.RangeID, store.Ident.StoreID, nil
+			return rng.Meta.GetReplica(), nil
 		}
 	}
-	return 0, 0, proto.NewRangeKeyMismatchError(start, end, nil)
+	return nil, proto.NewRangeKeyMismatchError(start, end, nil)
 }

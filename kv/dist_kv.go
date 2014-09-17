@@ -279,7 +279,6 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 	err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
 		desc, err := kv.rangeCache.LookupRangeMetadata(args.Header().Key)
 		if err == nil {
-			args.Header().RangeID = desc.RangeID
 			err = kv.sendRPC(desc, method, args, replyChan)
 		}
 		if err != nil {

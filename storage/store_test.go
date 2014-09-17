@@ -62,7 +62,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Create range and fetch.
-	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{}); err != nil {
+	replica := proto.Replica{StoreID: store.Ident.StoreID, RangeID: 1}
+	if _, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica}); err != nil {
 		t.Errorf("failure to create first range: %v", err)
 	}
 	if _, err := store.GetRange(1); err != nil {
@@ -137,7 +138,7 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, nil)
 	store.Ident.StoreID = 1
-	replica := proto.Replica{StoreID: 1}
+	replica := proto.Replica{StoreID: 1, RangeID: 1}
 	// Create system key range for allocations.
 	_, err := store.CreateRange(engine.KeySystemPrefix, engine.PrefixEndKey(engine.KeySystemPrefix), []proto.Replica{replica})
 	if err != nil {
@@ -149,6 +150,7 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	store.db = db
 	// If requested, create a default range for tests from "a"-"z".
 	if createDefaultRange {
+		replica = proto.Replica{StoreID: 1, RangeID: 2}
 		_, err := store.CreateRange(engine.Key("a"), engine.Key("z"), []proto.Replica{replica})
 		if err != nil {
 			t.Fatal(err)
@@ -237,7 +239,6 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	defer store.Close()
 	// Range is from "a" to "z", so this value should fail.
 	args, reply := getArgs([]byte("0"), 2)
-	args.RangeID = 2
 	err := store.ExecuteCmd("Get", args, reply)
 	if err == nil {
 		t.Error("expected invalid range")
@@ -257,18 +258,18 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	}
 }
 
-// TestStoreRangeIDAllocation verifies that range IDs are
+// TestStoreRaftIDAllocation verifies that raft IDs are
 // allocated in successive blocks.
-func TestStoreRangeIDAllocation(t *testing.T) {
+func TestStoreRaftIDAllocation(t *testing.T) {
 	store, _ := createTestStore(false, t)
 	defer store.Close()
 
-	// Range IDs should be allocated from ID 2 (first alloc'd range)
-	// to rangeIDCount * 3 + 1.
-	for i := 0; i < rangeIDAllocCount*3; i++ {
+	// Raft IDs should be allocated from ID 2 (first alloc'd range)
+	// to raftIDAllocCount * 3 + 1.
+	for i := 0; i < raftIDAllocCount*3; i++ {
 		r := addTestRange(store, engine.Key(fmt.Sprintf("%03d", i)), engine.Key(fmt.Sprintf("%03d", i+1)), t)
-		if r.Meta.RangeID != int64(2+i) {
-			t.Error("expected range id %d; got %d", 2+i, r.Meta.RangeID)
+		if r.Meta.RaftID != int64(2+i) {
+			t.Error("expected Raft id %d; got %d", 2+i, r.Meta.RaftID)
 		}
 	}
 }

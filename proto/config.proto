@@ -33,15 +33,16 @@ message Attributes {
 message Replica {
   optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
   // combination of node & store attributes.
-  optional Attributes attrs = 3 [(gogoproto.nullable) = false];
+  optional Attributes attrs = 4 [(gogoproto.nullable) = false];
 }
 
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
 message RangeDescriptor {
-  optional int64 range_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
   // StartKey is the first key which may be contained by this range.
   optional bytes start_key = 2 [(gogoproto.nullable) = false];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
@@ -53,11 +54,12 @@ message RangeDescriptor {
 }
 
 // A RangeMetadata holds information about the range. This includes
-// the cluster ID, and a RangeDescriptor describing the
-// contents of the range.
+// the cluster ID, a RangeDescriptor describing the contents of the
+// range, and the range ID which owns the metadata.
 message RangeMetadata {
   optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
   optional RangeDescriptor desc = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
 }
 
 // GCPolicy defines garbage collection policies which apply to MVCC

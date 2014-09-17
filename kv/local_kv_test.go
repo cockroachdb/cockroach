@@ -83,13 +83,13 @@ func TestLocalKVGetStore(t *testing.T) {
 	kv := NewLocalKV()
 	store := storage.Store{}
 	replica := proto.Replica{StoreID: store.Ident.StoreID}
-	s, err := kv.GetStore(&replica)
+	s, err := kv.GetStore(replica.StoreID)
 	if s != nil || err == nil {
 		t.Errorf("expected no stores in new local kv.")
 	}
 
 	kv.AddStore(&store)
-	s, err = kv.GetStore(&replica)
+	s, err = kv.GetStore(replica.StoreID)
 	if s == nil {
 		t.Errorf("expected store")
 	} else if s.Ident.StoreID != store.Ident.StoreID {
@@ -108,7 +108,7 @@ func createTestStore(storeID int32, start, end engine.Key, t *testing.T) *storag
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := storage.NewStore(clock, eng, nil, nil)
 	store.Ident.StoreID = storeID
-	replica := proto.Replica{StoreID: storeID}
+	replica := proto.Replica{StoreID: storeID, RangeID: 1}
 	_, err := store.CreateRange(start, end, []proto.Replica{replica})
 	if err != nil {
 		t.Fatal(err)
@@ -116,26 +116,26 @@ func createTestStore(storeID int32, start, end engine.Key, t *testing.T) *storag
 	return store
 }
 
-func TestLocalKVLookupRange(t *testing.T) {
+func TestLocalKVLookupReplica(t *testing.T) {
 	kv := NewLocalKV()
 	s1 := createTestStore(1, engine.Key("a"), engine.Key("c"), t)
 	s2 := createTestStore(2, engine.Key("x"), engine.Key("z"), t)
 	kv.AddStore(s1)
 	kv.AddStore(s2)
 
-	if _, sID, err := kv.lookupRange(engine.Key("a"), engine.Key("c")); sID != s1.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, sID, err)
+	if r, err := kv.lookupReplica(engine.Key("a"), engine.Key("c")); r.StoreID != s1.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, r.StoreID, err)
 	}
-	if _, sID, err := kv.lookupRange(engine.Key("b"), nil); sID != s1.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, sID, err)
+	if r, err := kv.lookupReplica(engine.Key("b"), nil); r.StoreID != s1.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, r.StoreID, err)
 	}
-	if _, sID, err := kv.lookupRange(engine.Key("b"), engine.Key("d")); sID != 0 || err == nil {
-		t.Errorf("expected store 0 and error got %d", sID)
+	if r, err := kv.lookupReplica(engine.Key("b"), engine.Key("d")); r != nil || err == nil {
+		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if _, sID, err := kv.lookupRange(engine.Key("x"), engine.Key("z")); sID != s2.Ident.StoreID {
-		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, sID, err)
+	if r, err := kv.lookupReplica(engine.Key("x"), engine.Key("z")); r.StoreID != s2.Ident.StoreID {
+		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, r.StoreID, err)
 	}
-	if _, sID, err := kv.lookupRange(engine.Key("y"), nil); sID != s2.Ident.StoreID || err != nil {
-		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, sID, err)
+	if r, err := kv.lookupReplica(engine.Key("y"), nil); r.StoreID != s2.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, r.StoreID, err)
 	}
 }

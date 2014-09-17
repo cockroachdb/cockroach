@@ -40,16 +40,8 @@ const (
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
 	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
-	rangeIDAllocCount = 10
+	raftIDAllocCount = 10
 )
-
-func init() {
-	// rangeIDAllocCount should be high enough to allow us to advance
-	// it; if not just panic here.
-	if rangeIDAllocCount <= 1 {
-		panic("rangeIDAllocCount must be greater than 1")
-	}
-}
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
 func makeRangeKey(rangeID int64) engine.Key {
@@ -124,8 +116,8 @@ type Store struct {
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by range ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
-	nextRangeID int64            // Next available range ID
-	lastRangeID int64            // Last available range ID in pre-alloc'd block
+	nextRaftID  int64            // Next available Raft ID
+	lastRaftID  int64            // Last available Raft ID in pre-alloc'd block
 }
 
 // NewStore returns a new instance of a store.
@@ -243,12 +235,28 @@ func (s *Store) LookupRange(start, end engine.Key) *Range {
 
 // CreateRange creates a new range by allocating a new range ID and
 // storing range metadata. On success, returns the new range.
+//
+// TODO(spencer): this method is temporary and will need to be
+// removed.  In its place, ranges themselves will initiate the
+// creation of a new range. This is done during splits. The range
+// leader calls store.SplitRange, which allocates the raft ID and all
+// range IDs (range IDs will need to be changed from the local ID
+// allocator used here to a global allocator). This way, the complete
+// replica slice will be available for the Raft.InternalSplitRange
+// command to be executed at each of the replicas in the original
+// range, yielding identical results.
 func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replica) (*Range, error) {
-	rangeID, err := s.allocateRangeID()
+	if len(replicas) != 1 {
+		panic("CreateRange can only handle a single replica currently")
+	}
+	raftID, err := s.allocateRaftID()
 	if err != nil {
 		return nil, err
 	}
-
+	rangeID, err := engine.Increment(s.engine, engine.KeyLocalRangeIDGenerator, 1)
+	if err != nil {
+		return nil, err
+	}
 	if ok, _ := engine.GetProto(s.engine, makeRangeKey(rangeID), nil); ok {
 		return nil, util.Error("range ID already in use")
 	}
@@ -257,12 +265,14 @@ func (s *Store) CreateRange(startKey, endKey engine.Key, replicas []proto.Replic
 	meta := &proto.RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
 		RangeDescriptor: proto.RangeDescriptor{
-			RangeID:  rangeID,
+			RaftID:   raftID,
 			StartKey: startKey,
 			EndKey:   endKey,
 			Replicas: replicas,
 		},
+		RangeID: rangeID,
 	}
+	meta.Replicas[0].RangeID = rangeID
 	err = engine.PutProto(s.engine, makeRangeKey(rangeID), meta)
 	if err != nil {
 		return nil, err
@@ -326,7 +336,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Verify specified range contains the command's implicated keys.
-	rng, err := s.GetRange(header.RangeID)
+	rng, err := s.GetRange(header.Replica.RangeID)
 	if err != nil {
 		return err
 	}
@@ -345,50 +355,51 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	return rng.ReadWriteCmd(method, args, reply)
 }
 
-// allocateRangeID allocates a new range ID from the global KV DB.
-// Each store allocates blocks of IDS in rangeIDAllocCount increments
+// allocateRaftID allocates a new Raft ID from the global KV DB.
+// Each store allocates blocks of IDS in raftIDAllocCount increments
 // for efficiency.
-func (s *Store) allocateRangeID() (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Handle the bootstrapping case where db is nil; bootstrap range ID is 1.
+func (s *Store) allocateRaftID() (int64, error) {
+	// Handle the bootstrapping case where db is nil; bootstrap raft ID is 1.
 	if s.db == nil {
 		return 1, nil
 	}
-	// If we have pre-alloc'd range IDs available, return one.
-	if s.nextRangeID < s.lastRangeID {
-		s.nextRangeID++
-		return s.nextRangeID - 1, nil
+
+	s.mu.Lock()
+	// If we have pre-alloc'd Raft IDs available, return one.
+	if s.nextRaftID < s.lastRaftID {
+		id := s.nextRaftID
+		s.nextRaftID++
+		s.mu.Unlock()
+		return id, nil
 	}
 
 	// Unlock mutex in anticipation of increment.
 	s.mu.Unlock()
 	ir := <-s.db.Increment(&proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  engine.KeyRangeIDGenerator,
+			Key:  engine.KeyRaftIDGenerator,
 			User: UserRoot,
 		},
-		Increment: rangeIDAllocCount,
+		Increment: raftIDAllocCount,
 	})
-	// Re-lock mutex after call to increment. The deferred unlock is
-	// still in effect.
-	s.mu.Lock()
 	if ir.Error != nil {
-		return 0, util.Errorf("unable to allocate range IDs: %v", ir.Error)
+		return 0, util.Errorf("unable to allocate raft IDs: %v", ir.Error)
 	}
 	if ir.NewValue <= 1 {
-		return 0, util.Errorf("range ID allocation returned invalid allocation: %+v", ir)
+		return 0, util.Errorf("raft ID allocation returned invalid allocation: %+v", ir)
 	}
 
-	s.lastRangeID = ir.NewValue + 1
-	s.nextRangeID = ir.NewValue - rangeIDAllocCount + 1
-	// Range ID 1 is reserved for the bootstrap range.
-	if s.nextRangeID <= 1 {
-		s.nextRangeID = 2
+	// Re-lock mutex after call to increment.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastRaftID = ir.NewValue + 1
+	s.nextRaftID = ir.NewValue - raftIDAllocCount + 1
+	// Raft ID 1 is reserved for the bootstrap raft group.
+	if s.nextRaftID <= 1 {
+		s.nextRaftID = 2
 	}
-	s.nextRangeID++
-	return s.nextRangeID - 1, nil
+	s.nextRaftID++
+	return s.nextRaftID - 1, nil
 
 }
 
