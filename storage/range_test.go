@@ -37,19 +37,18 @@ import (
 
 var (
 	testRangeDescriptor = proto.RangeDescriptor{
+		RangeID:  1,
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
 			{
 				NodeID:  1,
 				StoreID: 1,
-				RangeID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
 			{
 				NodeID:  2,
 				StoreID: 1,
-				RangeID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
 			},
 		},
@@ -60,7 +59,7 @@ var (
 		Write: []string{"root"},
 	}
 	testDefaultZoneConfig = proto.ZoneConfig{
-		Replicas: []proto.Attributes{
+		ReplicaAttrs: []proto.Attributes{
 			proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			proto.Attributes{Attrs: []string{"dc2", "mem"}},
 		},
@@ -88,7 +87,7 @@ func createTestEngine(t *testing.T) engine.Engine {
 // of the keyspace. The gossip instance is also returned for testing.
 func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip) {
 	rm := &proto.RangeMetadata{
-		RangeID:         0,
+		ClusterID:       "cluster1",
 		RangeDescriptor: testRangeDescriptor,
 	}
 	g := gossip.New(rpc.LoadInsecureTLSConfig())
@@ -262,7 +261,7 @@ func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) 
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 		},
 	}
 	reply := &proto.GetResponse{}
@@ -275,7 +274,7 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -291,7 +290,7 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 		},
 		Increment: inc,
 	}
@@ -306,7 +305,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 			Txn:     txn,
 		},
 		Commit: commit,
@@ -321,7 +320,7 @@ func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 			Txn:     txn,
 		},
 	}
@@ -337,7 +336,7 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			EndKey:  endKey,
-			Replica: proto.Replica{RangeID: rangeID},
+			RangeID: rangeID,
 		},
 		SnapshotId: snapshotID,
 		MaxResults: maxResults,

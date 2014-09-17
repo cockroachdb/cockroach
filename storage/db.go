@@ -182,7 +182,7 @@ func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
 	// TODO(spencer): change this when zone specifications change to elect for three
 	// replicas with no specific features set.
 	zoneConfig := &proto.ZoneConfig{
-		Replicas: []proto.Attributes{
+		ReplicaAttrs: []proto.Attributes{
 			proto.Attributes{},
 			proto.Attributes{},
 			proto.Attributes{},

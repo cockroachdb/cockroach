@@ -60,10 +60,13 @@ message RequestHeader {
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
   optional string user = 5 [(gogoproto.nullable) = false];
-  // Replica specifies the destination for the request. See config.go.
-  optional Replica replica = 6 [(gogoproto.nullable) = false];
+  // RangeID specifies the range containing the keys between Key and EndKey.
+  optional int64 range_id = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+  // Replica specifies the destination for the request. This is a specific
+  // instance of the available replicas belonging to RangeID.
+  optional Replica replica = 7 [(gogoproto.nullable) = false];
   // Txn is set non-nil if a transaction is underway.
-  optional Transaction txn = 7;
+  optional Transaction txn = 8;
 }
 
 // ResponseHeader is returned with every storage node response.

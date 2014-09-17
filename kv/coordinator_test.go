@@ -35,9 +35,9 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	store := storage.NewStore(clock, eng, nil)
+	store := storage.NewStore(clock, eng, nil, nil)
 	store.Ident.StoreID = 1
-	replica := proto.Replica{StoreID: 1, RangeID: 1}
+	replica := proto.Replica{NodeID: 1, StoreID: 1}
 	_, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
 	if err != nil {
 		t.Fatal(err)

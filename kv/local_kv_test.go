@@ -13,8 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Matthew O'Connor (matthew.t.oconnor@gmail.com)
-// Author: Zach Brock (zbrock@gmail.com)
+// Author: Spencer Kimball
 
 package kv
 
@@ -25,9 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-func TestAddStore(t *testing.T) {
+func TestLocalKVAddStore(t *testing.T) {
 	kv := NewLocalKV()
 	store := storage.Store{}
 	kv.AddStore(&store)
@@ -39,7 +39,7 @@ func TestAddStore(t *testing.T) {
 	}
 }
 
-func TestGetStoreCount(t *testing.T) {
+func TesLocalKVtGetStoreCount(t *testing.T) {
 	kv := NewLocalKV()
 	if kv.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new kv")
@@ -54,7 +54,7 @@ func TestGetStoreCount(t *testing.T) {
 	}
 }
 
-func TestVisitStores(t *testing.T) {
+func TestLocalKVVisitStores(t *testing.T) {
 	kv := NewLocalKV()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
@@ -79,7 +79,7 @@ func TestVisitStores(t *testing.T) {
 	}
 }
 
-func TestGetStore(t *testing.T) {
+func TestLocalKVGetStore(t *testing.T) {
 	kv := NewLocalKV()
 	store := storage.Store{}
 	replica := proto.Replica{StoreID: store.Ident.StoreID}
@@ -100,43 +100,42 @@ func TestGetStore(t *testing.T) {
 	}
 }
 
-func TestReplicaLookup(t *testing.T) {
+// createTestStore creates a new Store instance with a single range
+// spanning from start to end.
+func createTestStore(storeID int32, start, end engine.Key, t *testing.T) *storage.Store {
+	manual := hlc.ManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	store := storage.NewStore(clock, eng, nil, nil)
+	store.Ident.StoreID = storeID
+	replica := proto.Replica{StoreID: storeID}
+	_, err := store.CreateRange(start, end, []proto.Replica{replica})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func TestLocalKVLookupRange(t *testing.T) {
 	kv := NewLocalKV()
-	r1 := addTestRange(kv, engine.KeyMin, engine.Key("C"))
-	r2 := addTestRange(kv, engine.Key("C"), engine.Key("X"))
-	r3 := addTestRange(kv, engine.Key("X"), engine.KeyMax)
-	if len(kv.ranges) != 3 {
-		t.Errorf("pre-condition failed-expected ranges to be size 3, got %d", len(kv.ranges))
-	}
+	s1 := createTestStore(1, engine.Key("a"), engine.Key("c"), t)
+	s2 := createTestStore(2, engine.Key("x"), engine.Key("z"), t)
+	kv.AddStore(s1)
+	kv.AddStore(s2)
 
-	assertReplicaForRange(t, kv.lookupReplica(engine.KeyMin), r1)
-	assertReplicaForRange(t, kv.lookupReplica(engine.Key("B")), r1)
-	assertReplicaForRange(t, kv.lookupReplica(engine.Key("C")), r2)
-	assertReplicaForRange(t, kv.lookupReplica(engine.Key("M")), r2)
-	assertReplicaForRange(t, kv.lookupReplica(engine.Key("X")), r3)
-	assertReplicaForRange(t, kv.lookupReplica(engine.Key("Z")), r3)
-	if kv.lookupReplica(engine.KeyMax) != nil {
-		t.Errorf("expected engine.KeyMax to not have an associated Replica")
+	if _, sID, err := kv.lookupRange(engine.Key("a"), engine.Key("c")); sID != s1.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, sID, err)
 	}
-}
-
-func assertReplicaForRange(t *testing.T, repl *proto.Replica, rng *storage.Range) {
-	if repl == nil {
-		t.Errorf("no replica returned")
-	} else if repl.RangeID != rng.Meta.RangeID {
-		t.Errorf("wrong replica returned-expected %+v and %+v to have the same RangeID",
-			rng.Meta, repl)
+	if _, sID, err := kv.lookupRange(engine.Key("b"), nil); sID != s1.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s1.Ident.StoreID, sID, err)
 	}
-}
-
-func addTestRange(kv *LocalKV, start, end engine.Key) *storage.Range {
-	r := storage.Range{}
-	rep := proto.Replica{NodeID: 1, StoreID: 1, RangeID: int64(len(kv.ranges) + 1)}
-	r.Meta = &proto.RangeMetadata{
-		ClusterID:       "some-cluster",
-		RangeID:         rep.RangeID,
-		RangeDescriptor: proto.RangeDescriptor{StartKey: start, EndKey: end, Replicas: []proto.Replica{rep}},
+	if _, sID, err := kv.lookupRange(engine.Key("b"), engine.Key("d")); sID != 0 || err == nil {
+		t.Errorf("expected store 0 and error got %d", sID)
 	}
-	kv.ranges = append(kv.ranges, &r)
-	return &r
+	if _, sID, err := kv.lookupRange(engine.Key("x"), engine.Key("z")); sID != s2.Ident.StoreID {
+		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, sID, err)
+	}
+	if _, sID, err := kv.lookupRange(engine.Key("y"), nil); sID != s2.Ident.StoreID || err != nil {
+		t.Errorf("expected store %d; got %d: %v", s2.Ident.StoreID, sID, err)
+	}
 }

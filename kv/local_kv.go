@@ -18,10 +18,8 @@
 package kv
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -34,7 +32,6 @@ import (
 type LocalKV struct {
 	mu       sync.RWMutex             // Protects storeMap and addrs
 	storeMap map[int32]*storage.Store // Map from StoreID to Store
-	ranges   storage.RangeSlice       // *Range slice sorted by end key
 }
 
 // NewLocalKV returns a local-only KV DB for direct access to a store.
@@ -57,14 +54,14 @@ func (kv *LocalKV) HasStore(storeID int32) bool {
 	return ok
 }
 
-// GetStore looks up the store by Replica.StoreID. Returns an error
+// GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (kv *LocalKV) GetStore(r *proto.Replica) (*storage.Store, error) {
+func (kv *LocalKV) GetStore(storeID int32) (*storage.Store, error) {
 	kv.mu.RLock()
-	store, ok := kv.storeMap[r.StoreID]
+	store, ok := kv.storeMap[storeID]
 	kv.mu.RUnlock()
 	if !ok {
-		return nil, util.Errorf("store for replica %+v not found", r)
+		return nil, util.Errorf("store %d not found", storeID)
 	}
 	return store, nil
 }
@@ -77,10 +74,6 @@ func (kv *LocalKV) AddStore(s *storage.Store) {
 		panic(fmt.Sprintf("cannot add store twice to local db: %+v", s.Ident))
 	}
 	kv.storeMap[s.Ident.StoreID] = s
-
-	// Maintain a slice of ranges ordered by StartKey.
-	kv.ranges = append(kv.ranges, s.GetRanges()...)
-	sort.Sort(kv.ranges)
 }
 
 // VisitStores implements a visitor pattern over stores in the storeMap.
@@ -99,28 +92,23 @@ func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
 
 // ExecuteCmd synchronously runs Store.ExecuteCmd. The store is looked
 // up from the store map if specified by header.Replica; otherwise,
-// the command is being executed locally, and the replica is
-// determined via lookup of header.Key in the ranges slice.
+// the command is being executed locally, and the range is
+// determined via lookup through each of the stores.
 func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
 	// If the replica isn't specified in the header, look it up.
 	var err error
 	var store *storage.Store
-	// If we aren't given a Replica, then a little bending over
+	// If we aren't given a RangeID, then a little bending over
 	// backwards here. We need to find the Store, but all we have is the
-	// Key. So find its Range locally, and pull out its Replica which we
-	// use to find the Store. This lets us use the same codepath below
-	// (store.ExecuteCmd) for both locally and remotely originated
-	// commands.
+	// Key. So find its Range locally. This lets us use the same
+	// codepath below (store.ExecuteCmd) for both locally and remotely
+	// originated commands.
 	header := args.Header()
-	if header.Replica.NodeID == 0 {
-		if repl := kv.lookupReplica(header.Key); repl != nil {
-			header.Replica = *repl
-		} else {
-			err = util.Errorf("unable to lookup range replica for key %q", string(header.Key))
-		}
+	if header.RangeID == 0 || header.Replica.StoreID == 0 {
+		header.RangeID, header.Replica.StoreID, err = kv.lookupRange(header.Key, header.EndKey)
 	}
 	if err == nil {
-		store, err = kv.GetStore(&header.Replica)
+		store, err = kv.GetStore(header.Replica.StoreID)
 	}
 	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
 	if err != nil {
@@ -143,24 +131,15 @@ func (kv *LocalKV) Close() {
 	}
 }
 
-// lookupReplica looks up a replica by key. Lookups are done via
-// binary search over the "ranges" RangeSlice. Returns nil if no range
-// is found for the specified key.
-func (kv *LocalKV) lookupReplica(key engine.Key) *proto.Replica {
+// lookupRange looks up range ID and store ID. Lookups are done
+// by consulting each store in turn via Store.LookupRange(key).
+func (kv *LocalKV) lookupRange(start, end engine.Key) (int64, int32, error) {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
-	n := sort.Search(len(kv.ranges), func(i int) bool {
-		return bytes.Compare(key, kv.ranges[i].Meta.EndKey) < 0
-	})
-	if n >= len(kv.ranges) || bytes.Compare(key, kv.ranges[n].Meta.EndKey) >= 0 {
-		return nil
-	}
-
-	// Search the Replicas for the one that references our local Range. See executeCmd() as well.
-	for i, repl := range kv.ranges[n].Meta.Replicas {
-		if repl.RangeID == kv.ranges[n].Meta.RangeID {
-			return &kv.ranges[n].Meta.Replicas[i]
+	for _, store := range kv.storeMap {
+		if rng := store.LookupRange(start, end); rng != nil {
+			return rng.Meta.RangeID, store.Ident.StoreID, nil
 		}
 	}
-	return nil
+	return 0, 0, proto.NewRangeKeyMismatchError(start, end, nil)
 }
