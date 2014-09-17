@@ -167,7 +167,6 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 		reply := <-interceptChan
 		if reply.Error == nil && reply.Txn.Status != proto.PENDING {
 			db.coordinator.EndTxn(reply.Txn)
-			return
 		}
 		// Go ahead and return the result to the client.
 		replyChan <- reply

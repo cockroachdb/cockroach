@@ -356,7 +356,7 @@ message InternalHeartbeatTxnResponse {
 // method. It's sent by readers or writers which have encountered an
 // "intent" laid down by another transaction. The goal is to resolve
 // the conflict. Note that args.Key should be set to the txn ID of
-// args.PushTxn, not args.Txn, as is usual. This RPC is addressed
+// args.PusheeTxn, not args.Txn, as is usual. This RPC is addressed
 // to the range which owns the pushee's txn record.
 //
 // Resolution is trivial if the txn which owns the intent has either
@@ -367,17 +367,17 @@ message InternalHeartbeatTxnResponse {
 // by comparing priorities.
 message InternalPushTxnRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction push_txn = 2 [(gogoproto.nullable) = false];
+  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
   // Set to true to request that the PushTxn be aborted if possible.
-  // This is done in the event of a writer conflicting with PushTxn.
-  // Readers set this to false and instead attempt to move PushTxn's
+  // This is done in the event of a writer conflicting with PusheeTxn.
+  // Readers set this to false and instead attempt to move PusheeTxn's
   // commit timestamp forward.
   optional bool Abort = 3 [(gogoproto.nullable) = false];
 }
 
 // An InternalPushTxnResponse is the return value from the
 // InternalPushTxn() method. It returns success and the resulting
-// state of PushTxn if the conflict was resolved in favor of the
+// state of PusheeTxn if the conflict was resolved in favor of the
 // caller; the caller should subsequently invoke
 // InternalResolveIntent() on the conflicted key. It returns an error
 // otherwise.
@@ -385,7 +385,7 @@ message InternalPushTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Txn is non-nil if the transaction could be heartbeat and contains
   // the current value of the transaction.
-  optional Transaction push_txn = 2;
+  optional Transaction pushee_txn = 2;
 }
 
 // An InternalResolveIntentRequest is arguments to the

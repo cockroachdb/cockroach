@@ -841,14 +841,13 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // (args.PushTxn -- the pushee txn whose intent(s) caused the
 // conflict).
 //
-// Txn already committed/aborted: If pushee txn is committed, return
-// already-committed error. If pushee txn has been aborted, return
-// success.
+// Txn already committed/aborted: If pushee txn is committed or
+// aborted return success.
 //
 // Txn Timeout: If pushee txn entry isn't present or its LastHeartbeat
 // timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat. If
 // current time - LastHeartbeat > 2 * DefaultHeartbeatInterval, then
-// the puhsee txn should be either pushed forward or aborted,
+// the pushee txn should be either pushed forward or aborted,
 // depending on value of Request.Abort.
 //
 // Old Txn Epoch: If persisted pushee txn entry has a newer Epoch than
@@ -864,8 +863,8 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // pusher, return TransactionRetryError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	if !bytes.Equal(args.Key, args.PushTxn.ID) {
-		reply.SetGoError(util.Errorf("push txn not addressed at pushee's txn ID: %q vs. %q", args.Key, args.PushTxn.ID))
+	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
 		return
 	}
 	// Create the actual key to the system-local transaction table.
@@ -880,68 +879,75 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	}
 	if ok {
 		// Start with the persisted transaction record as final transaction.
-		reply.PushTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
+		reply.PusheeTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
 		// Upgrade the epoch and timestamp as necessary.
-		if reply.PushTxn.Epoch < args.PushTxn.Epoch {
-			reply.PushTxn.Epoch = args.PushTxn.Epoch
+		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
+			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 		}
-		if reply.PushTxn.Timestamp.Less(args.PushTxn.Timestamp) {
-			reply.PushTxn.Timestamp = args.PushTxn.Timestamp
+		if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
+			reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
 		}
 	} else {
+		// Some sanity checks for case where we don't find a transaction record.
+		if args.PusheeTxn.LastHeartbeat != nil {
+			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
+				"no txn persisted, yet intent has heartbeat"))
+			return
+		} else if args.PusheeTxn.Status != proto.PENDING {
+			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
+				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status)))
+			return
+		}
 		// The transaction doesn't exist yet on disk; use the supplied version.
-		reply.PushTxn = gogoproto.Clone(&args.PushTxn).(*proto.Transaction)
+		reply.PusheeTxn = gogoproto.Clone(&args.PusheeTxn).(*proto.Transaction)
 	}
 
-	// If already committed, return already committed error.
-	if reply.PushTxn.Status == proto.COMMITTED {
-		reply.SetGoError(proto.NewTransactionStatusError(reply.PushTxn, "already committed"))
-		return
-	} else if reply.PushTxn.Status == proto.ABORTED {
-		// This is a trivial noop.
+	// If already committed or aborted, return success.
+	if reply.PusheeTxn.Status != proto.PENDING {
+		// Trivial noop.
 		return
 	}
 
-	// push bool is true in the event the pusher prevails.
-	var push bool
+	// pusherWins bool is true in the event the pusher prevails.
+	var pusherWins bool
 
 	// Check for txn timeout.
-	if reply.PushTxn.LastHeartbeat == nil {
-		reply.PushTxn.LastHeartbeat = &reply.PushTxn.Timestamp
+	if reply.PusheeTxn.LastHeartbeat == nil {
+		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
 	}
 	// Compute heartbeat expiration.
 	expiry := r.clock.Now()
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
-	if reply.PushTxn.LastHeartbeat.Less(expiry) {
-		log.V(1).Infof("pushing expired txn %+v", reply.PushTxn)
-		push = true
-	} else if args.PushTxn.Epoch < reply.PushTxn.Epoch {
+	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
+		log.V(1).Infof("pushing expired txn %+v", reply.PusheeTxn)
+		pusherWins = true
+	} else if args.PusheeTxn.Epoch < reply.PusheeTxn.Epoch {
 		// Check for an intent from a prior epoch.
-		log.V(1).Infof("pushing intent from previous epoch for txn %+v", reply.PushTxn)
-		push = true
-	} else if reply.PushTxn.Priority < args.Txn.Priority ||
-		(reply.PushTxn.Priority == args.Txn.Priority && args.Txn.Timestamp.Less(reply.PushTxn.Timestamp)) {
+		log.V(1).Infof("pushing intent from previous epoch for txn %+v", reply.PusheeTxn)
+		pusherWins = true
+	} else if reply.PusheeTxn.Priority < args.Txn.Priority ||
+		(reply.PusheeTxn.Priority == args.Txn.Priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Finally, choose based on priority; if priorities are equal, order by lower txn timestamp.
-		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %+v", reply.PushTxn, args.Txn)
-		push = true
+		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %+v", reply.PusheeTxn, args.Txn)
+		pusherWins = true
 	}
 
-	if !push {
-		log.V(1).Infof("failed to push intent %+v vs %+v", reply.PushTxn, args.Txn)
-		reply.SetGoError(proto.NewTransactionRetryError(reply.PushTxn))
+	if !pusherWins {
+		log.V(1).Infof("failed to push intent %+v vs %+v", reply.PusheeTxn, args.Txn)
+		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn))
 		return
 	}
 
 	// If aborting transaction, set new status and return success.
 	if args.Abort {
-		reply.PushTxn.Status = proto.ABORTED
+		reply.PusheeTxn.Status = proto.ABORTED
 	} else {
 		// Otherwise, update timestamp to be one greater than the request's timestamp.
-		reply.PushTxn.Timestamp = args.Timestamp
-		reply.PushTxn.Timestamp.Logical++
+		reply.PusheeTxn.Timestamp = args.Timestamp
+		reply.PusheeTxn.Timestamp.Logical++
 	}
 	// Persist the pushed transaction.
-	if err := engine.PutProto(r.engine, key, reply.PushTxn); err != nil {
+	if err := engine.PutProto(r.engine, key, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}

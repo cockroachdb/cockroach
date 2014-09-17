@@ -145,6 +145,12 @@ func (db *testDB) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) 
 	return replyChan
 }
 
+func (db *testDB) InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse {
+	replyChan := make(chan *proto.InternalPushTxnResponse, 1)
+	go db.executeCmd(InternalPushTxn, args, replyChan)
+	return replyChan
+}
+
 func (db *testDB) InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse {
 	replyChan := make(chan *proto.InternalResolveIntentResponse, 1)
 	go db.executeCmd(InternalResolveIntent, args, replyChan)

@@ -329,8 +329,8 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, rangeID int64) (
 			Replica:   proto.Replica{RangeID: rangeID},
 			Txn:       pusher,
 		},
-		PushTxn: *pushee,
-		Abort:   abort,
+		PusheeTxn: *pushee,
+		Abort:     abort,
 	}
 	reply := &proto.InternalPushTxnResponse{}
 	return args, reply
@@ -833,7 +833,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	}
 }
 
-// TestInternalPushTxnBadKey verifies that args.Key equals args.PushTxn.ID.
+// TestInternalPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestInternalPushTxnBadKey(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
@@ -843,42 +843,37 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 
 	args, reply := pushTxnArgs(pusher, pushee, true, 0)
 	args.Key = pusher.ID
-	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), ".*not addressed.*", t)
+	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), ".*should match pushee.*", t)
 }
 
-// TestInternalPushTxnAlreadyCommitted verifies already-committed
-// error trying to push committed txn.
-func TestInternalPushTxnAlreadyCommitted(t *testing.T) {
+// TestInternalPushTxnAlreadyCommittedOrAborted verifies success
+// (noop) in event that pushee is already committed or aborted.
+func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
-	pushee.Status = proto.COMMITTED
+	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher.Priority = 1
+		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
-	args, reply := pushTxnArgs(pusher, pushee, true, 0)
-	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), "txn {.*}: already committed", t)
-	if reply.PushTxn.Status != proto.COMMITTED {
-		t.Errorf("expected push txn to return with status == COMMITTED; got %+v", reply.PushTxn)
-	}
-}
+		// End the pushee's transaction.
+		etArgs, etReply := endTxnArgs(pushee, status == proto.COMMITTED, 0)
+		etArgs.Timestamp = pushee.Timestamp
+		if err := rng.ReadWriteCmd("EndTransaction", etArgs, etReply); err != nil {
+			t.Fatal(err)
+		}
 
-// TestInternalPushTxnAlreadyAborted verifies success (noop)
-// in event that pushee is aborted.
-func TestInternalPushTxnAlreadyAborted(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
-
-	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
-	pushee.Status = proto.ABORTED
-
-	args, reply := pushTxnArgs(pusher, pushee, true, 0)
-	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
-		t.Fatal(err)
-	}
-	if reply.PushTxn.Status != proto.ABORTED {
-		t.Errorf("expected push txn to return with status == ABORTED; got %+v", reply.PushTxn)
+		// Now try to push what's already committed or aborted.
+		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+			t.Fatal(err)
+		}
+		if reply.PusheeTxn.Status != status {
+			t.Errorf("expected push txn to return with status == %s; got %+v", status, reply.PusheeTxn)
+		}
 	}
 }
 
@@ -939,8 +934,8 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Status = proto.ABORTED
 		expTxn.LastHeartbeat = &test.startTS
 
-		if !reflect.DeepEqual(expTxn, reply.PushTxn) {
-			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PushTxn)
+		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
+			t.Errorf("unexpected push txn in trial %d; expected %+v, got %+v", i, expTxn, reply.PusheeTxn)
 		}
 	}
 }
@@ -1105,10 +1100,10 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	}
 	expTS := pusher.Timestamp
 	expTS.Logical++
-	if !reply.PushTxn.Timestamp.Equal(expTS) {
-		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PushTxn.Timestamp)
+	if !reply.PusheeTxn.Timestamp.Equal(expTS) {
+		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.Timestamp)
 	}
-	if reply.PushTxn.Status != proto.PENDING {
-		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PushTxn.Status)
+	if reply.PusheeTxn.Status != proto.PENDING {
+		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 	}
 }
