@@ -221,7 +221,7 @@ var (
 	// KeyConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
 	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, Key("zone"))
-	// KeyNodeIDGenerator is the globl node ID generator sequence.
+	// KeyNodeIDGenerator is the global node ID generator sequence.
 	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-idgen"))
 	// KeyRaftIDGenerator is the global Raft consensus group ID generator sequence.
 	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, Key("raft-idgen"))

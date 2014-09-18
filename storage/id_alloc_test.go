@@ -63,3 +63,24 @@ func TestIDAllocator(t *testing.T) {
 		// Expected; noop.
 	}
 }
+
+// TestIDAllocatorNegativeValue creates an ID allocator against an
+// increment key which is preset to a negative value. We verify that
+// the id allocator makes a double-alloc to make up the difference
+// and push the id allocation into positive integers.
+func TestIDAllocatorNegativeValue(t *testing.T) {
+	store, _ := createTestStore(false, t)
+	// Increment our key to a negative value.
+	newValue, err := engine.Increment(store.engine, engine.KeyRaftIDGenerator, -1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newValue != -1024 {
+		t.Errorf("expected new value to be -1024; got %d", newValue)
+	}
+	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	value := idAlloc.Allocate()
+	if value != 2 {
+		t.Errorf("expected id allocation to have value 2; got %d", value)
+	}
+}

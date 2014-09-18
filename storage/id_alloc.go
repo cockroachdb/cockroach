@@ -39,18 +39,21 @@ type IDAllocator struct {
 
 // NewIDAllocator creates a new ID allocator which increments the
 // specified key in allocation blocks of size blockSize, with
-// allocated IDs starting at minID. Allocated IDs are non-zero,
-// positive integers.
+// allocated IDs starting at minID. Allocated IDs are positive
+// integers.
 func NewIDAllocator(idKey engine.Key, db DB, minID int64, blockSize int64) *IDAllocator {
 	if minID <= allocationTrigger {
 		log.Fatalf("minID must be > %d", allocationTrigger)
+	}
+	if blockSize < 1 {
+		log.Fatalf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &IDAllocator{
 		idKey:     idKey,
 		db:        db,
 		minID:     minID,
 		blockSize: blockSize,
-		ids:       make(chan int64, blockSize),
+		ids:       make(chan int64, blockSize+blockSize/2+1),
 	}
 	ia.ids <- allocationTrigger
 	return ia
