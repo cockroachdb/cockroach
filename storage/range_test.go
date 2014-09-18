@@ -1107,3 +1107,31 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 	}
 }
+
+// TestInternalPushTxnPushTimestampAlreadyPushed verifies that pushing
+// a timestamp forward which is already far enough forward is a simple
+// noop. We do this by ensuring that priorities would otherwise make
+// pushing impossible.
+func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher.Priority = 1
+	pushee.Priority = 2 // pusher will lose
+	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 0}
+	pushee.Timestamp = proto.Timestamp{WallTime: 50, Logical: 1}
+
+	// Now, push the transaction with args.Abort=false.
+	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 0)
+	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+		t.Errorf("unexpected error on push: %v", err)
+	}
+	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {
+		t.Errorf("expected timestamp to be equal to original %+v; got %+v", pushee.Timestamp, reply.PusheeTxn.Timestamp)
+	}
+	if reply.PusheeTxn.Status != proto.PENDING {
+		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
+	}
+}

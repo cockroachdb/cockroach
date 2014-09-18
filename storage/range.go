@@ -907,6 +907,12 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 		// Trivial noop.
 		return
 	}
+	// If we're trying to move the timestamp forward, and it's already
+	// far enough forward, return success.
+	if !args.Abort && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
+		// Trivial noop.
+		return
+	}
 
 	// pusherWins bool is true in the event the pusher prevails.
 	var pusherWins bool
