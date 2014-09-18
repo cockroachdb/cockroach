@@ -35,16 +35,20 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	store := storage.NewStore(clock, eng, nil, nil)
-	store.Ident.StoreID = 1
-	replica := proto.Replica{NodeID: 1, StoreID: 1, RangeID: 1}
-	_, err := store.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
+	kv := NewLocalKV()
+	db := NewDB(kv, clock)
+	store := storage.NewStore(clock, eng, db, nil)
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	kv.AddStore(store)
+	_, err := store.CreateRange(store.BootstrapRangeMetadata())
 	if err != nil {
 		t.Fatal(err)
 	}
-	kv := NewLocalKV()
-	kv.AddStore(store)
-	db := NewDB(kv, clock)
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
 	return db, clock, &manual
 }
 

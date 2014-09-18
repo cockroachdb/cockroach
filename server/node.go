@@ -126,18 +126,9 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	}
 
 	// Create first range.
-	replica := proto.Replica{
-		NodeID:  1,
-		StoreID: 1,
-		RangeID: 1,
-		Attrs:   proto.Attributes{},
-	}
-	rng, err := s.CreateRange(engine.KeyMin, engine.KeyMax, []proto.Replica{replica})
+	rng, err := s.CreateRange(s.BootstrapRangeMetadata())
 	if err != nil {
 		return nil, err
-	}
-	if rng.Meta.RangeID != 1 {
-		return nil, util.Errorf("expected range id of 1, got %d", rng.Meta.RangeID)
 	}
 
 	// Create a KV DB with a local KV to directly modify the new range.
