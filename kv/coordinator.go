@@ -29,10 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-const (
-	defaultHeartbeatInterval = 5 * time.Second
-)
-
 // This list filters the KV API into those operations which can be part of
 // transaction.
 var transactionalActions = map[string]struct{}{
@@ -119,7 +115,7 @@ func newCoordinator(db *DB, clock *hlc.Clock) *coordinator {
 	tc := &coordinator{
 		db:                db,
 		clock:             clock,
-		heartbeatInterval: defaultHeartbeatInterval,
+		heartbeatInterval: storage.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[string]*txnMetadata{},
 	}
@@ -182,7 +178,7 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 // EndTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
 // the txns map.
-func (tc *coordinator) EndTxn(txn *proto.Transaction, commit bool) {
+func (tc *coordinator) EndTxn(txn *proto.Transaction) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
@@ -199,7 +195,6 @@ func (tc *coordinator) EndTxn(txn *proto.Transaction, commit bool) {
 				User:   storage.UserRoot,
 				Txn:    txn,
 			},
-			Commit: commit,
 		})
 	}
 	delete(tc.txns, string(txn.ID))
@@ -257,14 +252,8 @@ func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 			// If the transaction is not in pending state, then we can stop
 			// the heartbeat. It's either aborted or commited, and we resolve
 			// write intents accordingly.
-			switch reply.Txn.Status {
-			case proto.PENDING:
-				// Heartbeat continues...
-			case proto.COMMITTED:
-				tc.EndTxn(reply.Txn, true)
-				return
-			case proto.ABORTED:
-				tc.EndTxn(reply.Txn, false)
+			if reply.Txn.Status != proto.PENDING {
+				tc.EndTxn(reply.Txn)
 				return
 			}
 		case <-closer:

@@ -173,11 +173,12 @@ func TestCoordinatorEndTxn(t *testing.T) {
 	defer db.Close()
 
 	txn := &proto.Transaction{
-		ID: engine.Key("txn"),
+		ID:     engine.Key("txn"),
+		Status: proto.COMMITTED,
 	}
 	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txn.ID))
 
-	db.coordinator.EndTxn(txn, true)
+	db.coordinator.EndTxn(txn)
 	if len(db.coordinator.txns) != 0 {
 		t.Errorf("expected empty transactions map; got %d", len(db.coordinator.txns))
 	}

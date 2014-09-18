@@ -239,10 +239,13 @@ message EndTransactionRequest {
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. If successful, the final transaction
 // record is returned. In particular, transaction status and timestamp
-// will be updated to reflect final committed values. CommitWait
-// specifies the commit wait, which is the remaining time the client
-// MUST wait before signalling completion of the transaction to
-// another distributed node to maintain consistency.
+// will be updated to reflect final committed values. Clients may
+// propagate Txn.Timestamp as the final txn commit timestamp in order
+// to preserve causal ordering between subsequent
+// transactions. CommitWait specifies the commit wait, which is the
+// remaining time the client MUST wait before signalling completion of
+// the transaction to another distributed node to maintain
+// consistency.
 message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional Transaction txn = 2;
@@ -329,7 +332,7 @@ message InternalRangeLookupResponse {
 }
 
 // An InternalHeartbeatTxnRequest is arguments to the
-// InternalHeartbeatTxn() method. It is sent by transaction
+// InternalHeartbeatTxn() method. It's sent by transaction
 // coordinators to let the system know that the transaction is still
 // ongoing. Note that this heartbeat message is different from the
 // heartbeat message in the gossip protocol.
@@ -349,14 +352,48 @@ message InternalHeartbeatTxnResponse {
   optional Transaction txn = 2;
 }
 
+// An InternalPushTxnRequest is arguments to the InternalPushTxn()
+// method. It's sent by readers or writers which have encountered an
+// "intent" laid down by another transaction. The goal is to resolve
+// the conflict. Note that args.Key should be set to the txn ID of
+// args.PusheeTxn, not args.Txn, as is usual. This RPC is addressed
+// to the range which owns the pushee's txn record.
+//
+// Resolution is trivial if the txn which owns the intent has either
+// been committed or aborted already. Otherwise, the existing txn can
+// either be aborted (for write/write conflicts), or its commit
+// timestamp can be moved forward (for read/write conflicts). The
+// course of action is determined by the owning txn's status and also
+// by comparing priorities.
+message InternalPushTxnRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  // Set to true to request that the PushTxn be aborted if possible.
+  // This is done in the event of a writer conflicting with PusheeTxn.
+  // Readers set this to false and instead attempt to move PusheeTxn's
+  // commit timestamp forward.
+  optional bool Abort = 3 [(gogoproto.nullable) = false];
+}
+
+// An InternalPushTxnResponse is the return value from the
+// InternalPushTxn() method. It returns success and the resulting
+// state of PusheeTxn if the conflict was resolved in favor of the
+// caller; the caller should subsequently invoke
+// InternalResolveIntent() on the conflicted key. It returns an error
+// otherwise.
+message InternalPushTxnResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Txn is non-nil if the transaction could be heartbeat and contains
+  // the current value of the transaction.
+  optional Transaction pushee_txn = 2;
+}
+
 // An InternalResolveIntentRequest is arguments to the
 // InternalResolveIntent() method. It is sent by transaction
-// coordinators to clean up write intents: either to remove them or
-// commit them.
+// coordinators and after success calling InternalPushTxn to clean up
+// write intents: either to remove them or commit them.
 message InternalResolveIntentRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // True to commit, false to remove.
-  optional bool commit = 2 [(gogoproto.nullable) = false];
 }
 
 // An InternalResolveIntentResponse is the return value from the
@@ -402,7 +439,8 @@ message ReadWriteCmdRequest {
   optional EnqueueUpdateRequest enqueue_update = 10;
   optional EnqueueMessageRequest enqueue_message = 11;
   optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 12;
-  optional InternalResolveIntentRequest internal_resolve_intent = 13;
+  optional InternalPushTxnRequest internal_push_txn = 13;
+  optional InternalResolveIntentRequest internal_resolve_intent = 14;
 }
 
 // A ReadWriteCmdResponse is a union type containing instances of all
@@ -421,5 +459,6 @@ message ReadWriteCmdResponse {
   optional EnqueueUpdateResponse enqueue_update = 10;
   optional EnqueueMessageResponse enqueue_message = 11;
   optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 12;
-  optional InternalResolveIntentResponse internal_resolve_intent = 13;
+  optional InternalPushTxnResponse internal_push_txn = 13;
+  optional InternalResolveIntentResponse internal_resolve_intent = 14;
 }

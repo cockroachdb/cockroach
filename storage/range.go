@@ -49,13 +49,22 @@ func init() {
 	gob.Register(proto.Transaction{})
 }
 
-// ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
-// serves as the sentinel gossip key which informs a node whether or
-// not it's connected to the primary gossip network and not just a
-// partition. As such it must expire on a reasonable basis and be
-// continually re-gossipped. The replica which is the raft leader of
-// the first range gossips it.
-const ttlClusterIDGossip = 30 * time.Second
+const (
+	// DefaultHeartbeatInterval is how often heartbeats are sent from the
+	// transaction coordinator to a live transaction. These keep it from
+	// being preempted by other transactions writing the same keys. If a
+	// transaction fails to be heartbeat within 2x the heartbeat interval,
+	// it may be aborted by conflicting txns.
+	DefaultHeartbeatInterval = 5 * time.Second
+
+	// ttlClusterIDGossip is time-to-live for cluster ID. The cluster ID
+	// serves as the sentinel gossip key which informs a node whether or
+	// not it's connected to the primary gossip network and not just a
+	// partition. As such it must expire on a reasonable basis and be
+	// continually re-gossipped. The replica which is the raft leader of
+	// the first range gossips it.
+	ttlClusterIDGossip = 30 * time.Second
+)
 
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
@@ -88,6 +97,7 @@ const (
 	EnqueueMessage        = "EnqueueMessage"
 	InternalRangeLookup   = "InternalRangeLookup"
 	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
+	InternalPushTxn       = "InternalPushTxn"
 	InternalResolveIntent = "InternalResolveIntent"
 	InternalSnapshotCopy  = "InternalSnapshotCopy"
 )
@@ -117,6 +127,7 @@ var writeMethods = map[string]struct{}{
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
+	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 }
 
@@ -164,6 +175,7 @@ type Cmd struct {
 // as appropriate.
 type Range struct {
 	Meta      *proto.RangeMetadata
+	clock     *hlc.Clock
 	mvcc      *engine.MVCC
 	engine    engine.Engine  // The underlying key-value store
 	allocator *allocator     // Makes allocation decisions
@@ -182,10 +194,15 @@ type Range struct {
 // no knowledge of a possible store that contains it and thus all rebalancing
 // operations will fail. Use NewRangeFromStore() instead to create ranges
 // contained within a store.
+//
+// TODO(spencer): need to give range just a single instance of Range manager
+// to contain clock, mvcc, engine, allocator & gossip. This will reduce
+// completely unnecessary memory usage per range.
 func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 	allocator *allocator, gossip *gossip.Gossip, rm RangeManager) *Range {
 	r := &Range{
 		Meta:      meta,
+		clock:     clock,
 		mvcc:      engine.NewMVCC(eng),
 		engine:    eng,
 		allocator: allocator,
@@ -500,6 +517,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalRangeLookup(args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+	case InternalPushTxn:
+		r.InternalPushTxn(args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case InternalResolveIntent:
 		r.InternalResolveIntent(args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case InternalSnapshotCopy:
@@ -614,8 +633,6 @@ func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
 func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
 	// Create the actual key to the system-local transaction table.
 	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
-	// Start with supplied transaction, then possibly load from txn record.
-	reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -628,6 +645,9 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 	// commit it or abort it (according to args.Commit), and also that the
 	// Timestamp and Epoch have not suffered regression.
 	if ok {
+		// Use the persisted transaction record as final transaction.
+		reply.Txn = gogoproto.Clone(existTxn).(*proto.Transaction)
+
 		if existTxn.Status == proto.COMMITTED {
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already committed"))
 			return
@@ -644,8 +664,9 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %+v", args.Txn.Timestamp)))
 			return
 		}
-		// Use the persisted transaction record as final transaction.
-		gogoproto.Merge(reply.Txn, existTxn)
+	} else {
+		// The transaction doesn't exist yet on disk; use the supplied version.
+		reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)
 	}
 
 	// Take max of requested timestamp and possibly "pushed" txn
@@ -780,7 +801,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
-// coordinator. Returns the udpated transaction.
+// coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Create the actual key to the system-local transaction table.
 	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
@@ -810,12 +831,145 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 	reply.Txn = &txn
 }
 
+// InternalPushTxn resolves conflicts between concurrent txns (or
+// between a non-transactional reader or writer and a txn) in several
+// ways depending on the statuses and priorities of the conflicting
+// transactions. The InternalPushTxn operation is invoked by a
+// "pusher" (the writer trying to abort a conflicting txn or the
+// reader trying to push a conflicting txn's commit timestamp
+// forward), who attempts to resolve a conflict with a "pushee"
+// (args.PushTxn -- the pushee txn whose intent(s) caused the
+// conflict).
+//
+// Txn already committed/aborted: If pushee txn is committed or
+// aborted return success.
+//
+// Txn Timeout: If pushee txn entry isn't present or its LastHeartbeat
+// timestamp isn't set, use PushTxn.Timestamp as LastHeartbeat. If
+// current time - LastHeartbeat > 2 * DefaultHeartbeatInterval, then
+// the pushee txn should be either pushed forward or aborted,
+// depending on value of Request.Abort.
+//
+// Old Txn Epoch: If persisted pushee txn entry has a newer Epoch than
+// PushTxn.Epoch, return success, as older epoch may be removed.
+//
+// Lower Txn Priority: If pushee txn has a lower priority than pusher,
+// adjust pushee's persisted txn depending on value of args.Abort. If
+// args.Abort is true, set txn.Status to ABORTED, and priority to one
+// less than the pusher's priority and return success. If args.Abort
+// is false, set txn.Timestamp to pusher's txn.Timestamp + 1.
+//
+// Higher Txn Priority: If pushee txn has a higher priority than
+// pusher, return TransactionRetryError. Transaction will be retried
+// with priority one less than the pushee's higher priority.
+func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
+	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
+		return
+	}
+	// Create the actual key to the system-local transaction table.
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+
+	// Fetch existing transaction if possible.
+	existTxn := &proto.Transaction{}
+	ok, err := engine.GetProto(r.engine, key, existTxn)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	if ok {
+		// Start with the persisted transaction record as final transaction.
+		reply.PusheeTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
+		// Upgrade the epoch and timestamp as necessary.
+		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
+			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
+		}
+		if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
+			reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
+		}
+	} else {
+		// Some sanity checks for case where we don't find a transaction record.
+		if args.PusheeTxn.LastHeartbeat != nil {
+			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
+				"no txn persisted, yet intent has heartbeat"))
+			return
+		} else if args.PusheeTxn.Status != proto.PENDING {
+			reply.SetGoError(proto.NewTransactionStatusError(&args.PusheeTxn,
+				fmt.Sprintf("no txn persisted, yet intent has status %s", args.PusheeTxn.Status)))
+			return
+		}
+		// The transaction doesn't exist yet on disk; use the supplied version.
+		reply.PusheeTxn = gogoproto.Clone(&args.PusheeTxn).(*proto.Transaction)
+	}
+
+	// If already committed or aborted, return success.
+	if reply.PusheeTxn.Status != proto.PENDING {
+		// Trivial noop.
+		return
+	}
+	// If we're trying to move the timestamp forward, and it's already
+	// far enough forward, return success.
+	if !args.Abort && args.Timestamp.Less(reply.PusheeTxn.Timestamp) {
+		// Trivial noop.
+		return
+	}
+
+	// pusherWins bool is true in the event the pusher prevails.
+	var pusherWins bool
+
+	// Check for txn timeout.
+	if reply.PusheeTxn.LastHeartbeat == nil {
+		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
+	}
+	// Compute heartbeat expiration.
+	expiry := r.clock.Now()
+	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
+	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
+		log.V(1).Infof("pushing expired txn %+v", reply.PusheeTxn)
+		pusherWins = true
+	} else if args.PusheeTxn.Epoch < reply.PusheeTxn.Epoch {
+		// Check for an intent from a prior epoch.
+		log.V(1).Infof("pushing intent from previous epoch for txn %+v", reply.PusheeTxn)
+		pusherWins = true
+	} else if reply.PusheeTxn.Priority < args.Txn.Priority ||
+		(reply.PusheeTxn.Priority == args.Txn.Priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+		// Finally, choose based on priority; if priorities are equal, order by lower txn timestamp.
+		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %+v", reply.PusheeTxn, args.Txn)
+		pusherWins = true
+	}
+
+	if !pusherWins {
+		log.V(1).Infof("failed to push intent %+v vs %+v", reply.PusheeTxn, args.Txn)
+		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn))
+		return
+	}
+
+	// If aborting transaction, set new status and return success.
+	if args.Abort {
+		reply.PusheeTxn.Status = proto.ABORTED
+	} else {
+		// Otherwise, update timestamp to be one greater than the request's timestamp.
+		reply.PusheeTxn.Timestamp = args.Timestamp
+		reply.PusheeTxn.Timestamp.Logical++
+	}
+	// Persist the pushed transaction.
+	if err := engine.PutProto(r.engine, key, reply.PusheeTxn); err != nil {
+		reply.SetGoError(err)
+		return
+	}
+}
+
 // InternalResolveIntent updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator.  The range will return the current status for this
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
-	reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.Txn, args.Commit))
+	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
+		reply.SetGoError(r.mvcc.ResolveWriteIntent(args.Key, args.Txn))
+	} else {
+		_, err := r.mvcc.ResolveWriteIntentRange(args.Key, args.EndKey, 0, args.Txn)
+		reply.SetGoError(err)
+	}
 }
 
 // createSnapshot creates a new snapshot, named using an internal counter.

@@ -418,7 +418,7 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit bool) error {
+func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 	if txn == nil {
 		return util.Error("no txn specified")
 	}
@@ -434,15 +434,23 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit boo
 	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
 		return nil
 	}
-	// If we're committing the intent and the txn epochs match, the
-	// intent value is good to go and we just set meta.Txn to nil.
-	// We may have to update the actual version value if timestamps
-	// are different between meta and txn.
-	if commit && meta.Txn.Epoch == txn.Epoch {
+	// If we're committing, or if the commit timestamp of the intent has
+	// been moved forward, and if the proposed epoch matches the existing
+	// epoch: update the meta.Txn. For commit, it's set to nil;
+	// otherwise, we update its value. We may have to update the actual
+	// version value (remove old and create new with proper
+	// timestamp-encoded key) if timestamp changed.
+	commit := txn.Status == proto.COMMITTED
+	pushed := txn.Status == proto.PENDING && meta.Txn.Timestamp.Less(txn.Timestamp)
+	if (commit || pushed) && meta.Txn.Epoch == txn.Epoch {
 		// Use a write batch because we may have multiple puts.
 		var batch []interface{}
 		origTimestamp := meta.Timestamp
-		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: txn.Timestamp})
+		var metaTxn *proto.Transaction
+		if pushed { // keep intent if we're pushing timestamp
+			metaTxn = txn
+		}
+		batchPut, err := MakeBatchPutProto(binKey, &proto.MVCCMetadata{Timestamp: txn.Timestamp, Txn: metaTxn})
 		if err != nil {
 			return err
 		}
@@ -464,13 +472,18 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit boo
 		return mvcc.engine.WriteBatch(batch)
 	}
 
-	// If not committing (this can be the case if commit=true, but the
-	// committed epoch is different from this intent's epoch), we must
-	// find the next versioned value and reset the metadata's latest
-	// timestamp. If there are no other versioned values, we delete the
-	// metadata key. Because there are multiple steps here and we want
-	// them all to commit, or none to commit, we schedule them using a
-	// write batch.
+	// This method shouldn't be called with this instance, but there's
+	// nothing to do if the epochs match and the state is still PENDING.
+	if txn.Status == proto.PENDING && meta.Txn.Epoch == txn.Epoch {
+		return nil
+	}
+
+	// Otherwise, we're deleting the intent. We must find the next
+	// versioned value and reset the metadata's latest timestamp. If
+	// there are no other versioned values, we delete the metadata
+	// key. Because there are multiple steps here and we want them all
+	// to commit, or none to commit, we schedule them using a write
+	// batch.
 	var batch []interface{}
 
 	// First clear the intent value.
@@ -505,10 +518,10 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction, commit boo
 }
 
 // ResolveWriteIntentRange commits or aborts (rolls back) the range of
-// write intents specified by start and end keys for a given txn
-// according to commit parameter. ResolveWriteIntentRange will skip
-// write intents of other txns. Specify max=0 for unbounded resolves.
-func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *proto.Transaction, commit bool) (int64, error) {
+// write intents specified by start and end keys for a given
+// txn. ResolveWriteIntentRange will skip write intents of other
+// txns. Specify max=0 for unbounded resolves.
+func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *proto.Transaction) (int64, error) {
 	if txn == nil {
 		return 0, util.Error("no txn specified")
 	}
@@ -532,7 +545,7 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *p
 		if len(remainder) != 0 {
 			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
-		err = mvcc.ResolveWriteIntent(currentKey, txn, commit)
+		err = mvcc.ResolveWriteIntent(currentKey, txn)
 		if err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", currentKey, err)
 		} else {
