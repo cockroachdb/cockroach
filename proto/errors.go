@@ -76,17 +76,14 @@ func (e *RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
-// NewTransactionStatusError initializes a new TransactionStatusError.
-func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
-	return &TransactionStatusError{
-		Txn: *txn,
-		Msg: msg,
-	}
+// NewTransactionAbortedError initializes a new TransactionAbortedError.
+func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
+	return &TransactionAbortedError{Txn: *txn}
 }
 
 // Error formats error.
-func (e *TransactionStatusError) Error() string {
-	return fmt.Sprintf("txn %+v: %s", e.Txn, e.Msg)
+func (e *TransactionAbortedError) Error() string {
+	return fmt.Sprintf("txn aborted: %+v", e.Txn)
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
@@ -99,9 +96,17 @@ func (e *TransactionRetryError) Error() string {
 	return fmt.Sprintf("retry txn: %+v", e.Txn)
 }
 
-// CanRetry indicates whether or not this TransactionRetryError can be retried.
-func (e *TransactionRetryError) CanRetry() bool {
-	return true
+// NewTransactionStatusError initializes a new TransactionStatusError.
+func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
+	return &TransactionStatusError{
+		Txn: *txn,
+		Msg: msg,
+	}
+}
+
+// Error formats error.
+func (e *TransactionStatusError) Error() string {
+	return fmt.Sprintf("txn %+v: %s", e.Txn, e.Msg)
 }
 
 // Error formats error.

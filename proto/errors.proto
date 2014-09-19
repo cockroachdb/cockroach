@@ -48,15 +48,10 @@ message RangeKeyMismatchError {
   optional RangeMetadata range = 3;
 }
 
-// A TransactionStatusError indicates that the transaction status is
-// incompatible with the requested operation. This means the
-// transaction has already either been committed or aborted. It might
-// also be the case that the request to modify the transaction failed
-// due to a regression in transaction epoch or timestamp, both of
-// which may only monotonically increase.
-message TransactionStatusError {
+// A TransactionAbortedError indicates that the transaction was
+// aborted by another concurrent transaction.
+message TransactionAbortedError {
   optional Transaction txn = 1 [(gogoproto.nullable) = false];
-  optional string msg = 2 [(gogoproto.nullable) = false];
 }
 
 // A TransactionRetryError indicates that the transaction must be
@@ -64,6 +59,17 @@ message TransactionStatusError {
 // transaction struct to use is returned with the error.
 message TransactionRetryError {
   optional Transaction txn = 1 [(gogoproto.nullable) = false];
+}
+
+// A TransactionStatusError indicates that the transaction status is
+// incompatible with the requested operation. This might mean the
+// transaction has already been committed. It might also be the case
+// that the request to modify the transaction failed due to a
+// regression in transaction epoch or timestamp, both of which may
+// only monotonically increase.
+message TransactionStatusError {
+  optional Transaction txn = 1 [(gogoproto.nullable) = false];
+  optional string msg = 2 [(gogoproto.nullable) = false];
 }
 
 // A WriteIntentError indicates that a write intent belonging to
@@ -94,9 +100,10 @@ message Error {
   optional NotLeaderError not_leader = 2;
   optional RangeNotFoundError range_not_found = 3;
   optional RangeKeyMismatchError range_key_mismatch = 4;
-  optional TransactionStatusError transaction_status = 5;
+  optional TransactionAbortedError transaction_aborted = 5;
   optional TransactionRetryError transaction_retry = 6;
-  optional WriteIntentError write_intent = 7;
-  optional WriteTooOldError write_too_old = 8;
+  optional TransactionStatusError transaction_status = 7;
+  optional WriteIntentError write_intent = 8;
+  optional WriteTooOldError write_too_old = 9;
 }
 

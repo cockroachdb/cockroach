@@ -249,3 +249,33 @@ func (db *DB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-ch
 	go db.executeCmd(storage.InternalSnapshotCopy, args, replyChan)
 	return replyChan
 }
+
+// RunTransaction executes retryable in the context of a distributed
+// transaction. The transaction is automatically aborted if retryable
+// returns an error and committed otherwise. RunTransaction takes care
+// of all header timestamps and txn settings, and automatically
+// retries as necessary in the event of transaction aborts or other
+// failures.  retryable should have no side effects which could cause
+// problems in the event it must be run more than once.
+func (db *DB) RunTransaction(userPriority int32, isolation proto.IsolationType, retryable func(db storage.DB) error) error {
+	tdb := newTxnDB(db, userPriority, isolation)
+	// Loop, creating new transaction, in the event txn is aborted.
+	for {
+		if err := retryable(tdb); err != nil {
+			txnErr, ok := err.(*txnDBError)
+			// If this isn't a txn DB error, return it; the txn failed because
+			// of errors propagated by the retryable func.
+			if !ok {
+				tdb.Abort()
+				return err
+			}
+			// Otherwise, either the transaction was aborted, in which case
+			// the txnDB will have created a new txn, or the transaction
+			// must be retried from the start, as in an SSI txn whose
+			// timestamp was pushed (we nominally keep our intents, but
+			// start again with an incremented epoch).
+			continue
+		}
+		return nil
+	}
+}
