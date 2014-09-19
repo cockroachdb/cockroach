@@ -41,27 +41,6 @@ type MVCC struct {
 	engine Engine // The underlying key-value store
 }
 
-// writeIntentError is a trivial implementation of error.
-type writeIntentError struct {
-	Txn *proto.Transaction
-}
-
-type writeTooOldError struct {
-	Timestamp proto.Timestamp
-	Txn       *proto.Transaction
-}
-
-func (e *writeIntentError) Error() string {
-	return fmt.Sprintf("there exists a write intent from transaction %+v", e.Txn)
-}
-
-func (e *writeTooOldError) Error() string {
-	if e.Txn != nil {
-		return fmt.Sprintf("cannot write with a timestamp older than %+v, or older txn epoch: %+v", e.Timestamp, e.Txn)
-	}
-	return fmt.Sprintf("cannot write with a timestamp older than %+v", e.Timestamp)
-}
-
 // NewMVCC returns a new instance of MVCC.
 func NewMVCC(engine Engine) *MVCC {
 	return &MVCC{
@@ -129,7 +108,7 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	var valBytes []byte
 	if !timestamp.Less(meta.Timestamp) {
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
-			return nil, &writeIntentError{Txn: meta.Txn}
+			return nil, &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
 		}
 
 		latestKey := mvccEncodeKey(binKey, meta.Timestamp)
@@ -169,30 +148,29 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 // We assume the range will check for an existing write intent before
 // executing any Put action at the MVCC level.
 func (mvcc *MVCC) Put(key Key, timestamp proto.Timestamp, value proto.Value, txn *proto.Transaction) error {
-	binKey := encoding.EncodeBinary(nil, key)
 	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
 			"the timestamp %+v provided in value does not match the timestamp %+v in request",
 			value.Timestamp, timestamp)
 	}
-	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Value: &value}, txn)
+	return mvcc.putInternal(key, timestamp, proto.MVCCValue{Value: &value}, txn)
 }
 
 // Delete marks the key deleted and will not return in the next get response.
 func (mvcc *MVCC) Delete(key Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
-	binKey := encoding.EncodeBinary(nil, key)
-	return mvcc.putInternal(binKey, timestamp, proto.MVCCValue{Deleted: true}, txn)
+	return mvcc.putInternal(key, timestamp, proto.MVCCValue{Deleted: true}, txn)
 }
 
 // putInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MVCCValue, txn *proto.Transaction) error {
+	binKey := encoding.EncodeBinary(nil, key)
 	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
 	}
 
 	meta := &proto.MVCCMetadata{}
-	ok, err := GetProto(mvcc.engine, key, meta)
+	ok, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil {
 		return err
 	}
@@ -207,7 +185,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 		// This should not happen since range should check the existing
 		// write intent before executing any Put action at MVCC level.
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
-			return &writeIntentError{Txn: meta.Txn}
+			return &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
 		}
 
 		// We can update the current metadata only if both the timestamp
@@ -217,10 +195,10 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 		if !timestamp.Less(meta.Timestamp) && (meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
 			// If this is an intent and timestamps have changed, need to remove old version.
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
-				batch = append(batch, BatchDelete(mvccEncodeKey(key, meta.Timestamp)))
+				batch = append(batch, BatchDelete(mvccEncodeKey(binKey, meta.Timestamp)))
 			}
 			meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-			batchPut, err := MakeBatchPutProto(key, meta)
+			batchPut, err := MakeBatchPutProto(binKey, meta)
 			if err != nil {
 				return err
 			}
@@ -229,12 +207,12 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 			// In case we receive a Put request to update an old version,
 			// it must be an error since raft should handle any client
 			// retry from timeout.
-			return &writeTooOldError{Timestamp: meta.Timestamp, Txn: meta.Txn}
+			return &proto.WriteTooOldError{Timestamp: meta.Timestamp, Txn: meta.Txn}
 		}
 	} else { // In case the key metadata does not exist yet.
 		// Create key metadata.
 		meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-		batchPut, err := MakeBatchPutProto(key, meta)
+		batchPut, err := MakeBatchPutProto(binKey, meta)
 		if err != nil {
 			return err
 		}
@@ -246,7 +224,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	batchPut, err := MakeBatchPutProto(mvccEncodeKey(key, timestamp), &value)
+	batchPut, err := MakeBatchPutProto(mvccEncodeKey(binKey, timestamp), &value)
 	if err != nil {
 		return err
 	}

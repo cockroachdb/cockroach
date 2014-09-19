@@ -55,8 +55,7 @@ func (rh *ResponseHeader) Verify(req Request) error {
 	return nil
 }
 
-// GoError converts the Error field of the response header to a
-// GenericError.
+// GoError returns the non-nil error from the proto.Error union.
 func (rh *ResponseHeader) GoError() error {
 	if rh.Error == nil {
 		return nil
@@ -74,6 +73,10 @@ func (rh *ResponseHeader) GoError() error {
 		return rh.Error.TransactionStatus
 	case rh.Error.TransactionRetry != nil:
 		return rh.Error.TransactionRetry
+	case rh.Error.WriteIntent != nil:
+		return rh.Error.WriteIntent
+	case rh.Error.WriteTooOld != nil:
+		return rh.Error.WriteTooOld
 	default:
 		return nil
 	}
@@ -97,6 +100,10 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = &Error{TransactionStatus: t}
 	case *TransactionRetryError:
 		rh.Error = &Error{TransactionRetry: t}
+	case *WriteIntentError:
+		rh.Error = &Error{WriteIntent: t}
+	case *WriteTooOldError:
+		rh.Error = &Error{WriteTooOld: t}
 	default:
 		var canRetry bool
 		if r, ok := err.(util.Retryable); ok {
