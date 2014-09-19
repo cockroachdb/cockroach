@@ -15,7 +15,7 @@ A Scalable, Geo-Replicated, Transactional Datastore
 
 ## Next Steps
 
-See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO)
+See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
 ## Instructions for building Cockroach Docker Container
 
