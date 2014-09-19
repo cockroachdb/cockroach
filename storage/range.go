@@ -693,7 +693,7 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already committed"))
 			return
 		} else if existTxn.Status == proto.ABORTED {
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already aborted"))
+			reply.SetGoError(proto.NewTransactionAbortedError(existTxn))
 			return
 		} else if args.Txn.Epoch < existTxn.Epoch {
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch)))

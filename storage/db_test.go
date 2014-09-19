@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -161,4 +162,8 @@ func (db *testDB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) 
 	replyChan := make(chan *proto.InternalSnapshotCopyResponse, 1)
 	go db.executeCmd(InternalSnapshotCopy, args, replyChan)
 	return replyChan
+}
+
+func (db *testDB) RunTransaction(userPriority int32, isolation proto.IsolationType, retryable func(db DB) error) error {
+	return util.Errorf("RunTransaction unimplemented")
 }

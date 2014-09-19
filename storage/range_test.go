@@ -813,7 +813,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		expErrRegexp string
 	}{
 		{engine.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn {.*}: already committed"},
-		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn {.*}: already aborted"},
+		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted {.*}"},
 		{engine.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn {.*}: epoch regression: 0"},
 		{engine.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn {.*}: timestamp regression: {WallTime:1 Logical:0 .*}"},
 	}

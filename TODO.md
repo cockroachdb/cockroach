@@ -44,6 +44,10 @@
           existing intent and write new intent. If push fails, backoff
           and retry the transaction.
 
+  - Keep a cache of pushed transactions on a store to avoid repushing
+    further intents after a txn has already been aborted or its
+    timestamp moved forward.
+
 * StoreFinder using Gossip protocol to filter
 
 

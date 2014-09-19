@@ -69,10 +69,12 @@ func (rh *ResponseHeader) GoError() error {
 		return rh.Error.RangeNotFound
 	case rh.Error.RangeKeyMismatch != nil:
 		return rh.Error.RangeKeyMismatch
-	case rh.Error.TransactionStatus != nil:
-		return rh.Error.TransactionStatus
+	case rh.Error.TransactionAborted != nil:
+		return rh.Error.TransactionAborted
 	case rh.Error.TransactionRetry != nil:
 		return rh.Error.TransactionRetry
+	case rh.Error.TransactionStatus != nil:
+		return rh.Error.TransactionStatus
 	case rh.Error.WriteIntent != nil:
 		return rh.Error.WriteIntent
 	case rh.Error.WriteTooOld != nil:
@@ -96,10 +98,12 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = &Error{RangeNotFound: t}
 	case *RangeKeyMismatchError:
 		rh.Error = &Error{RangeKeyMismatch: t}
-	case *TransactionStatusError:
-		rh.Error = &Error{TransactionStatus: t}
+	case *TransactionAbortedError:
+		rh.Error = &Error{TransactionAborted: t}
 	case *TransactionRetryError:
 		rh.Error = &Error{TransactionRetry: t}
+	case *TransactionStatusError:
+		rh.Error = &Error{TransactionStatus: t}
 	case *WriteIntentError:
 		rh.Error = &Error{WriteIntent: t}
 	case *WriteTooOldError:
