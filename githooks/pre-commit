@@ -3,7 +3,7 @@
 # Find the .go files that are being modified by this change. Exclude the
 # auto-generated .pb.go files.
 gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$' | grep -v '.pb.go$')
-if [ -n "${gofiles}" ]; then
+if [ "${GO_SKIP_PRECOMMIT_CHECKS}" != "1" -a -n "${gofiles}" ]; then
   # Check for formatting errors.
   unformatted=$(goimports -l ${gofiles})
   if [ -n "${unformatted}" ]; then
