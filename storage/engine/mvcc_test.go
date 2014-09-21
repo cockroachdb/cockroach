@@ -759,6 +759,48 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	}
 }
 
+// TestMVCCReadWithDiffEpochs writes a value first using epoch 1, then
+// reads using epoch 2 to verify that values written during different
+// transaction epochs are not visible.
+func TestMVCCReadWithDiffEpochs(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	// Write initial value wihtout a txn.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Now write using txn1, epoch 1.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+	// Try reading using different txns & epochs.
+	testCases := []struct {
+		txn      *proto.Transaction
+		expValue *proto.Value
+		expErr   bool
+	}{
+		// No transaction; should see error.
+		{nil, nil, true},
+		// Txn1, epoch 1; should see new value2.
+		{txn1, &value2, false},
+		// Txn1, epoch 2; should see original value1.
+		{txn1e2, &value1, false},
+		// Txn2; should see error.
+		{txn2, nil, true},
+	}
+	for i, test := range testCases {
+		value, err := mvcc.Get(testKey1, makeTS(2, 0), test.txn)
+		if test.expErr {
+			if err == nil {
+				t.Errorf("test %d: unexpected success", i)
+			} else if _, ok := err.(*writeIntentError); !ok {
+				t.Errorf("test %d: expected write intent error; got %v", i, err)
+			}
+		} else if err != nil || value == nil || !bytes.Equal(test.expValue.Bytes, value.Bytes) {
+			t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.Bytes, value, err)
+		}
+	}
+}
+
 func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
