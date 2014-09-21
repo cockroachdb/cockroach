@@ -391,10 +391,10 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		r.Lock()
 		r.readQ.RemoveWrite(wKey)
 		r.Unlock()
-		// If the original client didn't wait, log execution errors so they're
-		// surfaced somewhere.
+		// If the original client didn't wait (e.g. resolve write intent),
+		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.V(1).Infof("non-synchronous execution of %s with %+v failed: %v", cmd.Method, cmd.Args, err)
+			log.Warningf("non-synchronous execution of %s with %+v failed: %v", cmd.Method, cmd.Args, err)
 		}
 		return err
 	}
@@ -568,6 +568,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = args.Header().Timestamp
+
+	log.V(1).Infof("executed %s command %+v: %+v", method, args, reply)
 
 	// Add this command's result to the response cache if this is a
 	// read/write method. This must be done as part of the execution of
