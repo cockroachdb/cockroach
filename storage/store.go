@@ -416,6 +416,8 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		return err
 	}
 
+	log.V(1).Infof("resolving write intent on %s %+v: %v", method, args, wiErr)
+
 	// Attempt to push the transaction which created the conflicting intent.
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -461,7 +463,6 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	if IsReadOnly(method) {
 		return rng.AddCmd(method, args, reply, true)
 	}
-
 	return wiErr
 }
 
