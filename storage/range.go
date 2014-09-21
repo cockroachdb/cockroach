@@ -257,16 +257,40 @@ func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
 	return r.Meta.ContainsKeyRange(start, end)
 }
 
-// EnqueueCmd enqueues a command to Raft.
-func (r *Range) EnqueueCmd(cmd *Cmd) error {
-	r.raft <- cmd
-	return <-cmd.done
+// AddCmd adds a command for execution on this range. The command's
+// affected keys are verified to be contained within the range and the
+// range's leadership is confirmed. The command is then dispatched
+// either along the read-only execution path or the read-write Raft
+// command queue. If wait is false, read-write commands are added to
+// Raft without waiting for their completion.
+func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
+	header := args.Header()
+	var err error
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		err = proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Meta)
+	} else if !r.IsLeader() {
+		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
+		err = &proto.NotLeaderError{}
+	}
+	if err != nil {
+		reply.Header().SetGoError(err)
+		return err
+	}
+
+	// Differentiate between read-only and read-write.
+	if IsReadOnly(method) {
+		if !wait {
+			return util.Errorf("cannot specify !wait for read-only requests")
+		}
+		return r.addReadOnlyCmd(method, args, reply)
+	}
+	return r.addReadWriteCmd(method, args, reply, wait)
 }
 
-// ReadOnlyCmd updates the read timestamp cache and waits for any
+// addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) ReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
 	header := args.Header()
 	r.Lock()
 	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
@@ -297,7 +321,7 @@ func (r *Range) ReadOnlyCmd(method string, args proto.Request, reply proto.Respo
 	return r.executeCmd(method, args, reply)
 }
 
-// ReadWriteCmd first consults the response cache to determine whether
+// addReadWriteCmd first consults the response cache to determine whether
 // this command has already been sent to the range. If a response is
 // found, it's returned immediately and not submitted to raft. Next,
 // the timestamp cache is checked to determine if any newer accesses to
@@ -306,7 +330,8 @@ func (r *Range) ReadOnlyCmd(method string, args proto.Request, reply proto.Respo
 // command are added as pending writes to the read queue and the
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the repsonse cache.
-func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Response) error {
+// If wait is true, will block until the command is complete.
+func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -356,15 +381,29 @@ func (r *Range) ReadWriteCmd(method string, args proto.Request, reply proto.Resp
 		Reply:  reply,
 		done:   make(chan error, 1),
 	}
-	// This waits for the command to complete.
-	err := r.EnqueueCmd(cmd)
+	r.raft <- cmd
 
-	// Now that the command has completed, remove the pending write.
-	r.Lock()
-	r.readQ.RemoveWrite(wKey)
-	r.Unlock()
+	// Create a completion func for mandatory cleanups which we either
+	// run synchronously if we're waiting or in a goroutine otherwise.
+	completionFunc := func() error {
+		err := <-cmd.done
+		// Now that the command has completed, remove the pending write.
+		r.Lock()
+		r.readQ.RemoveWrite(wKey)
+		r.Unlock()
+		// If the original client didn't wait (e.g. resolve write intent),
+		// log execution errors so they're surfaced somewhere.
+		if !wait && err != nil {
+			log.Warningf("non-synchronous execution of %s with %+v failed: %v", cmd.Method, cmd.Args, err)
+		}
+		return err
+	}
 
-	return err
+	if wait {
+		return completionFunc()
+	}
+	go completionFunc()
+	return nil
 }
 
 // processRaft processes read/write commands, sending them to the Raft
@@ -529,6 +568,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = args.Header().Timestamp
+
+	log.V(1).Infof("executed %s command %+v: %+v", method, args, reply)
 
 	// Add this command's result to the response cache if this is a
 	// read/write method. This must be done as part of the execution of
@@ -857,7 +898,9 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // adjust pushee's persisted txn depending on value of args.Abort. If
 // args.Abort is true, set txn.Status to ABORTED, and priority to one
 // less than the pusher's priority and return success. If args.Abort
-// is false, set txn.Timestamp to pusher's txn.Timestamp + 1.
+// is false, set txn.Timestamp to pusher's Timestamp + 1 (note that
+// we use the pusher's Args.Timestamp, not Txn.Timestamp because the
+// args timestamp can advance during the txn).
 //
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionRetryError. Transaction will be retried

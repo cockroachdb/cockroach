@@ -324,3 +324,149 @@ func TestStoreRangesByKey(t *testing.T) {
 		t.Errorf("expected engine.KeyMax to not have an associated range")
 	}
 }
+
+// TestStoreResolveWriteIntent adds write intent and then verifies
+// that a put returns a WriteIntentError with Resolved flag set to
+// true in the event the pushee has lower priority or false otherwise.
+// Retrying the put should succeed for the Resolved case and fail
+// with another WriteIntentError otherwise.
+func TestStoreResolveWriteIntent(t *testing.T) {
+	store, _ := createTestStore(true, t)
+	defer store.Close()
+
+	for i, resolvable := range []bool{true, false} {
+		key := engine.Key(fmt.Sprintf("key-%d", i))
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, store.clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, store.clock)
+		if resolvable {
+			pushee.Priority = 1
+			pusher.Priority = 2 // Pusher will win.
+		} else {
+			pushee.Priority = 2
+			pusher.Priority = 1 // Pusher will lose.
+		}
+
+		// First lay down intent using the pushee's txn.
+		pArgs, pReply := putArgs(key, []byte("value"), 2)
+		pArgs.Timestamp = store.clock.Now()
+		pArgs.Txn = pushee
+		if err := store.ExecuteCmd("Put", pArgs, pReply); err != nil {
+			t.Fatal(err)
+		}
+
+		// Now, try a put using the pusher's txn.
+		pArgs.Timestamp = store.clock.Now()
+		pArgs.Txn = pusher
+		err := store.ExecuteCmd("Put", pArgs, pReply)
+		if err == nil {
+			t.Errorf("resolvable? %t, expected write intent error", resolvable)
+		}
+		wiErr, ok := err.(*proto.WriteIntentError)
+		if !ok {
+			t.Errorf("resolvable? %t, expected write intent error; got %v", resolvable, err)
+		}
+		if !bytes.Equal(wiErr.Key, key) || !bytes.Equal(wiErr.Txn.ID, pushee.ID) ||
+			wiErr.Resolved != resolvable {
+			t.Errorf("resolvable? %t, unexpected values in write intent error: %+v", resolvable, wiErr)
+		}
+
+		// Trying again should succeed if wiErr.Resolved and fail otherwise.
+		err = store.ExecuteCmd("Put", pArgs, pReply)
+		if wiErr.Resolved && err != nil {
+			t.Errorf("resolvable? %t, expected write to succeed: %v", resolvable, err)
+		} else if !wiErr.Resolved && err == nil {
+			t.Errorf("resolvable? %d, expected write intent error but succeeded", resolvable)
+		}
+	}
+}
+
+// TestStoreResolveWriteIntentRollback verifies that resolving a write
+// intent by aborting it yields the previous value.
+func TestStoreResolveWriteIntentRollback(t *testing.T) {
+	store, _ := createTestStore(true, t)
+	defer store.Close()
+
+	key := engine.Key("a")
+	pusher := NewTransaction(key, 1, proto.SERIALIZABLE, store.clock)
+	pushee := NewTransaction(key, 1, proto.SERIALIZABLE, store.clock)
+	pushee.Priority = 1
+	pusher.Priority = 2 // Pusher will win.
+
+	// First lay down intent using the pushee's txn.
+	args, reply := incrementArgs(key, 1, 2)
+	args.Timestamp = store.clock.Now()
+	args.Txn = pushee
+	if err := store.ExecuteCmd(Increment, args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, try a put using the pusher's txn.
+	args.Timestamp = store.clock.Now()
+	args.Txn = pusher
+	args.Increment = 2
+	err := store.ExecuteCmd(Increment, args, reply)
+	if err == nil {
+		t.Error("expected write intent error")
+	}
+
+	// Trying again should succeed.
+	if err = store.ExecuteCmd(Increment, args, reply); err != nil {
+		t.Errorf("expected write to succeed: %v", err)
+	}
+	if reply.NewValue != 2 {
+		t.Errorf("expected rollback of earlier increment to yield increment value of 2; got %d", reply.NewValue)
+	}
+}
+
+// TestStoreResolveWriteIntentPushOnRead verifies that resolving a
+// write intent for a read will push the timestamp.
+func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
+	store, _ := createTestStore(true, t)
+	defer store.Close()
+
+	key := engine.Key("a")
+	pusher := NewTransaction(key, 1, proto.SERIALIZABLE, store.clock)
+	pushee := NewTransaction(key, 1, proto.SNAPSHOT, store.clock)
+	pushee.Priority = 1
+	pusher.Priority = 2 // Pusher will win.
+
+	// First, write original value.
+	args, reply := putArgs(key, []byte("value1"), 2)
+	args.Timestamp = store.clock.Now()
+	if err := store.ExecuteCmd(Put, args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second, lay down intent using the pushee's txn.
+	args.Timestamp = store.clock.Now()
+	args.Txn = pushee
+	args.Value.Bytes = []byte("value2")
+	if err := store.ExecuteCmd(Put, args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, try to read value using the pusher's txn.
+	gArgs, gReply := getArgs(key, 2)
+	gArgs.Timestamp = store.clock.Now()
+	gArgs.Txn = pusher
+	if err := store.ExecuteCmd(Get, gArgs, gReply); err != nil {
+		t.Errorf("expected read %+v to succeed: %v", gArgs, err)
+	} else if !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
+		t.Errorf("expected bytes to be %q, got %q", "value1", gReply.Value.Bytes)
+	}
+
+	// Finally, try to end the pushee's transaction; since it's got
+	// SNAPSHOT isolation, the end should work, but verify the txn
+	// commit timestamp is equal to gArgs.Timestamp + 1.
+	etArgs, etReply := endTxnArgs(pushee, true, 2)
+	etArgs.Timestamp = pushee.Timestamp
+	if err := store.ExecuteCmd(EndTransaction, etArgs, etReply); err != nil {
+		t.Fatal(err)
+	}
+	expTimestamp := gArgs.Timestamp
+	expTimestamp.Logical++
+	if etReply.Txn.Status != proto.COMMITTED || !etReply.Txn.Timestamp.Equal(expTimestamp) {
+		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %v: %+v",
+			expTimestamp, etReply.Txn)
+	}
+}

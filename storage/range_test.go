@@ -248,13 +248,18 @@ func (be *blockingEngine) put(key engine.Key, value []byte) error {
 	return be.InMem.Put(key, value)
 }
 
-// createTestRange creates a range using a blocking engine. Returns
+// createTestRangeWithClock creates a range using a blocking engine. Returns
 // the range clock's manual unix nanos time and the range.
 func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Clock, *blockingEngine) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
-	rng := NewRange(&proto.RangeMetadata{}, clock, engine, nil, nil, nil)
+	rm := &proto.RangeMetadata{
+		ClusterID:       "cluster1",
+		RangeDescriptor: testRangeDescriptor,
+		RangeID:         0,
+	}
+	rng := NewRange(rm, clock, engine, nil, nil, nil)
 	rng.Start()
 	return rng, &manual, clock, engine
 }
@@ -406,7 +411,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs([]byte("a"), 0)
 	args.Timestamp = clock.Now()
-	err := rng.ReadOnlyCmd("Get", args, reply)
+	err := rng.AddCmd(Get, args, reply, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -433,7 +438,7 @@ func TestRangeReadQueue(t *testing.T) {
 	writeDone := make(chan struct{})
 	go func() {
 		args, reply := putArgs([]byte("a"), []byte("value"), 0)
-		err := rng.ReadWriteCmd("Put", args, reply)
+		err := rng.AddCmd(Put, args, reply, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,7 +449,7 @@ func TestRangeReadQueue(t *testing.T) {
 	readBDone := make(chan struct{})
 	go func() {
 		args, reply := getArgs([]byte("b"), 0)
-		err := rng.ReadOnlyCmd("Get", args, reply)
+		err := rng.AddCmd(Get, args, reply, true)
 		if err != nil {
 			t.Error(err)
 		}
@@ -455,7 +460,7 @@ func TestRangeReadQueue(t *testing.T) {
 	readADone := make(chan struct{})
 	go func() {
 		args, reply := getArgs([]byte("a"), 0)
-		err := rng.ReadOnlyCmd("Get", args, reply)
+		err := rng.AddCmd(Get, args, reply, true)
 		if err != nil {
 			t.Error(err)
 		}
@@ -495,12 +500,12 @@ func TestRangeUseTSCache(t *testing.T) {
 	*mc = hlc.ManualClock(t0.Nanoseconds())
 	args, reply := getArgs([]byte("a"), 0)
 	args.Timestamp = clock.Now()
-	err := rng.ReadOnlyCmd("Get", args, reply)
+	err := rng.AddCmd(Get, args, reply, true)
 	if err != nil {
 		t.Error(err)
 	}
 	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 0)
-	err = rng.ReadWriteCmd("Put", pArgs, pReply)
+	err = rng.AddCmd(Put, pArgs, pReply, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +538,7 @@ func TestRangeIdempotence(t *testing.T) {
 			} else {
 				args.CmdID = proto.ClientCmdID{WallTime: 1, Random: int64(idx + 100)}
 			}
-			err := rng.ReadWriteCmd("Increment", &args, &reply)
+			err := rng.AddCmd(Increment, &args, &reply, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -574,15 +579,15 @@ func TestRangeSnapshot(t *testing.T) {
 
 	pArgs, pReply := putArgs(key1, val1, 0)
 	pArgs.Timestamp = clock.Now()
-	err := rng.ReadWriteCmd("Put", pArgs, pReply)
+	err := rng.AddCmd(Put, pArgs, pReply, true)
 
 	pArgs, pReply = putArgs(key2, val2, 0)
 	pArgs.Timestamp = clock.Now()
-	err = rng.ReadWriteCmd("Put", pArgs, pReply)
+	err = rng.AddCmd(Put, pArgs, pReply, true)
 
 	gArgs, gReply := getArgs(key1, 0)
 	gArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("Get", gArgs, gReply)
+	err = rng.AddCmd(Get, gArgs, gReply, true)
 
 	if err != nil {
 		t.Fatalf("error : %s", err)
@@ -594,7 +599,7 @@ func TestRangeSnapshot(t *testing.T) {
 
 	iscArgs, iscReply := internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
 	iscArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
+	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -610,12 +615,12 @@ func TestRangeSnapshot(t *testing.T) {
 
 	pArgs, pReply = putArgs(key2, val3, 0)
 	pArgs.Timestamp = clock.Now()
-	err = rng.ReadWriteCmd("Put", pArgs, pReply)
+	err = rng.AddCmd(Put, pArgs, pReply, true)
 
 	// Scan with the previous snapshot will get the old value val2 of key2.
 	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
 	iscArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
+	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -632,7 +637,7 @@ func TestRangeSnapshot(t *testing.T) {
 	// Create a new snapshot to cover the latest value.
 	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
 	iscArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
+	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -650,7 +655,7 @@ func TestRangeSnapshot(t *testing.T) {
 
 	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
 	iscArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
+	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -659,7 +664,7 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
 	iscArgs.Timestamp = clock.Now()
-	err = rng.ReadOnlyCmd("InternalSnapshotCopy", iscArgs, iscReply)
+	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
@@ -679,7 +684,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		args, reply := endTxnArgs(txn, commit, 0)
 		args.Timestamp = txn.Timestamp
-		if err := rng.ReadWriteCmd("EndTransaction", args, reply); err != nil {
+		if err := rng.AddCmd(EndTransaction, args, reply, true); err != nil {
 			t.Error(err)
 		}
 		expStatus := proto.COMMITTED
@@ -693,7 +698,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
 		hbArgs, hbReply := heartbeatArgs(txn, 0)
-		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+		if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Error(err)
 		}
 		if hbReply.Txn.Status != expStatus || hbReply.Txn.LastHeartbeat != nil {
@@ -715,7 +720,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		// Start out with a heartbeat to the transaction.
 		hbArgs, hbReply := heartbeatArgs(txn, 0)
 		hbArgs.Timestamp = txn.Timestamp
-		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+		if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Error(err)
 		}
 		if hbReply.Txn.Status != proto.PENDING || hbReply.Txn.LastHeartbeat == nil {
@@ -724,7 +729,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 
 		args, reply := endTxnArgs(txn, commit, 0)
 		args.Timestamp = txn.Timestamp
-		if err := rng.ReadWriteCmd("EndTransaction", args, reply); err != nil {
+		if err := rng.AddCmd(EndTransaction, args, reply, true); err != nil {
 			t.Error(err)
 		}
 		expStatus := proto.COMMITTED
@@ -766,7 +771,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		args, reply := endTxnArgs(txn, test.commit, 0)
 		*mc = hlc.ManualClock(1)
 		args.Timestamp = clock.Now()
-		err := rng.ReadWriteCmd("EndTransaction", args, reply)
+		err := rng.AddCmd(EndTransaction, args, reply, true)
 		if test.expErr {
 			if err == nil {
 				t.Errorf("expected error")
@@ -829,7 +834,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.ID = test.key
 		args, reply := endTxnArgs(txn, true, 0)
 		args.Timestamp = txn.Timestamp
-		verifyErrorMatches(rng.ReadWriteCmd("EndTransaction", args, reply), test.expErrRegexp, t)
+		verifyErrorMatches(rng.AddCmd(EndTransaction, args, reply, true), test.expErrRegexp, t)
 	}
 }
 
@@ -843,7 +848,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 
 	args, reply := pushTxnArgs(pusher, pushee, true, 0)
 	args.Key = pusher.ID
-	verifyErrorMatches(rng.ReadWriteCmd("InternalPushTxn", args, reply), ".*should match pushee.*", t)
+	verifyErrorMatches(rng.AddCmd(InternalPushTxn, args, reply, true), ".*should match pushee.*", t)
 }
 
 // TestInternalPushTxnAlreadyCommittedOrAborted verifies success
@@ -854,21 +859,21 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 
 	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = 1
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
 		// End the pushee's transaction.
 		etArgs, etReply := endTxnArgs(pushee, status == proto.COMMITTED, 0)
 		etArgs.Timestamp = pushee.Timestamp
-		if err := rng.ReadWriteCmd("EndTransaction", etArgs, etReply); err != nil {
+		if err := rng.AddCmd(EndTransaction, etArgs, etReply, true); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now try to push what's already committed or aborted.
 		args, reply := pushTxnArgs(pusher, pushee, true, 0)
-		if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+		if err := rng.AddCmd(InternalPushTxn, args, reply, true); err != nil {
 			t.Fatal(err)
 		}
 		if reply.PusheeTxn.Status != status {
@@ -907,8 +912,8 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 1
 		pusher.Priority = 2 // Pusher will win.
 
@@ -917,7 +922,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Timestamp = test.startTS
 		hbArgs, hbReply := heartbeatArgs(pushee, 0)
 		hbArgs.Timestamp = pushee.Timestamp
-		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+		if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Fatal(err)
 		}
 
@@ -925,7 +930,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
 		args, reply := pushTxnArgs(pusher, pushee, true, 0)
-		if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+		if err := rng.AddCmd(InternalPushTxn, args, reply, true); err != nil {
 			t.Fatal(err)
 		}
 		expTxn := gogoproto.Clone(pushee).(*proto.Transaction)
@@ -964,8 +969,8 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -973,7 +978,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		if test.heartbeat != nil {
 			hbArgs, hbReply := heartbeatArgs(pushee, 0)
 			hbArgs.Timestamp = *test.heartbeat
-			if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+			if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -981,7 +986,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		*mc = hlc.ManualClock(test.currentTime)
 		args, reply := pushTxnArgs(pusher, pushee, true, 0)
-		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		err := rng.AddCmd(InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
 		}
@@ -1008,8 +1013,8 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1017,14 +1022,14 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 		pushee.Epoch = test.curEpoch
 		hbArgs, hbReply := heartbeatArgs(pushee, 0)
 		hbArgs.Timestamp = pushee.Timestamp
-		if err := rng.ReadWriteCmd("InternalHeartbeatTxn", hbArgs, hbReply); err != nil {
+		if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		pushee.Epoch = test.intentEpoch
 		args, reply := pushTxnArgs(pusher, pushee, true, 0)
-		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		err := rng.AddCmd(InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
 		}
@@ -1062,8 +1067,8 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(engine.MakeKey(key, []byte{1}), 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(engine.MakeKey(key, []byte{2}), 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
@@ -1071,7 +1076,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		args, reply := pushTxnArgs(pusher, pushee, true, 0)
-		err := rng.ReadWriteCmd("InternalPushTxn", args, reply)
+		err := rng.AddCmd(InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
 		}
@@ -1095,7 +1100,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 
 	// Now, push the transaction with args.Abort=false.
 	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 0)
-	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+	if err := rng.AddCmd(InternalPushTxn, args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %v", err)
 	}
 	expTS := pusher.Timestamp
@@ -1125,7 +1130,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 
 	// Now, push the transaction with args.Abort=false.
 	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 0)
-	if err := rng.ReadWriteCmd("InternalPushTxn", args, reply); err != nil {
+	if err := rng.AddCmd(InternalPushTxn, args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %v", err)
 	}
 	if !reply.PusheeTxn.Timestamp.Equal(pushee.Timestamp) {

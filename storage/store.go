@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -385,24 +386,84 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 		}
 	}
 
-	// Verify specified range contains the command's implicated keys.
+	// Get range and add command to the range for execution.
 	rng, err := s.GetRange(header.Replica.RangeID)
 	if err != nil {
 		return err
 	}
-	if !rng.ContainsKeyRange(header.Key, header.EndKey) {
-		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, rng.Meta)
+	if err := rng.AddCmd(method, args, reply, true); err == nil {
+		return nil
 	}
-	if !rng.IsLeader() {
-		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		return &proto.NotLeaderError{}
+	// Maybe resolve a potential write intent error. We do this here
+	// because this is the code path with the requesting client
+	// waiting. We don't want every replica to attempt to resolve the
+	// intent independently, so we can't do it in Range.executeCmd.
+	return s.maybeResolveWriteIntentError(rng, method, args, reply)
+}
+
+// maybeResolveWriteIntentError checks the reply's error. If the error
+// is a writeIntentError, it tries to push the conflicting
+// transaction: either move its timestamp forward on a read/write
+// conflict, or abort it on a write/write conflict. If the push
+// succeeds, we immediately issue a resolve intent command and set the
+// error's Resolved flag to true so the client retries the command
+// immediately. If the push fails, we set the error's Resolved flag to
+// false so that the client backs off before reissuing the command.
+func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args proto.Request, reply proto.Response) error {
+	err := reply.Header().GoError()
+	wiErr, ok := err.(*proto.WriteIntentError)
+	if !ok {
+		return err
 	}
 
-	// Differentiate between read-only and read-write.
-	if IsReadOnly(method) {
-		return rng.ReadOnlyCmd(method, args, reply)
+	log.V(1).Infof("resolving write intent on %s %+v: %v", method, args, wiErr)
+
+	// Attempt to push the transaction which created the conflicting intent.
+	pushArgs := &proto.InternalPushTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: args.Header().Timestamp,
+			Key:       wiErr.Txn.ID, // Address to pushee's txn
+			User:      args.Header().User,
+			Txn:       args.Header().Txn,
+		},
+		PusheeTxn: wiErr.Txn,
+		Abort:     !IsReadOnly(method), // abort if cmd isn't read-only
 	}
-	return rng.ReadWriteCmd(method, args, reply)
+	pushReply := <-s.db.InternalPushTxn(pushArgs)
+	if pushReply.Header().GoError() != nil {
+		log.V(1).Infof("push %+v failed: %v", pushArgs, pushReply.Header().GoError())
+		return wiErr
+	}
+
+	// Note that even though we're setting Resolved = true here, it'll never
+	// be set in the response cache that way (the response containing this
+	// write intent error was cached right after the command was executed
+	// in Range.executeCmd). This means that a client which retries the request
+	// will always backoff, even if backoff isn't necessary. This doesn't
+	// affect correctness, only possibly adds minor latency for an unusual case.
+	wiErr.Resolved = true
+
+	resolveArgs := &proto.InternalResolveIntentRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: args.Header().Timestamp,
+			Key:       wiErr.Key,
+			User:      UserRoot,
+			Txn:       pushReply.PusheeTxn,
+		},
+	}
+	resolveReply := &proto.InternalResolveIntentResponse{}
+	// Add resolve command with wait=false to add to Raft but not wait for completion.
+	if resolveErr := rng.AddCmd(InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
+		log.Warningf("resolve %+v failed: %v", resolveArgs, resolveErr)
+	}
+
+	// If the command is read-write, we must return the error to the
+	// client so it can resubmit the command with a new ClientCmdID. For
+	// read-only commands, we can resubmit immediately instead.
+	if IsReadOnly(method) {
+		return rng.AddCmd(method, args, reply, true)
+	}
+	return wiErr
 }
 
 // RangeManager is an interface satisfied by Store through which ranges

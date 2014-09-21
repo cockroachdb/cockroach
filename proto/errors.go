@@ -63,9 +63,8 @@ func NewRangeKeyMismatchError(start, end []byte, meta *RangeMetadata) *RangeKeyM
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
 	if e.Range != nil {
-		return fmt.Sprintf("key range %q-%q outside of bounds of range %q: %q-%q",
-			string(e.RequestStartKey), string(e.RequestEndKey),
-			string(e.Range.RangeID),
+		return fmt.Sprintf("key range %q-%q outside of bounds of range %d: %q-%q",
+			string(e.RequestStartKey), string(e.RequestEndKey), e.Range.RangeID,
 			string(e.Range.StartKey), string(e.Range.EndKey))
 	}
 	return fmt.Sprintf("key range %q-%q could not be located within a range on store",
@@ -103,4 +102,17 @@ func (e *TransactionRetryError) Error() string {
 // CanRetry indicates whether or not this TransactionRetryError can be retried.
 func (e *TransactionRetryError) CanRetry() bool {
 	return true
+}
+
+// Error formats error.
+func (e *WriteIntentError) Error() string {
+	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v", e.Key, e.Txn)
+}
+
+// Error formats error.
+func (e *WriteTooOldError) Error() string {
+	if e.Txn != nil {
+		return fmt.Sprintf("cannot write with a timestamp older than %+v, or older txn epoch: %+v", e.Timestamp, e.Txn)
+	}
+	return fmt.Sprintf("cannot write with a timestamp older than %+v", e.Timestamp)
 }
