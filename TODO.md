@@ -8,9 +8,6 @@
 
     - Get: logic to support clock skew uncertainty and concurrency.
 
-      Simple, common case: if most recent timestamp for key is less
-      than Timestamp and committed, read value.
-
       If most recent timestamp for key is greater than MaxTimestamp
       (it can be either committed or an intent), and there are no
       versions of key between Timestamp and MaxTimestamp, read value
@@ -24,32 +21,11 @@
       retry, Timestamp will be min(key's timestamp + 1, MaxTimestamp),
       and MaxTimestamp will be max(key's timestamp + 1, MaxTimestamp).
 
-      In the event an intent is encountered with timestamp <=
-      Timestamp, try to push the transaction to Timestamp + 1. If
-      already committed, resolve and retry the read. If push succeeds,
-      read value for key at Timestamp. If push fails, backoff and
-      retry the transaction.
-
-      After reading any value, update the read-timestamp-cache with
-      the txn's Timestamp.
-
-    - Put: additions to support intent marker.
-
-      If entry exists but is intent:
-
-        - If intent owned by another txn, try to push transaction
-          (with "Abort"=true). If result of push is already-committed
-          or aborted, resolve the existing intent and retry put. If
-          push succeeds (meaning the other txn is aborted), delete
-          existing intent and write new intent. If push fails, backoff
-          and retry the transaction.
-
   - Keep a cache of pushed transactions on a store to avoid repushing
     further intents after a txn has already been aborted or its
     timestamp moved forward.
 
 * StoreFinder using Gossip protocol to filter
-
 
 * Range split
 

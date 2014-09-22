@@ -20,6 +20,7 @@ package kv
 import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -252,22 +253,20 @@ func (db *DB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-ch
 
 // RunTransaction executes retryable in the context of a distributed
 // transaction. The transaction is automatically aborted if retryable
-// returns an error and committed otherwise. RunTransaction takes care
-// of all header timestamps and txn settings, and automatically
-// retries as necessary in the event of transaction aborts or other
-// failures.  retryable should have no side effects which could cause
+// returns any error aside from a txnDBError, and is committed
+// otherwise. retryable should have no side effects which could cause
 // problems in the event it must be run more than once.
-func (db *DB) RunTransaction(userPriority int32, isolation proto.IsolationType, retryable func(db storage.DB) error) error {
-	tdb := newTxnDB(db, userPriority, isolation)
-	// Loop, creating new transaction, in the event txn is aborted.
+func (db *DB) RunTransaction(user string, userPriority int32, isolation proto.IsolationType,
+	retryable func(db storage.DB) error) error {
+	tdb := newTxnDB(db, user, userPriority, isolation)
+	// Run retryable in a loop until we encounter success or
+	// non-txnDBError error condition.
+	var err error
 	for {
-		if err := retryable(tdb); err != nil {
-			txnErr, ok := err.(*txnDBError)
-			// If this isn't a txn DB error, return it; the txn failed because
-			// of errors propagated by the retryable func.
-			if !ok {
-				tdb.Abort()
-				return err
+		if err = retryable(tdb); err != nil {
+			if _, ok := err.(*txnDBError); !ok {
+				// If this isn't a txn DB error, break.
+				break
 			}
 			// Otherwise, either the transaction was aborted, in which case
 			// the txnDB will have created a new txn, or the transaction
@@ -276,6 +275,20 @@ func (db *DB) RunTransaction(userPriority int32, isolation proto.IsolationType, 
 			// start again with an incremented epoch).
 			continue
 		}
-		return nil
+		break
 	}
+	// If err is non-nil, abort the txn.
+	if err != nil {
+		if abortErr := tdb.Abort(); abortErr != nil {
+			return util.Errorf("after error %v; failed abort: %v", err, abortErr)
+		}
+		return err
+	}
+	// Otherwise, commit the txn. This may block waiting for outstanding
+	// writes to complete -- we need the most recent of all response
+	// timestamps in order to commit.
+	if commitErr := tdb.Commit(); commitErr != nil {
+		return commitError
+	}
+	return nil
 }
