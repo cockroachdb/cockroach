@@ -41,7 +41,7 @@ func TestTxnDBBasics(t *testing.T) {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := RunTransaction(db, storage.UserRoot, 1, proto.SNAPSHOT, func(txn storage.DB) error {
+		err := db.RunTransaction(storage.UserRoot, 1, proto.SNAPSHOT, func(txn storage.DB) error {
 			// Put transactional value.
 			if pr := <-txn.Put(&proto.PutRequest{
 				RequestHeader: proto.RequestHeader{Key: key},

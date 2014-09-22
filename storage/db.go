@@ -53,6 +53,8 @@ type DB interface {
 	InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 	InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse
+
+	RunTransaction(user string, userPriority int32, isolation proto.IsolationType, retryable func(db DB) error) error
 }
 
 // GetI fetches the value at the specified key and gob-deserializes it
