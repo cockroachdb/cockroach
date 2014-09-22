@@ -792,7 +792,7 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 		if test.expErr {
 			if err == nil {
 				t.Errorf("test %d: unexpected success", i)
-			} else if _, ok := err.(*writeIntentError); !ok {
+			} else if _, ok := err.(*proto.WriteIntentError); !ok {
 				t.Errorf("test %d: expected write intent error; got %v", i, err)
 			}
 		} else if err != nil || value == nil || !bytes.Equal(test.expValue.Bytes, value.Bytes) {
