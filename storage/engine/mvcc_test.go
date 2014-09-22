@@ -792,12 +792,35 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 		if test.expErr {
 			if err == nil {
 				t.Errorf("test %d: unexpected success", i)
-			} else if _, ok := err.(*writeIntentError); !ok {
+			} else if _, ok := err.(*proto.WriteIntentError); !ok {
 				t.Errorf("test %d: expected write intent error; got %v", i, err)
 			}
 		} else if err != nil || value == nil || !bytes.Equal(test.expValue.Bytes, value.Bytes) {
 			t.Errorf("test %d: expected value %q, err nil; got %+v, %v", i, test.expValue.Bytes, value, err)
 		}
+	}
+}
+
+// TestMVCCReadWithPushedTimestamp verifies that a read for a value
+// written by the transaction, but then subsequently pushed, can still
+// be read by the txn at the later timestamp, even if an earlier
+// timestamp is specified. This happens when a txn's intents are
+// resolved by other actors; the intents shouldn't become invisible
+// to pushed txn.
+func TestMVCCReadWithPushedTimestamp(t *testing.T) {
+	mvcc := createTestMVCC(t)
+	// Start with epoch 1.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1); err != nil {
+		t.Fatal(err)
+	}
+	// Resolve the intent, pushing its timestamp forward.
+	if err := mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
+		t.Fatal(err)
+	}
+	// Attempt to read using naive txn's previous timestamp.
+	value, err := mvcc.Get(testKey1, makeTS(0, 0), txn1)
+	if err != nil || value == nil || !bytes.Equal(value.Bytes, value1.Bytes) {
+		t.Errorf("expected value %q, err nil; got %+v, %v", value.Bytes, value, err)
 	}
 }
 
