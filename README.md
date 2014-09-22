@@ -103,6 +103,14 @@ communication between distributed system components.
 
 ![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
 
+#### Datastore Scan Efficiency Spectrum
+
+![Datastore Scan Efficiency Spectrum](/resources/doc/scan-efficiency.png?raw=true)
+
+#### Read vs. Write Optimization Spectrum
+
+![Read vs. Write Optimization Spectrum](/resources/doc/read-vs-write.png?raw=true)
+
 ## Architecture
 
 Cockroach implements a layered architecture, with various
