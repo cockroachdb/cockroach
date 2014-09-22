@@ -139,7 +139,7 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 		// txn was restarted and an earlier iteration wrote the value
 		// we're now reading. In this case, we skip the intent.
 		if meta.Txn != nil && txn.Epoch != meta.Txn.Epoch {
-			valBytes, ts, isValue, err = mvcc.scanNext(NextKey(latestKey), PrefixEndKey(binKey))
+			valBytes, ts, isValue, err = mvcc.scanNextVersion(NextKey(latestKey), PrefixEndKey(binKey))
 		} else {
 			valBytes, err = mvcc.engine.Get(latestKey)
 			ts = meta.Timestamp
@@ -147,7 +147,7 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 		}
 	} else {
 		nextKey := mvccEncodeKey(binKey, timestamp)
-		valBytes, ts, isValue, err = mvcc.scanNext(nextKey, PrefixEndKey(binKey))
+		valBytes, ts, isValue, err = mvcc.scanNextVersion(nextKey, PrefixEndKey(binKey))
 	}
 	if valBytes == nil || err != nil {
 		return nil, err
@@ -170,9 +170,10 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	return value.Value, nil
 }
 
-// scanNext scans the value from engine starting at nextKey, limited
-// by endKey. Returns the bytes and timestamp if read, nil otherwise.
-func (mvcc *MVCC) scanNext(nextKey, endKey Key) ([]byte, proto.Timestamp, bool, error) {
+// scanNextVersion scans the value from engine starting at nextKey,
+// limited by endKey. Returns the bytes and timestamp if read, nil
+// otherwise.
+func (mvcc *MVCC) scanNextVersion(nextKey, endKey Key) ([]byte, proto.Timestamp, bool, error) {
 	// We use the PrefixEndKey(key) as the upper bound for scan.
 	// If there is no other version after nextKey, it won't return
 	// the value of the next key.
