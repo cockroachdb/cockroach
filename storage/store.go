@@ -453,7 +453,9 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	}
 	resolveReply := &proto.InternalResolveIntentResponse{}
 	// Add resolve command with wait=false to add to Raft but not wait for completion.
-	rng.AddCmd(InternalResolveIntent, resolveArgs, resolveReply, false)
+	if resolveErr := rng.AddCmd(InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
+		log.Warningf("resolve %+v failed: +v", resolveArgs, resolveErr)
+	}
 
 	// If the command is read-write, we must return the error to the
 	// client so it can resubmit the command with a new ClientCmdID. For
