@@ -83,3 +83,11 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 	}
 	return c.Sum32()
 }
+
+// UpgradePriority sets transaction priority to the maximum of current
+// priority and the specified minPriority.
+func (t *Transaction) UpgradePriority(minPriority int32) {
+	if minPriority > t.Priority {
+		t.Priority = minPriority
+	}
+}

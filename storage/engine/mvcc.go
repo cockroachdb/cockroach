@@ -107,7 +107,10 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	ts := proto.Timestamp{}
 	var valBytes []byte
 	var isValue bool
-	if !timestamp.Less(meta.Timestamp) {
+
+	// Always read latest value in the event the txns match.
+	if !timestamp.Less(meta.Timestamp) ||
+		(meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)) {
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
 			return nil, &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
 		}

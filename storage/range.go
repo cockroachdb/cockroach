@@ -923,12 +923,15 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	if ok {
 		// Start with the persisted transaction record as final transaction.
 		reply.PusheeTxn = gogoproto.Clone(existTxn).(*proto.Transaction)
-		// Upgrade the epoch and timestamp as necessary.
+		// Upgrade the epoch, timestamp and priority as necessary.
 		if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 			reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
 		}
 		if reply.PusheeTxn.Timestamp.Less(args.PusheeTxn.Timestamp) {
 			reply.PusheeTxn.Timestamp = args.PusheeTxn.Timestamp
+		}
+		if reply.PusheeTxn.Priority < args.PusheeTxn.Priority {
+			reply.PusheeTxn.Priority = args.PusheeTxn.Priority
 		}
 	} else {
 		// Some sanity checks for case where we don't find a transaction record.
@@ -960,6 +963,15 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	// pusherWins bool is true in the event the pusher prevails.
 	var pusherWins bool
 
+	// If there's no incoming transaction, the pusher is
+	// non-transactional. We create a random priority in this case.
+	var priority int32
+	if args.Txn != nil {
+		priority = args.Txn.Priority
+	} else {
+		priority = util.CachedRand.Int31()
+	}
+
 	// Check for txn timeout.
 	if reply.PusheeTxn.LastHeartbeat == nil {
 		reply.PusheeTxn.LastHeartbeat = &reply.PusheeTxn.Timestamp
@@ -974,18 +986,24 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 		// Check for an intent from a prior epoch.
 		log.V(1).Infof("pushing intent from previous epoch for txn %+v", reply.PusheeTxn)
 		pusherWins = true
-	} else if reply.PusheeTxn.Priority < args.Txn.Priority ||
-		(reply.PusheeTxn.Priority == args.Txn.Priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
+	} else if reply.PusheeTxn.Priority < priority ||
+		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Finally, choose based on priority; if priorities are equal, order by lower txn timestamp.
-		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %+v", reply.PusheeTxn, args.Txn)
+		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %d", reply.PusheeTxn, priority)
+		pusherWins = true
+	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && !args.Abort {
+		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
 		pusherWins = true
 	}
 
 	if !pusherWins {
-		log.V(1).Infof("failed to push intent %+v vs %+v", reply.PusheeTxn, args.Txn)
+		log.V(1).Infof("failed to push intent %+v vs %+v/%d", reply.PusheeTxn, args.Txn, priority)
 		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn))
 		return
 	}
+
+	// Upgrade priority of pushed transaction to one less than pusher's.
+	reply.PusheeTxn.UpgradePriority(priority - 1)
 
 	// If aborting transaction, set new status and return success.
 	if args.Abort {
