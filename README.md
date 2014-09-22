@@ -4,8 +4,12 @@
 
 A Scalable, Geo-Replicated, Transactional Datastore
 
-<a class="embedly-card" href="http://www.wired.com/2014/07/cockroachdb/">Out in the Open: Ex-Googlers Building Cloud Software That's Almost Impossible to Take Down | WIRED</a>
-<script>(function(a){var b="embedly-platform",c="script";if(!a.getElementById(b)){var d=a.createElement(c);d.id=b;d.async=true;d.src=("https:"===document.location.protocol?"https":"http")+"://cdn.embedly.com/widgets/platform.js";var e=document.getElementsByTagName(c)[0];e.parentNode.insertBefore(d,e)}})(document);</script>
+```html
+<div>
+        <a class="embedly-card" href="http://www.wired.com/2014/07/cockroachdb/">Out in the Open: Ex-Googlers Building Cloud Software That's Almost Impossible to Take Down | WIRED</a>
+        <script>(function(a){var b="embedly-platform",c="script";if(!a.getElementById(b)){var d=a.createElement(c);d.id=b;d.async=true;d.src=("https:"===document.location.protocol?"https":"http")+"://cdn.embedly.com/widgets/platform.js";var e=document.getElementsByTagName(c)[0];e.parentNode.insertBefore(d,e)}})(document);</script>
+</div>
+```
 
 ## Status
 
