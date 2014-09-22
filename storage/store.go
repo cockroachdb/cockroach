@@ -421,10 +421,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	// Attempt to push the transaction which created the conflicting intent.
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Timestamp: args.Header().Timestamp,
-			Key:       wiErr.Txn.ID, // Address to pushee's txn
-			User:      args.Header().User,
-			Txn:       args.Header().Txn,
+			Timestamp:    args.Header().Timestamp,
+			Key:          wiErr.Txn.ID, // Address to pushee's txn
+			User:         args.Header().User,
+			UserPriority: args.Header().UserPriority,
+			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
 		Abort:     !IsReadOnly(method), // abort if cmd isn't read-only

@@ -22,10 +22,12 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"testing"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -546,6 +548,8 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// will use a random priority, which is likely to be > 1, so should win.
 	gArgs, gReply := getArgs(key, 2)
 	gArgs.Timestamp = store.clock.Now()
+	gArgs.UserPriority = gogoproto.Int32(math.MaxInt32)
+	fmt.Println(gArgs.GetUserPriority())
 	if err := store.ExecuteCmd(Get, gArgs, gReply); err != nil {
 		t.Errorf("expected read %+v to succeed: %v", gArgs, err)
 	} else if gReply.Value != nil {
@@ -557,6 +561,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	args.Timestamp = store.clock.Now()
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
+	args.UserPriority = gogoproto.Int32(math.MaxInt32)
 	err := store.ExecuteCmd(Put, args, reply)
 	if err == nil {
 		t.Fatal("expected write intent error")
@@ -568,12 +573,17 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if !bytes.Equal(wiErr.Key, key) || !bytes.Equal(wiErr.Txn.ID, pushee.ID) || !wiErr.Resolved {
 		t.Errorf("unexpected values in write intent error: %+v", wiErr)
 	}
-	// Also, verify that the pushee's timestamp was moved forward on
+	// Verify that the pushee's timestamp was moved forward on
 	// former read, since we have it available in write intent error.
 	expTS := gArgs.Timestamp
 	expTS.Logical++
 	if !wiErr.Txn.Timestamp.Equal(expTS) {
 		t.Errorf("expected pushee timestamp pushed to %v; got %v", expTS, wiErr.Txn.Timestamp)
+	}
+	// Similarly, verify that pushee's priority was moved from 0
+	// to math.MaxInt32-1 during push.
+	if wiErr.Txn.Priority != math.MaxInt32-1 {
+		t.Errorf("expected pushee priority to be pushed to %d; got %d", math.MaxInt32-1, wiErr.Txn.Priority)
 	}
 	// Trying again should succeed.
 	err = store.ExecuteCmd("Put", args, reply)
@@ -589,7 +599,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if err == nil {
 		t.Errorf("unexpected success committing transaction")
 	}
-	if _, ok := err.(*proto.TransactionStatusError); !ok {
+	if _, ok := err.(*proto.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %v", err)
 	}
 }
