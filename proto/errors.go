@@ -111,7 +111,7 @@ func (e *TransactionStatusError) Error() string {
 
 // Error formats error.
 func (e *WriteIntentError) Error() string {
-	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v", e.Key, e.Txn)
+	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v: resolved? %t", e.Key, e.Txn, e.Resolved)
 }
 
 // Error formats error.

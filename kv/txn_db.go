@@ -24,7 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -33,8 +32,8 @@ import (
 
 // Default constants for timeouts.
 const (
-	retryBackoff    = 150 * time.Second
-	maxRetryBackoff = 5 * time.Second
+	txnRetryBackoff    = 150 * time.Second
+	txnMaxRetryBackoff = 5 * time.Second
 )
 
 // A txnDB embeds a kv.DB struct.
@@ -47,7 +46,8 @@ type txnDB struct {
 // implementation.
 func newTxnDB(db *DB, user string, userPriority int32, isolation proto.IsolationType) *txnDB {
 	txnKV := &txnKV{
-		kv:           db.kv,
+		wrappedKV:    db.kv,
+		clock:        db.clock,
 		user:         user,
 		userPriority: userPriority,
 		isolation:    isolation,
@@ -75,7 +75,7 @@ func (tdb *txnDB) Commit() error {
 // On receipt of TransactionAbortedError, the transaction is re-
 // created and error passed to caller.
 type txnKV struct {
-	kv           kv.KV
+	wrappedKV    KV
 	clock        *hlc.Clock
 	user         string
 	userPriority int32
@@ -103,9 +103,8 @@ func (tkv *txnKV) endTransaction(db *DB, commit bool) error {
 	tkv.wg.Wait()
 
 	tkv.mu.Lock()
-	defer tkv.mu.Unlock()
-
-	reply <- db.EndTransaction(&proto.EndTransactionRequest{
+	db.kv = tkv.wrappedKV // Switch underlying kv to wrappedKV
+	etArgs := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       tkv.txn.ID,
 			User:      tkv.user,
@@ -113,8 +112,11 @@ func (tkv *txnKV) endTransaction(db *DB, commit bool) error {
 			Txn:       tkv.txn,
 		},
 		Commit: commit,
-	})
-	return reply.Header().GoError()
+	}
+	tkv.mu.Unlock()
+
+	etReply := <-db.EndTransaction(etArgs)
+	return etReply.Header().GoError()
 }
 
 // ExecuteCmd proxies requests to tkv.db, taking care to:
@@ -128,7 +130,7 @@ func (tkv *txnKV) endTransaction(db *DB, commit bool) error {
 func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
 	tkv.mu.Lock()
 	if tkv.done {
-		tkv.sendError(replyChan, util.Errorf("transactional session no longer active"))
+		tkv.sendError(replyChan, util.Errorf("transaction has already been ended (committed/aborted)"))
 		return
 	}
 	if !isTransactional(method) {
@@ -149,10 +151,10 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 	tkv.mu.Unlock()
 
 	// Proxy command through to the wrapped KV.
-	const retryOpts = util.RetryOptions{
+	retryOpts := util.RetryOptions{
 		Tag:         fmt.Sprintf("retrying cmd %s on write intent error", method),
-		Backoff:     retryBackoff,
-		MaxBackoff:  maxRetryBackoff,
+		Backoff:     txnRetryBackoff,
+		MaxBackoff:  txnMaxRetryBackoff,
 		Constant:    2,
 		MaxAttempts: 0, // retry indefinitely
 	}
@@ -162,9 +164,9 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			// On mutating commands, set a client command ID. This prevents
 			// mutations from being run multiple times on RPC retries.
 			if !storage.IsReadOnly(method) {
-				args.Header().ClientCmdID = proto.ClientCmdID{
+				args.Header().CmdID = proto.ClientCmdID{
 					WallTime: tkv.clock.Now().WallTime,
-					Random:   util.CachedRand.Int32(),
+					Random:   util.CachedRand.Int63(),
 				}
 			}
 
@@ -184,9 +186,9 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			case *proto.TransactionRetryError:
 				// On retry, increment epoch & set timestamp to max of
 				// txn record and current header timestamp.
-				tkv.txn = t.Txn
+				*tkv.txn = t.Txn
 				tkv.txn.Epoch++
-				if tkv.txn.timestamp.Less(args.Header().Timestamp) {
+				if tkv.txn.Timestamp.Less(args.Header().Timestamp) {
 					tkv.txn.Timestamp = args.Header().Timestamp
 				}
 				tkv.timestamp = tkv.txn.Timestamp
@@ -198,8 +200,8 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			case *proto.WriteIntentError:
 				// If write intent error is resolved, exit retry/backoff loop to
 				// immediately retry.
-				if wiErr.Resolved {
-					return true, wiErr
+				if t.Resolved {
+					return true, t
 				}
 				// Otherwise, backoff on unresolvable intent and retry command.
 				// Make sure to upgrade our priority to the conflicting txn's - 1.
@@ -222,11 +224,56 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 
 // Close proxies through to wrapped KV.
 func (tkv *txnKV) Close() {
-	tkv.kv.Close()
+	tkv.wrappedKV.Close()
 }
 
 func (tkv *txnKV) sendError(replyChan interface{}, err error) {
 	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
 	reply.Header().SetGoError(err)
 	reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
+}
+
+// RunTransaction executes retryable in the context of a distributed
+// transaction. The transaction is automatically aborted if retryable
+// returns any error aside from a txnDBError, and is committed
+// otherwise. retryable should have no side effects which could cause
+// problems in the event it must be run more than once.
+func RunTransaction(db *DB, user string, userPriority int32,
+	isolation proto.IsolationType, retryable func(db storage.DB) error) error {
+	tdb := newTxnDB(db, user, userPriority, isolation)
+	// Run retryable in a loop until we encounter success or error
+	// condition this loop isn't capable of handling.
+	var err error
+	for {
+		if err = retryable(tdb); err != nil {
+			switch err.(type) {
+			default:
+				// If this isn't a txn DB error, break.
+				break
+			case *proto.TransactionRetryError, *proto.TransactionAbortedError:
+				// Otherwise, either the transaction was aborted, in which case
+				// the txnDB will have created a new txn, or the transaction
+				// must be retried from the start, as in an SSI txn whose
+				// timestamp was pushed (we nominally keep our intents, but
+				// start again with an incremented epoch).
+				continue
+			}
+		}
+		// If execution of retryable succeeded, break.
+		break
+	}
+	// If err is non-nil, abort the txn.
+	if err != nil {
+		if abortErr := tdb.Abort(); abortErr != nil {
+			return util.Errorf("after error %v; failed abort: %v", err, abortErr)
+		}
+		return err
+	}
+	// Otherwise, commit the txn. This may block waiting for outstanding
+	// writes to complete -- we need the most recent of all response
+	// timestamps in order to commit.
+	if commitErr := tdb.Commit(); commitErr != nil {
+		return commitErr
+	}
+	return nil
 }

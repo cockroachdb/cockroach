@@ -20,7 +20,6 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
-	"math"
 
 	"code.google.com/p/go-uuid/uuid"
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -54,8 +53,6 @@ type DB interface {
 	InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 	InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse
-
-	RunTransaction(userPriority int32, isolation proto.IsolationType, retryable func(db DB) error) error
 }
 
 // GetI fetches the value at the specified key and gob-deserializes it
@@ -226,10 +223,7 @@ func UpdateRangeDescriptor(db DB, meta proto.RangeMetadata,
 func NewTransaction(baseKey engine.Key, userPriority int32,
 	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
 	// Compute priority by adjusting based on userPriority factor.
-	if userPriority < 1 {
-		userPriority = 1
-	}
-	priority := math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
+	priority := proto.MakePriority(userPriority)
 	// Compute timestamp and max timestamp.
 	now := clock.Now()
 	max := now
