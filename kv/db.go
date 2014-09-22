@@ -20,6 +20,7 @@ package kv
 import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -252,4 +253,49 @@ func (db *DB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-ch
 	replyChan := make(chan *proto.InternalSnapshotCopyResponse, 1)
 	go db.executeCmd(storage.InternalSnapshotCopy, args, replyChan)
 	return replyChan
+}
+
+// RunTransaction executes retryable in the context of a distributed
+// transaction. The transaction is automatically aborted if retryable
+// returns any error aside from a txnDBError, and is committed
+// otherwise. retryable should have no side effects which could cause
+// problems in the event it must be run more than once.
+func (db *DB) RunTransaction(user string, userPriority int32,
+	isolation proto.IsolationType, retryable func(db storage.DB) error) error {
+	tdb := newTxnDB(db, user, userPriority, isolation)
+	// Run retryable in a loop until we encounter success or error
+	// condition this loop isn't capable of handling.
+	var err error
+	for {
+		if err = retryable(tdb); err != nil {
+			switch err.(type) {
+			default:
+				// If this isn't a txn DB error, break.
+				break
+			case *proto.TransactionRetryError, *proto.TransactionAbortedError:
+				// Otherwise, either the transaction was aborted, in which case
+				// the txnDB will have created a new txn, or the transaction
+				// must be retried from the start, as in an SSI txn whose
+				// timestamp was pushed (we nominally keep our intents, but
+				// start again with an incremented epoch).
+				continue
+			}
+		}
+		// If execution of retryable succeeded, break.
+		break
+	}
+	// If err is non-nil, abort the txn.
+	if err != nil {
+		if abortErr := tdb.Abort(); abortErr != nil {
+			return util.Errorf("after error %v; failed abort: %v", err, abortErr)
+		}
+		return err
+	}
+	// Otherwise, commit the txn. This may block waiting for outstanding
+	// writes to complete -- we need the most recent of all response
+	// timestamps in order to commit.
+	if commitErr := tdb.Commit(); commitErr != nil {
+		return commitErr
+	}
+	return nil
 }
