@@ -19,6 +19,7 @@ package kv
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
 	"time"
@@ -168,9 +169,13 @@ func (tkv *txnKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			}
 
 			// Create an intercept channel so we can examine the reply before passing it on to client.
-			interceptChan := reflect.MakeChan(reflect.TypeOf(replyChan).Elem().Elem(), 1)
-			tkv.kv.ExecuteCmd(method, args, interceptChan.Interface())
-			reply := interceptChan.Recv().Interface().(proto.Response)
+			interceptChan := reflect.MakeChan(reflect.TypeOf(replyChan), 1)
+			tkv.wrappedKV.ExecuteCmd(method, args, interceptChan.Interface())
+			recvVal, ok := interceptChan.Recv()
+			if !ok {
+				log.Fatalf("intercept channel closed on request %+v", args)
+			}
+			reply := recvVal.Interface().(proto.Response)
 
 			tkv.mu.Lock()
 			defer tkv.mu.Unlock()
