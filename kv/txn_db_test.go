@@ -34,15 +34,15 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	db, clock, _ := createTestDB(t)
-	value = []byte("value")
+	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
+		key := []byte(fmt.Sprintf("key-%t", commit))
+
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.RunTransaction(storage.UserRoot, 1, proto.SNAPSHOT, func(txn storage.DB) error {
-			key = []byte(fmt.Sprintf("key-%t", commit))
-
 			// Put transactional value.
-			if pr := <-txn.Put(proto.PutRequest{
+			if pr := <-txn.Put(&proto.PutRequest{
 				RequestHeader: proto.RequestHeader{Key: key},
 				Value:         proto.Value{Bytes: value},
 			}); pr.GoError() != nil {
@@ -50,7 +50,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Attempt to read outside of txn.
-			if gr := <-db.Get(proto.GetRequest{
+			if gr := <-db.Get(&proto.GetRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:       key,
 					Timestamp: clock.Now(),
@@ -60,7 +60,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Read within the transaction.
-			if gr := <-txn.Get(proto.GetRequest{
+			if gr := <-txn.Get(&proto.GetRequest{
 				RequestHeader: proto.RequestHeader{Key: key},
 			}); gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
 				return util.Errorf("expected success reading value %+v: %v", gr.Value, gr.GoError())
@@ -69,6 +69,7 @@ func TestTxnDBBasics(t *testing.T) {
 			if !commit {
 				return util.Errorf("purposefully failing transaction")
 			}
+			return nil
 		})
 
 		if commit != (err == nil) {
@@ -78,7 +79,7 @@ func TestTxnDBBasics(t *testing.T) {
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr := <-db.Get(proto.GetRequest{
+		gr := <-db.Get(&proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       key,
 				Timestamp: clock.Now(),
@@ -86,11 +87,11 @@ func TestTxnDBBasics(t *testing.T) {
 		})
 		if commit {
 			if gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-				return util.Errorf("expected success reading value: %+v, %v", gr.Value, gr.GoError())
+				t.Errorf("expected success reading value: %+v, %v", gr.Value, gr.GoError())
 			}
 		} else {
 			if gr.GoError() != nil || gr.Value != nil {
-				return util.Errorf("expected success and nil value: %+v, %v", gr.Value, gr.GoError())
+				t.Errorf("expected success and nil value: %+v, %v", gr.Value, gr.GoError())
 			}
 		}
 	}
