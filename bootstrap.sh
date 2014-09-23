@@ -15,6 +15,7 @@ $GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/vet
 $GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/goimports
 
 # Grab dependencies.
+# TODO(bdarnell): make these submodules like etcd/raft, so we can pin versions?
 $GO_GET $GO_GET_FLAGS code.google.com/p/biogo.store/llrb
 $GO_GET $GO_GET_FLAGS code.google.com/p/go-commander
 $GO_GET $GO_GET_FLAGS code.google.com/p/go-uuid/uuid
