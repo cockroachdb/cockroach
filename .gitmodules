@@ -1,3 +1,6 @@
 [submodule "_vendor/rocksdb"]
 	path = _vendor/rocksdb
 	url = https://github.com/cockroachdb/rocksdb.git
+[submodule "_vendor/src/github.com/coreos/etcd"]
+	path = _vendor/src/github.com/coreos/etcd
+	url = https://github.com/cockroachdb/etcd.git

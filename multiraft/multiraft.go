@@ -27,6 +27,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	// TODO(bdarnell) remove this when we are actually using etcd/raft.
+	// For now I'm just doing a dummy import to make sure the submodule setup
+	// doesn't break anything.
+	_ "github.com/coreos/etcd/raft"
 )
 
 // NodeID is a unique non-zero identifier for the node within the cluster.
