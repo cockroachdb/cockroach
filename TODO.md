@@ -89,3 +89,9 @@
     from the RangeDescriptor. The store which owns a removed replica
     is responsible for clearing the relevant portion of the key space
     as well as any other housekeeping details.
+
+* Implement all ops that operate on a range for the case in which
+  the given key range overlaps multiple logical ranges (Scan, DeleteRange etc).
+  Requires transactions. Split the operation addressed to a key range into
+  subranges that each hit a single range only, and run all of those as a
+  distributed transaction.
