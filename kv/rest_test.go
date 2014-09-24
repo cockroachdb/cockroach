@@ -17,8 +17,9 @@
 // Author: Zach Brock (zbrock@gmail.com)
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-// Package rest_test contains the HTTP tests for the KV API. It's here because if this was in the rest
+// Package kv_test contains the HTTP tests for the KV API. It's here because if this was in the kv
 // package there would be a circular dependency between package rest and package server.
+// TODO(andybons): create mock DB to eliminate the circular dependency.
 package kv_test
 
 import (
