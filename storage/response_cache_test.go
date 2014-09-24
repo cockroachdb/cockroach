@@ -32,8 +32,8 @@ var incR = proto.IncrementResponse{
 
 // createTestResponseCache creates an in-memory engine and
 // returns a response cache using the engine for range ID 1.
-func createTestResponseCache(t *testing.T) *ResponseCache {
-	return NewResponseCache(1, engine.NewInMem(proto.Attributes{}, 1<<20))
+func createTestResponseCache(t *testing.T, rangeID int64) *ResponseCache {
+	return NewResponseCache(rangeID, engine.NewInMem(proto.Attributes{}, 1<<20))
 }
 
 func makeCmdID(wallTime, random int64) proto.ClientCmdID {
@@ -43,9 +43,10 @@ func makeCmdID(wallTime, random int64) proto.ClientCmdID {
 	}
 }
 
-// TestResponseCachePutAndGet tests basic get & put functionality.
-func TestResponseCachePutAndGet(t *testing.T) {
-	rc := createTestResponseCache(t)
+// TestResponseCachePutGetClearData tests basic get & put functionality as well as
+// clearing the cache.
+func TestResponseCachePutGetClearData(t *testing.T) {
+	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
 	// Start with a get for an unseen cmdID.
@@ -60,12 +61,20 @@ func TestResponseCachePutAndGet(t *testing.T) {
 	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
 		t.Errorf("unexpected failure getting response: %t, %v, %+v", ok, err, val)
 	}
+	if err := rc.ClearData(); err != nil {
+		t.Error(err)
+	}
+	// The previously present response should be gone.
+	if ok, err := rc.GetResponse(cmdID, &val); ok {
+		t.Errorf("unexpected success getting response: %t, %v, %+v", ok, err, val)
+	}
+
 }
 
 // TestResponseCacheEmptyCmdID tests operation with empty client
 // command id. All calls should be noops.
 func TestResponseCacheEmptyCmdID(t *testing.T) {
-	rc := createTestResponseCache(t)
+	rc := createTestResponseCache(t, 1)
 	cmdID := proto.ClientCmdID{}
 	val := proto.IncrementResponse{}
 	// Put value of 1 for test response.
@@ -82,10 +91,35 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	}
 }
 
+// TestResponseCacheCopyInto tests that responses cached in one cache get
+// transferred correctly to another cache using CopyInto().
+func TestResposeCacheCopyInto(t *testing.T) {
+	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
+	rc2.rangeID = 2
+	cmdID := makeCmdID(1, 1)
+	// Store an increment with new value one in the first cache.
+	val := proto.IncrementResponse{}
+	if err := rc1.PutResponse(cmdID, &incR); err != nil {
+		t.Errorf("unexpected error putting response: %v", err)
+	}
+	// Copy the first cache into the second.
+	if err := rc1.CopyInto(rc2); err != nil {
+		t.Errorf("unexpected error while copying response cache: %v", err)
+	}
+	// Get should return 1 for both caches.
+	if ok, err := rc1.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	}
+	if ok, err := rc2.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
+		t.Errorf("unexpected failure getting response from destination: %t, %v, %+v", ok, err, val)
+	}
+
+}
+
 // TestResponseCacheInflight verifies GetResponse invocations block on
 // inflight requests.
 func TestResponseCacheInflight(t *testing.T) {
-	rc := createTestResponseCache(t)
+	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
 	// Add inflight for cmdID.
@@ -134,7 +168,7 @@ func TestResponseCacheTwoInflights(t *testing.T) {
 			t.Error("expected panic due to two successive calls to AddInflight")
 		}
 	}()
-	rc := createTestResponseCache(t)
+	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	rc.addInflightLocked(cmdID)
 	rc.addInflightLocked(cmdID)
@@ -143,7 +177,7 @@ func TestResponseCacheTwoInflights(t *testing.T) {
 // TestResponseCacheClear verifies that inflight waiters are
 // signaled in the event the cache is cleared.
 func TestResponseCacheClear(t *testing.T) {
-	rc := createTestResponseCache(t)
+	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
 	// Add inflight for cmdID.
