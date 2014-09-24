@@ -15,7 +15,7 @@
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
 
-package rest
+package kv
 
 import (
 	"errors"
@@ -32,15 +32,15 @@ import (
 )
 
 const (
-	// APIPrefix is the prefix for RESTful endpoints used to
+	// RESTPrefix is the prefix for RESTful endpoints used to
 	// interact directly with the key-value datastore.
-	APIPrefix = "/kv/"
+	RESTPrefix = "/kv/"
 	// EntryPrefix is the prefix for endpoints that interact with individual key-value pairs directly.
-	EntryPrefix = APIPrefix + "entry/"
+	EntryPrefix = RESTPrefix + "entry/"
 	// RangePrefix is the prefix for endpoints that interact with a range of key-value pairs.
-	RangePrefix = APIPrefix + "range/"
+	RangePrefix = RESTPrefix + "range/"
 	// CounterPrefix is the prefix for the endpoint that increments a key by a given amount.
-	CounterPrefix = APIPrefix + "counter/"
+	CounterPrefix = RESTPrefix + "counter/"
 )
 
 // Function signture for an HTTP handler that only takes a writer and a request
@@ -49,21 +49,30 @@ type actionHandler func(*Server, http.ResponseWriter, *http.Request)
 // Function signture for an HTTP handler that takes a writer and a request and a storage key
 type actionKeyHandler func(*Server, http.ResponseWriter, *http.Request, engine.Key)
 
+// HTTP methods, defined in RFC 2616.
+const (
+	methodGet    = "GET"
+	methodPut    = "PUT"
+	methodPost   = "POST"
+	methodDelete = "DELETE"
+	methodHead   = "HEAD"
+)
+
 // Maps various path + HTTP method combos to specific server methods
 var routingTable = map[string]map[string]actionHandler{
 	EntryPrefix: {
-		"GET":    makeActionWithKey((*Server).handleEntryGetAction),
-		"PUT":    makeActionWithKey((*Server).handleEntryPutAction),
-		"POST":   makeActionWithKey((*Server).handleEntryPutAction),
-		"DELETE": makeActionWithKey((*Server).handleEntryDeleteAction),
-		"HEAD":   makeActionWithKey((*Server).handleEntryHeadAction),
+		methodGet:    makeActionWithKey((*Server).handleEntryGetAction),
+		methodPut:    makeActionWithKey((*Server).handleEntryPutAction),
+		methodPost:   makeActionWithKey((*Server).handleEntryPutAction),
+		methodDelete: makeActionWithKey((*Server).handleEntryDeleteAction),
+		methodHead:   makeActionWithKey((*Server).handleEntryHeadAction),
 	},
 	RangePrefix: {
-	// TODO(zbrock + matthew) not supported yet!
+	// TODO(andybons) implement.
 	},
 	CounterPrefix: {
-		"GET":  (*Server).handleIncrementAction,
-		"POST": (*Server).handleIncrementAction,
+		methodGet:  (*Server).handleCounterAction,
+		methodPost: (*Server).handleCounterAction,
 	},
 }
 
@@ -78,9 +87,9 @@ func NewRESTServer(db storage.DB) *Server {
 	return &Server{db: db}
 }
 
-// HandleAction arbitrates requests to the appropriate function
-// based on the request’s HTTP method.
-func (s *Server) HandleAction(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP satisfies the http.Handler interface and arbitrates requests
+// to the appropriate function based on the request’s HTTP method.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for endPoint, epRoutes := range routingTable {
 		if strings.HasPrefix(r.URL.Path, endPoint) {
 			epHandler := epRoutes[r.Method]
@@ -93,7 +102,6 @@ func (s *Server) HandleAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-	return
 }
 
 func makeActionWithKey(act actionKeyHandler) actionHandler {
@@ -119,7 +127,7 @@ func dbKey(path, apiPrefix string) (engine.Key, error) {
 	return nil, err
 }
 
-func (s *Server) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request) {
 	key, err := dbKey(r.URL.Path, CounterPrefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -129,7 +137,7 @@ func (s *Server) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
 	// GET Requests are just an increment with 0 value.
 	var inputVal int64
 
-	if r.Method == "POST" {
+	if r.Method == methodPost {
 		b, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -138,7 +146,7 @@ func (s *Server) handleIncrementAction(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		inputVal, err = strconv.ParseInt(string(b), 10, 64)
 		if err != nil {
-			http.Error(w, "Could not parse int64 for increment", http.StatusBadRequest)
+			http.Error(w, "could not parse int64 for increment: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
@@ -214,7 +222,7 @@ func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, k
 		return
 	}
 	if !cr.Exists {
-		http.Error(w, "", http.StatusNotFound)
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
