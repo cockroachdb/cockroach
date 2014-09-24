@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Spencer Kimball
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package kv
 

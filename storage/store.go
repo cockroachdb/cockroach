@@ -421,10 +421,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	// Attempt to push the transaction which created the conflicting intent.
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Timestamp: args.Header().Timestamp,
-			Key:       wiErr.Txn.ID, // Address to pushee's txn
-			User:      args.Header().User,
-			Txn:       args.Header().Txn,
+			Timestamp:    args.Header().Timestamp,
+			Key:          wiErr.Txn.ID, // Address to pushee's txn
+			User:         args.Header().User,
+			UserPriority: args.Header().UserPriority,
+			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
 		Abort:     !IsReadOnly(method), // abort if cmd isn't read-only
@@ -454,7 +455,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	resolveReply := &proto.InternalResolveIntentResponse{}
 	// Add resolve command with wait=false to add to Raft but not wait for completion.
 	if resolveErr := rng.AddCmd(InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
-		log.Warningf("resolve %+v failed: %v", resolveArgs, resolveErr)
+		log.Warningf("resolve %+v failed: +v", resolveArgs, resolveErr)
 	}
 
 	// If the command is read-write, we must return the error to the

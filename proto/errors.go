@@ -76,6 +76,26 @@ func (e *RangeKeyMismatchError) CanRetry() bool {
 	return true
 }
 
+// NewTransactionAbortedError initializes a new TransactionAbortedError.
+func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
+	return &TransactionAbortedError{Txn: *txn}
+}
+
+// Error formats error.
+func (e *TransactionAbortedError) Error() string {
+	return fmt.Sprintf("txn aborted: %+v", e.Txn)
+}
+
+// NewTransactionRetryError initializes a new TransactionRetryError.
+func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
+	return &TransactionRetryError{Txn: *txn}
+}
+
+// Error formats error.
+func (e *TransactionRetryError) Error() string {
+	return fmt.Sprintf("retry txn: %+v", e.Txn)
+}
+
 // NewTransactionStatusError initializes a new TransactionStatusError.
 func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusError {
 	return &TransactionStatusError{
@@ -89,24 +109,9 @@ func (e *TransactionStatusError) Error() string {
 	return fmt.Sprintf("txn %+v: %s", e.Txn, e.Msg)
 }
 
-// NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
-	return &TransactionRetryError{Txn: *txn}
-}
-
-// Error formats error.
-func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn: %+v", e.Txn)
-}
-
-// CanRetry indicates whether or not this TransactionRetryError can be retried.
-func (e *TransactionRetryError) CanRetry() bool {
-	return true
-}
-
 // Error formats error.
 func (e *WriteIntentError) Error() string {
-	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v", e.Key, e.Txn)
+	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v: resolved? %t", e.Key, e.Txn, e.Resolved)
 }
 
 // Error formats error.

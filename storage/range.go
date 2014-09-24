@@ -693,7 +693,7 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already committed"))
 			return
 		} else if existTxn.Status == proto.ABORTED {
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, "already aborted"))
+			reply.SetGoError(proto.NewTransactionAbortedError(existTxn))
 			return
 		} else if args.Txn.Epoch < existTxn.Epoch {
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch)))
@@ -964,12 +964,15 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	var pusherWins bool
 
 	// If there's no incoming transaction, the pusher is
-	// non-transactional. We create a random priority in this case.
+	// non-transactional. We make a random priority, biased by
+	// specified args.Header().UserPriority in this case.
 	var priority int32
 	if args.Txn != nil {
 		priority = args.Txn.Priority
+		fmt.Println("txn priority", priority)
 	} else {
-		priority = util.CachedRand.Int31()
+		priority = proto.MakePriority(args.GetUserPriority())
+		fmt.Println("non-txn priority", priority, ", user priority", args.GetUserPriority())
 	}
 
 	// Check for txn timeout.

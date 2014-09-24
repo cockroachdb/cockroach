@@ -63,8 +63,19 @@ message RequestHeader {
   // Replica specifies the destination for the request. This is a specific
   // instance of the available replicas belonging to RangeID.
   optional Replica replica = 6 [(gogoproto.nullable) = false];
-  // Txn is set non-nil if a transaction is underway.
-  optional Transaction txn = 7;
+  // UserPriority specifies priority multiple for non-transactional
+  // commands. This value should be a positive integer [1, 2^31-1).
+  // It's properly viewed as a multiple for how likely this
+  // transaction will be to prevail if a write conflict occurs.
+  // Commands with UserPriority=100 will be 100x less likely to be
+  // aborted as conflicting transactions or non-transactional commands
+  // with UserPriority=1. This value is ignored if Txn is
+  // specified. If neither this value nor Txn is specified, the value
+  // defaults to 1.
+  optional int32 user_priority = 7 [default = 1];
+  // Txn is set non-nil if a transaction is underway. If set, the value
+  // of Priority is ignored.
+  optional Transaction txn = 8;
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -205,15 +216,10 @@ message ScanResponse {
 }
 
 // A BeginTransactionRequest is arguments to the BeginTransaction()
-// method. It specifies the user priority and isolation level.
+// method. It specifies the user priority (done via
+// RequestHeader.UserPriority) and isolation level.
 message BeginTransactionRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // UserPriority should be chosen from the range [1, 2^31-1). It's
-  // properly viewed as a multiple for how likely this transaction
-  // will be to prevail if a write conflict occurs. A UserPriority of
-  // 100 makes a transaction 100x less likely to be aborted if a write
-  // conflict occurs with another transaction with a UserPriority of 1.
-  optional int32 user_priority = 2 [(gogoproto.nullable) = false];
   // Isolation is one of SERIALIZABLE or SNAPSHOT, indicating the
   // isolation guarantees provided to concurrent transactions.
   optional IsolationType isolation = 3 [(gogoproto.nullable) = false];

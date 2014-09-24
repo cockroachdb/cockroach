@@ -21,6 +21,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -97,7 +98,7 @@ func (db *testDB) Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse {
 }
 
 func (db *testDB) BeginTransaction(args *proto.BeginTransactionRequest) <-chan *proto.BeginTransactionResponse {
-	txn := NewTransaction(args.Key, args.UserPriority, args.Isolation, db.clock)
+	txn := NewTransaction(args.Key, args.GetUserPriority(), args.Isolation, db.clock)
 	reply := &proto.BeginTransactionResponse{
 		ResponseHeader: proto.ResponseHeader{
 			Timestamp: txn.Timestamp,
@@ -161,4 +162,8 @@ func (db *testDB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) 
 	replyChan := make(chan *proto.InternalSnapshotCopyResponse, 1)
 	go db.executeCmd(InternalSnapshotCopy, args, replyChan)
 	return replyChan
+}
+
+func (db *testDB) RunTransaction(user string, userPriority int32, isolation proto.IsolationType, retryable func(db DB) error) error {
+	return util.Errorf("RunTransaction unimplemented")
 }
