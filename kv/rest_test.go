@@ -73,7 +73,7 @@ const (
 func TestMethods(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	testKey, testVal := "Hello, 世界", "世界 is cool"
-	for _, tc := range []struct {
+	testCases := []struct {
 		method, key string
 		body        io.Reader
 		statusCode  int
@@ -105,7 +105,8 @@ func TestMethods(t *testing.T) {
 		{methodDelete, testKey, nil, http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusNotFound, nil},
 		{methodGet, testKey, nil, http.StatusNotFound, []byte(statusText(http.StatusNotFound))},
-	} {
+	}
+	for _, tc := range testCases {
 		resp, err := httpDo(tc.method, kv.EntryPrefix+tc.key, tc.body)
 		if err != nil {
 			t.Errorf("[%s] %s: error making request: %v", tc.method, tc.key, err)
@@ -138,7 +139,7 @@ func TestMethods(t *testing.T) {
 func TestIncrement(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	testKey := "Hello, 世界"
-	for _, tc := range []struct {
+	testCases := []struct {
 		method, key           string
 		val, statusCode, resp int
 	}{
@@ -152,7 +153,8 @@ func TestIncrement(t *testing.T) {
 		{methodPost, testKey, 0, http.StatusOK, -1},
 		// TODO(andybons): Implement.
 		// {methodDelete, testKey, 0, http.StatusOK, 0},
-	} {
+	}
+	for _, tc := range testCases {
 		var body io.Reader
 		if tc.statusCode == http.StatusOK {
 			body = strings.NewReader(strconv.Itoa(tc.val))
