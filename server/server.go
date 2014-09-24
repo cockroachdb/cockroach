@@ -37,7 +37,6 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/kv/rest"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -104,7 +103,7 @@ strictly enforced.
 A node exports an HTTP API with the following endpoints:
 
   Health check:           /healthz
-  Key-value REST:         ` + rest.APIPrefix + `
+  Key-value REST:         ` + kv.RESTPrefix + `
   Structured Schema REST: ` + structured.StructuredKeyPrefix
 
 // A CmdInit command initializes a new Cockroach cluster.
@@ -184,7 +183,7 @@ type server struct {
 	rpc            *rpc.Server
 	gossip         *gossip.Gossip
 	kvDB           *kv.DB
-	kvREST         *rest.Server
+	kvREST         *kv.Server
 	node           *Node
 	admin          *adminServer
 	status         *statusServer
@@ -323,7 +322,7 @@ func newServer() (*server, error) {
 
 	s.gossip = gossip.New(tlsConfig)
 	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
-	s.kvREST = rest.NewRESTServer(s.kvDB)
+	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)
 	s.admin = newAdminServer(s.kvDB)
 	s.status = newStatusServer(s.kvDB, s.gossip)
@@ -392,8 +391,7 @@ func (s *server) initHTTP() {
 	// Status endpoints:
 	s.status.RegisterHandlers(s.mux)
 
-	// TODO(andybons): all servers should satisfy the http.Handler interface.
-	s.mux.HandleFunc(rest.APIPrefix, s.kvREST.HandleAction)
+	s.mux.Handle(kv.RESTPrefix, s.kvREST)
 	s.mux.Handle(structured.StructuredKeyPrefix, s.structuredREST)
 }
 
