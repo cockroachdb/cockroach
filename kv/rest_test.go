@@ -184,7 +184,7 @@ func TestIncrement(t *testing.T) {
 			continue
 		}
 		if i != tc.resp {
-			t.Errorf("[%s] %s: expected response to be %d; got %d", tc.resp, i)
+			t.Errorf("[%s] %s: expected response to be %d; got %d", tc.method, tc.key, tc.resp, i)
 			continue
 		}
 	}
