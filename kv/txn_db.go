@@ -81,7 +81,7 @@ type txnKV struct {
 	userPriority int32
 	isolation    proto.IsolationType
 
-	mu        sync.Mutex // Protects timestamp & txn...
+	mu        sync.Mutex // Protects timestamp & txn.
 	wg        sync.WaitGroup
 	timestamp proto.Timestamp
 	txn       *proto.Transaction
