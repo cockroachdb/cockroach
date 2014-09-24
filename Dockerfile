@@ -18,11 +18,15 @@ ENV PATH /usr/local/go/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bi
 ENV GOPATH /go
 ENV GOROOT /usr/local/go
 ENV ROACHPATH $GOPATH/src/github.com/cockroachdb
-ENV ROCKSDBPATH $ROACHPATH/cockroach/_vendor/
+ENV VENDORPATH $ROACHPATH/cockroach/_vendor
+ENV ROCKSDBPATH $VENDORPATH
+ENV VENDORGOPATH $VENDORPATH/src
+ENV COREOSPATH $VENDORGOPATH/github.com/coreos
 
 # Symlink our mounted source directory to appropriate go src location.
 RUN mkdir -p $ROACHPATH
 RUN mkdir -p $ROCKSDBPATH
+RUN mkdir -p $COREOSPATH
 
 # Get Cockroach Go dependencies.
 RUN go get code.google.com/p/biogo.store/llrb
@@ -34,12 +38,13 @@ RUN go get code.google.com/p/gogoprotobuf/gogoproto
 RUN go get github.com/golang/glog
 RUN go get gopkg.in/yaml.v1
 
-# Get RocksDB source from github.
-# See the NOTE below if hacking directly on the _vendor/rocksdb
-# submodule. In that case, uncomment the "_vendor" exclude from
+# Get RocksDB, Etcd sources from github.
+# See the NOTE below if hacking directly on the _vendor/
+# submodules. In that case, uncomment the "_vendor" exclude from
 # .dockerignore and comment out the following lines.
 RUN cd $ROCKSDBPATH && git clone --depth=1 https://github.com/facebook/rocksdb.git
 RUN cd $ROCKSDBPATH/rocksdb && make static_lib
+RUN cd $COREOSPATH && git clone --depth=1 https://github.com/coreos/etcd.git
 
 # Copy the contents of the cockroach source directory to the image.
 # Any changes which have been made to the source directory will cause
