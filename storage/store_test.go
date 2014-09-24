@@ -558,7 +558,6 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	gArgs, gReply := getArgs(key, 2)
 	gArgs.Timestamp = store.clock.Now()
 	gArgs.UserPriority = gogoproto.Int32(math.MaxInt32)
-	fmt.Println(gArgs.GetUserPriority())
 	if err := store.ExecuteCmd(Get, gArgs, gReply); err != nil {
 		t.Errorf("expected read %+v to succeed: %v", gArgs, err)
 	} else if gReply.Value != nil {

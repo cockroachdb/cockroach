@@ -127,7 +127,7 @@ func (in *InMem) Put(key Key, value []byte) error {
 	return in.putLocked(key, value)
 }
 
-// putLocked assumes mutex is already held by caller. See put().
+// putLocked assumes mutex is already held by caller. See Put().
 func (in *InMem) putLocked(key Key, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
