@@ -92,6 +92,16 @@ func MakePriority(userPriority int32) int32 {
 	if userPriority < 1 {
 		userPriority = 1
 	}
+	// The idea here is to bias selection of a random priority from the
+	// range [1, 2^31-1) such that if userPriority=100, it's 100x more
+	// likely to be a higher int32 than if userPriority=1. The formula
+	// below chooses random values according to the following table:
+	//   userPriority  |  range
+	//   1             |  all positive int32s
+	//   10            |  top 9/10ths of positive int32s
+	//   100           |  top 99/100ths of positive int32s
+	//   1000          |  top 999/1000ths of positive int32s
+	//   ...etc
 	return math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
 }
 
