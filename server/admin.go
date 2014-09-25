@@ -18,10 +18,14 @@
 package server
 
 import (
+	// This is imported for its side-effect of registering expvar
+	// endpoints with the http.DefaultServeMux.
 	_ "expvar"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	// This is imported for its side-effect of registering pprof
+	// endpoints with the http.DefaultServeMux.
 	_ "net/http/pprof"
 	"net/url"
 	"strings"

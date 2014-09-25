@@ -104,7 +104,7 @@ func TestMVCCKeys(t *testing.T) {
 	copy(sortKeys, keys)
 	sort.Strings(sortKeys)
 	if !reflect.DeepEqual(sortKeys, keys) {
-		t.Error("expected keys to sort in order %s, but got %s", keys, sortKeys)
+		t.Errorf("expected keys to sort in order %s, but got %s", keys, sortKeys)
 	}
 }
 

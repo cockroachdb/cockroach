@@ -83,7 +83,7 @@ func (r *RangeMetadata) GetReplica() *Replica {
 			return &r.Replicas[i]
 		}
 	}
-	panic(fmt.Sprintf("could not locate replica matching range %d: %s", r.RangeID, r.Replicas))
+	panic(fmt.Sprintf("could not locate replica matching range %d: %v", r.RangeID, r.Replicas))
 }
 
 // CanRead does a linear search for user to verify read permission.
