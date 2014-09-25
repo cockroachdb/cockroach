@@ -51,14 +51,14 @@ func TestIDAllocator(t *testing.T) {
 	sort.Ints(ids)
 	for i := 0; i < 100; i++ {
 		if ids[i] != i+2 {
-			t.Error("expected \"%d\"th ID to be %d; got %d", i, i+2, ids[i])
+			t.Errorf("expected \"%d\"th ID to be %d; got %d", i, i+2, ids[i])
 		}
 	}
 
 	// Verify no leftover IDs.
 	select {
 	case id := <-allocd:
-		t.Error("there appear to be leftover IDs, starting with %d", id)
+		t.Errorf("there appear to be leftover IDs, starting with %d", id)
 	default:
 		// Expected; noop.
 	}

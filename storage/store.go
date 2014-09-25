@@ -319,7 +319,7 @@ func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
 		}
 	}
 	if meta.RangeID == 0 {
-		return nil, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %s",
+		return nil, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %v",
 			s.Ident.StoreID, meta.Replicas)
 	}
 

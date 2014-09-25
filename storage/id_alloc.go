@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-const (
-	// allocationTrigger is a special ID which if encountered,
-	// causes allocation of the next block of IDs.
-	allocationTrigger = 0
-)
+// allocationTrigger is a special ID which if encountered,
+// causes allocation of the next block of IDs.
+const allocationTrigger = 0
 
+// An IDAllocator is used to increment a key in allocation blocks
+// of arbitrary size starting at a minimum ID.
 type IDAllocator struct {
 	idKey     engine.Key
 	db        DB
