@@ -86,7 +86,7 @@ func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.W
 	}
 	for _, c := range cq.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
 		c := c.(*cmd)
-		// Only add to the wait group if both commands aren't read-only.
+		// Only add to the wait group if one of the commands isn't read-only.
 		if !readOnly || !c.readOnly {
 			c.pending = append(c.pending, wg)
 			wg.Add(1)

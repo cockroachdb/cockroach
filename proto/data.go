@@ -121,5 +121,5 @@ func (t *Transaction) MD5() string {
 		return ""
 	}
 	txnMD5 := md5.Sum(t.ID)
-	return string(txnMD5[0:md5.Size])
+	return string(txnMD5[:md5.Size])
 }
