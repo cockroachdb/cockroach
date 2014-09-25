@@ -18,6 +18,7 @@
 package proto
 
 import (
+	"crypto/md5"
 	"math"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -111,4 +112,14 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	if minPriority > t.Priority {
 		t.Priority = minPriority
 	}
+}
+
+// MD5 returns the MD5 digest of the transaction ID as a string.
+// This method returns an empty string if the transaction is nil.
+func (t *Transaction) MD5() string {
+	if t == nil {
+		return ""
+	}
+	txnMD5 := md5.Sum(t.ID)
+	return string(txnMD5[0:md5.Size])
 }

@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/golang/glog"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -360,7 +359,7 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	// because any writes during that period necessarily had higher
 	// timestamps. This is because the read-timestamp-cache prevents it
 	// for the active leader and leadership changes force the
-	// read-timestamp-cache to reset its high water mark.
+	// read-timestamp-cache to reset its low water mark.
 	if !r.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
 		return &proto.NotLeaderError{}
@@ -370,7 +369,7 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	// Only update the timestamp cache if the command succeeded.
 	if err == nil {
 		r.Lock()
-		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
+		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5())
 		r.Unlock()
 	}
 	r.endCmd(cmdKey)
@@ -392,6 +391,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
+	txnMD5 := header.Txn.MD5()
 	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
 		if ok { // this is a replay! extract error for return
 			return reply.Header().GoError()
@@ -410,18 +410,17 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// been run to successful completion.
 	cmdKey := r.beginCmd(header.Key, header.EndKey, false)
 
-	// One of the prime invariants of Cockroach is that a mutating command
-	// cannot write a key with an earlier timestamp than the most recent
-	// read of the same key. So first order of business here is to check
-	// the timestamp cache for reads/writes which are more recent than the
-	// timestamp of this write. If more recent, we simply update the
-	// write's timestamp before enqueuing it for execution. When the write
-	// returns, the updated timestamp will inform the final commit
-	// timestamp.
+	// One of the prime invariants of Cockroach is that a mutating
+	// command must write to a key with a greater timestamp than the
+	// most recent read or writeto the same key. Check the timestamp
+	// cache for reads/writes which are at least as recent as the
+	// timestamp of this write. If necessary, Update the write's
+	// timestamp. When the write returns, the updated timestamp will
+	// inform the final commit timestamp.
 	r.Lock() // Protect access to timestamp cache and read queue.
-	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
-		if glog.V(1) {
-			glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
+	if ts := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5); !ts.Less(header.Timestamp) {
+		if log.V(1) {
+			log.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
 		}
 		ts.Logical++ // increment logical component by one to differentiate.
 		// Update the request timestamp.
@@ -448,7 +447,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// for successive writes to the same key or key range.
 		if err == nil {
 			r.Lock()
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5)
 			r.Unlock()
 		}
 		r.cmdQ.Remove(cmdKey)
@@ -1214,7 +1213,7 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 		r.Meta.RangeDescriptor.EndKey = oldEndKey
 		newRange.Stop()
 		if err = newRange.Destroy(); err != nil {
-			glog.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
+			log.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
 		}
 		return
 	}

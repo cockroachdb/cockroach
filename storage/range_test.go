@@ -443,17 +443,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the timestamp cache has 1sec for "a".
-	ts := rng.tsCache.GetMax(engine.Key("a"), nil)
+	ts := rng.tsCache.GetMax(engine.Key("a"), nil, "")
 	if ts.WallTime != t0.Nanoseconds() {
 		t.Errorf("expected wall time to have 1s, but got %+v", ts)
 	}
 	// Verify the timestamp cache has 1sec for "b".
-	ts = rng.tsCache.GetMax(engine.Key("b"), nil)
+	ts = rng.tsCache.GetMax(engine.Key("b"), nil, "")
 	if ts.WallTime != t0.Nanoseconds() {
 		t.Errorf("expected wall time to have 1s, but got %+v", ts)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	ts = rng.tsCache.GetMax(engine.Key("c"), nil)
+	ts = rng.tsCache.GetMax(engine.Key("c"), nil, "")
 	if ts.WallTime != 0 {
 		t.Errorf("expected wall time to have 0s, but got %+v", ts)
 	}
@@ -607,6 +607,48 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		if !pReply.Timestamp.Equal(pArgs.Timestamp) {
 			t.Errorf("expected timestamp not to advance %s != %s", pReply.Timestamp, pArgs.Timestamp)
 		}
+	}
+}
+
+// TestRangeNoTimestampIncrementWithinTxn verifies that successive
+// read the write commands within the same transaction do not cause
+// the write to receive an incremented timestamp.
+func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	// Test for both read & write attempts.
+	key := engine.Key("a")
+	txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+
+	// Start with a read to warm the timestamp cache.
+	gArgs, gReply := getArgs(key, 0)
+	gArgs.Txn = txn
+	gArgs.Timestamp = txn.Timestamp
+	if err := rng.AddCmd(Get, gArgs, gReply, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now try a write and verify timestamp isn't incremented.
+	pArgs, pReply := putArgs(key, []byte("value"), 0)
+	pArgs.Txn = txn
+	pArgs.Timestamp = pArgs.Txn.Timestamp
+	if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
+		t.Fatal(err)
+	}
+	if !pReply.Timestamp.Equal(pArgs.Timestamp) {
+		t.Errorf("expected timestamp to remain %s; got %s", pArgs.Timestamp, pReply.Timestamp)
+	}
+
+	// Finally, try a non-transactional write and verify timestamp is incremented.
+	pArgs.Txn = nil
+	expTS := pArgs.Timestamp
+	expTS.Logical++
+	if err := rng.AddCmd(Put, pArgs, pReply, true); err == nil {
+		t.Errorf("expected write intent error")
+	}
+	if !pReply.Timestamp.Equal(expTS) {
+		t.Errorf("expected timestamp to increment to %s; got %s", expTS, pReply.Timestamp)
 	}
 }
 
