@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/golang/glog"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -186,8 +185,8 @@ type Range struct {
 	raft      chan *Cmd      // Raft commands
 	closer    chan struct{}  // Channel for closing the range
 
-	sync.RWMutex                 // Protects readQ, tsCache & respCache.
-	readQ        *ReadQueue      // Reads queued behind pending writes
+	sync.RWMutex                 // Protects cmdQ, tsCache & respCache
+	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	respCache    *ResponseCache  // Provides idempotence for retries
 }
@@ -212,7 +211,7 @@ func NewRange(meta *proto.RangeMetadata, clock *hlc.Clock, eng engine.Engine,
 		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
 		rm:        rm,
 		closer:    make(chan struct{}),
-		readQ:     NewReadQueue(),
+		cmdQ:      NewCommandQueue(),
 		tsCache:   NewTimestampCache(clock),
 		respCache: NewResponseCache(meta.RangeID, eng),
 	}
@@ -310,17 +309,41 @@ func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, 
 	return r.addReadWriteCmd(method, args, reply, wait)
 }
 
+// beginCmd waits for any overlapping, already-executing commands via
+// the command queue and adds itself to the queue to gate follow-on
+// commands which overlap its key range. This method will block if
+// there are any overlapping commands already in the queue. Returns
+// the command queue insertion key, to be supplied to subsequent
+// invocation of endCmd().
+func (r *Range) beginCmd(start, end engine.Key, readOnly bool) interface{} {
+	r.Lock()
+	var wg sync.WaitGroup
+	r.cmdQ.GetWait(start, end, readOnly, &wg)
+	cmdKey := r.cmdQ.Add(start, end, readOnly)
+	r.Unlock()
+	wg.Wait()
+	return cmdKey
+}
+
+// endCmd indicates the specified command has run to completion. This
+// method must be invoked regardless of command success or
+// failure. Otherwise, the command will be lodged indefinitely in
+// the command queue.
+func (r *Range) endCmd(cmdKey interface{}) {
+	r.Lock()
+	r.cmdQ.Remove(cmdKey)
+	r.Unlock()
+}
+
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
 func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
 	header := args.Header()
-	r.Lock()
-	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
-	var wg sync.WaitGroup
-	r.readQ.AddRead(header.Key, header.EndKey, &wg)
-	r.Unlock()
-	wg.Wait()
+
+	// Add the read to the command queue to gate subsequent
+	// overlapping, commands until this command completes.
+	cmdKey := r.beginCmd(header.Key, header.EndKey, true)
 
 	// It's possible that arbitrary delays (e.g. major GC, VM
 	// de-prioritization, etc.) could cause the execution of this read
@@ -336,12 +359,22 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	// because any writes during that period necessarily had higher
 	// timestamps. This is because the read-timestamp-cache prevents it
 	// for the active leader and leadership changes force the
-	// read-timestamp-cache to reset its high water mark.
+	// read-timestamp-cache to reset its low water mark.
 	if !r.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
 		return &proto.NotLeaderError{}
 	}
-	return r.executeCmd(method, args, reply)
+	err := r.executeCmd(method, args, reply)
+
+	// Only update the timestamp cache if the command succeeded.
+	if err == nil {
+		r.Lock()
+		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5())
+		r.Unlock()
+	}
+	r.endCmd(cmdKey)
+
+	return err
 }
 
 // addReadWriteCmd first consults the response cache to determine whether
@@ -352,12 +385,13 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 // timestamp is moved forward. Finally the keys affected by this
 // command are added as pending writes to the read queue and the
 // command is submitted to Raft. Upon completion, the write is removed
-// from the read queue and the reply is added to the repsonse cache.
+// from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
 func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
+	txnMD5 := header.Txn.MD5()
 	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
 		if ok { // this is a replay! extract error for return
 			return reply.Header().GoError()
@@ -369,32 +403,29 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		log.Errorf("unable to read result for %+v from the response cache: %v", args, err)
 	}
 
-	// One of the prime invariants of Cockroach is that a mutating command
-	// cannot write a key with an earlier timestamp than the most recent
-	// read of the same key. So first order of business here is to check
-	// the timestamp cache for reads/writes which are more recent than the
-	// timestamp of this write. If more recent, we simply update the
-	// write's timestamp before enqueuing it for execution. When the write
-	// returns, the updated timestamp will inform the final commit
-	// timestamp.
+	// Add the write to the command queue to gate subsequent overlapping
+	// commands until this command completes. Note that this must be
+	// done before getting the max timestamp for the key(s), as
+	// timestamp cache is only updated after preceding commands have
+	// been run to successful completion.
+	cmdKey := r.beginCmd(header.Key, header.EndKey, false)
+
+	// One of the prime invariants of Cockroach is that a mutating
+	// command must write to a key with a greater timestamp than the
+	// most recent read or writeto the same key. Check the timestamp
+	// cache for reads/writes which are at least as recent as the
+	// timestamp of this write. If necessary, Update the write's
+	// timestamp. When the write returns, the updated timestamp will
+	// inform the final commit timestamp.
 	r.Lock() // Protect access to timestamp cache and read queue.
-	if ts := r.tsCache.GetMax(header.Key, header.EndKey); header.Timestamp.Less(ts) {
-		if glog.V(1) {
-			glog.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
+	if ts := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5); !ts.Less(header.Timestamp) {
+		if log.V(1) {
+			log.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
 		}
 		ts.Logical++ // increment logical component by one to differentiate.
 		// Update the request timestamp.
 		header.Timestamp = ts
 	}
-	// Just as for reads, we update the timestamp cache with the
-	// timestamp of this write. This ensures a strictly higher timestamp
-	// for successive writes to the same key or key range.
-	r.tsCache.Add(header.Key, header.EndKey, header.Timestamp)
-
-	// The next step is to add the write to the read queue to inform
-	// subsequent reads that there is a pending write. Reads which
-	// overlap pending writes must wait for those writes to complete.
-	wKey := r.readQ.AddWrite(header.Key, header.EndKey)
 	r.Unlock()
 
 	// Create command and enqueue for Raft.
@@ -410,10 +441,17 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
 		err := <-cmd.done
-		// Now that the command has completed, remove the pending write.
-		r.Lock()
-		r.readQ.RemoveWrite(wKey)
-		r.Unlock()
+
+		// Just as for reads, we update the timestamp cache with the timestamp
+		// of this write on success. This ensures a strictly higher timestamp
+		// for successive writes to the same key or key range.
+		if err == nil {
+			r.Lock()
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5)
+			r.Unlock()
+		}
+		r.cmdQ.Remove(cmdKey)
+
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
@@ -1002,10 +1040,8 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	var priority int32
 	if args.Txn != nil {
 		priority = args.Txn.Priority
-		fmt.Println("txn priority", priority)
 	} else {
 		priority = proto.MakePriority(args.GetUserPriority())
-		fmt.Println("non-txn priority", priority, ", user priority", args.GetUserPriority())
 	}
 
 	// Check for txn timeout.
@@ -1177,7 +1213,7 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 		r.Meta.RangeDescriptor.EndKey = oldEndKey
 		newRange.Stop()
 		if err = newRange.Destroy(); err != nil {
-			glog.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
+			log.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
 		}
 		return
 	}

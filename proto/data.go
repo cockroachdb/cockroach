@@ -18,6 +18,7 @@
 package proto
 
 import (
+	"crypto/md5"
 	"math"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -31,6 +32,8 @@ var (
 	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
 	// MinTimestamp is the min value allowed for Timestamp.
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 0}
+	// emptyMD5 is a zero-filled md5 byte array, used to indicate a nil transaction.
+	NoTxnMD5 = [md5.Size]byte{}
 )
 
 // Less implements the util.Ordered interface, allowing
@@ -105,10 +108,29 @@ func MakePriority(userPriority int32) int32 {
 	return math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
 }
 
+// MD5Equal returns whether the specified md5.Size byte arrays are equal.
+func MD5Equal(a, b [md5.Size]byte) bool {
+	for i := 0; i < md5.Size; i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // UpgradePriority sets transaction priority to the maximum of current
 // priority and the specified minPriority.
 func (t *Transaction) UpgradePriority(minPriority int32) {
 	if minPriority > t.Priority {
 		t.Priority = minPriority
 	}
+}
+
+// MD5 returns the MD5 digest of the transaction ID as a string.
+// This method returns an empty string if the transaction is nil.
+func (t *Transaction) MD5() [md5.Size]byte {
+	if t == nil {
+		return NoTxnMD5
+	}
+	return md5.Sum(t.ID)
 }

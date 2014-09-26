@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"time"
 
+	"crypto/md5"
+
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -45,17 +47,28 @@ func (rk rangeKey) Compare(b interval.Comparable) int {
 	return bytes.Compare(rk, b.(rangeKey))
 }
 
-// A TimestampCache maintains an interval tree FIFO cache of keys
-// or key ranges and the timestamps at which they were most recently
-// read or written.
+// A TimestampCache maintains an interval tree FIFO cache of keys or
+// key ranges and the timestamps at which they were most recently read
+// or written. If a timestamp was read or written by a transaction, an
+// MD5 of the txn ID is stored with the timestamp to avoid advancing
+// timestamps on successive requests from the same transaction. We use
+// the MD5 of the txn ID to conserve memory as txn IDs are expected to
+// be fairly large ~100 bytes.
 //
-// The cache also maintains a high-water mark which is the most
+// The cache also maintains a low-water mark which is the most
 // recently evicted entry's timestamp. This value always ratchets
-// with monotonic increases. The high water mark is initialized to
-// the current system time plus the maximum clock skew.
+// with monotonic increases. The low water mark is initialized to
+// the current system time plus the maximum clock offset.
 type TimestampCache struct {
-	cache             *util.IntervalCache
-	highWater, latest proto.Timestamp
+	cache            *util.IntervalCache
+	lowWater, latest proto.Timestamp
+}
+
+// A cacheEntry combines the timestamp with an optional MD5 of the
+// transaction ID.
+type cacheEntry struct {
+	timestamp proto.Timestamp
+	txnMD5    [md5.Size]byte // Empty for no transaction
 }
 
 // NewTimestampCache returns a new timestamp cache with supplied
@@ -69,19 +82,19 @@ func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	return tc
 }
 
-// Clear clears the cache and resets the high water mark to the
-// current time plus the maximum clock skew.
+// Clear clears the cache and resets the low water mark to the
+// current time plus the maximum clock offset.
 func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.cache.Clear()
-	tc.highWater = clock.Now()
-	tc.highWater.WallTime += clock.MaxDrift().Nanoseconds()
-	tc.latest = tc.highWater
+	tc.lowWater = clock.Now()
+	tc.lowWater.WallTime += clock.MaxDrift().Nanoseconds()
+	tc.latest = tc.lowWater
 }
 
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
-// key only.
-func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) {
+// key only. txnMD5 is empty for no transaction.
+func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -89,25 +102,29 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp) 
 		tc.latest = timestamp
 	}
 	// Only add to the cache if the timestamp is more recent than the
-	// high water mark.
-	if tc.highWater.Less(timestamp) {
-		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), timestamp)
+	// low water mark.
+	if tc.lowWater.Less(timestamp) {
+		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5}
+		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), ce)
 	}
 }
 
-// GetMax returns the maximum timestamp covering any part of the
-// interval spanning from start to end keys. If no part of the
-// specified range is overlapped by timestamps in the cache, the high
-// water timestamp is returned.
-func (tc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
+// GetMax returns the maximum timestamp which overlaps the interval
+// spanning from start to end keys. Cached timestamps matching the
+// specified txnID are not considered.  If no part of the specified
+// range is overlapped by timestamps in the cache, the low water
+// timestamp is returned.
+func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) proto.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
-	max := tc.highWater
+	max := tc.lowWater
 	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
-		ts := v.(proto.Timestamp)
-		if max.Less(ts) {
-			max = ts
+		ce := v.(cacheEntry)
+		// Only consider cache entries which don't match the specified MD5.
+		if (proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) ||
+			!proto.MD5Equal(txnMD5, ce.txnMD5)) && max.Less(ce.timestamp) {
+			max = ce.timestamp
 		}
 	}
 	return max
@@ -116,14 +133,14 @@ func (tc *TimestampCache) GetMax(start, end engine.Key) proto.Timestamp {
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
-	ts := value.(proto.Timestamp)
+	ce := value.(cacheEntry)
 	// Compute the edge of the cache window.
 	edge := tc.latest
 	edge.WallTime -= minCacheWindow.Nanoseconds()
-	// We evict and update the high water mark if the proposed evictee's
+	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
-	if !edge.Less(ts) {
-		tc.highWater = ts
+	if !edge.Less(ce.timestamp) {
+		tc.lowWater = ce.timestamp
 		return true
 	}
 	return false
