@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"time"
 
+	"crypto/md5"
+
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -66,7 +68,7 @@ type TimestampCache struct {
 // transaction ID.
 type cacheEntry struct {
 	timestamp proto.Timestamp
-	txnMD5    string // Empty for no transaction
+	txnMD5    [md5.Size]byte // Empty for no transaction
 }
 
 // NewTimestampCache returns a new timestamp cache with supplied
@@ -92,7 +94,7 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnMD5 is empty for no transaction.
-func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 string) {
+func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -112,7 +114,7 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 // specified txnID are not considered.  If no part of the specified
 // range is overlapped by timestamps in the cache, the low water
 // timestamp is returned.
-func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 string) proto.Timestamp {
+func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) proto.Timestamp {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -120,7 +122,8 @@ func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 string) proto.Tim
 	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
 		ce := v.(cacheEntry)
 		// Only consider cache entries which don't match the specified MD5.
-		if (len(ce.txnMD5) == 0 || len(txnMD5) == 0 || txnMD5 != ce.txnMD5) && max.Less(ce.timestamp) {
+		if (proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) ||
+			!proto.MD5Equal(txnMD5, ce.txnMD5)) && max.Less(ce.timestamp) {
 			max = ce.timestamp
 		}
 	}

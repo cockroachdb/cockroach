@@ -233,6 +233,7 @@ func newBlockingEngine() *blockingEngine {
 func (be *blockingEngine) block(key engine.Key) {
 	// Need to binary encode the key so it matches when accessed through MVCC.
 	be.key = encoding.EncodeBinary(nil, key)
+	be.wg.Add(1)
 }
 
 func (be *blockingEngine) unblock() {
@@ -241,7 +242,6 @@ func (be *blockingEngine) unblock() {
 
 func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
 	if bytes.Equal(key, be.key) {
-		be.wg.Add(1)
 		be.key = nil
 		be.wg.Wait()
 	}
@@ -250,7 +250,6 @@ func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
 
 func (be *blockingEngine) Put(key engine.Key, value []byte) error {
 	if bytes.Equal(key, be.key) {
-		be.wg.Add(1)
 		be.key = nil
 		be.wg.Wait()
 	}
@@ -443,17 +442,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the timestamp cache has 1sec for "a".
-	ts := rng.tsCache.GetMax(engine.Key("a"), nil, "")
+	ts := rng.tsCache.GetMax(engine.Key("a"), nil, proto.NoTxnMD5)
 	if ts.WallTime != t0.Nanoseconds() {
 		t.Errorf("expected wall time to have 1s, but got %+v", ts)
 	}
 	// Verify the timestamp cache has 1sec for "b".
-	ts = rng.tsCache.GetMax(engine.Key("b"), nil, "")
+	ts = rng.tsCache.GetMax(engine.Key("b"), nil, proto.NoTxnMD5)
 	if ts.WallTime != t0.Nanoseconds() {
 		t.Errorf("expected wall time to have 1s, but got %+v", ts)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	ts = rng.tsCache.GetMax(engine.Key("c"), nil, "")
+	ts = rng.tsCache.GetMax(engine.Key("c"), nil, proto.NoTxnMD5)
 	if ts.WallTime != 0 {
 		t.Errorf("expected wall time to have 0s, but got %+v", ts)
 	}
