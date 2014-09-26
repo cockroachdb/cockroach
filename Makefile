@@ -48,7 +48,7 @@ all: build test
 auxiliary: rocksdb roach_proto roach_lib sqlparser
 
 build: auxiliary
-	echo $(CGO_FLAGS) $(GO) build -o cockroach
+	$(CGO_FLAGS) $(GO) build -o cockroach
 
 rocksdb:
 	cd $(ROCKSDB); make static_lib
