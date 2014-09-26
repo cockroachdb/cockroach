@@ -228,7 +228,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	s.Ident = ident
 	kvs, err := s.engine.Scan(engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
 	if err != nil {
-		return util.Errorf("unable to scan engine to verify empty: %v", err)
+		return util.Errorf("unable to scan engine to verify empty: %s", err)
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
@@ -451,7 +451,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		return err
 	}
 
-	log.V(1).Infof("resolving write intent on %s %+v: %v", method, args, wiErr)
+	log.V(1).Infof("resolving write intent on %s %q: %s", method, args.Header().Key, wiErr)
 
 	// Attempt to push the transaction which created the conflicting intent.
 	pushArgs := &proto.InternalPushTxnRequest{
@@ -467,21 +467,39 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	}
 	pushReply := <-s.db.InternalPushTxn(pushArgs)
 	if pushReply.Header().GoError() != nil {
-		log.V(1).Infof("push %+v failed: %v", pushArgs, pushReply.Header().GoError())
-		return wiErr
+		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushReply.Header().GoError())
+
+		// For write/write conflicts, propagate the push failure, not the
+		// original write intent error. The push failure will instruct the
+		// client to restart the transaction with a backoff.
+		if !IsReadOnly(method) {
+			reply.Header().Error = pushReply.Header().Error
+			return reply.Header().GoError()
+		} else {
+			// For read/write conflicts, return the write intent error which
+			// engages client's backoff/retry (with !Resolved). We don't need
+			// to restart the txn, only resend the read with a backoff.
+			return err
+		}
 	}
 
-	// Note that even though we're setting Resolved = true here, it'll never
-	// be set in the response cache that way (the response containing this
-	// write intent error was cached right after the command was executed
-	// in Range.executeCmd). This means that a client which retries the request
-	// will always backoff, even if backoff isn't necessary. This doesn't
-	// affect correctness, only possibly adds minor latency for an unusual case.
+	// Note that even though we're setting Resolved = true here, it'll
+	// never be set in the response cache (the response containing this
+	// write intent error was cached right after the command was
+	// executed in Range.executeCmd). This means that a client which
+	// retries the request will always backoff, even if backoff isn't
+	// necessary. This doesn't affect correctness, only possibly adds
+	// minor latency for an unusual case.
 	wiErr.Resolved = true
+	// Also, update the transaction record with result of push.
+	wiErr.Txn = *pushReply.PusheeTxn
 
 	resolveArgs := &proto.InternalResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
-			Timestamp: args.Header().Timestamp,
+			// Use the pushee's timestamp, which might be lower than the
+			// pusher's request timestamp. No need to push the intent higher
+			// than the pushee's txn!
+			Timestamp: pushReply.PusheeTxn.Timestamp,
 			Key:       wiErr.Key,
 			User:      UserRoot,
 			Txn:       pushReply.PusheeTxn,

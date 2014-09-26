@@ -220,6 +220,9 @@ message ScanResponse {
 // RequestHeader.UserPriority) and isolation level.
 message BeginTransactionRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Name is a pithy string describing the purpose of the txn.
+  // Very useful for debugging.
+  optional string name = 2 [(gogoproto.nullable) = false];
   // Isolation is one of SERIALIZABLE or SNAPSHOT, indicating the
   // isolation guarantees provided to concurrent transactions.
   optional IsolationType isolation = 3 [(gogoproto.nullable) = false];

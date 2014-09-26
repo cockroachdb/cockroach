@@ -234,10 +234,7 @@ func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 		},
 	}
 
-	// Fire off a heartbeat first thing.
-	tc.db.InternalHeartbeatTxn(request)
-
-	// Now loop with ticker for periodic heartbeats.
+	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
 		case <-ticker.C:

@@ -276,7 +276,7 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 		Constant:    2,
 		MaxAttempts: 0, // retry indefinitely
 	}
-	err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		desc, err := kv.rangeCache.LookupRangeMetadata(args.Header().Key)
 		if err == nil {
 			err = kv.sendRPC(desc, method, args, replyChan)
@@ -288,10 +288,10 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			// If retryable, allow outer loop to retry.
 			if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
 				log.Warningf("failed to invoke %s: %v", method, err)
-				return false, nil
+				return util.RetryContinue, nil
 			}
 		}
-		return true, err
+		return util.RetryBreak, err
 	})
 	if err != nil {
 		sendErrorReply(err, replyChan)

@@ -101,11 +101,11 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Cl
 	retryOpts.Tag = fmt.Sprintf("client %s connection", addr)
 
 	go func() {
-		err := util.RetryWithBackoff(retryOpts, func() (bool, error) {
+		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 			conn, err := tlsDial(addr.Network(), addr.String(), tlsConfig)
 			if err != nil {
 				log.Info(err)
-				return false, nil
+				return util.RetryContinue, nil
 			}
 
 			c.mu.Lock()
@@ -117,7 +117,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Cl
 			// retry loop.
 			if err = c.heartbeat(); err != nil {
 				c.Close()
-				return false, err
+				return util.RetryContinue, err
 			}
 
 			// Signal client is ready by closing Ready channel.
@@ -127,7 +127,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Cl
 			// Launch periodic heartbeat.
 			go c.startHeartbeat()
 
-			return true, nil
+			return util.RetryBreak, nil
 		})
 		if err != nil {
 			log.Errorf("client %s failed to connect: %v", addr, err)

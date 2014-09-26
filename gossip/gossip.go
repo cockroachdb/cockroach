@@ -454,14 +454,14 @@ func (g *Gossip) maybeWarnAboutInit() {
 		Constant:    2,                // doubles
 		MaxAttempts: 0,                // indefinite retries
 	}
-	util.RetryWithBackoff(retryOptions, func() (bool, error) {
+	util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
 		g.mu.Lock()
 		hasSentinel := g.is.getInfo(KeySentinel) != nil
 		allConnected := g.filterExtant(g.bootstraps).len() == 0
 		g.mu.Unlock()
 		// If we have the sentinel, exit the retry loop.
 		if hasSentinel {
-			return true, nil
+			return util.RetryBreak, nil
 		}
 		// Otherwise, if all bootstrap hosts are connected and this
 		// node is a bootstrap host, warn.
@@ -469,7 +469,7 @@ func (g *Gossip) maybeWarnAboutInit() {
 			log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
 				"Use \"cockroach init\" to initialize.")
 		}
-		return false, nil
+		return util.RetryContinue, nil
 	})
 }
 

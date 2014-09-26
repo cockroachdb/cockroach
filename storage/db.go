@@ -29,6 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
+// A TransactionOptions describes parameters for use with DB.RunTransaction.
+type TransactionOptions struct {
+	Name         string // Consice desc of txn for debugging
+	User         string
+	UserPriority int32
+	Isolation    proto.IsolationType
+	Retry        *util.RetryOptions // Null for defaults
+}
+
 // A DB interface provides asynchronous methods to access a key value
 // store. It is defined in storage as Ranges must use it directly. For
 // example, to split using distributed txns, push transactions in the
@@ -54,7 +63,199 @@ type DB interface {
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 	InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse
 
-	RunTransaction(user string, userPriority int32, isolation proto.IsolationType, retryable func(db DB) error) error
+	RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error
+}
+
+// BaseDB provides a base struct for implementions of the DB
+// interface. It provides a ready-made harness for creating reply
+// channels and passing args and channel to a configured executor
+// function.
+type BaseDB struct {
+	Executor func(method string, args proto.Request, replyChan interface{})
+}
+
+// NewBaseDB creates a new instance initialized with the specified
+// command executor.
+func NewBaseDB(executor func(method string, args proto.Request, replyChan interface{})) *BaseDB {
+	return &BaseDB{
+		Executor: executor,
+	}
+}
+
+// Contains determines whether the KV map contains the specified key.
+func (db *BaseDB) Contains(args *proto.ContainsRequest) <-chan *proto.ContainsResponse {
+	replyChan := make(chan *proto.ContainsResponse, 1)
+	go db.Executor(Contains, args, replyChan)
+	return replyChan
+}
+
+// Get fetches the value for a key from the KV map, respecting a
+// possibly historical timestamp. If the timestamp is 0, returns
+// the most recent value.
+func (db *BaseDB) Get(args *proto.GetRequest) <-chan *proto.GetResponse {
+	replyChan := make(chan *proto.GetResponse, 1)
+	go db.Executor(Get, args, replyChan)
+	return replyChan
+}
+
+// Put sets the value for a key at the specified timestamp. If the
+// timestamp is 0, the value is set with the current time as timestamp.
+func (db *BaseDB) Put(args *proto.PutRequest) <-chan *proto.PutResponse {
+	// Init the value checksum if not set by requesting client.
+	args.Value.InitChecksum(args.Key)
+	replyChan := make(chan *proto.PutResponse, 1)
+	go db.Executor(Put, args, replyChan)
+	return replyChan
+}
+
+// ConditionalPut sets the value for a key if the existing value
+// matches the value specified in the request. Specifying a null value
+// for existing means the value must not yet exist.
+func (db *BaseDB) ConditionalPut(args *proto.ConditionalPutRequest) <-chan *proto.ConditionalPutResponse {
+	// Init the value checksum if not set by requesting client.
+	args.Value.InitChecksum(args.Key)
+	replyChan := make(chan *proto.ConditionalPutResponse, 1)
+	go db.Executor(ConditionalPut, args, replyChan)
+	return replyChan
+}
+
+// Increment increments the value at the specified key. Once called
+// for a key, Put & Get will return errors; only Increment will
+// continue to be a valid command. The value must be deleted before
+// it can be reset using Put.
+func (db *BaseDB) Increment(args *proto.IncrementRequest) <-chan *proto.IncrementResponse {
+	replyChan := make(chan *proto.IncrementResponse, 1)
+	go db.Executor(Increment, args, replyChan)
+	return replyChan
+}
+
+// Delete removes the value for the specified key.
+func (db *BaseDB) Delete(args *proto.DeleteRequest) <-chan *proto.DeleteResponse {
+	replyChan := make(chan *proto.DeleteResponse, 1)
+	go db.Executor(Delete, args, replyChan)
+	return replyChan
+}
+
+// DeleteRange removes all values for keys which fall between
+// args.RequestHeader.Key and args.RequestHeader.EndKey.
+func (db *BaseDB) DeleteRange(args *proto.DeleteRangeRequest) <-chan *proto.DeleteRangeResponse {
+	replyChan := make(chan *proto.DeleteRangeResponse, 1)
+	go db.Executor(DeleteRange, args, replyChan)
+	return replyChan
+}
+
+// Scan fetches the values for all keys which fall between
+// args.RequestHeader.Key and args.RequestHeader.EndKey.
+func (db *BaseDB) Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse {
+	replyChan := make(chan *proto.ScanResponse, 1)
+	go db.Executor(Scan, args, replyChan)
+	return replyChan
+}
+
+// BeginTransaction starts a transaction by initializing a new
+// Transaction proto using the contents of the request. Note that this
+// method does not call through to the key value interface but instead
+// services it directly, as creating a new transaction requires only
+// access to the node's clock. Nothing must be read or written.
+func (db *BaseDB) BeginTransaction(args *proto.BeginTransactionRequest) <-chan *proto.BeginTransactionResponse {
+	replyChan := make(chan *proto.BeginTransactionResponse, 1)
+	go db.Executor(BeginTransaction, args, replyChan)
+	return replyChan
+}
+
+// EndTransaction either commits or aborts an ongoing transaction.
+func (db *BaseDB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.EndTransactionResponse {
+	replyChan := make(chan *proto.EndTransactionResponse, 1)
+	go db.Executor(EndTransaction, args, replyChan)
+	return replyChan
+}
+
+// AccumulateTS is used to efficiently accumulate a time series of
+// int64 quantities representing discrete subtimes. For example, a
+// key/value might represent a minute of data. Each would contain 60
+// int64 counts, each representing a second.
+func (db *BaseDB) AccumulateTS(args *proto.AccumulateTSRequest) <-chan *proto.AccumulateTSResponse {
+	replyChan := make(chan *proto.AccumulateTSResponse, 1)
+	go db.Executor(AccumulateTS, args, replyChan)
+	return replyChan
+}
+
+// ReapQueue scans and deletes messages from a recipient message
+// queue. ReapQueueRequest invocations must be part of an extant
+// transaction or they fail. Returns the reaped queue messsages, up to
+// the requested maximum. If fewer than the maximum were returned,
+// then the queue is empty.
+func (db *BaseDB) ReapQueue(args *proto.ReapQueueRequest) <-chan *proto.ReapQueueResponse {
+	replyChan := make(chan *proto.ReapQueueResponse, 1)
+	go db.Executor(ReapQueue, args, replyChan)
+	return replyChan
+}
+
+// EnqueueUpdate enqueues an update for eventual execution.
+func (db *BaseDB) EnqueueUpdate(args *proto.EnqueueUpdateRequest) <-chan *proto.EnqueueUpdateResponse {
+	replyChan := make(chan *proto.EnqueueUpdateResponse, 1)
+	go db.Executor(EnqueueUpdate, args, replyChan)
+	return replyChan
+}
+
+// EnqueueMessage enqueues a message for delivery to an inbox.
+func (db *BaseDB) EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *proto.EnqueueMessageResponse {
+	replyChan := make(chan *proto.EnqueueMessageResponse, 1)
+	go db.Executor(EnqueueMessage, args, replyChan)
+	return replyChan
+}
+
+// InternalHeartbeatTxn sends a periodic heartbeat to extant
+// transaction rows to indicate the client is still alive and
+// the transaction should not be considered abandoned.
+func (db *BaseDB) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) <-chan *proto.InternalHeartbeatTxnResponse {
+	replyChan := make(chan *proto.InternalHeartbeatTxnResponse, 1)
+	go db.Executor(InternalHeartbeatTxn, args, replyChan)
+	return replyChan
+}
+
+// InternalPushTxn attempts to resolve read or write conflicts between
+// transactions. Both the pusher (args.Txn) and the pushee
+// (args.PushTxn) are supplied. However, args.Key should be set to the
+// transaction ID of the pushee, as it must be directed to the range
+// containing the pushee's transaction record in order to consult the
+// most up to date txn state. If the conflict resolution can be
+// resolved in favor of the pusher, returns success; otherwise returns
+// an error code either indicating the pusher must retry or abort and
+// restart the transaction.
+func (db *BaseDB) InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse {
+	replyChan := make(chan *proto.InternalPushTxnResponse, 1)
+	go db.Executor(InternalPushTxn, args, replyChan)
+	return replyChan
+}
+
+// InternalResolveIntent resolves existing write intents for a key or
+// key range.
+func (db *BaseDB) InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse {
+	replyChan := make(chan *proto.InternalResolveIntentResponse, 1)
+	go db.Executor(InternalResolveIntent, args, replyChan)
+	return replyChan
+}
+
+// InternalSnapshotCopy scans the key range specified by start key through
+// end key up to some maximum number of results from the given snapshot_id.
+// It will create a snapshot if snapshot_id is empty.
+func (db *BaseDB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse {
+	replyChan := make(chan *proto.InternalSnapshotCopyResponse, 1)
+	go db.Executor(InternalSnapshotCopy, args, replyChan)
+	return replyChan
+}
+
+// RunTransaction executes retryable in the context of a distributed
+// transaction. The transaction is automatically aborted if retryable
+// returns any error aside from a txnDBError, and is automatically
+// committed otherwise. retryable should have no side effects which
+// could cause problems in the event it must be run more than
+// once. The opts struct contains transaction settings. If limits for
+// backoff / retry are enabled through the options and reached during
+// transaction execution, TransactionRetryError will be returned.
+func (db *BaseDB) RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error {
+	return util.Errorf("RunTransaction unimplemented")
 }
 
 // GetI fetches the value at the specified key and gob-deserializes it
@@ -222,7 +423,7 @@ func UpdateRangeDescriptor(db DB, meta proto.RangeMetadata,
 // a randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Range.InternalPushTxn).
-func NewTransaction(baseKey engine.Key, userPriority int32,
+func NewTransaction(name string, baseKey engine.Key, userPriority int32,
 	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := proto.MakePriority(userPriority)
@@ -232,6 +433,7 @@ func NewTransaction(baseKey engine.Key, userPriority int32,
 	max.WallTime += clock.MaxDrift().Nanoseconds()
 
 	return &proto.Transaction{
+		Name:         name,
 		ID:           append(baseKey, []byte(uuid.New())...),
 		Priority:     priority,
 		Isolation:    isolation,
