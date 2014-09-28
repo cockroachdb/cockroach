@@ -8,7 +8,7 @@ MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 # Setup the toolchain.
 RUN apt-get update -y -qq
 RUN apt-get dist-upgrade -y -qq
-RUN apt-get install -y -qq wget curl git mercurial build-essential bzr zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev libprotobuf-dev protobuf-compiler g++-4.8 libgflags-dev
+RUN apt-get install -y -qq wget curl git mercurial build-essential bzr zlib1g-dev libbz2-dev libjemalloc-dev libprotobuf-dev protobuf-compiler g++-4.8 libgflags-dev
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
 
