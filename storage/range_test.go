@@ -215,13 +215,13 @@ func TestInternalRangeLookup(t *testing.T) {
 
 // A blockingEngine allows us to delay get/put (but not other ops!).
 // It works by allowing a single key to be primed for a delay. When
-// a get/put ops arrives for that key, it's blocked via wait group
+// a get/put ops arrives for that key, it's blocked via a mutex
 // until unblock() is invoked.
 type blockingEngine struct {
-	sync.Mutex
+	blocker sync.Mutex // blocks Get() and Put()
 	*engine.InMem
-	key engine.Key
-	wg  sync.WaitGroup
+	sync.Mutex // protects key
+	key        engine.Key
 }
 
 func newBlockingEngine() *blockingEngine {
@@ -232,22 +232,30 @@ func newBlockingEngine() *blockingEngine {
 }
 
 func (be *blockingEngine) block(key engine.Key) {
+	be.Lock()
+	defer be.Unlock()
 	// Need to binary encode the key so it matches when accessed through MVCC.
 	be.key = encoding.EncodeBinary(nil, key)
-	be.wg.Add(1)
+	// Get() and Put() will try to get this lock, so they will wait.
+	be.blocker.Lock()
 }
 
 func (be *blockingEngine) unblock() {
-	be.wg.Done()
+	be.blocker.Unlock()
+}
+
+func (be *blockingEngine) wait() {
+	be.blocker.Lock()
+	be.blocker.Unlock()
 }
 
 func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
 	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
-		defer be.wg.Wait()
+		defer be.wait()
 	}
-	defer be.Unlock()
+	be.Unlock()
 	return be.InMem.Get(key)
 }
 
@@ -255,9 +263,9 @@ func (be *blockingEngine) Put(key engine.Key, value []byte) error {
 	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
-		defer be.wg.Wait()
+		defer be.wait()
 	}
-	defer be.Unlock()
+	be.Unlock()
 	return be.InMem.Put(key, value)
 }
 
