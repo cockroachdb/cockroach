@@ -35,3 +35,8 @@ _testmain.go
 
 cockroach
 *.swp
+
+# --prefix installed _vendor
+/_vendor/include
+/_vendor/lib
+/_vendor/share
