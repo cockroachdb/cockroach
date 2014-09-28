@@ -25,6 +25,7 @@ install:
 
 script:
   - make test
+  - make testrace
 
 notifications:
   email:
