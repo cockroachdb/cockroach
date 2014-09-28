@@ -445,12 +445,12 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// Just as for reads, we update the timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher timestamp
 		// for successive writes to the same key or key range.
+		r.Lock()
 		if err == nil {
-			r.Lock()
 			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5)
-			r.Unlock()
 		}
 		r.cmdQ.Remove(cmdKey)
+		r.Unlock()
 
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.

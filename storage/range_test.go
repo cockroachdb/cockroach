@@ -218,6 +218,7 @@ func TestInternalRangeLookup(t *testing.T) {
 // a get/put ops arrives for that key, it's blocked via wait group
 // until unblock() is invoked.
 type blockingEngine struct {
+	sync.Mutex
 	*engine.InMem
 	key engine.Key
 	wg  sync.WaitGroup
@@ -241,18 +242,22 @@ func (be *blockingEngine) unblock() {
 }
 
 func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
+	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
-		be.wg.Wait()
+		defer be.wg.Wait()
 	}
+	defer be.Unlock()
 	return be.InMem.Get(key)
 }
 
 func (be *blockingEngine) Put(key engine.Key, value []byte) error {
+	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
-		be.wg.Wait()
+		defer be.wg.Wait()
 	}
+	defer be.Unlock()
 	return be.InMem.Put(key, value)
 }
 

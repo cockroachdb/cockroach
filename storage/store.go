@@ -138,8 +138,8 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db DB, gossip *gossip.Gossip)
 
 // Close calls Range.Stop() on all active ranges.
 func (s *Store) Close() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, rng := range s.ranges {
 		rng.Stop()
 	}
