@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"math/rand"
 	"reflect"
 	"sync"
 	"time"
@@ -129,7 +130,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		args.Header().Key = tdb.txn.ID
 		tdb.txnEnd = true // set this txn as having been ended
 	} else if !isTransactional(method) {
-		sendError(util.Errorf("method %q cannot be invoked through transactional DB", method), replyChan)
+		tdb.DB.executeCmd(method, args, replyChan)
 		tdb.Unlock()
 		return
 	}
@@ -141,9 +142,10 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		tdb.timestamp = tdb.txn.Timestamp
 	}
 	// Set args.Timestamp & args.Txn to reflect current values.
+	txnCopy := *tdb.txn
 	args.Header().User = tdb.User
 	args.Header().Timestamp = tdb.timestamp
-	args.Header().Txn = tdb.txn
+	args.Header().Txn = &txnCopy
 	tdb.wg.Add(1)
 	tdb.Unlock()
 
@@ -159,7 +161,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		if !storage.IsReadOnly(method) {
 			args.Header().CmdID = proto.ClientCmdID{
 				WallTime: tdb.clock.Now().WallTime,
-				Random:   util.CachedRand.Int63(),
+				Random:   rand.Int63(),
 			}
 		}
 

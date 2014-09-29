@@ -20,6 +20,7 @@ package util
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -87,7 +88,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 		var wait time.Duration
 		if status == RetryReset {
 			backoff = opts.Backoff
-			wait = time.Duration(math.Abs(CachedRand.Float64()) * float64(backoff.Nanoseconds()) * retryJitter)
+			wait = time.Duration(math.Abs(rand.Float64()) * float64(backoff.Nanoseconds()) * retryJitter)
 			count = 0
 			if !opts.UseV1Info || log.V(1) == true {
 				log.Infof("%s failed; retrying in 0ms", opts.Tag)
@@ -99,7 +100,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 			if !opts.UseV1Info || log.V(1) == true {
 				log.Infof("%s failed; retrying in %s", opts.Tag, backoff)
 			}
-			wait = backoff + time.Duration(CachedRand.Float64()*float64(backoff.Nanoseconds())*retryJitter)
+			wait = backoff + time.Duration(rand.Float64()*float64(backoff.Nanoseconds())*retryJitter)
 			// Increase backoff for next iteration.
 			backoff = time.Duration(float64(backoff) * opts.Constant)
 			if backoff > opts.MaxBackoff {

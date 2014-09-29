@@ -136,7 +136,7 @@ func MD5Equal(a, b [md5.Size]byte) bool {
 func (t *Transaction) Restart(abort bool, userPriority, upgradePriority int32, timestamp Timestamp) {
 	if abort {
 		uu := uuid.New()
-		t.ID = append(t.ID[:len(t.ID)-len(uu)], []byte(uu)...)
+		t.ID = append(append([]byte(nil), t.ID[:len(t.ID)-len(uu)]...), []byte(uu)...)
 		t.Epoch = 0
 	} else {
 		t.Epoch++

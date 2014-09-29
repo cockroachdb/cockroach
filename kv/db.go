@@ -27,7 +27,7 @@ import (
 // package includes both local and distributed KV implementations.
 type KV interface {
 	// ExecuteCmd executes the specified command (method + args) and
-	// send a reply on the provided channel.
+	// sends a reply on the provided channel.
 	ExecuteCmd(method string, args proto.Request, replyChan interface{})
 	// Close provides implementation-specific cleanup.
 	Close()

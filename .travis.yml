@@ -24,6 +24,8 @@ install:
   - make build
 
 script:
+  # Note that testrace runs with some tests excluded for performance
+  # This means that we should always run both test and testrace.
   - make test
   - make testrace
 
