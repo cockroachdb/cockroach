@@ -51,7 +51,11 @@ build: auxiliary
 	$(CGO_FLAGS) $(GO) build -o cockroach
 
 rocksdb:
-	cd $(ROCKSDB); make static_lib
+	# There is a hiccup in RocksDB's Makefile which causes build_version.cc to
+	# be "newer" than build_version.o for each run of `make static_lib` even
+	# though before invoking make, this is not the case. This is a quick fix
+	# for this, simply telling make that build_version.cc hasn't changed.
+	cd $(ROCKSDB); make -o util/build_version.cc static_lib
 
 roach_proto:
 	cd $(ROACH_PROTO); $(FLAGS) make static_lib
