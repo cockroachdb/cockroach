@@ -4,3 +4,6 @@
 [submodule "_vendor/src/github.com/coreos/etcd"]
 	path = _vendor/src/github.com/coreos/etcd
 	url = https://github.com/cockroachdb/etcd.git
+[submodule "snappy"]
+	path = _vendor/snappy
+	url = https://github.com/google/snappy.git

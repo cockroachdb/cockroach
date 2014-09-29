@@ -6,8 +6,7 @@ GO_GET_FLAGS="-u -v"
 set -e -x
 
 # Init submodules.
-git submodule init
-git submodule update
+git submodule update --init
 
 # Grab binaries required by git hooks.
 $GO_GET $GO_GET_FLAGS github.com/golang/lint/golint

@@ -21,15 +21,17 @@
 GO ?= go
 
 DEPLOY      := $(CURDIR)/deploy
-GOPATH      := $(CURDIR)/_vendor:$(GOPATH)
-ROCKSDB     := $(CURDIR)/_vendor/rocksdb
+VENDOR      := $(CURDIR)/_vendor
+GOPATH      := $(VENDOR):$(GOPATH)
+ROCKSDB     := $(VENDOR)/rocksdb
+SNAPPY      := $(VENDOR)/snappy
 ROACH_PROTO := $(CURDIR)/proto
 ROACH_LIB   := $(CURDIR)/roachlib
 SQL_PARSER  := $(CURDIR)/sql/parser
 
-CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
-CXXFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
-LDFLAGS  := "-L/usr/local/lib -L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
+CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) -I$(VENDOR)/include $(CFLAGS)"
+CXXFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) -I$(VENDOR)/include $(CXXFLAGS)"
+LDFLAGS  := "-L/usr/local/lib -L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) -L$(VENDOR)/lib $(LDFLAGS)"
 
 FLAGS := LDFLAGS=$(LDFLAGS) \
          CFLAGS=$(CFLAGS) \
@@ -45,16 +47,13 @@ TESTFLAGS := -logtostderr -timeout 10s
 
 all: build test
 
-auxiliary: rocksdb roach_proto roach_lib sqlparser
+auxiliary: rocksdb roach_proto roach_lib snappy sqlparser
 
 build: auxiliary
 	$(CGO_FLAGS) $(GO) build -o cockroach
 
-rocksdb:
-	cd $(ROCKSDB); make static_lib
-
 roach_proto:
-	cd $(ROACH_PROTO); $(FLAGS) make static_lib
+	cd $(ROACH_PROTO); $(FLAGS) make static_lib;
 
 roach_lib: roach_proto
 	cd $(ROACH_LIB); $(FLAGS) make static_lib
@@ -76,6 +75,28 @@ coverage: build
 
 acceptance:
 	cd $(DEPLOY); ./build-docker.sh && ./local-cluster.sh start && ./local-cluster.sh stop
+
+# Vendor libs
+rocksdb:
+	cd $(ROCKSDB); make static_lib
+
+snappy: snappy_autogen_sh
+	cd $(SNAPPY); make && make install
+
+snappy_autogen_sh:
+	# This is a patched version of _vendor/snappy/autogen.sh \
+	# OS X already has libtool (native macho toolchain) and we need glibtool for snappy.
+	if [ ! -f "$(SNAPPY)/Makefile" ]; then \
+		cd $(SNAPPY); \
+        rm -rf autom4te.cache && \
+        aclocal -I m4 && \
+        autoheader && \
+        case `uname` in Darwin*) glibtoolize --copy ;; \
+            *) libtoolize --copy ;; esac && \
+        automake --add-missing --copy  && \
+        autoconf && \
+        ./configure --prefix $(VENDOR);\
+	fi
 
 clean:
 	$(GO) clean
