@@ -51,7 +51,7 @@ build: auxiliary
 	$(CGO_FLAGS) $(GO) build -o cockroach
 
 rocksdb:
-	cd $(ROCKSDB); make static_lib
+	cd $(ROCKSDB); DO_NOT_RUN_BUILD_DETECT_VERSION=true make static_lib
 
 roach_proto:
 	cd $(ROACH_PROTO); $(FLAGS) make static_lib
