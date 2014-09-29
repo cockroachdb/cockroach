@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -38,7 +40,7 @@ const (
 	// EntryPrefix is the prefix for endpoints that interact with individual key-value pairs directly.
 	EntryPrefix = RESTPrefix + "entry/"
 	// RangePrefix is the prefix for endpoints that interact with a range of key-value pairs.
-	RangePrefix = RESTPrefix + "range/"
+	RangePrefix = RESTPrefix + "range"
 	// CounterPrefix is the prefix for the endpoint that increments a key by a given amount.
 	CounterPrefix = RESTPrefix + "counter/"
 )
@@ -61,18 +63,21 @@ const (
 // Maps various path + HTTP method combos to specific server methods
 var routingTable = map[string]map[string]actionHandler{
 	EntryPrefix: {
-		methodGet:    makeActionWithKey((*Server).handleEntryGetAction),
-		methodPut:    makeActionWithKey((*Server).handleEntryPutAction),
-		methodPost:   makeActionWithKey((*Server).handleEntryPutAction),
-		methodDelete: makeActionWithKey((*Server).handleEntryDeleteAction),
-		methodHead:   makeActionWithKey((*Server).handleEntryHeadAction),
+		methodGet:    keyedAction(EntryPrefix, (*Server).handleGetAction),
+		methodPut:    keyedAction(EntryPrefix, (*Server).handlePutAction),
+		methodPost:   keyedAction(EntryPrefix, (*Server).handlePutAction),
+		methodDelete: keyedAction(EntryPrefix, (*Server).handleDeleteAction),
+		methodHead:   keyedAction(EntryPrefix, (*Server).handleHeadAction),
 	},
 	RangePrefix: {
-	// TODO(andybons) implement.
+		methodGet:    (*Server).handleRangeAction,
+		methodDelete: (*Server).handleRangeAction,
 	},
 	CounterPrefix: {
-		methodGet:  (*Server).handleCounterAction,
-		methodPost: (*Server).handleCounterAction,
+		methodHead:   keyedAction(CounterPrefix, (*Server).handleHeadAction),
+		methodGet:    keyedAction(CounterPrefix, (*Server).handleCounterAction),
+		methodPost:   keyedAction(CounterPrefix, (*Server).handleCounterAction),
+		methodDelete: keyedAction(CounterPrefix, (*Server).handleDeleteAction),
 	},
 }
 
@@ -104,9 +109,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
-func makeActionWithKey(act actionKeyHandler) actionHandler {
+// keyedAction wraps the given actionKeyHandler func in a closure that
+// extracts the key from the request and passes it on to the handler.
+// The closure is then returned for later execution.
+func keyedAction(pathPrefix string, act actionKeyHandler) actionHandler {
 	return func(s *Server, w http.ResponseWriter, r *http.Request) {
-		key, err := dbKey(r.URL.Path, EntryPrefix)
+		key, err := dbKey(r.URL.Path, pathPrefix)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -127,13 +135,56 @@ func dbKey(path, apiPrefix string) (engine.Key, error) {
 	return nil, err
 }
 
-func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request) {
-	key, err := dbKey(r.URL.Path, CounterPrefix)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+const (
+	rangeParamStart = "start"
+	rangeParamEnd   = "end"
+	rangeParamLimit = "limit"
+)
+
+func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
+	startKey := engine.Key(r.FormValue(rangeParamStart))
+	endKey := engine.Key(r.FormValue(rangeParamEnd))
+	// TODO(andybons): Is an endKey optional?
+	if len(startKey) == 0 || len(endKey) == 0 {
+		http.Error(w, "start and end keys must be non-empty", http.StatusBadRequest)
 		return
 	}
+	if endKey.Less(startKey) {
+		http.Error(w, "end key must be greater than start key", http.StatusBadRequest)
+		return
+	}
+	// A limit of zero implies no limit.
+	limit, _ := strconv.ParseInt(r.FormValue(rangeParamLimit), 10, 64)
+	reqHeader := proto.RequestHeader{
+		Key:    startKey,
+		EndKey: endKey,
+		User:   storage.UserRoot,
+	}
+	var results interface{}
+	if r.Method == methodGet {
+		scanReq := &proto.ScanRequest{RequestHeader: reqHeader}
+		if limit > 0 {
+			scanReq.MaxResults = limit
+		}
+		results = <-s.db.Scan(scanReq)
+	} else if r.Method == methodDelete {
+		deleteReq := &proto.DeleteRangeRequest{RequestHeader: reqHeader}
+		if limit > 0 {
+			deleteReq.MaxEntriesToDelete = limit
+		}
+		results = <-s.db.DeleteRange(deleteReq)
+	}
+	if results == nil {
+		panic("results from range operation cannot be nil")
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(results); err != nil {
+		log.Errorf("could not json encode scan response: %v", err)
+		return
+	}
+}
 
+func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	// GET Requests are just an increment with 0 value.
 	var inputVal int64
 
@@ -165,7 +216,7 @@ func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%d", gr.NewValue)
 }
 
-func (s *Server) handleEntryPutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -186,7 +237,7 @@ func (s *Server) handleEntryPutAction(w http.ResponseWriter, r *http.Request, ke
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	gr := <-s.db.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -210,7 +261,7 @@ func (s *Server) handleEntryGetAction(w http.ResponseWriter, r *http.Request, ke
 	}
 }
 
-func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	cr := <-s.db.Contains(&proto.ContainsRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -228,7 +279,7 @@ func (s *Server) handleEntryHeadAction(w http.ResponseWriter, r *http.Request, k
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleEntryDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
 	dr := <-s.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
