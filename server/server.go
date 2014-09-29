@@ -297,10 +297,11 @@ func newServer() (*server, error) {
 	if strings.HasPrefix(*rpcAddr, ":") {
 		*rpcAddr = host + *rpcAddr
 	}
-	_, err = net.ResolveTCPAddr("tcp", *rpcAddr)
+	addr, err := net.ResolveTCPAddr("tcp", *rpcAddr)
 	if err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", *rpcAddr, err)
 	}
+	*rpcAddr = addr.String() // use resolved ip address to identify ourselves
 
 	var tlsConfig *rpc.TLSConfig
 	if *certDir == "" {
