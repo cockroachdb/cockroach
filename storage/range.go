@@ -314,7 +314,7 @@ func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, 
 // commands which overlap its key range. This method will block if
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
-// invocation of endCmd().
+// invocation of cmdQ.Remove().
 func (r *Range) beginCmd(start, end engine.Key, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
@@ -323,16 +323,6 @@ func (r *Range) beginCmd(start, end engine.Key, readOnly bool) interface{} {
 	r.Unlock()
 	wg.Wait()
 	return cmdKey
-}
-
-// endCmd indicates the specified command has run to completion. This
-// method must be invoked regardless of command success or
-// failure. Otherwise, the command will be lodged indefinitely in
-// the command queue.
-func (r *Range) endCmd(cmdKey interface{}) {
-	r.Lock()
-	r.cmdQ.Remove(cmdKey)
-	r.Unlock()
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
@@ -367,12 +357,12 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	err := r.executeCmd(method, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
+	r.Lock()
 	if err == nil {
-		r.Lock()
 		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5())
-		r.Unlock()
 	}
-	r.endCmd(cmdKey)
+	r.cmdQ.Remove(cmdKey)
+	r.Unlock()
 
 	return err
 }
