@@ -257,9 +257,11 @@ func (g *Gossip) Stop() <-chan error {
 	// Wake up bootstrap goroutine so it can exit.
 	g.stalled.Signal()
 	// Close all outgoing clients.
+	g.mu.Lock()
 	for _, addr := range g.outgoing.asSlice() {
 		g.closeClient(addr)
 	}
+	g.mu.Unlock()
 	return g.exited
 }
 
