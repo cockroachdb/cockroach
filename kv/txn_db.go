@@ -183,7 +183,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		if tdb.timestamp.Less(reply.Header().Timestamp) {
 			tdb.timestamp = reply.Header().Timestamp
 		}
-		if log.V(1) && reply.Header().GoError() != nil {
+		if /*log.V(1) && */ reply.Header().GoError() != nil {
 			log.Infof("command %s %+v failed: %s", method, args, reply.Header().GoError())
 		}
 		// Take action on various errors.
