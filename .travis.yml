@@ -26,8 +26,8 @@ install:
 script:
   # Note that testrace runs with some tests excluded for performance
   # This means that we should always run both test and testrace.
-  - make test
-  - make testrace
+  - make test TESTFLAGS="-timeout 1m"
+  - make testrace TESTFLAGS="-timeout 1m"
 
 notifications:
   email:

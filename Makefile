@@ -41,7 +41,7 @@ CGO_FLAGS := CGO_LDFLAGS=$(LDFLAGS) \
 
 PKG       := "./..."
 TESTS     := ".*"
-TESTFLAGS := -logtostderr -timeout 30s
+TESTFLAGS := -logtostderr -timeout 10s
 
 all: build test
 
