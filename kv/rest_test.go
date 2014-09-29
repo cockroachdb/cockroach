@@ -24,6 +24,8 @@ package kv_test
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -137,6 +139,49 @@ func TestMethods(t *testing.T) {
 	}
 }
 
+func TestRange(t *testing.T) {
+	// Create range of keys (with counters interspersed).
+	baseURL := "http://" + serverAddr
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("key_%.2d", i)
+		val := fmt.Sprintf("value_%.2d", i)
+		prefix := kv.EntryPrefix
+		// Intersperse counters every tenth key.
+		if i%10 == 0 {
+			prefix = kv.CounterPrefix
+			val = strconv.Itoa(i)
+		}
+		postURL(baseURL+prefix+key, strings.NewReader(val), t)
+	}
+	// Query subset of that range.
+	start, end := 5, 25
+	url := fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, kv.RangePrefix, start, end)
+	s := getURL(url, t)
+	var scan proto.ScanResponse
+	if err := json.NewDecoder(strings.NewReader(s)).Decode(&scan); err != nil {
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+	}
+	for i, row := range scan.Rows {
+		n := i + start
+		if n%10 == 0 {
+			// A counter is expected in this case.
+			// TODO(andybons): No info is returned in the struct in this case
+			// that would indicate it’s a counter.
+			continue
+		}
+		expected := fmt.Sprintf("value_%.2d", n)
+		if string(row.Value.Bytes) != expected {
+			t.Errorf("expected row %d value (key=%q) in scan to be %q; got %q", i, string(row.Key), expected, string(row.Value.Bytes))
+		}
+	}
+	// TODO(andybons):
+	// Query limit of that range.
+	// Delete limit of that range.
+	// Query remaining range.
+	// Delete remaining range.
+	// Query key range.
+}
+
 func TestIncrement(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	testKey := "Hello, 世界"
@@ -146,18 +191,20 @@ func TestIncrement(t *testing.T) {
 	}{
 		// The order of the operations within these groups must be preserved.
 		{methodPost, "", 0, http.StatusBadRequest, 0},
+		{methodHead, testKey, 0, http.StatusNotFound, 0},
 		{methodPut, testKey, 0, http.StatusMethodNotAllowed, 0},
 		{methodGet, testKey, 0, http.StatusOK, 0},
 		{methodPost, testKey, 2, http.StatusOK, 2},
 		{methodGet, testKey, 0, http.StatusOK, 2},
+		{methodHead, testKey, 0, http.StatusOK, 0},
 		{methodPost, testKey, -3, http.StatusOK, -1},
 		{methodPost, testKey, 0, http.StatusOK, -1},
-		// TODO(andybons): Implement.
-		// {methodDelete, testKey, 0, http.StatusOK, 0},
+		{methodDelete, testKey, 0, http.StatusOK, 0},
+		{methodHead, testKey, 0, http.StatusNotFound, 0},
 	}
 	for _, tc := range testCases {
 		var body io.Reader
-		if tc.statusCode == http.StatusOK {
+		if tc.statusCode == http.StatusOK && tc.method == methodPost {
 			body = strings.NewReader(strconv.Itoa(tc.val))
 		}
 		resp, err := httpDo(tc.method, kv.CounterPrefix+tc.key, body)
@@ -176,6 +223,10 @@ func TestIncrement(t *testing.T) {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.key, err)
+			continue
+		}
+		// Responses are empty for HEAD and DELETE requests.
+		if tc.method != methodGet && tc.method != methodPost {
 			continue
 		}
 		i, err := strconv.Atoi(string(b))
@@ -271,12 +322,13 @@ func getURL(url string, t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK status code; got %d", resp.StatusCode)
-	}
+	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK status code; got %d: %q", resp.StatusCode, string(b))
 	}
 	return string(b)
 }

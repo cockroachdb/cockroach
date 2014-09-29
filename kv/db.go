@@ -125,7 +125,7 @@ func (db *DB) Delete(args *proto.DeleteRequest) <-chan *proto.DeleteResponse {
 }
 
 // DeleteRange removes all values for keys which fall between
-// args.Header.Key and args.Header.EndKey.
+// args.RequestHeader.Key and args.RequestHeader.EndKey.
 func (db *DB) DeleteRange(args *proto.DeleteRangeRequest) <-chan *proto.DeleteRangeResponse {
 	replyChan := make(chan *proto.DeleteRangeResponse, 1)
 	go db.executeCmd(storage.DeleteRange, args, replyChan)
@@ -133,7 +133,7 @@ func (db *DB) DeleteRange(args *proto.DeleteRangeRequest) <-chan *proto.DeleteRa
 }
 
 // Scan fetches the values for all keys which fall between
-// args.Header.Key and args.Header.EndKey.
+// args.RequestHeader.Key and args.RequestHeader.EndKey.
 func (db *DB) Scan(args *proto.ScanRequest) <-chan *proto.ScanResponse {
 	replyChan := make(chan *proto.ScanResponse, 1)
 	go db.executeCmd(storage.Scan, args, replyChan)
