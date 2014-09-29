@@ -70,6 +70,7 @@ var routingTable = map[string]map[string]actionHandler{
 		methodHead:   keyedAction(EntryPrefix, (*Server).handleHeadAction),
 	},
 	RangePrefix: {
+		// TODO(andybons): HEAD action handler.
 		methodGet:    (*Server).handleRangeAction,
 		methodDelete: (*Server).handleRangeAction,
 	},
@@ -142,19 +143,33 @@ const (
 )
 
 func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
+	// TODO(andybons): Allow the client to specify range parameters via
+	// request headers as well, allowing query parameters to override the
+	// ranger headers if necessary.
+	// http://www.restapitutorial.com/media/RESTful_Best_Practices-v1_1.pdf
 	startKey := engine.Key(r.FormValue(rangeParamStart))
 	endKey := engine.Key(r.FormValue(rangeParamEnd))
-	// TODO(andybons): Is an endKey optional?
-	if len(startKey) == 0 || len(endKey) == 0 {
-		http.Error(w, "start and end keys must be non-empty", http.StatusBadRequest)
+	if len(startKey) == 0 {
+		http.Error(w, "start key must be non-empty", http.StatusBadRequest)
 		return
+	}
+	if len(endKey) == 0 {
+		endKey = startKey
 	}
 	if endKey.Less(startKey) {
 		http.Error(w, "end key must be greater than start key", http.StatusBadRequest)
 		return
 	}
 	// A limit of zero implies no limit.
-	limit, _ := strconv.ParseInt(r.FormValue(rangeParamLimit), 10, 64)
+	limit, err := strconv.ParseInt(r.FormValue(rangeParamLimit), 10, 64)
+	if len(r.FormValue(rangeParamLimit)) > 0 && err != nil {
+		http.Error(w, "error parsing limit: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if limit < 0 {
+		http.Error(w, "limit must be non-negative", http.StatusBadRequest)
+		return
+	}
 	reqHeader := proto.RequestHeader{
 		Key:    startKey,
 		EndKey: endKey,

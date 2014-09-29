@@ -322,12 +322,13 @@ func getURL(url string, t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK status code; got %d", resp.StatusCode)
-	}
+	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK status code; got %d: %q", resp.StatusCode, string(b))
 	}
 	return string(b)
 }
