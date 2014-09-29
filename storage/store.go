@@ -119,9 +119,9 @@ type Store struct {
 	raftIDAlloc  *IDAllocator   // Raft ID allocator
 	rangeIDAlloc *IDAllocator   // Range ID allocator
 
-	mu          sync.RWMutex     // Protects variables below...
-	ranges      map[int64]*Range // Map of ranges by range ID
-	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
+	sync.RWMutex                  // Protects variables below...
+	ranges       map[int64]*Range // Map of ranges by range ID
+	rangesByKey  RangeSlice       // Sorted slice of ranges by StartKey
 }
 
 // NewStore returns a new instance of a store.
@@ -138,8 +138,8 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db DB, gossip *gossip.Gossip)
 
 // Close calls Range.Stop() on all active ranges.
 func (s *Store) Close() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 	for _, rng := range s.ranges {
 		rng.Stop()
 	}
@@ -184,8 +184,8 @@ func (s *Store) Init() error {
 		return &NotBootstrappedError{}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	start := engine.KeyLocalRangeMetadataPrefix
 	end := engine.PrefixEndKey(start)
 	const rows = 64
@@ -237,8 +237,8 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 
 // GetRange fetches a range by ID. Returns an error if no range is found.
 func (s *Store) GetRange(rangeID int64) (*Range, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.RLock()
+	defer s.RUnlock()
 	if rng, ok := s.ranges[rangeID]; ok {
 		return rng, nil
 	}
@@ -249,8 +249,8 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 // "rangesByKey" RangeSlice. Returns nil if no range is found for
 // specified key range.
 func (s *Store) LookupRange(start, end engine.Key) *Range {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.RLock()
+	defer s.RUnlock()
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
 		return bytes.Compare(start, s.rangesByKey[i].Meta.EndKey) < 0
 	})
@@ -328,11 +328,11 @@ func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
+	s.Lock()
+	defer s.Unlock()
 	s.ranges[meta.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
-	s.mu.Unlock()
 
 	return rng, nil
 }
@@ -362,8 +362,8 @@ func (s *Store) writeRangeToEngine(rng *Range) error {
 //
 // For a rangeID that is not known to the store, DropRange is a noop.
 func (s *Store) DropRange(rangeID int64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	if rng, ok := s.ranges[rangeID]; ok {
 		rng.Stop()
 	}

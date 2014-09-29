@@ -219,8 +219,9 @@ func TestInternalRangeLookup(t *testing.T) {
 // until unblock() is invoked.
 type blockingEngine struct {
 	*engine.InMem
-	key engine.Key
-	wg  sync.WaitGroup
+	sync.Mutex // Protects wg & key.
+	wg         *sync.WaitGroup
+	key        engine.Key
 }
 
 func newBlockingEngine() *blockingEngine {
@@ -232,27 +233,39 @@ func newBlockingEngine() *blockingEngine {
 
 func (be *blockingEngine) block(key engine.Key) {
 	// Need to binary encode the key so it matches when accessed through MVCC.
+	be.Lock()
 	be.key = encoding.EncodeBinary(nil, key)
+	be.wg = &sync.WaitGroup{}
 	be.wg.Add(1)
+	be.Unlock()
 }
 
 func (be *blockingEngine) unblock() {
+	be.Lock()
 	be.wg.Done()
+	be.wg = nil
+	be.Unlock()
+}
+
+func (be *blockingEngine) maybeBlock(key engine.Key) {
+	be.Lock()
+	if !bytes.Equal(key, be.key) {
+		be.Unlock()
+		return
+	}
+	be.key = nil
+	wg := be.wg
+	be.Unlock()
+	wg.Wait()
 }
 
 func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
-	if bytes.Equal(key, be.key) {
-		be.key = nil
-		be.wg.Wait()
-	}
+	be.maybeBlock(key)
 	return be.InMem.Get(key)
 }
 
 func (be *blockingEngine) Put(key engine.Key, value []byte) error {
-	if bytes.Equal(key, be.key) {
-		be.key = nil
-		be.wg.Wait()
-	}
+	be.maybeBlock(key)
 	return be.InMem.Put(key, value)
 }
 

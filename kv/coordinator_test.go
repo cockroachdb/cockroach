@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,10 +138,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 				return false
 			}
 			// Advance clock by 1ns.
-			// Locking the coordinator to prevent a data race.
-			db.coordinator.Lock()
-			*manual = hlc.ManualClock(*manual + 1)
-			db.coordinator.Unlock()
+			atomic.AddInt64((*int64)(manual), 1)
 			if heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
 				return true
@@ -199,10 +197,7 @@ func TestCoordinatorGC(t *testing.T) {
 	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
 
 	// Now, advance clock past the default client timeout.
-	// Locking the coordinator to prevent a data race.
-	db.coordinator.Lock()
-	*manual = hlc.ManualClock(defaultClientTimeout.Nanoseconds() + 1)
-	db.coordinator.Unlock()
+	atomic.StoreInt64((*int64)(manual), defaultClientTimeout.Nanoseconds()+1)
 
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the coordinator to prevent a data race.
