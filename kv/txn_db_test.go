@@ -21,13 +21,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -128,11 +129,12 @@ func TestTxnDBBasics(t *testing.T) {
 // priorities, isolation levels and interleavings of commands in the
 // histories.
 
-// verifier executs the history and then invokes the checkFn to verify
-// the environment left from executing the history.
+// verifier executes the history and then invokes checkFn to verify
+// the environment (map from key to value) left from executing the
+// history.
 type verifier struct {
 	history string
-	checkFn func(env map[string]string) error
+	checkFn func(env map[string]int64) error
 }
 
 // historyVerifier parses a planned transaction execution history into
@@ -207,12 +209,8 @@ func (hv *historyVerifier) run(isolations []proto.IsolationType, db *DB, t *test
 
 func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	isolations []proto.IsolationType, cmds []*cmd, db *DB, t *testing.T) error {
-	var planned []string
-	for _, c := range cmds {
-		planned = append(planned, c.String())
-	}
-	plannedStr := strings.Join(planned, " ")
-	log.V(1).Infof("attempting history(%d) %s", historyIdx, plannedStr)
+	plannedStr := historyString(cmds)
+	log.V(1).Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
 
 	hv.actual = []string{}
 	hv.wg.Add(len(priorities))
@@ -237,7 +235,7 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	actualStr := strings.Join(hv.actual, " ")
 
 	// Verify history.
-	verifyEnv := map[string]string{}
+	verifyEnv := map[string]int64{}
 	for _, c := range hv.verifyCmds {
 		c.historyIdx = historyIdx
 		c.env = verifyEnv
@@ -271,9 +269,14 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 		Retry:        testTxnRetryOpts,
 	}
 	err := db.RunTransaction(txnOpts, func(tdb storage.DB) error {
-		env := map[string]string{}
+		env := map[string]int64{}
+		// TODO(spencer): restarts must create additional histories. They
+		// look like: given the current partial history and a restart on
+		// txn txnIdx, re-enumerate a set of all histories containing the
+		// remaining commands from extant txns and all commands from this
+		// restarted txn.
+
 		// If this is attempt > 1, reset cmds so no waits.
-		cmds[0].env = map[string]string{}
 		if retry++; retry == 2 {
 			for _, c := range cmds {
 				c.done()
@@ -316,7 +319,7 @@ type cmd struct {
 	fn          func(c *cmd, db storage.DB, t *testing.T) error // execution function
 	ch          chan struct{}                                   // channel for other commands to wait
 	prev        <-chan struct{}                                 // channel this command must wait on before executing
-	env         map[string]string                               // contains all previously read values
+	env         map[string]int64                                // contains all previously read values
 }
 
 func (c *cmd) init(prevCmd *cmd) {
@@ -380,7 +383,7 @@ func readCmd(c *cmd, db storage.DB, t *testing.T) error {
 	})
 	if r.GoError() == nil {
 		if r.Value != nil {
-			c.env[c.key] = string(r.Value.Bytes)
+			c.env[c.key] = r.Value.GetInteger()
 		}
 	}
 	return r.GoError()
@@ -403,7 +406,7 @@ func scanCmd(c *cmd, db storage.DB, t *testing.T) error {
 		keyPrefix := []byte(fmt.Sprintf("%d.", c.historyIdx))
 		for _, kv := range r.Rows {
 			key := bytes.TrimPrefix(kv.Key, keyPrefix)
-			c.env[string(key)] = string(kv.Value.Bytes)
+			c.env[string(key)] = kv.Value.GetInteger()
 		}
 	}
 	return r.GoError()
@@ -412,32 +415,26 @@ func scanCmd(c *cmd, db storage.DB, t *testing.T) error {
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
 func incCmd(c *cmd, db storage.DB, t *testing.T) error {
-	val := "1"
-	if v, ok := c.env[c.key]; ok {
-		if iv, err := strconv.Atoi(v); err == nil {
-			val = fmt.Sprintf("%d", iv+1)
-		}
-	}
-	c.env[c.key] = val
-	r := <-db.Put(&proto.PutRequest{
+	r := <-db.Increment(&proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
-		Value:         proto.Value{Bytes: []byte(val)},
+		Increment:     int64(1),
 	})
+	if r.GoError() == nil {
+		c.env[c.key] = r.NewValue
+	}
 	return r.GoError()
 }
 
 // sumCmd sums the values of all keys read during the transaction
 // and writes the result to the db.
 func sumCmd(c *cmd, db storage.DB, t *testing.T) error {
-	sum := 0
+	sum := int64(0)
 	for _, v := range c.env {
-		if iv, err := strconv.Atoi(v); err == nil {
-			sum += iv
-		}
+		sum += v
 	}
 	r := <-db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
-		Value:         proto.Value{Bytes: []byte(fmt.Sprintf("%d", sum))},
+		Value:         proto.Value{Integer: gogoproto.Int64(sum)},
 	})
 	return r.GoError()
 }
@@ -460,6 +457,14 @@ var cmdDict = map[string]func(c *cmd, db storage.DB, t *testing.T) error{
 }
 
 var cmdRE = regexp.MustCompile(`([A-Z]+)(?:\(([A-Z]+)(?:-([A-Z]+))?\))?`)
+
+func historyString(cmds []*cmd) string {
+	var cmdStrs []string
+	for _, c := range cmds {
+		cmdStrs = append(cmdStrs, c.String())
+	}
+	return strings.Join(cmdStrs, " ")
+}
 
 // parseHistory parses the history string into individual commands
 // and returns a slice.
@@ -499,6 +504,13 @@ func parseHistories(histories []string, t *testing.T) [][]*cmd {
 	return results
 }
 
+// Easily accessible slices of transaction isolation variations.
+var (
+	bothIsolations   = []proto.IsolationType{proto.SERIALIZABLE, proto.SNAPSHOT}
+	onlySerializable = []proto.IsolationType{proto.SERIALIZABLE}
+	onlySnapshot     = []proto.IsolationType{proto.SNAPSHOT}
+)
+
 // enumerateIsolations returns a slice enumerating all combinations of
 // isolation types across the transactions. The inner slice describes
 // the isolation type for each transaction. The outer slice contains
@@ -507,7 +519,7 @@ func enumerateIsolations(numTxns int, isolations []proto.IsolationType) [][]prot
 	// Use a count from 0 to 2^N-1 and examine binary digits to get all
 	// possible combinations of txn isolations.
 	result := [][]proto.IsolationType{}
-	for i := 0; i < 1<<uint(len(isolations)); i++ {
+	for i := 0; i < 1<<uint(numTxns); i++ {
 		desc := make([]proto.IsolationType, numTxns)
 		for j := 0; j < numTxns; j++ {
 			bit := 0
@@ -519,6 +531,24 @@ func enumerateIsolations(numTxns int, isolations []proto.IsolationType) [][]prot
 		result = append(result, desc)
 	}
 	return result
+}
+
+func TestEnumerateIsolations(t *testing.T) {
+	SSI := proto.SERIALIZABLE
+	SI := proto.SNAPSHOT
+	expIsolations := [][]proto.IsolationType{
+		{SSI, SSI, SSI},
+		{SI, SSI, SSI},
+		{SSI, SI, SSI},
+		{SI, SI, SSI},
+		{SSI, SSI, SI},
+		{SI, SSI, SI},
+		{SSI, SI, SI},
+		{SI, SI, SI},
+	}
+	if !reflect.DeepEqual(enumerateIsolations(3, bothIsolations), expIsolations) {
+		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enumerateIsolations(3, bothIsolations))
+	}
 }
 
 // enumeratePriorities returns a slice enumerating all combinations of the
@@ -537,6 +567,24 @@ func enumeratePriorities(priorities []int32) [][]int32 {
 	return results
 }
 
+func TestEnumeratePriorities(t *testing.T) {
+	p1 := int32(1)
+	p2 := int32(2)
+	p3 := int32(3)
+	expPriorities := [][]int32{
+		{p1, p2, p3},
+		{p1, p3, p2},
+		{p2, p1, p3},
+		{p2, p3, p1},
+		{p3, p1, p2},
+		{p3, p2, p1},
+	}
+	enum := enumeratePriorities([]int32{p1, p2, p3})
+	if !reflect.DeepEqual(enum, expPriorities) {
+		t.Errorf("expected enumeration to match %s; got %s", expPriorities, enum)
+	}
+}
+
 // enumerateHistories returns a slice enumerating all combinations of
 // collated histories possible given the specified transactions. Each
 // input transaction is a slice of commands. The order of commands for
@@ -548,7 +596,6 @@ func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
 	numTxns := len(txns)
 	if symmetric {
 		numTxns = 1
-		symmetric = false
 	}
 	for i := 0; i < numTxns; i++ {
 		if len(txns[i]) == 0 {
@@ -556,7 +603,7 @@ func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
 		}
 		cp := append([][]*cmd(nil), txns...)
 		cp[i] = append([]*cmd(nil), cp[i][1:]...)
-		leftover := enumerateHistories(cp, symmetric)
+		leftover := enumerateHistories(cp, false)
 		if len(leftover) == 0 {
 			results = [][]*cmd{[]*cmd{txns[i][0]}}
 		}
@@ -567,12 +614,38 @@ func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
 	return results
 }
 
-// Easily accessible slices of transaction isolation variations.
-var (
-	bothIsolations   = []proto.IsolationType{proto.SERIALIZABLE, proto.SNAPSHOT}
-	onlySerializable = []proto.IsolationType{proto.SERIALIZABLE}
-	onlySnapshot     = []proto.IsolationType{proto.SNAPSHOT}
-)
+func TestEnumerateHistories(t *testing.T) {
+	txns := parseHistories([]string{"I(A) C", "I(A) C"}, t)
+	enum := enumerateHistories(txns, false)
+	enumStrs := make([]string, len(enum))
+	for i, history := range enum {
+		enumStrs[i] = historyString(history)
+	}
+	enumSymmetric := enumerateHistories(txns, true)
+	enumSymmetricStrs := make([]string, len(enumSymmetric))
+	for i, history := range enumSymmetric {
+		enumSymmetricStrs[i] = historyString(history)
+	}
+	expEnumStrs := []string{
+		"I1(A) C1 I2(A) C2",
+		"I1(A) I2(A) C1 C2",
+		"I1(A) I2(A) C2 C1",
+		"I2(A) I1(A) C1 C2",
+		"I2(A) I1(A) C2 C1",
+		"I2(A) C2 I1(A) C1",
+	}
+	expEnumSymmetricStrs := []string{
+		"I1(A) C1 I2(A) C2",
+		"I1(A) I2(A) C1 C2",
+		"I1(A) I2(A) C2 C1",
+	}
+	if !reflect.DeepEqual(enumStrs, expEnumStrs) {
+		t.Errorf("expected enumeration to match %s; got %s", expEnumStrs, enumStrs)
+	}
+	if !reflect.DeepEqual(enumSymmetricStrs, expEnumSymmetricStrs) {
+		t.Errorf("expected symmetric enumeration to match %s; got %s", expEnumSymmetricStrs, enumSymmetricStrs)
+	}
+}
 
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
@@ -618,9 +691,9 @@ func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 	txn2 := "I(A) I(B) C"
 	verify := &verifier{
 		history: "R(C)",
-		checkFn: func(env map[string]string) error {
-			if env["C"] != "2" && env["C"] != "0" {
-				return util.Errorf("expected C to be either 0 or 2, got %s", env["C"])
+		checkFn: func(env map[string]int64) error {
+			if env["C"] != 2 && env["C"] != 0 {
+				return util.Errorf("expected C to be either 0 or 2, got %d", env["C"])
 			}
 			return nil
 		},
@@ -648,9 +721,9 @@ func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	txn := "R(A) I(A) C"
 	verify := &verifier{
 		history: "R(A)",
-		checkFn: func(env map[string]string) error {
-			if env["A"] != "2" {
-				return util.Errorf("expected A=2, got %s", env["A"])
+		checkFn: func(env map[string]int64) error {
+			if env["A"] != 2 {
+				return util.Errorf("expected A=2, got %d", env["A"])
 			}
 			return nil
 		},
@@ -675,9 +748,9 @@ func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 	txn2 := "I(B) C"
 	verify := &verifier{
 		history: "R(D) R(E)",
-		checkFn: func(env map[string]string) error {
+		checkFn: func(env map[string]int64) error {
 			if env["D"] != env["E"] {
-				return util.Errorf("expected first SUM == second SUM (%s != %s)", env["D"], env["E"])
+				return util.Errorf("expected first SUM == second SUM (%d != %d)", env["D"], env["E"])
 			}
 			return nil
 		},
@@ -697,9 +770,9 @@ func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	txn2 := "I(B) C"
 	verify := &verifier{
 		history: "R(D)",
-		checkFn: func(env map[string]string) error {
-			if env["D"] != "0" {
-				return util.Errorf("expected delete range to yield an empty scan of same range, sum=%s", env["D"])
+		checkFn: func(env map[string]int64) error {
+			if env["D"] != 0 {
+				return util.Errorf("expected delete range to yield an empty scan of same range, sum=%d", env["D"])
 			}
 			return nil
 		},
@@ -731,9 +804,9 @@ func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	txn2 := "SC(A-C) I(B) SUM(B) C"
 	verify := &verifier{
 		history: "R(A) R(B)",
-		checkFn: func(env map[string]string) error {
-			if !((env["A"] == "1" && env["B"] == "2") || (env["A"] == "2" && env["B"] == "1")) {
-				return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%s, B=%s", env["A"], env["B"])
+		checkFn: func(env map[string]int64) error {
+			if !((env["A"] == 1 && env["B"] == 2) || (env["A"] == 2 && env["B"] == 1)) {
+				return util.Errorf("expected either A=1, B=2 -or- A=2, B=1, but have A=%d, B=%d", env["A"], env["B"])
 			}
 			return nil
 		},

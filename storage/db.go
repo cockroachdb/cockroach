@@ -31,11 +31,11 @@ import (
 
 // A TransactionOptions describes parameters for use with DB.RunTransaction.
 type TransactionOptions struct {
-	Name         string // Consice desc of txn for debugging
+	Name         string // Concise desc of txn for debugging
 	User         string
 	UserPriority int32
 	Isolation    proto.IsolationType
-	Retry        *util.RetryOptions // Null for defaults
+	Retry        *util.RetryOptions // Nil for defaults
 }
 
 // A DB interface provides asynchronous methods to access a key value

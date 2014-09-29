@@ -46,13 +46,13 @@ func (re *RetryMaxAttemptsError) Error() string {
 const (
 	// RetryBreak indicates the retry loop is finished and should return
 	// the result of the retry worker function.
-	RetryBreak RetryStatus = 0
+	RetryBreak RetryStatus = iota
 	// RetryReset indicates that the retry loop should be reset with
 	// no backoff for an immediate retry.
-	RetryReset RetryStatus = 1
+	RetryReset
 	// RetryContinue indicates that the retry loop should continue with
 	// another iteration of backoff / retry.
-	RetryContinue RetryStatus = 2
+	RetryContinue
 )
 
 // RetryOptions provides control of retry loop logic via the

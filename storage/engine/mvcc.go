@@ -232,7 +232,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 			// committed version, send write tool old error.
 			return &proto.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
 		} else {
-			// Othewrise, it's an old write to the current transaction. Just ignore.
+			// Otherwise, it's an old write to the current transaction. Just ignore.
 			return nil
 		}
 	} else { // In case the key metadata does not exist yet.

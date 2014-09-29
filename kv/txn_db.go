@@ -46,9 +46,9 @@ type txnDB struct {
 	*DB
 	storage.TransactionOptions
 	txnEnd bool // True if EndTransaction was invoked internally
+	wg     sync.WaitGroup
 
-	sync.Mutex // Protects timestamp & txn.
-	wg         sync.WaitGroup
+	sync.Mutex // Protects variables below.
 	timestamp  proto.Timestamp
 	txn        *proto.Transaction
 }
