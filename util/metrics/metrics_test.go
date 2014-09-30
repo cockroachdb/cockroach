@@ -252,16 +252,16 @@ func TestUpdateSubscribers(t *testing.T) {
 	go func() {
 		select {
 		case <-rawMetricStream:
-		case <-time.After(2 * time.Millisecond):
-			t.Error("received no raw metrics from the MetricSystem after 2 milliseconds.")
+		case <-time.After(10 * time.Millisecond):
+			t.Error("received no raw metrics from the MetricSystem after 10 milliseconds.")
 		}
 		metricSystem.UnsubscribeFromRawMetrics(rawMetricStream)
 	}()
 	go func() {
 		select {
 		case <-processedMetricStream:
-		case <-time.After(2 * time.Millisecond):
-			t.Error("received no processed metrics from the MetricSystem after 2 milliseconds.")
+		case <-time.After(10 * time.Millisecond):
+			t.Error("received no processed metrics from the MetricSystem after 10 milliseconds.")
 		}
 		metricSystem.UnsubscribeFromProcessedMetrics(processedMetricStream)
 	}()
@@ -310,8 +310,8 @@ func TestProcessedBroadcast(t *testing.T) {
 			t.Error("expected histogram1_count to be 3, instead was",
 				processedMetrics.Metrics["histogram1_count"])
 		}
-	case <-time.After(2 * time.Millisecond):
-		t.Error("received no metrics from the MetricSystem after 2 milliseconds.")
+	case <-time.After(10 * time.Millisecond):
+		t.Error("received no metrics from the MetricSystem after 10 milliseconds.")
 	}
 
 	metricSystem.UnsubscribeFromProcessedMetrics(processedMetricStream)
@@ -337,8 +337,8 @@ func TestRawBroadcast(t *testing.T) {
 			t.Error("expected counter2 rate to be 121, instead was",
 				rawMetrics.Counters["counter2"])
 		}
-	case <-time.After(2 * time.Millisecond):
-		t.Error("received no metrics from the MetricSystem after 2 milliseconds.")
+	case <-time.After(10 * time.Millisecond):
+		t.Error("received no metrics from the MetricSystem after 10 milliseconds.")
 	}
 
 	metricSystem.UnsubscribeFromRawMetrics(rawMetricStream)
