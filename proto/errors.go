@@ -83,17 +83,17 @@ func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
 
 // Error formats error.
 func (e *TransactionAbortedError) Error() string {
-	return fmt.Sprintf("txn aborted: %+v", e.Txn)
+	return fmt.Sprintf("txn %s: aborted", e.Txn)
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
-	return &TransactionRetryError{Txn: *txn}
+func NewTransactionRetryError(txn *Transaction, backoff bool) *TransactionRetryError {
+	return &TransactionRetryError{Txn: *txn, Backoff: backoff}
 }
 
 // Error formats error.
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn: %+v", e.Txn)
+	return fmt.Sprintf("retry txn: %s, backoff? %t", e.Txn, e.Backoff)
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError.
@@ -106,18 +106,15 @@ func NewTransactionStatusError(txn *Transaction, msg string) *TransactionStatusE
 
 // Error formats error.
 func (e *TransactionStatusError) Error() string {
-	return fmt.Sprintf("txn %+v: %s", e.Txn, e.Msg)
+	return fmt.Sprintf("txn %s: %s", e.Txn, e.Msg)
 }
 
 // Error formats error.
 func (e *WriteIntentError) Error() string {
-	return fmt.Sprintf("conflicting write intent at key %q from transaction %+v: resolved? %t", e.Key, e.Txn, e.Resolved)
+	return fmt.Sprintf("conflicting write intent at key %q from transaction %s: resolved? %t", e.Key, e.Txn, e.Resolved)
 }
 
 // Error formats error.
 func (e *WriteTooOldError) Error() string {
-	if e.Txn != nil {
-		return fmt.Sprintf("cannot write with a timestamp older than %+v, or older txn epoch: %+v", e.Timestamp, e.Txn)
-	}
-	return fmt.Sprintf("cannot write with a timestamp older than %+v", e.Timestamp)
+	return fmt.Sprintf("failed write with timestamp %s < %s", e.Timestamp, e.ExistingTimestamp)
 }

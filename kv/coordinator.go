@@ -147,21 +147,22 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 
 	tc.Lock()
 	defer tc.Unlock()
-	if _, ok := tc.txns[string(header.Txn.ID)]; !ok {
-		tc.txns[string(header.Txn.ID)] = &txnMetadata{
+	txnMeta, ok := tc.txns[string(header.Txn.ID)]
+	if !ok {
+		txnMeta = &txnMetadata{
 			txn:             *header.Txn,
 			lastUpdateTS:    tc.clock.Now(),
 			timeoutDuration: tc.clientTimeout,
 			closer:          make(chan struct{}),
 		}
+		tc.txns[string(header.Txn.ID)] = txnMeta
 
 		// TODO(jiajia): Reevaluate this logic of creating a goroutine
 		// for each active transaction. Spencer suggests a heap
 		// containing next heartbeat timeouts which is processed by a
 		// single goroutine.
-		go tc.heartbeat(header.Txn, tc.txns[string(header.Txn.ID)].closer)
+		go tc.heartbeat(header.Txn, txnMeta.closer)
 	}
-	txnMeta := tc.txns[string(header.Txn.ID)]
 	txnMeta.lastUpdateTS = tc.clock.Now()
 
 	// If read-only, exit now; otherwise, store the affected key range.
@@ -234,10 +235,7 @@ func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 		},
 	}
 
-	// Fire off a heartbeat first thing.
-	tc.db.InternalHeartbeatTxn(request)
-
-	// Now loop with ticker for periodic heartbeats.
+	// Loop with ticker for periodic heartbeats.
 	for {
 		select {
 		case <-ticker.C:
@@ -250,9 +248,11 @@ func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 			request.Header().Timestamp = tc.clock.Now()
 			reply := <-tc.db.InternalHeartbeatTxn(request)
 			// If the transaction is not in pending state, then we can stop
-			// the heartbeat. It's either aborted or commited, and we resolve
+			// the heartbeat. It's either aborted or committed, and we resolve
 			// write intents accordingly.
-			if reply.Txn.Status != proto.PENDING {
+			if reply.Error != nil {
+				log.Warningf("heartbeat to %q failed: %s", txn.ID, reply.GoError())
+			} else if reply.Txn.Status != proto.PENDING {
 				tc.EndTxn(reply.Txn)
 				return
 			}

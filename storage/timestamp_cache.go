@@ -69,6 +69,7 @@ type TimestampCache struct {
 type cacheEntry struct {
 	timestamp proto.Timestamp
 	txnMD5    [md5.Size]byte // Empty for no transaction
+	readOnly  bool           // Command is read-only
 }
 
 // NewTimestampCache returns a new timestamp cache with supplied
@@ -93,8 +94,9 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
-// key only. txnMD5 is empty for no transaction.
-func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte) {
+// key only. txnMD5 is empty for no transaction. readOnly specifies
+// whether the command adding this timestamp was read-only or not.
+func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
@@ -104,30 +106,33 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
-		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5}
+		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5, readOnly: readOnly}
 		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), ce)
 	}
 }
 
-// GetMax returns the maximum timestamp which overlaps the interval
-// spanning from start to end keys. Cached timestamps matching the
-// specified txnID are not considered.  If no part of the specified
+// GetMax returns the maximum read and write timestamps which overlap
+// the interval spanning from start to end. Cached timestamps matching
+// the specified txnID are not considered. If no part of the specified
 // range is overlapped by timestamps in the cache, the low water
-// timestamp is returned.
-func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) proto.Timestamp {
+// timestamp is returned for both read and write timestamps.
+func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
 	if end == nil {
 		end = engine.NextKey(start)
 	}
-	max := tc.lowWater
+	maxR := tc.lowWater
+	maxW := tc.lowWater
 	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
 		ce := v.(cacheEntry)
-		// Only consider cache entries which don't match the specified MD5.
-		if (proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) ||
-			!proto.MD5Equal(txnMD5, ce.txnMD5)) && max.Less(ce.timestamp) {
-			max = ce.timestamp
+		if proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) || !proto.MD5Equal(txnMD5, ce.txnMD5) {
+			if ce.readOnly && maxR.Less(ce.timestamp) {
+				maxR = ce.timestamp
+			} else if !ce.readOnly && maxW.Less(ce.timestamp) {
+				maxW = ce.timestamp
+			}
 		}
 	}
-	return max
+	return maxR, maxW
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no

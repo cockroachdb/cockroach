@@ -227,11 +227,13 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 				return err
 			}
 			batch = append(batch, batchPut)
+		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
+			// If we receive a Put request to write before an already-
+			// committed version, send write tool old error.
+			return &proto.WriteTooOldError{Timestamp: timestamp, ExistingTimestamp: meta.Timestamp}
 		} else {
-			// In case we receive a Put request to update an old version,
-			// it must be an error since raft should handle any client
-			// retry from timeout.
-			return &proto.WriteTooOldError{Timestamp: meta.Timestamp, Txn: meta.Txn}
+			// Otherwise, it's an old write to the current transaction. Just ignore.
+			return nil
 		}
 	} else { // In case the key metadata does not exist yet.
 		// Create key metadata.

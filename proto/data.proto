@@ -22,6 +22,8 @@ import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
 
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {
+  option (gogoproto.goproto_stringer) = false;
+
   // Holds a wall time, typically a unix epoch time
   // expressed in nanoseconds.
   optional int64 wall_time = 1 [(gogoproto.nullable) = false];
@@ -124,21 +126,24 @@ enum TransactionStatus {
 // used to decide whether a transaction will be aborted during
 // contention.
 message Transaction {
-  optional bytes id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
-  optional int32 priority = 2 [(gogoproto.nullable) = false];
-  optional IsolationType isolation = 3 [(gogoproto.nullable) = false];
-  optional TransactionStatus status = 4 [(gogoproto.nullable) = false];
+  option (gogoproto.goproto_stringer) = false;
+
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional bytes id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional int32 priority = 3 [(gogoproto.nullable) = false];
+  optional IsolationType isolation = 4 [(gogoproto.nullable) = false];
+  optional TransactionStatus status = 5 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
-  optional int32 epoch = 5 [(gogoproto.nullable) = false];
+  optional int32 epoch = 6 [(gogoproto.nullable) = false];
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
-  optional Timestamp timestamp = 6 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 7 [(gogoproto.nullable) = false];
   // Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
   // retry error.
-  optional Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  optional Timestamp max_timestamp = 8 [(gogoproto.nullable) = false];
   // The last hearbeat timestamp.
-  optional Timestamp last_heartbeat = 8;
+  optional Timestamp last_heartbeat = 9;
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

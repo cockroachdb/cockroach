@@ -132,6 +132,23 @@ var writeMethods = map[string]struct{}{
 	InternalSplit:         struct{}{},
 }
 
+// tsCacheMethods specifies the set of methods which affect the timestamp cache.
+var tsCacheMethods = map[string]struct{}{
+	Contains:              struct{}{},
+	Get:                   struct{}{},
+	Put:                   struct{}{},
+	ConditionalPut:        struct{}{},
+	Increment:             struct{}{},
+	Scan:                  struct{}{},
+	Delete:                struct{}{},
+	DeleteRange:           struct{}{},
+	AccumulateTS:          struct{}{},
+	ReapQueue:             struct{}{},
+	EnqueueUpdate:         struct{}{},
+	EnqueueMessage:        struct{}{},
+	InternalResolveIntent: struct{}{},
+}
+
 // ReadMethods lists the read-only methods supported by a range.
 var ReadMethods = util.MapKeys(readMethods).([]string)
 
@@ -156,6 +173,13 @@ func NeedWritePerm(method string) bool {
 // IsReadOnly returns true if the specified method only requires read permissions.
 func IsReadOnly(method string) bool {
 	return !NeedWritePerm(method)
+}
+
+// UsesTimestampCache returns true if the method affects or is
+// affected by the timestamp cache.
+func UsesTimestampCache(method string) bool {
+	_, ok := tsCacheMethods[method]
+	return ok
 }
 
 // A Cmd holds method, args, reply and a done channel for a command
@@ -358,8 +382,8 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
-	if err == nil {
-		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5())
+	if err == nil && UsesTimestampCache(method) {
+		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), true /* readOnly */)
 	}
 	r.cmdQ.Remove(cmdKey)
 	r.Unlock()
@@ -390,7 +414,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// cache. Instead of failing the request just because we can't
 		// decode the reply in the response cache, we proceed as though
 		// idempotence has expired.
-		log.Errorf("unable to read result for %+v from the response cache: %v", args, err)
+		log.Errorf("unable to read result for %+v from the response cache: %s", args, err)
 	}
 
 	// Add the write to the command queue to gate subsequent overlapping
@@ -400,23 +424,40 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// been run to successful completion.
 	cmdKey := r.beginCmd(header.Key, header.EndKey, false)
 
-	// One of the prime invariants of Cockroach is that a mutating
-	// command must write to a key with a greater timestamp than the
-	// most recent read or writeto the same key. Check the timestamp
-	// cache for reads/writes which are at least as recent as the
-	// timestamp of this write. If necessary, Update the write's
+	// Two important invariants of Cockroach: 1) encountering a more
+	// recently written value means transaction restart. 2) values must
+	// be written with a greater timestamp than the most recent read to
+	// the same key. Check the timestamp cache for reads/writes which
+	// are at least as recent as the timestamp of this write. For
+	// writes, send TransactionRetryError; for reads, update the write's
 	// timestamp. When the write returns, the updated timestamp will
 	// inform the final commit timestamp.
-	r.Lock() // Protect access to timestamp cache and read queue.
-	if ts := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5); !ts.Less(header.Timestamp) {
-		if log.V(1) {
-			log.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
+	if UsesTimestampCache(method) {
+		r.Lock()
+		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
+		r.Unlock()
+
+		// If there's a newer write timestamp and we're in a txn, set a
+		// write too old error in reply. We still go ahead and try the
+		// write; afterall, the cause of the higher timestamp may be an
+		// intent we can push.
+		if !wTS.Less(header.Timestamp) && header.Txn != nil {
+			err := &proto.WriteTooOldError{Timestamp: header.Timestamp, ExistingTimestamp: wTS}
+			reply.Header().SetGoError(err)
+		} else if !wTS.Less(header.Timestamp) || !rTS.Less(header.Timestamp) {
+			// Otherwise, make sure we advance the request's timestamp.
+			ts := wTS
+			if ts.Less(rTS) {
+				ts = rTS
+			}
+			if log.V(1) {
+				log.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
+			}
+			ts.Logical++ // increment logical component by one to differentiate.
+			// Update the request timestamp.
+			header.Timestamp = ts
 		}
-		ts.Logical++ // increment logical component by one to differentiate.
-		// Update the request timestamp.
-		header.Timestamp = ts
 	}
-	r.Unlock()
 
 	// Create command and enqueue for Raft.
 	cmd := &Cmd{
@@ -432,12 +473,12 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	completionFunc := func() error {
 		err := <-cmd.done
 
-		// Just as for reads, we update the timestamp cache with the timestamp
-		// of this write on success. This ensures a strictly higher timestamp
-		// for successive writes to the same key or key range.
+		// As for reads, update timestamp cache with the timestamp
+		// of this write on success. This ensures a strictly higher
+		// timestamp for successive writes to the same key or key range.
 		r.Lock()
-		if err == nil {
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5)
+		if err == nil && UsesTimestampCache(method) {
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
 		}
 		r.cmdQ.Remove(cmdKey)
 		r.Unlock()
@@ -445,7 +486,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %v", cmd.Method, cmd.Args, err)
+			log.Warningf("non-synchronous execution of %s with %+v failed: %s", cmd.Method, cmd.Args, err)
 		}
 		return err
 	}
@@ -511,7 +552,7 @@ func (r *Range) startGossip() {
 func (r *Range) maybeGossipClusterID() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyClusterID, r.Meta.ClusterID, ttlClusterIDGossip); err != nil {
-			log.Errorf("failed to gossip cluster ID %s: %v", r.Meta.ClusterID, err)
+			log.Errorf("failed to gossip cluster ID %s: %s", r.Meta.ClusterID, err)
 		}
 	}
 }
@@ -521,7 +562,7 @@ func (r *Range) maybeGossipClusterID() {
 func (r *Range) maybeGossipFirstRange() {
 	if r.gossip != nil && r.IsFirstRange() && r.IsLeader() {
 		if err := r.gossip.AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.RangeDescriptor, 0*time.Second); err != nil {
-			log.Errorf("failed to gossip first range metadata: %v", err)
+			log.Errorf("failed to gossip first range metadata: %s", err)
 		}
 	}
 }
@@ -536,11 +577,11 @@ func (r *Range) maybeGossipConfigs() {
 			if cp.dirty && r.ContainsKey(cp.keyPrefix) {
 				configMap, err := r.loadConfigMap(cp.keyPrefix, cp.configI)
 				if err != nil {
-					log.Errorf("failed loading %s config map: %v", cp.gossipKey, err)
+					log.Errorf("failed loading %s config map: %s", cp.gossipKey, err)
 					continue
 				} else {
 					if err := r.gossip.AddInfo(cp.gossipKey, configMap, 0*time.Second); err != nil {
-						log.Errorf("failed to gossip %s configMap: %v", cp.gossipKey, err)
+						log.Errorf("failed to gossip %s configMap: %s", cp.gossipKey, err)
 						continue
 					}
 				}
@@ -566,7 +607,7 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 		// gob encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
-			return nil, util.Errorf("unable to unmarshal config key %s: %v", string(kv.Key), err)
+			return nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)
 		}
 		configs = append(configs, &PrefixConfig{Prefix: bytes.TrimPrefix(kv.Key, keyPrefix), Config: config})
 	}
@@ -638,7 +679,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// to continue request idempotence when leadership changes.
 	if !IsReadOnly(method) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
-			log.Errorf("unable to write result of %+v: %+v to the response cache: %v",
+			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
 				args, reply, putErr)
 		}
 	}
@@ -763,8 +804,18 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the transaction timestamp.
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %+v", args.Txn.Timestamp)))
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.Timestamp)))
 			return
+		}
+		// Take max of requested epoch and existing epoch. The requester
+		// may have incremented the epoch on retries.
+		if reply.Txn.Epoch < args.Txn.Epoch {
+			reply.Txn.Epoch = args.Txn.Epoch
+		}
+		// Take max of requested priority and existing priority. This isn't
+		// terribly useful, but we do it for completeness.
+		if reply.Txn.Priority < args.Txn.Priority {
+			reply.Txn.Priority = args.Txn.Priority
 		}
 	} else {
 		// The transaction doesn't exist yet on disk; use the supplied version.
@@ -784,7 +835,7 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
 		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.Timestamp) {
-			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn))
+			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn, false /* !Backoff */))
 			return
 		}
 		reply.Txn.Status = proto.COMMITTED
@@ -1042,16 +1093,16 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	expiry := r.clock.Now()
 	expiry.WallTime -= 2 * DefaultHeartbeatInterval.Nanoseconds()
 	if reply.PusheeTxn.LastHeartbeat.Less(expiry) {
-		log.V(1).Infof("pushing expired txn %+v", reply.PusheeTxn)
+		log.V(1).Infof("pushing expired txn %s", reply.PusheeTxn)
 		pusherWins = true
 	} else if args.PusheeTxn.Epoch < reply.PusheeTxn.Epoch {
 		// Check for an intent from a prior epoch.
-		log.V(1).Infof("pushing intent from previous epoch for txn %+v", reply.PusheeTxn)
+		log.V(1).Infof("pushing intent from previous epoch for txn %s", reply.PusheeTxn)
 		pusherWins = true
 	} else if reply.PusheeTxn.Priority < priority ||
 		(reply.PusheeTxn.Priority == priority && args.Txn.Timestamp.Less(reply.PusheeTxn.Timestamp)) {
 		// Finally, choose based on priority; if priorities are equal, order by lower txn timestamp.
-		log.V(1).Infof("pushing intent from txn with lower priority %+v vs %d", reply.PusheeTxn, priority)
+		log.V(1).Infof("pushing intent from txn with lower priority %s vs %d", reply.PusheeTxn, priority)
 		pusherWins = true
 	} else if reply.PusheeTxn.Isolation == proto.SNAPSHOT && !args.Abort {
 		log.V(1).Infof("pushing timestamp for snapshot isolation txn")
@@ -1059,8 +1110,8 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	}
 
 	if !pusherWins {
-		log.V(1).Infof("failed to push intent %+v vs %+v/%d", reply.PusheeTxn, args.Txn, priority)
-		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn))
+		log.V(1).Infof("failed to push intent %s vs %s using priority=%d", reply.PusheeTxn, args.Txn, priority)
+		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn, true /* Backoff */))
 		return
 	}
 
@@ -1075,6 +1126,7 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 		reply.PusheeTxn.Timestamp = args.Timestamp
 		reply.PusheeTxn.Timestamp.Logical++
 	}
+
 	// Persist the pushed transaction.
 	if err := engine.PutProto(r.engine, key, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
@@ -1199,11 +1251,11 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 	oldEndKey := r.Meta.RangeDescriptor.EndKey
 	r.Meta.RangeDescriptor.EndKey = splitKey
 	if err = r.Update(); err != nil {
-		reply.SetGoError(util.Errorf("cannot save range, split aborted: %v", err))
+		reply.SetGoError(util.Errorf("cannot save range, split aborted: %s", err))
 		r.Meta.RangeDescriptor.EndKey = oldEndKey
 		newRange.Stop()
 		if err = newRange.Destroy(); err != nil {
-			log.Errorf("unable to drop obsolete range (error: %v), manual cleanup necessary: %v", err, newRange)
+			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %s", err, newRange)
 		}
 		return
 	}

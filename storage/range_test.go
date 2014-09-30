@@ -448,26 +448,29 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	// Set clock to time 2s for write.
+	t1 := 2 * time.Second
+	*mc = hlc.ManualClock(t1.Nanoseconds())
 	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 0)
 	pArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(Put, pArgs, pReply, true)
 	if err != nil {
 		t.Error(err)
 	}
-	// Verify the timestamp cache has 1sec for "a".
-	ts := rng.tsCache.GetMax(engine.Key("a"), nil, proto.NoTxnMD5)
-	if ts.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected wall time to have 1s, but got %+v", ts)
+	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
+	rTS, wTS := rng.tsCache.GetMax(engine.Key("a"), nil, proto.NoTxnMD5)
+	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
+		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
-	// Verify the timestamp cache has 1sec for "b".
-	ts = rng.tsCache.GetMax(engine.Key("b"), nil, proto.NoTxnMD5)
-	if ts.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected wall time to have 1s, but got %+v", ts)
+	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
+	rTS, wTS = rng.tsCache.GetMax(engine.Key("b"), nil, proto.NoTxnMD5)
+	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
+		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	ts = rng.tsCache.GetMax(engine.Key("c"), nil, proto.NoTxnMD5)
-	if ts.WallTime != 0 {
-		t.Errorf("expected wall time to have 0s, but got %+v", ts)
+	rTS, wTS = rng.tsCache.GetMax(engine.Key("c"), nil, proto.NoTxnMD5)
+	if rTS.WallTime != 0 || wTS.WallTime != 0 {
+		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}
 }
 
@@ -599,7 +602,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Start by laying down an intent to trip up future read or write to same key.
 		pArgs, pReply := putArgs(key, []byte("value"), 0)
-		pArgs.Txn = NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pArgs.Txn = NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 		if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
 			t.Fatal("test %d: %s", i, err)
@@ -631,7 +634,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Test for both read & write attempts.
 	key := engine.Key("a")
-	txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+	txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 	// Start with a read to warm the timestamp cache.
 	gArgs, gReply := getArgs(key, 0)
@@ -831,7 +834,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
-		txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		args, reply := endTxnArgs(txn, commit, 0)
 		args.Timestamp = txn.Timestamp
 		if err := rng.AddCmd(EndTransaction, args, reply, true); err != nil {
@@ -865,7 +868,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
-		txn := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 		// Start out with a heartbeat to the transaction.
 		hbArgs, hbReply := heartbeatArgs(txn, 0)
@@ -916,7 +919,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	}
 	key := []byte("a")
 	for _, test := range testCases {
-		txn := NewTransaction(key, 1, test.isolation, clock)
+		txn := NewTransaction("test", key, 1, test.isolation, clock)
 		// End the transaction with args timestamp moved forward in time.
 		args, reply := endTxnArgs(txn, test.commit, 0)
 		*mc = hlc.ManualClock(1)
@@ -926,8 +929,8 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 			if err == nil {
 				t.Errorf("expected error")
 			}
-			if _, ok := err.(*proto.TransactionRetryError); !ok {
-				t.Errorf("expected retry error; got %s", err)
+			if rErr, ok := err.(*proto.TransactionRetryError); !ok || rErr.Backoff {
+				t.Errorf("expected retry error with !Backoff; got %s", err)
 			}
 		} else {
 			if err != nil {
@@ -944,6 +947,41 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	}
 }
 
+// TestEndTransactionWithIncrementedEpoch verifies that txn ended with
+// a higher epoch (and priority) correctly assumes the higher epoch.
+func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	key := []byte("a")
+	txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+
+	// Start out with a heartbeat to the transaction.
+	hbArgs, hbReply := heartbeatArgs(txn, 0)
+	hbArgs.Timestamp = txn.Timestamp
+	if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
+		t.Error(err)
+	}
+
+	// Now end the txn with increased epoch and priority.
+	args, reply := endTxnArgs(txn, true, 0)
+	args.Timestamp = txn.Timestamp
+	args.Txn.Epoch = txn.Epoch + 1
+	args.Txn.Priority = txn.Priority + 1
+	if err := rng.AddCmd(EndTransaction, args, reply, true); err != nil {
+		t.Error(err)
+	}
+	if reply.Txn.Status != proto.COMMITTED {
+		t.Errorf("expected transaction status to be COMMITTED; got %s", reply.Txn.Status)
+	}
+	if reply.Txn.Epoch != txn.Epoch {
+		t.Errorf("expected epoch to equal %d; got %d", txn.Epoch, reply.Txn.Epoch)
+	}
+	if reply.Txn.Priority != txn.Priority {
+		t.Errorf("expected priority to equal %d; got %d", txn.Priority, reply.Txn.Priority)
+	}
+}
+
 // TestEndTransactionWithErrors verifies various error conditions
 // are checked such as transaction already being committed or
 // aborted, or timestamp or epoch regression.
@@ -953,7 +991,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 	regressTS := clock.Now()
 	*mc = hlc.ManualClock(1)
-	txn := NewTransaction(engine.Key(""), 1, proto.SERIALIZABLE, clock)
+	txn := NewTransaction("test", engine.Key(""), 1, proto.SERIALIZABLE, clock)
 
 	testCases := []struct {
 		key          engine.Key
@@ -962,10 +1000,10 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTS      proto.Timestamp
 		expErrRegexp string
 	}{
-		{engine.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn {.*}: already committed"},
-		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted: {.*}"},
-		{engine.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn {.*}: epoch regression: 0"},
-		{engine.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn {.*}: timestamp regression: {WallTime:1 Logical:0 .*}"},
+		{engine.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: already committed"},
+		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: aborted"},
+		{engine.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" {.*}: epoch regression: 0"},
+		{engine.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn \"test\" {.*}: timestamp regression: 0.000000001,0"},
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
@@ -993,8 +1031,8 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
 
 	args, reply := pushTxnArgs(pusher, pushee, true, 0)
 	args.Key = pusher.ID
@@ -1009,8 +1047,8 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 
 	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = 1
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
@@ -1062,8 +1100,8 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 1
 		pusher.Priority = 2 // Pusher will win.
 
@@ -1119,8 +1157,8 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1139,6 +1177,11 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		err := rng.AddCmd(InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
+		}
+		if err != nil {
+			if rErr, ok := err.(*proto.TransactionRetryError); !ok || !rErr.Backoff {
+				t.Errorf("expected txn retry error with Backoff=true: %v", err)
+			}
 		}
 	}
 }
@@ -1163,8 +1206,8 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
 		pusher.Priority = 1 // Pusher won't win based on priority.
 
@@ -1183,6 +1226,11 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
 		}
+		if err != nil {
+			if rErr, ok := err.(*proto.TransactionRetryError); !ok || !rErr.Backoff {
+				t.Errorf("expected txn retry error with Backoff=true: %v", err)
+			}
+		}
 	}
 }
 
@@ -1199,36 +1247,47 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 	testCases := []struct {
 		pusherPriority, pusheePriority int32
 		pusherTS, pusheeTS             proto.Timestamp
+		abort                          bool
 		expSuccess                     bool
 	}{
 		// Pusher has higher priority succeeds.
-		{2, 1, ts1, ts1, true},
+		{2, 1, ts1, ts1, true, true},
 		// Pusher has lower priority fails.
-		{1, 2, ts1, ts1, false},
+		{1, 2, ts1, ts1, true, false},
+		{1, 2, ts1, ts1, false, false},
 		// Pusher has lower priority fails, even with older txn timestamp.
-		{1, 2, ts1, ts2, false},
+		{1, 2, ts1, ts2, true, false},
+		// Pusher has lower priority, but older txn timestamp allows success if !abort.
+		{1, 2, ts1, ts2, false, true},
 		// With same priorities, older txn timestamp succeeds.
-		{1, 1, ts1, ts2, true},
+		{1, 1, ts1, ts2, true, true},
 		// With same priorities, same txn timestamp fails.
-		{1, 1, ts1, ts1, false},
+		{1, 1, ts1, ts1, true, false},
+		{1, 1, ts1, ts1, false, false},
 		// With same priorities, newer txn timestamp fails.
-		{1, 1, ts2, ts1, false},
+		{1, 1, ts2, ts1, true, false},
+		{1, 1, ts2, ts1, false, false},
 	}
 
 	for i, test := range testCases {
 		key := engine.Key(fmt.Sprintf("key-%d", i))
-		pusher := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
-		pushee := NewTransaction(key, 1, proto.SERIALIZABLE, clock)
+		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = test.pusherPriority
 		pushee.Priority = test.pusheePriority
 		pusher.Timestamp = test.pusherTS
 		pushee.Timestamp = test.pusheeTS
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
-		args, reply := pushTxnArgs(pusher, pushee, true, 0)
+		args, reply := pushTxnArgs(pusher, pushee, test.abort, 0)
 		err := rng.AddCmd(InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %v", i, test.expSuccess, err)
+		}
+		if err != nil {
+			if rErr, ok := err.(*proto.TransactionRetryError); !ok || !rErr.Backoff {
+				t.Errorf("expected txn retry error with Backoff=true: %v", err)
+			}
 		}
 	}
 }
@@ -1241,8 +1300,8 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
 	pusher.Priority = 2
 	pushee.Priority = 1 // pusher will win
 	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 25}
@@ -1271,8 +1330,8 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction(engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction(engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
 	pusher.Priority = 1
 	pushee.Priority = 2 // pusher will lose
 	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 0}

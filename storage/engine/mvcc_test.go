@@ -724,13 +724,13 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	if err := mvcc.Put(testKey1, makeTS(1, 0), value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
-	// Try a write with an earlier timestamp.
-	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1e2); err == nil {
-		t.Fatal("expected write too old error")
+	// Try a write with an earlier timestamp; this is just ignored.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1e2); err != nil {
+		t.Fatal(err)
 	}
-	// Try a write with an earlier epoch.
-	if err := mvcc.Put(testKey1, makeTS(1, 0), value1, txn1); err == nil {
-		t.Fatal("expected write too old error")
+	// Try a write with an earlier epoch; again ignored.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value1, txn1); err != nil {
+		t.Fatal(err)
 	}
 	// Try a write with different value using both later timestamp and epoch.
 	if err := mvcc.Put(testKey1, makeTS(1, 0), value3, txn1e2); err != nil {
@@ -739,6 +739,10 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	// Resolve the intent.
 	if err := mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
+	}
+	// Now try writing an earlier intent--should get write too old error.
+	if err := mvcc.Put(testKey1, makeTS(0, 0), value2, txn2); err == nil {
+		t.Fatal("expected write too old error")
 	}
 	// Attempt to read older timestamp; should fail.
 	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)

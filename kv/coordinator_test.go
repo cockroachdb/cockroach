@@ -34,7 +34,7 @@ import (
 func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
 	kv := NewLocalKV()
 	db := NewDB(kv, clock)
 	store := storage.NewStore(clock, eng, db, nil)

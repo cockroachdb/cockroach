@@ -56,9 +56,11 @@ message TransactionAbortedError {
 
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp. The
-// transaction struct to use is returned with the error.
+// transaction struct to use is returned with the error. Backoff
+// indicates whether the retry should backoff or proceed immediately.
 message TransactionRetryError {
   optional Transaction txn = 1 [(gogoproto.nullable) = false];
+  optional bool backoff = 2 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -90,7 +92,7 @@ message WriteIntentError {
 // history. The write should be retried at the Timestamp + 1.
 message WriteTooOldError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  optional Transaction txn = 2;
+  optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // Error is a union type containing all available errors.
