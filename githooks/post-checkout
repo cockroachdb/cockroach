@@ -1,0 +1,4 @@
+#!/bin/bash
+cd "$(git rev-parse --show-toplevel)"
+(cd proto; make clean) > /dev/null 2>&1
+(cd roachlib; make clean) > /dev/null 2>&1
