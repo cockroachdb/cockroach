@@ -947,6 +947,41 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	}
 }
 
+// TestEndTransactionWithIncrementedEpoch verifies that txn ended with
+// a higher epoch (and priority) correctly assumes the higher epoch.
+func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
+	rng, _, clock, _ := createTestRangeWithClock(t)
+	defer rng.Stop()
+
+	key := []byte("a")
+	txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
+
+	// Start out with a heartbeat to the transaction.
+	hbArgs, hbReply := heartbeatArgs(txn, 0)
+	hbArgs.Timestamp = txn.Timestamp
+	if err := rng.AddCmd(InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
+		t.Error(err)
+	}
+
+	// Now end the txn with increased epoch and priority.
+	args, reply := endTxnArgs(txn, true, 0)
+	args.Timestamp = txn.Timestamp
+	args.Txn.Epoch = txn.Epoch + 1
+	args.Txn.Priority = txn.Priority + 1
+	if err := rng.AddCmd(EndTransaction, args, reply, true); err != nil {
+		t.Error(err)
+	}
+	if reply.Txn.Status != proto.COMMITTED {
+		t.Errorf("expected transaction status to be COMMITTED; got %s", reply.Txn.Status)
+	}
+	if reply.Txn.Epoch != txn.Epoch {
+		t.Errorf("expected epoch to equal %d; got %d", txn.Epoch, reply.Txn.Epoch)
+	}
+	if reply.Txn.Priority != txn.Priority {
+		t.Errorf("expected priority to equal %d; got %d", txn.Priority, reply.Txn.Priority)
+	}
+}
+
 // TestEndTransactionWithErrors verifies various error conditions
 // are checked such as transaction already being committed or
 // aborted, or timestamp or epoch regression.

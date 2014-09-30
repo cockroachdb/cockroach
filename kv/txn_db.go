@@ -18,6 +18,7 @@
 package kv
 
 import (
+	"bytes"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -183,20 +184,26 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		if tdb.timestamp.Less(reply.Header().Timestamp) {
 			tdb.timestamp = reply.Header().Timestamp
 		}
-		if /*log.V(1) && */ reply.Header().GoError() != nil {
+		if log.V(1) && reply.Header().GoError() != nil {
 			log.Infof("command %s %+v failed: %s", method, args, reply.Header().GoError())
 		}
 		// Take action on various errors.
 		switch t := reply.Header().GoError().(type) {
 		case *proto.TransactionRetryError:
-			// Note that the priority we upgrade with is the error txn's
-			// priority - 1. This is because on retry errors, the listed
-			// txn is the conflicting txn.
+			// Increase timestamp if applicable.
+			if tdb.timestamp.Less(t.Txn.Timestamp) {
+				tdb.timestamp = t.Txn.Timestamp
+				if !bytes.Equal(tdb.txn.ID, t.Txn.ID) {
+					tdb.timestamp.Logical++ // ensure this txn's timestamp > other txn
+				}
+			}
+			// Abort if this isn't the same transaction.
 			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, t.Txn.Priority-1, tdb.timestamp)
 		case *proto.TransactionAbortedError:
-			// Note that the priority we upgrade with is simply the error
-			// txn's priority. This is because on aborted errors, we're
-			// getting our own txn, whose priority has already been updated.
+			// Increase timestamp if applicable.
+			if tdb.timestamp.Less(t.Txn.Timestamp) {
+				tdb.timestamp = t.Txn.Timestamp
+			}
 			tdb.txn.Restart(true /* Abort */, tdb.UserPriority, t.Txn.Priority, tdb.timestamp)
 		case *proto.WriteTooOldError:
 			// If write is too old, update the timestamp and restart the

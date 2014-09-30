@@ -807,6 +807,16 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.Timestamp)))
 			return
 		}
+		// Take max of requested epoch and existing epoch. The requester
+		// may have incremented the epoch on retries.
+		if reply.Txn.Epoch < args.Txn.Epoch {
+			reply.Txn.Epoch = args.Txn.Epoch
+		}
+		// Take max of requested priority and existing priority. This isn't
+		// terribly useful, but we do it for completeness.
+		if reply.Txn.Priority < args.Txn.Priority {
+			reply.Txn.Priority = args.Txn.Priority
+		}
 	} else {
 		// The transaction doesn't exist yet on disk; use the supplied version.
 		reply.Txn = gogoproto.Clone(args.Txn).(*proto.Transaction)

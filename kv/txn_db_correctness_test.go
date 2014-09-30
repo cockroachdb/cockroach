@@ -15,13 +15,12 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-// +build !race
-
 package kv
 
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"strings"
@@ -54,185 +53,6 @@ var testTxnRetryOpts = &util.RetryOptions{
 // priorities, isolation levels and interleavings of commands in the
 // histories.
 
-// verifier executes the history and then invokes checkFn to verify
-// the environment (map from key to value) left from executing the
-// history.
-type verifier struct {
-	history string
-	checkFn func(env map[string]int64) error
-}
-
-// historyVerifier parses a planned transaction execution history into
-// commands per transaction and each command's previous dependency.
-// When run, each transaction's commands are executed via a goroutine
-// in a separate txnDB. The results of the execution are added to the
-// actual commands slice. When all txns have completed the actual history
-// is compared to the expected history.
-type historyVerifier struct {
-	name       string
-	txns       [][]*cmd
-	verify     *verifier
-	verifyCmds []*cmd
-	expSuccess bool
-	symmetric  bool
-
-	sync.Mutex // protects actual slice of command outcomes.
-	actual     []string
-	wg         sync.WaitGroup
-}
-
-func newHistoryVerifier(name string, txns []string, verify *verifier, expSuccess bool, t *testing.T) *historyVerifier {
-	return &historyVerifier{
-		name:       name,
-		txns:       parseHistories(txns, t),
-		verify:     verify,
-		verifyCmds: parseHistory(0, verify.history, t),
-		expSuccess: expSuccess,
-		symmetric:  areHistoriesSymmetric(txns),
-	}
-}
-
-// areHistoriesSymmetric returns whether all txn histories are the same.
-func areHistoriesSymmetric(txns []string) bool {
-	for i := 1; i < len(txns); i++ {
-		if txns[i] != txns[0] {
-			return false
-		}
-	}
-	return true
-}
-
-func (hv *historyVerifier) run(isolations []proto.IsolationType, db *DB, t *testing.T) {
-	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
-	priorities := make([]int32, len(hv.txns))
-	for i := 0; i < len(hv.txns); i++ {
-		priorities[i] = int32(i + 1)
-	}
-	enumPri := enumeratePriorities(priorities)
-	enumIso := enumerateIsolations(len(hv.txns), isolations)
-	enumHis := enumerateHistories(hv.txns, hv.symmetric)
-
-	historyIdx := 1
-	var failures []error
-	for _, p := range enumPri {
-		for _, i := range enumIso {
-			for _, h := range enumHis {
-				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
-					failures = append(failures, err)
-				}
-				historyIdx++
-			}
-		}
-	}
-
-	if hv.expSuccess == true && len(failures) > 0 {
-		t.Errorf("expected success, experienced %d errors", len(failures))
-	} else if !hv.expSuccess && len(failures) == 0 {
-		t.Errorf("expected failures for the %q anomaly, but experienced none", hv.name)
-	}
-}
-
-func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
-	isolations []proto.IsolationType, cmds []*cmd, db *DB, t *testing.T) error {
-	plannedStr := historyString(cmds)
-	log.Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
-
-	hv.actual = []string{}
-	hv.wg.Add(len(priorities))
-	txnMap := map[int][]*cmd{}
-	var prev *cmd
-	for _, c := range cmds {
-		c.historyIdx = historyIdx
-		txnMap[c.txnIdx] = append(txnMap[c.txnIdx], c)
-		c.init(prev)
-		prev = c
-	}
-	for i, txnCmds := range txnMap {
-		go func(i int, txnCmds []*cmd) {
-			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
-				t.Errorf("unexpected failure running transaction %d (%s): %v", i, cmds, err)
-			}
-		}(i, txnCmds)
-	}
-	hv.wg.Wait()
-
-	// Construct string for actual history.
-	actualStr := strings.Join(hv.actual, " ")
-
-	// Verify history.
-	verifyEnv := map[string]int64{}
-	for _, c := range hv.verifyCmds {
-		c.historyIdx = historyIdx
-		c.env = verifyEnv
-		c.init(nil)
-		_, err := c.execute(db, t)
-		if err != nil {
-			t.Errorf("failed on execution of verification cmd %s: %s", c, err)
-			return err
-		}
-	}
-
-	err := hv.verify.checkFn(verifyEnv)
-	if err == nil {
-		log.Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
-	}
-	if hv.expSuccess && err != nil {
-		t.Errorf("iso=%v, pri=%v, history=%q: %s, actual=%q", isolations, priorities, plannedStr, actualStr, err)
-		log.Errorf("FAILED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
-	}
-	return err
-}
-
-func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
-	isolation proto.IsolationType, cmds []*cmd, db *DB, t *testing.T) error {
-	var retry int
-	txnName := fmt.Sprintf("txn%d", txnIdx)
-	txnOpts := &storage.TransactionOptions{
-		Name:         txnName,
-		User:         storage.UserRoot,
-		UserPriority: -priority,
-		Isolation:    isolation,
-		Retry:        testTxnRetryOpts,
-	}
-	err := db.RunTransaction(txnOpts, func(tdb storage.DB) error {
-		env := map[string]int64{}
-		// TODO(spencer): restarts must create additional histories. They
-		// look like: given the current partial history and a restart on
-		// txn txnIdx, re-enumerate a set of all histories containing the
-		// remaining commands from extant txns and all commands from this
-		// restarted txn.
-
-		// If this is attempt > 1, reset cmds so no waits.
-		if retry++; retry == 2 {
-			for _, c := range cmds {
-				c.done()
-			}
-		}
-		log.V(1).Infof("%s, retry=%d", txnName, retry)
-		for i := range cmds {
-			cmds[i].env = env
-			if err := hv.runCmd(tdb, txnIdx, retry, i, cmds, t); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	hv.wg.Done()
-	return err
-}
-
-func (hv *historyVerifier) runCmd(db storage.DB, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
-	fmtStr, err := cmds[cmdIdx].execute(db, t)
-	if err != nil {
-		return err
-	}
-	hv.Lock()
-	cmdStr := fmt.Sprintf(fmtStr, txnIdx, retry)
-	hv.actual = append(hv.actual, cmdStr)
-	hv.Unlock()
-	return nil
-}
-
 // cmd is a command to run within a transaction. Commands keep a
 // reference to the previous command's wait channel, in order to
 // enforce an ordering. If a previous wait channel is set, the
@@ -240,6 +60,7 @@ func (hv *historyVerifier) runCmd(db storage.DB, txnIdx, retry, cmdIdx int, cmds
 type cmd struct {
 	name        string                                          // name of the cmd for debug output
 	key, endKey string                                          // key and optional endKey
+	debug       string                                          // optional debug string
 	txnIdx      int                                             // transaction index in the history
 	historyIdx  int                                             // this suffixes key so tests get unique keys
 	fn          func(c *cmd, db storage.DB, t *testing.T) error // execution function
@@ -255,6 +76,7 @@ func (c *cmd) init(prevCmd *cmd) {
 		c.prev = nil
 	}
 	c.ch = make(chan struct{}, 1)
+	c.debug = ""
 }
 
 func (c *cmd) execute(db storage.DB, t *testing.T) (string, error) {
@@ -267,18 +89,19 @@ func (c *cmd) execute(db storage.DB, t *testing.T) (string, error) {
 		c.ch <- struct{}{}
 	}
 	if len(c.key) > 0 && len(c.endKey) > 0 {
-		return fmt.Sprintf("%s%%d.%%d(%s-%s)", c.name, c.key, c.endKey), err
+		return fmt.Sprintf("%s%%d.%%d(%s-%s)%s", c.name, c.key, c.endKey, c.debug), err
 	}
 	if len(c.key) > 0 {
-		return fmt.Sprintf("%s%%d.%%d(%s)", c.name, c.key), err
+		return fmt.Sprintf("%s%%d.%%d(%s)%s", c.name, c.key, c.debug), err
 	}
-	return fmt.Sprintf("%s%%d.%%d", c.name), err
+	return fmt.Sprintf("%s%%d.%%d%s", c.name, c.debug), err
 }
 
 func (c *cmd) done() {
 	close(c.ch)
 	c.ch = nil
 	c.prev = nil
+	c.debug = ""
 }
 
 func (c *cmd) getKey() []byte {
@@ -310,6 +133,7 @@ func readCmd(c *cmd, db storage.DB, t *testing.T) error {
 	if r.GoError() == nil {
 		if r.Value != nil {
 			c.env[c.key] = r.Value.GetInteger()
+			c.debug = fmt.Sprintf("[%d]", r.Value.GetInteger())
 		}
 	}
 	return r.GoError()
@@ -329,11 +153,14 @@ func scanCmd(c *cmd, db storage.DB, t *testing.T) error {
 		RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
 	})
 	if r.GoError() == nil {
+		var vals []string
 		keyPrefix := []byte(fmt.Sprintf("%d.", c.historyIdx))
 		for _, kv := range r.Rows {
 			key := bytes.TrimPrefix(kv.Key, keyPrefix)
 			c.env[string(key)] = kv.Value.GetInteger()
+			vals = append(vals, fmt.Sprintf("%d", kv.Value.GetInteger()))
 		}
+		c.debug = fmt.Sprintf("[%s]", strings.Join(vals, " "))
 	}
 	return r.GoError()
 }
@@ -347,6 +174,7 @@ func incCmd(c *cmd, db storage.DB, t *testing.T) error {
 	})
 	if r.GoError() == nil {
 		c.env[c.key] = r.NewValue
+		c.debug = fmt.Sprintf("[%d]", r.NewValue)
 	}
 	return r.GoError()
 }
@@ -362,6 +190,7 @@ func sumCmd(c *cmd, db storage.DB, t *testing.T) error {
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
 		Value:         proto.Value{Integer: gogoproto.Int64(sum)},
 	})
+	c.debug = fmt.Sprintf("[%d]", sum)
 	return r.GoError()
 }
 
@@ -442,17 +271,16 @@ var (
 // the isolation type for each transaction. The outer slice contains
 // each possible combination of such transaction isolations.
 func enumerateIsolations(numTxns int, isolations []proto.IsolationType) [][]proto.IsolationType {
-	// Use a count from 0 to 2^N-1 and examine binary digits to get all
-	// possible combinations of txn isolations.
+	// Use a count from 0 to pow(# isolations, numTxns) and examine
+	// n-ary digits to get all possible combinations of txn isolations.
+	n := len(isolations)
 	result := [][]proto.IsolationType{}
-	for i := 0; i < 1<<uint(numTxns); i++ {
+	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
 		desc := make([]proto.IsolationType, numTxns)
+		val := i
 		for j := 0; j < numTxns; j++ {
-			bit := 0
-			if i&(1<<uint(j)) != 0 {
-				bit = 1
-			}
-			desc[j] = isolations[bit%len(isolations)]
+			desc[j] = isolations[val%n]
+			val /= n
 		}
 		result = append(result, desc)
 	}
@@ -474,6 +302,13 @@ func TestEnumerateIsolations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(enumerateIsolations(3, bothIsolations), expIsolations) {
 		t.Errorf("expected enumeration to match %s; got %s", expIsolations, enumerateIsolations(3, bothIsolations))
+	}
+
+	expDegenerate := [][]proto.IsolationType{
+		{SSI, SSI, SSI},
+	}
+	if !reflect.DeepEqual(enumerateIsolations(3, onlySerializable), expDegenerate) {
+		t.Errorf("expected enumeration to match %s; got %s", expDegenerate, enumerateIsolations(3, onlySerializable))
 	}
 }
 
@@ -573,6 +408,188 @@ func TestEnumerateHistories(t *testing.T) {
 	}
 }
 
+// verifier executes the history and then invokes checkFn to verify
+// the environment (map from key to value) left from executing the
+// history.
+type verifier struct {
+	history string
+	checkFn func(env map[string]int64) error
+}
+
+// historyVerifier parses a planned transaction execution history into
+// commands per transaction and each command's previous dependency.
+// When run, each transaction's commands are executed via a goroutine
+// in a separate txnDB. The results of the execution are added to the
+// actual commands slice. When all txns have completed the actual history
+// is compared to the expected history.
+type historyVerifier struct {
+	name       string
+	txns       [][]*cmd
+	verify     *verifier
+	verifyCmds []*cmd
+	expSuccess bool
+	symmetric  bool
+
+	sync.Mutex // protects actual slice of command outcomes.
+	actual     []string
+	wg         sync.WaitGroup
+}
+
+func newHistoryVerifier(name string, txns []string, verify *verifier, expSuccess bool, t *testing.T) *historyVerifier {
+	return &historyVerifier{
+		name:       name,
+		txns:       parseHistories(txns, t),
+		verify:     verify,
+		verifyCmds: parseHistory(0, verify.history, t),
+		expSuccess: expSuccess,
+		symmetric:  areHistoriesSymmetric(txns),
+	}
+}
+
+// areHistoriesSymmetric returns whether all txn histories are the same.
+func areHistoriesSymmetric(txns []string) bool {
+	for i := 1; i < len(txns); i++ {
+		if txns[i] != txns[0] {
+			return false
+		}
+	}
+	return true
+}
+
+func (hv *historyVerifier) run(isolations []proto.IsolationType, db *DB, t *testing.T) {
+	log.Infof("verifying all possible histories for the %q anomaly", hv.name)
+	priorities := make([]int32, len(hv.txns))
+	for i := 0; i < len(hv.txns); i++ {
+		priorities[i] = int32(i + 1)
+	}
+	enumPri := enumeratePriorities(priorities)
+	enumIso := enumerateIsolations(len(hv.txns), isolations)
+	enumHis := enumerateHistories(hv.txns, hv.symmetric)
+
+	historyIdx := 1
+	var failures []error
+	for _, p := range enumPri {
+		for _, i := range enumIso {
+			for _, h := range enumHis {
+				if err := hv.runHistory(historyIdx, p, i, h, db, t); err != nil {
+					failures = append(failures, err)
+				}
+				historyIdx++
+			}
+		}
+	}
+
+	if hv.expSuccess == true && len(failures) > 0 {
+		t.Errorf("expected success, experienced %d errors", len(failures))
+	} else if !hv.expSuccess && len(failures) == 0 {
+		t.Errorf("expected failures for the %q anomaly, but experienced none", hv.name)
+	}
+}
+
+func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
+	isolations []proto.IsolationType, cmds []*cmd, db *DB, t *testing.T) error {
+	plannedStr := historyString(cmds)
+	log.V(1).Infof("attempting iso=%v pri=%v history=%s", isolations, priorities, plannedStr)
+
+	hv.actual = []string{}
+	hv.wg.Add(len(priorities))
+	txnMap := map[int][]*cmd{}
+	var prev *cmd
+	for _, c := range cmds {
+		c.historyIdx = historyIdx
+		txnMap[c.txnIdx] = append(txnMap[c.txnIdx], c)
+		c.init(prev)
+		prev = c
+	}
+	for i, txnCmds := range txnMap {
+		go func(i int, txnCmds []*cmd) {
+			if err := hv.runTxn(i, priorities[i-1], isolations[i-1], txnCmds, db, t); err != nil {
+				t.Errorf("unexpected failure running transaction %d (%s): %v", i, cmds, err)
+			}
+		}(i, txnCmds)
+	}
+	hv.wg.Wait()
+
+	// Construct string for actual history.
+	actualStr := strings.Join(hv.actual, " ")
+
+	// Verify history.
+	var verifyStrs []string
+	verifyEnv := map[string]int64{}
+	for _, c := range hv.verifyCmds {
+		c.historyIdx = historyIdx
+		c.env = verifyEnv
+		c.init(nil)
+		fmtStr, err := c.execute(db, t)
+		if err != nil {
+			t.Errorf("failed on execution of verification cmd %s: %s", c, err)
+			return err
+		}
+		cmdStr := fmt.Sprintf(fmtStr, 0, 0)
+		verifyStrs = append(verifyStrs, cmdStr)
+	}
+
+	err := hv.verify.checkFn(verifyEnv)
+	if err == nil {
+		log.V(1).Infof("PASSED: iso=%v, pri=%v, history=%q", isolations, priorities, actualStr)
+	}
+	if hv.expSuccess && err != nil {
+		verifyStr := strings.Join(verifyStrs, " ")
+		t.Errorf("iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s", isolations, priorities, plannedStr, actualStr, verifyStr, err)
+	}
+	return err
+}
+
+func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
+	isolation proto.IsolationType, cmds []*cmd, db *DB, t *testing.T) error {
+	var retry int
+	txnName := fmt.Sprintf("txn%d", txnIdx)
+	txnOpts := &storage.TransactionOptions{
+		Name:         txnName,
+		User:         storage.UserRoot,
+		UserPriority: -priority,
+		Isolation:    isolation,
+		Retry:        testTxnRetryOpts,
+	}
+	err := db.RunTransaction(txnOpts, func(tdb storage.DB) error {
+		env := map[string]int64{}
+		// TODO(spencer): restarts must create additional histories. They
+		// look like: given the current partial history and a restart on
+		// txn txnIdx, re-enumerate a set of all histories containing the
+		// remaining commands from extant txns and all commands from this
+		// restarted txn.
+
+		// If this is attempt > 1, reset cmds so no waits.
+		if retry++; retry == 2 {
+			for _, c := range cmds {
+				c.done()
+			}
+		}
+		log.V(1).Infof("%s, retry=%d", txnName, retry)
+		for i := range cmds {
+			cmds[i].env = env
+			if err := hv.runCmd(tdb, txnIdx, retry, i, cmds, t); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	hv.wg.Done()
+	return err
+}
+
+func (hv *historyVerifier) runCmd(db storage.DB, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
+	fmtStr, err := cmds[cmdIdx].execute(db, t)
+	if err != nil {
+		return err
+	}
+	hv.Lock()
+	cmdStr := fmt.Sprintf(fmtStr, txnIdx, retry)
+	hv.actual = append(hv.actual, cmdStr)
+	hv.Unlock()
+	return nil
+}
+
 // checkConcurrency creates a history verifier, starts a new database
 // and runs the verifier.
 func checkConcurrency(name string, isolations []proto.IsolationType, txns []string,
@@ -612,7 +629,7 @@ func checkConcurrency(name string, isolations []proto.IsolationType, txns []stri
 //
 // Lost update would typically fail with a history such as:
 //    R1(A) R2(B) W2(B) R2(A) W2(A) R1(B) C1 C2
-func Disable_TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
+func TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 	txn1 := "R(A) R(B) SUM(C) C"
 	txn2 := "I(A) I(B) C"
 	verify := &verifier{
@@ -643,7 +660,7 @@ func Disable_TestTxnDBInconsistentAnalysisAnomaly(t *testing.T) {
 // However, the following variant will cause a lost update in
 // READ_COMMITTED and in practice requires REPEATABLE_READ to avoid.
 //   R1(A) R2(A) I1(A) C1 I2(A) C2
-func Disable_TestTxnDBLostUpdateAnomaly(t *testing.T) {
+func TestTxnDBLostUpdateAnomaly(t *testing.T) {
 	txn := "R(A) I(A) C"
 	verify := &verifier{
 		history: "R(A)",
@@ -669,7 +686,7 @@ func Disable_TestTxnDBLostUpdateAnomaly(t *testing.T) {
 //
 // Phantom reads would typically fail with a history such as:
 //   SC1(A-C) I2(B) C2 SC1(A-C) C1
-func Disable_TestTxnDBPhantomReadAnomaly(t *testing.T) {
+func TestTxnDBPhantomReadAnomaly(t *testing.T) {
 	txn1 := "SC(A-C) SUM(D) SC(A-C) SUM(E) C"
 	txn2 := "I(B) C"
 	verify := &verifier{
@@ -691,7 +708,7 @@ func Disable_TestTxnDBPhantomReadAnomaly(t *testing.T) {
 //
 // Phantom deletes would typically fail with a history such as:
 //   DR1(A-C) I2(B) C2 SC1(A-C) C1
-func Disable_TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
+func TestTxnDBPhantomDeleteAnomaly(t *testing.T) {
 	txn1 := "DR(A-C) SC(A-C) SUM(D) C"
 	txn2 := "I(B) C"
 	verify := &verifier{
