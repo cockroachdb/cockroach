@@ -94,6 +94,9 @@ type Engine interface {
 	// given snapshotID.
 	// Specify max=0 for unbounded scans.
 	ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error)
+	// ApproximateSize returns the approximate number of bytes the engine is
+	// using to store data for the given range of keys.
+	ApproximateSize(start, end Key) (uint64, error)
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.

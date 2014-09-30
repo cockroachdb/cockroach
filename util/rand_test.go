@@ -43,3 +43,13 @@ func TestRandIntInRange(t *testing.T) {
 		}
 	}
 }
+
+func TestRandString(t *testing.T) {
+	rand := NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		x := RandString(rand, i)
+		if len(x) != i {
+			t.Errorf("got array with unexpected length: %d (expected %d)", len(x), i)
+		}
+	}
+}
