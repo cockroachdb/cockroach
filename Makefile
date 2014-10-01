@@ -22,14 +22,15 @@ GO ?= go
 
 DEPLOY      := $(CURDIR)/deploy
 GOPATH      := $(CURDIR)/_vendor:$(GOPATH)
-ROCKSDB     := $(CURDIR)/_vendor/rocksdb
+USR 		:= $(CURDIR)/_vendor/usr
+
 ROACH_PROTO := $(CURDIR)/proto
 ROACH_LIB   := $(CURDIR)/roachlib
 SQL_PARSER  := $(CURDIR)/sql/parser
 
-CFLAGS   := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
-CXXFLAGS := "-I$(ROCKSDB)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
-LDFLAGS  := "-L/usr/local/lib -L$(ROCKSDB) -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
+CFLAGS   := "-I$(USR)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
+CXXFLAGS := "-I$(USR)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
+LDFLAGS  := "-L$(USR)/lib -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
 
 FLAGS := LDFLAGS=$(LDFLAGS) \
          CFLAGS=$(CFLAGS) \
@@ -45,13 +46,10 @@ TESTFLAGS := -logtostderr -timeout 10s
 
 all: build test
 
-auxiliary: rocksdb roach_proto roach_lib sqlparser
+auxiliary: roach_proto roach_lib sqlparser
 
 build: auxiliary
 	$(CGO_FLAGS) $(GO) build -o cockroach
-
-rocksdb:
-	cd $(ROCKSDB); make static_lib
 
 roach_proto:
 	cd $(ROACH_PROTO); $(FLAGS) make static_lib
@@ -79,7 +77,6 @@ acceptance:
 
 clean:
 	$(GO) clean
-	cd $(ROCKSDB); make clean
 	cd $(ROACH_PROTO); make clean
 	cd $(ROACH_LIB); make clean
 	cd $(SQL_PARSER); make clean

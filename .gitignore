@@ -35,3 +35,6 @@ _testmain.go
 
 cockroach
 *.swp
+
+
+_vendor/usr

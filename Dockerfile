@@ -5,7 +5,7 @@ MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 # Setup the toolchain.
 RUN apt-get update -y -qq
 RUN apt-get dist-upgrade -y -qq
-RUN apt-get install --auto-remove -y -qq git mercurial build-essential bzr zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev libprotobuf-dev protobuf-compiler libgflags-dev
+RUN apt-get install --auto-remove -y -qq git mercurial build-essential bzr libprotobuf-dev protobuf-compiler
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.7 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.7 50
