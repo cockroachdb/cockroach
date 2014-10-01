@@ -39,7 +39,13 @@ var (
 // computeSize returns the approximate size in bytes that the keyVal
 // object took while stored in the underlying LLRB.
 func computeSize(kv proto.RawKeyValue) int64 {
-	return int64(len(kv.Key)) + int64(len(kv.Value)) + llrbNodeSize + keyValueSize
+	return computeKeyValueSize(kv) + llrbNodeSize + keyValueSize
+}
+
+// computeKeyValueSize returns the approximate size in bytes that the key and
+// value take, excluding the overhead of the underlying LLRB.
+func computeKeyValueSize(kv proto.RawKeyValue) int64 {
+	return int64(len(kv.Key)) + int64(len(kv.Value))
 }
 
 // InMem a simple, in-memory key-value store.
@@ -307,3 +313,16 @@ func (in *InMem) Capacity() (StoreCapacity, error) {
 
 // SetGCTimeouts is a noop for the InMem engine.
 func (in *InMem) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {}
+
+// ApproximateSize computes the size of data used to store all keys in the given
+// key range.
+func (in *InMem) ApproximateSize(start, end Key) (uint64, error) {
+	var size uint64
+	in.RLock()
+	defer in.RUnlock()
+	in.data.DoRange(func(node llrb.Comparable) bool {
+		size += uint64(computeKeyValueSize(node.(proto.RawKeyValue)))
+		return false
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
+	return size, nil
+}

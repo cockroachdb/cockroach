@@ -528,3 +528,45 @@ func (r *RocksDB) Destroy() error {
 	}
 	return nil
 }
+
+// ApproximateSize returns the approximate number of bytes on disk that RocksDB
+// is using to store data for the given range of keys.
+func (r *RocksDB) ApproximateSize(start, end Key) (uint64, error) {
+	// RocksDB's ApproximateSizes function operates on a set of ranges, the
+	// various values of which are passed as parallel arrays. We are only
+	// operating on a single range, but the call is still structured as if there
+	// are multiple ranges.
+	var (
+		rngStarts   = []*C.char{bytesPointer(start)}
+		rngLimits   = []*C.char{bytesPointer(end)}
+		startSizes  = []C.size_t{(C.size_t)(len(start))}
+		limitSizes  = []C.size_t{(C.size_t)(len(end))}
+		returnSizes = make([]uint64, 1)
+	)
+	C.rocksdb_approximate_sizes(
+		r.rdb,
+		C.int(1),
+		&rngStarts[0],
+		&startSizes[0],
+		&rngLimits[0],
+		&limitSizes[0],
+		(*C.uint64_t)(&returnSizes[0]),
+	)
+	return returnSizes[0], nil
+}
+
+// Flush causes RocksDB to write all in-memory data to disk immediately.
+func (r *RocksDB) Flush() error {
+	flushopts := C.rocksdb_flushoptions_create()
+	defer C.rocksdb_flushoptions_destroy(flushopts)
+	C.rocksdb_flushoptions_set_wait(flushopts, 1)
+
+	var cErr *C.char
+	C.rocksdb_flush(r.rdb,
+		flushopts,
+		&cErr)
+	if cErr != nil {
+		return charToErr(cErr)
+	}
+	return nil
+}

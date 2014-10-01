@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
@@ -514,12 +515,71 @@ func TestSnapshot(t *testing.T) {
 	}, t)
 }
 
+func TestApproximateSize(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		var (
+			count    = 10000
+			keys     = make([]Key, count)
+			values   = make([][]byte, count) // Random values to prevent compression
+			rand     = util.NewPseudoRand()
+			valueLen = 10
+		)
+		for i := 0; i < count; i++ {
+			keys[i] = []byte(fmt.Sprintf("key%8d", i))
+			values[i] = []byte(util.RandString(rand, valueLen))
+		}
+
+		insertKeysAndValues(keys, values, engine, t)
+		if rocksdb, ok := engine.(*RocksDB); ok {
+			err := rocksdb.Flush()
+			if err != nil {
+				t.Fatalf("Error flushing RocksDB: %s", err.Error())
+			}
+		}
+
+		sizePerRecord := (len([]byte(keys[0])) + valueLen)
+		verifyApproximateSize(keys, engine, sizePerRecord, 0.7, t)
+		verifyApproximateSize(keys[:count/2], engine, sizePerRecord, 0.7, t)
+		verifyApproximateSize(keys[:count/4], engine, sizePerRecord, 0.7, t)
+	}, t)
+}
+
 func insertKeys(keys []Key, engine Engine, t *testing.T) {
+	insertKeysAndValues(keys, nil, engine, t)
+}
+
+func insertKeysAndValues(keys []Key, values [][]byte, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))
-	for idx := range order {
-		if err := engine.Put(keys[idx], []byte("value")); err != nil {
+	for _, idx := range order {
+		var val []byte
+		if idx < len(values) {
+			val = values[idx]
+		} else {
+			val = []byte("value")
+		}
+		if err := engine.Put(keys[idx], val); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
+	}
+}
+
+func verifyApproximateSize(keys []Key, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
+	sz, err := engine.ApproximateSize(keys[0], keys[len(keys)-1])
+	if err != nil {
+		t.Errorf("Error from ApproximateSize(): %s", err)
+	}
+
+	uncompressedTotalSize := uint64(sizePerRecord * len(keys))
+	// On-disk size should never exceed expected size
+	if sz > uncompressedTotalSize {
+		t.Errorf("ApproximateSize returned greater than uncompressed total size: %d > %d", sz, uncompressedTotalSize)
+	}
+	// On-disk size may be lower than expected total size due to compression.
+	// This value is chosen low enough that the test should never fail due to
+	// randomness.
+	compressionMin := uint64(float64(uncompressedTotalSize) * ratio)
+	if sz < compressionMin {
+		t.Errorf("ApproximateSize returned lower than expected compression min: %d < %d", sz, compressionMin)
 	}
 }

@@ -39,6 +39,21 @@ func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
 }
 
+var randLetters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+// RandString returns a string of the given length with random data.
+func RandString(r *rand.Rand, size int) string {
+	if size <= 0 {
+		return ""
+	}
+
+	arr := make([]rune, size)
+	for i := 0; i < len(arr); i++ {
+		arr[i] = randLetters[r.Intn(len(randLetters))]
+	}
+	return string(arr)
+}
+
 // CachedRand is a global singleton rand.Rand object cached for
 // one-off purposes to generate random numbers.
 var CachedRand = NewPseudoRand()
