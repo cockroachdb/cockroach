@@ -294,13 +294,13 @@ func (r *Range) IsLeader() bool {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key engine.Key) bool {
-	return r.Meta.ContainsKey(key)
+	return r.Meta.ContainsKey(key.Address())
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
-	return r.Meta.ContainsKeyRange(start, end)
+	return r.Meta.ContainsKeyRange(start.Address(), end.Address())
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -597,7 +597,7 @@ func (r *Range) maybeGossipConfigs() {
 func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	kvs, err := r.mvcc.Scan(keyPrefix, engine.PrefixEndKey(keyPrefix), 0, proto.MaxTimestamp, nil)
+	kvs, err := r.mvcc.Scan(keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -774,12 +774,12 @@ func (r *Range) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) {
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
 func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
-	// Create the actual key to the system-local transaction table.
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	// Encode the key for direct access to/from the engine.
+	encKey := engine.Key(args.Key).Encode(nil)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := engine.GetProto(r.engine, key, existTxn)
+	ok, err := engine.GetProto(r.engine, encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -844,7 +844,7 @@ func (r *Range) EndTransaction(args *proto.EndTransactionRequest, reply *proto.E
 	}
 
 	// Persist the transaction record with updated status (& possibly timestmap).
-	if err := engine.PutProto(r.engine, key, reply.Txn); err != nil {
+	if err := engine.PutProto(r.engine, encKey, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -918,9 +918,9 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 	// We want to search for the metadata key just greater than args.Key.  Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
-	metaPrefix := args.Key[:len(engine.KeyMeta1Prefix)]
-	nextKey := engine.NextKey(args.Key)
-	kvs, err := r.mvcc.Scan(nextKey, engine.PrefixEndKey(metaPrefix), rangeCount, args.Timestamp, args.Txn)
+	metaPrefix := engine.Key(args.Key[:len(engine.KeyMeta1Prefix)])
+	nextKey := engine.Key(args.Key).Next()
+	kvs, err := r.mvcc.Scan(nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -956,10 +956,11 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
-	// Create the actual key to the system-local transaction table.
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	// Encode the key for direct access to/from the engine.
+	encKey := engine.Key(args.Key).Encode(nil)
+
 	var txn proto.Transaction
-	ok, err := engine.GetProto(r.engine, key, &txn)
+	ok, err := engine.GetProto(r.engine, encKey, &txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -976,7 +977,7 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := engine.PutProto(r.engine, key, &txn); err != nil {
+		if err := engine.PutProto(r.engine, encKey, &txn); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -1018,16 +1019,19 @@ func (r *Range) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, re
 // pusher, return TransactionRetryError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
-		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
+	key := engine.Key(args.Key)
+	if !bytes.Equal(key.Address(), args.PusheeTxn.ID) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q",
+			key.Address(), args.PusheeTxn.ID))
 		return
 	}
-	// Create the actual key to the system-local transaction table.
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+
+	// Encode the key for direct access to/from the engine.
+	encKey := key.Encode(nil)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := engine.GetProto(r.engine, key, existTxn)
+	ok, err := engine.GetProto(r.engine, encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1128,7 +1132,7 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 	}
 
 	// Persist the pushed transaction.
-	if err := engine.PutProto(r.engine, key, reply.PusheeTxn); err != nil {
+	if err := engine.PutProto(r.engine, encKey, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}

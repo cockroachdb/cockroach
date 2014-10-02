@@ -35,7 +35,7 @@ func NewInvalidRangeMetaKeyError(k Key) *InvalidRangeMetaKeyError {
 
 // Error formats error string.
 func (i *InvalidRangeMetaKeyError) Error() string {
-	return fmt.Sprintf("'%s' is not valid range metadata key.", string(i.Key))
+	return fmt.Sprintf("%q is not valid range metadata key.", string(i.Key))
 }
 
 // Init registers engine error types with Gob.

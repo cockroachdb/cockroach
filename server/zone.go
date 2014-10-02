@@ -78,7 +78,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 		sr := <-zh.db.Scan(&proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    engine.KeyConfigZonePrefix,
-				EndKey: engine.PrefixEndKey(engine.KeyConfigZonePrefix),
+				EndKey: engine.KeyConfigZonePrefix.PrefixEnd(),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,

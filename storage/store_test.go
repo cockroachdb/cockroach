@@ -149,7 +149,7 @@ func createTestStore(createDefaultRange bool, t *testing.T) (*Store, *hlc.Manual
 	// Create system key range for allocations.
 	meta := store.BootstrapRangeMetadata()
 	meta.StartKey = engine.KeySystemPrefix
-	meta.EndKey = engine.PrefixEndKey(engine.KeySystemPrefix)
+	meta.EndKey = engine.KeySystemPrefix.PrefixEnd()
 	rng, err := store.CreateRange(meta)
 	if err != nil {
 		t.Fatal(err)
@@ -375,7 +375,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		if resolvable {
 			wiErr, ok := err.(*proto.WriteIntentError)
 			if !ok {
-				t.Errorf("resolvable? %t, expected write intent error; got %s", resolvable, err)
+				t.Fatalf("resolvable? %t, expected write intent error; got %s", resolvable, err)
 			}
 			if !bytes.Equal(wiErr.Key, key) || !bytes.Equal(wiErr.Txn.ID, pushee.ID) ||
 				wiErr.Resolved != resolvable {

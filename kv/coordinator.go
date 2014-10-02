@@ -229,7 +229,7 @@ func (tc *coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  txn.ID,
+			Key:  engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, txn.ID),
 			User: storage.UserRoot,
 			Txn:  txn,
 		},

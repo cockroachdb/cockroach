@@ -82,9 +82,9 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 // the requester is a read-only command; false for read-write.
 func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.WaitGroup) {
 	if end == nil {
-		end = engine.NextKey(start)
+		end = start.Next()
 	}
-	for _, c := range cq.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
+	for _, c := range cq.cache.GetOverlaps(start, end) {
 		c := c.(*cmd)
 		// Only add to the wait group if one of the commands isn't read-only.
 		if !readOnly || !c.readOnly {
@@ -105,9 +105,9 @@ func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.W
 // GetWait().
 func (cq *CommandQueue) Add(start, end engine.Key, readOnly bool) interface{} {
 	if end == nil {
-		end = engine.NextKey(start)
+		end = start.Next()
 	}
-	key := cq.cache.NewKey(rangeKey(start), rangeKey(end))
+	key := cq.cache.NewKey(start, end)
 	cq.cache.Add(key, &cmd{readOnly: readOnly})
 	return key
 }

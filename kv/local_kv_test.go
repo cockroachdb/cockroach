@@ -113,7 +113,7 @@ func TestLocalKVLookupReplica(t *testing.T) {
 	kv.AddStore(store)
 	meta := store.BootstrapRangeMetadata()
 	meta.StartKey = engine.KeySystemPrefix
-	meta.EndKey = engine.PrefixEndKey(engine.KeySystemPrefix)
+	meta.EndKey = engine.KeySystemPrefix.PrefixEnd()
 	if _, err := store.CreateRange(meta); err != nil {
 		t.Fatal(err)
 	}

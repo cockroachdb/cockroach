@@ -20,7 +20,6 @@ package engine
 import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,7 +59,7 @@ func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
 		return nil
 	}
 	// Look up the policy which applies to this set of MVCC values.
-	_, decKey := encoding.DecodeBinary(keys[0])
+	_, decKey := DecodeKey(keys[0])
 	policy := gc.policyFn(decKey)
 	if policy == nil || policy.TTLSeconds <= 0 {
 		return nil

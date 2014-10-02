@@ -49,7 +49,7 @@ const (
 
 // rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
 func makeRangeKey(rangeID int64) engine.Key {
-	return engine.MakeKey(engine.KeyLocalRangeMetadataPrefix, engine.Key(strconv.FormatInt(rangeID, 10)))
+	return engine.MakeLocalKey(engine.KeyLocalRangeMetadataPrefix, engine.Key(strconv.FormatInt(rangeID, 10)))
 }
 
 // A RangeSlice is a slice of Range pointers used for replica lookups
@@ -163,8 +163,8 @@ func (s *Store) Init() error {
 	}
 
 	// Create ID allocators.
-	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2, raftIDAllocCount)
-	s.rangeIDAlloc = NewIDAllocator(engine.KeyRangeIDGenerator, s.db, 2, rangeIDAllocCount)
+	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	s.rangeIDAlloc = NewIDAllocator(engine.KeyRangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount)
 
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
@@ -186,8 +186,10 @@ func (s *Store) Init() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	start := engine.KeyLocalRangeMetadataPrefix
-	end := engine.PrefixEndKey(start)
+	startKey := engine.KeyLocalRangeMetadataPrefix
+	endKey := startKey.PrefixEnd()
+	start := startKey.Encode(nil)
+	end := endKey.Encode(nil)
 	const rows = 64
 	for {
 		kvs, err := s.engine.Scan(start, end, rows)
@@ -207,7 +209,7 @@ func (s *Store) Init() error {
 		if len(kvs) < rows {
 			break
 		}
-		start = engine.NextKey(kvs[rows-1].Key)
+		start = engine.Key(kvs[rows-1].Key).Next()
 	}
 
 	// Ensure that ranges are sorted.
@@ -247,14 +249,18 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 
 // LookupRange looks up a range via binary search over the sorted
 // "rangesByKey" RangeSlice. Returns nil if no range is found for
-// specified key range.
+// specified key range. Note that the specified keys are transformed
+// using Key.Address() to ensure we lookup ranges correctly for local
+// keys.
 func (s *Store) LookupRange(start, end engine.Key) *Range {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	startAddr := start.Address()
+	endAddr := end.Address()
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
-		return bytes.Compare(start, s.rangesByKey[i].Meta.EndKey) < 0
+		return startAddr.Less(s.rangesByKey[i].Meta.EndKey)
 	})
-	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Meta.ContainsKeyRange(start, end) {
+	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Meta.ContainsKeyRange(startAddr, endAddr) {
 		return nil
 	}
 	return s.rangesByKey[n]
@@ -352,7 +358,7 @@ func (s *Store) writeRangeToEngine(rng *Range) error {
 	if rng == nil {
 		return util.Error("no range given")
 	}
-	return engine.PutProto(s.engine, makeRangeKey(rng.Meta.RangeID), rng.Meta)
+	return engine.PutProto(s.engine, makeRangeKey(rng.Meta.RangeID).Encode(nil), rng.Meta)
 }
 
 // DropRange removes the specified range from the store's map, and also
@@ -368,7 +374,7 @@ func (s *Store) DropRange(rangeID int64) error {
 		rng.Stop()
 	}
 	delete(s.ranges, rangeID)
-	if err := s.engine.Clear(makeRangeKey(rangeID)); err != nil {
+	if err := s.engine.Clear(makeRangeKey(rangeID).Encode(nil)); err != nil {
 		return err
 	}
 	return nil
@@ -457,7 +463,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    args.Header().Timestamp,
-			Key:          wiErr.Txn.ID, // Address to pushee's txn
+			Key:          engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, wiErr.Txn.ID), // Address to pushee's txn
 			User:         args.Header().User,
 			UserPriority: args.Header().UserPriority,
 			Txn:          args.Header().Txn,
