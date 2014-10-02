@@ -538,9 +538,9 @@ func TestApproximateSize(t *testing.T) {
 		}
 
 		sizePerRecord := (len([]byte(keys[0])) + valueLen)
-		verifyApproximateSize(keys, engine, sizePerRecord, 0.7, t)
-		verifyApproximateSize(keys[:count/2], engine, sizePerRecord, 0.7, t)
-		verifyApproximateSize(keys[:count/4], engine, sizePerRecord, 0.7, t)
+		verifyApproximateSize(keys, engine, sizePerRecord, 0.15, t)
+		verifyApproximateSize(keys[:count/2], engine, sizePerRecord, 0.15, t)
+		verifyApproximateSize(keys[:count/4], engine, sizePerRecord, 0.15, t)
 	}, t)
 }
 
@@ -571,15 +571,13 @@ func verifyApproximateSize(keys []Key, engine Engine, sizePerRecord int, ratio f
 	}
 
 	uncompressedTotalSize := uint64(sizePerRecord * len(keys))
-	// On-disk size should never exceed expected size
-	if sz > uncompressedTotalSize {
-		t.Errorf("ApproximateSize returned greater than uncompressed total size: %d > %d", sz, uncompressedTotalSize)
-	}
 	// On-disk size may be lower than expected total size due to compression.
-	// This value is chosen low enough that the test should never fail due to
-	// randomness.
-	compressionMin := uint64(float64(uncompressedTotalSize) * ratio)
-	if sz < compressionMin {
-		t.Errorf("ApproximateSize returned lower than expected compression min: %d < %d", sz, compressionMin)
+	// If compression is disabled (e.g. snappy auto-detects uncompressable
+	// input and disables compression), the total size will be higher due to
+	// storage overhead.
+	minSize := uint64(float64(uncompressedTotalSize) * (float64(1) - ratio))
+	maxSize := uint64(float64(uncompressedTotalSize) * (float64(1) + ratio))
+	if sz < minSize || sz > maxSize {
+		t.Errorf("ApproximateSize %d outside of acceptable bounds %d - %d", sz, minSize, maxSize)
 	}
 }
