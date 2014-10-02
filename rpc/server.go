@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -46,13 +47,15 @@ type Server struct {
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(addr net.Addr, tlsConfig *TLSConfig) *Server {
+func NewServer(addr net.Addr, tlsConfig *TLSConfig, clock *hlc.Clock) *Server {
 	s := &Server{
 		Server:    rpc.NewServer(),
 		tlsConfig: tlsConfig,
 		addr:      addr,
 	}
-	heartbeat := &HeartbeatService{}
+	heartbeat := &HeartbeatService{
+		clock: clock,
+	}
 	s.RegisterName("Heartbeat", heartbeat)
 	return s
 }

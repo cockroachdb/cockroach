@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // verifyConvergence verifies that info from each node is visible from
@@ -47,7 +48,7 @@ func TestConvergence(t *testing.T) {
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
-	g := New(rpc.LoadInsecureTLSConfig())
+	g := New(rpc.LoadInsecureTLSConfig(), hlc.NewClock(hlc.UnixNano))
 	g.AddInfo("i", int64(1), time.Hour)
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
@@ -74,7 +75,7 @@ func TestGossipInfoStore(t *testing.T) {
 // TestGossipGroupsInfoStore verifies gossiping of groups via the
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
-	g := New(rpc.LoadInsecureTLSConfig())
+	g := New(rpc.LoadInsecureTLSConfig(), hlc.NewClock(hlc.UnixNano))
 
 	// For int64.
 	g.RegisterGroup("i", 3, MinGroup)

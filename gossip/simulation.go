@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -58,13 +59,14 @@ func NewSimulationNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *SimulationNetwork {
 
 	tlsConfig := rpc.LoadInsecureTLSConfig()
+	clock := hlc.NewClock(hlc.UnixNano)
 
 	log.Infof("simulating gossip network with %d nodes", nodeCount)
 	servers := make([]*rpc.Server, nodeCount)
 	addrs := make([]net.Addr, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		addr := util.CreateTestAddr(networkType)
-		servers[i] = rpc.NewServer(addr, tlsConfig)
+		servers[i] = rpc.NewServer(addr, tlsConfig, clock)
 		if err := servers[i].Start(); err != nil {
 			log.Fatal(err)
 		}
@@ -79,7 +81,7 @@ func NewSimulationNetwork(nodeCount int, networkType string,
 
 	nodes := make([]*SimulationNode, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := New(tlsConfig)
+		node := New(tlsConfig, clock)
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)

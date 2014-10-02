@@ -251,7 +251,8 @@ func (kv *DistKV) sendRPC(desc *proto.RangeDescriptor, method string, args proto
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
 	}
-	return rpc.Send(argsMap, method, replyChan, rpcOpts, kv.gossip.TLSConfig())
+	return rpc.Send(argsMap, method, replyChan, rpcOpts,
+		kv.gossip.TLSConfig(), kv.gossip.Clock())
 }
 
 // ExecuteCmd verifies permissions and looks up the appropriate range

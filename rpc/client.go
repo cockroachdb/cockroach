@@ -19,12 +19,14 @@ package rpc
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"net/rpc"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -59,12 +61,36 @@ type Client struct {
 	Ready  chan struct{} // Closed when client is connected
 	Closed chan struct{} // Closed when connection has closed
 
-	mu          sync.RWMutex // Mutex protects the fields below
-	*rpc.Client              // Embedded RPC client
-	addr        net.Addr     // Remote address of client
-	lAddr       net.Addr     // Local address of client
+	mu          sync.Mutex // Mutex protects the fields below
+	*rpc.Client            // Embedded RPC client
+	addr        net.Addr   // Remote address of client
+	lAddr       net.Addr   // Local address of client
 	healthy     bool
 	closed      bool
+	offset      Offset // Latest measured clock offset from the server
+	clock       *hlc.Clock
+}
+
+// Offset keeps track of this client's estimate of its offset from it's
+// connected server. Delay is the roundtrip delay in the last offset
+// measurement. The real offset should be in the interval [Offset - Delay/2,
+// Offset + Delay/2]. If the last heartbeat timed out, Offset = InfiniteOffset.
+//
+// Offset and delay are measured as an adaptation of the remote clock reading
+// technique described in
+// https://www.eecis.udel.edu/~mills/ntp/html/warp.html#arch. Note that we
+// don't have the fined grained notion of a "server receive time" and "server
+// send time", but only the time that the server reads before responding to
+// a heartbeat.
+type Offset struct {
+	Offset int64
+	Delay  int64
+}
+
+// InfiniteOffset is the offset value used if we fail to detect a heartbeat.
+var InfiniteOffset = Offset{
+	Offset: math.MaxInt64,
+	Delay:  0,
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -79,7 +105,8 @@ type Client struct {
 // and completed one successful heartbeat. The Closed channel is
 // closed if the client fails to connect or if the client's Close()
 // method is invoked.
-func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Client {
+func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig,
+	clock *hlc.Clock) *Client {
 	clientMu.Lock()
 	if c, ok := clients[addr.String()]; ok {
 		clientMu.Unlock()
@@ -89,6 +116,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig) *Cl
 		addr:   addr,
 		Ready:  make(chan struct{}),
 		Closed: make(chan struct{}),
+		clock:  clock,
 	}
 	clients[c.Addr().String()] = c
 	clientMu.Unlock()
@@ -154,16 +182,24 @@ func (c *Client) IsHealthy() bool {
 
 // Addr returns remote address of the client.
 func (c *Client) Addr() net.Addr {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.addr
 }
 
 // LocalAddr returns the local address of the client.
 func (c *Client) LocalAddr() net.Addr {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.lAddr
+}
+
+// Offset returns the most recently measured offset of the client clock
+// from the server clock.
+func (c *Client) Offset() Offset {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.offset
 }
 
 // Close removes the client from the clients map and closes
@@ -200,18 +236,26 @@ func (c *Client) startHeartbeat() {
 
 // heartbeat sends a single heartbeat RPC.
 func (c *Client) heartbeat() error {
-	call := c.Go("Heartbeat.Ping", &PingRequest{}, &PingResponse{}, nil)
+	response := &PingResponse{}
+	sendTime := c.clock.Now().WallTime
+	call := c.Go("Heartbeat.Ping", &PingRequest{}, response, nil)
 	select {
 	case <-call.Done:
+		receiveTime := c.clock.Now().WallTime
 		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		c.mu.Lock()
 		c.healthy = true
+		c.offset.Offset =
+			(response.ServerTime - sendTime +
+				response.ServerTime - receiveTime) / 2
+		c.offset.Delay = receiveTime - sendTime
 		c.mu.Unlock()
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
 		// Allowed twice gossip interval.
 		c.mu.Lock()
 		c.healthy = false
+		c.offset = InfiniteOffset
 		c.mu.Unlock()
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	}
