@@ -18,12 +18,10 @@
 package storage
 
 import (
-	"bytes"
 	"time"
 
 	"crypto/md5"
 
-	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -38,14 +36,6 @@ const (
 	// timestamp.
 	minCacheWindow = 10 * time.Second
 )
-
-// rangeKey implements interval.Comparable.
-type rangeKey engine.Key
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (rk rangeKey) Compare(b interval.Comparable) int {
-	return bytes.Compare(rk, b.(rangeKey))
-}
 
 // A TimestampCache maintains an interval tree FIFO cache of keys or
 // key ranges and the timestamps at which they were most recently read
@@ -98,7 +88,7 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 // whether the command adding this timestamp was read-only or not.
 func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
 	if end == nil {
-		end = engine.NextKey(start)
+		end = start.Next()
 	}
 	if tc.latest.Less(timestamp) {
 		tc.latest = timestamp
@@ -107,7 +97,7 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
 		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5, readOnly: readOnly}
-		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), ce)
+		tc.cache.Add(tc.cache.NewKey(start, end), ce)
 	}
 }
 
@@ -118,11 +108,11 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 // timestamp is returned for both read and write timestamps.
 func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
 	if end == nil {
-		end = engine.NextKey(start)
+		end = start.Next()
 	}
 	maxR := tc.lowWater
 	maxW := tc.lowWater
-	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
+	for _, v := range tc.cache.GetOverlaps(start, end) {
 		ce := v.(cacheEntry)
 		if proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) || !proto.MD5Equal(txnMD5, ce.txnMD5) {
 			if ce.readOnly && maxR.Less(ce.timestamp) {

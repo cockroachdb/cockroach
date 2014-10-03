@@ -272,7 +272,7 @@ func iterateRangeSnapshot(eng Engine, startKey, endKey Key, chunkSize int64, sna
 		if len(kvs) == 0 {
 			break
 		}
-		startKey = NextKey(kvs[len(kvs)-1].Key)
+		startKey = Key(kvs[len(kvs)-1].Key).Next()
 	}
 	return nil
 }

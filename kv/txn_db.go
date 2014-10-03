@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -128,7 +129,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 	tdb.Lock()
 	if method == storage.EndTransaction {
 		// For EndTransaction, make sure key is set to txn ID.
-		args.Header().Key = tdb.txn.ID
+		args.Header().Key = engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, tdb.txn.ID)
 		tdb.txnEnd = true // set this txn as having been ended
 	} else if !isTransactional(method) {
 		tdb.DB.executeCmd(method, args, replyChan)

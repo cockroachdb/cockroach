@@ -157,7 +157,7 @@ func (rmc *RangeMetadataCache) getCachedRangeMetadata(key engine.Key) (
 	rd := v.(*proto.RangeDescriptor)
 
 	// Check that key actually belongs to range
-	if !rd.ContainsKey(key) {
+	if !rd.ContainsKey(key.Address()) {
 		return nil, nil
 	}
 	return metaEndKey, rd

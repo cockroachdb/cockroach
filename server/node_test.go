@@ -90,7 +90,7 @@ func TestBootstrapCluster(t *testing.T) {
 	// Scan the complete contents of the local database.
 	sr := <-localDB.Scan(&proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:    engine.KeyMin,
+			Key:    engine.KeyLocalPrefix.PrefixEnd(), // skip local keys
 			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,
 		},

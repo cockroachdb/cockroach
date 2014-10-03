@@ -85,6 +85,24 @@ func getGCTimeouts(rocksdbPtr unsafe.Pointer) (minTxnTS, minRCacheTS int64) {
 	return rocksdb.gcTimeouts()
 }
 
+//export getGCPrefixes
+// getGCPrefixes returns key prefixes for transaction and response
+// cache rows, in that order. Each prefix is encoded to match the raw
+// keys in the underlying storage engine. Ownership for the returned
+// strings is assumed by the caller. They should be deallocated using
+// free().
+func getGCPrefixes() (*C.char, *C.char) {
+	// Since we're converting to a C-string, the prefixes which we'll
+	// match against will end at the first null character, or just after
+	// the encoded transaction prefix, up to but not including the
+	// terminating null character.
+	// TODO(spencer): it's fragile to rely on this behavior. Should
+	// consider changing.
+	txnPrefix := KeyLocalTransactionPrefix.Encode(nil)
+	rcachePrefix := KeyLocalResponseCachePrefix.Encode(nil)
+	return C.CString(string(txnPrefix)), C.CString(string(rcachePrefix))
+}
+
 //export reportGCError
 // reportGCError is a callback for the rocksdb custom compaction filter
 // to log errors encountered while trying to parse response cache entries

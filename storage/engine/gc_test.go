@@ -24,13 +24,12 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 var (
-	aKey  = encoding.EncodeBinary(nil, Key("a"))
-	bKey  = encoding.EncodeBinary(nil, Key("b"))
-	cKey  = encoding.EncodeBinary(nil, Key("c"))
+	aKey  = Key("a").Encode(nil)
+	bKey  = Key("b").Encode(nil)
+	cKey  = Key("c").Encode(nil)
 	aKeys = []Key{
 		aKey,
 		mvccEncodeKey(aKey, makeTS(2E9, 0)),

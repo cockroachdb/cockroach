@@ -183,7 +183,7 @@ func TestCoordinatorEndTxn(t *testing.T) {
 		t.Errorf("expected empty transactions map; got %d", len(db.coordinator.txns))
 	}
 
-	// TODO(spencer): need to test that write intents were sent to key "a".
+	// TODO(spencer): need to test that resolve intents were sent to key "a".
 }
 
 // TestCoordinatorGC verifies that the coordinator cleans up extant

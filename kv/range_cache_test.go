@@ -47,14 +47,14 @@ func (db *testMetadataDB) getMetadata(key engine.Key) []proto.RangeDescriptor {
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testMetadataNode{
 			&proto.RangeDescriptor{
-				EndKey: engine.NextKey(key),
+				EndKey: key.Next(),
 			},
 		})
 		if v == nil {
 			break
 		}
 		response = append(response, *(v.(testMetadataNode).RangeDescriptor))
-		key = engine.NextKey(response[i].EndKey)
+		key = engine.Key(response[i].EndKey).Next()
 	}
 	return response
 }
@@ -123,7 +123,7 @@ func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeMetadata: %s", err.Error())
 	}
-	if !r.ContainsKey(engine.Key(key)) {
+	if !r.ContainsKey(engine.Key(key).Address()) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 }

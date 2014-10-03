@@ -434,7 +434,7 @@ func NewTransaction(name string, baseKey engine.Key, userPriority int32,
 
 	return &proto.Transaction{
 		Name:         name,
-		ID:           append(baseKey, []byte(uuid.New())...),
+		ID:           append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
 		Priority:     priority,
 		Isolation:    isolation,
 		Timestamp:    now,

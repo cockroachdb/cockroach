@@ -18,6 +18,10 @@
 #include "rocksdb/c.h"
 
 struct FilterState {
+  // The key prefix identifying transaction records.
+  const char* txn_prefix;
+  // The key prefix identifying response cache records.
+  const char* rcache_prefix;
   // The minimum timestamp for transaction rows. Any transaction with
   // a timestamp prior to min_txn_ts can be discarded.
   int64_t min_txn_ts;

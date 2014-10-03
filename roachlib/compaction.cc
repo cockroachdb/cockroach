@@ -31,13 +31,6 @@
 
 namespace {
 
-// These constants must be kept exactly in sync with their
-// counterparts in storage/engine/keys.go. Note that the length must
-// be explicitly specified because these keys are prefixed with null
-// characters. Take care to update the lengths if the keys change.
-static const rocksdb::Slice KeyLocalRangeResponseCachePrefix("\x00\x00\x00respcache-", 13);
-static const rocksdb::Slice KeyLocalTransactionPrefix("\x00\x00\x00txn-", 7);
-
 // GetResponseHeader extracts the response header for each type of
 // response in the ReadWriteCmdResponse union.
 const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse& rwResp) {
@@ -94,12 +87,14 @@ unsigned char GCCompactionFilter(
 {
   struct FilterState* fs = (struct FilterState*)state;
   const rocksdb::Slice keyS(key, key_length);
+  const rocksdb::Slice txnS(fs->txn_prefix);
+  const rocksdb::Slice rcacheS(fs->rcache_prefix);
   *value_changed = 0;
   *error_msg = NULL;
 
   // Response cache rows are GC'd if their timestamp is older than the
   // response cache GC timeout.
-  if (keyS.starts_with(KeyLocalRangeResponseCachePrefix)) {
+  if (keyS.starts_with(rcacheS)) {
     proto::ReadWriteCmdResponse rwResp;
     if (!rwResp.ParseFromArray(existing_value, value_length)) {
       *error_msg = (char*)"failed to parse response cache entry";
@@ -113,7 +108,7 @@ unsigned char GCCompactionFilter(
     if (header->timestamp().wall_time() <= fs->min_rcache_ts) {
       return (unsigned char)1;
     }
-  } else if (keyS.starts_with(KeyLocalTransactionPrefix)) {
+  } else if (keyS.starts_with(txnS)) {
     // Transaction rows are GC'd if their timestamp is older than the
     // system-wide minimum write intent timestamp. This system-wide
     // minimum write intent is periodically computed via map-reduce
