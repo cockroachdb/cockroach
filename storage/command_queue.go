@@ -76,16 +76,17 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 
 // GetWait initializes the supplied wait group with the number of
 // executing commands which overlap the specified key range. If end is
-// nil, end is set to start, meaning the command affects a single
-// key. The caller should call wg.Wait() to wait for confirmation that
-// all gating commands have completed or failed. readOnly is true if
-// the requester is a read-only command; false for read-write.
+// empty, end is set to start.Next(), meaning the command affects a
+// single key. The caller should call wg.Wait() to wait for
+// confirmation that all gating commands have completed or
+// failed. readOnly is true if the requester is a read-only command;
+// false for read-write.
 func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.WaitGroup) {
-	if end == nil {
+	if len(end) == 0 {
 		end = start.Next()
 	}
 	for _, c := range cq.cache.GetOverlaps(start, end) {
-		c := c.(*cmd)
+		c := c.Value.(*cmd)
 		// Only add to the wait group if one of the commands isn't read-only.
 		if !readOnly || !c.readOnly {
 			c.pending = append(c.pending, wg)
@@ -95,16 +96,16 @@ func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.W
 }
 
 // Add adds a command to the queue which affects the specified key
-// range. If end is nil, it is set to start, meaning the command
-// affects a single key. The returned interface is the key for the
-// command queue and must be re-supplied on subsequent invocation of
-// Remove().
+// range. If end is empty, it is set to start.Next(), meaning the
+// command affects a single key. The returned interface is the key for
+// the command queue and must be re-supplied on subsequent invocation
+// of Remove().
 //
 // Add should be invoked after waiting on already-executing,
 // overlapping commands via the WaitGroup initialized through
 // GetWait().
 func (cq *CommandQueue) Add(start, end engine.Key, readOnly bool) interface{} {
-	if end == nil {
+	if len(end) == 0 {
 		end = start.Next()
 	}
 	key := cq.cache.NewKey(start, end)

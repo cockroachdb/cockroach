@@ -30,12 +30,6 @@ import (
 // Key defines the key in the key-value datastore.
 type Key []byte
 
-// KeyRange provides a key range from start to end.  If end is nil,
-// the key range is defined only for a single key: start.
-type KeyRange struct {
-	Start, End Key
-}
-
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
 func MakeKey(prefix Key, keys ...Key) Key {
