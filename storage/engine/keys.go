@@ -32,26 +32,24 @@ type Key []byte
 
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
-func MakeKey(prefix Key, keys ...Key) Key {
-	suffix := []byte(nil)
-	for _, k := range keys {
-		suffix = append(suffix, []byte(k)...)
+func MakeKey(keys ...Key) Key {
+	byteSlices := make([][]byte, len(keys))
+	for i, k := range keys {
+		byteSlices[i] = []byte(k)
 	}
-	return Key(bytes.Join([][]byte{prefix, suffix}, []byte{}))
+	return Key(bytes.Join(byteSlices, nil))
 }
 
-// MakeLocalKey concatenates KeyLocalPrefix with the specified key
-// value, verifying in the process that the prefix has the length of
-// KeyLocalPrefixLength and that this length in bytes is a multiple of
-// seven.
-func MakeLocalKey(prefix Key, keys ...Key) Key {
-	if KeyLocalPrefixLength%7 != 0 {
-		log.Fatalf("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
+// MakeLocalKey is a simple passthrough to MakeKey, with verification
+// that the first key has length KeyLocalPrefixLength.
+func MakeLocalKey(keys ...Key) Key {
+	if len(keys) == 0 {
+		log.Fatal("no key components specified in call to MakeLocalKey")
 	}
-	if len(prefix) != KeyLocalPrefixLength {
-		log.Fatalf("local key prefix length must be %d: %q", KeyLocalPrefixLength, prefix)
+	if len(keys[0]) != KeyLocalPrefixLength {
+		log.Fatal("local key prefix length must be %d: %q", KeyLocalPrefixLength, keys[0])
 	}
-	return MakeKey(prefix, keys...)
+	return MakeKey(keys...)
 }
 
 // Address returns the address for the key, used to lookup the range
@@ -72,8 +70,8 @@ func (k Key) Address() Key {
 	return k[KeyLocalPrefixLength:]
 }
 
-// DecodeKey returns a Key initialized by decoding two binary-encoded
-// prefixes from the passed in bytes slice. Any leftover bytes are
+// DecodeKey returns a Key initialized by decoding a binary-encoded
+// prefix from the passed in bytes slice. Any leftover bytes are
 // returned.
 func DecodeKey(b []byte) ([]byte, Key) {
 	if len(b) == 0 {
@@ -206,6 +204,12 @@ func ValidateRangeMetaKey(key Key) error {
 	}
 
 	return nil
+}
+
+func init() {
+	if KeyLocalPrefixLength%7 != 0 {
+		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
+	}
 }
 
 // Constants for system-reserved keys in the KV map.
