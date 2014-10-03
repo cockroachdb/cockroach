@@ -100,6 +100,44 @@ func TestCoordinatorAddRequest(t *testing.T) {
 	}
 }
 
+// TestCoordinatorKeyRanges verifies that multiple requests to same or
+// overlapping key ranges causes the coordinator to keep track only of
+// the minimum number of ranges.
+func TestCoordinatorKeyRanges(t *testing.T) {
+	ranges := []struct {
+		start, end engine.Key
+	}{
+		{engine.Key("a"), engine.Key(nil)},
+		{engine.Key("a"), engine.Key(nil)},
+		{engine.Key("aa"), engine.Key(nil)},
+		{engine.Key("b"), engine.Key(nil)},
+		{engine.Key("aa"), engine.Key("c")},
+		{engine.Key("b"), engine.Key("c")},
+	}
+
+	db, _, _ := createTestDB(t)
+	defer db.Close()
+	txnID := engine.Key("txn")
+
+	for _, rng := range ranges {
+		putReq := createPutRequest(rng.start, []byte("value"), txnID)
+		// Trick the coordinator into using the EndKey for coordinator
+		// resolve keys interval cache.
+		putReq.EndKey = rng.end
+		<-db.Put(putReq)
+	}
+
+	// Verify that the transaction metadata contains only two entries
+	// in its "keys" interval cache. "a" and range "aa"-"c".
+	txnMeta, ok := db.coordinator.txns[string(txnID)]
+	if !ok {
+		t.Fatalf("expected a transaction to be created on coordinator")
+	}
+	if txnMeta.keys.Len() != 2 {
+		t.Errorf("expected 2 entries in keys interval cache; got %v", txnMeta.keys)
+	}
+}
+
 // TestCoordinatorMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestCoordinatorMultipleTxns(t *testing.T) {

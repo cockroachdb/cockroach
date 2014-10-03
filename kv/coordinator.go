@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -77,7 +78,7 @@ type txnMetadata struct {
 	// keys stores key ranges affected by this transaction through this
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
-	keys []engine.KeyRange
+	keys *util.IntervalCache
 
 	// lastUpdateTS is the latest time when the client sent transaction
 	// operations to this coordinator.
@@ -91,6 +92,47 @@ type txnMetadata struct {
 
 	// This is the closer to close the heartbeat goroutine.
 	closer chan struct{}
+}
+
+// addKeyRange adds the specified key range to the interval cache,
+// taking care not to add this range if existing entries already
+// completely cover the range.
+func (tm *txnMetadata) addKeyRange(start, end engine.Key) {
+	if len(end) == 0 {
+		end = start.Next()
+	}
+	key := tm.keys.NewKey(start, end)
+	for _, o := range tm.keys.GetOverlaps(start, end) {
+		if o.Key.Contains(key) {
+			return
+		} else if key.Contains(o.Key) {
+			tm.keys.Del(o.Key)
+		}
+	}
+
+	// Since no existing key range fully covered this range, add it now.
+	tm.keys.Add(key, nil)
+}
+
+// close sends resolve intent commands for all key ranges this
+// transaction has covered, clear the keys cache and closes the
+// metadata heartbeat.
+func (tm *txnMetadata) close(txn *proto.Transaction, db *DB) {
+	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
+		// We don't care about the reply channel; these are best
+		// effort. We simply fire and forget.
+		db.InternalResolveIntent(&proto.InternalResolveIntentRequest{
+			RequestHeader: proto.RequestHeader{
+				Timestamp: txn.Timestamp,
+				Key:       o.Key.Start().(engine.Key),
+				EndKey:    o.Key.End().(engine.Key),
+				User:      storage.UserRoot,
+				Txn:       txn,
+			},
+		})
+	}
+	tm.keys.Clear()
+	close(tm.closer)
 }
 
 // A coordinator coordinates the transaction states for the clients.
@@ -151,6 +193,7 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 	if !ok {
 		txnMeta = &txnMetadata{
 			txn:             *header.Txn,
+			keys:            util.NewIntervalCache(util.CacheConfig{Policy: util.CacheNone}),
 			lastUpdateTS:    tc.clock.Now(),
 			timeoutDuration: tc.clientTimeout,
 			closer:          make(chan struct{}),
@@ -170,10 +213,7 @@ func (tc *coordinator) AddRequest(method string, header *proto.RequestHeader) {
 		return
 	}
 	// Otherwise, append a new key range to the set of affected keys.
-	txnMeta.keys = append(txnMeta.keys, engine.KeyRange{
-		Start: header.Key,
-		End:   header.EndKey,
-	})
+	txnMeta.addKeyRange(header.Key, header.EndKey)
 }
 
 // EndTxn is called to resolve write intents which were set down over
@@ -186,20 +226,8 @@ func (tc *coordinator) EndTxn(txn *proto.Transaction) {
 	if !ok {
 		return
 	}
-	for _, rng := range txnMeta.keys {
-		// We don't care about the reply channel; these are best
-		// effort. We simply fire and forget.
-		tc.db.InternalResolveIntent(&proto.InternalResolveIntentRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:    rng.Start,
-				EndKey: rng.End,
-				User:   storage.UserRoot,
-				Txn:    txn,
-			},
-		})
-	}
+	txnMeta.close(txn, tc.db)
 	delete(tc.txns, string(txn.ID))
-	close(txnMeta.closer)
 }
 
 // hasClientAbandonedCoord returns true if the transaction specified by
