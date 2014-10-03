@@ -52,6 +52,36 @@ func makeRangeKey(rangeID int64) engine.Key {
 	return engine.MakeLocalKey(engine.KeyLocalRangeMetadataPrefix, engine.Key(strconv.FormatInt(rangeID, 10)))
 }
 
+// verifyKeyLength verifies key length. Extra key length is allowed for
+// keys prefixed with the meta1 or meta2 addressing prefixes.
+func verifyKeyLength(key engine.Key) error {
+	maxLength := engine.KeyMaxLength
+	if bytes.HasPrefix(key, engine.KeyMeta1Prefix) || bytes.HasPrefix(key, engine.KeyMeta2Prefix) {
+		maxLength += len(engine.KeyMeta1Prefix)
+	}
+	if len(key) > maxLength {
+		return util.Errorf("maximum key length exceeded for %q: %d > %d", key, len(key), maxLength)
+	}
+	return nil
+}
+
+// verifyKeys verifies key length for start and end. If end is
+// non-empty, it must be >= start.
+func verifyKeys(start, end engine.Key) error {
+	if err := verifyKeyLength(start); err != nil {
+		return err
+	}
+	if len(end) > 0 {
+		if err := verifyKeyLength(end); err != nil {
+			return err
+		}
+		if end.Less(start) {
+			return util.Errorf("end key cannot sort before start: %q < %q", end, start)
+		}
+	}
+	return nil
+}
+
 // A RangeSlice is a slice of Range pointers used for replica lookups
 // by key.
 type RangeSlice []*Range
@@ -412,6 +442,9 @@ func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
 func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Response) error {
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
+	if err := verifyKeys(header.Key, header.EndKey); err != nil {
+		return err
+	}
 	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
 		// Update the incoming timestamp.
 		now := s.clock.Now()

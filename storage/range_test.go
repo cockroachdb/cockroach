@@ -369,6 +369,18 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
+func scanArgs(start, end []byte, rangeID int64) (*proto.ScanRequest, *proto.ScanResponse) {
+	args := &proto.ScanRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     start,
+			EndKey:  end,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+	}
+	reply := &proto.ScanResponse{}
+	return args, reply
+}
+
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
 func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
