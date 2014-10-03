@@ -131,6 +131,9 @@ func dbKey(path, apiPrefix string) (engine.Key, error) {
 		if len(k) == 0 {
 			return nil, errors.New("empty key not allowed")
 		}
+		if k[0] == byte(0) {
+			return nil, errors.New("keys may not start with null characters")
+		}
 		return k, nil
 	}
 	return nil, err
@@ -151,6 +154,10 @@ func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	endKey := engine.Key(r.FormValue(rangeParamEnd))
 	if len(startKey) == 0 {
 		http.Error(w, "start key must be non-empty", http.StatusBadRequest)
+		return
+	}
+	if startKey[0] == byte(0) {
+		http.Error(w, "keys may not start with null characters", http.StatusBadRequest)
 		return
 	}
 	if len(endKey) == 0 {

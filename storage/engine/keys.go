@@ -47,7 +47,9 @@ func MakeKey(prefix Key, keys ...Key) Key {
 }
 
 // MakeLocalKey concatenates KeyLocalPrefix with the specified key
-// value, verifying in the process that the length of key is two bytes.
+// value, verifying in the process that the prefix has the length of
+// KeyLocalPrefixLength and that this length in bytes is a multiple of
+// seven.
 func MakeLocalKey(prefix Key, keys ...Key) Key {
 	if KeyLocalPrefixLength%7 != 0 {
 		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
@@ -71,15 +73,14 @@ func (k Key) Address() Key {
 		return k
 	}
 	if len(k) < KeyLocalPrefixLength {
-		log.Fatalf("local key %q malformed; should contain prefix %q and two-character designation", k, KeyLocalPrefix)
+		log.Fatalf("local key %q malformed; should contain prefix %q and four-character designation", k, KeyLocalPrefix)
 	}
 	return k[KeyLocalPrefixLength:]
 }
 
 // DecodeKey returns a Key initialized by decoding two binary-encoded
 // prefixes from the passed in bytes slice. Any leftover bytes are
-// returned with the key. Note that if a key has a local prefix, it's
-// encoded first so that it will sort properly with respect to
+// returned.
 func DecodeKey(b []byte) ([]byte, Key) {
 	if len(b) == 0 {
 		panic("cannot decode an empty key")
@@ -90,7 +91,7 @@ func DecodeKey(b []byte) ([]byte, Key) {
 }
 
 // Encode returns a binary-encoded version of the key appended to the
-// prefix byte string "b".
+// supplied byte string, b.
 func (k Key) Encode(b []byte) []byte {
 	return encoding.EncodeBinary(b, []byte(k))
 }
@@ -128,7 +129,7 @@ func (k Key) Less(l Key) bool {
 
 // Equal returns whether two keys are identical.
 func (k Key) Equal(l Key) bool {
-	return bytes.Compare(k, l) == 0
+	return bytes.Equal(k, l)
 }
 
 // Compare implements the llrb.Comparable interface for tree nodes.
@@ -240,7 +241,7 @@ var (
 	KeyLocalPrefix = Key("\x00\x00\x00")
 
 	// KeyLocalPrefixLength is the maximum length of the local prefix.
-	// It includes both the standard prefix and an additional two
+	// It includes both the standard prefix and an additional four
 	// characters to designate the type of local data.
 	//
 	// NOTE: this is very important! In order to support prefix matches
@@ -274,6 +275,7 @@ var (
 	// KeySystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
 	KeySystemPrefix = Key("\x00")
+	KeySystemMax    = Key("\x01")
 
 	// KeyMetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
