@@ -54,7 +54,7 @@ type Config struct {
 	// A new election is called if the ElectionTimeout elapses with no contact from the leader.
 	// The actual ElectionTimeout is chosen randomly from the range [ElectionTimeoutMin,
 	// ElectionTimeoutMax) to minimize the chances of several servers trying to become leaders
-	// simultaneously.  The Raft paper suggests a range of 150-300ms for local networks;
+	// simultaneously. The Raft paper suggests a range of 150-300ms for local networks;
 	// geographically distributed installations should use higher values to account for the
 	// increased round trip time.
 	ElectionTimeoutMin time.Duration
@@ -80,7 +80,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// MultiRaft represents a local node in a raft cluster.  The owner is responsible for consuming
+// MultiRaft represents a local node in a raft cluster. The owner is responsible for consuming
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
@@ -155,7 +155,7 @@ func (m *MultiRaft) DoRPC(name string, req, resp interface{}) error {
 
 }
 
-// strictErrorLog panics in strict mode and logs an error otherwise.  Arguments are printf-style
+// strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
 // and will be passed directly to either log.Errorf or log.Fatalf.
 func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 	if m.Strict {
@@ -176,7 +176,7 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 	}
 }
 
-// CreateGroup creates a new consensus group and joins it.  The application should
+// CreateGroup creates a new consensus group and joins it. The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
 func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error {
 	for _, id := range initialMembers {
@@ -189,7 +189,7 @@ func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error 
 	return <-op.ch
 }
 
-// SubmitCommand sends a command (a binary blob) to the cluster.  This method returns
+// SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
@@ -218,8 +218,8 @@ func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMember
 // Role represents the state of the node in a group.
 type Role int
 
-// Nodes can be either observers, followers, candidates, or leaders.  Observers receive
-// replicated logs but do not vote.  There is at most one Leader per term; a node cannot become
+// Nodes can be either observers, followers, candidates, or leaders. Observers receive
+// replicated logs but do not vote. There is at most one Leader per term; a node cannot become
 // a Leader without first becoming a Candiate and winning an election.
 const (
 	RoleObserver Role = iota
@@ -229,7 +229,7 @@ const (
 )
 
 // pendingCall represents an RPC that we should not respond to until we have persisted
-// up to the given point.  term and logIndex may be -1 if the rpc didn't modify that
+// up to the given point. term and logIndex may be -1 if the rpc didn't modify that
 // variable and therefore can be resolved regardless of its value.
 type pendingCall struct {
 	call     *rpc.Call
@@ -240,9 +240,9 @@ type pendingCall struct {
 // group represents the state of a consensus group.
 type group struct {
 	groupID GroupID
-	// Persistent state.  When an RPC is received (or another event occurs), the in-memory fields
+	// Persistent state. When an RPC is received (or another event occurs), the in-memory fields
 	// are updated immediately; the 'persisted' versions are updated later after they have been
-	// (asynchronously) written to stable storage.  The group is 'dirty' whenever the current
+	// (asynchronously) written to stable storage. The group is 'dirty' whenever the current
 	// and persisted data differ.
 	electionState             *GroupElectionState
 	committedMembers          *GroupMembers
@@ -258,25 +258,25 @@ type group struct {
 	// leaderCommitIndex is the last commitIndex we have received from the leader.
 	leaderCommitIndex int
 	// commitIndex is the last index we have applied (i.e. issued as an
-	// EventCommandCommitted).  It is the smaller of leaderCommitIndex and our
+	// EventCommandCommitted). It is the smaller of leaderCommitIndex and our
 	// persistedLastIndex.
 	commitIndex      int
 	electionDeadline time.Time
 	votes            map[NodeID]bool
 
-	// Candidate/leader volatile state.  Reset on conversion to candidate.
+	// Candidate/leader volatile state. Reset on conversion to candidate.
 	// currentMembers is the cluster membership including any pending (uncommitted)
 	// membership changes.
 	currentMembers *GroupMembers
 
-	// Leader volatile state.  Reset on election.
+	// Leader volatile state. Reset on election.
 	nextIndex  map[NodeID]int // default: lastLogIndex + 1
 	matchIndex map[NodeID]int // default: 0
 
 	// a List of *pendingCall
 	pendingCalls list.List
 
-	// LogEntries that have not been persisted.  The group is 'dirty' when this is non-empty.
+	// LogEntries that have not been persisted. The group is 'dirty' when this is non-empty.
 	pendingEntries []*LogEntry
 }
 
@@ -331,7 +331,7 @@ type node struct {
 	client   *asyncClient
 }
 
-// state represents the internal state of a MultiRaft object.  All variables here
+// state represents the internal state of a MultiRaft object. All variables here
 // are accessible only from the state.start goroutine so they can be accessed without
 // synchronization.
 type state struct {
@@ -510,7 +510,7 @@ func (s *state) submitCommand(op *submitCommandOp) {
 
 func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
 	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
-	// TODO(bdarnell): update currentMembers.  Should we disallow more than one
+	// TODO(bdarnell): update currentMembers. Should we disallow more than one
 	// membership change in flight at a time, and if so how?
 	op.ch <- s.addLogEntry(op.groupID, LogEntryChangeMembership, nil)
 }
@@ -743,7 +743,7 @@ func (s *state) becomeCandidate(g *group) {
 	s.updateElectionDeadline(g)
 	for _, id := range g.currentMembers.Members {
 		// Note that we send ourselves a vote request instead of setting g.votes[s.nodeID]
-		// directly.  This reduces special cases in the code, especially for the case when a
+		// directly. This reduces special cases in the code, especially for the case when a
 		// node is removed from the cluster while leader (in which case it must conduct the
 		// election for its replacement).
 		node := s.nodes[id]

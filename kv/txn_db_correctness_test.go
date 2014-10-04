@@ -343,7 +343,7 @@ func TestEnumeratePriorities(t *testing.T) {
 	}
 	enum := enumeratePriorities([]int32{p1, p2, p3})
 	if !reflect.DeepEqual(enum, expPriorities) {
-		t.Errorf("expected enumeration to match %s; got %s", expPriorities, enum)
+		t.Errorf("expected enumeration to match %v; got %v", expPriorities, enum)
 	}
 }
 

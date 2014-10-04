@@ -47,7 +47,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 		return RetryContinue, nil
 	})
 	if _, ok := err.(*RetryMaxAttemptsError); !ok {
-		t.Error("should receive max attempts error on retry: %s", err)
+		t.Errorf("should receive max attempts error on retry: %s", err)
 	}
 	timer.Stop()
 }
@@ -60,7 +60,7 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 		return RetryContinue, nil
 	})
 	if _, ok := err.(*RetryMaxAttemptsError); !ok {
-		t.Error("should receive max attempts error on retry: %s", err)
+		t.Errorf("should receive max attempts error on retry: %s", err)
 	}
 	if retries != 3 {
 		t.Error("expected 3 retries, got", retries)

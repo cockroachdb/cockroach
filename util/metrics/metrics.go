@@ -67,7 +67,7 @@ type timerToken struct {
 }
 
 // One occurrence of a continuous value for which rich metrics such as
-// percentiles may be generated.  This is what the below timers utilize.
+// percentiles may be generated. This is what the below timers utilize.
 type histogramType struct {
 	Name  string
 	Value float64
@@ -134,7 +134,7 @@ type MetricSystem struct {
 }
 
 // Metrics is the default metric system, which collects and broadcasts metrics
-// to subscribers once every 60 seconds.  Also includes default system stats.
+// to subscribers once every 60 seconds. Also includes default system stats.
 var Metrics = NewMetricSystem(60*time.Second, true)
 
 // NewMetricSystem returns a new metric system that collects and broadcasts
@@ -210,7 +210,7 @@ func (ms *MetricSystem) UnsubscribeFromProcessedMetrics(
 }
 
 // StartTimer begins a timer and returns a token which is required for halting
-// the timer.  This allows for concurrent timings under the same name.
+// the timer. This allows for concurrent timings under the same name.
 func (ms *MetricSystem) StartTimer(name string) timerToken {
 	return timerToken{
 		Name:  name,
@@ -228,7 +228,7 @@ func (ms *MetricSystem) StopTimer(token timerToken) time.Duration {
 }
 
 // Counter is used for recording a running count of the total occurrences of
-// a particular event.  A rate is also exported for the amount that a counter
+// a particular event. A rate is also exported for the amount that a counter
 // has increased during an interval of this MetricSystem.
 func (ms *MetricSystem) Counter(name string, amount uint64) {
 	ms.counterMu.RLock()
@@ -312,7 +312,7 @@ func (ms *MetricSystem) DeregisterGaugeFunc(name string) {
 }
 
 // compress takes a float64 and lossily shrinks it to an int16 to facilitate
-// bucketing of histogram values, staying within 1% of the true value.  This
+// bucketing of histogram values, staying within 1% of the true value. This
 // fails for large values of 1e142 and above, and is inaccurate for values
 // closer to 0 than +/- 0.51 or +/- math.Inf.
 func compress(value float64) int16 {
@@ -388,7 +388,7 @@ func (s proportionArray) Swap(i, j int) {
 }
 
 // percentile calculates a percentile represented as a float64 between 0 and 1
-// inclusive from a proportionArray.  totalCount is the sum of all counts of
+// inclusive from a proportionArray. totalCount is the sum of all counts of
 // elements in the proportionArray.
 func percentile(totalCount uint64, proportions proportionArray,
 	percentile float64) (float64, error) {
@@ -401,7 +401,7 @@ func percentile(totalCount uint64, proportions proportionArray,
 			return proportion.Value, nil
 		}
 	}
-	return 0, errors.New("Invalid percentile.  Should be between 0 and 1.")
+	return 0, errors.New("invalid percentile, should be between 0 and 1")
 }
 
 func (ms *MetricSystem) collectRawMetrics() *RawMetricSet {
@@ -566,7 +566,7 @@ func (ms *MetricSystem) reaper() {
 					"dropping their metrics on the floor rather than blocking.")
 				if ms.rawBadSubscribers[subscriber] >= 2 {
 					log.Error("this raw subscriber has caused dropped metrics at ",
-						"least 3 times in a row.  closing the channel.")
+						"least 3 times in a row. closing the channel.")
 					delete(ms.rawSubscribers, subscriber)
 					close(subscriber)
 				}
@@ -610,7 +610,7 @@ func (ms *MetricSystem) reaper() {
 						"dropping their metrics on the floor rather than blocking.")
 					if ms.processedBadSubscribers[subscriber] >= 2 {
 						log.Error("this subscriber has caused dropped metrics at ",
-							"least 3 times in a row.  closing the channel.")
+							"least 3 times in a row. closing the channel.")
 						delete(ms.processedSubscribers, subscriber)
 						close(subscriber)
 					}
@@ -623,7 +623,7 @@ func (ms *MetricSystem) reaper() {
 		default:
 			// processChan has filled up, this metric load is not sustainable
 			log.Errorf("processing of metrics is taking longer than this node can "+
-				"handle.  dropping this entire interval of %s metrics on the "+
+				"handle. dropping this entire interval of %s metrics on the "+
 				"floor rather than blocking the reaper.", rawMetrics.Time)
 		}
 	} // end main reaper loop

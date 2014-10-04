@@ -396,7 +396,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			// Trying again should fail again.
 			if err = store.ExecuteCmd(Put, pArgs, pReply); err == nil {
-				t.Errorf("resolvable? %d, expected write intent error but succeeded", resolvable)
+				t.Errorf("resolvable? %t, expected write intent error but succeeded", resolvable)
 			}
 		}
 	}

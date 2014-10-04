@@ -195,7 +195,7 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, err
 	)
 	if len(metadataKey) == 0 {
 		// In this case, the requested key is stored in the cluster's first
-		// range.  Return the first range, which is always gossiped and not
+		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
 		rd, err := kv.getFirstRangeDescriptor()
 		if err != nil {

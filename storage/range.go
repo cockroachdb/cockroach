@@ -915,7 +915,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 		return
 	}
 
-	// We want to search for the metadata key just greater than args.Key.  Scan
+	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
 	metaPrefix := engine.Key(args.Key[:len(engine.KeyMeta1Prefix)])
@@ -1140,7 +1140,7 @@ func (r *Range) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto
 
 // InternalResolveIntent updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
-// coordinator.  The range will return the current status for this
+// coordinator. The range will return the current status for this
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
 	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
@@ -1259,7 +1259,7 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 		r.Meta.RangeDescriptor.EndKey = oldEndKey
 		newRange.Stop()
 		if err = newRange.Destroy(); err != nil {
-			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %s", err, newRange)
+			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %v", err, newRange)
 		}
 		return
 	}

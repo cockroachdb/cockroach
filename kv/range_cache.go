@@ -132,7 +132,7 @@ func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key engine.Key) {
 			rmc.rangeCacheMu.Unlock()
 		}
 		// Retrieve the metadata range key for the next level of metadata, and
-		// evict that key as well.  This loop ends after the meta1 range, which
+		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
 		key = engine.RangeMetaKey(key)
 		if len(key) == 0 {

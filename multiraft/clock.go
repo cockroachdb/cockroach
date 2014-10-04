@@ -28,7 +28,7 @@ import (
 type Clock interface {
 	Now() time.Time
 
-	// NewElectionTimer returns a timer to be used for triggering elections.  The resulting
+	// NewElectionTimer returns a timer to be used for triggering elections. The resulting
 	// Timer struct will have its C field filled out, but may not be a "real" timer, so it
 	// must be stopped with StopElectionTimer instead of t.Stop()
 	NewElectionTimer(time.Duration) *time.Timer
@@ -52,7 +52,7 @@ func (realClock) StopElectionTimer(t *time.Timer) {
 	t.Stop()
 }
 
-// manualClock is a fake implementation of the Clock interface.  With this clock
+// manualClock is a fake implementation of the Clock interface. With this clock
 // time does not flow normally, but time-based events can be triggered manually with
 // methods like triggerElection.
 type manualClock struct {

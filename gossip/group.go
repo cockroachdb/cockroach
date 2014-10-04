@@ -194,7 +194,7 @@ func (g *group) infosAsSlice() infoSlice {
 // currently have.
 func (g *group) addInfo(i *info) error {
 	// First, see if info is already in the group. If so, and this
-	// info timestamp is newer, remove existing info.  If the
+	// info timestamp is newer, remove existing info. If the
 	// timestamps are equal (i.e. this is the same info), but hops
 	// value of prospective info is lower, take the minimum of the two
 	// Hops values.

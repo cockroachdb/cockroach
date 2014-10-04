@@ -41,7 +41,7 @@ type zoneHandler struct {
 	db storage.DB // Key-value database client
 }
 
-// Put writes a zone config for the specified key prefix "key".  The
+// Put writes a zone config for the specified key prefix "key". The
 // zone config is parsed from the input "body". The zone config is
 // stored gob-encoded. The specified body must be valid utf8 and must
 // validly parse into a zone config struct.

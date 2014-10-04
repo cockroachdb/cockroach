@@ -23,8 +23,8 @@ where one server is a part of many Raft consensus groups (likely with overlappin
 This entails the use of a shared log and coalesced timers for heartbeats.
 
 A cluster consists of a collection of nodes; the local node is represented by a MultiRaft
-object.  Each node may participate in any number of groups.  Nodes must have a globally
-unique ID (a string), and groups have a globally unique name.  The application is responsible
+object. Each node may participate in any number of groups. Nodes must have a globally
+unique ID (a string), and groups have a globally unique name. The application is responsible
 for providing a Transport interface that knows how to communicate with other nodes
 based on their IDs, and a Storage interface to manage persistent data.
 
