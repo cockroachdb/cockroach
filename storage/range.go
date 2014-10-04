@@ -1259,7 +1259,7 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 		r.Meta.RangeDescriptor.EndKey = oldEndKey
 		newRange.Stop()
 		if err = newRange.Destroy(); err != nil {
-			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %s", err, newRange)
+			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %v", err, newRange)
 		}
 		return
 	}

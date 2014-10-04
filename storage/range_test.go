@@ -635,7 +635,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs.Txn = NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 		if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
-			t.Fatal("test %d: %s", i, err)
+			t.Fatalf("test %d: %s", i, err)
 		}
 
 		// Now attempt read or write.
@@ -647,7 +647,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Write the intent again -- should not have its timestamp upgraded!
 		if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
-			t.Fatal("test %d: %s", i, err)
+			t.Fatalf("test %d: %s", i, err)
 		}
 		if !pReply.Timestamp.Equal(pArgs.Timestamp) {
 			t.Errorf("expected timestamp not to advance %s != %s", pReply.Timestamp, pArgs.Timestamp)

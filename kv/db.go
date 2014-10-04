@@ -112,7 +112,8 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 
 // RunTransaction executes retryable in the context of a distributed
 // transaction.
-
+// TODO(Spencer): write or copy a more descriptive comment here as various
+// references to this comment exist.
 func (db *DB) RunTransaction(opts *storage.TransactionOptions, retryable func(db storage.DB) error) error {
 	return runTransaction(db, opts, retryable)
 }
