@@ -40,7 +40,7 @@ const (
 	// storage.StoreDescriptor struct.
 	KeyMaxAvailCapacityPrefix = "max-avail-capacity-"
 
-	// KeyNodeCount is the count of gossip nodes in the network.  The
+	// KeyNodeCount is the count of gossip nodes in the network. The
 	// value is an int64 containing the count of nodes in the cluster.
 	// TODO(spencer): should remove this and instead just count the
 	//   number of node ids being gossiped.

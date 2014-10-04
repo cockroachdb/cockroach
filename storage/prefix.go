@@ -29,7 +29,7 @@ import (
 
 // PrefixConfig relate a string prefix to a config object. Config
 // objects include accounting, permissions, and zones. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects.  In order
+// objects are the constituents of PrefixConfigMap objects. In order
 // to support binary searches of hierarchical prefixes (see the
 // comments in NewPrefixConfigMap), PrefixConfig objects are
 // additionally added to a PrefixConfigMap to demarcate the end of a

@@ -25,7 +25,7 @@ import (
 )
 
 // The Transport interface is supplied by the application to manage communication with
-// other nodes.  It is responsible for mapping from IDs to some communication channel
+// other nodes. It is responsible for mapping from IDs to some communication channel
 // (in the simplest case, a host:port pair could be used as an ID, although this would
 // make it impossible to move an instance from one host to another except by syncing
 // up a new node from scratch).
@@ -46,9 +46,9 @@ type localRPCTransport struct {
 	listeners map[NodeID]net.Listener
 }
 
-// NewLocalRPCTransport creates a Transport for local testing use.  MultiRaft instances
+// NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
 // sharing the same local Transport can find and communicate with each other by ID (which
-// can be an arbitrary string).  Each instance binds to a different unused port on
+// can be an arbitrary string). Each instance binds to a different unused port on
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
@@ -107,7 +107,7 @@ type RequestHeader struct {
 	DestNode NodeID
 }
 
-// RequestVoteRequest is a part of the Raft protocol.  It is public so it can be used
+// RequestVoteRequest is a part of the Raft protocol. It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type RequestVoteRequest struct {
 	RequestHeader
@@ -118,14 +118,14 @@ type RequestVoteRequest struct {
 	LastLogTerm  int
 }
 
-// RequestVoteResponse is a part of the Raft protocol.  It is public so it can be used
+// RequestVoteResponse is a part of the Raft protocol. It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type RequestVoteResponse struct {
 	Term        int
 	VoteGranted bool
 }
 
-// AppendEntriesRequest is a part of the Raft protocol.  It is public so it can be used
+// AppendEntriesRequest is a part of the Raft protocol. It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type AppendEntriesRequest struct {
 	RequestHeader
@@ -138,7 +138,7 @@ type AppendEntriesRequest struct {
 	LeaderCommit int
 }
 
-// AppendEntriesResponse is a part of the Raft protocol.  It is public so it can be used
+// AppendEntriesResponse is a part of the Raft protocol. It is public so it can be used
 // by the net/rpc system but should not be used outside this package except to serialize it.
 type AppendEntriesResponse struct {
 	Term    int

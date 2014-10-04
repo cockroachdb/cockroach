@@ -18,7 +18,7 @@
 package multiraft
 
 // eventDemux turns the unified MultiRaft.Events stream into a set of type-safe
-// channels for ease of testing.  It is not suitable for non-test use because
+// channels for ease of testing. It is not suitable for non-test use because
 // unconsumed channels can become backlogged and block.
 type eventDemux struct {
 	LeaderElection   chan *EventLeaderElection

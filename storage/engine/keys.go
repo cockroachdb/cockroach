@@ -97,7 +97,7 @@ func (k Key) Next() Key {
 
 // PrefixEnd determines the end key given key as a prefix, that is
 // the key that sorts precisely behind all keys starting with prefix:
-// "1" is added to the final byte and the carry propagated.  The
+// "1" is added to the final byte and the carry propagated. The
 // special cases of nil and KeyMin ("") always returns KeyMax
 // ("\xff").
 func (k Key) PrefixEnd() Key {
@@ -153,9 +153,9 @@ type KeyValue struct {
 	Value
 }
 
-// RangeMetaKey returns a range metadata key for the given key.  For ordinary
+// RangeMetaKey returns a range metadata key for the given key. For ordinary
 // keys this returns a level 2 metadata key - for level 2 keys, it returns a
-// level 1 key.  For level 1 keys and local keys, KeyMin is returned.
+// level 1 key. For level 1 keys and local keys, KeyMin is returned.
 func RangeMetaKey(key Key) Key {
 	if len(key) == 0 {
 		return KeyMin
@@ -178,8 +178,8 @@ func RangeMetadataLookupKey(r *proto.RangeDescriptor) Key {
 }
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
-// key.  It must have an appropriate metadata range prefix, and the original key
-// value must be less thas KeyMax.  As a special case, KeyMin is considered a
+// key. It must have an appropriate metadata range prefix, and the original key
+// value must be less thas KeyMax. As a special case, KeyMin is considered a
 // valid Range Metadata Key.
 func ValidateRangeMetaKey(key Key) error {
 	// KeyMin is a valid key.

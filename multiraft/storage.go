@@ -32,7 +32,7 @@ const (
 	LogEntryChangeMembership
 )
 
-// LogEntry represents a persistent log entry.  Payloads are interpreted according to
+// LogEntry represents a persistent log entry. Payloads are interpreted according to
 // the Type field; Payloads of LogEntryCommand are opaque to the raft system.
 type LogEntry struct {
 	Term    int
@@ -58,7 +58,7 @@ const (
 	// TODO(bdarnell): enforce the requirement that a node be added as an observer first.
 	ChangeMembershipAddMember
 
-	// ChangeMembershipRemoveMember removes a voting node.  It is not possible to remove the
+	// ChangeMembershipRemoveMember removes a voting node. It is not possible to remove the
 	// last node; the result of attempting to do so is undefined.
 	ChangeMembershipRemoveMember
 )
@@ -77,7 +77,7 @@ type GroupElectionState struct {
 	// CurrentTerm is the highest term this node has seen.
 	CurrentTerm int
 
-	// VotedFor is the node this node has voted for in CurrentTerm's election.  It is zero
+	// VotedFor is the node this node has voted for in CurrentTerm's election. It is zero
 	// If this node has not yet voted in CurrentTerm.
 	VotedFor NodeID
 }
@@ -126,7 +126,7 @@ type Storage interface {
 	// SetGroupElectionState is called to update the election state for the given group.
 	SetGroupElectionState(groupID GroupID, electionState *GroupElectionState) error
 
-	// AppendLogEntries is called to add entries to the log.  The entries will always span
+	// AppendLogEntries is called to add entries to the log. The entries will always span
 	// a contiguous range of indices just after the current end of the log.
 	AppendLogEntries(groupID GroupID, entries []*LogEntry) error
 
@@ -137,7 +137,7 @@ type Storage interface {
 	GetLogEntry(groupID GroupID, index int) (*LogEntry, error)
 
 	// GetLogEntries is called to asynchronously retrieve entries from the log,
-	// from firstIndex to lastIndex inclusive.  If there is an error the storage
+	// from firstIndex to lastIndex inclusive. If there is an error the storage
 	// layer should send one LogEntryState with a non-nil error and then close the
 	// channel.
 	GetLogEntries(groupID GroupID, firstIndex, lastIndex int, ch chan<- *LogEntryState)
@@ -259,7 +259,7 @@ type writeTask struct {
 	storage Storage
 	stopper chan struct{}
 
-	// ready is an unbuffered channel used for synchronization.  If writes to this channel do not
+	// ready is an unbuffered channel used for synchronization. If writes to this channel do not
 	// block, the writeTask is ready to receive a request.
 	ready chan struct{}
 
@@ -268,7 +268,7 @@ type writeTask struct {
 	out chan *writeResponse
 }
 
-// newWriteTask creates a writeTask.  The caller should start the task after creating it.
+// newWriteTask creates a writeTask. The caller should start the task after creating it.
 func newWriteTask(storage Storage) *writeTask {
 	return &writeTask{
 		storage: storage,
@@ -279,7 +279,7 @@ func newWriteTask(storage Storage) *writeTask {
 	}
 }
 
-// start runs the storage loop.  Blocks until stopped, so should be run in a goroutine.
+// start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
 func (w *writeTask) start() {
 	for {
 		var request *writeRequest

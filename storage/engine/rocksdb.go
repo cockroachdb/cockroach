@@ -218,7 +218,7 @@ func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
 	return nil
 }
 
-// Attrs returns the list of attributes describing this engine.  This
+// Attrs returns the list of attributes describing this engine. This
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
 // the engine.

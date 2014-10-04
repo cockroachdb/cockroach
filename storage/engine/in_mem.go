@@ -119,7 +119,7 @@ func (in *InMem) ReleaseSnapshot(snapshotID string) error {
 	return nil
 }
 
-// Attrs returns the list of attributes describing this engine.  This
+// Attrs returns the list of attributes describing this engine. This
 // includes the disk type (always "mem") and potentially other labels
 // to identify important attributes of the engine.
 func (in *InMem) Attrs() proto.Attributes {

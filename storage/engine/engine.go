@@ -220,11 +220,11 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 }
 
 // ClearRange removes a set of entries, from start (inclusive)
-// to end (exclusive), up to max entries.  If max is 0, all
-// entries between start and end are deleted.  This function
-// returns the number of entries removed.  Either all entries
+// to end (exclusive), up to max entries. If max is 0, all
+// entries between start and end are deleted. This function
+// returns the number of entries removed. Either all entries
 // within the range, up to max, will be deleted, or none, and
-// an error will be returned.  Note that this function actually
+// an error will be returned. Note that this function actually
 // removes entries from the storage engine, rather than inserting
 // tombstones.
 func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
