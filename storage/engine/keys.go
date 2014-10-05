@@ -20,6 +20,7 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 
 	"code.google.com/p/biogo.store/interval"
@@ -177,7 +178,7 @@ func RangeMetadataLookupKey(r *proto.RangeDescriptor) Key {
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. It must have an appropriate metadata range prefix, and the original key
-// value must be less thas KeyMax. As a special case, KeyMin is considered a
+// value must be less than KeyMax. As a special case, KeyMin is considered a
 // valid Range Metadata Key.
 func ValidateRangeMetaKey(key Key) error {
 	// KeyMin is a valid key.
@@ -193,7 +194,7 @@ func ValidateRangeMetaKey(key Key) error {
 
 	// The prefix must be equal to KeyMeta1Prefix or KeyMeta2Prefix
 	if !bytes.HasPrefix(key, KeyMetaPrefix) {
-		return NewInvalidRangeMetaKeyError("does not have \\x00\\x00meta[12] prefix", key)
+		return NewInvalidRangeMetaKeyError(fmt.Sprintf("does not have %q prefix", KeyMetaPrefix), key)
 	}
 	if lvl := string(prefix[len(KeyMetaPrefix)]); lvl != "1" && lvl != "2" {
 		return NewInvalidRangeMetaKeyError("meta level is not 1 or 2", key)
@@ -215,7 +216,7 @@ func init() {
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMaxLength is the maximum key length.
-	KeyMaxLength = 2048
+	KeyMaxLength = 4096
 
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key("")
