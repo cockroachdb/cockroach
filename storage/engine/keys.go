@@ -47,7 +47,7 @@ func MakeLocalKey(keys ...Key) Key {
 		log.Fatal("no key components specified in call to MakeLocalKey")
 	}
 	if len(keys[0]) != KeyLocalPrefixLength {
-		log.Fatal("local key prefix length must be %d: %q", KeyLocalPrefixLength, keys[0])
+		log.Fatalf("local key prefix length must be %d: %q", KeyLocalPrefixLength, keys[0])
 	}
 	return MakeKey(keys...)
 }
@@ -93,11 +93,10 @@ func (k Key) Next() Key {
 	return MakeKey(k, Key{0})
 }
 
-// PrefixEnd determines the end key given key as a prefix, that is
-// the key that sorts precisely behind all keys starting with prefix:
-// "1" is added to the final byte and the carry propagated. The
-// special cases of nil and KeyMin ("") always returns KeyMax
-// ("\xff").
+// PrefixEnd determines the end key given key as a prefix, that is the
+// key that sorts precisely behind all keys starting with prefix: "1"
+// is added to the final byte and the carry propagated. The special
+// cases of nil and KeyMin always returns KeyMax.
 func (k Key) PrefixEnd() Key {
 	if len(k) == 0 {
 		return KeyMax
