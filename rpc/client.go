@@ -61,36 +61,34 @@ type Client struct {
 	Ready  chan struct{} // Closed when client is connected
 	Closed chan struct{} // Closed when connection has closed
 
-	mu          sync.Mutex // Mutex protects the fields below
-	*rpc.Client            // Embedded RPC client
-	addr        net.Addr   // Remote address of client
-	lAddr       net.Addr   // Local address of client
-	healthy     bool
-	closed      bool
-	offset      Offset // Latest measured clock offset from the server
-	clock       *hlc.Clock
+	mu           sync.Mutex // Mutex protects the fields below
+	*rpc.Client             // Embedded RPC client
+	addr         net.Addr   // Remote address of client
+	lAddr        net.Addr   // Local address of client
+	healthy      bool
+	closed       bool
+	offset       RemoteOffset // Latest measured clock offset from the server
+	clock        *hlc.Clock
+	remoteClocks *RemoteClockMonitor
 }
 
-// Offset keeps track of this client's estimate of its offset from it's
-// connected server. Delay is the roundtrip delay in the last offset
-// measurement. The real offset should be in the interval [Offset - Delay/2,
-// Offset + Delay/2]. If the last heartbeat timed out, Offset = InfiniteOffset.
+// RemoteOffset keeps track of this client's estimate of its offset from it's
+// remote server. Error is the maximum error in the reading of this offset, so
+// that the real offset should be in the interval [Offset - Error, Offset
+// + Error]. If the last heartbeat timed out, Offset = InfiniteOffset.
 //
-// Offset and delay are measured as an adaptation of the remote clock reading
-// technique described in
-// https://www.eecis.udel.edu/~mills/ntp/html/warp.html#arch. Note that we
-// don't have the fined grained notion of a "server receive time" and "server
-// send time", but only the time that the server reads before responding to
-// a heartbeat.
-type Offset struct {
-	Offset int64
-	Delay  int64
+// Offset and error are measured using the remote clock reading technique
+// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+type RemoteOffset struct {
+	Offset     int64 // The estimated offset from the remote server, in nanoseconds.
+	Error      int64 // The maximum error of the measured offset, in nanoseconds.
+	MeasuredAt int64 // Measurement time, in nanoseconds from unix epoch.
 }
 
 // InfiniteOffset is the offset value used if we fail to detect a heartbeat.
-var InfiniteOffset = Offset{
+var InfiniteOffset = RemoteOffset{
 	Offset: math.MaxInt64,
-	Delay:  0,
+	Error:  0,
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -105,18 +103,18 @@ var InfiniteOffset = Offset{
 // and completed one successful heartbeat. The Closed channel is
 // closed if the client fails to connect or if the client's Close()
 // method is invoked.
-func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig,
-	clock *hlc.Clock) *Client {
+func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client {
 	clientMu.Lock()
 	if c, ok := clients[addr.String()]; ok {
 		clientMu.Unlock()
 		return c
 	}
 	c := &Client{
-		addr:   addr,
-		Ready:  make(chan struct{}),
-		Closed: make(chan struct{}),
-		clock:  clock,
+		addr:         addr,
+		Ready:        make(chan struct{}),
+		Closed:       make(chan struct{}),
+		clock:        context.localClock,
+		remoteClocks: context.remoteClocks,
 	}
 	clients[c.Addr().String()] = c
 	clientMu.Unlock()
@@ -130,7 +128,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, tlsConfig *TLSConfig,
 
 	go func() {
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-			conn, err := tlsDial(addr.Network(), addr.String(), tlsConfig)
+			conn, err := tlsDial(addr.Network(), addr.String(), context.tlsConfig)
 			if err != nil {
 				log.Info(err)
 				return util.RetryContinue, nil
@@ -194,9 +192,9 @@ func (c *Client) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
-// Offset returns the most recently measured offset of the client clock
-// from the server clock.
-func (c *Client) Offset() Offset {
+// RemoteOffset returns the most recently measured offset of the client clock
+// from the remote server clock.
+func (c *Client) RemoteOffset() RemoteOffset {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.offset
@@ -236,27 +234,35 @@ func (c *Client) startHeartbeat() {
 
 // heartbeat sends a single heartbeat RPC.
 func (c *Client) heartbeat() error {
+	request := &PingRequest{Offset: c.RemoteOffset(), Addr: c.LocalAddr().String()}
 	response := &PingResponse{}
 	sendTime := c.clock.Now().WallTime
-	call := c.Go("Heartbeat.Ping", &PingRequest{}, response, nil)
+	call := c.Go("Heartbeat.Ping", request, response, nil)
 	select {
 	case <-call.Done:
 		receiveTime := c.clock.Now().WallTime
 		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		c.mu.Lock()
 		c.healthy = true
-		c.offset.Offset =
-			(response.ServerTime - sendTime +
-				response.ServerTime - receiveTime) / 2
-		c.offset.Delay = receiveTime - sendTime
+		// TODO(embark) consider max clock drift and min message delivery time
+		// Not including clock drift might decrease accuracy, while not
+		// including min message delivery time might increase the error
+		// estimate.
+		c.offset.Error = (receiveTime - sendTime) / 2
+		remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
+		c.offset.Offset = remoteTimeNow - receiveTime
+		c.offset.MeasuredAt = receiveTime
 		c.mu.Unlock()
+		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		return call.Error
 	case <-time.After(heartbeatInterval * 2):
 		// Allowed twice gossip interval.
 		c.mu.Lock()
 		c.healthy = false
 		c.offset = InfiniteOffset
+		c.offset.MeasuredAt = c.clock.Now().WallTime
 		c.mu.Unlock()
+		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
 	}
 

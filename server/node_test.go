@@ -48,11 +48,12 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcServer := rpc.NewServer(addr, tlsConfig, clock)
+	rpcContext := rpc.NewContext(clock, tlsConfig)
+	rpcServer := rpc.NewServer(addr, rpcContext)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(tlsConfig, clock)
+	g := gossip.New(rpcContext)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {

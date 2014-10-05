@@ -319,8 +319,10 @@ func newServer() (*server, error) {
 	}
 	s.clock.SetMaxDrift(*maxDrift)
 
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig, s.clock)
-	s.gossip = gossip.New(tlsConfig, s.clock)
+	rpcContext := rpc.NewContext(s.clock, tlsConfig)
+
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), rpcContext)
+	s.gossip = gossip.New(rpcContext)
 	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)

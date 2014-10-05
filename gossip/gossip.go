@@ -109,7 +109,7 @@ type Gossip struct {
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
-	tlsConfig    *rpc.TLSConfig     // Config for RPC TLS
+	rpcContext   *rpc.Context       // The context required for RPC
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
@@ -122,16 +122,15 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-func New(tlsConfig *rpc.TLSConfig, clock *hlc.Clock) *Gossip {
+func New(rpcContext *rpc.Context) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
-		tlsConfig:    tlsConfig,
+		rpcContext:   rpcContext,
 		server:       newServer(*GossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      map[string]*client{},
 		disconnected: make(chan *client, MaxPeers),
-		clock:        clock,
 	}
 	g.stalled = sync.NewCond(&g.mu)
 	return g
@@ -512,13 +511,8 @@ func (g *Gossip) closeClient(addr net.Addr) {
 	g.clientsMu.Unlock()
 }
 
-// TLSConfig returns the Gossip's TLS config; this is a bit hacky but reduces
-// the number of places we have to pass the config around.
-func (g *Gossip) TLSConfig() *rpc.TLSConfig {
-	return g.tlsConfig
-}
-
-// Clock returns the Gossip's hybrid logical clock instance.
-func (g *Gossip) Clock() *hlc.Clock {
-	return g.clock
+// RPCContext returns the Gossip's rpc.Context; this is a bit hacky but reduces
+// the number of places we have to pass the context around.
+func (g *Gossip) RPCContext() *rpc.Context {
+	return g.rpcContext
 }
