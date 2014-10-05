@@ -932,7 +932,7 @@ func (r *Range) InternalRangeLookup(args *proto.InternalRangeLookupRequest, repl
 		// key, but no matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just treat it
 		// as a retryable Key Mismatch error.
-		err := proto.NewRangeKeyMismatchError(args.Key, args.Key, r.Meta)
+		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Meta)
 		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
 		return

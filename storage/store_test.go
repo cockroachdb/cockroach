@@ -190,6 +190,36 @@ func TestStoreExecuteCmd(t *testing.T) {
 
 }
 
+// TestStoreVerifyKeys checks that key length is enforced and
+// that end keys must sort >= start.
+func TestStoreVerifyKeys(t *testing.T) {
+	store, _ := createTestStore(true, t)
+	defer store.Close()
+	tooLongKey := engine.MakeKey(engine.KeyMax, []byte{0})
+
+	// Start with a too-long key on a get.
+	gArgs, gReply := getArgs(tooLongKey, 2)
+	if err := store.ExecuteCmd(Get, gArgs, gReply); err == nil {
+		t.Fatal("expected error for key too long")
+	}
+	// Try a scan with too-long EndKey.
+	sArgs, sReply := scanArgs(engine.KeyMin, tooLongKey, 2)
+	if err := store.ExecuteCmd(Scan, sArgs, sReply); err == nil {
+		t.Fatal("expected error for end key too long")
+	}
+	// Try a scan with end key < start key.
+	sArgs.Key = []byte("b")
+	sArgs.EndKey = []byte("a")
+	if err := store.ExecuteCmd(Scan, sArgs, sReply); err == nil {
+		t.Fatal("expected error for end key < start")
+	}
+	// Finally, try a range lookup with adjusted maximum key length.
+	pArgs, pReply := putArgs(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), []byte("value"), 1)
+	if err := store.ExecuteCmd(Put, pArgs, pReply); err != nil {
+		t.Fatalf("unexpected error on put to meta2 value: %s", err)
+	}
+}
+
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
 func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	store, _ := createTestStore(true, t)

@@ -99,10 +99,11 @@ func TestKeyPrefixEnd(t *testing.T) {
 		key Key
 		end Key
 	}{
-		{Key{}, Key{0xff}},
+		{Key{}, KeyMax},
 		{Key{0}, Key{0x01}},
 		{Key{0xff}, Key{0xff}},
 		{Key{0xff, 0xff}, Key{0xff, 0xff}},
+		{KeyMax, KeyMax},
 		{Key{0xff, 0xfe}, Key{0xff, 0xff}},
 		{Key{0x00, 0x00}, Key{0x00, 0x01}},
 		{Key{0x00, 0xff}, Key{0x01, 0x00}},
@@ -174,7 +175,7 @@ func TestNextKey(t *testing.T) {
 		{nil, Key("\x00")},
 		{Key(""), Key("\x00")},
 		{Key("test key"), Key("test key\x00")},
-		{Key(KeyMax), Key("\xff\x00")},
+		{Key(KeyMax), MakeKey(KeyMax, []byte("\x00"))},
 		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
 	}
 	for i, c := range testCases {

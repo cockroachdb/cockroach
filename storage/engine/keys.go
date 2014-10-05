@@ -20,6 +20,8 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
@@ -176,7 +178,7 @@ func RangeMetadataLookupKey(r *proto.RangeDescriptor) Key {
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. It must have an appropriate metadata range prefix, and the original key
-// value must be less thas KeyMax. As a special case, KeyMin is considered a
+// value must be less than KeyMax. As a special case, KeyMin is considered a
 // valid Range Metadata Key.
 func ValidateRangeMetaKey(key Key) error {
 	// KeyMin is a valid key.
@@ -185,21 +187,21 @@ func ValidateRangeMetaKey(key Key) error {
 	}
 	// Key must be at least as long as KeyMeta1Prefix.
 	if len(key) < len(KeyMeta1Prefix) {
-		return NewInvalidRangeMetaKeyError(key)
+		return NewInvalidRangeMetaKeyError("too short", key)
 	}
 
 	prefix, body := key[:len(KeyMeta1Prefix)], key[len(KeyMeta1Prefix):]
 
 	// The prefix must be equal to KeyMeta1Prefix or KeyMeta2Prefix
 	if !bytes.HasPrefix(key, KeyMetaPrefix) {
-		return NewInvalidRangeMetaKeyError(key)
+		return NewInvalidRangeMetaKeyError(fmt.Sprintf("does not have %q prefix", KeyMetaPrefix), key)
 	}
 	if lvl := string(prefix[len(KeyMetaPrefix)]); lvl != "1" && lvl != "2" {
-		return NewInvalidRangeMetaKeyError(key)
+		return NewInvalidRangeMetaKeyError("meta level is not 1 or 2", key)
 	}
 	// Body of the key must sort before KeyMax
 	if !body.Less(KeyMax) {
-		return NewInvalidRangeMetaKeyError(key)
+		return NewInvalidRangeMetaKeyError("body of range lookup is >= KeyMax", key)
 	}
 
 	return nil
@@ -213,12 +215,13 @@ func init() {
 
 // Constants for system-reserved keys in the KV map.
 var (
+	// KeyMaxLength is the maximum key length.
+	KeyMaxLength = 4096
+
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key("")
-	// KeyMax is a maximum key value which sorts after all other
-	// keys. Because keys are stored using an ordered encoding (see
-	// storage/encoding.go), they will never start with \xff.
-	KeyMax = Key("\xff")
+	// KeyMax is a maximum key value which sorts after all other keys.
+	KeyMax = Key(strings.Repeat("\xff", KeyMaxLength))
 
 	// KeyLocalPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as range accounting information
