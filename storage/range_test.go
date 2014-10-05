@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"regexp"
 	"sync"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -66,6 +68,8 @@ var (
 			proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			proto.Attributes{Attrs: []string{"dc2", "mem"}},
 		},
+		RangeMinBytes: 0,
+		RangeMaxBytes: 1 << 8, // very low so a range will usually want to split.
 	}
 )
 
@@ -1377,5 +1381,42 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 	if reply.PusheeTxn.Status != proto.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
+	}
+}
+
+// fillRange writes keys with the given prefix to the range until the
+// approximate size as reported by mvcc surpasses the requested size.
+// TODO(Tobias): for a RocksDB engine, this will likely overshoot by a lot
+// since data is not immediately written to disk and hence not visible to
+// ApproximateSize().
+func fillRange(r *Range, prefix engine.Key, bytes int64, t *testing.T) {
+	src := rand.New(rand.NewSource(0))
+	endKey := prefix.PrefixEnd()
+	for {
+		if curBytes, err := r.mvcc.ApproximateSize(prefix, endKey); err != nil {
+			t.Fatal(err)
+		} else if curBytes > uint64(bytes) {
+			return
+		}
+		key := append(append([]byte(nil), prefix...), []byte(util.RandString(src, 100))...)
+		val := []byte(util.RandString(src, int(bytes)))
+		if err := r.mvcc.Put(key, proto.Timestamp{}, proto.Value{Bytes: val}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestShouldSplit verifies that shouldSplit() correctly takes into account the
+// zone configuration to figure out what the maximum size of a range is.
+func TestShouldSplit(t *testing.T) {
+	rng, _ := createTestRange(createTestEngine(t), t)
+	defer rng.Stop()
+	if ok := rng.shouldSplit(); ok {
+		t.Fatalf("range should not split but wants to")
+	}
+	maxBytes := testDefaultZoneConfig.RangeMaxBytes
+	fillRange(rng, engine.Key("test"), maxBytes, t)
+	if ok := rng.shouldSplit(); !ok {
+		t.Fatalf("range should split but does not want to")
 	}
 }

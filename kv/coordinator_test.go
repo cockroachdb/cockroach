@@ -52,7 +52,7 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 	return db, clock, &manual
 }
 
-// creatPutRequest returns a ready-made request using the
+// createPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
 func createPutRequest(key engine.Key, value, txnID []byte) *proto.PutRequest {
 	return &proto.PutRequest{

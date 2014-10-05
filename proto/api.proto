@@ -74,7 +74,7 @@ message RequestHeader {
   // defaults to 1.
   optional int32 user_priority = 7 [default = 1];
   // Txn is set non-nil if a transaction is underway. If set, the value
-  // of Priority is ignored.
+  // of UserPriority is ignored.
   optional Transaction txn = 8;
 }
 
@@ -435,7 +435,8 @@ message InternalSnapshotCopyResponse {
 // An InternalSplitRequest is arguments to the InternalSplit() method.
 message InternalSplitRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bytes split_key = 2 [(gogoproto.nullable) = false];
+  optional RangeDescriptor range_descriptor = 2 [(gogoproto.nullable) = false];
+  optional bytes split_key = 3 [(gogoproto.nullable) = false];
 }
 
 // An InternalSplitResponse is the return value from the InternalSplit()

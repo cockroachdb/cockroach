@@ -127,6 +127,13 @@ func runTransaction(db *DB, opts *storage.TransactionOptions, retryable func(db 
 // - Re-create transaction on TransactionAbortedError
 func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interface{}) {
 	tdb.Lock()
+	// If the transaction hasn't yet been created, create now, using
+	// this command's key as the base key.
+	if tdb.txn == nil {
+		tdb.txn = storage.NewTransaction(tdb.Name, args.Header().Key,
+			tdb.UserPriority, tdb.Isolation, tdb.clock)
+		tdb.timestamp = tdb.txn.Timestamp
+	}
 	if method == storage.EndTransaction {
 		// For EndTransaction, make sure key is set to txn ID.
 		args.Header().Key = engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, tdb.txn.ID)
@@ -135,13 +142,6 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 		tdb.DB.executeCmd(method, args, replyChan)
 		tdb.Unlock()
 		return
-	}
-	// If the transaction hasn't yet been created, create now, using
-	// this command's key as the base key.
-	if tdb.txn == nil {
-		tdb.txn = storage.NewTransaction(tdb.Name, args.Header().Key,
-			tdb.UserPriority, tdb.Isolation, tdb.clock)
-		tdb.timestamp = tdb.txn.Timestamp
 	}
 	// Set args.Timestamp & args.Txn to reflect current values.
 	txnCopy := *tdb.txn
