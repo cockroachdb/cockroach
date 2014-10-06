@@ -202,6 +202,11 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if err := store.ExecuteCmd(Get, gArgs, gReply); err == nil {
 		t.Fatal("expected error for key too long")
 	}
+	// Try a start key == KeyMax.
+	gArgs.Key = engine.KeyMax
+	if err := store.ExecuteCmd(Get, gArgs, gReply); err == nil {
+		t.Fatal("expected error for start key == KeyMax")
+	}
 	// Try a scan with too-long EndKey.
 	sArgs, sReply := scanArgs(engine.KeyMin, tooLongKey, 2)
 	if err := store.ExecuteCmd(Scan, sArgs, sReply); err == nil {
@@ -213,7 +218,8 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if err := store.ExecuteCmd(Scan, sArgs, sReply); err == nil {
 		t.Fatal("expected error for end key < start")
 	}
-	// Finally, try a range lookup with adjusted maximum key length.
+	// Finally, try a put to meta2 key which would otherwise exceed
+	// maximum key length, but is accepted because of the meta prefix.
 	pArgs, pReply := putArgs(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), []byte("value"), 1)
 	if err := store.ExecuteCmd(Put, pArgs, pReply); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
