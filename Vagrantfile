@@ -9,14 +9,9 @@ $provisioner = <<SCRIPT
   sudo apt-get install -qy python-software-properties
   sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
   sudo apt-get update -qq
-  sudo apt-get install -y -qq gcc-4.8 g++-4.8 zlib1g-dev libbz2-dev libsnappy-dev libjemalloc-dev libprotobuf-dev protobuf-compiler clang curl make git mercurial
+  sudo apt-get install -y -qq gcc-4.8 g++-4.8 libjemalloc-dev libprotobuf-dev protobuf-compiler clang curl make git mercurial
   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
-  wget https://gflags.googlecode.com/files/libgflags0_2.0-1_amd64.deb
-  sudo dpkg -i libgflags0_2.0-1_amd64.deb
-  wget https://gflags.googlecode.com/files/libgflags-dev_2.0-1_amd64.deb
-  sudo dpkg -i libgflags-dev_2.0-1_amd64.deb
-  rm -rf libgflags*
 
   # Go time.
   curl -s https://storage.googleapis.com/golang/go1.3.1.linux-amd64.tar.gz | sudo tar -v -C /usr/local -xz
