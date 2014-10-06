@@ -234,7 +234,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 			// Make sure to upgrade our priority to the conflicting txn's - 1.
 			return util.RetryContinue, nil
 		}
-		reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
+		proto.SendReply(replyChan, reply)
 		return util.RetryBreak, nil
 	})
 
@@ -247,7 +247,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 }
 
 func sendError(err error, replyChan interface{}) {
-	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
+	reply := proto.NewReply(replyChan)
 	reply.Header().SetGoError(err)
-	reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
+	proto.SendReply(replyChan, reply)
 }

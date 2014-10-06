@@ -22,7 +22,6 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sync"
 	"unsafe"
 
@@ -294,7 +293,7 @@ func (in *InMem) WriteBatch(cmds []interface{}) error {
 				return err
 			}
 		default:
-			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
 		}
 	}
 	return nil

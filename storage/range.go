@@ -102,8 +102,18 @@ const (
 	InternalSplit         = "InternalSplit"
 )
 
+type stringSet map[string]struct{}
+
+func (s stringSet) keys() []string {
+	keys := make([]string, 0, len(s))
+	for k := range s {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // readMethods specifies the set of methods which read and return data.
-var readMethods = map[string]struct{}{
+var readMethods = stringSet{
 	Contains:             struct{}{},
 	Get:                  struct{}{},
 	ConditionalPut:       struct{}{},
@@ -115,7 +125,7 @@ var readMethods = map[string]struct{}{
 }
 
 // writeMethods specifies the set of methods which write data.
-var writeMethods = map[string]struct{}{
+var writeMethods = stringSet{
 	Put:                   struct{}{},
 	ConditionalPut:        struct{}{},
 	Increment:             struct{}{},
@@ -133,7 +143,7 @@ var writeMethods = map[string]struct{}{
 }
 
 // tsCacheMethods specifies the set of methods which affect the timestamp cache.
-var tsCacheMethods = map[string]struct{}{
+var tsCacheMethods = stringSet{
 	Contains:              struct{}{},
 	Get:                   struct{}{},
 	Put:                   struct{}{},
@@ -150,10 +160,10 @@ var tsCacheMethods = map[string]struct{}{
 }
 
 // ReadMethods lists the read-only methods supported by a range.
-var ReadMethods = util.MapKeys(readMethods).([]string)
+var ReadMethods = readMethods.keys()
 
 // WriteMethods lists the methods supported by a range which write data.
-var WriteMethods = util.MapKeys(writeMethods).([]string)
+var WriteMethods = writeMethods.keys()
 
 // Methods lists all the methods supported by a range.
 var Methods = append(ReadMethods, WriteMethods...)
@@ -604,7 +614,7 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 	var configs []*PrefixConfig
 	for _, kv := range kvs {
 		// Instantiate an instance of the config type by unmarshalling
-		// gob encoded config from the Value into a new instance of configI.
+		// proto encoded config from the Value into a new instance of configI.
 		config := reflect.New(reflect.TypeOf(configI)).Interface().(gogoproto.Message)
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, config); err != nil {
 			return nil, util.Errorf("unable to unmarshal config key %s: %s", string(kv.Key), err)

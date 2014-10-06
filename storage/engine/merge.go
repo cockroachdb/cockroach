@@ -97,6 +97,11 @@ func (s Appender) Merge(t Mergable) (Mergable, error) {
 // The two values obtained in this way are merged and the result, or
 // an error, returned.
 func goMerge(existing, update []byte) ([]byte, error) {
+	// TODO(pmattis): This should almost certainly not be using gob for
+	// encoding as gob has overhead each time it sends a new type over a
+	// "connection" and the usage here is creating a new "connection"
+	// per value stored. Better to use a proto with optional Counter and
+	// Appender fields.
 	u, err := encoding.GobDecode(update)
 	if err != nil {
 		return nil, util.Errorf("merge: %v", err)

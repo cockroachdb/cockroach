@@ -23,7 +23,6 @@ import (
 	"math/rand"
 	"net"
 	"net/rpc"
-	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -131,7 +130,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				helperChan <- util.Errorf("no arguments in map (len %d) for client %s", len(argsMap), clients[index].Addr())
 				continue
 			}
-			reply := reflect.New(reflect.TypeOf(replyChanI).Elem().Elem()).Interface()
+			reply := proto.NewReply(replyChanI)
 			if log.V(1) {
 				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
@@ -165,7 +164,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				if log.V(1) {
 					log.Infof("%s: successful reply: %+v", method, t)
 				}
-				reflect.ValueOf(replyChanI).Send(reflect.ValueOf(t))
+				proto.SendReply(replyChanI, t.(proto.Response))
 				if successes == opts.N {
 					return nil
 				}
