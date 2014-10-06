@@ -530,7 +530,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 // write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *proto.Transaction) (int64, error) {
+func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto.Transaction) (int64, error) {
 	if txn == nil {
 		return 0, util.Error("no txn specified")
 	}
@@ -570,6 +570,12 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key Key, endKey Key, max int64, txn *p
 	}
 
 	return num, nil
+}
+
+// ApproximateSize computes the approximate size using the underlying engine.
+func (mvcc *MVCC) ApproximateSize(key, endKey Key) (uint64, error) {
+	return mvcc.engine.ApproximateSize(encoding.EncodeBinary(nil, key),
+		encoding.EncodeBinary(nil, endKey))
 }
 
 // a splitSampleItem wraps a key along with an aggregate over key range

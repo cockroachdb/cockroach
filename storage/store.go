@@ -317,10 +317,10 @@ func (s *Store) BootstrapRangeMetadata() *proto.RangeMetadata {
 	}
 }
 
-// NewRangeMetadata creates a new RangeMetadata based on start and
-// end keys and the supplied proto.Replicas slice. It allocates new
-// Raft and range IDs to fill out the supplied RangeMetadata. Returns
-// the new RangeMetadata.
+// NewRangeMetadata creates a new RangeMetadata based on start and end keys and
+// the supplied proto.Replicas slice, which is copied. It allocates new Raft
+// and range IDs to fill out the supplied RangeMetadata.
+// Returns the new RangeMetadata.
 func (s *Store) NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata {
 	meta := &proto.RangeMetadata{
 		ClusterID: s.Ident.ClusterID,
@@ -328,7 +328,7 @@ func (s *Store) NewRangeMetadata(start, end engine.Key, replicas []proto.Replica
 			RaftID:   s.raftIDAlloc.Allocate(),
 			StartKey: start,
 			EndKey:   end,
-			Replicas: replicas,
+			Replicas: append([]proto.Replica(nil), replicas...),
 		},
 		// Note that RangeID is specifically left blank, as it varies
 		// for each replica which belongs to the range.
@@ -342,29 +342,38 @@ func (s *Store) NewRangeMetadata(start, end engine.Key, replicas []proto.Replica
 	return meta
 }
 
+// MatchRangeID finds and returns the range ID associated to this store's replica.
+func (s *Store) MatchRangeID(meta *proto.RangeMetadata) (int64, error) {
+	for _, repl := range meta.Replicas {
+		if repl.StoreID == s.Ident.StoreID && meta.ClusterID == s.Ident.ClusterID {
+			return repl.RangeID, nil
+		}
+	}
+	return 0, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %v",
+		s.Ident.StoreID, meta.Replicas)
+}
+
 // CreateRange creates a new Range using the provided RangeMetadata.
 // It persists the metadata locally and adds the new range to the
 // ranges map and sorted rangesByKey slice for doing range lookups
 // by key.
 func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
 	// Set the RangeID for meta based on the replica which matches this store.
-	for _, repl := range meta.Replicas {
-		if repl.StoreID == s.Ident.StoreID {
-			meta.RangeID = repl.RangeID
-			break
-		}
+	rangeID, err := s.MatchRangeID(meta)
+	if err != nil {
+		return nil, err
 	}
-	if meta.RangeID == 0 {
-		return nil, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %v",
-			s.Ident.StoreID, meta.Replicas)
-	}
+	meta.RangeID = rangeID
 
+	s.mu.Lock()
+	if _, ok := s.ranges[meta.RangeID]; ok {
+		return nil, util.Errorf("RangeID %d already registered with the store", meta.RangeID)
+	}
 	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
 	err := s.writeRangeToEngine(rng)
 	if err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
 	s.ranges[meta.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
@@ -514,12 +523,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		if !IsReadOnly(method) {
 			reply.Header().Error = pushReply.Header().Error
 			return reply.Header().GoError()
-		} else {
-			// For read/write conflicts, return the write intent error which
-			// engages client's backoff/retry (with !Resolved). We don't need
-			// to restart the txn, only resend the read with a backoff.
-			return err
 		}
+		// For read/write conflicts, return the write intent error which
+		// engages client's backoff/retry (with !Resolved). We don't need
+		// to restart the txn, only resend the read with a backoff.
+		return err
 	}
 
 	// Note that even though we're setting Resolved = true here, it'll
@@ -559,13 +567,21 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	return wiErr
 }
 
+// RunTransaction passes through to the DB contained in the store.
+func (s *Store) RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error {
+	return s.db.RunTransaction(opts, retryable)
+}
+
 // RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for rebalancing
 // (i.e. splitting and merging) operations.
 // TODO(Tobias): add necessary operations as we need them.
 type RangeManager interface {
 	NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata
+	MatchRangeID(meta *proto.RangeMetadata) (int64, error)
+	GetRange(rangeID int64) (*Range, error)
 	CreateRange(meta *proto.RangeMetadata) (*Range, error)
 	UpdateRange(rangeID int64) error
 	DropRange(rangeID int64) error
+	RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error
 }

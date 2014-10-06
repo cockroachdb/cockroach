@@ -729,7 +729,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Increments are a good way of testing the response cache. Up here, we
 	// address them to the original range, then later to the one that contains
-	// the key.
+	// the key after the split.
 	rIncArgs := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     engine.Key("wobble"),

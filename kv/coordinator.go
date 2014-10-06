@@ -45,6 +45,7 @@ var transactionalActions = map[string]struct{}{
 	storage.Put:            struct{}{},
 	storage.ReapQueue:      struct{}{},
 	storage.Scan:           struct{}{},
+	storage.InternalSplit:  struct{}{},
 }
 
 func isTransactional(method string) bool {

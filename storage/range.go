@@ -65,6 +65,12 @@ const (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
+// splitCheckInterval is the duration waited between periodic checks on whether
+// the range is going to split.
+// It is stored as a variable to allow for dynamic adaption (for instance based
+// on write load) and easier testing.
+var splitCheckInterval = 1 * time.Minute
+
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 var configPrefixes = []struct {
@@ -215,10 +221,7 @@ type Range struct {
 	respCache    *ResponseCache  // Provides idempotence for retries
 }
 
-// NewRange initializes the range using the given metadata. The range will have
-// no knowledge of a possible store that contains it and thus all rebalancing
-// operations will fail. Use NewRangeFromStore() instead to create ranges
-// contained within a store.
+// NewRange initializes the range using the given metadata.
 //
 // TODO(spencer): need to give range just a single instance of Range manager
 // to contain clock, mvcc, engine, allocator & gossip. This will reduce
@@ -253,6 +256,7 @@ func (r *Range) Start() {
 	if r.IsFirstRange() {
 		go r.startGossip()
 	}
+	go r.maybeSplit()
 }
 
 // Stop ends the log processing loop.
@@ -1189,30 +1193,141 @@ func (r *Range) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, re
 	reply.SetGoError(err)
 }
 
+// shouldSplit returns whether the range thinks it should split, based on the
+// approximate size and the lowest allowed maximal size in the contained zones.
+func (r *Range) shouldSplit() bool {
+	if r.gossip == nil {
+		return false
+	}
+	desc := r.Meta.RangeDescriptor
+	bytes, err := r.mvcc.ApproximateSize(desc.StartKey, desc.EndKey)
+	if err != nil {
+		log.Warning(err)
+		return false
+	}
+	zonePrefixConfigMap, err := r.gossip.GetInfo(gossip.KeyConfigZone)
+	if err != nil {
+		log.Warning(err)
+		return false
+	}
+	if zonePrefixConfigMap == nil {
+		log.Warning("zone configuration map is empty")
+		return false
+	}
+	var maxBytes int64
+	zonePrefixConfigMap.(PrefixConfigMap).VisitPrefixes(desc.StartKey, desc.EndKey,
+		func(s, e engine.Key, conf interface{}) error {
+			maxBytes = conf.(*proto.ZoneConfig).RangeMaxBytes
+			return nil
+		})
+	return err == nil && bytes > uint64(maxBytes)
+}
+
+// maybeSplit regularly checks whether the range wants to split. If so, it
+// initiates the split with the correct key.
+// TODO(Tobias): make sure there can't be concurrent split ops.
+// TODO(Tobias): The algorithm should take into account the zone configuration,
+// figuring out exactly which subrange violates its zone-defined maximal size
+// "most", and preferably split that subrange instead of the whole range.
+func (r *Range) maybeSplit() {
+	ticker := time.NewTicker(splitCheckInterval)
+	for {
+		select {
+		case <-ticker.C:
+			if !r.IsLeader() {
+				continue
+			}
+			if r.shouldSplit() {
+				desc := r.Meta.RangeDescriptor
+				snapshotID, err := r.createSnapshot()
+				if err != nil {
+					log.Warning(err)
+					continue
+				}
+				splitKey, err := r.mvcc.FindSplitKey(desc.StartKey, desc.EndKey, snapshotID)
+				if err != nil {
+					log.Warning(err)
+					continue
+				}
+				if err := r.engine.ReleaseSnapshot(snapshotID); err != nil {
+					log.Warning(err)
+				}
+				if err := r.CoordinateSplit(splitKey); err != nil {
+					log.Errorf("error splitting range: %v", err)
+				}
+			}
+		case <-r.closer:
+			return
+		}
+	}
+}
+
+// CoordinateSplit .
+func (r *Range) CoordinateSplit(splitKey engine.Key) error {
+	if r == nil || r.rm == nil {
+		return util.Error("cannot split without an underlying store")
+	}
+
+	if !r.ContainsKey(splitKey) {
+		return util.Errorf("split key not contained in range")
+	}
+
+	desc := r.Meta.RangeDescriptor
+	// Initialize new range metadata for the new range. In particular, new
+	// rangeIDs are generated inside the replicas contained in meta.
+	newMeta := r.rm.NewRangeMetadata(splitKey, desc.EndKey, desc.Replicas)
+
+	txnOpts := &TransactionOptions{
+		Name:      fmt.Sprintf("Split Range %d", r.Meta.RangeID),
+		User:      UserRoot,
+		Isolation: proto.SERIALIZABLE,
+		Retry: &util.RetryOptions{
+			MaxAttempts: 1,
+		},
+	}
+
+	err := r.rm.RunTransaction(txnOpts, func(txn DB) error {
+		args := &proto.InternalSplitRequest{
+			RequestHeader:   proto.RequestHeader{Key: splitKey},
+			RangeDescriptor: newMeta.RangeDescriptor,
+		}
+		resp := <-txn.InternalSplit(args)
+		if err := resp.GoError(); err != nil {
+			return err
+		}
+		// TODO(mrtracy): Transactionally update the Meta{1,2} keys so that both
+		// ranges have their correct key spaces reflected.
+		// Special case: This range contains Meta{1,2} keys (-> possible deadlock)
+		return nil
+	})
+	return err
+}
+
 // InternalSplit shrinks the given range, using args.SplitKey as its new end.
 // A new range is created, containing the remaining range from args.SplitKey to
 // the original end key of the first range. The split is only carried out if
 // args.Key and args.EndKey match precisely the split key and EndKey of the
 // original range, respectively.
+// TODO(Tobias): decide which key range we actually want to block. It is
+// important that we catch all of the response cache at the precise moment the
+// split comes into action, which is
 //
-// TODO(Tobias): This version, as is, is provisional. A correct implementation
-// is much more subtle and requires a transaction. See:
-// https://github.com/cockroachdb/cockroach/pull/64/files#r17667926
+// See https://github.com/cockroachdb/cockroach/pull/64/files#r17667926
 func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.InternalSplitResponse) {
 	var err error
 	if r.rm == nil {
 		reply.SetGoError(util.Error("cannot split without an underlying store"))
 		return
 	}
-	desc := r.Meta.RangeDescriptor
+
 	// InternalSplit affects the whole range, but in fact only needs to block
 	// everything that is to be moved into the new range beginning at the split
 	// key. To make sure that the range is protecting those and only those
 	// keys, we check that args.Key == splitKey and args.EndKey = desc.EndKey.
-	if !bytes.Equal(args.Key, args.SplitKey) || !bytes.Equal(args.EndKey, desc.EndKey) {
-		reply.SetGoError(util.Error("key range indicated does not match range"))
-		return
-	}
+	//if !bytes.Equal(args.Key, args.SplitKey) || !bytes.Equal(args.EndKey, desc.EndKey) {
+	//	reply.SetGoError(util.Error("key range indicated does not match range"))
+	//	return
+	//}
 	splitKey := args.SplitKey
 	if !r.ContainsKey(splitKey) {
 		reply.SetGoError(util.Errorf("split key not contained in range"))
@@ -1229,8 +1344,20 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 	// data which now belongs to the new queue. Since caching a little
 	// redundant data does not matter, we simply clone the response cache of
 	// the old range.
+	meta := &proto.RangeMetadata{
+		ClusterID:       r.Meta.ClusterID,
+		RangeDescriptor: args.RangeDescriptor,
+	}
 
-	meta := r.rm.NewRangeMetadata(splitKey, desc.EndKey, desc.Replicas)
+	rangeID, err := r.rm.MatchRangeID(meta)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	// DropRange is a noop for nonexisting ranges, so this makes sure
+	// this function is idempotent and can be retried.
+	r.rm.DropRange(rangeID)
+
 	newRange, err := r.rm.CreateRange(meta)
 	if err != nil {
 		reply.SetGoError(err)
@@ -1263,7 +1390,4 @@ func (r *Range) InternalSplit(args *proto.InternalSplitRequest, reply *proto.Int
 		}
 		return
 	}
-	// TODO(mrtracy): Transactionally update the Meta{1,2} keys so that both
-	// ranges have their correct key spaces reflected.
-	// Special case: This range contains Meta{1,2} keys (-> possible deadlock)
 }
