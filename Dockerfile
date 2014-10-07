@@ -5,7 +5,8 @@ MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 # Setup the toolchain.
 RUN apt-get update -y -qq
 RUN apt-get dist-upgrade -y -qq
-RUN apt-get install --auto-remove -y -qq git mercurial build-essential bzr libprotobuf-dev protobuf-compiler
+# TODO(pmattis): Use the vendored snappy and gflags.
+RUN apt-get install --auto-remove -y -qq git mercurial build-essential pkg-config bzr zlib1g-dev libbz2-dev libsnappy-dev libgflags-dev libprotobuf-dev protobuf-compiler
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.7 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.7 50
@@ -20,6 +21,11 @@ ENV COREOSPATH $VENDORGOPATH/github.com/coreos
 RUN mkdir -p $ROACHPATH
 RUN mkdir -p $ROCKSDBPATH
 RUN mkdir -p $COREOSPATH
+
+# TODO(pmattis): Switch to using bootstrap.sh for retrieving go
+# dependencies and building rocksdb. The current road block is that
+# doing so causes rocksdb/snappy/etc to be rebuilt any time there is a
+# change to the cockroach directory.
 
 # Get Cockroach Go dependencies.
 RUN go get code.google.com/p/biogo.store/llrb

@@ -12,7 +12,7 @@ before_install:
 
 install:
   - ./bootstrap.sh
-  - make
+  - make GOFLAGS=-x
 
 script:
   # Note that testrace runs with some tests excluded for performance

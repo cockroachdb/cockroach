@@ -8,30 +8,29 @@
 # 2) Update go dependencies
 # 3) Build a shadow toolchain containing our dependencies in _vendor/build
 
-GO_GET="go get"
-GO_GET_FLAGS="-u -v"
-
 # TODO(shawn) make rocksdb build less magic
 # TODO(shawn) make sure rocksdb still links against jemalloc (and that it makes sense when embedding in go)
+# TODO(pmattis): check for pkg-config and curl.
 
 set -e -x
 
-# Update the code
-git pull && git submodule update --init
+function go_get() {
+  go get -u -v "$@"
+}
 
 # Grab binaries required by git hooks.
-$GO_GET $GO_GET_FLAGS github.com/golang/lint/golint
-$GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/vet
-$GO_GET $GO_GET_FLAGS code.google.com/p/go.tools/cmd/goimports
+go_get github.com/golang/lint/golint
+go_get code.google.com/p/go.tools/cmd/vet
+go_get code.google.com/p/go.tools/cmd/goimports
 
 # Grab dependencies.
 # TODO(bdarnell): make these submodules like etcd/raft, so we can pin versions?
-$GO_GET $GO_GET_FLAGS code.google.com/p/biogo.store/llrb
-$GO_GET $GO_GET_FLAGS code.google.com/p/go-commander
-$GO_GET $GO_GET_FLAGS code.google.com/p/go-uuid/uuid
-$GO_GET $GO_GET_FLAGS code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
-$GO_GET $GO_GET_FLAGS github.com/golang/glog
-$GO_GET $GO_GET_FLAGS gopkg.in/yaml.v1
+go_get code.google.com/p/biogo.store/llrb
+go_get code.google.com/p/go-commander
+go_get code.google.com/p/go-uuid/uuid
+go_get code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
+go_get github.com/golang/glog
+go_get gopkg.in/yaml.v1
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
@@ -72,5 +71,3 @@ cd snappy-1.1.1
 
 cd ${ROCKSDB}
 make static_lib
-cp librocksdb.a ${LIB}/
-cp -R ./include/rocksdb ${INCLUDE}
