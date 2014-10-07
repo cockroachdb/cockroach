@@ -465,13 +465,13 @@ func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 	for i, e := range cmds {
 		switch v := e.(type) {
 		case BatchDelete:
-			if len(v) == 0 {
+			if len(v.Key) == 0 {
 				return emptyKeyError()
 			}
 			C.rocksdb_writebatch_delete(
 				batch,
-				bytesPointer(v),
-				C.size_t(len(v)))
+				bytesPointer(v.Key),
+				C.size_t(len(v.Key)))
 		case BatchPut:
 			key, value := v.Key, v.Value
 			// We write the batch before returning from this method, so we

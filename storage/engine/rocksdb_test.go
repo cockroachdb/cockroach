@@ -87,11 +87,11 @@ func TestRocksDBCompaction(t *testing.T) {
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	batch := []interface{}{
 		// TODO(spencer): use Transaction and Response protobufs here.
-		BatchPut{Key: MakeLocalKey(rcPre, Key("a")).Encode(nil), Value: encodePutResponse(makeTS(2, 0), t)},
-		BatchPut{Key: MakeLocalKey(rcPre, Key("b")).Encode(nil), Value: encodePutResponse(makeTS(3, 0), t)},
+		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(rcPre, Key("a")).Encode(nil), Value: encodePutResponse(makeTS(2, 0), t)}},
+		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(rcPre, Key("b")).Encode(nil), Value: encodePutResponse(makeTS(3, 0), t)}},
 
-		BatchPut{Key: MakeLocalKey(txnPre, Key("a")).Encode(nil), Value: encodeTransaction(makeTS(1, 0), t)},
-		BatchPut{Key: MakeLocalKey(txnPre, Key("b")).Encode(nil), Value: encodeTransaction(makeTS(2, 0), t)},
+		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(txnPre, Key("a")).Encode(nil), Value: encodeTransaction(makeTS(1, 0), t)}},
+		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(txnPre, Key("b")).Encode(nil), Value: encodeTransaction(makeTS(2, 0), t)}},
 	}
 	if err := rocksdb.WriteBatch(batch); err != nil {
 		t.Fatal(err)

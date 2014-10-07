@@ -71,8 +71,8 @@ func TestIDAllocator(t *testing.T) {
 func TestIDAllocatorNegativeValue(t *testing.T) {
 	store, _ := createTestStore(false, t)
 	// Increment our key to a negative value.
-	mvcc := engine.NewMVCC(store.engine)
-	newValue, err := mvcc.Increment(engine.KeyRaftIDGenerator.Encode(nil), store.clock.Now(), nil, -1024)
+	b := engine.NewBatch(store.engine)
+	newValue, err := engine.MVCCIncrement(b, engine.KeyRaftIDGenerator.Encode(nil), store.clock.Now(), nil, -1024)
 	if err != nil {
 		t.Fatal(err)
 	}

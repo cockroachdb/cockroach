@@ -281,7 +281,7 @@ func (in *InMem) WriteBatch(cmds []interface{}) error {
 	for i, e := range cmds {
 		switch v := e.(type) {
 		case BatchDelete:
-			if err := in.clearLocked(Key(v)); err != nil {
+			if err := in.clearLocked(v.Key); err != nil {
 				return err
 			}
 		case BatchPut:

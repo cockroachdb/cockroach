@@ -73,14 +73,17 @@ var (
 // default configuration settings.
 func createTestEngine(t *testing.T) engine.Engine {
 	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
-	mvcc := engine.NewMVCC(e)
-	if err := mvcc.PutProto(engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
+	b := engine.NewBatch(e)
+	if err := engine.MVCCPutProto(b, engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := mvcc.PutProto(engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
+	if err := engine.MVCCPutProto(b, engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := mvcc.PutProto(engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+	if err := engine.MVCCPutProto(b, engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	return e
@@ -96,7 +99,7 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 	}
 	g := gossip.New(rpc.LoadInsecureTLSConfig(), hlc.NewClock(hlc.UnixNano))
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(rm, clock, engine, nil, g, nil)
+	r := NewRange(rm, NewStore(clock, engine, nil, g))
 	r.Start()
 	return r, g
 }
@@ -114,7 +117,7 @@ func TestRangeContains(t *testing.T) {
 		RangeID: 0,
 	}
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(rm, clock, nil, nil, nil, nil)
+	r := NewRange(rm, NewStore(clock, nil, nil, nil))
 	if !r.ContainsKey(engine.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -173,14 +176,17 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // key prefixes for a config are gossipped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	e := createTestEngine(t)
-	mvcc := engine.NewMVCC(e)
+	b := engine.NewBatch(e)
 	// Add a permission for a new key prefix.
 	db1Perm := proto.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
-	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
+	if err := engine.MVCCPutProto(b, key, proto.MinTimestamp, nil, &db1Perm); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	r, g := createTestRange(e, t)
@@ -204,25 +210,28 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 // TestRangeGossipConfigUpdates verifies that writes to the
 // permissions cause the updated configs to be re-gossipped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
-	r, g := createTestRange(createTestEngine(t), t)
+	e := createTestEngine(t)
+	r, g := createTestRange(e, t)
 	defer r.Stop()
 	// Add a permission for a new key prefix.
-	db1Perm := proto.PermConfig{
+	db1Perm := &proto.PermConfig{
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
-	reply := &proto.PutResponse{}
-
-	data, err := gogoproto.Marshal(&db1Perm)
+	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: data}}, reply)
-	if reply.Error != nil {
-		t.Fatal(reply.GoError())
+	req := &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: key},
+		Value:         proto.Value{Bytes: data},
 	}
+	reply := &proto.PutResponse{}
 
+	if err := r.executeCmd(Put, req, reply); err != nil {
+		t.Fatal(err)
+	}
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +239,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
 		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{engine.Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{engine.Key("/db1"), nil, db1Perm},
 		&PrefixConfig{engine.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
@@ -309,7 +318,7 @@ func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Cloc
 		RangeDescriptor: testRangeDescriptor,
 		RangeID:         0,
 	}
-	rng := NewRange(rm, clock, engine, nil, nil, nil)
+	rng := NewRange(rm, NewStore(clock, engine, nil, nil))
 	rng.Start()
 	return rng, &manual, clock, engine
 }
@@ -1056,7 +1065,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key).Encode(nil)
-		if err := engine.PutProto(rng.engine, txnKey, &existTxn); err != nil {
+		if err := engine.PutProto(rng.rm.Engine(), txnKey, &existTxn); err != nil {
 			t.Fatal(err)
 		}
 

@@ -62,6 +62,7 @@ type DB interface {
 	InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 	InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse
+	InternalSplit(args *proto.InternalSplitRequest) <-chan *proto.InternalSplitResponse
 
 	RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error
 }
@@ -243,6 +244,13 @@ func (db *BaseDB) InternalResolveIntent(args *proto.InternalResolveIntentRequest
 func (db *BaseDB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse {
 	replyChan := make(chan *proto.InternalSnapshotCopyResponse, 1)
 	go db.Executor(InternalSnapshotCopy, args, replyChan)
+	return replyChan
+}
+
+// InternalSplit is called by a range leader coordinating a split of its range.
+func (db *BaseDB) InternalSplit(args *proto.InternalSplitRequest) <-chan *proto.InternalSplitResponse {
+	replyChan := make(chan *proto.InternalSplitResponse, 1)
+	go db.Executor(InternalSplit, args, replyChan)
 	return replyChan
 }
 

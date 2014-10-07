@@ -23,7 +23,6 @@ import (
 	"sort"
 	"strings"
 
-	"code.google.com/p/biogo.store/llrb"
 	yaml "gopkg.in/yaml.v1"
 )
 
@@ -116,9 +115,4 @@ func ParseZoneConfig(in []byte) (*ZoneConfig, error) {
 // ToYAML serializes a ZoneConfig as YAML.
 func (z *ZoneConfig) ToYAML() ([]byte, error) {
 	return yaml.Marshal(z)
-}
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (kv RawKeyValue) Compare(b llrb.Comparable) int {
-	return bytes.Compare(kv.Key, b.(RawKeyValue).Key)
 }

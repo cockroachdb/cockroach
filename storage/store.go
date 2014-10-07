@@ -238,7 +238,7 @@ func (s *Store) Init() error {
 			if err := gogoproto.Unmarshal(kv.Value, &meta); err != nil {
 				return err
 			}
-			rng := NewRange(&meta, s.clock, s.engine, s.allocator, s.gossip, s)
+			rng := NewRange(&meta, s)
 			rng.Start()
 			s.ranges[meta.RangeID] = rng
 			s.rangesByKey = append(s.rangesByKey, rng)
@@ -324,6 +324,12 @@ func (s *Store) BootstrapRangeMetadata() *proto.RangeMetadata {
 	}
 }
 
+// The following methods are accessors implementation the RangeManager interface.
+func (s *Store) Clock() *hlc.Clock      { return s.clock }
+func (s *Store) Engine() engine.Engine  { return s.engine }
+func (s *Store) Allocator() *allocator  { return s.allocator }
+func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
+
 // NewRangeMetadata creates a new RangeMetadata based on start and
 // end keys and the supplied proto.Replicas slice. It allocates new
 // Raft and range IDs to fill out the supplied RangeMetadata. Returns
@@ -366,7 +372,7 @@ func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
 			s.Ident.StoreID, meta.Replicas)
 	}
 
-	rng := NewRange(meta, s.clock, s.engine, s.allocator, s.gossip, s)
+	rng := NewRange(meta, s)
 	err := s.writeRangeToEngine(rng)
 	if err != nil {
 		return nil, err
@@ -569,8 +575,14 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 // RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for rebalancing
 // (i.e. splitting and merging) operations.
-// TODO(Tobias): add necessary operations as we need them.
 type RangeManager interface {
+	// Accessors for shared state.
+	Clock() *hlc.Clock
+	Engine() engine.Engine
+	Allocator() *allocator
+	Gossip() *gossip.Gossip
+
+	// Range manipulation methods.
 	NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata
 	CreateRange(meta *proto.RangeMetadata) (*Range, error)
 	UpdateRange(rangeID int64) error
