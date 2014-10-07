@@ -22,6 +22,7 @@ import (
 	"net/rpc"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // The Transport interface is supplied by the application to manage communication with
@@ -101,48 +102,15 @@ func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
 	return client, nil
 }
 
-// RequestHeader contains fields common to all RPC requests.
-type RequestHeader struct {
-	SrcNode  NodeID
-	DestNode NodeID
+// SendMessageRequest wraps a raft message.
+type SendMessageRequest struct {
+	GroupID GroupID
+	Message raftpb.Message
 }
 
-// RequestVoteRequest is a part of the Raft protocol.  It is public so it can be used
-// by the net/rpc system but should not be used outside this package except to serialize it.
-type RequestVoteRequest struct {
-	RequestHeader
-	GroupID      GroupID
-	Term         int
-	CandidateID  NodeID
-	LastLogIndex int
-	LastLogTerm  int
-}
-
-// RequestVoteResponse is a part of the Raft protocol.  It is public so it can be used
-// by the net/rpc system but should not be used outside this package except to serialize it.
-type RequestVoteResponse struct {
-	Term        int
-	VoteGranted bool
-}
-
-// AppendEntriesRequest is a part of the Raft protocol.  It is public so it can be used
-// by the net/rpc system but should not be used outside this package except to serialize it.
-type AppendEntriesRequest struct {
-	RequestHeader
-	GroupID      GroupID
-	Term         int
-	LeaderID     NodeID
-	PrevLogIndex int
-	PrevLogTerm  int
-	Entries      []*LogEntry
-	LeaderCommit int
-}
-
-// AppendEntriesResponse is a part of the Raft protocol.  It is public so it can be used
-// by the net/rpc system but should not be used outside this package except to serialize it.
-type AppendEntriesResponse struct {
-	Term    int
-	Success bool
+// SendMessageResponse is empty (raft uses a one-way messaging model; if a response
+// is needed it will be sent as a separate message).
+type SendMessageResponse struct {
 }
 
 // ServerInterface is a generic interface based on net/rpc.
@@ -152,13 +120,11 @@ type ServerInterface interface {
 
 // RPCInterface is the methods we expose for use by net/rpc.
 type RPCInterface interface {
-	RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) error
-	AppendEntries(req *AppendEntriesRequest, resp *AppendEntriesResponse) error
+	SendMessage(req *SendMessageRequest, resp *SendMessageResponse) error
 }
 
 var (
-	requestVoteName   = "MultiRaft.RequestVote"
-	appendEntriesName = "MultiRaft.AppendEntries"
+	sendMessageName = "MultiRaft.SendMessage"
 )
 
 // ClientInterface is the interface expected of the client provided by a transport.
@@ -174,13 +140,8 @@ type rpcAdapter struct {
 	server ServerInterface
 }
 
-func (r *rpcAdapter) RequestVote(req *RequestVoteRequest, resp *RequestVoteResponse) error {
-	return r.server.DoRPC(requestVoteName, req, resp)
-}
-
-func (r *rpcAdapter) AppendEntries(req *AppendEntriesRequest,
-	resp *AppendEntriesResponse) error {
-	return r.server.DoRPC(appendEntriesName, req, resp)
+func (r *rpcAdapter) SendMessage(req *SendMessageRequest, resp *SendMessageResponse) error {
+	return r.server.DoRPC(sendMessageName, req, resp)
 }
 
 // asyncClient bridges MultiRaft's channel-oriented interface with the synchronous RPC interface.
@@ -192,10 +153,6 @@ type asyncClient struct {
 	ch     chan *rpc.Call
 }
 
-func (a *asyncClient) requestVote(req *RequestVoteRequest) {
-	a.conn.Go(requestVoteName, req, &RequestVoteResponse{}, a.ch)
-}
-
-func (a *asyncClient) appendEntries(req *AppendEntriesRequest) {
-	a.conn.Go(appendEntriesName, req, &AppendEntriesResponse{}, a.ch)
+func (a *asyncClient) sendMessage(req *SendMessageRequest) {
+	a.conn.Go(sendMessageName, req, &SendMessageResponse{}, a.ch)
 }

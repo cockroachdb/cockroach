@@ -17,78 +17,43 @@
 
 package multiraft
 
-import (
-	"sync"
-	"time"
-)
+import "time"
 
-// Clock encapsulates the timing-related parts of the raft protocol.
-// Types of events are separated in the API (i.e. NewElectionTimer() instead of
-// NewTimer() so they can be triggered individually in tests.
-type Clock interface {
-	Now() time.Time
-
-	// NewElectionTimer returns a timer to be used for triggering elections.  The resulting
-	// Timer struct will have its C field filled out, but may not be a "real" timer, so it
-	// must be stopped with StopElectionTimer instead of t.Stop()
-	NewElectionTimer(time.Duration) *time.Timer
-	StopElectionTimer(*time.Timer)
+// Ticker encapsulates the timing-related parts of the raft protocol.
+type Ticker interface {
+	// This channel will be readable once per tick. The time value returned is unspecified;
+	// the channel has this type for compatibility with time.Ticker but other implementations
+	// may not return real times.
+	Chan() <-chan time.Time
 }
 
-type realClock struct{}
-
-// RealClock is the standard implementation of the Clock interface.
-var RealClock = realClock{}
-
-func (realClock) Now() time.Time {
-	return time.Now()
+type realTicker struct {
+	*time.Ticker
 }
 
-func (realClock) NewElectionTimer(t time.Duration) *time.Timer {
-	return time.NewTimer(t)
+func newTicker(interval time.Duration) Ticker {
+	return &realTicker{time.NewTicker(interval)}
 }
 
-func (realClock) StopElectionTimer(t *time.Timer) {
-	t.Stop()
+func (t *realTicker) Chan() <-chan time.Time {
+	return t.C
 }
 
-// manualClock is a fake implementation of the Clock interface.  With this clock
+// manualTicker is a fake implementation of the Ticker interface.  With this ticker
 // time does not flow normally, but time-based events can be triggered manually with
-// methods like triggerElection.
-type manualClock struct {
-	sync.Mutex
-	now             time.Time
-	electionChannel chan time.Time
-	nextElection    time.Time
+// the Tick method.
+type manualTicker struct {
+	ch chan time.Time
 }
 
-func newManualClock() *manualClock {
-	return &manualClock{
-		now:             time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
-		electionChannel: make(chan time.Time),
-	}
+func newManualTicker() *manualTicker {
+	return &manualTicker{make(chan time.Time)}
 }
 
-func (m *manualClock) Now() time.Time {
-	m.Lock()
-	defer m.Unlock()
-	return m.now
+func (m *manualTicker) Chan() <-chan time.Time {
+	return m.ch
 }
 
-func (m *manualClock) NewElectionTimer(t time.Duration) *time.Timer {
-	m.Lock()
-	defer m.Unlock()
-	m.nextElection = m.now.Add(t)
-	return &time.Timer{C: m.electionChannel}
-}
-
-func (m *manualClock) StopElectionTimer(*time.Timer) {
-}
-
-func (m *manualClock) triggerElection() {
-	m.Lock()
-	m.now = m.nextElection
-	now := m.now
-	m.Unlock()
-	m.electionChannel <- now
+func (m *manualTicker) Tick() {
+	m.ch <- time.Time{}
 }
