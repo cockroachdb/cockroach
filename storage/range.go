@@ -64,12 +64,6 @@ const (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
-// splitCheckInterval is the duration waited between periodic checks on whether
-// the range is going to split.
-// It is stored as a variable to allow for dynamic adaption (for instance based
-// on write load) and easier testing.
-var splitCheckInterval = 1 * time.Minute
-
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 var configPrefixes = []struct {
