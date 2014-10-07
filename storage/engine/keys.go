@@ -215,7 +215,12 @@ func init() {
 
 // Constants for system-reserved keys in the KV map.
 var (
-	// KeyMaxLength is the maximum key length.
+	// KeyMaxLength is the maximum key length in bytes. This value is
+	// somewhat arbitrary. It is chosen high enough to allow most
+	// conceivable use cases while also still being comfortably short of
+	// a limit which would affect the performance of the system, both
+	// from performance of key comparisons and from memory usage for
+	// things like the timestamp cache, lookup cache, and command queue.
 	KeyMaxLength = 4096
 
 	// KeyMin is a minimum key value which sorts before all other keys.

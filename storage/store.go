@@ -65,15 +65,22 @@ func verifyKeyLength(key engine.Key) error {
 	return nil
 }
 
-// verifyKeys verifies key length for start and end. If end is
-// non-empty, it must be >= start.
+// verifyKeys verifies key length for start and end. Also verifies
+// that start key is less than KeyMax and end key is less than or
+// equal to KeyMax. If end is non-empty, it must be >= start.
 func verifyKeys(start, end engine.Key) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
+	if !start.Less(engine.KeyMax) {
+		return util.Errorf("start key %q must be less than KeyMax", start)
+	}
 	if len(end) > 0 {
 		if err := verifyKeyLength(end); err != nil {
 			return err
+		}
+		if engine.KeyMax.Less(end) {
+			return util.Errorf("end key %q must be less than or equal to KeyMax", end)
 		}
 		if end.Less(start) {
 			return util.Errorf("end key cannot sort before start: %q < %q", end, start)
