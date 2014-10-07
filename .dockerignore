@@ -5,4 +5,5 @@ roachlib/*.a
 proto/*.pb.go
 proto/lib/*
 proto/lib/code.google.com/p/gogoprotobuf/gogoproto/*
+storage/engine/engine.pc
 cockroach

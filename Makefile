@@ -19,64 +19,71 @@
 
 # Cockroach build rules.
 GO ?= go
+# Allow setting of go build flags from the command line (see
+# .travis.yml).
+GOFLAGS := 
 
-DEPLOY      := $(CURDIR)/deploy
-GOPATH      := $(CURDIR)/_vendor:$(GOPATH)
-USR 		:= $(CURDIR)/_vendor/usr
+DEPLOY  := deploy
+GOPATH  := $(CURDIR)/_vendor:$(GOPATH)
 
-ROACH_PROTO := $(CURDIR)/proto
-ROACH_LIB   := $(CURDIR)/roachlib
-SQL_PARSER  := $(CURDIR)/sql/parser
-
-CFLAGS   := "-I$(USR)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CFLAGS)"
-CXXFLAGS := "-I$(USR)/include -I$(ROACH_PROTO)/lib -I$(ROACH_LIB) $(CXXFLAGS)"
-LDFLAGS  := "-L$(USR)/lib -L$(ROACH_PROTO)/lib -L$(ROACH_LIB) $(LDFLAGS)"
-
-FLAGS := LDFLAGS=$(LDFLAGS) \
-         CFLAGS=$(CFLAGS) \
-         CXXFLAGS=$(CXXFLAGS)
-
-CGO_FLAGS := CGO_LDFLAGS=$(LDFLAGS) \
-             CGO_CFLAGS=$(CFLAGS) \
-             CGO_CXXFLAGS=$(CXXFLAGS)
+ROACH_PROTO := proto
+ROACH_LIB   := roachlib
+SQL_PARSER  := sql/parser
 
 PKG       := "./..."
 TESTS     := ".*"
 TESTFLAGS := -logtostderr -timeout 10s
 
+OS := $(shell uname -s)
+
+ifeq ($(OS),Darwin)
+LDEXTRA += -lc++
+endif
+
+ifeq ($(OS),Linux)
+LDEXTRA += -lrt
+endif
+
 all: build test
 
-auxiliary: roach_proto roach_lib sqlparser
+auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser
 
 build: auxiliary
-	$(CGO_FLAGS) $(GO) build -o cockroach
+	$(GO) build $(GOFLAGS) -i -o cockroach
+
+storage/engine/engine.pc: storage/engine/engine.pc.in
+	sed -e "s,@PWD@,$(CURDIR),g" -e "s,@LDEXTRA@,$(LDEXTRA),g" < $^ > $@
 
 roach_proto:
-	cd $(ROACH_PROTO); $(FLAGS) make static_lib
+	make -C $(ROACH_PROTO) static_lib
 
 roach_lib: roach_proto
-	cd $(ROACH_LIB); $(FLAGS) make static_lib
+	make -C $(ROACH_LIB) static_lib
 
 sqlparser:
-	cd $(SQL_PARSER); $(FLAGS) make
+	make -C $(SQL_PARSER)
 
 goget:
-	$(CGO_FLAGS) $(GO) get ./...
+	$(GO) get ./...
 
 test: auxiliary
-	$(CGO_FLAGS) $(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace: auxiliary
-	$(CGO_FLAGS) $(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 coverage: build
-	$(CGO_FLAGS) $(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 acceptance:
-	cd $(DEPLOY); ./build-docker.sh && ./local-cluster.sh start && ./local-cluster.sh stop
+	(cd $(DEPLOY); \
+	  ./build-docker.sh && \
+	  ./local-cluster.sh start && \
+	  ./local-cluster.sh stop)
 
 clean:
 	$(GO) clean
-	cd $(ROACH_PROTO); make clean
-	cd $(ROACH_LIB); make clean
-	cd $(SQL_PARSER); make clean
+	rm -f storage/engine/engine.pc
+	make -C $(ROACH_PROTO) clean
+	make -C $(ROACH_LIB) clean
+	make -C $(SQL_PARSER) clean

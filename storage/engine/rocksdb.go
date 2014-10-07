@@ -21,9 +21,7 @@
 package engine
 
 /*
-#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroach -lroachproto -lprotobuf
-#cgo linux LDFLAGS: -lrt
-#cgo darwin LDFLAGS: -lc++
+#cgo pkg-config: ./engine.pc
 #include <stdlib.h>
 #include "rocksdb/c.h"
 #include "rocksdb_merge.h"
