@@ -59,13 +59,13 @@ mkdir -p ${LIB}
 mkdir -p ${INCLUDE}
 
 cd ${TMP}
-wget https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz
+curl -L https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz > gflags-2.0-no-svn-files.tar.gz
 tar -xzvf gflags-2.0-no-svn-files.tar.gz
 cd gflags-2.0
 ./configure --prefix ${USR} && make && make install
 
 cd ${TMP}
-wget https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz
+curl -L https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz > snappy-1.1.1.tar.gz
 tar -xzvf snappy-1.1.1.tar.gz
 cd snappy-1.1.1
 ./configure --prefix ${USR} && make && make install
