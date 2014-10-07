@@ -205,6 +205,9 @@ func TestBatchScan(t *testing.T) {
 		{Key: Key("h"), Value: []byte("8")},
 		{Key: Key("i"), Value: []byte("9")},
 		{Key: Key("j"), Value: []byte("10")},
+		{Key: Key("k"), Value: []byte("11")},
+		{Key: Key("l"), Value: []byte("12")},
+		{Key: Key("m"), Value: []byte("13")},
 	}
 	for _, kv := range existingVals {
 		if err := e.Put(kv.Key, kv.Value); err != nil {
@@ -237,15 +240,15 @@ func TestBatchScan(t *testing.T) {
 		// Full monty.
 		{start: Key("a"), end: Key("z"), max: 0},
 		// Select ~half.
-		{start: Key("a"), end: Key("z"), max: 7},
+		{start: Key("a"), end: Key("z"), max: 9},
 		// Select one.
 		{start: Key("a"), end: Key("z"), max: 1},
 		// Select half by end key.
-		{start: Key("a"), end: Key("e0"), max: 0},
+		{start: Key("a"), end: Key("f0"), max: 0},
 		// Start at half and select rest.
-		{start: Key("e"), end: Key("z"), max: 0},
+		{start: Key("f"), end: Key("z"), max: 0},
 		// Start at last and select max=10.
-		{start: Key("jj"), end: Key("z"), max: 10},
+		{start: Key("m"), end: Key("z"), max: 10},
 	}
 
 	// Scan each case using the batch and store the results.
