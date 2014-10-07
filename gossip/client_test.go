@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -36,19 +37,21 @@ func init() {
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
 	tlsConfig := rpc.LoadInsecureTLSConfig()
+	lclock := hlc.NewClock(hlc.UnixNano)
 
 	laddr := util.CreateTestAddr("unix")
-	lserver = rpc.NewServer(laddr, tlsConfig)
+	lserver = rpc.NewServer(laddr, tlsConfig, lclock)
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	local = New(tlsConfig)
+	local = New(tlsConfig, lclock)
+	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rserver = rpc.NewServer(raddr, tlsConfig)
+	rserver = rpc.NewServer(raddr, tlsConfig, rclock)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	remote = New(tlsConfig)
+	remote = New(tlsConfig, rclock)
 	local.start(lserver)
 	remote.start(rserver)
 	time.Sleep(time.Millisecond)

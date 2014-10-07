@@ -66,6 +66,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -117,10 +118,11 @@ type Gossip struct {
 	disconnected chan *client       // Channel of disconnected clients
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
+	clock        *hlc.Clock         // The server hlc clock.
 }
 
 // New creates an instance of a gossip node.
-func New(tlsConfig *rpc.TLSConfig) *Gossip {
+func New(tlsConfig *rpc.TLSConfig, clock *hlc.Clock) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
 		tlsConfig:    tlsConfig,
@@ -129,6 +131,7 @@ func New(tlsConfig *rpc.TLSConfig) *Gossip {
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      map[string]*client{},
 		disconnected: make(chan *client, MaxPeers),
+		clock:        clock,
 	}
 	g.stalled = sync.NewCond(&g.mu)
 	return g
@@ -513,4 +516,9 @@ func (g *Gossip) closeClient(addr net.Addr) {
 // the number of places we have to pass the config around.
 func (g *Gossip) TLSConfig() *rpc.TLSConfig {
 	return g.tlsConfig
+}
+
+// Clock returns the Gossip's hybrid logical clock instance.
+func (g *Gossip) Clock() *hlc.Clock {
+	return g.clock
 }

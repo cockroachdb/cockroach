@@ -17,6 +17,8 @@
 
 package rpc
 
+import "github.com/cockroachdb/cockroach/util/hlc"
+
 // A PingRequest specifies the string to echo in response.
 type PingRequest struct {
 	Ping string // Echo this string with PingResponse.
@@ -24,14 +26,34 @@ type PingRequest struct {
 
 // A PingResponse contains the echoed ping request string.
 type PingResponse struct {
-	Pong string // An echo of value sent with PingRequest.
+	Pong       string // An echo of value sent with PingRequest.
+	ServerTime int64
 }
 
 // A HeartbeatService exposes a method to echo its request params.
-type HeartbeatService struct{}
+type HeartbeatService struct {
+	// Provides the nanosecond unix epoch timestamp of the processor.
+	clock *hlc.Clock
+}
 
 // Ping echos the contents of the request to the response.
 func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 	reply.Pong = args.Ping
+	reply.ServerTime = hs.clock.Now().WallTime
+	return nil
+}
+
+// A ManualHeartbeatService allows manual control of when heartbeats occur, to
+// facilitate testing.
+type ManualHeartbeatService struct {
+	clock *hlc.Clock
+	ready chan bool // Heartbeats are processed when a value is sent here.
+}
+
+// Ping waits until the heartbeat service is ready to respond to a Heartbeat.
+func (mhs *ManualHeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
+	<-mhs.ready
+	reply.Pong = args.Ping
+	reply.ServerTime = mhs.clock.Now().WallTime
 	return nil
 }
