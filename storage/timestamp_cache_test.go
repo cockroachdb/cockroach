@@ -199,6 +199,58 @@ func TestTimestampCacheClear(t *testing.T) {
 	}
 }
 
+// TestTimestampCacheReplacements verifies that a newer entry
+// in the timestamp cache which completely "covers" an older
+// entry will replace it.
+func TestTimestampCacheReplacements(t *testing.T) {
+	manual := hlc.ManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	tc := NewTimestampCache(clock)
+
+	txn1MD5 := md5.Sum([]byte("txn1"))
+	txn2MD5 := md5.Sum([]byte("txn2"))
+
+	ts1 := clock.Now()
+	tc.Add(engine.Key("a"), nil, ts1, proto.NoTxnMD5, true)
+	if ts, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); !ts.Equal(ts1) {
+		t.Errorf("expected %s; got %s", ts1, ts)
+	}
+	// Write overlapping value with txn1 and verify with txn1--we should get
+	// low water mark, not ts1.
+	ts2 := clock.Now()
+	tc.Add(engine.Key("a"), nil, ts2, txn1MD5, true)
+	if ts, _ := tc.GetMax(engine.Key("a"), nil, txn1MD5); !ts.Equal(tc.lowWater) {
+		t.Errorf("expected low water (empty) time; got %s", ts)
+	}
+	// Write range which overlaps "a" with txn2 and verify with txn2--we should
+	// get low water mark, not ts2.
+	ts3 := clock.Now()
+	tc.Add(engine.Key("a"), engine.Key("c"), ts3, txn2MD5, true)
+	if ts, _ := tc.GetMax(engine.Key("a"), nil, txn2MD5); !ts.Equal(tc.lowWater) {
+		t.Errorf("expected low water (empty) time; got %s", ts)
+	}
+	// Also, verify txn1 sees ts3.
+	if ts, _ := tc.GetMax(engine.Key("a"), nil, txn1MD5); !ts.Equal(ts3) {
+		t.Errorf("expected %s; got %s", ts3, ts)
+	}
+	// Now, write to "b" with a higher timestamp and no txn. Should be
+	// visible to all txns.
+	ts4 := clock.Now()
+	tc.Add(engine.Key("b"), nil, ts4, proto.NoTxnMD5, true)
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, proto.NoTxnMD5); !ts.Equal(ts4) {
+		t.Errorf("expected %s; got %s", ts4, ts)
+	}
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, txn1MD5); !ts.Equal(ts4) {
+		t.Errorf("expected %s; got %s", ts4, ts)
+	}
+	// Finally, write an earlier version of "a"; should simply get
+	// tossed and we should see ts4 still.
+	tc.Add(engine.Key("b"), nil, ts1, proto.NoTxnMD5, true)
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, proto.NoTxnMD5); !ts.Equal(ts4) {
+		t.Errorf("expected %s; got %s", ts4, ts)
+	}
+}
+
 // TestTimestampCacheWithTxnMD5 verifies that timestamps matching
 // a specified MD5 of the txn ID are ignored.
 func TestTimestampCacheWithTxnMD5(t *testing.T) {
@@ -206,29 +258,26 @@ func TestTimestampCacheWithTxnMD5(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
 
-	// Add non-txn entry at current time.
-	ts1 := clock.Now()
-	tc.Add(engine.Key("a"), nil, ts1, proto.NoTxnMD5, true)
-
 	// Add two successive txn entries.
 	txn1MD5 := md5.Sum([]byte("txn1"))
 	txn2MD5 := md5.Sum([]byte("txn2"))
+	ts1 := clock.Now()
+	tc.Add(engine.Key("a"), engine.Key("c"), ts1, txn1MD5, true)
 	ts2 := clock.Now()
-	tc.Add(engine.Key("a"), nil, ts2, txn1MD5, true)
-	ts3 := clock.Now()
-	tc.Add(engine.Key("a"), nil, ts3, txn2MD5, true)
+	// This entry will remove "a"-"b" from the cache.
+	tc.Add(engine.Key("b"), engine.Key("d"), ts2, txn2MD5, true)
 
 	// Fetching with no transaction gets latest value.
-	if ts, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); !ts.Equal(ts3) {
-		t.Errorf("expected %s; got %s", ts3, ts)
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, proto.NoTxnMD5); !ts.Equal(ts2) {
+		t.Errorf("expected %s; got %s", ts2, ts)
 	}
 	// Fetching with txn MD5 "1" gets most recent.
-	if ts, _ := tc.GetMax(engine.Key("a"), nil, txn1MD5); !ts.Equal(ts3) {
-		t.Errorf("expected %s; got %s", ts3, ts)
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, txn1MD5); !ts.Equal(ts2) {
+		t.Errorf("expected %s; got %s", ts2, ts)
 	}
 	// Fetching with txn MD5 "2" skips most recent.
-	if ts, _ := tc.GetMax(engine.Key("a"), nil, txn2MD5); !ts.Equal(ts2) {
-		t.Errorf("expected %s; got %s", ts2, ts)
+	if ts, _ := tc.GetMax(engine.Key("b"), nil, txn2MD5); !ts.Equal(ts1) {
+		t.Errorf("expected %s; got %s", ts1, ts)
 	}
 }
 
@@ -241,7 +290,7 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 
 	// Add read-only non-txn entry at current time.
 	ts1 := clock.Now()
-	tc.Add(engine.Key("a"), nil, ts1, proto.NoTxnMD5, true)
+	tc.Add(engine.Key("a"), engine.Key("b"), ts1, proto.NoTxnMD5, true)
 
 	// Add two successive txn entries; one read-only and one read-write.
 	txn1MD5 := md5.Sum([]byte("txn1"))

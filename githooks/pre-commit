@@ -26,7 +26,7 @@ if [ "${GO_SKIP_PRECOMMIT_CHECKS}" != "1" -a -n "${gofiles}" ]; then
   fi
 
   # Check for vet errors.
-  unvetted=$(go vet ${gofiles} | awk -F: '{print $1}' | uniq)
+  unvetted=$(go tool vet ${gofiles} | awk -F: '{print $1}' | uniq)
   if [ -n "${unvetted}" ]; then
     echo -e >&2 "\nGo files with vet errors:"
     for fn in ${unvetted}; do

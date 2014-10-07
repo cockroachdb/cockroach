@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -80,18 +80,18 @@ func TestRocksDBCompaction(t *testing.T) {
 		}
 	}(t)
 
-	rcPre := KeyLocalRangeResponseCachePrefix
+	rcPre := KeyLocalResponseCachePrefix
 	txnPre := KeyLocalTransactionPrefix
 
-	// Write a two transaction values and two response cache values such
+	// Write two transaction values and two response cache values such
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	batch := []interface{}{
 		// TODO(spencer): use Transaction and Response protobufs here.
-		BatchPut{Key: MakeKey(rcPre, Key("a")), Value: encodePutResponse(makeTS(2, 0), t)},
-		BatchPut{Key: MakeKey(rcPre, Key("b")), Value: encodePutResponse(makeTS(3, 0), t)},
+		BatchPut{Key: MakeLocalKey(rcPre, Key("a")).Encode(nil), Value: encodePutResponse(makeTS(2, 0), t)},
+		BatchPut{Key: MakeLocalKey(rcPre, Key("b")).Encode(nil), Value: encodePutResponse(makeTS(3, 0), t)},
 
-		BatchPut{Key: MakeKey(txnPre, Key("a")), Value: encodeTransaction(makeTS(1, 0), t)},
-		BatchPut{Key: MakeKey(txnPre, Key("b")), Value: encodeTransaction(makeTS(2, 0), t)},
+		BatchPut{Key: MakeLocalKey(txnPre, Key("a")).Encode(nil), Value: encodeTransaction(makeTS(1, 0), t)},
+		BatchPut{Key: MakeLocalKey(txnPre, Key("b")).Encode(nil), Value: encodeTransaction(makeTS(2, 0), t)},
 	}
 	if err := rocksdb.WriteBatch(batch); err != nil {
 		t.Fatal(err)
@@ -108,8 +108,8 @@ func TestRocksDBCompaction(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	expKeys := []Key{
-		MakeKey(rcPre, Key("b")),
-		MakeKey(txnPre, Key("b")),
+		MakeLocalKey(rcPre, Key("b")).Encode(nil),
+		MakeLocalKey(txnPre, Key("b")).Encode(nil),
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %s, got keys %s", expKeys, keys)

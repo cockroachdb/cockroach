@@ -316,11 +316,11 @@ func newServer() (*server, error) {
 		host:  host,
 		mux:   http.NewServeMux(),
 		clock: hlc.NewClock(hlc.UnixNano),
-		rpc:   rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig),
 	}
 	s.clock.SetMaxDrift(*maxDrift)
 
-	s.gossip = gossip.New(tlsConfig)
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig, s.clock)
+	s.gossip = gossip.New(tlsConfig, s.clock)
 	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)

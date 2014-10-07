@@ -832,7 +832,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	mvcc := createTestMVCC(t)
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, txn1)
 	err = mvcc.Put(testKey2, makeTS(0, 0), value2, txn1e2)
-	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey2), 2, txn1e2Commit)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, testKey2.Next(), 2, txn1e2Commit)
 	if num != 2 {
 		t.Errorf("expected 2 rows resolved; got %d", num)
 	}
@@ -944,7 +944,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	err = mvcc.Put(testKey3, makeTS(0, 0), value3, txn2)
 	err = mvcc.Put(testKey4, makeTS(0, 0), value4, txn1)
 
-	num, err := mvcc.ResolveWriteIntentRange(testKey1, NextKey(testKey4), 0, txn1Commit)
+	num, err := mvcc.ResolveWriteIntentRange(testKey1, testKey4.Next(), 0, txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}

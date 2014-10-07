@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"fmt"
 	"net"
-	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -31,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 )
 
 // Default constants for timeouts.
@@ -195,7 +196,7 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, err
 	)
 	if len(metadataKey) == 0 {
 		// In this case, the requested key is stored in the cluster's first
-		// range.  Return the first range, which is always gossiped and not
+		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
 		rd, err := kv.getFirstRangeDescriptor()
 		if err != nil {
@@ -238,10 +239,9 @@ func (kv *DistKV) sendRPC(desc *proto.RangeDescriptor, method string, args proto
 			continue
 		}
 		// Copy the args value and set the replica in the header.
-		argsVal := reflect.New(reflect.TypeOf(args).Elem())
-		reflect.Indirect(argsVal).Set(reflect.Indirect(reflect.ValueOf(args)))
-		reflect.Indirect(argsVal).FieldByName("Replica").Set(reflect.ValueOf(replica))
-		argsMap[addr] = argsVal.Interface()
+		argsCopy := gogoproto.Clone(args).(proto.Request)
+		argsCopy.Header().Replica = replica
+		argsMap[addr] = argsCopy
 	}
 	if len(argsMap) == 0 {
 		return noNodeAddrsAvailError{}
@@ -251,7 +251,8 @@ func (kv *DistKV) sendRPC(desc *proto.RangeDescriptor, method string, args proto
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
 	}
-	return rpc.Send(argsMap, method, replyChan, rpcOpts, kv.gossip.TLSConfig())
+	return rpc.Send(argsMap, method, replyChan, rpcOpts,
+		kv.gossip.TLSConfig(), kv.gossip.Clock())
 }
 
 // ExecuteCmd verifies permissions and looks up the appropriate range
@@ -264,7 +265,7 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 
 	// Verify permissions.
 	if err := kv.verifyPermissions(method, args.Header()); err != nil {
-		sendErrorReply(err, replyChan)
+		sendError(err, replyChan)
 		return
 	}
 
@@ -294,18 +295,9 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 		return util.RetryBreak, err
 	})
 	if err != nil {
-		sendErrorReply(err, replyChan)
+		sendError(err, replyChan)
 	}
 }
 
 // Close is a noop for the distributed KV implementation.
 func (kv *DistKV) Close() {}
-
-// sendErrorReply instantiates a new reply value according to the
-// inner element type of replyChan and sets its ResponseHeader
-// error to err before sending the new reply on the channel.
-func sendErrorReply(err error, replyChan interface{}) {
-	replyVal := reflect.New(reflect.TypeOf(replyChan).Elem().Elem())
-	replyVal.Interface().(proto.Response).Header().SetGoError(err)
-	reflect.ValueOf(replyChan).Send(replyVal)
-}

@@ -21,9 +21,7 @@
 package engine
 
 /*
-#cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroach -lroachproto -lprotobuf
-#cgo linux LDFLAGS: -lrt
-#cgo darwin LDFLAGS: -lc++
+#cgo pkg-config: ./engine.pc
 #include <stdlib.h>
 #include "rocksdb/c.h"
 #include "rocksdb_merge.h"
@@ -34,7 +32,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"reflect"
 	"syscall"
 	"unsafe"
 
@@ -83,6 +80,24 @@ func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 func getGCTimeouts(rocksdbPtr unsafe.Pointer) (minTxnTS, minRCacheTS int64) {
 	rocksdb := (*RocksDB)(rocksdbPtr)
 	return rocksdb.gcTimeouts()
+}
+
+//export getGCPrefixes
+// getGCPrefixes returns key prefixes for transaction and response
+// cache rows, in that order. Each prefix is encoded to match the raw
+// keys in the underlying storage engine. Ownership for the returned
+// strings is assumed by the caller. They should be deallocated using
+// free().
+func getGCPrefixes() (*C.char, *C.char) {
+	// Since we're converting to a C-string, the prefixes which we'll
+	// match against will end at the first null character, or just after
+	// the encoded transaction prefix, up to but not including the
+	// terminating null character.
+	// TODO(spencer): it's fragile to rely on this behavior. Should
+	// consider changing.
+	txnPrefix := KeyLocalTransactionPrefix.Encode(nil)
+	rcachePrefix := KeyLocalResponseCachePrefix.Encode(nil)
+	return C.CString(string(txnPrefix)), C.CString(string(rcachePrefix))
 }
 
 //export reportGCError
@@ -200,7 +215,7 @@ func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
 	return nil
 }
 
-// Attrs returns the list of attributes describing this engine.  This
+// Attrs returns the list of attributes describing this engine. This
 // may include a specification of disk type (e.g. hdd, ssd, fio, etc.)
 // and potentially other labels to identify important attributes of
 // the engine.
@@ -474,7 +489,7 @@ func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 				bytesPointer(value),
 				C.size_t(len(value)))
 		default:
-			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
 		}
 	}
 

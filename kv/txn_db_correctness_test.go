@@ -133,7 +133,7 @@ func readCmd(c *cmd, db storage.DB, t *testing.T) error {
 	if r.GoError() == nil {
 		if r.Value != nil {
 			c.env[c.key] = r.Value.GetInteger()
-			c.debug = fmt.Sprintf("[%d]", r.Value.GetInteger())
+			c.debug = fmt.Sprintf("[%d ts=%d]", r.Value.GetInteger(), r.Timestamp.Logical)
 		}
 	}
 	return r.GoError()
@@ -160,7 +160,7 @@ func scanCmd(c *cmd, db storage.DB, t *testing.T) error {
 			c.env[string(key)] = kv.Value.GetInteger()
 			vals = append(vals, fmt.Sprintf("%d", kv.Value.GetInteger()))
 		}
-		c.debug = fmt.Sprintf("[%s]", strings.Join(vals, " "))
+		c.debug = fmt.Sprintf("[%s ts=%d]", strings.Join(vals, " "), r.Timestamp.Logical)
 	}
 	return r.GoError()
 }
@@ -174,7 +174,7 @@ func incCmd(c *cmd, db storage.DB, t *testing.T) error {
 	})
 	if r.GoError() == nil {
 		c.env[c.key] = r.NewValue
-		c.debug = fmt.Sprintf("[%d]", r.NewValue)
+		c.debug = fmt.Sprintf("[%d ts=%d]", r.NewValue, r.Timestamp.Logical)
 	}
 	return r.GoError()
 }
@@ -190,13 +190,14 @@ func sumCmd(c *cmd, db storage.DB, t *testing.T) error {
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
 		Value:         proto.Value{Integer: gogoproto.Int64(sum)},
 	})
-	c.debug = fmt.Sprintf("[%d]", sum)
+	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp.Logical)
 	return r.GoError()
 }
 
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, db storage.DB, t *testing.T) error {
 	r := <-db.EndTransaction(&proto.EndTransactionRequest{Commit: true})
+	c.debug = fmt.Sprintf("[ts=%d]", r.Timestamp.Logical)
 	return r.GoError()
 }
 
@@ -342,7 +343,7 @@ func TestEnumeratePriorities(t *testing.T) {
 	}
 	enum := enumeratePriorities([]int32{p1, p2, p3})
 	if !reflect.DeepEqual(enum, expPriorities) {
-		t.Errorf("expected enumeration to match %s; got %s", expPriorities, enum)
+		t.Errorf("expected enumeration to match %v; got %v", expPriorities, enum)
 	}
 }
 
@@ -535,7 +536,8 @@ func (hv *historyVerifier) runHistory(historyIdx int, priorities []int32,
 	}
 	if hv.expSuccess && err != nil {
 		verifyStr := strings.Join(verifyStrs, " ")
-		t.Errorf("iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s", isolations, priorities, plannedStr, actualStr, verifyStr, err)
+		t.Errorf("%d: iso=%v, pri=%v, history=%q: actual=%q, verify=%q: %s",
+			historyIdx, isolations, priorities, plannedStr, actualStr, verifyStr, err)
 	}
 	return err
 }

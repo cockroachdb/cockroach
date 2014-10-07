@@ -22,7 +22,6 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sync"
 	"unsafe"
 
@@ -119,7 +118,7 @@ func (in *InMem) ReleaseSnapshot(snapshotID string) error {
 	return nil
 }
 
-// Attrs returns the list of attributes describing this engine.  This
+// Attrs returns the list of attributes describing this engine. This
 // includes the disk type (always "mem") and potentially other labels
 // to identify important attributes of the engine.
 func (in *InMem) Attrs() proto.Attributes {
@@ -294,7 +293,7 @@ func (in *InMem) WriteBatch(cmds []interface{}) error {
 				return err
 			}
 		default:
-			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
 		}
 	}
 	return nil

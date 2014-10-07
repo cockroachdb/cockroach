@@ -47,11 +47,12 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		t.Fatal(err)
 	}
 
-	rpcServer := rpc.NewServer(addr, tlsConfig)
+	clock := hlc.NewClock(hlc.UnixNano)
+	rpcServer := rpc.NewServer(addr, tlsConfig, clock)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(tlsConfig)
+	g := gossip.New(tlsConfig, clock)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
@@ -60,7 +61,6 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetBootstrap([]net.Addr{gossipBS})
 		g.Start(rpcServer)
 	}
-	clock := hlc.NewClock(hlc.UnixNano)
 	db := kv.NewDB(kv.NewDistKV(g), clock)
 	node := NewNode(db, g)
 	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
@@ -90,7 +90,7 @@ func TestBootstrapCluster(t *testing.T) {
 	// Scan the complete contents of the local database.
 	sr := <-localDB.Scan(&proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:    engine.KeyMin,
+			Key:    engine.KeyLocalPrefix.PrefixEnd(), // skip local keys
 			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,
 		},
@@ -104,8 +104,8 @@ func TestBootstrapCluster(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	var expectedKeys = []engine.Key{
-		engine.Key("\x00\x00meta1\xff"),
-		engine.Key("\x00\x00meta2\xff"),
+		engine.MakeKey(engine.Key("\x00\x00meta1"), engine.KeyMax),
+		engine.MakeKey(engine.Key("\x00\x00meta2"), engine.KeyMax),
 		engine.Key("\x00acct"),
 		engine.Key("\x00node-idgen"),
 		engine.Key("\x00perm"),

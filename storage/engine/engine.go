@@ -22,7 +22,6 @@ package engine
 import (
 	"bytes"
 	"encoding/gob"
-	"reflect"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
@@ -194,7 +193,7 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 			return 0, err
 		}
 		if _, ok := decoded.(int64); !ok {
-			return 0, util.Errorf("received value of wrong type %v", reflect.TypeOf(decoded))
+			return 0, util.Errorf("received value of wrong type %T", decoded)
 		}
 		int64Val = decoded.(int64)
 	}
@@ -220,11 +219,11 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 }
 
 // ClearRange removes a set of entries, from start (inclusive)
-// to end (exclusive), up to max entries.  If max is 0, all
-// entries between start and end are deleted.  This function
-// returns the number of entries removed.  Either all entries
+// to end (exclusive), up to max entries. If max is 0, all
+// entries between start and end are deleted. This function
+// returns the number of entries removed. Either all entries
 // within the range, up to max, will be deleted, or none, and
-// an error will be returned.  Note that this function actually
+// an error will be returned. Note that this function actually
 // removes entries from the storage engine, rather than inserting
 // tombstones.
 func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
@@ -272,7 +271,7 @@ func iterateRangeSnapshot(eng Engine, startKey, endKey Key, chunkSize int64, sna
 		if len(kvs) == 0 {
 			break
 		}
-		startKey = NextKey(kvs[len(kvs)-1].Key)
+		startKey = Key(kvs[len(kvs)-1].Key).Next()
 	}
 	return nil
 }

@@ -71,7 +71,7 @@ func ExampleSetAndGetZone() {
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
 		runSetZone(CmdSetZone, []string{prefix, testConfigFn})
-		runGetZones(CmdGetZone, []string{prefix})
+		runGetZone(CmdGetZone, []string{prefix})
 	}
 	// Output:
 	// set zone config for key prefix ""

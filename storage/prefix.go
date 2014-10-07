@@ -29,7 +29,7 @@ import (
 
 // PrefixConfig relate a string prefix to a config object. Config
 // objects include accounting, permissions, and zones. PrefixConfig
-// objects are the constituents of PrefixConfigMap objects.  In order
+// objects are the constituents of PrefixConfigMap objects. In order
 // to support binary searches of hierarchical prefixes (see the
 // comments in NewPrefixConfigMap), PrefixConfig objects are
 // additionally added to a PrefixConfigMap to demarcate the end of a
@@ -91,7 +91,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
-	if len(p) == 0 || bytes.Compare(p[0].Prefix, engine.KeyMin) != 0 {
+	if len(p) == 0 || p[0].Prefix.Compare(engine.KeyMin) != 0 {
 		return nil, util.Errorf("no default prefix specified")
 	}
 
@@ -105,7 +105,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 		}
 		if stack.Len() != 0 {
 			newConfigs = append(newConfigs, &PrefixConfig{
-				Prefix:    engine.PrefixEndKey(entry.Prefix),
+				Prefix:    entry.Prefix.PrefixEnd(),
 				Canonical: stack.Back().Value.(*PrefixConfig).Prefix,
 				Config:    stack.Back().Value.(*PrefixConfig).Config,
 			})
@@ -139,7 +139,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 // specified key.
 func (p PrefixConfigMap) MatchByPrefix(key engine.Key) *PrefixConfig {
 	n := sort.Search(len(p), func(i int) bool {
-		return bytes.Compare(key, p[i].Prefix) < 0
+		return key.Compare(p[i].Prefix) < 0
 	})
 	if n == 0 || n > len(p) {
 		panic("should never match a key outside of default range")
@@ -151,10 +151,10 @@ func (p PrefixConfigMap) MatchByPrefix(key engine.Key) *PrefixConfig {
 	}
 	// Otherwise, search for the canonical prefix config.
 	n = sort.Search(len(p), func(i int) bool {
-		return bytes.Compare(pc.Canonical, p[i].Prefix) <= 0
+		return pc.Canonical.Compare(p[i].Prefix) <= 0
 	})
 	// Should find an exact match every time.
-	if n >= len(p) || !bytes.Equal(pc.Canonical, p[n].Prefix) {
+	if n >= len(p) || !pc.Canonical.Equal(p[n].Prefix) {
 		panic(fmt.Sprintf("canonical lookup for key %q failed", string(pc.Canonical)))
 	}
 	return p[n]
@@ -182,18 +182,18 @@ func (p PrefixConfigMap) MatchesByPrefix(key engine.Key) []*PrefixConfig {
 // by the specified key range [start, end).
 func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
 	visitor func(start, end engine.Key, config interface{}) error) error {
-	comp := bytes.Compare(start, end)
+	comp := start.Compare(end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
 	}
 	startIdx := sort.Search(len(p), func(i int) bool {
-		return bytes.Compare(start, p[i].Prefix) < 0
+		return start.Compare(p[i].Prefix) < 0
 	})
 	// Common case of start == end.
 	endIdx := startIdx
 	if comp != 0 {
 		endIdx = sort.Search(len(p), func(i int) bool {
-			return bytes.Compare(end, p[i].Prefix) < 0
+			return end.Compare(p[i].Prefix) < 0
 		})
 	}
 
@@ -209,7 +209,7 @@ func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
 		if err := visitor(start, p[i].Prefix, p[i-1].Config); err != nil {
 			return err
 		}
-		if bytes.Equal(p[i].Prefix, end) {
+		if p[i].Prefix.Equal(end) {
 			return nil
 		}
 		start = p[i].Prefix

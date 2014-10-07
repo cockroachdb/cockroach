@@ -62,12 +62,12 @@ Fetches and displays the zone configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runGetZones,
+	Run:  runGetZone,
 	Flag: *flag.CommandLine,
 }
 
-// runGetZones invokes the REST API with GET action and key prefix as path.
-func runGetZones(cmd *commander.Command, args []string) {
+// runGetZone invokes the REST API with GET action and key prefix as path.
+func runGetZone(cmd *commander.Command, args []string) {
 	if len(args) != 1 {
 		cmd.Usage()
 		return

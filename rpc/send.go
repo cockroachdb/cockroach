@@ -23,11 +23,11 @@ import (
 	"math/rand"
 	"net"
 	"net/rpc"
-	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -81,7 +81,8 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 // failure. Note that on error, some replies may have been sent on the
 // channel. Send returns an error if the number of errors exceeds the
 // possibility of attaining the required successful responses.
-func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{}, opts Options, tlsConfig *TLSConfig) error {
+func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{},
+	opts Options, tlsConfig *TLSConfig, clock *hlc.Clock) error {
 	if opts.N < len(argsMap) {
 		return SendError{
 			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(argsMap), opts.N),
@@ -92,7 +93,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 	// Build the slice of clients.
 	var healthy, unhealthy []*Client
 	for addr, args := range argsMap {
-		client := NewClient(addr, nil, tlsConfig)
+		client := NewClient(addr, nil, tlsConfig, clock)
 		delete(argsMap, addr)
 		argsMap[client.Addr()] = args
 		if client.IsHealthy() {
@@ -131,7 +132,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				helperChan <- util.Errorf("no arguments in map (len %d) for client %s", len(argsMap), clients[index].Addr())
 				continue
 			}
-			reply := reflect.New(reflect.TypeOf(replyChanI).Elem().Elem()).Interface()
+			reply := proto.NewReply(replyChanI)
 			if log.V(1) {
 				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
@@ -165,7 +166,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				if log.V(1) {
 					log.Infof("%s: successful reply: %+v", method, t)
 				}
-				reflect.ValueOf(replyChanI).Send(reflect.ValueOf(t))
+				proto.SendReply(replyChanI, t.(proto.Response))
 				if successes == opts.N {
 					return nil
 				}

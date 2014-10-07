@@ -62,8 +62,8 @@ func TestPrefixEndKey(t *testing.T) {
 	}
 
 	for i, test := range testData {
-		if bytes.Compare(engine.PrefixEndKey(test.prefix), test.expEnd) != 0 {
-			t.Errorf("%d: %q end key %q != %q", i, test.prefix, engine.PrefixEndKey(test.prefix), test.expEnd)
+		if !test.prefix.PrefixEnd().Equal(test.expEnd) {
+			t.Errorf("%d: %q end key %q != %q", i, test.prefix, test.prefix.PrefixEnd(), test.expEnd)
 		}
 	}
 }

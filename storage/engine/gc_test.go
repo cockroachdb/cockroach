@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -24,13 +24,12 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 var (
-	aKey  = encoding.EncodeBinary(nil, Key("a"))
-	bKey  = encoding.EncodeBinary(nil, Key("b"))
-	cKey  = encoding.EncodeBinary(nil, Key("c"))
+	aKey  = Key("a").Encode(nil)
+	bKey  = Key("b").Encode(nil)
+	cKey  = Key("c").Encode(nil)
 	aKeys = []Key{
 		aKey,
 		mvccEncodeKey(aKey, makeTS(2E9, 0)),

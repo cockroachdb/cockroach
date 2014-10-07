@@ -59,8 +59,12 @@ unsigned char gc_compaction_filter_filter(
 
 rocksdb_compactionfilter_t* gc_compaction_filter_factory_create_filter(
     void* rocksdb, rocksdb_compactionfiltercontext_t* context) {
+  struct getGCPrefixes_return prefixes = getGCPrefixes();
   struct getGCTimeouts_return timeouts = getGCTimeouts(rocksdb);
   struct FilterState* fs = (struct FilterState*)malloc(sizeof(struct FilterState));
+
+  fs->txn_prefix = prefixes.r0;
+  fs->rcache_prefix = prefixes.r1;
   fs->min_txn_ts = timeouts.r0;
   fs->min_rcache_ts = timeouts.r1;
 

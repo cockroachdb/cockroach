@@ -51,7 +51,7 @@ type Config struct {
 	// A new election is called if the ElectionTimeout elapses with no contact from the leader.
 	// The actual ElectionTimeout is chosen randomly from the range [ElectionTimeoutMin,
 	// ElectionTimeoutMax) to minimize the chances of several servers trying to become leaders
-	// simultaneously.  The Raft paper suggests a range of 150-300ms for local networks;
+	// simultaneously. The Raft paper suggests a range of 150-300ms for local networks;
 	// geographically distributed installations should use higher values to account for the
 	// increased round trip time.
 	ElectionTimeoutTicks   int
@@ -81,7 +81,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// MultiRaft represents a local node in a raft cluster.  The owner is responsible for consuming
+// MultiRaft represents a local node in a raft cluster. The owner is responsible for consuming
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
@@ -156,7 +156,7 @@ func (m *MultiRaft) DoRPC(name string, req, resp interface{}) error {
 
 }
 
-// strictErrorLog panics in strict mode and logs an error otherwise.  Arguments are printf-style
+// strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
 // and will be passed directly to either log.Errorf or log.Fatalf.
 func (m *MultiRaft) strictErrorLog(format string, args ...interface{}) {
 	if m.Strict {
@@ -177,7 +177,7 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 	}
 }
 
-// CreateGroup creates a new consensus group and joins it.  The application should
+// CreateGroup creates a new consensus group and joins it. The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
 func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error {
 	for _, id := range initialMembers {
@@ -194,7 +194,7 @@ func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error 
 	return <-op.ch
 }
 
-// SubmitCommand sends a command (a binary blob) to the cluster.  This method returns
+// SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
@@ -221,7 +221,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMember
 }
 
 // pendingCall represents an RPC that we should not respond to until we have persisted
-// up to the given point.  term and logIndex may be -1 if the rpc didn't modify that
+// up to the given point. term and logIndex may be -1 if the rpc didn't modify that
 // variable and therefore can be resolved regardless of its value.
 type pendingCall struct {
 	call     *rpc.Call
@@ -283,7 +283,7 @@ type node struct {
 	client   *asyncClient
 }
 
-// state represents the internal state of a MultiRaft object.  All variables here
+// state represents the internal state of a MultiRaft object. All variables here
 // are accessible only from the state.start goroutine so they can be accessed without
 // synchronization.
 type state struct {

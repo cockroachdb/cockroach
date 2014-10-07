@@ -18,12 +18,10 @@
 package storage
 
 import (
-	"bytes"
 	"time"
 
 	"crypto/md5"
 
-	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -38,14 +36,6 @@ const (
 	// timestamp.
 	minCacheWindow = 10 * time.Second
 )
-
-// rangeKey implements interval.Comparable.
-type rangeKey engine.Key
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (rk rangeKey) Compare(b interval.Comparable) int {
-	return bytes.Compare(rk, b.(rangeKey))
-}
 
 // A TimestampCache maintains an interval tree FIFO cache of keys or
 // key ranges and the timestamps at which they were most recently read
@@ -97,8 +87,8 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 // key only. txnMD5 is empty for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
 func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
-	if end == nil {
-		end = engine.NextKey(start)
+	if len(end) == 0 {
+		end = start.Next()
 	}
 	if tc.latest.Less(timestamp) {
 		tc.latest = timestamp
@@ -106,8 +96,22 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
+		// Check existing, overlapping entries. Remove superseded
+		// entries or return without adding this entry if necessary.
+		key := tc.cache.NewKey(start, end)
+		for _, o := range tc.cache.GetOverlaps(start, end) {
+			ce := o.Value.(cacheEntry)
+			if ce.readOnly != readOnly {
+				continue
+			}
+			if o.Key.Contains(key) && !ce.timestamp.Less(timestamp) {
+				return // don't add this key; there's already a cache entry with >= timestamp.
+			} else if key.Contains(o.Key) && !timestamp.Less(ce.timestamp) {
+				tc.cache.Del(o.Key) // delete existing key; this cache entry supersedes.
+			}
+		}
 		ce := cacheEntry{timestamp: timestamp, txnMD5: txnMD5, readOnly: readOnly}
-		tc.cache.Add(tc.cache.NewKey(rangeKey(start), rangeKey(end)), ce)
+		tc.cache.Add(key, ce)
 	}
 }
 
@@ -116,14 +120,20 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 // the specified txnID are not considered. If no part of the specified
 // range is overlapped by timestamps in the cache, the low water
 // timestamp is returned for both read and write timestamps.
+//
+// The txnMD5 is an MD5 of the transaction ID. It prevents restarts
+// with a pattern like: read("a"), write("a"). The read adds a
+// timestamp for "a". Then the write (for the same transaction) would
+// get that as the max timestamp and be forced to increment it. The MD5
+// allows timestamps from the same txn to be ignored.
 func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
-	if end == nil {
-		end = engine.NextKey(start)
+	if len(end) == 0 {
+		end = start.Next()
 	}
 	maxR := tc.lowWater
 	maxW := tc.lowWater
-	for _, v := range tc.cache.GetOverlaps(rangeKey(start), rangeKey(end)) {
-		ce := v.(cacheEntry)
+	for _, o := range tc.cache.GetOverlaps(start, end) {
+		ce := o.Value.(cacheEntry)
 		if proto.MD5Equal(ce.txnMD5, proto.NoTxnMD5) || proto.MD5Equal(txnMD5, proto.NoTxnMD5) || !proto.MD5Equal(txnMD5, ce.txnMD5) {
 			if ce.readOnly && maxR.Less(ce.timestamp) {
 				maxR = ce.timestamp

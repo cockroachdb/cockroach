@@ -238,7 +238,7 @@ func (is *infoStore) maxHops() uint32 {
 // course of visiting all groups, all group infos, and all non-group
 // infos. The visitGroup function is run against each group in
 // turn. After each group is visited, the visitInfo function is run
-// against each of its infos.  Finally, after all groups have been
+// against each of its infos. Finally, after all groups have been
 // visitied, the visitInfo function is run against each non-group info
 // in turn. Be sure to skip over any expired infos.
 func (is *infoStore) visitInfos(visitGroup func(*group) error, visitInfo func(*info) error) error {

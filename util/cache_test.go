@@ -269,9 +269,12 @@ func TestIntervalCacheOverlap(t *testing.T) {
 	ic.Add(ic.NewKey(rangeKey("i"), rangeKey("j")), 10)
 
 	expValues := []interface{}{3, 2, 4, 6, 7, 9}
-	vs := ic.GetOverlaps(rangeKey("d"), rangeKey("g"))
-	if !reflect.DeepEqual(expValues, vs) {
-		t.Errorf("expected overlap values %+v, got %+v", expValues, vs)
+	values := []interface{}{}
+	for _, o := range ic.GetOverlaps(rangeKey("d"), rangeKey("g")) {
+		values = append(values, o.Value)
+	}
+	if !reflect.DeepEqual(expValues, values) {
+		t.Errorf("expected overlap values %+v, got %+v", expValues, values)
 	}
 }
 

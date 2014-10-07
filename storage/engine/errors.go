@@ -25,17 +25,18 @@ import (
 // InvalidRangeMetaKeyError indicates that a Range Metadata key is somehow
 // invalid.
 type InvalidRangeMetaKeyError struct {
+	Msg string
 	Key Key
 }
 
 // NewInvalidRangeMetaKeyError returns a new InvalidRangeMetaKeyError
-func NewInvalidRangeMetaKeyError(k Key) *InvalidRangeMetaKeyError {
-	return &InvalidRangeMetaKeyError{k}
+func NewInvalidRangeMetaKeyError(msg string, k Key) *InvalidRangeMetaKeyError {
+	return &InvalidRangeMetaKeyError{Msg: msg, Key: k}
 }
 
 // Error formats error string.
 func (i *InvalidRangeMetaKeyError) Error() string {
-	return fmt.Sprintf("'%s' is not valid range metadata key.", string(i.Key))
+	return fmt.Sprintf("%q is not valid range metadata key: %s", string(i.Key), i.Msg)
 }
 
 // Init registers engine error types with Gob.

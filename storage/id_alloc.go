@@ -84,7 +84,7 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 		Increment: ia.blockSize,
 	})
 	if ir.Error != nil {
-		log.Errorf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, ir.Error)
+		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, ir.Error)
 	}
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",

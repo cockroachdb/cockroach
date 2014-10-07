@@ -39,7 +39,7 @@ const (
 	// TODO(bdarnell): enforce the requirement that a node be added as an observer first.
 	ChangeMembershipAddMember
 
-	// ChangeMembershipRemoveMember removes a voting node.  It is not possible to remove the
+	// ChangeMembershipRemoveMember removes a voting node. It is not possible to remove the
 	// last node; the result of attempting to do so is undefined.
 	ChangeMembershipRemoveMember
 )
@@ -82,7 +82,7 @@ type Storage interface {
 	// SetGroupState is called to update the persistent state for the given group.
 	SetGroupState(groupID GroupID, state *GroupPersistentState) error
 
-	// AppendLogEntries is called to add entries to the log.  The entries will always span
+	// AppendLogEntries is called to add entries to the log. The entries will always span
 	// a contiguous range of indices just after the current end of the log.
 	AppendLogEntries(groupID GroupID, entries []*LogEntry) error
 
@@ -93,7 +93,7 @@ type Storage interface {
 	//GetLogEntry(groupID GroupID, index int) (*LogEntry, error)
 
 	// GetLogEntries is called to asynchronously retrieve entries from the log,
-	// from firstIndex to lastIndex inclusive.  If there is an error the storage
+	// from firstIndex to lastIndex inclusive. If there is an error the storage
 	// layer should send one LogEntryState with a non-nil error and then close the
 	// channel.
 	//GetLogEntries(groupID GroupID, firstIndex, lastIndex int, ch chan<- *LogEntryState)
@@ -209,7 +209,7 @@ type writeTask struct {
 	storage Storage
 	stopper chan struct{}
 
-	// ready is an unbuffered channel used for synchronization.  If writes to this channel do not
+	// ready is an unbuffered channel used for synchronization. If writes to this channel do not
 	// block, the writeTask is ready to receive a request.
 	ready chan struct{}
 
@@ -218,7 +218,7 @@ type writeTask struct {
 	out chan *writeResponse
 }
 
-// newWriteTask creates a writeTask.  The caller should start the task after creating it.
+// newWriteTask creates a writeTask. The caller should start the task after creating it.
 func newWriteTask(storage Storage) *writeTask {
 	return &writeTask{
 		storage: storage,
@@ -229,7 +229,7 @@ func newWriteTask(storage Storage) *writeTask {
 	}
 }
 
-// start runs the storage loop.  Blocks until stopped, so should be run in a goroutine.
+// start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
 func (w *writeTask) start() {
 	for {
 		var request *writeRequest

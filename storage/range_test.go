@@ -94,11 +94,40 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 		RangeDescriptor: testRangeDescriptor,
 		RangeID:         0,
 	}
-	g := gossip.New(rpc.LoadInsecureTLSConfig())
+	g := gossip.New(rpc.LoadInsecureTLSConfig(), hlc.NewClock(hlc.UnixNano))
 	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(rm, clock, engine, nil, g, nil)
 	r.Start()
 	return r, g
+}
+
+// TestRangeContains verifies that the range uses Key.Address() in
+// order to properly resolve addresses for local keys.
+func TestRangeContains(t *testing.T) {
+	rm := &proto.RangeMetadata{
+		ClusterID: "cluster1",
+		RangeDescriptor: proto.RangeDescriptor{
+			RaftID:   1,
+			StartKey: engine.Key("a"),
+			EndKey:   engine.Key("b"),
+		},
+		RangeID: 0,
+	}
+	clock := hlc.NewClock(hlc.UnixNano)
+	r := NewRange(rm, clock, nil, nil, nil, nil)
+	if !r.ContainsKey(engine.Key("aa")) {
+		t.Errorf("expected range to contain key \"aa\"")
+	}
+	if !r.ContainsKey(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa"))) {
+		t.Errorf("expected range to contain key transaction key for \"aa\"")
+	}
+	if !r.ContainsKeyRange(engine.Key("aa"), engine.Key("b")) {
+		t.Errorf("expected range to contain key range \"aa\"-\"b\"")
+	}
+	if !r.ContainsKeyRange(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa")),
+		engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("b"))) {
+		t.Errorf("expected range to contain key transaction range \"aa\"-\"b\"")
+	}
 }
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
@@ -235,7 +264,7 @@ func (be *blockingEngine) block(key engine.Key) {
 	be.Lock()
 	defer be.Unlock()
 	// Need to binary encode the key so it matches when accessed through MVCC.
-	be.key = encoding.EncodeBinary(nil, key)
+	be.key = key.Encode(nil)
 	// Get() and Put() will try to get this lock, so they will wait.
 	be.blocker.Lock()
 }
@@ -340,13 +369,25 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
+func scanArgs(start, end []byte, rangeID int64) (*proto.ScanRequest, *proto.ScanResponse) {
+	args := &proto.ScanRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     start,
+			EndKey:  end,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+	}
+	reply := &proto.ScanResponse{}
+	return args, reply
+}
+
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
 func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     txn.ID,
+			Key:     engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, txn.ID),
 			Replica: proto.Replica{RangeID: rangeID},
 			Txn:     txn,
 		},
@@ -362,7 +403,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, rangeID int64) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       pushee.ID,
+			Key:       engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, pushee.ID),
 			Timestamp: pusher.Timestamp,
 			Replica:   proto.Replica{RangeID: rangeID},
 			Txn:       pusher,
@@ -379,7 +420,7 @@ func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     txn.ID,
+			Key:     engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, txn.ID),
 			Replica: proto.Replica{RangeID: rangeID},
 			Txn:     txn,
 		},
@@ -391,7 +432,8 @@ func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 // internalSnapshotCopyArgs returns a InternalSnapshotCopyRequest and
 // InternalSnapshotCopyResponse pair addressed to the default replica
 // for the specified key and endKey.
-func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
+func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (
+	*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
 	args := &proto.InternalSnapshotCopyRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -605,7 +647,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		pArgs.Txn = NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 		if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
-			t.Fatal("test %d: %s", i, err)
+			t.Fatalf("test %d: %s", i, err)
 		}
 
 		// Now attempt read or write.
@@ -617,7 +659,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Write the intent again -- should not have its timestamp upgraded!
 		if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
-			t.Fatal("test %d: %s", i, err)
+			t.Fatalf("test %d: %s", i, err)
 		}
 		if !pReply.Timestamp.Equal(pArgs.Timestamp) {
 			t.Errorf("expected timestamp not to advance %s != %s", pReply.Timestamp, pArgs.Timestamp)
@@ -750,7 +792,7 @@ func TestRangeSnapshot(t *testing.T) {
 			gReply.Value.Bytes, val1)
 	}
 
-	iscArgs, iscReply := internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	iscArgs, iscReply := internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd(), engine.KeyMax, 50, "", 0)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -771,7 +813,7 @@ func TestRangeSnapshot(t *testing.T) {
 	err = rng.AddCmd(Put, pArgs, pReply, true)
 
 	// Scan with the previous snapshot will get the old value val2 of key2.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, snapshotID, 0)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd(), engine.KeyMax, 50, snapshotID, 0)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -785,10 +827,10 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshotLastKey := iscReply.Rows[3].Key
+	snapshotLastKey := engine.Key(iscReply.Rows[3].Key)
 
 	// Create a new snapshot to cover the latest value.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(engine.KeyLocalPrefix), engine.KeyMax, 50, "", 0)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd(), engine.KeyMax, 50, "", 0)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -804,9 +846,9 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshot2LastKey := iscReply.Rows[4].Key
+	snapshot2LastKey := engine.Key(iscReply.Rows[4].Key)
 
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshotLastKey), engine.KeyMax, 50, snapshotID, 0)
+	iscArgs, iscReply = internalSnapshotCopyArgs(snapshotLastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID, 0)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -815,7 +857,7 @@ func TestRangeSnapshot(t *testing.T) {
 	if len(iscReply.Rows) != 0 {
 		t.Fatalf("error : %d", len(iscReply.Rows))
 	}
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.PrefixEndKey(snapshot2LastKey), engine.KeyMax, 50, snapshotID2, 0)
+	iscArgs, iscReply = internalSnapshotCopyArgs(snapshot2LastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID2, 0)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -1013,7 +1055,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key)
+		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key).Encode(nil)
 		if err := engine.PutProto(rng.engine, txnKey, &existTxn); err != nil {
 			t.Fatal(err)
 		}

@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied.  See the License for the specific language governing
+// implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
@@ -20,7 +20,6 @@ package engine
 import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,7 +59,7 @@ func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
 		return nil
 	}
 	// Look up the policy which applies to this set of MVCC values.
-	_, decKey := encoding.DecodeBinary(keys[0])
+	_, decKey := DecodeKey(keys[0])
 	policy := gc.policyFn(decKey)
 	if policy == nil || policy.TTLSeconds <= 0 {
 		return nil

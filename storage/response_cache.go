@@ -47,8 +47,8 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // machine and the results are stored in the ResponseCache.
 //
 // The ResponseCache stores responses in the underlying engine, using
-// keys derived from KeyLocalRangeResponseCachePrefix, range ID and
-// the ClientCmdID.
+// keys derived from KeyLocalResponseCachePrefix, range ID and the
+// ClientCmdID.
 //
 // A ResponseCache is safe for concurrent access.
 type ResponseCache struct {
@@ -85,7 +85,8 @@ func (rc *ResponseCache) ClearInflight() {
 // the inflight map.
 func (rc *ResponseCache) ClearData() error {
 	p := rc.makePrefix()
-	_, err := engine.ClearRange(rc.engine, p, engine.PrefixEndKey(p), 0)
+	end := p.PrefixEnd()
+	_, err := engine.ClearRange(rc.engine, p.Encode(nil), end.Encode(nil), 0)
 	return err
 }
 
@@ -119,7 +120,8 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
-	if ok, err := engine.GetProto(rc.engine, rc.makeKey(cmdID), &rwResp); ok || err != nil {
+	encKey := rc.makeKey(cmdID).Encode(nil)
+	if ok, err := engine.GetProto(rc.engine, encKey, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
 		rc.removeInflightLocked(cmdID)
@@ -142,7 +144,7 @@ func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
 	rc.Lock()
 	defer rc.Unlock()
 	prefix := rc.makePrefix()
-	kvs, err := rc.engine.Scan(prefix, engine.PrefixEndKey(prefix), 0)
+	kvs, err := rc.engine.Scan(prefix.Encode(nil), prefix.PrefixEnd().Encode(nil), 0)
 	if err != nil {
 		return err
 	}
@@ -151,9 +153,8 @@ func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
 		if cmdID, err := rc.decodeKey(kv.Key); err == nil {
-			batch = append(batch, engine.BatchPut{
-				Key: destRC.makeKey(cmdID), Value: kv.Value,
-			})
+			encKey := destRC.makeKey(cmdID).Encode(nil)
+			batch = append(batch, engine.BatchPut{Key: encKey, Value: kv.Value})
 			//destRC.engine.Put(destRC.makeKey(cmdID), kv.Value)
 		} else {
 			// This is near impossible to ever happen in practice, so if it happens
@@ -175,10 +176,10 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{})
 		return nil
 	}
 	// Write the response value to the engine.
-	key := rc.makeKey(cmdID)
+	encKey := rc.makeKey(cmdID).Encode(nil)
 	rwResp := &proto.ReadWriteCmdResponse{}
 	rwResp.SetValue(reply)
-	err := engine.PutProto(rc.engine, key, rwResp)
+	err := engine.PutProto(rc.engine, encKey, rwResp)
 
 	// Take lock after writing response to cache!
 	rc.Lock()
@@ -226,25 +227,29 @@ func (rc *ResponseCache) makeKey(cmdID proto.ClientCmdID) engine.Key {
 // makePrefix generates the prefix under which all entries for the given range
 // are stored in the engine.
 func (rc *ResponseCache) makePrefix() engine.Key {
-	b := append([]byte{}, engine.KeyLocalRangeResponseCachePrefix...)
+	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)
 	return encoding.EncodeInt(b, rc.rangeID)
 }
 
-func (rc *ResponseCache) decodeKey(encKey engine.Key) (proto.ClientCmdID, error) {
-	minLen := len(engine.KeyLocalRangeResponseCachePrefix)
+func (rc *ResponseCache) decodeKey(encKey []byte) (proto.ClientCmdID, error) {
 	ret := proto.ClientCmdID{}
-	if len(encKey) < minLen {
-		return ret, util.Errorf("key not long enough to be decoded: %q", encKey)
+	leftover, decKey := engine.DecodeKey(encKey)
+	if len(leftover) != 0 {
+		return ret, util.Errorf("key %q contains extra bytes: %q", encKey, leftover)
+	}
+	minLen := len(engine.KeyLocalResponseCachePrefix)
+	if len(decKey) < minLen {
+		return ret, util.Errorf("key not long enough to be decoded: %q", decKey)
 	}
 	// First, Cut the prefix and the range ID.
-	binKey := encKey[minLen:]
-	ts, _ := encoding.DecodeInt(binKey)
+	b := decKey[minLen:]
+	b, _ = encoding.DecodeInt(b)
 	// Second, read the wall time.
-	ts, wt := encoding.DecodeInt(ts)
+	b, wt := encoding.DecodeInt(b)
 	// Third, read the Random component.
-	ts, rd := encoding.DecodeInt(ts)
-	if len(ts) > 0 {
-		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, ts)
+	b, rd := encoding.DecodeInt(b)
+	if len(b) > 0 {
+		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, b)
 	}
 	ret.WallTime = wt
 	ret.Random = rd

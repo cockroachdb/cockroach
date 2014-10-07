@@ -26,7 +26,7 @@ import (
 )
 
 // The Transport interface is supplied by the application to manage communication with
-// other nodes.  It is responsible for mapping from IDs to some communication channel
+// other nodes. It is responsible for mapping from IDs to some communication channel
 // (in the simplest case, a host:port pair could be used as an ID, although this would
 // make it impossible to move an instance from one host to another except by syncing
 // up a new node from scratch).
@@ -47,9 +47,9 @@ type localRPCTransport struct {
 	listeners map[NodeID]net.Listener
 }
 
-// NewLocalRPCTransport creates a Transport for local testing use.  MultiRaft instances
+// NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
 // sharing the same local Transport can find and communicate with each other by ID (which
-// can be an arbitrary string).  Each instance binds to a different unused port on
+// can be an arbitrary string). Each instance binds to a different unused port on
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {

@@ -50,7 +50,7 @@ const (
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
 // them by directing the commands contained within RPCs to local
-// stores, which in turn direct the commands to specific ranges.  Each
+// stores, which in turn direct the commands to specific ranges. Each
 // node has access to the global, monolithic Key-Value abstraction via
 // its kv.DB reference. Nodes use this to allocate node and store
 // IDs for bootstrapping the node itself or new stores as they're added
