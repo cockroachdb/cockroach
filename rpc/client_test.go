@@ -152,8 +152,13 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	c := NewClient(s.Addr(), nil, tlsConfig, clientClock)
 	heartbeat.ready <- true // Allow one heartbeat for initialization.
 	<-c.Ready
-	// Wait until there must have been a missed heartbeat.
-	time.Sleep(heartbeatInterval * 4)
+	// Synchronously wait on missing the next heartbeat.
+	err = util.IsTrueWithin(func() bool {
+		return !c.IsHealthy()
+	}, heartbeatInterval*10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if c.Offset() != InfiniteOffset {
 		t.Errorf("expected offset %v, actual %v",
 			InfiniteOffset, c.Offset())
