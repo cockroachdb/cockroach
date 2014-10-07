@@ -17,7 +17,13 @@
 
 package proto
 
-import "github.com/cockroachdb/cockroach/util"
+import (
+	"reflect"
+
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
+
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {
@@ -26,12 +32,14 @@ func (ccid ClientCmdID) IsEmpty() bool {
 
 // Request is an interface for RPC requests.
 type Request interface {
+	gogoproto.Message
 	// Header returns the request header.
 	Header() *RequestHeader
 }
 
 // Response is an interface for RPC responses.
 type Response interface {
+	gogoproto.Message
 	// Header returns the response header.
 	Header() *ResponseHeader
 	// Verify verifies response integrity, as applicable.
@@ -147,4 +155,17 @@ func (sr *ScanResponse) Verify(req Request) error {
 		}
 	}
 	return nil
+}
+
+// NewReply constructs a new reply element that is compatible with the
+// supplied channel.
+func NewReply(replyChanI interface{}) Response {
+	// TODO(pmattis): The reflection sort of sucks, but at least it is
+	// localized to this one file.
+	return reflect.New(reflect.TypeOf(replyChanI).Elem().Elem()).Interface().(Response)
+}
+
+// SendReply sends the supplied reply to the reply channel.
+func SendReply(replyChanI interface{}, reply Response) {
+	reflect.ValueOf(replyChanI).Send(reflect.ValueOf(reply))
 }

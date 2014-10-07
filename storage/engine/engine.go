@@ -22,7 +22,6 @@ package engine
 import (
 	"bytes"
 	"encoding/gob"
-	"reflect"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
@@ -194,7 +193,7 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 			return 0, err
 		}
 		if _, ok := decoded.(int64); !ok {
-			return 0, util.Errorf("received value of wrong type %v", reflect.TypeOf(decoded))
+			return 0, util.Errorf("received value of wrong type %T", decoded)
 		}
 		int64Val = decoded.(int64)
 	}

@@ -34,7 +34,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"reflect"
 	"syscall"
 	"unsafe"
 
@@ -492,7 +491,7 @@ func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 				bytesPointer(value),
 				C.size_t(len(value)))
 		default:
-			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %v", i, reflect.TypeOf(v)))
+			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
 		}
 	}
 

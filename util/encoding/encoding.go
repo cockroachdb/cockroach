@@ -25,7 +25,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"math"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -128,7 +127,7 @@ func Encode(k []byte, v interface{}) ([]byte, error) {
 	case []byte:
 		result = value
 	default:
-		panic(fmt.Sprintf("unable to encode type '%v' of value '%s'", reflect.TypeOf(v), v))
+		panic(fmt.Sprintf("unable to encode type '%T' of value '%s'", v, v))
 	}
 	return wrapChecksum(k, result), nil
 }

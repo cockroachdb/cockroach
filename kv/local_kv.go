@@ -19,7 +19,6 @@ package kv
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -114,7 +113,7 @@ func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan inter
 	if err == nil {
 		store, err = kv.GetStore(header.Replica.StoreID)
 	}
-	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
+	reply := proto.NewReply(replyChan)
 	if err != nil {
 		reply.Header().SetGoError(err)
 	} else {
@@ -123,7 +122,7 @@ func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan inter
 			reply.Header().SetGoError(err)
 		}
 	}
-	reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
+	proto.SendReply(replyChan, reply)
 }
 
 // Close closes all stores.
