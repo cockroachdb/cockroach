@@ -179,11 +179,26 @@ func TestBatchMerge(t *testing.T) {
 }
 
 func TestBatchProto(t *testing.T) {
-	b := NewBatch(NewInMem(proto.Attributes{}, 1<<20))
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	b := NewBatch(e)
 	kv := &proto.RawKeyValue{Key: Key("a"), Value: []byte("value")}
 	b.PutProto(Key("proto"), kv)
 	getKV := &proto.RawKeyValue{}
 	if ok, err := b.GetProto(Key("proto"), getKV); !ok || err != nil {
+		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
+	}
+	if !reflect.DeepEqual(getKV, kv) {
+		t.Errorf("expected %v; got %v", kv, getKV)
+	}
+	// Before commit, proto will not be available via engine.
+	if ok, err := GetProto(e, Key("proto"), getKV); ok || err != nil {
+		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
+	}
+	// Commit and verify the proto can be read directly from the engine.
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := GetProto(e, Key("proto"), getKV); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !reflect.DeepEqual(getKV, kv) {

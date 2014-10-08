@@ -588,7 +588,8 @@ func (r *Range) maybeGossipConfigs() {
 func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	kvs, err := engine.MVCCScan(engine.NewBatch(r.rm.Engine()), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
+	mvcc := engine.NewMVCC(engine.NewBatch(r.rm.Engine()))
+	kvs, err := mvcc.Scan(keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -629,54 +630,57 @@ func (r *Range) maybeUpdateGossipConfigs(key engine.Key) {
 // Raft replica would need to stall itself.
 func (r *Range) executeCmd(method string, args proto.Request, reply proto.Response) error {
 	// Create a new batch for the command to ensure all or nothing semantics.
-	b := engine.NewBatch(r.rm.Engine())
+	batch := engine.NewBatch(r.rm.Engine())
+	// Create an MVCC instance wrapping the batch for commands which require MVCC.
+	mvcc := engine.NewMVCC(batch)
 
 	switch method {
 	case Contains:
-		r.Contains(b, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
+		r.Contains(mvcc, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
 	case Get:
-		r.Get(b, args.(*proto.GetRequest), reply.(*proto.GetResponse))
+		r.Get(mvcc, args.(*proto.GetRequest), reply.(*proto.GetResponse))
 	case Put:
-		r.Put(b, args.(*proto.PutRequest), reply.(*proto.PutResponse))
+		r.Put(mvcc, args.(*proto.PutRequest), reply.(*proto.PutResponse))
 	case ConditionalPut:
-		r.ConditionalPut(b, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
+		r.ConditionalPut(mvcc, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
 	case Increment:
-		r.Increment(b, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
+		r.Increment(mvcc, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
 	case Delete:
-		r.Delete(b, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
+		r.Delete(mvcc, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
 	case DeleteRange:
-		r.DeleteRange(b, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
+		r.DeleteRange(mvcc, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
 	case Scan:
-		r.Scan(b, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
+		r.Scan(mvcc, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case EndTransaction:
-		r.EndTransaction(b, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
+		r.EndTransaction(batch, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
 	case AccumulateTS:
-		r.AccumulateTS(b, args.(*proto.AccumulateTSRequest), reply.(*proto.AccumulateTSResponse))
+		r.AccumulateTS(mvcc, args.(*proto.AccumulateTSRequest), reply.(*proto.AccumulateTSResponse))
 	case ReapQueue:
-		r.ReapQueue(b, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
+		r.ReapQueue(mvcc, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
 	case EnqueueUpdate:
-		r.EnqueueUpdate(b, args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
+		r.EnqueueUpdate(mvcc, args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
 	case EnqueueMessage:
-		r.EnqueueMessage(b, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
+		r.EnqueueMessage(mvcc, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
 	case InternalRangeLookup:
-		r.InternalRangeLookup(b, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
+		r.InternalRangeLookup(mvcc, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case InternalHeartbeatTxn:
-		r.InternalHeartbeatTxn(b, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case InternalPushTxn:
-		r.InternalPushTxn(b, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
+		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case InternalResolveIntent:
-		r.InternalResolveIntent(b, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
+		r.InternalResolveIntent(mvcc, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case InternalSnapshotCopy:
-		r.InternalSnapshotCopy(b, args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
+		// InternalSnapshotCopy is special--it operates directly on the engine.
+		r.InternalSnapshotCopy(r.rm.Engine(), args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
 	case InternalSplit:
-		r.InternalSplit(b, args.(*proto.InternalSplitRequest), reply.(*proto.InternalSplitResponse))
+		r.InternalSplit(mvcc, args.(*proto.InternalSplitRequest), reply.(*proto.InternalSplitResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
 
 	// Commit the batch on success.
 	if reply.Header().Error == nil {
-		reply.Header().SetGoError(b.Commit())
+		reply.Header().SetGoError(batch.Commit())
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
@@ -706,8 +710,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 }
 
 // Contains verifies the existence of a key in the key value store.
-func (r *Range) Contains(b *engine.Batch, args *proto.ContainsRequest, reply *proto.ContainsResponse) {
-	val, err := engine.MVCCGet(b, args.Key, args.Timestamp, args.Txn)
+func (r *Range) Contains(mvcc *engine.MVCC, args *proto.ContainsRequest, reply *proto.ContainsResponse) {
+	val, err := mvcc.Get(args.Key, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -718,23 +722,23 @@ func (r *Range) Contains(b *engine.Batch, args *proto.ContainsRequest, reply *pr
 }
 
 // Get returns the value for a specified key.
-func (r *Range) Get(b *engine.Batch, args *proto.GetRequest, reply *proto.GetResponse) {
-	val, err := engine.MVCCGet(b, args.Key, args.Timestamp, args.Txn)
+func (r *Range) Get(mvcc *engine.MVCC, args *proto.GetRequest, reply *proto.GetResponse) {
+	val, err := mvcc.Get(args.Key, args.Timestamp, args.Txn)
 	reply.Value = val
 	reply.SetGoError(err)
 }
 
 // Put sets the value for a specified key.
-func (r *Range) Put(b *engine.Batch, args *proto.PutRequest, reply *proto.PutResponse) {
-	err := engine.MVCCPut(b, args.Key, args.Timestamp, args.Value, args.Txn)
+func (r *Range) Put(mvcc *engine.MVCC, args *proto.PutRequest, reply *proto.PutResponse) {
+	err := mvcc.Put(args.Key, args.Timestamp, args.Value, args.Txn)
 	reply.SetGoError(err)
 }
 
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
-func (r *Range) ConditionalPut(b *engine.Batch, args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	val, err := engine.MVCCConditionalPut(b, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
+func (r *Range) ConditionalPut(mvcc *engine.MVCC, args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
+	val, err := mvcc.ConditionalPut(args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 	reply.ActualValue = val
 	reply.SetGoError(err)
 }
@@ -742,21 +746,21 @@ func (r *Range) ConditionalPut(b *engine.Batch, args *proto.ConditionalPutReques
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.
-func (r *Range) Increment(b *engine.Batch, args *proto.IncrementRequest, reply *proto.IncrementResponse) {
-	val, err := engine.MVCCIncrement(b, args.Key, args.Timestamp, args.Txn, args.Increment)
+func (r *Range) Increment(mvcc *engine.MVCC, args *proto.IncrementRequest, reply *proto.IncrementResponse) {
+	val, err := mvcc.Increment(args.Key, args.Timestamp, args.Txn, args.Increment)
 	reply.NewValue = val
 	reply.SetGoError(err)
 }
 
 // Delete deletes the key and value specified by key.
-func (r *Range) Delete(b *engine.Batch, args *proto.DeleteRequest, reply *proto.DeleteResponse) {
-	reply.SetGoError(engine.MVCCDelete(b, args.Key, args.Timestamp, args.Txn))
+func (r *Range) Delete(mvcc *engine.MVCC, args *proto.DeleteRequest, reply *proto.DeleteResponse) {
+	reply.SetGoError(mvcc.Delete(args.Key, args.Timestamp, args.Txn))
 }
 
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
-func (r *Range) DeleteRange(b *engine.Batch, args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
-	num, err := engine.MVCCDeleteRange(b, args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
+func (r *Range) DeleteRange(mvcc *engine.MVCC, args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) {
+	num, err := mvcc.DeleteRange(args.Key, args.EndKey, args.MaxEntriesToDelete, args.Timestamp, args.Txn)
 	reply.NumDeleted = num
 	reply.SetGoError(err)
 }
@@ -764,21 +768,21 @@ func (r *Range) DeleteRange(b *engine.Batch, args *proto.DeleteRangeRequest, rep
 // Scan scans the key range specified by start key through end key up
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
-func (r *Range) Scan(b *engine.Batch, args *proto.ScanRequest, reply *proto.ScanResponse) {
-	kvs, err := engine.MVCCScan(b, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.Txn)
+func (r *Range) Scan(mvcc *engine.MVCC, args *proto.ScanRequest, reply *proto.ScanResponse) {
+	kvs, err := mvcc.Scan(args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.Txn)
 	reply.Rows = kvs
 	reply.SetGoError(err)
 }
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(b *engine.Batch, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
 	// Encode the key for direct access to/from the engine.
 	encKey := engine.Key(args.Key).Encode(nil)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := b.GetProto(encKey, existTxn)
+	ok, err := batch.GetProto(encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -843,7 +847,7 @@ func (r *Range) EndTransaction(b *engine.Batch, args *proto.EndTransactionReques
 	}
 
 	// Persist the transaction record with updated status (& possibly timestmap).
-	if err := b.PutProto(encKey, reply.Txn); err != nil {
+	if err := batch.PutProto(encKey, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -851,13 +855,13 @@ func (r *Range) EndTransaction(b *engine.Batch, args *proto.EndTransactionReques
 
 // AccumulateTS is used internally to aggregate statistics over key
 // ranges throughout the distributed cluster.
-func (r *Range) AccumulateTS(b *engine.Batch, args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) {
+func (r *Range) AccumulateTS(mvcc *engine.MVCC, args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) {
 	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // ReapQueue destructively queries messages from a delivery inbox
 // queue. This method must be called from within a transaction.
-func (r *Range) ReapQueue(b *engine.Batch, args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) {
+func (r *Range) ReapQueue(mvcc *engine.MVCC, args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) {
 	reply.SetGoError(util.Error("unimplemented"))
 }
 
@@ -866,13 +870,13 @@ func (r *Range) ReapQueue(b *engine.Batch, args *proto.ReapQueueRequest, reply *
 // are also built using update queues. Crucially, the enqueue happens
 // as part of the caller's transaction, so is guaranteed to be
 // executed if the transaction succeeded.
-func (r *Range) EnqueueUpdate(b *engine.Batch, args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) {
+func (r *Range) EnqueueUpdate(mvcc *engine.MVCC, args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) {
 	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // EnqueueMessage enqueues a message (Value) for delivery to a
 // recipient inbox.
-func (r *Range) EnqueueMessage(b *engine.Batch, args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) {
+func (r *Range) EnqueueMessage(mvcc *engine.MVCC, args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) {
 	reply.SetGoError(util.Error("unimplemented"))
 }
 
@@ -901,7 +905,7 @@ func (r *Range) EnqueueMessage(b *engine.Batch, args *proto.EnqueueMessageReques
 // intended to serve as a sort of caching pre-fetch, so that the requesting
 // nodes can aggressively cache RangeDescriptors which are likely to be desired
 // by their current workload.
-func (r *Range) InternalRangeLookup(b *engine.Batch, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
+func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) {
 	if err := engine.ValidateRangeMetaKey(args.Key); err != nil {
 		reply.SetGoError(err)
 		return
@@ -919,7 +923,7 @@ func (r *Range) InternalRangeLookup(b *engine.Batch, args *proto.InternalRangeLo
 	// MaxRanges.
 	metaPrefix := engine.Key(args.Key[:len(engine.KeyMeta1Prefix)])
 	nextKey := engine.Key(args.Key).Next()
-	kvs, err := engine.MVCCScan(b, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, args.Txn)
+	kvs, err := mvcc.Scan(nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -954,12 +958,12 @@ func (r *Range) InternalRangeLookup(b *engine.Batch, args *proto.InternalRangeLo
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Range) InternalHeartbeatTxn(b *engine.Batch, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
+func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Encode the key for direct access to/from the engine.
 	encKey := engine.Key(args.Key).Encode(nil)
 
 	var txn proto.Transaction
-	ok, err := b.GetProto(encKey, &txn)
+	ok, err := batch.GetProto(encKey, &txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -976,7 +980,7 @@ func (r *Range) InternalHeartbeatTxn(b *engine.Batch, args *proto.InternalHeartb
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := b.PutProto(encKey, &txn); err != nil {
+		if err := batch.PutProto(encKey, &txn); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -1017,7 +1021,7 @@ func (r *Range) InternalHeartbeatTxn(b *engine.Batch, args *proto.InternalHeartb
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionRetryError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Range) InternalPushTxn(b *engine.Batch, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
+func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
 	key := engine.Key(args.Key)
 	if !bytes.Equal(key.Address(), args.PusheeTxn.ID) {
 		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q",
@@ -1030,7 +1034,7 @@ func (r *Range) InternalPushTxn(b *engine.Batch, args *proto.InternalPushTxnRequ
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := b.GetProto(encKey, existTxn)
+	ok, err := batch.GetProto(encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1131,7 +1135,7 @@ func (r *Range) InternalPushTxn(b *engine.Batch, args *proto.InternalPushTxnRequ
 	}
 
 	// Persist the pushed transaction.
-	if err := b.PutProto(encKey, reply.PusheeTxn); err != nil {
+	if err := batch.PutProto(encKey, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -1141,32 +1145,32 @@ func (r *Range) InternalPushTxn(b *engine.Batch, args *proto.InternalPushTxnRequ
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. The range will return the current status for this
 // transaction to the coordinator.
-func (r *Range) InternalResolveIntent(b *engine.Batch, args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
+func (r *Range) InternalResolveIntent(mvcc *engine.MVCC, args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
 	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
-		reply.SetGoError(engine.MVCCResolveWriteIntent(b, args.Key, args.Txn))
+		reply.SetGoError(mvcc.ResolveWriteIntent(args.Key, args.Txn))
 	} else {
-		_, err := engine.MVCCResolveWriteIntentRange(b, args.Key, args.EndKey, 0, args.Txn)
+		_, err := mvcc.ResolveWriteIntentRange(args.Key, args.EndKey, 0, args.Txn)
 		reply.SetGoError(err)
 	}
 }
 
 // createSnapshot creates a new snapshot, named using an internal counter.
-func (r *Range) createSnapshot() (string, error) {
-	candidateID, err := engine.Increment(r.rm.Engine(), engine.KeyLocalSnapshotIDGenerator, 1)
+func (r *Range) createSnapshot(e engine.Engine) (string, error) {
+	candidateID, err := engine.Increment(e, engine.KeyLocalSnapshotIDGenerator, 1)
 	if err != nil {
 		return "", err
 	}
 	snapshotID := strconv.FormatInt(candidateID, 10)
-	err = r.rm.Engine().CreateSnapshot(snapshotID)
+	err = e.CreateSnapshot(snapshotID)
 	return snapshotID, err
 }
 
 // InternalSnapshotCopy scans the key range specified by start key through
 // end key up to some maximum number of results from the given snapshot_id.
 // It will create a snapshot if snapshot_id is empty.
-func (r *Range) InternalSnapshotCopy(b *engine.Batch, args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
+func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
 	if len(args.SnapshotId) == 0 {
-		snapshotID, err := r.createSnapshot()
+		snapshotID, err := r.createSnapshot(e)
 		if err != nil {
 			reply.SetGoError(err)
 			return
@@ -1174,13 +1178,13 @@ func (r *Range) InternalSnapshotCopy(b *engine.Batch, args *proto.InternalSnapsh
 		args.SnapshotId = snapshotID
 	}
 
-	kvs, err := r.rm.Engine().ScanSnapshot(args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
+	kvs, err := e.ScanSnapshot(args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
 	if err != nil {
 		reply.SetGoError(err)
 		return
 	}
 	if len(kvs) == 0 {
-		err = r.rm.Engine().ReleaseSnapshot(args.SnapshotId)
+		err = e.ReleaseSnapshot(args.SnapshotId)
 	}
 
 	reply.Rows = kvs
@@ -1197,7 +1201,7 @@ func (r *Range) InternalSnapshotCopy(b *engine.Batch, args *proto.InternalSnapsh
 // TODO(Tobias): This version, as is, is provisional. A correct implementation
 // is much more subtle and requires a transaction. See:
 // https://github.com/cockroachdb/cockroach/pull/64/files#r17667926
-func (r *Range) InternalSplit(b *engine.Batch, args *proto.InternalSplitRequest, reply *proto.InternalSplitResponse) {
+func (r *Range) InternalSplit(mvcc *engine.MVCC, args *proto.InternalSplitRequest, reply *proto.InternalSplitResponse) {
 	var err error
 	if r.rm == nil {
 		reply.SetGoError(util.Error("cannot split without an underlying store"))

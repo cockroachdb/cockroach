@@ -35,8 +35,9 @@ import (
 //
 // This struct is not thread safe.
 type Batch struct {
-	engine  Engine
-	updates llrb.Tree
+	engine    Engine
+	updates   llrb.Tree
+	committed bool
 }
 
 // NewBatch returns a new instance of Batch wrapping engine.
@@ -49,11 +50,15 @@ func NewBatch(engine Engine) *Batch {
 // Commit writes all pending updates to the underlying engine in
 // an atomic write batch.
 func (b *Batch) Commit() error {
+	if b.committed {
+		panic("this batch was already committed")
+	}
 	var batch []interface{}
 	b.updates.DoRange(func(n llrb.Comparable) (done bool) {
 		batch = append(batch, n)
 		return false
 	}, proto.RawKeyValue{Key: KeyMin}, proto.RawKeyValue{Key: KeyMax})
+	b.committed = true
 	return b.engine.WriteBatch(batch)
 }
 
