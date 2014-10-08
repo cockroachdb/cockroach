@@ -30,6 +30,7 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -40,11 +41,11 @@ func sendAdminRequest(req *http.Request) ([]byte, error) {
 	resp, err := http.DefaultClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
-		return nil, util.Errorf("admin REST request failed: %v", err)
+		return nil, util.Errorf("admin REST request failed: %s", err)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, util.Errorf("unable to read admin REST response: %v", err)
+		return nil, util.Errorf("unable to read admin REST response: %s", err)
 	}
 	if resp.StatusCode != 200 {
 		return nil, util.Errorf("%s: %s", resp.Status, string(b))
@@ -74,16 +75,28 @@ func runGetZone(cmd *commander.Command, args []string) {
 	}
 	req, err := http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], nil)
 	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %v", err)
+		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
 	// TODO(spencer): need to move to SSL.
 	b, err := sendAdminRequest(req)
 	if err != nil {
-		log.Errorf("admin REST request failed: %v", err)
+		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
-	fmt.Fprintf(os.Stdout, "zone config for key prefix %q:\n%s\n", args[0], string(b))
+	// Unmarshal json response.
+	config, err := proto.ZoneConfigFromJSON(b)
+	if err != nil {
+		err = util.Errorf("unable to unmarshal JSON-encoded zone config %q: %s", b, err)
+		return
+	}
+	// Marshal config to yaml for user-friendly output.
+	var out []byte
+	if out, err = config.ToYAML(); err != nil {
+		log.Errorf("unable to marshal zone config %+v to yaml: %s", config, err)
+		return
+	}
+	fmt.Fprintf(os.Stdout, "zone config for key prefix %q:\n%s\n", args[0], string(out))
 }
 
 // A CmdLsZones command displays a list of zone configs by prefix.
@@ -111,17 +124,17 @@ func runLsZones(cmd *commander.Command, args []string) {
 	}
 	req, err := http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix, nil)
 	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %v", err)
+		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
 	b, err := sendAdminRequest(req)
 	if err != nil {
-		log.Errorf("admin REST request failed: %v", err)
+		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
 	var prefixes []string
 	if err = json.Unmarshal(b, &prefixes); err != nil {
-		log.Errorf("unable to parse admin REST response: %v", err)
+		log.Errorf("unable to parse admin REST response: %s", err)
 		return
 	}
 	var re *regexp.Regexp
@@ -169,13 +182,13 @@ func runRmZone(cmd *commander.Command, args []string) {
 	}
 	req, err := http.NewRequest("DELETE", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], nil)
 	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %v", err)
+		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
 	// TODO(spencer): need to move to SSL.
 	_, err = sendAdminRequest(req)
 	if err != nil {
-		log.Errorf("admin REST request failed: %v", err)
+		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
 	fmt.Fprintf(os.Stdout, "removed zone config for key prefix %q\n", args[0])
@@ -229,18 +242,30 @@ func runSetZone(cmd *commander.Command, args []string) {
 	// Read in the config file.
 	body, err := ioutil.ReadFile(args[1])
 	if err != nil {
-		log.Errorf("unable to read zone config file %q: %v", args[1], err)
+		log.Errorf("unable to read zone config file %q: %s", args[1], err)
 		return
 	}
+	// Convert from YAML.
+	config, err := proto.ZoneConfigFromYAML(body)
+	if err != nil {
+		log.Errorf("zone config %q has invalid format: %s", body, err)
+		return
+	}
+	// Convert to JSON.
+	if body, err = config.ToJSON(); err != nil {
+		log.Errorf("could not convert zone config %s to JSON: %s", config, err)
+		return
+	}
+	// Send to admin REST API.
 	req, err := http.NewRequest("POST", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], bytes.NewReader(body))
 	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %v", err)
+		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
 	// TODO(spencer): need to move to SSL.
 	_, err = sendAdminRequest(req)
 	if err != nil {
-		log.Errorf("admin REST request failed: %v", err)
+		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
 	fmt.Fprintf(os.Stdout, "set zone config for key prefix %q\n", args[0])

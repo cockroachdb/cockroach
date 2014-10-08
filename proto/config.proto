@@ -92,7 +92,7 @@ message PermConfig {
 message ZoneConfig {
   // ReplicaAttrs is a slice of Attributes, each describing required
   // attributes for each replica in the zone.
-  repeated Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty,flow\""];
+  repeated Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty\""];
   optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
   optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];

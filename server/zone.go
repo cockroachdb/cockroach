@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	yaml "gopkg.in/yaml.v1"
 )
 
 const (
@@ -53,9 +52,9 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if !utf8.ValidString(configStr) {
 		return util.Errorf("config contents not valid utf8: %q", body)
 	}
-	config, err := proto.ParseZoneConfig(body)
+	config, err := proto.ZoneConfigFromJSON(body)
 	if err != nil {
-		return util.Errorf("zone config has invalid format: %s: %v", configStr, err)
+		return util.Errorf("zone config has invalid format: %s: %s", configStr, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
 	if err := storage.PutProto(zh.db, zoneKey, config, proto.Timestamp{}); err != nil {
@@ -70,7 +69,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 // matching the remainder is retrieved. Note that this will retrieve
 // the default zone config if "key" is equal to "/", and will list all
 // configs if "key" is equal to "". The body result contains
-// JSON-formatted output for a listing of keys and YAML-formatted
+// JSON-formatted output for a listing of keys and JSON-formatted
 // output for retrieval of a zone config.
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all zones if the key is empty.
@@ -98,7 +97,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 		// JSON-encode the prefixes array.
 		contentType = "application/json"
 		if body, err = json.Marshal(prefixes); err != nil {
-			err = util.Errorf("unable to format zone configurations: %v", err)
+			err = util.Errorf("unable to format zone configurations: %s", err)
 		}
 	} else {
 		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
@@ -114,15 +113,15 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			return
 		}
 		var out []byte
-		if out, err = yaml.Marshal(config); err != nil {
-			err = util.Errorf("unable to marshal zone config %+v to yaml: %v", config, err)
+		if out, err = json.Marshal(config); err != nil {
+			err = util.Errorf("unable to marshal zone config %+v to json: %s", config, err)
 			return
 		}
 		if !utf8.ValidString(string(out)) {
 			err = util.Errorf("config contents not valid utf8: %q", out)
 			return
 		}
-		contentType = "text/yaml"
+		contentType = "application/json"
 		body = out
 	}
 
