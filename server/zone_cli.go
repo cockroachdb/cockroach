@@ -30,7 +30,6 @@ import (
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -74,6 +73,7 @@ func runGetZone(cmd *commander.Command, args []string) {
 		return
 	}
 	req, err := http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], nil)
+	req.Header.Add("Accept", "text/yaml")
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -84,19 +84,7 @@ func runGetZone(cmd *commander.Command, args []string) {
 		log.Errorf("admin REST request failed: %s", err)
 		return
 	}
-	// Unmarshal json response.
-	config, err := proto.ZoneConfigFromJSON(b)
-	if err != nil {
-		err = util.Errorf("unable to unmarshal JSON-encoded zone config %q: %s", b, err)
-		return
-	}
-	// Marshal config to yaml for user-friendly output.
-	var out []byte
-	if out, err = config.ToYAML(); err != nil {
-		log.Errorf("unable to marshal zone config %+v to yaml: %s", config, err)
-		return
-	}
-	fmt.Fprintf(os.Stdout, "zone config for key prefix %q:\n%s\n", args[0], string(out))
+	fmt.Fprintf(os.Stdout, "zone config for key prefix %q:\n%s\n", args[0], string(b))
 }
 
 // A CmdLsZones command displays a list of zone configs by prefix.
@@ -245,19 +233,9 @@ func runSetZone(cmd *commander.Command, args []string) {
 		log.Errorf("unable to read zone config file %q: %s", args[1], err)
 		return
 	}
-	// Convert from YAML.
-	config, err := proto.ZoneConfigFromYAML(body)
-	if err != nil {
-		log.Errorf("zone config %q has invalid format: %s", body, err)
-		return
-	}
-	// Convert to JSON.
-	if body, err = config.ToJSON(); err != nil {
-		log.Errorf("could not convert zone config %s to JSON: %s", config, err)
-		return
-	}
 	// Send to admin REST API.
 	req, err := http.NewRequest("POST", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], bytes.NewReader(body))
+	req.Header.Add("Content-Type", "text/yaml")
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return

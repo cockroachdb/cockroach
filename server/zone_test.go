@@ -18,11 +18,15 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"os"
 
+	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -202,4 +206,113 @@ func ExampleRmZones() {
 	// db1
 	// removed zone config for key prefix "db1"
 	// [default]
+}
+
+// ExampleZoneContentTypes verifies that the Accept header can be used
+// to control the format of the response and the Content-Type header
+// can be used to specify the format of the request.
+func ExampleZoneContentTypes() {
+	httpServer := startAdminServer()
+	defer httpServer.Close()
+
+	config, err := proto.ZoneConfigFromYAML([]byte(testConfig))
+	if err != nil {
+		fmt.Println(err)
+	}
+	testCases := []struct {
+		contentType, accept string
+	}{
+		{"application/json", "application/json"},
+		{"text/yaml", "application/json"},
+		{"application/json", "text/yaml"},
+		{"text/yaml", "text/yaml"},
+	}
+	for i, test := range testCases {
+		key := fmt.Sprintf("/test%d", i)
+
+		var body []byte
+		if test.contentType == "application/json" {
+			if body, err = config.ToJSON(); err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			if body, err = config.ToYAML(); err != nil {
+				fmt.Println(err)
+			}
+		}
+		req, err := http.NewRequest("POST", kv.HTTPAddr()+zoneKeyPrefix+key, bytes.NewReader(body))
+		req.Header.Add("Content-Type", test.contentType)
+		if _, err = sendAdminRequest(req); err != nil {
+			fmt.Println(err)
+		}
+
+		req, err = http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix+key, nil)
+		req.Header.Add("Accept", test.accept)
+		if body, err = sendAdminRequest(req); err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(string(body))
+	}
+	// Output:
+	// {
+	//   "replica_attrs": [
+	//     {
+	//       "attrs": [
+	//         "dc1",
+	//         "ssd"
+	//       ]
+	//     },
+	//     {
+	//       "attrs": [
+	//         "dc2",
+	//         "ssd"
+	//       ]
+	//     },
+	//     {
+	//       "attrs": [
+	//         "dc3",
+	//         "ssd"
+	//       ]
+	//     }
+	//   ],
+	//   "range_min_bytes": 1048576,
+	//   "range_max_bytes": 67108864
+	// }
+	// {
+	//   "replica_attrs": [
+	//     {
+	//       "attrs": [
+	//         "dc1",
+	//         "ssd"
+	//       ]
+	//     },
+	//     {
+	//       "attrs": [
+	//         "dc2",
+	//         "ssd"
+	//       ]
+	//     },
+	//     {
+	//       "attrs": [
+	//         "dc3",
+	//         "ssd"
+	//       ]
+	//     }
+	//   ],
+	//   "range_min_bytes": 1048576,
+	//   "range_max_bytes": 67108864
+	// }
+	// replicas:
+	// - attrs: [dc1, ssd]
+	// - attrs: [dc2, ssd]
+	// - attrs: [dc3, ssd]
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	//
+	// replicas:
+	// - attrs: [dc1, ssd]
+	// - attrs: [dc2, ssd]
+	// - attrs: [dc3, ssd]
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
 }

@@ -115,9 +115,9 @@ func ZoneConfigFromJSON(in []byte) (*ZoneConfig, error) {
 	return z, err
 }
 
-// ToJSON serializes a ZoneConfig as JSON.
+// ToJSON serializes a ZoneConfig as "pretty", indented JSON.
 func (z *ZoneConfig) ToJSON() ([]byte, error) {
-	return json.Marshal(z)
+	return json.MarshalIndent(z, "", "  ")
 }
 
 // ZoneConfigFromYAML parses a YAML serialized ZoneConfig.
