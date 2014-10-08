@@ -124,12 +124,26 @@ range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
 
-func TestZoneConfigRoundTrip(t *testing.T) {
+func TestZoneConfigJSONRoundTrip(t *testing.T) {
+	json, err := testConfig.ToJSON()
+	if err != nil {
+		t.Fatalf("failed converting to json: %v", err)
+	}
+	parsedZoneConfig, err := ZoneConfigFromJSON(json)
+	if err != nil {
+		t.Errorf("failed parsing config: %v", err)
+	}
+	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
+		t.Errorf("json round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
+	}
+}
+
+func TestZoneConfigYAMLRoundTrip(t *testing.T) {
 	yaml, err := testConfig.ToYAML()
 	if err != nil {
 		t.Fatalf("failed converting to yaml: %v", err)
 	}
-	parsedZoneConfig, err := ParseZoneConfig(yaml)
+	parsedZoneConfig, err := ZoneConfigFromYAML(yaml)
 	if err != nil {
 		t.Errorf("failed parsing config: %v", err)
 	}
@@ -139,7 +153,7 @@ func TestZoneConfigRoundTrip(t *testing.T) {
 }
 
 func TestZoneConfigYAMLParsing(t *testing.T) {
-	parsedZoneConfig, err := ParseZoneConfig([]byte(yamlConfig))
+	parsedZoneConfig, err := ZoneConfigFromYAML([]byte(yamlConfig))
 	if err != nil {
 		t.Fatalf("failed parsing config: %v", err)
 	}

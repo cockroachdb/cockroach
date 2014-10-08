@@ -19,7 +19,9 @@ package proto
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -105,14 +107,36 @@ func (p *PermConfig) CanWrite(user string) bool {
 	return false
 }
 
-// ParseZoneConfig parses a YAML serialized ZoneConfig.
-func ParseZoneConfig(in []byte) (*ZoneConfig, error) {
+// ZoneConfigFromJSON parses a JSON serialized ZoneConfig.
+func ZoneConfigFromJSON(in []byte) (*ZoneConfig, error) {
+	z := &ZoneConfig{}
+	err := json.Unmarshal(in, z)
+	return z, err
+}
+
+// ToJSON serializes a ZoneConfig as "pretty", indented JSON.
+func (z *ZoneConfig) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(z, "", "  ")
+}
+
+// ZoneConfigFromYAML parses a YAML serialized ZoneConfig.
+func ZoneConfigFromYAML(in []byte) (*ZoneConfig, error) {
 	z := &ZoneConfig{}
 	err := yaml.Unmarshal(in, z)
 	return z, err
 }
 
+var yamlXXXUnrecognizedRE = regexp.MustCompile(` *xxx_unrecognized: \[\]\n?`)
+
 // ToYAML serializes a ZoneConfig as YAML.
 func (z *ZoneConfig) ToYAML() ([]byte, error) {
-	return yaml.Marshal(z)
+	b, err := yaml.Marshal(z)
+	if err != nil {
+		return b, err
+	}
+	// Filter out any lines in the input which match xxx_unrecognized, a
+	// truly-annoying public member of proto Message structs, which we
+	// cannot specify yaml output tags for.
+	// TODO(spencer): there's got to be a better way to do this.
+	return yamlXXXUnrecognizedRE.ReplaceAll(b, []byte{}), nil
 }
