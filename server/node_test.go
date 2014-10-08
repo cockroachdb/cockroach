@@ -141,9 +141,9 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Non-initialized stores (in this case the new in-memory-based
 	// store) will be bootstrapped by the node upon start. This happens
-	// in a goroutine, so we'll have to wait a bit (maximum 10ms) until
+	// in a goroutine, so we'll have to wait a bit (maximum 1s) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.localKV.GetStoreCount() == 3 }, 250*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.localKV.GetStoreCount() == 3 }, 1*time.Second); err != nil {
 		t.Error(err)
 	}
 }

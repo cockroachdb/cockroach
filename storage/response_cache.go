@@ -154,7 +154,7 @@ func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
 		// write it to the corresponding key in the new cache.
 		if cmdID, err := rc.decodeKey(kv.Key); err == nil {
 			encKey := destRC.makeKey(cmdID).Encode(nil)
-			batch = append(batch, engine.BatchPut{Key: encKey, Value: kv.Value})
+			batch = append(batch, engine.BatchPut{proto.RawKeyValue{Key: encKey, Value: kv.Value}})
 			//destRC.engine.Put(destRC.makeKey(cmdID), kv.Value)
 		} else {
 			// This is near impossible to ever happen in practice, so if it happens

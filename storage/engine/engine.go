@@ -99,23 +99,18 @@ type Engine interface {
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
-type BatchDelete Key
+type BatchDelete struct {
+	proto.RawKeyValue
+}
 
 // A BatchPut is a put operation executed as part of an atomic batch.
-type BatchPut proto.RawKeyValue
+type BatchPut struct {
+	proto.RawKeyValue
+}
 
 // A BatchMerge is a merge operation executed as part of an atomic batch.
-type BatchMerge proto.RawKeyValue
-
-// MakeBatchPutProto serializes the provided message and returns a
-// BatchPut object for use with WriteBatch. Returns an error on
-// protobuf serialization failure.
-func MakeBatchPutProto(key Key, msg gogoproto.Message) (BatchPut, error) {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return BatchPut(proto.RawKeyValue{}), err
-	}
-	return BatchPut(proto.RawKeyValue{Key: key, Value: data}), err
+type BatchMerge struct {
+	proto.RawKeyValue
 }
 
 // PutI sets the given key to the gob-serialized byte string of the
@@ -237,7 +232,7 @@ func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
 	var deletes = make([]interface{}, numElements, numElements)
 	// Loop over the scanned entries and add to a delete batch
 	for idx, kv := range scanned {
-		deletes[idx] = BatchDelete(kv.Key)
+		deletes[idx] = BatchDelete{proto.RawKeyValue{Key: kv.Key}}
 	}
 
 	err = engine.WriteBatch(deletes)

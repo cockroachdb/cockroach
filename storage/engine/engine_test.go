@@ -113,7 +113,7 @@ func TestEngineWriteBatch(t *testing.T) {
 		// Create key/values and put them in a batch to engine.
 		puts := make([]interface{}, numWrites, numWrites)
 		for i := 0; i < numWrites; i++ {
-			puts[i] = BatchPut{Key: key, Value: []byte(strconv.Itoa(i))}
+			puts[i] = BatchPut{proto.RawKeyValue{Key: key, Value: []byte(strconv.Itoa(i))}}
 		}
 		if err := e.WriteBatch(puts); err != nil {
 			t.Fatal(err)
@@ -129,29 +129,29 @@ func TestEngineBatch(t *testing.T) {
 		key := Key("a")
 		// Those are randomized below.
 		batch := []interface{}{
-			BatchPut{Key: key, Value: []byte("~ockroachDB")},
-			BatchPut{Key: key, Value: []byte("C~ckroachDB")},
-			BatchPut{Key: key, Value: []byte("Co~kroachDB")},
-			BatchPut{Key: key, Value: []byte("Coc~roachDB")},
-			BatchPut{Key: key, Value: []byte("Cock~oachDB")},
-			BatchPut{Key: key, Value: []byte("Cockr~achDB")},
-			BatchPut{Key: key, Value: []byte("Cockro~chDB")},
-			BatchPut{Key: key, Value: []byte("Cockroa~hDB")},
-			BatchPut{Key: key, Value: []byte("Cockroac~DB")},
-			BatchPut{Key: key, Value: []byte("Cockroach~B")},
-			BatchPut{Key: key, Value: []byte("CockroachD~")},
-			BatchDelete(key),
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("C"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" o"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  c"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" k"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("r"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" o"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  a"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" c"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("h"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender(" D"))},
-			BatchMerge{Key: key, Value: encoding.MustGobEncode(Appender("  B"))},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("~ockroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("C~ckroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Co~kroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Coc~roachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cock~oachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockr~achDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockro~chDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroa~hDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroac~DB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroach~B")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("CockroachD~")}},
+			BatchDelete{proto.RawKeyValue{Key: key}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("C"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" o"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  c"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" k"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("r"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" o"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  a"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" c"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("h"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" D"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  B"))}},
 		}
 
 		for i := 0; i < numShuffles; i++ {

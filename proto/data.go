@@ -18,10 +18,12 @@
 package proto
 
 import (
+	"bytes"
 	"crypto/md5"
 	"fmt"
 	"math"
 
+	"code.google.com/p/biogo.store/llrb"
 	"code.google.com/p/go-uuid/uuid"
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -91,6 +93,24 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 		c.Write(encoding.EncodeUint64(nil, uint64(v.GetInteger())))
 	}
 	return c.Sum32()
+}
+
+// KeyGetter is a hack to allow Compare() to work for the batch
+// update structs which wrap RawKeyValue.
+// TODO(petermattis): Is there somehow a better way to do this?
+//   It kept dying at runtime in the previous version of Compare
+//   which type cast the llrb.Comparable to a RawKeyValue. Because
+//   I'm wrapping a RawKeyValue with BatchDelete/BatchPut/BatchMerge.
+type KeyGetter interface {
+	KeyGet() []byte
+}
+
+// GetKey is an implementation for KeyGetter.
+func (kv RawKeyValue) KeyGet() []byte { return kv.Key }
+
+// Compare implements the llrb.Comparable interface for tree nodes.
+func (kv RawKeyValue) Compare(b llrb.Comparable) int {
+	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
 }
 
 // MakePriority generates a random priority value, biased by the
