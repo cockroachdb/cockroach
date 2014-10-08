@@ -125,7 +125,7 @@ range_max_bytes: 67108864
 `
 
 func TestZoneConfigJSONRoundTrip(t *testing.T) {
-	js, err := testConfig.ToJSON()
+	json, err := testConfig.ToJSON()
 	if err != nil {
 		t.Fatalf("failed converting to json: %v", err)
 	}
