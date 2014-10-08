@@ -290,3 +290,35 @@ func TestBatchScan(t *testing.T) {
 		}
 	}
 }
+
+// TestBatchConcurrency verifies operation of batch when the
+// underlying engine has concurrent modifications to overlapping
+// keys. This should never happen with the way Cockroach uses
+// batches, but worth verifying.
+func TestBatchConcurrency(t *testing.T) {
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	b := NewBatch(e)
+	// Write a merge to the batch.
+	if err := b.Merge(Key("a"), encoding.MustGobEncode(Appender("bar"))); err != nil {
+		t.Fatal(err)
+	}
+	val, err := b.Get(Key("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(val, encoding.MustGobEncode(Appender("bar"))) {
+		t.Error("mismatch of \"a\"")
+	}
+	// Write an engine value.
+	if err := e.Put(Key("a"), encoding.MustGobEncode(Appender("foo"))); err != nil {
+		t.Fatal(err)
+	}
+	// Now, read again and verify that the merge happens on top of the mod.
+	val, err = b.Get(Key("a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(val, encoding.MustGobEncode(Appender("foobar"))) {
+		t.Error("mismatch of \"a\"")
+	}
+}

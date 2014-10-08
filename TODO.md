@@ -75,3 +75,5 @@
   Requires transactions. Split the operation addressed to a key range into
   subranges that each hit a single range only, and run all of those as a
   distributed transaction.
+
+* Cleanup proto files to adhere to proto capitalization instead of go's.
