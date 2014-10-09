@@ -84,6 +84,8 @@ char* MergeOne(
     const char* existing, size_t existing_length,
     const char* update, size_t update_length,
     size_t* new_value_length, char** error_msg) {
+  *new_value_length = 0;
+
   proto::Value result;
   if (!result.ParseFromArray(existing, existing_length)) {
     // Corrupted existing value.
@@ -128,6 +130,7 @@ char* MergeOperator(
   // currently irritating to get them logged in Go, but we should get
   // it fixed up so that such logging from C++ is straightforward.
   *success = false;
+  *new_value_length = 0;
 
   proto::Value result;
   if (!result.ParseFromArray(existing_value, existing_value_length)) {
