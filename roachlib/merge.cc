@@ -40,9 +40,6 @@ bool WillOverflow(int64_t a, int64_t b) {
 }
 
 bool MergeValues(proto::Value *left, const proto::Value &right) {
-  printf("MergeValues left=%d,%d right=%d,%d\n",
-         int(left->has_bytes()), int(left->has_integer()),
-         int(right.has_bytes()), int(right.has_integer()));
   if (left->has_bytes()) {
     if (right.has_bytes()) {
       *left->mutable_bytes() += right.bytes();
@@ -63,10 +60,16 @@ bool MergeValues(proto::Value *left, const proto::Value &right) {
   return false;
 }
 
-char* MergeResult(const proto::Value& result, size_t *length) {
-  *length = result.ByteSize();
+// MergeResult serializes the result Value into a byte slice.
+char* MergeResult(proto::Value* result, size_t *length) {
+  // TODO(pmattis): Should recompute checksum here. Need a crc32
+  // implementation and need to verify the checksumming is identical
+  // to what is being done in Go. Worst case we can port the Go crc32
+  // back to C/C++.
+  result->clear_checksum();
+  *length = result->ByteSize();
   char *value = static_cast<char*>(malloc(*length));
-  if (!result.SerializeToArray(value, *length)) {
+  if (!result->SerializeToArray(value, *length)) {
     return NULL;
   }
   return value;
@@ -74,6 +77,9 @@ char* MergeResult(const proto::Value& result, size_t *length) {
 
 }  // namespace
 
+// MergeOne implements the merge operator on a single pair of values.
+// update is merged with existing. This method is provided for
+// invocation from Go code.
 char* MergeOne(
     const char* existing, size_t existing_length,
     const char* update, size_t update_length,
@@ -97,7 +103,7 @@ char* MergeOne(
     return NULL;
   }
 
-  char *new_value = MergeResult(result, new_value_length);
+  char *new_value = MergeResult(&result, new_value_length);
   if (!new_value) {
     *error_msg = (char*)"serialization error";
     return NULL;
@@ -105,6 +111,10 @@ char* MergeOne(
   return new_value;
 }
 
+// MergeOperator implements the RocksDB custom merge operator for
+// proto.Value objects. This method is called by RocksDB when merge
+// operations are encountered, either when reading a value with a
+// pending merge or when compacting merge operations.
 char* MergeOperator(
     const char* key, size_t key_length,
     const char* existing_value,
@@ -114,6 +124,9 @@ char* MergeOperator(
     int num_operands, unsigned char* success,
     size_t* new_value_length)
 {
+  // TODO(pmattis): We should not be silent about errors. It's
+  // currently irritating to get them logged in Go, but we should get
+  // it fixed up so that such logging from C++ is straightforward.
   *success = false;
 
   proto::Value result;
@@ -134,7 +147,7 @@ char* MergeOperator(
     }
   }
 
-  char *new_value = MergeResult(result, new_value_length);
+  char *new_value = MergeResult(&result, new_value_length);
   if (!new_value) {
     return NULL;
   }

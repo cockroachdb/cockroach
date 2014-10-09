@@ -38,7 +38,8 @@ func goMerge(existing, update []byte) ([]byte, error) {
 		bytesPointer(update), C.size_t(len(update)),
 		&cValLen, &cErr)
 	if cErr != nil {
-		return nil, util.ErrorSkipFrames(0, C.GoString(cErr))
+		return nil, util.Errorf("%s: existing=%q, update=%q",
+			C.GoString(cErr), existing, update)
 	}
 	if cVal != nil {
 		defer C.free(unsafe.Pointer(cVal))
