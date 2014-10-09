@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 // TestBatchBasics verifies that all commands work in a batch, aren't
@@ -42,10 +41,10 @@ func TestBatchBasics(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write an engine value to be merged.
-	if err := e.Put(Key("c"), encoding.MustGobEncode(Appender("foo"))); err != nil {
+	if err := e.Put(Key("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), encoding.MustGobEncode(Appender("bar"))); err != nil {
+	if err := b.Merge(Key("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +52,7 @@ func TestBatchBasics(t *testing.T) {
 	// through to engine until commit).
 	expValues := []proto.RawKeyValue{
 		{Key: Key("b"), Value: []byte("value")},
-		{Key: Key("c"), Value: encoding.MustGobEncode(Appender("foo"))},
+		{Key: Key("c"), Value: appender("foo")},
 	}
 	kvs, err := e.Scan(KeyMin, KeyMax, 0)
 	if err != nil {
@@ -66,7 +65,7 @@ func TestBatchBasics(t *testing.T) {
 	// Now, merged values should be:
 	expValues = []proto.RawKeyValue{
 		{Key: Key("a"), Value: []byte("value")},
-		{Key: Key("c"), Value: encoding.MustGobEncode(Appender("foobar"))},
+		{Key: Key("c"), Value: appender("foobar")},
 	}
 	// Scan values from batch directly.
 	kvs, err = b.Scan(KeyMin, KeyMax, 0)
@@ -97,7 +96,7 @@ func TestBatchGet(t *testing.T) {
 	if err := e.Put(Key("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(Key("c"), encoding.MustGobEncode(Appender("foo"))); err != nil {
+	if err := e.Put(Key("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Write batch values.
@@ -107,14 +106,14 @@ func TestBatchGet(t *testing.T) {
 	if err := b.Clear(Key("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), encoding.MustGobEncode(Appender("bar"))); err != nil {
+	if err := b.Merge(Key("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	expValues := []proto.RawKeyValue{
 		{Key: Key("a"), Value: []byte("value")},
 		{Key: Key("b"), Value: nil},
-		{Key: Key("c"), Value: encoding.MustGobEncode(Appender("foobar"))},
+		{Key: Key("c"), Value: appender("foobar")},
 	}
 	for i, expKV := range expValues {
 		kv, err := b.Get(expKV.Key)
@@ -131,24 +130,24 @@ func TestBatchMerge(t *testing.T) {
 	b := NewBatch(NewInMem(proto.Attributes{}, 1<<20))
 
 	// Write batch put, delete & merge.
-	if err := b.Put(Key("a"), encoding.MustGobEncode(Appender("a-value"))); err != nil {
+	if err := b.Put(Key("a"), appender("a-value")); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Clear(Key("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), encoding.MustGobEncode(Appender("c-value"))); err != nil {
+	if err := b.Merge(Key("c"), appender("c-value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, merge to all three keys.
-	if err := b.Merge(Key("a"), encoding.MustGobEncode(Appender("append"))); err != nil {
+	if err := b.Merge(Key("a"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("b"), encoding.MustGobEncode(Appender("append"))); err != nil {
+	if err := b.Merge(Key("b"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), encoding.MustGobEncode(Appender("append"))); err != nil {
+	if err := b.Merge(Key("c"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,7 +156,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, encoding.MustGobEncode(Appender("a-valueappend"))) {
+	if !bytes.Equal(val, appender("a-valueappend")) {
 		t.Error("mismatch of \"a\"")
 	}
 
@@ -165,7 +164,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, encoding.MustGobEncode(Appender("append"))) {
+	if !bytes.Equal(val, appender("append")) {
 		t.Error("mismatch of \"b\"")
 	}
 
@@ -173,7 +172,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, encoding.MustGobEncode(Appender("c-valueappend"))) {
+	if !bytes.Equal(val, appender("c-valueappend")) {
 		t.Error("mismatch of \"c\"")
 	}
 }
@@ -299,18 +298,18 @@ func TestBatchConcurrency(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := NewBatch(e)
 	// Write a merge to the batch.
-	if err := b.Merge(Key("a"), encoding.MustGobEncode(Appender("bar"))); err != nil {
+	if err := b.Merge(Key("a"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 	val, err := b.Get(Key("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, encoding.MustGobEncode(Appender("bar"))) {
+	if !bytes.Equal(val, appender("bar")) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.
-	if err := e.Put(Key("a"), encoding.MustGobEncode(Appender("foo"))); err != nil {
+	if err := e.Put(Key("a"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, read again and verify that the merge happens on top of the mod.
@@ -318,7 +317,7 @@ func TestBatchConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, encoding.MustGobEncode(Appender("foobar"))) {
+	if !bytes.Equal(val, appender("foobar")) {
 		t.Error("mismatch of \"a\"")
 	}
 }

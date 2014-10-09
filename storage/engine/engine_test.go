@@ -31,7 +31,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 )
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []proto.RawKeyValue) {
@@ -129,29 +128,29 @@ func TestEngineBatch(t *testing.T) {
 		key := Key("a")
 		// Those are randomized below.
 		batch := []interface{}{
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("~ockroachDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("C~ckroachDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Co~kroachDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Coc~roachDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cock~oachDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockr~achDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockro~chDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroa~hDB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroac~DB")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("Cockroach~B")}},
-			BatchPut{proto.RawKeyValue{Key: key, Value: []byte("CockroachD~")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("~ockroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("C~ckroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Co~kroachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Coc~roachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cock~oachDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cockr~achDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cockro~chDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cockroa~hDB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cockroac~DB")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("Cockroach~B")}},
+			BatchPut{proto.RawKeyValue{Key: key, Value: appender("CockroachD~")}},
 			BatchDelete{proto.RawKeyValue{Key: key}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("C"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" o"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  c"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" k"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("r"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" o"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  a"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" c"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("h"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender(" D"))}},
-			BatchMerge{proto.RawKeyValue{Key: key, Value: encoding.MustGobEncode(Appender("  B"))}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("C")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender(" o")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("  c")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender(" k")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("r")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender(" o")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("  a")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender(" c")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("h")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender(" D")}},
+			BatchMerge{proto.RawKeyValue{Key: key, Value: appender("  B")}},
 		}
 
 		for i := 0; i < numShuffles; i++ {
@@ -164,7 +163,7 @@ func TestEngineBatch(t *testing.T) {
 			// Reset the key
 			engine.Clear(key)
 			// Run it once with individual operations and remember the result.
-			for _, op := range currentBatch {
+			for i, op := range currentBatch {
 				if err := engine.WriteBatch([]interface{}{op}); err != nil {
 					t.Errorf("batch test: %d: op %v: %v", i, op, err)
 					continue
@@ -256,9 +255,9 @@ func TestEngineMerge(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testKey := Key("haste not in life")
 		merges := [][]byte{
-			[]byte(encoding.MustGobEncode(Appender("x"))),
-			[]byte(encoding.MustGobEncode(Appender("y"))),
-			[]byte(encoding.MustGobEncode(Appender("z"))),
+			appender("x"),
+			appender("y"),
+			appender("z"),
 		}
 		for i, update := range merges {
 			if err := engine.Merge(testKey, update); err != nil {
@@ -266,7 +265,7 @@ func TestEngineMerge(t *testing.T) {
 			}
 		}
 		result, _ := engine.Get(testKey)
-		if !bytes.Equal(encoding.MustGobDecode(result).(Appender), Appender("xyz")) {
+		if !bytes.Equal(result, appender("xyz")) {
 			t.Errorf("unexpected append-merge result")
 		}
 	}, t)

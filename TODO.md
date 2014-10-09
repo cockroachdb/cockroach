@@ -77,3 +77,8 @@
   distributed transaction.
 
 * Cleanup proto files to adhere to proto capitalization instead of go's.
+
+* Replace the usage of the rocksdb C interface with the C++
+  interface. This will both avoid some overhead present in the C
+  interface (various memory allocations) as well as allow us to use
+  more convenient C++ notation for various bits of functionality.
