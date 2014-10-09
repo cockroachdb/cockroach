@@ -68,6 +68,20 @@ func startServer() *server {
 	return s
 }
 
+// createTestConfigFile creates a temporary file and writes the
+// testConfig yaml data to it. The caller is responsible for
+// removing it. Returns the filename for a subsequent call to
+// os.Remove().
+func createTestConfigFile(body string) string {
+	f, err := ioutil.TempFile("", "test-config")
+	if err != nil {
+		log.Fatalf("failed to open temporary file: %v", err)
+	}
+	defer f.Close()
+	f.Write([]byte(body))
+	return f.Name()
+}
+
 // createTempDirs creates "count" temporary directories and returns
 // the paths to each as a slice.
 func createTempDirs(count int, t *testing.T) []string {

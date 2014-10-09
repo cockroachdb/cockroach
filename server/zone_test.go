@@ -20,7 +20,6 @@ package server
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,11 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
-	testConfig = `
+	testZoneConfig = `
 replicas:
   - attrs: [dc1, ssd]
   - attrs: [dc2, ssd]
@@ -42,36 +40,22 @@ range_max_bytes: 67108864
 `
 )
 
-// createTestConfigFile creates a temporary file and writes the
-// testConfig yaml data to it. The caller is responsible for
-// removing it. Returns the filename for a subsequent call to
-// os.Remove().
-func createTestConfigFile() string {
-	f, err := ioutil.TempFile("", "test-config")
-	if err != nil {
-		log.Fatalf("failed to open temporary file: %v", err)
-	}
-	defer f.Close()
-	f.Write([]byte(testConfig))
-	return f.Name()
-}
-
 // ExampleSetAndGetZone sets zone configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func ExampleSetAndGetZone() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile()
+	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
 		prefix engine.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testConfig},
-		{engine.Key("db1"), testConfig},
-		{engine.Key("db 2"), testConfig},
-		{engine.Key("\xfe"), testConfig},
+		{engine.KeyMin, testZoneConfig},
+		{engine.Key("db1"), testZoneConfig},
+		{engine.Key("db 2"), testZoneConfig},
+		{engine.Key("\xfe"), testZoneConfig},
 	}
 
 	for _, test := range testData {
@@ -123,7 +107,7 @@ func ExampleSetAndGetZone() {
 func ExampleLsZones() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile()
+	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -181,7 +165,7 @@ func ExampleLsZones() {
 func ExampleRmZones() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile()
+	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -215,7 +199,7 @@ func ExampleZoneContentTypes() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
 
-	config, err := proto.ZoneConfigFromYAML([]byte(testConfig))
+	config, err := proto.ZoneConfigFromYAML([]byte(testZoneConfig))
 	if err != nil {
 		fmt.Println(err)
 	}

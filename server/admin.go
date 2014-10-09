@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
 
 package server
 
@@ -34,6 +35,8 @@ import (
 )
 
 const (
+	maxGetResults = 1 << 16 // TODO(spencer): maybe we need paged query support
+
 	// adminKeyPrefix is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminKeyPrefix = "/_admin/"
@@ -44,6 +47,8 @@ const (
 	healthzKey = adminKeyPrefix + "healthz"
 	// zoneKeyPrefix is the prefix for zone configuration changes.
 	zoneKeyPrefix = adminKeyPrefix + "zones"
+	// permKeyPrefix is the prefix for permission configuration changes.
+	permissionKeyPrefix = adminKeyPrefix + "permissions"
 )
 
 // A actionHandler is an interface which provides Get, Put & Delete
@@ -57,16 +62,18 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	db   storage.DB // Key-value database client
-	zone *zoneHandler
+	db         storage.DB // Key-value database client
+	zone       *zoneHandler
+	permission *permissionHandler
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
 func newAdminServer(db storage.DB) *adminServer {
 	return &adminServer{
-		db:   db,
-		zone: &zoneHandler{db: db},
+		db:         db,
+		zone:       &zoneHandler{db: db},
+		permission: &permissionHandler{db: db},
 	}
 }
 
@@ -79,6 +86,8 @@ func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(healthzKey, s.handleHealthz)
 	mux.HandleFunc(zoneKeyPrefix, s.handleZoneAction)
 	mux.HandleFunc(zoneKeyPrefix+"/", s.handleZoneAction)
+	mux.HandleFunc(permissionKeyPrefix, s.handlePermissionAction)
+	mux.HandleFunc(permissionKeyPrefix+"/", s.handlePermissionAction)
 }
 
 // handleHealthz responds to health requests from monitoring services.
@@ -99,11 +108,25 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.zone, w, r)
+		s.handleGetAction(s.zone, w, r, zoneKeyPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.zone, w, r)
+		s.handlePutAction(s.zone, w, r, zoneKeyPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.zone, w, r)
+		s.handleDeleteAction(s.zone, w, r, zoneKeyPrefix)
+	default:
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+	}
+}
+
+// handlePermissionAction handles actions for permission configuration by method.
+func (s *adminServer) handlePermissionAction(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		s.handleGetAction(s.permission, w, r, permissionKeyPrefix)
+	case "PUT", "POST":
+		s.handlePutAction(s.permission, w, r, permissionKeyPrefix)
+	case "DELETE":
+		s.handleDeleteAction(s.permission, w, r, permissionKeyPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
@@ -117,8 +140,8 @@ func unescapePath(path, prefix string) (string, error) {
 	return result, nil
 }
 
-func (s *adminServer) handlePutAction(handler actionHandler, w http.ResponseWriter, r *http.Request) {
-	path, err := unescapePath(r.URL.Path, zoneKeyPrefix)
+func (s *adminServer) handlePutAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
+	path, err := unescapePath(r.URL.Path, prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -136,8 +159,8 @@ func (s *adminServer) handlePutAction(handler actionHandler, w http.ResponseWrit
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *adminServer) handleGetAction(handler actionHandler, w http.ResponseWriter, r *http.Request) {
-	path, err := unescapePath(r.URL.Path, zoneKeyPrefix)
+func (s *adminServer) handleGetAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
+	path, err := unescapePath(r.URL.Path, prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -151,8 +174,8 @@ func (s *adminServer) handleGetAction(handler actionHandler, w http.ResponseWrit
 	fmt.Fprintf(w, "%s", string(b))
 }
 
-func (s *adminServer) handleDeleteAction(handler actionHandler, w http.ResponseWriter, r *http.Request) {
-	path, err := unescapePath(r.URL.Path, zoneKeyPrefix)
+func (s *adminServer) handleDeleteAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
+	path, err := unescapePath(r.URL.Path, prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
