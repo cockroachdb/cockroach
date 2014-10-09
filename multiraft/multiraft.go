@@ -384,6 +384,7 @@ func (s *state) start() {
 			s.handleWriteResponse(resp)
 
 		case <-s.Ticker.Chan():
+			// TODO(bdarnell): get rid of this loop over all groups on each tick.
 			log.V(6).Infof("node %v: got tick", s.nodeID)
 			for _, g := range s.groups {
 				g.node.Tick()
