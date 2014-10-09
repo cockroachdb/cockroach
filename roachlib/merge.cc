@@ -126,6 +126,23 @@ char* MergeOperator(
     int num_operands, unsigned char* success,
     size_t* new_value_length)
 {
+  // TODO(pmattis): Taken from the old merger code, below are some
+  // details about how errors returned by the merge operator are
+  // handled. Need to test various error scenarios and decide on
+  // desired behavior. Clear the key and it's gone. Corrupt it
+  // properly and RocksDB might refuse to work with it at all until
+  // you clear it manually, which may also not be what we want. The
+  // problem with merges is that RocksDB won't really carry them out
+  // while we have a chance to talk back to clients.
+  //
+  // If we indicate failure (*success = false), then the call to the
+  // merger via rocksdb_merge will not return an error, but simply
+  // remove or truncate the offending key (at least when the settings
+  // specify that missing keys should be created; otherwise a
+  // corruption error will be returned, but likely only after the next
+  // read of the key). In effect, there is no propagation of error
+  // information to the client.
+
   // TODO(pmattis): We should not be silent about errors. It's
   // currently irritating to get them logged in Go, but we should get
   // it fixed up so that such logging from C++ is straightforward.
