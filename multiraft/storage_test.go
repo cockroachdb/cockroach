@@ -31,15 +31,15 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-func (b *BlockableStorage) LoadGroups() <-chan *GroupPersistentState {
+/*func (b *BlockableStorage) LoadGroups() <-chan *GroupPersistentState {
 	b.wait()
 	return b.storage.LoadGroups()
-}
+}*/
 
-func (b *BlockableStorage) SetGroupElectionState(groupID GroupID,
-	electionState *GroupElectionState) error {
+func (b *BlockableStorage) SetGroupState(groupID GroupID,
+	state *GroupPersistentState) error {
 	b.wait()
-	return b.storage.SetGroupElectionState(groupID, electionState)
+	return b.storage.SetGroupState(groupID, state)
 }
 
 func (b *BlockableStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry) error {
@@ -47,7 +47,7 @@ func (b *BlockableStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry
 	return b.storage.AppendLogEntries(groupID, entries)
 }
 
-func (b *BlockableStorage) TruncateLog(groupID GroupID, lastIndex int) error {
+/*func (b *BlockableStorage) TruncateLog(groupID GroupID, lastIndex int) error {
 	b.wait()
 	return b.storage.TruncateLog(groupID, lastIndex)
 }
@@ -62,3 +62,4 @@ func (b *BlockableStorage) GetLogEntries(groupID GroupID, firstIndex, lastIndex 
 	b.wait()
 	b.storage.GetLogEntries(groupID, firstIndex, lastIndex, ch)
 }
+*/
