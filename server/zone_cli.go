@@ -14,43 +14,15 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
 
 package server
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
-	"regexp"
 
 	commander "code.google.com/p/go-commander"
-	"github.com/cockroachdb/cockroach/kv"
-	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
-
-// sendAdminRequest send an HTTP request and processes the response for
-// its body or error message if a non-200 response code.
-func sendAdminRequest(req *http.Request) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, util.Errorf("admin REST request failed: %s", err)
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, util.Errorf("unable to read admin REST response: %s", err)
-	}
-	if resp.StatusCode != 200 {
-		return nil, util.Errorf("%s: %s", resp.Status, string(b))
-	}
-	return b, nil
-}
 
 // A CmdGetZone command displays the zone config for the specified
 // prefix.
@@ -68,23 +40,7 @@ non-ascii bytes or spaces.
 
 // runGetZone invokes the REST API with GET action and key prefix as path.
 func runGetZone(cmd *commander.Command, args []string) {
-	if len(args) != 1 {
-		cmd.Usage()
-		return
-	}
-	req, err := http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], nil)
-	req.Header.Add("Accept", "text/yaml")
-	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %s", err)
-		return
-	}
-	// TODO(spencer): need to move to SSL.
-	b, err := sendAdminRequest(req)
-	if err != nil {
-		log.Errorf("admin REST request failed: %s", err)
-		return
-	}
-	fmt.Fprintf(os.Stdout, "zone config for key prefix %q:\n%s\n", args[0], string(b))
+	runGetConfig(zoneKeyPrefix, cmd, args)
 }
 
 // A CmdLsZones command displays a list of zone configs by prefix.
@@ -106,44 +62,7 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsZones(cmd *commander.Command, args []string) {
-	if len(args) > 1 {
-		cmd.Usage()
-		return
-	}
-	req, err := http.NewRequest("GET", kv.HTTPAddr()+zoneKeyPrefix, nil)
-	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %s", err)
-		return
-	}
-	b, err := sendAdminRequest(req)
-	if err != nil {
-		log.Errorf("admin REST request failed: %s", err)
-		return
-	}
-	var prefixes []string
-	if err = json.Unmarshal(b, &prefixes); err != nil {
-		log.Errorf("unable to parse admin REST response: %s", err)
-		return
-	}
-	var re *regexp.Regexp
-	if len(args) == 1 {
-		if re, err = regexp.Compile(args[0]); err != nil {
-			log.Warningf("invalid regular expression %q; skipping regexp match and listing all zone prefixes", args[0])
-			re = nil
-		}
-	}
-	for _, prefix := range prefixes {
-		if re != nil {
-			unescaped, err := url.QueryUnescape(prefix)
-			if err != nil || !re.MatchString(unescaped) {
-				continue
-			}
-		}
-		if prefix == "" {
-			prefix = "[default]"
-		}
-		fmt.Fprintf(os.Stdout, "%s\n", prefix)
-	}
+	runLsConfigs(zoneKeyPrefix, cmd, args)
 }
 
 // A CmdRmZone command removes a zone config by prefix.
@@ -164,22 +83,7 @@ contains non-ascii bytes or spaces.
 // runRmZone invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmZone(cmd *commander.Command, args []string) {
-	if len(args) != 1 {
-		cmd.Usage()
-		return
-	}
-	req, err := http.NewRequest("DELETE", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], nil)
-	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %s", err)
-		return
-	}
-	// TODO(spencer): need to move to SSL.
-	_, err = sendAdminRequest(req)
-	if err != nil {
-		log.Errorf("admin REST request failed: %s", err)
-		return
-	}
-	fmt.Fprintf(os.Stdout, "removed zone config for key prefix %q\n", args[0])
+	runRmConfig(zoneKeyPrefix, cmd, args)
 }
 
 // A CmdSetZone command creates a new or updates an existing zone
@@ -223,28 +127,5 @@ This feature can be taken advantage of to pre-split ranges.
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetZone(cmd *commander.Command, args []string) {
-	if len(args) != 2 {
-		cmd.Usage()
-		return
-	}
-	// Read in the config file.
-	body, err := ioutil.ReadFile(args[1])
-	if err != nil {
-		log.Errorf("unable to read zone config file %q: %s", args[1], err)
-		return
-	}
-	// Send to admin REST API.
-	req, err := http.NewRequest("POST", kv.HTTPAddr()+zoneKeyPrefix+"/"+args[0], bytes.NewReader(body))
-	req.Header.Add("Content-Type", "text/yaml")
-	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %s", err)
-		return
-	}
-	// TODO(spencer): need to move to SSL.
-	_, err = sendAdminRequest(req)
-	if err != nil {
-		log.Errorf("admin REST request failed: %s", err)
-		return
-	}
-	fmt.Fprintf(os.Stdout, "set zone config for key prefix %q\n", args[0])
+	runSetConfig(zoneKeyPrefix, cmd, args)
 }
