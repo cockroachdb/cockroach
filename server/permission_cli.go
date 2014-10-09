@@ -23,78 +23,78 @@ import (
 	commander "code.google.com/p/go-commander"
 )
 
-// A CmdGetPermission command displays the permission config for the specified
+// A CmdGetPerms command displays the perm config for the specified
 // prefix.
-var CmdGetPermission = &commander.Command{
-	UsageLine: "get-permission [options] <key-prefix>",
+var CmdGetPerms = &commander.Command{
+	UsageLine: "get-perms [options] <key-prefix>",
 	Short:     "fetches and displays the permission config",
 	Long: `
 Fetches and displays the permission configuration for <key-prefix>. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runGetPermission,
+	Run:  runGetPerms,
 	Flag: *flag.CommandLine,
 }
 
-// runGetPermission invokes the REST API with GET action and key prefix as path.
-func runGetPermission(cmd *commander.Command, args []string) {
-	runGetConfig(permissionKeyPrefix, cmd, args)
+// runGetPerms invokes the REST API with GET action and key prefix as path.
+func runGetPerms(cmd *commander.Command, args []string) {
+	runGetConfig(permKeyPrefix, cmd, args)
 }
 
-// A CmdLsPermissions command displays a list of permission configs by prefix.
-var CmdLsPermissions = &commander.Command{
-	UsageLine: "ls-permissions [options] [key-regexp]",
-	Short:     "list all permission configs by key prefix",
+// A CmdLsPerms command displays a list of perm configs by prefix.
+var CmdLsPerms = &commander.Command{
+	UsageLine: "ls-perms [options] [key-regexp]",
+	Short:     "list all permisison configs by key prefix",
 	Long: `
 List permission configs. If a regular expression is given, the results of
 the listing are filtered by key prefixes matching the regexp. The key
 prefix should be escaped via URL query escaping if it contains
 non-ascii bytes or spaces.
 `,
-	Run:  runLsPermissions,
+	Run:  runLsPerms,
 	Flag: *flag.CommandLine,
 }
 
-// runLsPermissions invokes the REST API with GET action and no path, which
-// fetches a list of all permission configuration prefixes. The optional
+// runLsPerms invokes the REST API with GET action and no path, which
+// fetches a list of all perm configuration prefixes. The optional
 // regexp is applied to the complete list and matching prefixes
 // displayed.
-func runLsPermissions(cmd *commander.Command, args []string) {
-	runLsConfigs(permissionKeyPrefix, cmd, args)
+func runLsPerms(cmd *commander.Command, args []string) {
+	runLsConfigs(permKeyPrefix, cmd, args)
 
 }
 
-// A CmdRmPermission command removes a permission config by prefix.
-var CmdRmPermission = &commander.Command{
-	UsageLine: "rm-permission [options] <key-prefix>",
+// A CmdRmPerms command removes a perm config by prefix.
+var CmdRmPerms = &commander.Command{
+	UsageLine: "rm-perms [options] <key-prefix>",
 	Short:     "remove a permission config by key prefix",
 	Long: `
 Remove an existing permission config by key prefix. No action is taken if no
 permission configuration exists for the specified key prefix. Note that this
-command can affect only a single permission config with an exactly matching
+command can affect only a single perm config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it
 contains non-ascii bytes or spaces.
 `,
-	Run:  runRmPermission,
+	Run:  runRmPerms,
 	Flag: *flag.CommandLine,
 }
 
-// runRmPermission invokes the REST API with DELETE action and key prefix as
+// runRmPerms invokes the REST API with DELETE action and key prefix as
 // path.
-func runRmPermission(cmd *commander.Command, args []string) {
-	runRmConfig(permissionKeyPrefix, cmd, args)
+func runRmPerms(cmd *commander.Command, args []string) {
+	runRmConfig(permKeyPrefix, cmd, args)
 }
 
-// A CmdSetPermission command creates a new or updates an existing permission
+// A CmdSetPerms command creates a new or updates an existing perm
 // config.
-var CmdSetPermission = &commander.Command{
-	UsageLine: "set-permission [options] <key-prefix> <permission-config-file>",
+var CmdSetPerms = &commander.Command{
+	UsageLine: "set-perm [options] <key-prefix> <perm-config-file>",
 	Short:     "create or update permission config for key prefix",
 	Long: `
-Create or update a permission config for the specified key prefix (first
+Create or update a perm config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file
-(second argument: <permission-config-file>). The key prefix should be
+(second argument: <perm-config-file>). The key prefix should be
 escaped via URL query escaping if it contains non-ascii bytes or
 spaces.
 
@@ -121,13 +121,16 @@ For example:
 Setting permission configs will guarantee that users will have permissions for
 this key prefix and all sub prefixes of the one that is set
 `,
-	Run:  runSetPermission,
+	Run:  runSetPerms,
 	Flag: *flag.CommandLine,
 }
 
-// runSetPermission invokes the REST API with POST action and key prefix as
+// runSetPerm invokes the REST API with POST action and key prefix as
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
-func runSetPermission(cmd *commander.Command, args []string) {
-	runSetConfig(permissionKeyPrefix, cmd, args)
+func runSetPerms(cmd *commander.Command, args []string) {
+	runSetConfig(permKeyPrefix, cmd, args)
 }
+
+// TODO:(bram) Add inline json for setting
+// TODO:(bram) Add ability to add/remove a single user's read or write permission on a prefix

@@ -32,16 +32,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// A permissionHandler implements the adminHandler interface
-type permissionHandler struct {
+// A permHandler implements the adminHandler interface
+type permHandler struct {
 	db storage.DB // Key-value database client
 }
 
-// Put writes a permission config for the specified key prefix "key". The
-// permission config is parsed from the input "body". The permission config is
+// Put writes a perm config for the specified key prefix "key". The
+// perm config is parsed from the input "body". The perm config is
 // stored gob-encoded. The specified body must be valid utf8 and must
-// validly parse into a permission config struct.
-func (ph *permissionHandler) Put(path string, body []byte, r *http.Request) error {
+// validly parse into a perm config struct.
+func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for permission Put")
 	}
@@ -69,16 +69,16 @@ func (ph *permissionHandler) Put(path string, body []byte, r *http.Request) erro
 	return nil
 }
 
-// Get retrieves the permission configuration for the specified key. If the
-// key is empty, all permission configurations are returned. Otherwise, the
-// leading "/" path delimiter is stripped and the permission configuration
+// Get retrieves the perm configuration for the specified key. If the
+// key is empty, all perm configurations are returned. Otherwise, the
+// leading "/" path delimiter is stripped and the perm configuration
 // matching the remainder is retrieved. Note that this will retrieve
-// the default permission config if "key" is equal to "/", and will list all
+// the default perm config if "key" is equal to "/", and will list all
 // configs if "key" is equal to "". The body result contains
 // JSON-formatted output for a listing of keys and JSON-formatted
-// output for retrieval of a permission config.
-func (ph *permissionHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	// Scan all permissions if the key is empty.
+// output for retrieval of a perm config.
+func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
+	// Scan all perms if the key is empty.
 	if len(path) == 0 {
 		sr := <-ph.db.Scan(&proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
@@ -112,7 +112,7 @@ func (ph *permissionHandler) Get(path string, r *http.Request) (body []byte, con
 		if ok, _, err = storage.GetProto(ph.db, permKey, config); err != nil {
 			return
 		}
-		// On get, if there's no permission config for the requested prefix,
+		// On get, if there's no perm config for the requested prefix,
 		// return a not found error.
 		if !ok {
 			err = util.Errorf("no config found for key prefix %q", path)
@@ -129,14 +129,14 @@ func (ph *permissionHandler) Get(path string, r *http.Request) (body []byte, con
 			// YAML-encode the config.
 			contentType = "text/yaml"
 			if body, err = config.ToYAML(); err != nil {
-				err = util.Errorf("unable to marshal permission config %+v to json: %s", config, err)
+				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
 				return
 			}
 		} else {
 			// JSON-encode the config.
 			contentType = "application/json"
 			if body, err = config.ToJSON(); err != nil {
-				err = util.Errorf("unable to marshal permission config %+v to json: %s", config, err)
+				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
 				return
 			}
 		}
@@ -149,8 +149,8 @@ func (ph *permissionHandler) Get(path string, r *http.Request) (body []byte, con
 	return
 }
 
-// Delete removes the permission config specified by key.
-func (ph *permissionHandler) Delete(path string, r *http.Request) error {
+// Delete removes the perm config specified by key.
+func (ph *permHandler) Delete(path string, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for permission Delete")
 	}

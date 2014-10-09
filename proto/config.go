@@ -148,17 +148,21 @@ func PermConfigFromYAML(in []byte) (*PermConfig, error) {
 
 var yamlXXXUnrecognizedRE = regexp.MustCompile(` *xxx_unrecognized: \[\]\n?`)
 
+// sanitizeYAML filters lines in the input which match xxx_unrecognized, a
+// truly-annoying public member of proto Message structs, which we
+// cannot specify yaml output tags for.
+// TODO(spencer): there's got to be a better way to do this.
+func sanitizeYAML(b []byte) []byte {
+	return yamlXXXUnrecognizedRE.ReplaceAll(b, []byte{})
+}
+
 // ToYAML serializes a ZoneConfig as YAML.
 func (z *ZoneConfig) ToYAML() ([]byte, error) {
 	b, err := yaml.Marshal(z)
 	if err != nil {
 		return b, err
 	}
-	// Filter out any lines in the input which match xxx_unrecognized, a
-	// truly-annoying public member of proto Message structs, which we
-	// cannot specify yaml output tags for.
-	// TODO(spencer): there's got to be a better way to do this.
-	return yamlXXXUnrecognizedRE.ReplaceAll(b, []byte{}), nil
+	return sanitizeYAML(b), nil
 }
 
 // ToYAML serializes a PermConfig as YAML.
@@ -167,9 +171,5 @@ func (z *PermConfig) ToYAML() ([]byte, error) {
 	if err != nil {
 		return b, err
 	}
-	// Filter out any lines in the input which match xxx_unrecognized, a
-	// truly-annoying public member of proto Message structs, which we
-	// cannot specify yaml output tags for.
-	// TODO(spencer): there's got to be a better way to do this.
-	return yamlXXXUnrecognizedRE.ReplaceAll(b, []byte{}), nil
+	return sanitizeYAML(b), nil
 }

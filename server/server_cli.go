@@ -56,7 +56,7 @@ func getFriendlyNameFromPrefix(prefix string) string {
 	switch prefix {
 	case zoneKeyPrefix:
 		return "zone"
-	case permissionKeyPrefix:
+	case permKeyPrefix:
 		return "permission"
 	default:
 		return "unknown"

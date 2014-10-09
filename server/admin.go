@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	maxGetResults = 1 << 16 // TODO(spencer): maybe we need paged query support
+	maxGetResults = 0 // TODO(spencer): maybe we need paged query support
 
 	// adminKeyPrefix is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
@@ -45,13 +45,13 @@ const (
 	debugKeyPrefix = "/debug/"
 	// healthzKey is the healthz endpoint.
 	healthzKey = adminKeyPrefix + "healthz"
+	// permKeyPrefix is the prefix for permission configuration changes.
+	permKeyPrefix = adminKeyPrefix + "perms"
 	// zoneKeyPrefix is the prefix for zone configuration changes.
 	zoneKeyPrefix = adminKeyPrefix + "zones"
-	// permKeyPrefix is the prefix for permission configuration changes.
-	permissionKeyPrefix = adminKeyPrefix + "permissions"
 )
 
-// A actionHandler is an interface which provides Get, Put & Delete
+// An actionHandler is an interface which provides Get, Put & Delete
 // to satisfy administrative REST APIs.
 type actionHandler interface {
 	Put(path string, body []byte, r *http.Request) error
@@ -62,18 +62,18 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	db         storage.DB // Key-value database client
-	zone       *zoneHandler
-	permission *permissionHandler
+	db   storage.DB // Key-value database client
+	perm *permHandler
+	zone *zoneHandler
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
 func newAdminServer(db storage.DB) *adminServer {
 	return &adminServer{
-		db:         db,
-		zone:       &zoneHandler{db: db},
-		permission: &permissionHandler{db: db},
+		db:   db,
+		perm: &permHandler{db: db},
+		zone: &zoneHandler{db: db},
 	}
 }
 
@@ -84,10 +84,10 @@ func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
 	// get exported variables and pprof tools.
 	mux.HandleFunc(debugKeyPrefix, s.handleDebug)
 	mux.HandleFunc(healthzKey, s.handleHealthz)
+	mux.HandleFunc(permKeyPrefix, s.handlePermAction)
+	mux.HandleFunc(permKeyPrefix+"/", s.handlePermAction)
 	mux.HandleFunc(zoneKeyPrefix, s.handleZoneAction)
 	mux.HandleFunc(zoneKeyPrefix+"/", s.handleZoneAction)
-	mux.HandleFunc(permissionKeyPrefix, s.handlePermissionAction)
-	mux.HandleFunc(permissionKeyPrefix+"/", s.handlePermissionAction)
 }
 
 // handleHealthz responds to health requests from monitoring services.
@@ -104,6 +104,7 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
+// TODO(bram): using a single handler instead of one each for zone/perm/acct
 // handleZoneAction handles actions for zone configuration by method.
 func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -118,15 +119,15 @@ func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePermissionAction handles actions for permission configuration by method.
-func (s *adminServer) handlePermissionAction(w http.ResponseWriter, r *http.Request) {
+// handlePermAction handles actions for perm configuration by method.
+func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.permission, w, r, permissionKeyPrefix)
+		s.handleGetAction(s.perm, w, r, permKeyPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.permission, w, r, permissionKeyPrefix)
+		s.handlePutAction(s.perm, w, r, permKeyPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.permission, w, r, permissionKeyPrefix)
+		s.handleDeleteAction(s.perm, w, r, permKeyPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}

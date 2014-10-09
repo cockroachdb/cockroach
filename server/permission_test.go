@@ -30,34 +30,34 @@ import (
 )
 
 const (
-	testPermissionConfig = `
+	testPermConfig = `
 read: [readonly, readwrite]
 write: [readwrite, writeonly]
 `
 )
 
-// ExampleSetAndGetPermission sets permission configs for a variety of key
+// ExampleSetAndGetPerm sets perm configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetPermission() {
+func ExampleSetAndGetPerms() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermissionConfig)
+	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
 		prefix engine.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testPermissionConfig},
-		{engine.Key("db1"), testPermissionConfig},
-		{engine.Key("db 2"), testPermissionConfig},
-		{engine.Key("\xfe"), testPermissionConfig},
+		{engine.KeyMin, testPermConfig},
+		{engine.Key("db1"), testPermConfig},
+		{engine.Key("db 2"), testPermConfig},
+		{engine.Key("\xfe"), testPermConfig},
 	}
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		runSetPermission(CmdSetPermission, []string{prefix, testConfigFn})
-		runGetPermission(CmdGetPermission, []string{prefix})
+		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
+		runGetPerms(CmdGetPerms, []string{prefix})
 	}
 	// Output:
 	// set permission config for key prefix ""
@@ -97,13 +97,13 @@ func ExampleSetAndGetPermission() {
 	// - writeonly
 }
 
-// ExampleLsPermissions creates a series of permission configs and verifies
-// permission-ls works. First, no regexp lists all permission configs. Second,
+// ExampleLsPerms creates a series of perm configs and verifies
+// perm-ls works. First, no regexp lists all perm configs. Second,
 // regexp properly matches results.
-func ExampleLsPermissions() {
+func ExampleLsPerms() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermissionConfig)
+	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -122,15 +122,15 @@ func ExampleLsPermissions() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPermission(CmdSetPermission, []string{prefix, testConfigFn})
+		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
 	}
 
 	for i, regexp := range regexps {
 		fmt.Fprintf(os.Stdout, "test case %d: %q\n", i, regexp)
 		if regexp == "" {
-			runLsPermissions(CmdLsPermissions, []string{})
+			runLsPerms(CmdLsPerms, []string{})
 		} else {
-			runLsPermissions(CmdLsPermissions, []string{regexp})
+			runLsPerms(CmdLsPerms, []string{regexp})
 		}
 	}
 	// Output:
@@ -154,14 +154,14 @@ func ExampleLsPermissions() {
 	// db2
 }
 
-// ExampleRmPermissions creates a series of permisison configs and verifies
-// permission-rm works by deleting some and then all and verifying entries
-// have been removed via permission-ls. Also verify the default perission cannot
-// be removed.
-func ExampleRmPermissions() {
+// ExampleRmPerms creates a series of perm configs and verifies
+// perm-rm works by deleting some and then all and verifying entries
+// have been removed via perm-ls. Also verify the default perm config
+// cannot be removed.
+func ExampleRmPerms() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermissionConfig)
+	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -171,13 +171,13 @@ func ExampleRmPermissions() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPermission(CmdSetPermission, []string{prefix, testConfigFn})
+		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
 	}
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runRmPermission(CmdRmPermission, []string{prefix})
-		runLsPermissions(CmdLsPermissions, []string{})
+		runRmPerms(CmdRmPerms, []string{prefix})
+		runLsPerms(CmdLsPerms, []string{})
 	}
 	// Output:
 	// set permission config for key prefix ""
@@ -188,14 +188,14 @@ func ExampleRmPermissions() {
 	// [default]
 }
 
-// ExamplePermissionContentTypes verifies that the Accept header can be used
+// ExamplePermContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExamplePermissionContentTypes() {
+func ExamplePermContentTypes() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
 
-	config, err := proto.PermConfigFromYAML([]byte(testPermissionConfig))
+	config, err := proto.PermConfigFromYAML([]byte(testPermConfig))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -220,13 +220,13 @@ func ExamplePermissionContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", kv.HTTPAddr()+permissionKeyPrefix+key, bytes.NewReader(body))
+		req, err := http.NewRequest("POST", kv.HTTPAddr()+permKeyPrefix+key, bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", kv.HTTPAddr()+permissionKeyPrefix+key, nil)
+		req, err = http.NewRequest("GET", kv.HTTPAddr()+permKeyPrefix+key, nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
