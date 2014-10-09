@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Peter Mattis (peter.mattis@gmail.com)
 
 package engine
 
@@ -23,15 +24,38 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/proto"
 )
 
-func gibberishBytes(n int) []byte {
+func gibberishString(n int) string {
 	b := make([]byte, n, n)
 	for i := 0; i < n; i++ {
 		b[i] = byte(rand.Intn(math.MaxUint8 + 1))
 	}
+	return string(b)
+}
+
+func mustMarshal(m gogoproto.Message) []byte {
+	b, err := gogoproto.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
 	return b
+}
+
+func counter(n int64) []byte {
+	v := &proto.Value{
+		Integer: gogoproto.Int64(n),
+	}
+	return mustMarshal(v)
+}
+
+func appender(s string) []byte {
+	v := &proto.Value{
+		Bytes: []byte(s),
+	}
+	return mustMarshal(v)
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -39,27 +63,23 @@ func gibberishBytes(n int) []byte {
 func TestGoMerge(t *testing.T) {
 	// Let's start with stuff that should go wrong.
 	badCombinations := []struct {
-		old, update interface{}
+		existing, update []byte
 	}{
-		{Counter(0), Appender("")},
-		{[]byte("apple"), nil},
-		{"", ""},
-		{0, 0},
-		{Appender(""), Counter(0)},
-		{0, "asd"},
-		{float64(1.3), Counter(0)},
-		{Counter(0), nil},
+		{counter(0), appender("")},
+		{appender(""), counter(0)},
+		{counter(0), nil},
+		{appender(""), nil},
 	}
 	for i, c := range badCombinations {
-		_, err := goMerge(encoding.MustGobEncode(c.old), encoding.MustGobEncode(c.update))
+		_, err := goMerge(c.existing, c.update)
 		if err == nil {
 			t.Errorf("goMerge: %d: expected error", i)
 		}
 	}
 
 	testCasesCounter := []struct {
-		old, update, expected Counter
-		wantError             bool
+		existing, update, expected int64
+		wantError                  bool
 	}{
 		{0, 10, 10, false},
 		{10, 20, 30, false},
@@ -71,25 +91,8 @@ func TestGoMerge(t *testing.T) {
 		{math.MaxInt64, 1, 0, true},
 		{-1, math.MinInt64, 0, true},
 	}
-
-	gibber1, gibber2 := gibberishBytes(100), gibberishBytes(200)
-
-	testCasesAppender := []struct {
-		old, update, expected Appender
-	}{
-		{Appender(""), Appender(""), Appender("")},
-		{nil, Appender(""), Appender("")},
-		{nil, nil, nil},
-		{Appender("\n "), Appender(" \t "), Appender("\n  \t ")},
-		{Appender("ქართული"), Appender("\nKhartuli"), Appender("ქართული\nKhartuli")},
-		{gibber1, gibber2, append(append([]byte(nil), gibber1...), gibber2...)},
-	}
-
 	for i, c := range testCasesCounter {
-		oEncoded := encoding.MustGobEncode(c.old)
-		uEncoded := encoding.MustGobEncode(c.update)
-
-		result, err := goMerge(oEncoded, uEncoded)
+		result, err := goMerge(counter(c.existing), counter(c.update))
 		if c.wantError {
 			if err == nil {
 				t.Errorf("goMerge: %d: wanted error but got success", i)
@@ -100,24 +103,37 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		resultDecoded := encoding.MustGobDecode(result)
-		if resultDecoded != c.expected {
-			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
+		var v proto.Value
+		if err := gogoproto.Unmarshal(result, &v); err != nil {
+			t.Errorf("goMerge error unmarshalling: %s", err)
+			continue
+		}
+		if *v.Integer != c.expected {
+			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, *v.Integer)
 		}
 	}
-	for i, c := range testCasesAppender {
-		oEncoded := encoding.MustGobEncode(c.old)
-		uEncoded := encoding.MustGobEncode(c.update)
 
-		result, err := goMerge(oEncoded, uEncoded)
+	gibber1, gibber2 := gibberishString(100), gibberishString(200)
+
+	testCasesAppender := []struct {
+		existing, update, expected []byte
+	}{
+		{appender(""), appender(""), appender("")},
+		{nil, appender(""), appender("")},
+		{nil, nil, nil},
+		{appender("\n "), appender(" \t "), appender("\n  \t ")},
+		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
+		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
+	}
+
+	for i, c := range testCasesAppender {
+		result, err := goMerge(c.existing, c.update)
 		if err != nil {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		resultDecoded := encoding.MustGobDecode(result)
-		if !bytes.Equal(resultDecoded.(Appender), c.expected) {
+		if !bytes.Equal(result, c.expected) {
 			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
 		}
 	}
-
 }

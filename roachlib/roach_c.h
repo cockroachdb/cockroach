@@ -15,7 +15,14 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
+#ifndef ROACHLIB_ROACH_C_H
+#define ROACHLIB_ROACH_C_H
+
 #include "rocksdb/c.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct FilterState {
   // The key prefix identifying transaction records.
@@ -30,10 +37,6 @@ struct FilterState {
   int64_t min_rcache_ts;
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 unsigned char GCCompactionFilter(
     void* state, int level, const char* key,
     size_t key_length,
@@ -43,6 +46,21 @@ unsigned char GCCompactionFilter(
     unsigned char* value_changed,
     char** error_msg);
 
+char* MergeOne(
+    const char* existing, size_t existing_length,
+    const char* update, size_t update_length,
+    size_t* new_value_length, char** error_msg);
+char* MergeOperator(
+    const char* key, size_t key_length,
+    const char* existing_value,
+    size_t existing_value_length,
+    const char* const* operands_list,
+    const size_t* operands_list_length,
+    int num_operands, unsigned char* success,
+    size_t* new_value_length);
+
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif
+
+#endif // ROACHLIB_ROACH_C_H

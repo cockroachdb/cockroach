@@ -15,7 +15,7 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-// Style settings: indent -kr -ci2 -cli2 -i2 -l80 -nut storage/rocksdb_compaction.cc
+// Style settings: indent -kr -ci2 -cli2 -i2 -l80 -nut roachlib/compaction.cc
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>             // For memcpy
