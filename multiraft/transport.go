@@ -34,17 +34,17 @@ type Transport interface {
 	// Listen informs the Transport of the local node's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id NodeID, server ServerInterface) error
+	Listen(id int64, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id NodeID)
+	Stop(id int64)
 
 	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
-	Connect(id NodeID) (ClientInterface, error)
+	Connect(id int64) (ClientInterface, error)
 }
 
 type localRPCTransport struct {
-	listeners map[NodeID]net.Listener
+	listeners map[int64]net.Listener
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -53,10 +53,10 @@ type localRPCTransport struct {
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
-	return &localRPCTransport{make(map[NodeID]net.Listener)}
+	return &localRPCTransport{make(map[int64]net.Listener)}
 }
 
-func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id int64, server ServerInterface) error {
 	rpcServer := rpc.NewServer()
 	err := rpcServer.RegisterName("MultiRaft", &rpcAdapter{server})
 	if err != nil {
@@ -88,12 +88,12 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 	}
 }
 
-func (lt *localRPCTransport) Stop(id NodeID) {
+func (lt *localRPCTransport) Stop(id int64) {
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
 }
 
-func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
+func (lt *localRPCTransport) Connect(id int64) (ClientInterface, error) {
 	address := lt.listeners[id].Addr().String()
 	client, err := rpc.Dial("tcp", address)
 	if err != nil {
@@ -148,7 +148,7 @@ func (r *rpcAdapter) SendMessage(req *SendMessageRequest, resp *SendMessageRespo
 // Outgoing requests are run in a goroutine and their response ops are returned on the
 // given channel.
 type asyncClient struct {
-	nodeID NodeID
+	nodeID int64
 	conn   ClientInterface
 	ch     chan *rpc.Call
 }

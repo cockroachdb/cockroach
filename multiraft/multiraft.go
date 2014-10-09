@@ -30,16 +30,8 @@ import (
 	"github.com/coreos/etcd/third_party/code.google.com/p/go.net/context"
 )
 
-// NodeID is a unique non-zero identifier for the node within the cluster.
-type NodeID int32
-
 // GroupID is a unique identifier for a consensus group within the cluster.
 type GroupID int64
-
-// isSet returns true if the NodeID is valid (i.e. non-zero)
-func (n NodeID) isSet() bool {
-	return int32(n) != 0
-}
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
@@ -86,15 +78,15 @@ func (c *Config) Validate() error {
 type MultiRaft struct {
 	Config
 	Events   chan interface{}
-	nodeID   NodeID
+	nodeID   int64
 	ops      chan interface{}
 	requests chan *rpc.Call
 	stopped  chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
-	if !nodeID.isSet() {
+func NewMultiRaft(nodeID int64, config *Config) (*MultiRaft, error) {
+	if nodeID == 0 {
 		return nil, util.Error("Invalid NodeID")
 	}
 	err := config.Validate()
@@ -179,9 +171,9 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 
 // CreateGroup creates a new consensus group and joins it. The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []NodeID) error {
+func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []int64) error {
 	for _, id := range initialMembers {
-		if !id.isSet() {
+		if id == 0 {
 			return util.Error("Invalid NodeID")
 		}
 	}
@@ -210,7 +202,7 @@ func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
 // level or does MultiRaft take care of the non-member -> observer -> full member
 // cycle?
 func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMembershipOperation,
-	nodeID NodeID) error {
+	nodeID int64) error {
 	op := &changeGroupMembershipOp{
 		groupID,
 		ChangeMembershipPayload{changeOp, nodeID},
@@ -243,14 +235,9 @@ type group struct {
 	softState raft.SoftState
 }
 
-func (m *MultiRaft) newGroup(groupID GroupID, members []NodeID) *group {
-	// TODO(bdarnell): should we just get rid of the NodeID type?
-	peers := make([]int64, 0, len(members))
-	for _, id := range members {
-		peers = append(peers, int64(id))
-	}
+func (m *MultiRaft) newGroup(groupID GroupID, members []int64) *group {
 	return &group{
-		node: raft.StartNode(int64(m.nodeID), peers,
+		node: raft.StartNode(int64(m.nodeID), members,
 			m.ElectionTimeoutTicks, m.HeartbeatIntervalTicks),
 		groupID: groupID,
 	}
@@ -260,7 +247,7 @@ type stopOp struct{}
 
 type createGroupOp struct {
 	group          *group
-	initialMembers []NodeID
+	initialMembers []int64
 	ch             chan error
 }
 
@@ -278,7 +265,7 @@ type changeGroupMembershipOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   NodeID
+	nodeID   int64
 	refCount int
 	client   *asyncClient
 }
@@ -291,7 +278,7 @@ type state struct {
 	rand          *rand.Rand
 	groups        map[GroupID]*group
 	dirtyGroups   map[GroupID]*group
-	nodes         map[NodeID]*node
+	nodes         map[int64]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
 	writeTask     *writeTask
@@ -303,7 +290,7 @@ func newState(m *MultiRaft) *state {
 		rand:        util.NewPseudoRand(),
 		groups:      make(map[GroupID]*group),
 		dirtyGroups: make(map[GroupID]*group),
-		nodes:       make(map[NodeID]*node),
+		nodes:       make(map[int64]*node),
 		responses:   make(chan *rpc.Call, 100),
 		writeTask:   newWriteTask(m.Storage),
 	}
@@ -324,7 +311,7 @@ func (s *state) start() {
 				log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
 				if ready.SoftState != nil {
 					if ready.SoftState.Lead != g.softState.Lead {
-						s.sendEvent(&EventLeaderElection{groupID, NodeID(ready.SoftState.Lead)})
+						s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
 					}
 					g.softState = *ready.SoftState
 				}
@@ -336,7 +323,7 @@ func (s *state) start() {
 					}
 				}
 				for _, msg := range ready.Messages {
-					s.nodes[NodeID(msg.To)].client.sendMessage(&SendMessageRequest{groupID, msg})
+					s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
 				}
 			default:
 			}
