@@ -54,10 +54,12 @@ func sendAdminRequest(req *http.Request) ([]byte, error) {
 // Gets a friendly name for output based on the passed in config prefix.
 func getFriendlyNameFromPrefix(prefix string) string {
 	switch prefix {
-	case zoneKeyPrefix:
-		return "zone"
+	case acctKeyPrefix:
+		return "accounting"
 	case permKeyPrefix:
 		return "permission"
+	case zoneKeyPrefix:
+		return "zone"
 	default:
 		return "unknown"
 	}

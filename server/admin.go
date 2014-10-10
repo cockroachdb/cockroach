@@ -37,6 +37,8 @@ import (
 const (
 	maxGetResults = 0 // TODO(spencer): maybe we need paged query support
 
+	// acctKeyPrefix is the prefix for accounting configuration changes.
+	acctKeyPrefix = adminKeyPrefix + "acct"
 	// adminKeyPrefix is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminKeyPrefix = "/_admin/"
@@ -63,6 +65,7 @@ type actionHandler interface {
 // the cockroach cluster.
 type adminServer struct {
 	db   storage.DB // Key-value database client
+	acct *acctHandler
 	perm *permHandler
 	zone *zoneHandler
 }
@@ -72,6 +75,7 @@ type adminServer struct {
 func newAdminServer(db storage.DB) *adminServer {
 	return &adminServer{
 		db:   db,
+		acct: &acctHandler{db: db},
 		perm: &permHandler{db: db},
 		zone: &zoneHandler{db: db},
 	}
@@ -82,6 +86,8 @@ func newAdminServer(db storage.DB) *adminServer {
 func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
 	// Pass through requests to /debug to the default serve mux so we
 	// get exported variables and pprof tools.
+	mux.HandleFunc(acctKeyPrefix, s.handleAcctAction)
+	mux.HandleFunc(acctKeyPrefix+"/", s.handleAcctAction)
 	mux.HandleFunc(debugKeyPrefix, s.handleDebug)
 	mux.HandleFunc(healthzKey, s.handleHealthz)
 	mux.HandleFunc(permKeyPrefix, s.handlePermAction)
@@ -105,15 +111,15 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO(bram): using a single handler instead of one each for zone/perm/acct
-// handleZoneAction handles actions for zone configuration by method.
-func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
+// handleAcctAction handles actions for accounting configuration by method.
+func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.zone, w, r, zoneKeyPrefix)
+		s.handleGetAction(s.acct, w, r, acctKeyPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.zone, w, r, zoneKeyPrefix)
+		s.handlePutAction(s.acct, w, r, acctKeyPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.zone, w, r, zoneKeyPrefix)
+		s.handleDeleteAction(s.acct, w, r, acctKeyPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
@@ -128,6 +134,20 @@ func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
 		s.handlePutAction(s.perm, w, r, permKeyPrefix)
 	case "DELETE":
 		s.handleDeleteAction(s.perm, w, r, permKeyPrefix)
+	default:
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+	}
+}
+
+// handleZoneAction handles actions for zone configuration by method.
+func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		s.handleGetAction(s.zone, w, r, zoneKeyPrefix)
+	case "PUT", "POST":
+		s.handlePutAction(s.zone, w, r, zoneKeyPrefix)
+	case "DELETE":
+		s.handleDeleteAction(s.zone, w, r, zoneKeyPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}

@@ -108,9 +108,9 @@ func (p *PermConfig) CanWrite(user string) bool {
 	return false
 }
 
-// ZoneConfigFromJSON parses a JSON serialized ZoneConfig.
-func ZoneConfigFromJSON(in []byte) (*ZoneConfig, error) {
-	z := &ZoneConfig{}
+// AcctConfigFromJSON parses a JSON serialized PermConfig.
+func AcctConfigFromJSON(in []byte) (*AcctConfig, error) {
+	z := &AcctConfig{}
 	err := json.Unmarshal(in, z)
 	return z, err
 }
@@ -122,8 +122,15 @@ func PermConfigFromJSON(in []byte) (*PermConfig, error) {
 	return z, err
 }
 
-// ToJSON serializes a ZoneConfig as "pretty", indented JSON.
-func (z *ZoneConfig) ToJSON() ([]byte, error) {
+// ZoneConfigFromJSON parses a JSON serialized ZoneConfig.
+func ZoneConfigFromJSON(in []byte) (*ZoneConfig, error) {
+	z := &ZoneConfig{}
+	err := json.Unmarshal(in, z)
+	return z, err
+}
+
+// ToJSON serializes a AcctConfig as "pretty", indented JSON.
+func (z *AcctConfig) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(z, "", "  ")
 }
 
@@ -132,9 +139,14 @@ func (z *PermConfig) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(z, "", "  ")
 }
 
-// ZoneConfigFromYAML parses a YAML serialized ZoneConfig.
-func ZoneConfigFromYAML(in []byte) (*ZoneConfig, error) {
-	z := &ZoneConfig{}
+// ToJSON serializes a ZoneConfig as "pretty", indented JSON.
+func (z *ZoneConfig) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(z, "", "  ")
+}
+
+// AcctConfigFromYAML parses a YAML serialized AcctConfig.
+func AcctConfigFromYAML(in []byte) (*AcctConfig, error) {
+	z := &AcctConfig{}
 	err := yaml.Unmarshal(in, z)
 	return z, err
 }
@@ -142,6 +154,13 @@ func ZoneConfigFromYAML(in []byte) (*ZoneConfig, error) {
 // PermConfigFromYAML parses a YAML serialized PermConfig.
 func PermConfigFromYAML(in []byte) (*PermConfig, error) {
 	z := &PermConfig{}
+	err := yaml.Unmarshal(in, z)
+	return z, err
+}
+
+// ZoneConfigFromYAML parses a YAML serialized ZoneConfig.
+func ZoneConfigFromYAML(in []byte) (*ZoneConfig, error) {
+	z := &ZoneConfig{}
 	err := yaml.Unmarshal(in, z)
 	return z, err
 }
@@ -156,8 +175,8 @@ func sanitizeYAML(b []byte) []byte {
 	return yamlXXXUnrecognizedRE.ReplaceAll(b, []byte{})
 }
 
-// ToYAML serializes a ZoneConfig as YAML.
-func (z *ZoneConfig) ToYAML() ([]byte, error) {
+// ToYAML serializes a AcctConfig as YAML.
+func (z *AcctConfig) ToYAML() ([]byte, error) {
 	b, err := yaml.Marshal(z)
 	if err != nil {
 		return b, err
@@ -167,6 +186,15 @@ func (z *ZoneConfig) ToYAML() ([]byte, error) {
 
 // ToYAML serializes a PermConfig as YAML.
 func (z *PermConfig) ToYAML() ([]byte, error) {
+	b, err := yaml.Marshal(z)
+	if err != nil {
+		return b, err
+	}
+	return sanitizeYAML(b), nil
+}
+
+// ToYAML serializes a ZoneConfig as YAML.
+func (z *ZoneConfig) ToYAML() ([]byte, error) {
 	b, err := yaml.Marshal(z)
 	if err != nil {
 		return b, err
