@@ -214,30 +214,40 @@ func (b *Batch) Merge(key Key, value []byte) error {
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp.
-func (b *Batch) PutProto(key Key, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return err
+// of msg and the provided timestamp. Returns the length in bytes of
+// key and the value.
+func (b *Batch) PutProto(key Key, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
+	var data []byte
+	if data, err = gogoproto.Marshal(msg); err != nil {
+		return
 	}
-	return b.Put(key, data)
+	if err = b.Put(key, data); err != nil {
+		return
+	}
+	keyBytes = int64(len(key))
+	valBytes = int64(len(data))
+	return
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
 // using a protobuf decoder. Returns true on success or false if the
-// key was not found.
-func (b *Batch) GetProto(key Key, msg gogoproto.Message) (bool, error) {
-	val, err := b.Get(key)
-	if err != nil {
-		return false, err
+// key was not found. On success, returns the length in bytes of the
+// key and the value.
+func (b *Batch) GetProto(key Key, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+	var data []byte
+	if data, err = b.Get(key); err != nil {
+		return
 	}
-	if val == nil {
-		return false, nil
+	if data == nil {
+		return
 	}
+	ok = true
 	if msg != nil {
-		if err := gogoproto.Unmarshal(val, msg); err != nil {
-			return true, err
+		if err = gogoproto.Unmarshal(data, msg); err != nil {
+			return
 		}
 	}
-	return true, nil
+	keyBytes = int64(len(key))
+	valBytes = int64(len(data))
+	return
 }

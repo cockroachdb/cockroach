@@ -149,5 +149,12 @@ message Transaction {
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
   optional Transaction txn = 1;
+  // The timestamp of the most recent versioned value.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // Is the most recent value a deletion tombstone?
+  optional bool deleted = 3 [(gogoproto.nullable) = false];
+  // The size in bytes of the most recent encoded key.
+  optional int64 key_bytes = 4 [(gogoproto.nullable) = false];
+  // The size in bytes of the most recent versioned value.
+  optional int64 val_bytes = 5 [(gogoproto.nullable) = false];
 }

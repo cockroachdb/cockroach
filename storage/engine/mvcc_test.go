@@ -29,7 +29,9 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -312,6 +314,17 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		if value == nil {
 			t.Fatal("the value should not be empty")
 		}
+	}
+}
+
+func TestMVCCDeleteMissingKey(t *testing.T) {
+	mvcc := createTestMVCC()
+	if err := mvcc.Delete(testKey1, makeTS(1, 0), nil); err != nil {
+		t.Fatal(err)
+	}
+	// Verify nothing is written to the engine.
+	if val, err := mvcc.batch.engine.Get(encoding.EncodeBinary(nil, testKey1)); err != nil || val != nil {
+		t.Fatal("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
 	}
 }
 
@@ -1007,5 +1020,120 @@ func TestFindSplitKey(t *testing.T) {
 	ind, _ := strconv.Atoi(string(humanSplitKey))
 	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
 		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
+	}
+}
+
+// verifyStats scans the underlying engine and manually computes the
+// stat counters. It then compares those to the stats in the mvcc
+// object.
+func verifyStats(debug string, mvcc *MVCC, t *testing.T) {
+	// Since MVCCComputeStats reads directly from underlying engine, we
+	// must commit the batch. We just do this out from underneat the
+	// MVCC instance and reset with a new batch.
+	if err := mvcc.batch.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	mvcc.batch = NewBatch(mvcc.batch.engine)
+
+	// Compute the stats manually.
+	ms, err := MVCCComputeStats(mvcc.batch.engine, KeyMin, KeyMax)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ...And verify stats.
+	if ms.LiveBytes != mvcc.LiveBytes {
+		t.Errorf("%s: mvcc live bytes %d; measured %d", debug, mvcc.LiveBytes, ms.LiveBytes)
+	}
+	if ms.KeyBytes != mvcc.KeyBytes {
+		t.Errorf("%s: mvcc keyBytes %d; measured %d", debug, mvcc.KeyBytes, ms.KeyBytes)
+	}
+	if ms.ValBytes != mvcc.ValBytes {
+		t.Errorf("%s: mvcc valBytes %d; measured %d", debug, mvcc.ValBytes, ms.ValBytes)
+	}
+	if ms.IntentBytes != mvcc.IntentBytes {
+		t.Errorf("%s: mvcc intentBytes %d; measured %d", debug, mvcc.IntentBytes, ms.IntentBytes)
+	}
+	if ms.LiveCount != mvcc.LiveCount {
+		t.Errorf("%s: mvcc liveCount %d; measured %d", debug, mvcc.LiveCount, ms.LiveCount)
+	}
+	if ms.KeyCount != mvcc.KeyCount {
+		t.Errorf("%s: mvcc keyCount %d; measured %d", debug, mvcc.KeyCount, ms.KeyCount)
+	}
+	if ms.ValCount != mvcc.ValCount {
+		t.Errorf("%s: mvcc valCount %d; measured %d", debug, mvcc.ValCount, ms.ValCount)
+	}
+	if ms.IntentCount != mvcc.IntentCount {
+		t.Errorf("%s: mvcc intentCount %d; measured %d", debug, mvcc.IntentCount, ms.IntentCount)
+	}
+}
+
+// TestMVCCStats creates a random sequence of puts, deletes and delete
+// ranges and at each step verifies that the mvcc stats match a manual
+// computation of range stats via a scan of the underlying engine.
+func TestMVCCStats(t *testing.T) {
+	rand := util.NewPseudoRand()
+	mvcc := createTestMVCC()
+
+	// Test with empty mvcc.
+	verifyStats("empty test", mvcc, t)
+
+	// Now, generate a random sequence of puts, deletes and resolves.
+	// Each put and delete may or may not involve a txn. Resolves may
+	// either commit or abort.
+	keys := map[int32][]byte{}
+	for i := int32(0); i < int32(1000); i++ {
+		key := []byte(fmt.Sprintf("%s-%d", util.RandString(rand, int(rand.Int31n(32))), i))
+		keys[i] = key
+		var txn *proto.Transaction
+		if rand.Int31n(2) == 0 { // create a txn with 50% prob
+			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(0, i)}
+		}
+		// With 25% probability, put a new value; otherwise, delete an earlier
+		// key. Because an earlier step in this process may have itself been
+		// a delete, we could end up deleting a non-existent key, which is good;
+		// we don't mind testing that case as well.
+		isDelete := rand.Int31n(4) == 0
+		if i > 0 && isDelete {
+			idx := rand.Int31n(i)
+			log.V(1).Infof("*** DELETE index %d", idx)
+			if err := mvcc.Delete(keys[idx], makeTS(0, i), txn); err != nil {
+				// Abort any write intent on an earlier, unresolved txn.
+				if wiErr, ok := err.(*proto.WriteIntentError); ok {
+					wiErr.Txn.Status = proto.ABORTED
+					log.V(1).Infof("*** ABORT index %d", idx)
+					if err := mvcc.ResolveWriteIntent(keys[idx], &wiErr.Txn); err != nil {
+						t.Fatal(err)
+					}
+					// Now, re-delete.
+					log.V(1).Infof("*** RE-DELETE index %d", idx)
+					if err := mvcc.Delete(keys[idx], makeTS(0, i), txn); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					t.Fatal(err)
+				}
+			}
+		} else {
+			randVal := proto.Value{Bytes: []byte(util.RandString(rand, int(rand.Int31n(128))))}
+			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
+			if err := mvcc.Put(key, makeTS(0, i), randVal, txn); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !isDelete && txn != nil && rand.Int31n(2) == 0 { // resolve txn with 50% prob
+			txn.Status = proto.COMMITTED
+			if rand.Int31n(10) == 0 { // abort txn with 10% prob
+				txn.Status = proto.ABORTED
+			}
+			log.V(1).Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
+			if err := mvcc.ResolveWriteIntent(key, txn); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Every 10th step, verify the stats via manual engine scan.
+		if i%10 == 0 {
+			verifyStats(fmt.Sprintf("cycle %d", i), mvcc, t)
+		}
 	}
 }

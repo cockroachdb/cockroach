@@ -782,7 +782,7 @@ func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRe
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := batch.GetProto(encKey, existTxn)
+	ok, _, _, err := batch.GetProto(encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -847,7 +847,7 @@ func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRe
 	}
 
 	// Persist the transaction record with updated status (& possibly timestmap).
-	if err := batch.PutProto(encKey, reply.Txn); err != nil {
+	if _, _, err := batch.PutProto(encKey, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -963,7 +963,7 @@ func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHe
 	encKey := engine.Key(args.Key).Encode(nil)
 
 	var txn proto.Transaction
-	ok, err := batch.GetProto(encKey, &txn)
+	ok, _, _, err := batch.GetProto(encKey, &txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -980,7 +980,7 @@ func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHe
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if err := batch.PutProto(encKey, &txn); err != nil {
+		if _, _, err := batch.PutProto(encKey, &txn); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -1034,7 +1034,7 @@ func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxn
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := batch.GetProto(encKey, existTxn)
+	ok, _, _, err := batch.GetProto(encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1135,7 +1135,7 @@ func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxn
 	}
 
 	// Persist the pushed transaction.
-	if err := batch.PutProto(encKey, reply.PusheeTxn); err != nil {
+	if _, _, err := batch.PutProto(encKey, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
