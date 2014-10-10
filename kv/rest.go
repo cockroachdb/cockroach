@@ -60,8 +60,11 @@ const (
 	methodHead   = "HEAD"
 )
 
-// Maps various path + HTTP method combos to specific server methods
+// The routingTable maps various path + HTTP method combos to specific
+// server methods.
 var routingTable = map[string]map[string]actionHandler{
+	// TODO(andybons): For Entry and Counter prefixes, return JSON-ified
+	// response with option for “raw” value by passing ?raw=true.
 	EntryPrefix: {
 		methodGet:    keyedAction(EntryPrefix, (*Server).handleGetAction),
 		methodPut:    keyedAction(EntryPrefix, (*Server).handlePutAction),
