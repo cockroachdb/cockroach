@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 )
 
@@ -183,8 +184,19 @@ func TestBatchProto(t *testing.T) {
 	kv := &proto.RawKeyValue{Key: Key("a"), Value: []byte("value")}
 	b.PutProto(Key("proto"), kv)
 	getKV := &proto.RawKeyValue{}
-	if ok, err := b.GetProto(Key("proto"), getKV); !ok || err != nil {
+	ok, kSize, vSize, err := b.GetProto(Key("proto"), getKV)
+	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
+	}
+	if kSize != 5 {
+		t.Errorf("expected key size 5; got %d", kSize)
+	}
+	var data []byte
+	if data, err = gogoproto.Marshal(kv); err != nil {
+		t.Fatal(err)
+	}
+	if vSize != int64(len(data)) {
+		t.Errorf("expected value size %d; got %d", len(data), vSize)
 	}
 	if !reflect.DeepEqual(getKV, kv) {
 		t.Errorf("expected %v; got %v", kv, getKV)

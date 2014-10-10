@@ -19,8 +19,11 @@ package engine
 
 import (
 	"bytes"
+	crypto_rand "crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -29,7 +32,9 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -312,6 +317,17 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		if value == nil {
 			t.Fatal("the value should not be empty")
 		}
+	}
+}
+
+func TestMVCCDeleteMissingKey(t *testing.T) {
+	mvcc := createTestMVCC()
+	if err := mvcc.Delete(testKey1, makeTS(1, 0), nil); err != nil {
+		t.Fatal(err)
+	}
+	// Verify nothing is written to the engine.
+	if val, err := mvcc.batch.engine.Get(encoding.EncodeBinary(nil, testKey1)); err != nil || val != nil {
+		t.Fatal("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
 	}
 }
 
@@ -1007,5 +1023,211 @@ func TestFindSplitKey(t *testing.T) {
 	ind, _ := strconv.Atoi(string(humanSplitKey))
 	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
 		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
+	}
+}
+
+// encodedSize returns the encoded size of the protobuf message.
+func encodedSize(msg gogoproto.Message, t *testing.T) int64 {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return int64(len(data))
+}
+
+func verifyStats(debug string, mvcc *MVCC, ms MVCCStats, t *testing.T) {
+	// ...And verify stats.
+	if ms.LiveBytes != mvcc.LiveBytes {
+		t.Errorf("%s: mvcc live bytes %d; measured %d", debug, mvcc.LiveBytes, ms.LiveBytes)
+	}
+	if ms.KeyBytes != mvcc.KeyBytes {
+		t.Errorf("%s: mvcc keyBytes %d; measured %d", debug, mvcc.KeyBytes, ms.KeyBytes)
+	}
+	if ms.ValBytes != mvcc.ValBytes {
+		t.Errorf("%s: mvcc valBytes %d; measured %d", debug, mvcc.ValBytes, ms.ValBytes)
+	}
+	if ms.IntentBytes != mvcc.IntentBytes {
+		t.Errorf("%s: mvcc intentBytes %d; measured %d", debug, mvcc.IntentBytes, ms.IntentBytes)
+	}
+	if ms.LiveCount != mvcc.LiveCount {
+		t.Errorf("%s: mvcc liveCount %d; measured %d", debug, mvcc.LiveCount, ms.LiveCount)
+	}
+	if ms.KeyCount != mvcc.KeyCount {
+		t.Errorf("%s: mvcc keyCount %d; measured %d", debug, mvcc.KeyCount, ms.KeyCount)
+	}
+	if ms.ValCount != mvcc.ValCount {
+		t.Errorf("%s: mvcc valCount %d; measured %d", debug, mvcc.ValCount, ms.ValCount)
+	}
+	if ms.IntentCount != mvcc.IntentCount {
+		t.Errorf("%s: mvcc intentCount %d; measured %d", debug, mvcc.IntentCount, ms.IntentCount)
+	}
+}
+
+// TestMVCCStatsBasic writes a value, then deletes it as an intent via
+// a transaction, then resolves the intent, manually verifying the
+// mvcc stats at each step.
+func TestMVCCStatsBasic(t *testing.T) {
+	mvcc := createTestMVCC()
+
+	// Put a value.
+	ts := makeTS(0, 1)
+	key := Key("a")
+	value := proto.Value{Bytes: []byte("value")}
+	if err := mvcc.Put(key, ts, value, nil); err != nil {
+		t.Fatal(err)
+	}
+	mKeySize := int64(len(key.Encode(nil)))
+	mValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts}, t)
+	vKeySize := int64(len(mvccEncodeKey(key.Encode(nil), ts)))
+	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
+
+	ms := MVCCStats{
+		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
+		LiveCount: 1,
+		KeyBytes:  mKeySize + vKeySize,
+		KeyCount:  1,
+		ValBytes:  mValSize + vValSize,
+		ValCount:  1,
+	}
+	verifyStats("after put", mvcc, ms, t)
+
+	// Delete the value using a transaction.
+	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(0, 1)}
+	ts2 := makeTS(0, 2)
+	if err := mvcc.Delete(key, ts2, txn); err != nil {
+		t.Fatal(err)
+	}
+	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
+	v2KeySize := int64(len(mvccEncodeKey(key.Encode(nil), ts2)))
+	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
+	ms2 := MVCCStats{
+		KeyBytes:    mKeySize + vKeySize + v2KeySize,
+		KeyCount:    1,
+		ValBytes:    m2ValSize + vValSize + v2ValSize,
+		ValCount:    2,
+		IntentBytes: v2KeySize + v2ValSize,
+		IntentCount: 1,
+	}
+	verifyStats("after delete", mvcc, ms2, t)
+
+	// Resolve the deletion by aborting it.
+	txn.Status = proto.ABORTED
+	if err := mvcc.ResolveWriteIntent(key, txn); err != nil {
+		t.Fatal(err)
+	}
+	// Stats should equal same as before the deletion after aborting the intent.
+	verifyStats("after abort", mvcc, ms, t)
+
+	// Re-delete, but this time commit it.
+	txn.Status = proto.PENDING
+	ts3 := makeTS(0, 3)
+	if err := mvcc.Delete(key, ts3, txn); err != nil {
+		t.Fatal(err)
+	}
+	verifyStats("after 2nd delete", mvcc, ms2, t) // should be same as before.
+
+	// Now commit.
+	txn.Status = proto.COMMITTED
+	if err := mvcc.ResolveWriteIntent(key, txn); err != nil {
+		t.Fatal(err)
+	}
+	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts3, Deleted: true}, t)
+	ms3 := MVCCStats{
+		KeyBytes: mKeySize + vKeySize + v2KeySize,
+		KeyCount: 1,
+		ValBytes: m3ValSize + vValSize + v2ValSize,
+		ValCount: 2,
+	}
+	verifyStats("after abort", mvcc, ms3, t)
+}
+
+// TestMVCCStatsWithRandomRuns creates a random sequence of puts,
+// deletes and delete ranges and at each step verifies that the mvcc
+// stats match a manual computation of range stats via a scan of the
+// underlying engine.
+func TestMVCCStatsWithRandomRuns(t *testing.T) {
+	var seed int64
+	err := binary.Read(crypto_rand.Reader, binary.LittleEndian, &seed)
+	if err != nil {
+		t.Fatalf("could not read from crypto/rand: %s", err)
+	}
+	log.Infof("using pseudo random number generator with seed %d", seed)
+	rng := rand.New(rand.NewSource(seed))
+	mvcc := createTestMVCC()
+
+	// Test with empty mvcc.
+	verifyStats("empty test", mvcc, MVCCStats{}, t)
+
+	// Now, generate a rngom sequence of puts, deletes and resolves.
+	// Each put and delete may or may not involve a txn. Resolves may
+	// either commit or abort.
+	keys := map[int32][]byte{}
+	for i := int32(0); i < int32(1000); i++ {
+		key := []byte(fmt.Sprintf("%s-%d", util.RandString(rng, int(rng.Int31n(32))), i))
+		keys[i] = key
+		var txn *proto.Transaction
+		if rng.Int31n(2) == 0 { // create a txn with 50% prob
+			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(0, i)}
+		}
+		// With 25% probability, put a new value; otherwise, delete an earlier
+		// key. Because an earlier step in this process may have itself been
+		// a delete, we could end up deleting a non-existent key, which is good;
+		// we don't mind testing that case as well.
+		isDelete := rng.Int31n(4) == 0
+		if i > 0 && isDelete {
+			idx := rng.Int31n(i)
+			log.V(1).Infof("*** DELETE index %d", idx)
+			if err := mvcc.Delete(keys[idx], makeTS(0, i), txn); err != nil {
+				// Abort any write intent on an earlier, unresolved txn.
+				if wiErr, ok := err.(*proto.WriteIntentError); ok {
+					wiErr.Txn.Status = proto.ABORTED
+					log.V(1).Infof("*** ABORT index %d", idx)
+					if err := mvcc.ResolveWriteIntent(keys[idx], &wiErr.Txn); err != nil {
+						t.Fatal(err)
+					}
+					// Now, re-delete.
+					log.V(1).Infof("*** RE-DELETE index %d", idx)
+					if err := mvcc.Delete(keys[idx], makeTS(0, i), txn); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					t.Fatal(err)
+				}
+			}
+		} else {
+			rngVal := proto.Value{Bytes: []byte(util.RandString(rng, int(rng.Int31n(128))))}
+			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
+			if err := mvcc.Put(key, makeTS(0, i), rngVal, txn); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
+			txn.Status = proto.COMMITTED
+			if rng.Int31n(10) == 0 { // abort txn with 10% prob
+				txn.Status = proto.ABORTED
+			}
+			log.V(1).Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
+			if err := mvcc.ResolveWriteIntent(key, txn); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Every 10th step, verify the stats via manual engine scan.
+		if i%10 == 0 {
+			// Since MVCCComputeStats reads directly from underlying engine, we
+			// must commit the batch. We just do this out from underneath the
+			// MVCC instance and reset with a new batch.
+			if err := mvcc.batch.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			mvcc.batch = NewBatch(mvcc.batch.engine)
+
+			// Compute the stats manually.
+			ms, err := MVCCComputeStats(mvcc.batch.engine, KeyMin, KeyMax)
+			if err != nil {
+				t.Fatal(err)
+			}
+			verifyStats(fmt.Sprintf("cycle %d", i), mvcc, ms, t)
+		}
 	}
 }

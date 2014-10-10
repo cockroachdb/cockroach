@@ -242,12 +242,14 @@ func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
 	return numElements, nil
 }
 
-// iterateRange scans the given key range using the underlying engine in blocks
-// of at most chunkSize results, invoking f for each chunk read, until there
-// are no more results. An error is returned if an underlying scan returns an
-// error, or if f does. The read is executed using the specified snapshotID,
-// which is assumed to be valid and managed by the caller.
-func iterateRangeSnapshot(eng Engine, startKey, endKey Key, chunkSize int64, snapshotID string, f func([]proto.RawKeyValue) error) error {
+// iterateRange scans the given key range using the underlying engine
+// in blocks of at most chunkSize results, invoking f for each chunk
+// read, until there are no more results. An error is returned if an
+// underlying scan returns an error, or if f does. The read is
+// executed against a snapshot if the specified snapshotID is
+// non-empty.
+func iterateRange(eng Engine, startKey, endKey Key, chunkSize int64,
+	snapshotID string, f func([]proto.RawKeyValue) error) error {
 	var kvs []proto.RawKeyValue
 	var err error
 	hasSnap := len(snapshotID) > 0

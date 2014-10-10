@@ -32,27 +32,31 @@ import (
 const (
 	// The size of the reservoir used by FindSplitKey.
 	splitReservoirSize = 100
-	// How many keys are read at once when scanning for a split key.
-	splitScanRowCount = int64(1 << 8)
+	// How many keys are read at once when scanning for a split key
+	// or recomputing MVCC stats.
+	scanRowCount = int64(1 << 8)
 )
+
+// MVCCStats tracks byte and instance counts for:
+//  - Live key/values (i.e. what a scan at current time will reveal;
+//    note that this includes intent keys and values, but not keys and
+//    values with most recent value deleted)
+//  - Key bytes (includes all keys, even those with most recent value deleted)
+//  - Value bytes (includes all versions)
+//  - Key count (count of all keys, including keys with deleted tombstones)
+//  - Value count (all versions, including deleted tombstones)
+//  - Intents (provisional values written during txns)
+type MVCCStats struct {
+	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
+	LiveCount, KeyCount, ValCount, IntentCount int64
+}
 
 // MVCC wraps the mvcc operations of a key/value store. MVCC instances
 // are instantiated with a Batch object, meant to carry out a single
 // operation and commit the results to the underlying engine atomically.
-//
-// TODO(spencer): add prefix for storing counter values for:
-//  - bytes added as intent values
-//  - bytes added as keys
-//  - bytes added as non-intent values (either no txn or resolved)
-//  - bytes aborted (think of an intent deleted)
-//  - versions added
-//  - versions deleted
-//  - keys added
-//  - bytes GCd
-//  - versions GCd
-//  - keys GCd
 type MVCC struct {
 	batch *Batch
+	MVCCStats
 }
 
 // NewMVCC returns a new instance of MVCC, wrapping batch.
@@ -112,7 +116,7 @@ func (mvcc *MVCC) PutProto(key Key, timestamp proto.Timestamp, txn *proto.Transa
 func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction) (*proto.Value, error) {
 	binKey := key.Encode(nil)
 	meta := &proto.MVCCMetadata{}
-	ok, err := mvcc.batch.GetProto(binKey, meta)
+	ok, _, _, err := mvcc.batch.GetProto(binKey, meta)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -209,11 +213,12 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	}
 
 	meta := &proto.MVCCMetadata{}
-	ok, err := mvcc.batch.GetProto(binKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := mvcc.batch.GetProto(binKey, meta)
 	if err != nil {
 		return err
 	}
 
+	var newMeta *proto.MVCCMetadata
 	// In case the key metadata exists.
 	if ok {
 		// There is an uncommitted write intent and the current Put
@@ -233,10 +238,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
 				mvcc.batch.Clear(mvccEncodeKey(binKey, meta.Timestamp))
 			}
-			meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-			if err := mvcc.batch.PutProto(binKey, meta); err != nil {
-				return err
-			}
+			newMeta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
 			// If we receive a Put request to write before an already-
 			// committed version, send write tool old error.
@@ -246,11 +248,13 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 			return nil
 		}
 	} else { // In case the key metadata does not exist yet.
-		// Create key metadata.
-		meta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
-		if err := mvcc.batch.PutProto(binKey, meta); err != nil {
-			return err
+		// If this is a delete, do nothing!
+		if value.Deleted {
+			return nil
 		}
+		// Create key metadata.
+		meta = nil
+		newMeta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -258,7 +262,24 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	return mvcc.batch.PutProto(mvccEncodeKey(binKey, timestamp), &value)
+	valueKeySize, valueSize, err := mvcc.batch.PutProto(mvccEncodeKey(binKey, timestamp), &value)
+	if err != nil {
+		return err
+	}
+
+	// Write the mvcc metadata now that we have sizes for the latest versioned value.
+	newMeta.KeyBytes = valueKeySize
+	newMeta.ValBytes = valueSize
+	newMeta.Deleted = value.Deleted
+	metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, newMeta)
+	if err != nil {
+		return err
+	}
+
+	// Update MVCC stats.
+	mvcc.updateStatsOnPut(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
+
+	return nil
 }
 
 // Increment fetches the value for key, and assuming the value is
@@ -412,7 +433,7 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 	return res, nil
 }
 
-// MVCCResolveWriteIntent either commits or aborts (rolls back) an
+// ResolveWriteIntent either commits or aborts (rolls back) an
 // extant write intent for a given txn according to commit parameter.
 // ResolveWriteIntent will skip write intents of other txns.
 //
@@ -439,7 +460,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 
 	binKey := key.Encode(nil)
 	meta := &proto.MVCCMetadata{}
-	ok, err := mvcc.batch.GetProto(binKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := mvcc.batch.GetProto(binKey, meta)
 	if err != nil {
 		return err
 	}
@@ -458,13 +479,21 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 	pushed := txn.Status == proto.PENDING && meta.Txn.Timestamp.Less(txn.Timestamp)
 	if (commit || pushed) && meta.Txn.Epoch == txn.Epoch {
 		origTimestamp := meta.Timestamp
-		var metaTxn *proto.Transaction
+		newMeta := *meta
+		newMeta.Timestamp = txn.Timestamp
 		if pushed { // keep intent if we're pushing timestamp
-			metaTxn = txn
+			newMeta.Txn = txn
+		} else {
+			newMeta.Txn = nil
 		}
-		if err := mvcc.batch.PutProto(binKey, &proto.MVCCMetadata{Timestamp: txn.Timestamp, Txn: metaTxn}); err != nil {
+		metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, &newMeta)
+		if err != nil {
 			return err
 		}
+
+		// Update stat counters related to resolving the intent.
+		mvcc.updateStatsOnResolve(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit)
+
 		// If timestamp of value changed, need to rewrite versioned value.
 		// TODO(spencer,tobias): think about a new merge operator for
 		// updating key of intent value to new timestamp instead of
@@ -508,15 +537,33 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 	// If there is no other version, we should just clean up the key entirely.
 	if len(kvs) == 0 {
 		mvcc.batch.Clear(binKey)
+		// Clear stat counters attributable to the intent we're aborting.
+		mvcc.updateStatsOnAbort(origMetaKeySize, origMetaValSize, 0, 0, meta, nil)
 	} else {
 		_, ts, isValue := mvccDecodeKey(kvs[0].Key)
 		if !isValue {
 			return util.Errorf("expected an MVCC value key: %s", kvs[0].Key)
 		}
+		// Get the bytes for the next version so we have size for stat counts.
+		value := proto.MVCCValue{}
+		ok, valueKeySize, valueSize, err := mvcc.batch.GetProto(kvs[0].Key, &value)
+		if err != nil || !ok {
+			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
+		}
 		// Update the keyMetadata with the next version.
-		if err := mvcc.batch.PutProto(binKey, &proto.MVCCMetadata{Timestamp: ts}); err != nil {
+		newMeta := &proto.MVCCMetadata{
+			Timestamp: ts,
+			Deleted:   value.Deleted,
+			KeyBytes:  valueKeySize,
+			ValBytes:  valueSize,
+		}
+		metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, newMeta)
+		if err != nil {
 			return err
 		}
+
+		// Update stat counters with older version.
+		mvcc.updateStatsOnAbort(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
 	}
 
 	return nil
@@ -581,7 +628,7 @@ type splitSampleItem struct {
 // operate on a snapshot of the underlying engine if a snapshotID is
 // given, and in that case may safely be invoked in a goroutine.
 // TODO(Tobias): leverage the work done here anyways to gather stats.
-func MVCCFindSplitKey(engine Engine, key Key, endKey Key, snapshotID string) (Key, error) {
+func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, error) {
 	rs := util.NewWeightedReservoirSample(splitReservoirSize, nil)
 	h := rs.Heap.(*util.WeightedValueHeap)
 
@@ -592,8 +639,8 @@ func MVCCFindSplitKey(engine Engine, key Key, endKey Key, snapshotID string) (Ke
 	binStartKey := key.Encode(nil)
 	binEndKey := endKey.Encode(nil)
 	totalSize := 0
-	err := iterateRangeSnapshot(engine, binStartKey, binEndKey,
-		splitScanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
+	err := iterateRange(engine, binStartKey, binEndKey,
+		scanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
 			for _, kv := range kvs {
 				byteCount := len(kv.Key) + len(kv.Value)
 				rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
@@ -631,6 +678,159 @@ func MVCCFindSplitKey(engine Engine, key Key, endKey Key, snapshotID string) (Ke
 		return nil, util.Errorf("corrupt key encountered")
 	}
 	return humanKey, nil
+}
+
+// MVCCComputeStats scans the underlying engine from start to end keys
+// and computes stats counters based on the values. This method is used
+// after a range is split to recompute stats for each subrange.
+func MVCCComputeStats(engine Engine, key, endKey Key) (MVCCStats, error) {
+	binStartKey := key.Encode(nil)
+	binEndKey := endKey.Encode(nil)
+
+	ms := MVCCStats{}
+	first := false
+	meta := &proto.MVCCMetadata{}
+	err := iterateRange(engine, binStartKey, binEndKey,
+		scanRowCount, "", func(kvs []proto.RawKeyValue) error {
+			for _, kv := range kvs {
+				_, _, isValue := mvccDecodeKey(kv.Key)
+				if !isValue {
+					first = true
+					if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+						return util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
+					}
+					if !meta.Deleted {
+						ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+						ms.LiveCount++
+					}
+					ms.KeyBytes += int64(len(kv.Key))
+					ms.ValBytes += int64(len(kv.Value))
+					ms.KeyCount++
+				} else {
+					if first {
+						first = false
+						if !meta.Deleted {
+							ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+						}
+						if meta.Txn != nil {
+							ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
+							ms.IntentCount++
+						}
+						if meta.KeyBytes != int64(len(kv.Key)) {
+							return util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
+						}
+						if meta.ValBytes != int64(len(kv.Value)) {
+							return util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
+						}
+					}
+					ms.KeyBytes += int64(len(kv.Key))
+					ms.ValBytes += int64(len(kv.Value))
+					ms.ValCount++
+				}
+			}
+			return nil
+		})
+	return ms, err
+}
+
+// updateStatsOnPut updates stat counters for a newly put value,
+// including both the metadata key & value bytes and the mvcc
+// versioned value's key & value bytes. If the value is not a
+// deletion tombstone, updates the live stat counters as well.
+// If this value is an intent, updates the intent counters.
+func (mvcc *MVCC) updateStatsOnPut(origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata) {
+	// Remove current live counts for this key.
+	if orig != nil {
+		// If original version value for this key wasn't deleted, subtract
+		// its contribution from live bytes in anticipation of adding in
+		// contribution from new version below.
+		if !orig.Deleted {
+			mvcc.LiveBytes -= (orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize)
+			mvcc.LiveCount--
+		}
+		mvcc.KeyBytes -= origMetaKeySize
+		mvcc.ValBytes -= origMetaValSize
+		mvcc.KeyCount--
+		// If the original metadata for this key was an intent, subtract
+		// its contribution from stat counters as it's being replaced.
+		if orig.Txn != nil {
+			// Subtract counts attributable to intent we're replacing.
+			mvcc.KeyBytes -= orig.KeyBytes
+			mvcc.ValBytes -= orig.ValBytes
+			mvcc.ValCount--
+			mvcc.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+			mvcc.IntentCount--
+		}
+	}
+
+	// If new version isn't a deletion tombstone, add it to live counters.
+	if !meta.Deleted {
+		mvcc.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
+		mvcc.LiveCount++
+	}
+	mvcc.KeyBytes += meta.KeyBytes + metaKeySize
+	mvcc.ValBytes += meta.ValBytes + metaValSize
+	mvcc.KeyCount++
+	mvcc.ValCount++
+	if meta.Txn != nil {
+		mvcc.IntentBytes += meta.KeyBytes + meta.ValBytes
+		mvcc.IntentCount++
+	}
+}
+
+// updateStatsOnResolve updates stat counters with the difference
+// between the original and new metadata sizes. The size of the
+// resolved value (key & bytes) are subtracted from the intents
+// counters if commit=true.
+func (mvcc *MVCC) updateStatsOnResolve(origMetaKeySize, origMetaValSize,
+	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool) {
+	// We're pushing or committing an intent; update counts with
+	// difference in bytes between old metadata and new.
+	keyDiff := metaKeySize - origMetaKeySize
+	valDiff := metaValSize - origMetaValSize
+	if !meta.Deleted {
+		mvcc.LiveBytes += keyDiff + valDiff
+	}
+	mvcc.KeyBytes += keyDiff
+	mvcc.ValBytes += valDiff
+	// If committing, subtract out intent counts.
+	if commit {
+		mvcc.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
+		mvcc.IntentCount--
+	}
+}
+
+// updateStatsOnAbort updates stat counters by subtracting an
+// aborted value's key and value byte sizes. If an earlier version
+// was restored, the restored values are added to live bytes and
+// count if the restored value isn't a deletion tombstone.
+func (mvcc *MVCC) updateStatsOnAbort(origMetaKeySize, origMetaValSize,
+	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata) {
+	if !orig.Deleted {
+		mvcc.LiveBytes -= (orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize)
+		mvcc.LiveCount--
+	}
+	mvcc.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
+	mvcc.ValBytes -= (orig.ValBytes + origMetaValSize)
+	mvcc.KeyCount--
+	mvcc.ValCount--
+	mvcc.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+	mvcc.IntentCount--
+
+	// If restored version isn't a deletion tombstone, add it to live counters.
+	if restored != nil {
+		if !restored.Deleted {
+			mvcc.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
+			mvcc.LiveCount++
+		}
+		mvcc.KeyBytes += restoredMetaKeySize
+		mvcc.ValBytes += restoredMetaValSize
+		mvcc.KeyCount++
+		if restored.Txn != nil {
+			panic("restored version should never be an intent")
+		}
+	}
 }
 
 // mvccEncodeKey makes a timestamped key which is the concatenation of
