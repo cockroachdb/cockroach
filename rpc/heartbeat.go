@@ -20,8 +20,11 @@ package rpc
 import "github.com/cockroachdb/cockroach/util/hlc"
 
 // A PingRequest specifies the string to echo in response.
+// Fields are exported so that they will be serialized in the rpc call.
 type PingRequest struct {
-	Ping string // Echo this string with PingResponse.
+	Ping   string       // Echo this string with PingResponse.
+	Offset RemoteOffset // The last offset the client measured with the server.
+	Addr   string       // The address of the client.
 }
 
 // A PingResponse contains the echoed ping request string.
@@ -30,15 +33,28 @@ type PingResponse struct {
 	ServerTime int64
 }
 
-// A HeartbeatService exposes a method to echo its request params.
+// A HeartbeatService exposes a method to echo its request params. It doubles
+// as a way to measure the offset of the server from other nodes. It uses the
+// clock to return the server time every heartbeat. It also keeps track of
+// remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
 	// Provides the nanosecond unix epoch timestamp of the processor.
 	clock *hlc.Clock
+	// A pointer to the RemoteClockMonitor configured in the RPC Context,
+	// shared by rpc clients, to keep track of remote clock measurements.
+	remoteClockMonitor *RemoteClockMonitor
 }
 
-// Ping echos the contents of the request to the response.
+// Ping echos the contents of the request to the response, and returns the
+// server's current clock value, allowing the requester to measure its clock.
+// The reqeuster should also an estimate of their offset from this server along
+// with their address.
 func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 	reply.Pong = args.Ping
+	serverOffset := args.Offset
+	// The server offset should be the opposite of the client offset.
+	serverOffset.Offset = -serverOffset.Offset
+	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
 	reply.ServerTime = hs.clock.Now().WallTime
 	return nil
 }
@@ -46,14 +62,17 @@ func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 // A ManualHeartbeatService allows manual control of when heartbeats occur, to
 // facilitate testing.
 type ManualHeartbeatService struct {
-	clock *hlc.Clock
-	ready chan bool // Heartbeats are processed when a value is sent here.
+	clock              *hlc.Clock
+	remoteClockMonitor *RemoteClockMonitor
+	ready              chan bool // Heartbeats are processed when a value is sent here.
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
 func (mhs *ManualHeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 	<-mhs.ready
-	reply.Pong = args.Ping
-	reply.ServerTime = mhs.clock.Now().WallTime
-	return nil
+	hs := HeartbeatService{
+		clock:              mhs.clock,
+		remoteClockMonitor: mhs.remoteClockMonitor,
+	}
+	return hs.Ping(args, reply)
 }

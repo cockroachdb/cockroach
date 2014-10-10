@@ -98,7 +98,8 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 		RangeDescriptor: testRangeDescriptor,
 		RangeID:         0,
 	}
-	g := gossip.New(rpc.LoadInsecureTLSConfig(), hlc.NewClock(hlc.UnixNano))
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
+	g := gossip.New(rpcContext)
 	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(rm, NewStore(clock, engine, nil, g))
 	r.Start()

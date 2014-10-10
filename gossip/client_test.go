@@ -38,20 +38,22 @@ func init() {
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	lclock := hlc.NewClock(hlc.UnixNano)
+	lRPCContext := rpc.NewContext(lclock, tlsConfig)
 
 	laddr := util.CreateTestAddr("unix")
-	lserver = rpc.NewServer(laddr, tlsConfig, lclock)
+	lserver = rpc.NewServer(laddr, lRPCContext)
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	local = New(tlsConfig, lclock)
+	local = New(lRPCContext)
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
-	rserver = rpc.NewServer(raddr, tlsConfig, rclock)
+	rRPCContext := rpc.NewContext(rclock, tlsConfig)
+	rserver = rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	remote = New(tlsConfig, rclock)
+	remote = New(rRPCContext)
 	local.start(lserver)
 	remote.start(rserver)
 	time.Sleep(time.Millisecond)

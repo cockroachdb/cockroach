@@ -65,7 +65,7 @@ func newClient(addr net.Addr) *client {
 // channel. If the client experienced an error, its err field will
 // be set. This method blocks and should be invoked via goroutine.
 func (c *client) start(g *Gossip, done chan *client) {
-	c.rpcClient = rpc.NewClient(c.addr, nil, g.tlsConfig, g.clock)
+	c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
 	select {
 	case <-c.rpcClient.Ready:
 		// Success!

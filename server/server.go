@@ -317,10 +317,14 @@ func newServer() (*server, error) {
 		mux:   http.NewServeMux(),
 		clock: hlc.NewClock(hlc.UnixNano),
 	}
+	// TODO(embark): use rpc/clock_offset.go to periodically test that the
+	// server's clock offset is within maxDrift
 	s.clock.SetMaxDrift(*maxDrift)
 
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), tlsConfig, s.clock)
-	s.gossip = gossip.New(tlsConfig, s.clock)
+	rpcContext := rpc.NewContext(s.clock, tlsConfig)
+
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), rpcContext)
+	s.gossip = gossip.New(rpcContext)
 	s.kvDB = kv.NewDB(kv.NewDistKV(s.gossip), s.clock)
 	s.kvREST = kv.NewRESTServer(s.kvDB)
 	s.node = NewNode(s.kvDB, s.gossip)

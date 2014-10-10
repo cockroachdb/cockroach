@@ -24,7 +24,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -38,7 +37,7 @@ type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
 
-	tlsConfig *TLSConfig // The config we need for tls.Listen
+	context *Context
 
 	mu             sync.RWMutex          // Mutex protects the fields below
 	addr           net.Addr              // Server address; may change if picking unused port
@@ -47,14 +46,15 @@ type Server struct {
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(addr net.Addr, tlsConfig *TLSConfig, clock *hlc.Clock) *Server {
+func NewServer(addr net.Addr, context *Context) *Server {
 	s := &Server{
-		Server:    rpc.NewServer(),
-		tlsConfig: tlsConfig,
-		addr:      addr,
+		Server:  rpc.NewServer(),
+		context: context,
+		addr:    addr,
 	}
 	heartbeat := &HeartbeatService{
-		clock: clock,
+		clock:              context.localClock,
+		remoteClockMonitor: context.remoteClocks,
 	}
 	s.RegisterName("Heartbeat", heartbeat)
 	return s
@@ -71,7 +71,7 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 // Start runs the RPC server. After this method returns, the socket
 // will have been bound. Use Server.Addr() to ascertain server address.
 func (s *Server) Start() error {
-	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.tlsConfig)
+	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.context.tlsConfig)
 	if err != nil {
 		return err
 	}
