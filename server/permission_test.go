@@ -29,12 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-const (
-	testPermConfig = `
+const testPermConfig = `
 read: [readonly, readwrite]
 write: [readwrite, writeonly]
 `
-)
 
 // ExampleSetAndGetPerm sets perm configs for a variety of key
 // prefixes and verifies they can be fetched directly.
@@ -235,21 +233,21 @@ func ExamplePermContentTypes() {
 	}
 	// Output:
 	// {
-	//   "Read": [
+	//   "read": [
 	//     "readonly",
 	//     "readwrite"
 	//   ],
-	//   "Write": [
+	//   "write": [
 	//     "readwrite",
 	//     "writeonly"
 	//   ]
 	// }
 	// {
-	//   "Read": [
+	//   "read": [
 	//     "readonly",
 	//     "readwrite"
 	//   ],
-	//   "Write": [
+	//   "write": [
 	//     "readwrite",
 	//     "writeonly"
 	//   ]

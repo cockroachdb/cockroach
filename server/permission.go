@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -32,32 +31,29 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// A permHandler implements the adminHandler interface
+// A permHandler implements the adminHandler interface.
 type permHandler struct {
 	db storage.DB // Key-value database client
 }
 
-// Put writes a perm config for the specified key prefix "key". The
-// perm config is parsed from the input "body". The perm config is
-// stored gob-encoded. The specified body must be valid utf8 and must
-// validly parse into a perm config struct.
+// Put writes a perm config for the specified key prefix (which is treated as
+// a key). The perm config is parsed from the input "body". The perm config is
+// stored gob-encoded. The specified body must validly parse into a
+// perm config struct.
 func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for permission Put")
 	}
 	configStr := string(body)
-	if !utf8.ValidString(configStr) {
-		return util.Errorf("config contents not valid utf8: %q", body)
-	}
 	var err error
 	var config *proto.PermConfig
-	switch r.Header.Get("Content-Type") {
+	switch GetContentType(r) {
 	case "application/json", "application/x-json":
 		config, err = proto.PermConfigFromJSON(body)
 	case "text/yaml", "application/x-yaml":
 		config, err = proto.PermConfigFromYAML(body)
 	default:
-		err = util.Errorf("invalid content type: %q", r.Header.Get("Content-Type"))
+		err = util.Errorf("invalid content type: %q", GetContentType(r))
 	}
 	if err != nil {
 		return util.Errorf("permission config has invalid format: %s: %s", configStr, err)
@@ -118,7 +114,7 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		// TODO(spencer): once there's a nice (free) way to parse the Accept
+		// TODO(spencer): until there's a nice (free) way to parse the Accept
 		//   header and properly use the request's preference for a content
 		//   type, we simply find out which of "yaml" or "json" appears first
 		//   in the Accept header. If neither do, we default to JSON.
@@ -139,10 +135,6 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
 				return
 			}
-		}
-		if !utf8.ValidString(string(body)) {
-			err = util.Errorf("config contents not valid utf8: %q", body)
-			return
 		}
 	}
 

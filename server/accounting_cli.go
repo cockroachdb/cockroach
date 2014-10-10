@@ -23,6 +23,9 @@ import (
 	commander "code.google.com/p/go-commander"
 )
 
+// TODO:(bram) change this api to not require a file, just set (no file),
+//   get(true/false), ls, rm
+
 // A CmdGetAcct command displays the acct config for the specified
 // prefix.
 var CmdGetAcct = &commander.Command{
@@ -70,7 +73,7 @@ var CmdRmAcct = &commander.Command{
 	UsageLine: "rm-acct [options] <key-prefix>",
 	Short:     "remove an accounting config by key prefix",
 	Long: `
-Remove an existing accouting config by key prefix. No action is taken if no
+Remove an existing accounting config by key prefix. No action is taken if no
 accounting configuration exists for the specified key prefix. Note that this
 command can affect only a single accounting config with an exactly matching
 prefix. The key prefix should be escaped via URL query escaping if it

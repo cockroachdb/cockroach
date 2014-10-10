@@ -108,18 +108,18 @@ func (p *PermConfig) CanWrite(user string) bool {
 	return false
 }
 
-// AcctConfigFromJSON parses a JSON serialized PermConfig.
+// AcctConfigFromJSON parses a JSON serialized AcctConfig.
 func AcctConfigFromJSON(in []byte) (*AcctConfig, error) {
-	z := &AcctConfig{}
-	err := json.Unmarshal(in, z)
-	return z, err
+	a := &AcctConfig{}
+	err := json.Unmarshal(in, a)
+	return a, err
 }
 
 // PermConfigFromJSON parses a JSON serialized PermConfig.
 func PermConfigFromJSON(in []byte) (*PermConfig, error) {
-	z := &PermConfig{}
-	err := json.Unmarshal(in, z)
-	return z, err
+	p := &PermConfig{}
+	err := json.Unmarshal(in, p)
+	return p, err
 }
 
 // ZoneConfigFromJSON parses a JSON serialized ZoneConfig.
@@ -130,13 +130,13 @@ func ZoneConfigFromJSON(in []byte) (*ZoneConfig, error) {
 }
 
 // ToJSON serializes a AcctConfig as "pretty", indented JSON.
-func (z *AcctConfig) ToJSON() ([]byte, error) {
-	return json.MarshalIndent(z, "", "  ")
+func (a *AcctConfig) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(a, "", "  ")
 }
 
 // ToJSON serializes a PermConfig as "pretty", indented JSON.
-func (z *PermConfig) ToJSON() ([]byte, error) {
-	return json.MarshalIndent(z, "", "  ")
+func (p *PermConfig) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(p, "", "  ")
 }
 
 // ToJSON serializes a ZoneConfig as "pretty", indented JSON.
@@ -146,16 +146,16 @@ func (z *ZoneConfig) ToJSON() ([]byte, error) {
 
 // AcctConfigFromYAML parses a YAML serialized AcctConfig.
 func AcctConfigFromYAML(in []byte) (*AcctConfig, error) {
-	z := &AcctConfig{}
-	err := yaml.Unmarshal(in, z)
-	return z, err
+	a := &AcctConfig{}
+	err := yaml.Unmarshal(in, a)
+	return a, err
 }
 
 // PermConfigFromYAML parses a YAML serialized PermConfig.
 func PermConfigFromYAML(in []byte) (*PermConfig, error) {
-	z := &PermConfig{}
-	err := yaml.Unmarshal(in, z)
-	return z, err
+	p := &PermConfig{}
+	err := yaml.Unmarshal(in, p)
+	return p, err
 }
 
 // ZoneConfigFromYAML parses a YAML serialized ZoneConfig.
@@ -176,8 +176,8 @@ func sanitizeYAML(b []byte) []byte {
 }
 
 // ToYAML serializes a AcctConfig as YAML.
-func (z *AcctConfig) ToYAML() ([]byte, error) {
-	b, err := yaml.Marshal(z)
+func (a *AcctConfig) ToYAML() ([]byte, error) {
+	b, err := yaml.Marshal(a)
 	if err != nil {
 		return b, err
 	}
@@ -185,8 +185,8 @@ func (z *AcctConfig) ToYAML() ([]byte, error) {
 }
 
 // ToYAML serializes a PermConfig as YAML.
-func (z *PermConfig) ToYAML() ([]byte, error) {
-	b, err := yaml.Marshal(z)
+func (p *PermConfig) ToYAML() ([]byte, error) {
+	b, err := yaml.Marshal(p)
 	if err != nil {
 		return b, err
 	}

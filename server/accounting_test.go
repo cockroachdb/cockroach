@@ -29,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-const (
-	testAcctConfig = `cluster_id: test`
-)
+const testAcctConfig = `cluster_id: test`
 
 // ExampleSetAndGetAccts sets acct configs for a variety of key
 // prefixes and verifies they can be fetched directly.
@@ -212,10 +210,10 @@ func ExampleAcctContentTypes() {
 	}
 	// Output:
 	// {
-	//   "ClusterID": "test"
+	//   "cluster_id": "test"
 	// }
 	// {
-	//   "ClusterID": "test"
+	//   "cluster_id": "test"
 	// }
 	// cluster_id: test
 	//

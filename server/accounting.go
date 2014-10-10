@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -32,32 +31,29 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// A acctHandler implements the adminHandler interface
+// An acctHandler implements the adminHandler interface.
 type acctHandler struct {
 	db storage.DB // Key-value database client
 }
 
-// Put writes a acct config for the specified key prefix "key". The
-// acct config is parsed from the input "body". The acct config is
-// stored gob-encoded. The specified body must be valid utf8 and must
-// validly parse into a acct config struct.
+// Put writes an accounting config for the specified key prefix (which is
+// treated as a key). The accounting config is parsed from the input "body".
+// The accounting config is stored gob-encoded. The specified body must must
+// validly parse into an acctConfig struct.
 func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for accounting Put")
 	}
 	configStr := string(body)
-	if !utf8.ValidString(configStr) {
-		return util.Errorf("config contents not valid utf8: %q", body)
-	}
 	var err error
 	var config *proto.AcctConfig
-	switch r.Header.Get("Content-Type") {
+	switch GetContentType(r) {
 	case "application/json", "application/x-json":
 		config, err = proto.AcctConfigFromJSON(body)
 	case "text/yaml", "application/x-yaml":
 		config, err = proto.AcctConfigFromYAML(body)
 	default:
-		err = util.Errorf("invalid content type: %q", r.Header.Get("Content-Type"))
+		err = util.Errorf("invalid content type: %q", GetContentType(r))
 	}
 	if err != nil {
 		return util.Errorf("accounting config has invalid format: %s: %s", configStr, err)
@@ -69,14 +65,14 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 	return nil
 }
 
-// Get retrieves the acct configuration for the specified key. If the
-// key is empty, all acct configurations are returned. Otherwise, the
-// leading "/" path delimiter is stripped and the acct configuration
-// matching the remainder is retrieved. Note that this will retrieve
-// the default acct config if "key" is equal to "/", and will list all
-// configs if "key" is equal to "". The body result contains
-// JSON-formatted output for a listing of keys and JSON-formatted
-// output for retrieval of a acct config.
+// Get retrieves the accounting configuration for the specified key.
+// If the key is empty, all accounting configurations are returned.
+// Otherwise, the leading "/" path delimiter is stripped and the
+// accounting configurations matching the remainder is retrieved.
+// Note that this will retrieve the default accounting config if "key"
+// is equal to "/", and will list all configs if "key" is equal to "".
+// The body result contains JSON-formatted output for a listing of keys
+// and JSON-formatted output for retrieval of an accounting config.
 func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all accts if the key is empty.
 	if len(path) == 0 {
@@ -118,7 +114,7 @@ func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		// TODO(spencer): once there's a nice (free) way to parse the Accept
+		// TODO(spencer): until there's a nice (free) way to parse the Accept
 		//   header and properly use the request's preference for a content
 		//   type, we simply find out which of "yaml" or "json" appears first
 		//   in the Accept header. If neither do, we default to JSON.
@@ -140,16 +136,12 @@ func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentTy
 				return
 			}
 		}
-		if !utf8.ValidString(string(body)) {
-			err = util.Errorf("config contents not valid utf8: %q", body)
-			return
-		}
 	}
 
 	return
 }
 
-// Delete removes the acct config specified by key.
+// Delete removes the accouting config specified by key.
 func (ah *acctHandler) Delete(path string, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for accounting Delete")
