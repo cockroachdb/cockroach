@@ -317,6 +317,8 @@ func newServer() (*server, error) {
 		mux:   http.NewServeMux(),
 		clock: hlc.NewClock(hlc.UnixNano),
 	}
+	// TODO(embark): use rpc/clock_offset.go to periodically test that the
+	// server's clock offset is within maxDrift
 	s.clock.SetMaxDrift(*maxDrift)
 
 	rpcContext := rpc.NewContext(s.clock, tlsConfig)

@@ -33,14 +33,22 @@ type PingResponse struct {
 	ServerTime int64
 }
 
-// A HeartbeatService exposes a method to echo its request params.
+// A HeartbeatService exposes a method to echo its request params. It doubles
+// as a way to measure the offset of the server from other nodes. It uses the
+// clock to return the server time every heartbeat. It also keeps track of
+// remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
 	// Provides the nanosecond unix epoch timestamp of the processor.
-	clock              *hlc.Clock
+	clock *hlc.Clock
+	// A pointer to the RemoteClockMonitor configured in the RPC Context,
+	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
 }
 
-// Ping echos the contents of the request to the response.
+// Ping echos the contents of the request to the response, and returns the
+// server's current clock value, allowing the requester to measure its clock.
+// The reqeuster should also an estimate of their offset from this server along
+// with their address.
 func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 	reply.Pong = args.Ping
 	serverOffset := args.Offset

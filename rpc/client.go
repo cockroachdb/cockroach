@@ -72,7 +72,7 @@ type Client struct {
 	remoteClocks *RemoteClockMonitor
 }
 
-// RemoteOffset keeps track of this client's estimate of its offset from it's
+// RemoteOffset keeps track of this client's estimate of its offset from a
 // remote server. Error is the maximum error in the reading of this offset, so
 // that the real offset should be in the interval [Offset - Error, Offset
 // + Error]. If the last heartbeat timed out, Offset = InfiniteOffset.

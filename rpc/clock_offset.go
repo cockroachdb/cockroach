@@ -21,8 +21,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -86,11 +84,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	oldOffset, ok := r.offsets[addr]
-	if !ok {
-		r.offsets[addr] = offset
-	}
-
-	if offset.MeasuredAt >= oldOffset.MeasuredAt {
+	if !ok || offset.MeasuredAt >= oldOffset.MeasuredAt {
 		r.offsets[addr] = offset
 	}
 }
@@ -108,11 +102,12 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 // If the majority of remote clock are correct, then their intevals should
 // overlap over some region, which should include the true offset from the
 // cluster time. This algorithm ought to return this region.
+//
+//TODO(embark): create a routine that periodically invodes this method, and
+//causes the server to suicide if the offset is greater than MaxDrift.
 func (r *RemoteClockMonitor) findOffsetInterval() ClusterOffsetInterval {
-	log.Infof("in offsets: %v", r.offsets)
 	endpoints := r.buildEndpointList()
 	sort.Sort(endpoints)
-	log.Infof("endpoints: %v", endpoints)
 	numClocks := len(endpoints) / 2
 	// falsechimers are remote clocks which appear to have too great an offset
 	// from the cluster time. Their offset measurement is probably misleading,

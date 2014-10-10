@@ -109,7 +109,7 @@ type Gossip struct {
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
-	rpcContext   *rpc.Context       // The context required for RPC
+	RPCContext   *rpc.Context       // The context required for RPC
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
 	outgoing     *addrSet           // Set of outgoing client addresses
@@ -125,7 +125,7 @@ type Gossip struct {
 func New(rpcContext *rpc.Context) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
-		rpcContext:   rpcContext,
+		RPCContext:   rpcContext,
 		server:       newServer(*GossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
@@ -509,10 +509,4 @@ func (g *Gossip) closeClient(addr net.Addr) {
 		delete(g.clients, addr.String())
 	}
 	g.clientsMu.Unlock()
-}
-
-// RPCContext returns the Gossip's rpc.Context; this is a bit hacky but reduces
-// the number of places we have to pass the context around.
-func (g *Gossip) RPCContext() *rpc.Context {
-	return g.rpcContext
 }

@@ -123,10 +123,14 @@ func TestOffsetMeasurement(t *testing.T) {
 	if o := c.RemoteOffset(); o != expectedOffset {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
+
 	// Ensure the offsets map was updated properly too.
+	context.remoteClocks.mu.Lock()
 	if o := context.remoteClocks.offsets[c.addr.String()]; o != expectedOffset {
 		t.Errorf("espected offset %v, actual %v", expectedOffset, o)
 	}
+	context.remoteClocks.mu.Unlock()
+
 	s.Close()
 }
 
@@ -174,10 +178,14 @@ func TestFailedOffestMeasurement(t *testing.T) {
 		t.Errorf("expected offset %v, actual %v",
 			InfiniteOffset, c.RemoteOffset())
 	}
+
 	// Ensure the general offsets map was updated properly too.
+	context.remoteClocks.mu.Lock()
 	if o := context.remoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
 		t.Errorf("espected offset %v, actual %v", InfiniteOffset, o)
 	}
+	context.remoteClocks.mu.Unlock()
+
 	s.Close()
 }
 
