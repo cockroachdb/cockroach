@@ -37,7 +37,7 @@ import (
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
-	"github.com/cockroachdb/cockroach/kv"
+	. "github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
@@ -45,7 +45,7 @@ import (
 )
 
 var (
-	testDB     *kv.DB
+	testDB     *DB
 	serverAddr string
 	once       sync.Once
 )
@@ -57,7 +57,7 @@ func startServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not bootstrap test cluster: %v", err)
 	}
-	server := httptest.NewServer(kv.NewRESTServer(db))
+	server := httptest.NewServer(NewRESTServer(db))
 	serverAddr = server.Listener.Addr().String()
 	testDB = db
 }
@@ -110,7 +110,7 @@ func TestMethods(t *testing.T) {
 		{methodGet, testKey, nil, http.StatusNotFound, []byte(statusText(http.StatusNotFound))},
 	}
 	for _, tc := range testCases {
-		resp, err := httpDo(tc.method, kv.EntryPrefix+tc.key, tc.body)
+		resp, err := httpDo(tc.method, EntryPrefix+tc.key, tc.body)
 		if err != nil {
 			t.Errorf("[%s] %s: error making request: %v", tc.method, tc.key, err)
 			continue
@@ -140,46 +140,135 @@ func TestMethods(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
+	once.Do(func() { startServer(t) })
 	// Create range of keys (with counters interspersed).
 	baseURL := "http://" + serverAddr
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("key_%.2d", i)
 		val := fmt.Sprintf("value_%.2d", i)
-		prefix := kv.EntryPrefix
+		prefix := EntryPrefix
 		// Intersperse counters every tenth key.
-		if i%10 == 0 {
-			prefix = kv.CounterPrefix
+		if i > 0 && i%10 == 0 {
+			prefix = CounterPrefix
 			val = strconv.Itoa(i)
 		}
 		postURL(baseURL+prefix+key, strings.NewReader(val), t)
 	}
 	// Query subset of that range.
 	start, end := 5, 25
-	url := fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, kv.RangePrefix, start, end)
-	s := getURL(url, t)
+	url := fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, RangePrefix, start, end)
 	var scan proto.ScanResponse
-	if err := json.NewDecoder(strings.NewReader(s)).Decode(&scan); err != nil {
+	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
 		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
 	}
 	for i, row := range scan.Rows {
 		n := i + start
-		if n%10 == 0 {
-			// A counter is expected in this case.
-			// TODO(andybons): No info is returned in the struct in this case
-			// that would indicate it’s a counter.
+		if !verifyRangeRowIsGood(i, n, row, t) {
 			continue
 		}
-		expected := fmt.Sprintf("value_%.2d", n)
-		if string(row.Value.Bytes) != expected {
-			t.Errorf("expected row %d value (key=%q) in scan to be %q; got %q", i, string(row.Key), expected, string(row.Value.Bytes))
+	}
+	// Query limit of that range.
+	start, end = 5, 99
+	limit := 25
+	url = fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d&limit=%d", baseURL, RangePrefix, start, end, limit)
+	scan = proto.ScanResponse{}
+	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+	}
+	if len(scan.Rows) != limit {
+		t.Errorf("expected number of rows returned to be %d; got %d", limit, len(scan.Rows))
+	}
+	for i, row := range scan.Rows {
+		n := i + start
+		if !verifyRangeRowIsGood(i, n, row, t) {
+			continue
 		}
 	}
-	// TODO(andybons):
-	// Query limit of that range.
-	// Delete limit of that range.
+	// Delete limit of that range. Start: 5, end: 99, limit: 25 –> keys 5-30 deleted.
+	path := fmt.Sprintf("%s?start=key_%.2d&end=key_%.2d&limit=%d", RangePrefix, start, end, limit)
+	resp, err := httpDo(methodDelete, path, nil)
+	if err != nil {
+		t.Errorf("error attempting to delete range: %v", err)
+	}
+	defer resp.Body.Close()
+	checkStatus(resp, t)
 	// Query remaining range.
+	start, end = 0, 99
+	url = fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, RangePrefix, start, end)
+	scan = proto.ScanResponse{}
+	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+	}
+	numRows := end - limit
+	if len(scan.Rows) != numRows {
+		t.Errorf("expected number of rows returned to be %d; got %d", numRows, len(scan.Rows))
+	}
+	for i, row := range scan.Rows {
+		// 25 keys were deleted after the 5th key. Change the offset appropriately.
+		if i >= 5 {
+			start = limit
+		}
+		n := i + start
+		if !verifyRangeRowIsGood(i, n, row, t) {
+			continue
+		}
+	}
 	// Delete remaining range.
+	start, end = 0, 99
+	path = fmt.Sprintf("%s?start=key_%.2d&end=key_%.2d", RangePrefix, start, end)
+	resp, err = httpDo(methodDelete, path, nil)
+	if err != nil {
+		t.Errorf("error attempting to delete range: %v", err)
+	}
+	defer resp.Body.Close()
+	checkStatus(resp, t)
+
 	// Query key range.
+	scan = proto.ScanResponse{}
+	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+	}
+	if len(scan.Rows) != 0 {
+		t.Errorf("expected zero rows in response, got %d:", len(scan.Rows))
+		for _, row := range scan.Rows {
+			t.Logf("%q -> %q", string(row.Key), string(row.Value.Bytes))
+		}
+	}
+}
+
+// verifyRangeRowIsGood tests whether a row at a given index i holds the
+// appropriate values key_<n> -> value_<n> or key_<n> -> <counter value n>
+// in the case where n is greater than zero and a multiple of ten. This
+// is used in tandem with TestRange.
+func verifyRangeRowIsGood(i, n int, row proto.KeyValue, t *testing.T) bool {
+	if n > 0 && n%10 == 0 {
+		if row.Value.Integer == nil {
+			t.Errorf("expected row %d counter value (key=%q) to have non-nil Integer field", i, string(row.Key))
+			return false
+		}
+		if *row.Value.Integer != int64(n) {
+			t.Errorf("expected row %d counter value (key=%q) in scan to be %d; got %d", i, string(row.Key), n, row.Value.Integer)
+			return false
+		}
+		return true
+	}
+	expected := fmt.Sprintf("value_%.2d", n)
+	if string(row.Value.Bytes) != expected {
+		t.Errorf("expected row %d value (key=%q) in scan to be %q; got %q", i, string(row.Key), expected, string(row.Value.Bytes))
+		return false
+	}
+	return true
+}
+
+func checkStatus(resp *http.Response, t *testing.T) {
+	if resp.StatusCode == http.StatusOK {
+		return
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Errorf("could not read response body: %v", err)
+	}
+	t.Errorf("expected 200 OK; got %d: %s", resp.StatusCode, string(b))
 }
 
 func TestIncrement(t *testing.T) {
@@ -207,7 +296,7 @@ func TestIncrement(t *testing.T) {
 		if tc.statusCode == http.StatusOK && tc.method == methodPost {
 			body = strings.NewReader(strconv.Itoa(tc.val))
 		}
-		resp, err := httpDo(tc.method, kv.CounterPrefix+tc.key, body)
+		resp, err := httpDo(tc.method, CounterPrefix+tc.key, body)
 		if err != nil {
 			t.Errorf("[%s] %s: error making request: %v", tc.method, tc.key, err)
 			continue
@@ -267,7 +356,7 @@ func TestSystemKeys(t *testing.T) {
 	// Manipulate the meta1 key.
 	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
 	encMeta1Key := url.QueryEscape(string(metaKey))
-	url := "http://" + serverAddr + kv.EntryPrefix + encMeta1Key
+	url := "http://" + serverAddr + EntryPrefix + encMeta1Key
 	resp := getURL(url, t)
 	if resp != string(protoBytes) {
 		t.Fatalf("expected %q; got %q", string(protoBytes), resp)
@@ -284,7 +373,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	encKey := "%00some%2Fkey%20that%20encodes%E4%B8%96%E7%95%8C"
 	encBody := "%00some%2FBODY%20that%20encodes"
-	url := "http://" + serverAddr + kv.EntryPrefix + encKey
+	url := "http://" + serverAddr + EntryPrefix + encKey
 	postURL(url, strings.NewReader(encBody), t)
 	val := getURL(url, t)
 	if encBody != val {
