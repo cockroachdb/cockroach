@@ -31,55 +31,55 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// A permHandler implements the adminHandler interface.
-type permHandler struct {
+// An acctHandler implements the adminHandler interface.
+type acctHandler struct {
 	db storage.DB // Key-value database client
 }
 
-// Put writes a perm config for the specified key prefix (which is treated as
-// a key). The perm config is parsed from the input "body". The perm config is
-// stored gob-encoded. The specified body must validly parse into a
-// perm config struct.
-func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
+// Put writes an accounting config for the specified key prefix (which is
+// treated as a key). The accounting config is parsed from the input "body".
+// The accounting config is stored gob-encoded. The specified body must must
+// validly parse into an acctConfig struct.
+func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
-		return util.Errorf("no path specified for permission Put")
+		return util.Errorf("no path specified for accounting Put")
 	}
 	configStr := string(body)
 	var err error
-	var config *proto.PermConfig
+	var config *proto.AcctConfig
 	switch GetContentType(r) {
 	case "application/json", "application/x-json":
-		config, err = proto.PermConfigFromJSON(body)
+		config, err = proto.AcctConfigFromJSON(body)
 	case "text/yaml", "application/x-yaml":
-		config, err = proto.PermConfigFromYAML(body)
+		config, err = proto.AcctConfigFromYAML(body)
 	default:
 		err = util.Errorf("invalid content type: %q", GetContentType(r))
 	}
 	if err != nil {
-		return util.Errorf("permission config has invalid format: %s: %s", configStr, err)
+		return util.Errorf("accounting config has invalid format: %s: %s", configStr, err)
 	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
-	if err := storage.PutProto(ph.db, permKey, config, proto.Timestamp{}); err != nil {
+	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
+	if err := storage.PutProto(ah.db, acctKey, config, proto.Timestamp{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Get retrieves the perm configuration for the specified key. If the
-// key is empty, all perm configurations are returned. Otherwise, the
-// leading "/" path delimiter is stripped and the perm configuration
-// matching the remainder is retrieved. Note that this will retrieve
-// the default perm config if "key" is equal to "/", and will list all
-// configs if "key" is equal to "". The body result contains
-// JSON-formatted output for a listing of keys and JSON-formatted
-// output for retrieval of a perm config.
-func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	// Scan all perms if the key is empty.
+// Get retrieves the accounting configuration for the specified key.
+// If the key is empty, all accounting configurations are returned.
+// Otherwise, the leading "/" path delimiter is stripped and the
+// accounting configurations matching the remainder is retrieved.
+// Note that this will retrieve the default accounting config if "key"
+// is equal to "/", and will list all configs if "key" is equal to "".
+// The body result contains JSON-formatted output for a listing of keys
+// and JSON-formatted output for retrieval of an accounting config.
+func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
+	// Scan all accts if the key is empty.
 	if len(path) == 0 {
-		sr := <-ph.db.Scan(&proto.ScanRequest{
+		sr := <-ah.db.Scan(&proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:    engine.KeyConfigPermissionPrefix,
-				EndKey: engine.KeyConfigPermissionPrefix.PrefixEnd(),
+				Key:    engine.KeyConfigAccountingPrefix,
+				EndKey: engine.KeyConfigAccountingPrefix.PrefixEnd(),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,
@@ -93,19 +93,19 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 		}
 		var prefixes []string
 		for _, kv := range sr.Rows {
-			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigPermissionPrefix)
+			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigAccountingPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// JSON-encode the prefixes array.
 		contentType = "application/json"
 		if body, err = json.Marshal(prefixes); err != nil {
-			err = util.Errorf("unable to format permission configurations: %s", err)
+			err = util.Errorf("unable to format accouting configurations: %s", err)
 		}
 	} else {
-		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
+		acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
 		var ok bool
-		config := &proto.PermConfig{}
-		if ok, _, err = storage.GetProto(ph.db, permKey, config); err != nil {
+		config := &proto.AcctConfig{}
+		if ok, _, err = storage.GetProto(ah.db, acctKey, config); err != nil {
 			return
 		}
 		// On get, if there's no perm config for the requested prefix,
@@ -125,14 +125,14 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			// YAML-encode the config.
 			contentType = "text/yaml"
 			if body, err = config.ToYAML(); err != nil {
-				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
+				err = util.Errorf("unable to marshal acct config %+v to json: %s", config, err)
 				return
 			}
 		} else {
 			// JSON-encode the config.
 			contentType = "application/json"
 			if body, err = config.ToJSON(); err != nil {
-				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
+				err = util.Errorf("unable to marshal acct config %+v to json: %s", config, err)
 				return
 			}
 		}
@@ -141,18 +141,18 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 	return
 }
 
-// Delete removes the perm config specified by key.
-func (ph *permHandler) Delete(path string, r *http.Request) error {
+// Delete removes the accouting config specified by key.
+func (ah *acctHandler) Delete(path string, r *http.Request) error {
 	if len(path) == 0 {
-		return util.Errorf("no path specified for permission Delete")
+		return util.Errorf("no path specified for accounting Delete")
 	}
 	if path == "/" {
-		return util.Errorf("the default permission configuration cannot be deleted")
+		return util.Errorf("the default accounting configuration cannot be deleted")
 	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
-	dr := <-ph.db.Delete(&proto.DeleteRequest{
+	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
+	dr := <-ah.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  permKey,
+			Key:  acctKey,
 			User: storage.UserRoot,
 		},
 	})

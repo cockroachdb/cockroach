@@ -29,8 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-const (
-	testZoneConfig = `
+const testZoneConfig = `
 replicas:
   - attrs: [dc1, ssd]
   - attrs: [dc2, ssd]
@@ -38,7 +37,6 @@ replicas:
 range_min_bytes: 1048576
 range_max_bytes: 67108864
 `
-)
 
 // ExampleSetAndGetZone sets zone configs for a variety of key
 // prefixes and verifies they can be fetched directly.

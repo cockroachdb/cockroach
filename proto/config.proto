@@ -77,15 +77,15 @@ message GCPolicy {
 
 // AcctConfig holds accounting configuration.
 message AcctConfig {
-  optional string ClusterID = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
+  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"cluster_id,omitempty\""];
 }
 
 // PermConfig holds permission configuration, specifying read/write ACLs.
 message PermConfig {
   // ACL lists users with read permissions.
-  repeated string Read = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"read,omitempty\""];
+  repeated string read = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"read,omitempty\""];
   // ACL lists users with write permissions.
-  repeated string Write = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"write,omitempty\""];
+  repeated string write = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"write,omitempty\""];
 }
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.

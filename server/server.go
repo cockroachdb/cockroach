@@ -432,3 +432,17 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer gzw.Close()
 	s.mux.ServeHTTP(gzw, r)
 }
+
+// GetContentType pulls out the content type from a request header
+// it ignores every value after the first semicolon
+func GetContentType(request *http.Request) string {
+	contentType := request.Header.Get("Content-Type")
+	semicolonIndex := strings.Index(contentType, ";")
+	if semicolonIndex > -1 {
+		contentType = contentType[0:semicolonIndex]
+	}
+	return contentType
+}
+
+// TODO(bram): Add function to marshalBody
+//   func marshalBody(req *http.Request, msg gogoproto.Message) ([]byte, error)

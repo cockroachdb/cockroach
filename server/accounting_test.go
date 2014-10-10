@@ -29,79 +29,56 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-const testPermConfig = `
-read: [readonly, readwrite]
-write: [readwrite, writeonly]
-`
+const testAcctConfig = `cluster_id: test`
 
-// ExampleSetAndGetPerm sets perm configs for a variety of key
+// ExampleSetAndGetAccts sets acct configs for a variety of key
 // prefixes and verifies they can be fetched directly.
-func ExampleSetAndGetPerms() {
+func ExampleSetAndGetAccts() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermConfig)
+	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
 		prefix engine.Key
 		yaml   string
 	}{
-		{engine.KeyMin, testPermConfig},
-		{engine.Key("db1"), testPermConfig},
-		{engine.Key("db 2"), testPermConfig},
-		{engine.Key("\xfe"), testPermConfig},
+		{engine.KeyMin, testAcctConfig},
+		{engine.Key("db1"), testAcctConfig},
+		{engine.Key("db 2"), testAcctConfig},
+		{engine.Key("\xfe"), testAcctConfig},
 	}
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
-		runGetPerms(CmdGetPerms, []string{prefix})
+		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
+		runGetAcct(CmdGetAcct, []string{prefix})
 	}
 	// Output:
-	// set permission config for key prefix ""
-	// permission config for key prefix "":
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// set accounting config for key prefix ""
+	// accounting config for key prefix "":
+	// cluster_id: test
 	//
-	// set permission config for key prefix "db1"
-	// permission config for key prefix "db1":
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// set accounting config for key prefix "db1"
+	// accounting config for key prefix "db1":
+	// cluster_id: test
 	//
-	// set permission config for key prefix "db+2"
-	// permission config for key prefix "db+2":
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// set accounting config for key prefix "db+2"
+	// accounting config for key prefix "db+2":
+	// cluster_id: test
 	//
-	// set permission config for key prefix "%FE"
-	// permission config for key prefix "%FE":
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// set accounting config for key prefix "%FE"
+	// accounting config for key prefix "%FE":
+	// cluster_id: test
 }
 
-// ExampleLsPerms creates a series of perm configs and verifies
-// perm-ls works. First, no regexp lists all perm configs. Second,
+// ExampleLsAccts creates a series of acct configs and verifies
+// acct-ls works. First, no regexp lists all acct configs. Second,
 // regexp properly matches results.
-func ExampleLsPerms() {
+func ExampleLsAccts() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermConfig)
+	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -120,23 +97,23 @@ func ExampleLsPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
+		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
 	}
 
 	for i, regexp := range regexps {
 		fmt.Fprintf(os.Stdout, "test case %d: %q\n", i, regexp)
 		if regexp == "" {
-			runLsPerms(CmdLsPerms, []string{})
+			runLsAccts(CmdLsAccts, []string{})
 		} else {
-			runLsPerms(CmdLsPerms, []string{regexp})
+			runLsAccts(CmdLsAccts, []string{regexp})
 		}
 	}
 	// Output:
-	// set permission config for key prefix ""
-	// set permission config for key prefix "db1"
-	// set permission config for key prefix "db2"
-	// set permission config for key prefix "db3"
-	// set permission config for key prefix "user"
+	// set accounting config for key prefix ""
+	// set accounting config for key prefix "db1"
+	// set accounting config for key prefix "db2"
+	// set accounting config for key prefix "db3"
+	// set accounting config for key prefix "user"
 	// test case 0: ""
 	// [default]
 	// db1
@@ -152,14 +129,14 @@ func ExampleLsPerms() {
 	// db2
 }
 
-// ExampleRmPerms creates a series of perm configs and verifies
-// perm-rm works by deleting some and then all and verifying entries
-// have been removed via perm-ls. Also verify the default perm config
+// ExampleRmAccts creates a series of acct configs and verifies
+// acct-rm works by deleting some and then all and verifying entries
+// have been removed via acct-ls. Also verify the default acct config
 // cannot be removed.
-func ExampleRmPerms() {
+func ExampleRmAccts() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
-	testConfigFn := createTestConfigFile(testPermConfig)
+	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
 	keys := []engine.Key{
@@ -169,31 +146,31 @@ func ExampleRmPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
+		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
 	}
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runRmPerms(CmdRmPerms, []string{prefix})
-		runLsPerms(CmdLsPerms, []string{})
+		runRmAcct(CmdRmAcct, []string{prefix})
+		runLsAccts(CmdLsAccts, []string{})
 	}
 	// Output:
-	// set permission config for key prefix ""
-	// set permission config for key prefix "db1"
+	// set accounting config for key prefix ""
+	// set accounting config for key prefix "db1"
 	// [default]
 	// db1
-	// removed permission config for key prefix "db1"
+	// removed accounting config for key prefix "db1"
 	// [default]
 }
 
-// ExamplePermContentTypes verifies that the Accept header can be used
+// ExampleAcctContentTypes verifies that the Accept header can be used
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
-func ExamplePermContentTypes() {
+func ExampleAcctContentTypes() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
 
-	config, err := proto.PermConfigFromYAML([]byte(testPermConfig))
+	config, err := proto.AcctConfigFromYAML([]byte(testAcctConfig))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -218,13 +195,13 @@ func ExamplePermContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", kv.HTTPAddr()+permKeyPrefix+key, bytes.NewReader(body))
+		req, err := http.NewRequest("POST", kv.HTTPAddr()+acctKeyPrefix+key, bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", kv.HTTPAddr()+permKeyPrefix+key, nil)
+		req, err = http.NewRequest("GET", kv.HTTPAddr()+acctKeyPrefix+key, nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
@@ -233,36 +210,12 @@ func ExamplePermContentTypes() {
 	}
 	// Output:
 	// {
-	//   "read": [
-	//     "readonly",
-	//     "readwrite"
-	//   ],
-	//   "write": [
-	//     "readwrite",
-	//     "writeonly"
-	//   ]
+	//   "cluster_id": "test"
 	// }
 	// {
-	//   "read": [
-	//     "readonly",
-	//     "readwrite"
-	//   ],
-	//   "write": [
-	//     "readwrite",
-	//     "writeonly"
-	//   ]
+	//   "cluster_id": "test"
 	// }
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// cluster_id: test
 	//
-	// read:
-	// - readonly
-	// - readwrite
-	// write:
-	// - readwrite
-	// - writeonly
+	// cluster_id: test
 }
