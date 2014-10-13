@@ -130,7 +130,7 @@ func (b *Batch) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
 			if bytes.Equal(t.Key, engKV.Key) {
 				engIdx++
 			}
-		case BatchPut: // On put, reply the corresponding engine entry.
+		case BatchPut: // On put, override the corresponding engine entry.
 			if bytes.Equal(t.Key, engKV.Key) {
 				engIdx++
 			}
@@ -153,7 +153,7 @@ func (b *Batch) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
 
 	// Check for common case of no matches in the updates map.
 	if len(kvs) == 0 {
-		return engs, err
+		return engs[engIdx:], err
 	}
 	// Otherwise, append remaining entries in engs up to max.
 	lastIdx := int64(len(engs))
