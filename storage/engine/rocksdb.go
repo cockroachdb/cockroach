@@ -32,6 +32,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -50,12 +51,11 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb           *C.rocksdb_t                     // The DB handle
-	opts          *C.rocksdb_options_t             // Options used when creating or destroying
-	rOpts         *C.rocksdb_readoptions_t         // The default read options
-	wOpts         *C.rocksdb_writeoptions_t        // The default write options
-	mergeOperator *C.rocksdb_mergeoperator_t       // Custom RocksDB merge operator
-	snapshots     map[string]*C.rocksdb_snapshot_t // Map of snapshot handles by snapshot ID
+	rdb           *C.rocksdb_t               // The DB handle
+	opts          *C.rocksdb_options_t       // Options used when creating or destroying
+	rOpts         *C.rocksdb_readoptions_t   // The default read options
+	wOpts         *C.rocksdb_writeoptions_t  // The default write options
+	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB merge operator
 
 	// Custom RocksDB compaction filter.
 	compactionFilterFactory *C.rocksdb_compactionfilterfactory_t
@@ -63,6 +63,9 @@ type RocksDB struct {
 	attrs      proto.Attributes // Attributes for this engine
 	dir        string           // The data directory
 	gcTimeouts func() (minTxnTS, minRCacheTS int64)
+
+	sync.Mutex                                  // Protects the snapshots map.
+	snapshots  map[string]*C.rocksdb_snapshot_t // Map of snapshot handles by snapshot ID
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
@@ -191,6 +194,8 @@ func (r *RocksDB) CreateSnapshot(snapshotID string) error {
 	if r.rdb == nil {
 		return util.Errorf("RocksDB is not initialized yet")
 	}
+	r.Lock()
+	defer r.Unlock()
 	_, ok := r.snapshots[snapshotID]
 	if ok {
 		return util.Errorf("snapshotID %s already exists", snapshotID)
@@ -206,6 +211,8 @@ func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
 	if r.rdb == nil {
 		return util.Errorf("RocksDB is not initialized yet")
 	}
+	r.Lock()
+	defer r.Unlock()
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
 		return util.Errorf("snapshotID %s does not exist", snapshotID)
@@ -313,10 +320,12 @@ func (r *RocksDB) Get(key Key) ([]byte, error) {
 // GetSnapshot returns the value for the given key from the given
 // snapshotID, nil otherwise.
 func (r *RocksDB) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+	r.Lock()
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
 		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
 	}
+	r.Unlock()
 
 	opts := C.rocksdb_readoptions_create()
 	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
@@ -371,40 +380,35 @@ func (r *RocksDB) Clear(key Key) error {
 	return nil
 }
 
-// Scan returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive).
-// If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
+// Iterate iterates from start to end keys, invoking f on each
+// key/value pair. See engine.Iterate for details.
+func (r *RocksDB) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
 	opts := C.rocksdb_readoptions_create()
 	C.rocksdb_readoptions_set_fill_cache(opts, 0)
 	defer C.rocksdb_readoptions_destroy(opts)
-	return r.scanInternal(start, end, max, opts)
+	return r.iterateInternal(start, end, f, opts)
 }
 
-// ScanSnapshot returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive) from the
-// given snapshotID.
-// Specify max=0 for unbounded scans.
-func (r *RocksDB) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
+// IterateSnapshot iterates from start to end keys, invoking f on
+// each key/value pair. See engine.IterateSnapshot for details.
+func (r *RocksDB) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+	r.Lock()
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
-		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+		return util.Errorf("snapshotID %s does not exist", snapshotID)
 	}
+	r.Unlock()
 
 	opts := C.rocksdb_readoptions_create()
 	C.rocksdb_readoptions_set_fill_cache(opts, 0)
 	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
 	defer C.rocksdb_readoptions_destroy(opts)
-	return r.scanInternal(start, end, max, opts)
+	return r.iterateInternal(start, end, f, opts)
 }
 
-// scanInternal returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive).
-// If max is zero then the number of key/values returned is unbounded.
-func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readoptions_t) ([]proto.RawKeyValue, error) {
-	var keyVals []proto.RawKeyValue
+func (r *RocksDB) iterateInternal(start, end Key, f func(proto.RawKeyValue) (bool, error), opts *C.rocksdb_readoptions_t) error {
 	if bytes.Compare(start, end) >= 0 {
-		return keyVals, nil
+		return nil
 	}
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
@@ -421,10 +425,7 @@ func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readop
 	} else {
 		C.rocksdb_iter_seek(it, bytesPointer(start), C.size_t(byteCount))
 	}
-	for i := int64(1); C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
-		if max > 0 && i > max {
-			break
-		}
+	for ; C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
 		var l C.size_t
 		// The data returned by rocksdb_iter_{key,value} is not meant to be
 		// freed by the client. It is a direct reference to the data managed
@@ -436,19 +437,17 @@ func (r *RocksDB) scanInternal(start, end Key, max int64, opts *C.rocksdb_readop
 		}
 		data = C.rocksdb_iter_value(it, &l)
 		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
-		keyVals = append(keyVals, proto.RawKeyValue{
-			Key:   k,
-			Value: v,
-		})
-		i++
+		if done, err := f(proto.RawKeyValue{Key: k, Value: v}); done || err != nil {
+			return err
+		}
 	}
 	// Check for any errors during iteration.
 	var cErr *C.char
 	C.rocksdb_iter_get_error(it, &cErr)
 	if cErr != nil {
-		return nil, charToErr(cErr)
+		return charToErr(cErr)
 	}
-	return keyVals, nil
+	return nil
 }
 
 // WriteBatch applies the puts, merges and deletes atomically via

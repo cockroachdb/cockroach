@@ -1015,14 +1015,19 @@ func TestFindSplitKey(t *testing.T) {
 	if err := mvcc.batch.Commit(); err != nil {
 		t.Fatal(err)
 	}
-
-	humanSplitKey, err := MVCCFindSplitKey(mvcc.batch.engine, KeyMin, KeyMax, "")
+	if err := mvcc.batch.engine.CreateSnapshot("snap1"); err != nil {
+		t.Fatal(err)
+	}
+	humanSplitKey, err := MVCCFindSplitKey(mvcc.batch.engine, KeyMin, KeyMax, "snap1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ind, _ := strconv.Atoi(string(humanSplitKey))
 	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
 		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
+	}
+	if err := mvcc.batch.engine.ReleaseSnapshot("snap1"); err != nil {
+		t.Fatal(err)
 	}
 }
 

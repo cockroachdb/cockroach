@@ -32,9 +32,6 @@ import (
 const (
 	// The size of the reservoir used by FindSplitKey.
 	splitReservoirSize = 100
-	// How many keys are read at once when scanning for a split key
-	// or recomputing MVCC stats.
-	scanRowCount = int64(1 << 8)
 )
 
 // MVCCStats tracks byte and instance counts for:
@@ -639,15 +636,12 @@ func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, e
 	binStartKey := key.Encode(nil)
 	binEndKey := endKey.Encode(nil)
 	totalSize := 0
-	err := iterateRange(engine, binStartKey, binEndKey,
-		scanRowCount, snapshotID, func(kvs []proto.RawKeyValue) error {
-			for _, kv := range kvs {
-				byteCount := len(kv.Key) + len(kv.Value)
-				rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
-				totalSize += byteCount
-			}
-			return nil
-		})
+	err := engine.IterateSnapshot(binStartKey, binEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
+		byteCount := len(kv.Key) + len(kv.Value)
+		rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
+		totalSize += byteCount
+		return false, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -690,46 +684,43 @@ func MVCCComputeStats(engine Engine, key, endKey Key) (MVCCStats, error) {
 	ms := MVCCStats{}
 	first := false
 	meta := &proto.MVCCMetadata{}
-	err := iterateRange(engine, binStartKey, binEndKey,
-		scanRowCount, "", func(kvs []proto.RawKeyValue) error {
-			for _, kv := range kvs {
-				_, _, isValue := mvccDecodeKey(kv.Key)
-				if !isValue {
-					first = true
-					if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
-						return util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
-					}
-					if !meta.Deleted {
-						ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
-						ms.LiveCount++
-					}
-					ms.KeyBytes += int64(len(kv.Key))
-					ms.ValBytes += int64(len(kv.Value))
-					ms.KeyCount++
-				} else {
-					if first {
-						first = false
-						if !meta.Deleted {
-							ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
-						}
-						if meta.Txn != nil {
-							ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
-							ms.IntentCount++
-						}
-						if meta.KeyBytes != int64(len(kv.Key)) {
-							return util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
-						}
-						if meta.ValBytes != int64(len(kv.Value)) {
-							return util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
-						}
-					}
-					ms.KeyBytes += int64(len(kv.Key))
-					ms.ValBytes += int64(len(kv.Value))
-					ms.ValCount++
+	err := engine.Iterate(binStartKey, binEndKey, func(kv proto.RawKeyValue) (bool, error) {
+		_, _, isValue := mvccDecodeKey(kv.Key)
+		if !isValue {
+			first = true
+			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+				return false, util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
+			}
+			if !meta.Deleted {
+				ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+				ms.LiveCount++
+			}
+			ms.KeyBytes += int64(len(kv.Key))
+			ms.ValBytes += int64(len(kv.Value))
+			ms.KeyCount++
+		} else {
+			if first {
+				first = false
+				if !meta.Deleted {
+					ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+				}
+				if meta.Txn != nil {
+					ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
+					ms.IntentCount++
+				}
+				if meta.KeyBytes != int64(len(kv.Key)) {
+					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
+				}
+				if meta.ValBytes != int64(len(kv.Value)) {
+					return false, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
 				}
 			}
-			return nil
-		})
+			ms.KeyBytes += int64(len(kv.Key))
+			ms.ValBytes += int64(len(kv.Value))
+			ms.ValCount++
+		}
+		return false, nil
+	})
 	return ms, err
 }
 

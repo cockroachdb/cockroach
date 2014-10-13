@@ -1178,7 +1178,7 @@ func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapsh
 		args.SnapshotId = snapshotID
 	}
 
-	kvs, err := e.ScanSnapshot(args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
+	kvs, err := engine.ScanSnapshot(e, args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
 	if err != nil {
 		reply.SetGoError(err)
 		return

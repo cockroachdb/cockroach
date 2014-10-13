@@ -18,8 +18,6 @@
 package engine
 
 import (
-	"bytes"
-
 	"code.google.com/p/biogo.store/llrb"
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
@@ -99,70 +97,79 @@ func (b *Batch) Get(key Key) ([]byte, error) {
 	return b.engine.Get(key)
 }
 
+// iterateUpdates scans the updates tree from start to end, invoking f
+// on each value.
+func (b *Batch) iterateUpdates(start, end Key, f func(proto.RawKeyValue) (bool, error)) (bool, error) {
+	var done bool
+	var err error
+	// Scan the updates tree for the key range, merging as we go.
+	b.updates.DoRange(func(n llrb.Comparable) bool {
+		switch t := n.(type) {
+		case BatchDelete: // On delete, skip.
+		case BatchPut: // On put, override the corresponding engine entry.
+			done, err = f(t.RawKeyValue)
+		case BatchMerge: // On merge, merge with corresponding engine entry.
+			kv := proto.RawKeyValue{Key: t.Key}
+			kv.Value, err = goMerge([]byte(nil), t.Value)
+			if err == nil {
+				done, err = f(kv)
+			}
+		}
+		return done || err != nil
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
+	return done, err
+}
+
+// Iterate invokes f on key/value pairs merged from the underlying
+// engine and pending batch updates. If f returns done or an error,
+// the iteration ends and propagates the error.
+func (b *Batch) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
+	last := start
+	if err := b.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+		// Merge iteration from updates tree at each key/value.
+		done, err := b.iterateUpdates(last, kv.Key, f)
+		last = Key(kv.Key).Next()
+		if !done && err == nil {
+			val := b.updates.Get(proto.RawKeyValue{Key: kv.Key})
+			if val != nil {
+				switch t := val.(type) {
+				case BatchDelete:
+				case BatchPut:
+					f(t.RawKeyValue)
+				case BatchMerge:
+					mergedKV := proto.RawKeyValue{Key: t.Key}
+					mergedKV.Value, err = goMerge(kv.Value, t.Value)
+					if err == nil {
+						done, err = f(mergedKV)
+					}
+				}
+			} else {
+				done, err = f(kv)
+			}
+		}
+		return done, err
+	}); err != nil {
+		return err
+	}
+	// Final iteration from updates tree.
+	if _, err := b.iterateUpdates(last, end, f); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Scan scans from both the updates tree and the underlying engine
 // and combines the results, up to max.
 func (b *Batch) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
-	// First, get up to max key value pairs from the wrapped engine.
-	engs, err := b.engine.Scan(start, end, max)
-	if err != nil {
-		return nil, err
-	}
-	engIdx := 0
 	var kvs []proto.RawKeyValue
-
-	// Now, scan the updates tree for the same range, combining as we go
-	// up to max entries.
-	b.updates.DoRange(func(n llrb.Comparable) (done bool) {
-		// First add all values from engs slice less than the current updates key.
-		for engIdx < len(engs) && bytes.Compare(engs[engIdx].Key, n.(proto.KeyGetter).KeyGet()) < 0 {
-			kvs = append(kvs, engs[engIdx])
-			engIdx++
-			if max != 0 && int64(len(kvs)) >= max {
-				return true
-			}
+	err := b.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+		if max != 0 && int64(len(kvs)) >= max {
+			return true, nil
 		}
-		engKV := proto.RawKeyValue{Key: KeyMax}
-		if engIdx < len(engs) {
-			engKV = engs[engIdx]
-		}
-		switch t := n.(type) {
-		case BatchDelete: // On delete, just skip the corresponding engine entry.
-			if bytes.Equal(t.Key, engKV.Key) {
-				engIdx++
-			}
-		case BatchPut: // On put, override the corresponding engine entry.
-			if bytes.Equal(t.Key, engKV.Key) {
-				engIdx++
-			}
-			kvs = append(kvs, t.RawKeyValue)
-		case BatchMerge: // On merge, merge with corresponding engine entry.
-			var existingBytes []byte
-			if bytes.Equal(t.Key, engKV.Key) {
-				existingBytes = engKV.Value
-				engIdx++
-			}
-			kv := proto.RawKeyValue{Key: t.Key}
-			kv.Value, err = goMerge(existingBytes, t.Value)
-			if err != nil { // break out of DoRange on error.
-				return true
-			}
-			kvs = append(kvs, kv)
-		}
-		return max != 0 && int64(len(kvs)) >= max
-	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
-
-	// Check for common case of no matches in the updates map.
-	if len(kvs) == 0 {
-		return engs[engIdx:], err
-	}
-	// Otherwise, append remaining entries in engs up to max.
-	lastIdx := int64(len(engs))
-	if max != 0 {
-		if (lastIdx - int64(engIdx)) > max-int64(len(kvs)) {
-			lastIdx = max - int64(len(kvs)-engIdx)
-		}
-	}
-	return append(kvs, engs[engIdx:lastIdx]...), err
+		kvs = append(kvs, kv)
+		return false, nil
+	})
+	return kvs, err
 }
 
 // Clear stores the key as a BatchDelete in the updates tree.

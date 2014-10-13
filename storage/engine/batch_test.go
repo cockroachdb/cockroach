@@ -55,7 +55,7 @@ func TestBatchBasics(t *testing.T) {
 		{Key: Key("b"), Value: []byte("value")},
 		{Key: Key("c"), Value: appender("foo")},
 	}
-	kvs, err := e.Scan(KeyMin, KeyMax, 0)
+	kvs, err := Scan(e, KeyMin, KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestBatchBasics(t *testing.T) {
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err = e.Scan(KeyMin, KeyMax, 0)
+	kvs, err = Scan(e, KeyMin, KeyMax, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestBatchScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, scan := range scans {
-		kvs, err := e.Scan(scan.start, scan.end, scan.max)
+		kvs, err := Scan(e, scan.start, scan.end, scan.max)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -320,6 +320,33 @@ func TestBatchScanWithDelete(t *testing.T) {
 	}
 	if len(kvs) != 0 {
 		t.Errorf("expected empty scan with batch-deleted value; got %v", kvs)
+	}
+}
+
+// TestBatchScanMaxWithDeleted verifies that if a deletion
+// in the updates map shadows an entry from the engine, the
+// max on a scan is still reached.
+func TestBatchScanMaxWithDeleted(t *testing.T) {
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	b := NewBatch(e)
+	// Write two values.
+	if err := e.Put(Key("a"), []byte("value1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Put(Key("b"), []byte("value2")); err != nil {
+		t.Fatal(err)
+	}
+	// Now, delete "a" in batch.
+	if err := b.Clear(Key("a")); err != nil {
+		t.Fatal(err)
+	}
+	// A scan with max=1 should scan "b".
+	kvs, err := b.Scan(KeyMin, KeyMax, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 || !bytes.Equal(kvs[0].Key, []byte("b")) {
+		t.Errorf("expected scan of \"b\"; got %v", kvs)
 	}
 }
 

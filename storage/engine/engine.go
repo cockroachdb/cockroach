@@ -56,10 +56,11 @@ type Engine interface {
 	Put(key Key, value []byte) error
 	// Get returns the value for the given key, nil otherwise.
 	Get(key Key) ([]byte, error)
-	// Scan returns up to max key/value objects starting from
-	// start (inclusive) and ending at end (non-inclusive).
-	// Specify max=0 for unbounded scans.
-	Scan(start, end Key, max int64) ([]proto.RawKeyValue, error)
+	// Iterate scans from start to end keys, visiting at most max
+	// key/value pairs. On each key value pair, the function f is
+	// invoked. If f returns an error or if the scan itself encounters
+	// an error, the iteration will stop and return f.
+	Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
@@ -88,11 +89,9 @@ type Engine interface {
 	// GetSnapshot returns the value for the given key from the given
 	// snapshotID, nil otherwise.
 	GetSnapshot(key Key, snapshotID string) ([]byte, error)
-	// ScanSnapshot returns up to max key/value objects starting from
-	// start (inclusive) and ending at end (non-inclusive) from the
-	// given snapshotID.
-	// Specify max=0 for unbounded scans.
-	ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error)
+	// IterateSnapshot scans from start to end keys, visiting at
+	// most max key/value pairs from the specified snapshot ID.
+	IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end Key) (uint64, error)
@@ -213,6 +212,34 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 	return r, nil
 }
 
+// Scan returns up to max key/value objects starting from
+// start (inclusive) and ending at end (non-inclusive).
+// Specify max=0 for unbounded scans.
+func Scan(engine Engine, start, end Key, max int64) ([]proto.RawKeyValue, error) {
+	var kvs []proto.RawKeyValue
+	err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+		if max != 0 && int64(len(kvs)) >= max {
+			return true, nil
+		}
+		kvs = append(kvs, kv)
+		return false, nil
+	})
+	return kvs, err
+}
+
+// ScanSnapshot scans using the given snapshot ID.
+func ScanSnapshot(engine Engine, start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
+	var kvs []proto.RawKeyValue
+	err := engine.IterateSnapshot(start, end, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
+		if max != 0 && int64(len(kvs)) >= max {
+			return true, nil
+		}
+		kvs = append(kvs, kv)
+		return false, nil
+	})
+	return kvs, err
+}
+
 // ClearRange removes a set of entries, from start (inclusive)
 // to end (exclusive), up to max entries. If max is 0, all
 // entries between start and end are deleted. This function
@@ -222,7 +249,7 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 // removes entries from the storage engine, rather than inserting
 // tombstones.
 func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
-	scanned, err := engine.Scan(start, end, max)
+	scanned, err := Scan(engine, start, end, max)
 
 	if err != nil {
 		return 0, err
@@ -240,35 +267,4 @@ func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
 		return 0, err
 	}
 	return numElements, nil
-}
-
-// iterateRange scans the given key range using the underlying engine
-// in blocks of at most chunkSize results, invoking f for each chunk
-// read, until there are no more results. An error is returned if an
-// underlying scan returns an error, or if f does. The read is
-// executed against a snapshot if the specified snapshotID is
-// non-empty.
-func iterateRange(eng Engine, startKey, endKey Key, chunkSize int64,
-	snapshotID string, f func([]proto.RawKeyValue) error) error {
-	var kvs []proto.RawKeyValue
-	var err error
-	hasSnap := len(snapshotID) > 0
-	for {
-		if hasSnap {
-			kvs, err = eng.ScanSnapshot(startKey, endKey, chunkSize, snapshotID)
-		} else {
-			kvs, err = eng.Scan(startKey, endKey, chunkSize)
-		}
-		if err != nil {
-			return err
-		}
-		if err = f(kvs); err != nil {
-			return err
-		}
-		if len(kvs) == 0 {
-			break
-		}
-		startKey = Key(kvs[len(kvs)-1].Key).Next()
-	}
-	return nil
 }
