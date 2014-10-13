@@ -184,19 +184,19 @@ func TestBatchProto(t *testing.T) {
 	kv := &proto.RawKeyValue{Key: Key("a"), Value: []byte("value")}
 	b.PutProto(Key("proto"), kv)
 	getKV := &proto.RawKeyValue{}
-	ok, kSize, vSize, err := b.GetProto(Key("proto"), getKV)
+	ok, keySize, valSize, err := b.GetProto(Key("proto"), getKV)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
-	if kSize != 5 {
-		t.Errorf("expected key size 5; got %d", kSize)
+	if keySize != 5 {
+		t.Errorf("expected key size 5; got %d", keySize)
 	}
 	var data []byte
 	if data, err = gogoproto.Marshal(kv); err != nil {
 		t.Fatal(err)
 	}
-	if vSize != int64(len(data)) {
-		t.Errorf("expected value size %d; got %d", len(data), vSize)
+	if valSize != int64(len(data)) {
+		t.Errorf("expected value size %d; got %d", len(data), valSize)
 	}
 	if !reflect.DeepEqual(getKV, kv) {
 		t.Errorf("expected %v; got %v", kv, getKV)
@@ -299,6 +299,27 @@ func TestBatchScan(t *testing.T) {
 		if !reflect.DeepEqual(kvs, results[i]) {
 			t.Errorf("%d: expected %v; got %v", i, results[i], kvs)
 		}
+	}
+}
+
+// TestBatchScanWithDelete verifies that a scan containing
+// a single deleted value returns nothing.
+func TestBatchScanWithDelete(t *testing.T) {
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	b := NewBatch(e)
+	// Write initial value, then delete via batch.
+	if err := e.Put(Key("a"), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Clear(Key("a")); err != nil {
+		t.Fatal(err)
+	}
+	kvs, err := b.Scan(KeyMin, KeyMax, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 0 {
+		t.Errorf("expected empty scan with batch-deleted value; got %v", kvs)
 	}
 }
 
