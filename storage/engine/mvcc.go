@@ -37,6 +37,21 @@ const (
 	scanRowCount = int64(1 << 8)
 )
 
+// encodeMVCCStatValue constructs a proto.Value using the supplied
+// stat increment and then encodes that into a byte slice. Encoding
+// errors cause panice (as they should never happen). Returns false
+// if stat is equal to 0 to avoid unnecessary merge.
+func encodeMVCCStatValue(stat int64) (ok bool, enc []byte) {
+	if stat == 0 {
+		return false, nil
+	}
+	data, err := gogoproto.Marshal(&proto.Value{Integer: gogoproto.Int64(stat)})
+	if err != nil {
+		panic("could not marshal proto.Value")
+	}
+	return true, data
+}
+
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
 //    note that this includes intent keys and values, but not keys and
@@ -613,6 +628,43 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto
 	}
 
 	return num, nil
+}
+
+// FlushStats flushes stats to merge counters for both the affected
+// range and store.
+func (mvcc *MVCC) FlushStats(rangeID int64, storeID int32) {
+	if ok, encLiveBytes := encodeMVCCStatValue(mvcc.LiveBytes); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatLiveBytes), encLiveBytes)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatLiveBytes), encLiveBytes)
+	}
+	if ok, encKeyBytes := encodeMVCCStatValue(mvcc.KeyBytes); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatKeyBytes), encKeyBytes)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatKeyBytes), encKeyBytes)
+	}
+	if ok, encValBytes := encodeMVCCStatValue(mvcc.ValBytes); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatValBytes), encValBytes)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatValBytes), encValBytes)
+	}
+	if ok, encIntentBytes := encodeMVCCStatValue(mvcc.IntentBytes); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatIntentBytes), encIntentBytes)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatIntentBytes), encIntentBytes)
+	}
+	if ok, encLiveCount := encodeMVCCStatValue(mvcc.LiveCount); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatLiveCount), encLiveCount)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatLiveCount), encLiveCount)
+	}
+	if ok, encKeyCount := encodeMVCCStatValue(mvcc.KeyCount); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatKeyCount), encKeyCount)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatKeyCount), encKeyCount)
+	}
+	if ok, encValCount := encodeMVCCStatValue(mvcc.ValCount); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatValCount), encValCount)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatValCount), encValCount)
+	}
+	if ok, encIntentCount := encodeMVCCStatValue(mvcc.IntentCount); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, StatIntentCount), encIntentCount)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, StatIntentCount), encIntentCount)
+	}
 }
 
 // a splitSampleItem wraps a key along with an aggregate over key range

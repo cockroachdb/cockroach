@@ -678,14 +678,14 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		return util.Errorf("unrecognized command type: %s", method)
 	}
 
-	// Commit the batch on success.
-	if reply.Header().Error == nil {
+	// On success, flush the MVCC stats to the batch and commit.
+	if !IsReadOnly(method) && reply.Header().Error == nil {
+		mvcc.FlushStats(r.Meta.RangeID, r.rm.StoreID())
 		reply.Header().SetGoError(batch.Commit())
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
-	if (method == Put || method == ConditionalPut) &&
-		reply.Header().Error == nil {
+	if (method == Put || method == ConditionalPut) && reply.Header().Error == nil {
 		r.maybeUpdateGossipConfigs(args.Header().Key)
 	}
 

@@ -355,6 +355,18 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 	return args, reply
 }
 
+// deleteArgs returns a DeleteRequest and DeleteResponse pair.
+func deleteArgs(key engine.Key, rangeID int64) (*proto.DeleteRequest, *proto.DeleteResponse) {
+	args := &proto.DeleteRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+	}
+	reply := &proto.DeleteResponse{}
+	return args, reply
+}
+
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
@@ -1402,4 +1414,85 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	if reply.PusheeTxn.Status != proto.PENDING {
 		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
 	}
+}
+
+func verifyStatCounter(eng engine.Engine, rangeID int64, stat engine.Key, expVal int64, t *testing.T) {
+	statVal := &proto.Value{}
+	ok, err := engine.GetProto(eng, engine.MakeRangeStatKey(rangeID, stat), statVal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expVal == 0 && !ok {
+		return
+	} else if expVal != 0 && !ok {
+		t.Errorf("stat %q missing", stat)
+	}
+	if statVal.GetInteger() != expVal {
+		t.Errorf("expected stat %q to have value %d; got %d", stat, expVal, statVal.GetInteger())
+	}
+}
+
+func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, t *testing.T) {
+	verifyStatCounter(eng, rangeID, engine.StatLiveBytes, expMS.LiveBytes, t)
+	verifyStatCounter(eng, rangeID, engine.StatKeyBytes, expMS.KeyBytes, t)
+	verifyStatCounter(eng, rangeID, engine.StatValBytes, expMS.ValBytes, t)
+	verifyStatCounter(eng, rangeID, engine.StatIntentBytes, expMS.IntentBytes, t)
+	verifyStatCounter(eng, rangeID, engine.StatLiveCount, expMS.LiveCount, t)
+	verifyStatCounter(eng, rangeID, engine.StatKeyCount, expMS.KeyCount, t)
+	verifyStatCounter(eng, rangeID, engine.StatValCount, expMS.ValCount, t)
+	verifyStatCounter(eng, rangeID, engine.StatIntentCount, expMS.IntentCount, t)
+}
+
+// TestRangeStats verifies that commands executed against a range
+// update the range stat counters. The stat values are empirically
+// derived; we're really just testing that they increment in the right
+// ways, not the exact amounts. If the encodings change, will need to
+// update this test.
+func TestRangeStats(t *testing.T) {
+	rng, _, clock, eng := createTestRangeWithClock(t)
+	defer rng.Stop()
+	// Put a value.
+	pArgs, pReply := putArgs([]byte("a"), []byte("value1"), 0)
+	pArgs.Timestamp = clock.Now()
+	if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
+		t.Fatal(err)
+	}
+	expMS := engine.MVCCStats{LiveBytes: 44, KeyBytes: 20, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
+	verifyRangeStats(eng, rng.Meta.RangeID, expMS, t)
+
+	// Put a 2nd value transactionally.
+	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 0)
+	pArgs.Timestamp = clock.Now()
+	pArgs.Txn = &proto.Transaction{ID: []byte("txn1"), Timestamp: pArgs.Timestamp}
+	if err := rng.AddCmd(Put, pArgs, pReply, true); err != nil {
+		t.Fatal(err)
+	}
+	expMS = engine.MVCCStats{LiveBytes: 118, KeyBytes: 40, ValBytes: 78, IntentBytes: 28, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	verifyRangeStats(eng, rng.Meta.RangeID, expMS, t)
+
+	// Resolve the 2nd value.
+	rArgs := &proto.InternalResolveIntentRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: pArgs.Txn.Timestamp,
+			Key:       pArgs.Key,
+			Replica:   proto.Replica{RangeID: 0},
+			Txn:       pArgs.Txn,
+		},
+	}
+	rArgs.Txn.Status = proto.COMMITTED
+	rReply := &proto.InternalResolveIntentResponse{}
+	if err := rng.AddCmd(InternalResolveIntent, rArgs, rReply, true); err != nil {
+		t.Fatal(err)
+	}
+	expMS = engine.MVCCStats{LiveBytes: 88, KeyBytes: 40, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
+	verifyRangeStats(eng, rng.Meta.RangeID, expMS, t)
+
+	// Delete the 1st value.
+	dArgs, dReply := deleteArgs([]byte("a"), 0)
+	dArgs.Timestamp = clock.Now()
+	if err := rng.AddCmd(Delete, dArgs, dReply, true); err != nil {
+		t.Fatal(err)
+	}
+	expMS = engine.MVCCStats{LiveBytes: 44, KeyBytes: 56, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
+	verifyRangeStats(eng, rng.Meta.RangeID, expMS, t)
 }
