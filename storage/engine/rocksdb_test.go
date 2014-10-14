@@ -99,7 +99,7 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	keyvals, err := rocksdb.Scan(KeyMin, KeyMax, 0)
+	keyvals, err := Scan(rocksdb, KeyMin, KeyMax, 0)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}

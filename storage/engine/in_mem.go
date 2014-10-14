@@ -82,6 +82,8 @@ func (in *InMem) Stop() {
 
 // CreateSnapshot creates a snapshot handle from engine.
 func (in *InMem) CreateSnapshot(snapshotID string) error {
+	in.Lock()
+	defer in.Unlock()
 	_, ok := in.snapshots[snapshotID]
 	if ok {
 		return util.Errorf("snapshotID %s already exists", snapshotID)
@@ -110,6 +112,8 @@ func cloneNode(a *llrb.Node) *llrb.Node {
 // ReleaseSnapshot releases the existing snapshot handle for the
 // given snapshotID.
 func (in *InMem) ReleaseSnapshot(snapshotID string) error {
+	in.Lock()
+	defer in.Unlock()
 	_, ok := in.snapshots[snapshotID]
 	if !ok {
 		return util.Errorf("snapshotID %s does not exist", snapshotID)
@@ -186,6 +190,8 @@ func (in *InMem) Get(key Key) ([]byte, error) {
 // GetSnapshot returns the value for the given key from the given
 // snapshotID, nil otherwise.
 func (in *InMem) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+	in.RLock()
+	defer in.RUnlock()
 	snapshotHandle, ok := in.snapshots[snapshotID]
 	if !ok {
 		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
@@ -207,42 +213,40 @@ func (in *InMem) getLocked(key Key, data llrb.Tree) ([]byte, error) {
 	return val.(proto.RawKeyValue).Value, nil
 }
 
-// Scan returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive).
-func (in *InMem) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
+// Iterate iterates from start to end keys, invoking f on each
+// key/value pair. See engine.Iterate for details.
+func (in *InMem) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
 	in.RLock()
 	defer in.RUnlock()
-	return in.scanLocked(start, end, max, in.data)
+	return in.iterateLocked(start, end, f, in.data)
 }
 
-// ScanSnapshot returns up to max key/value objects starting from
-// start (inclusive) and ending at end (non-inclusive) from the
-// given snapshotID.
-// Specify max=0 for unbounded scans.
-func (in *InMem) ScanSnapshot(start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
+// Iterate iterates from start to end keys using snapshot ID, invoking
+// f on each key/value pair. See engine.IterateSnapshot for details.
+func (in *InMem) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+	in.RLock()
+	defer in.RUnlock()
 	snapshotHandle, ok := in.snapshots[snapshotID]
 	if !ok {
-		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
+		return util.Errorf("snapshotID %s does not exist", snapshotID)
 	}
-	return in.scanLocked(start, end, max, snapshotHandle)
+	return in.iterateLocked(start, end, f, snapshotHandle)
 }
 
-// scanLocked is intended to be called within at least a read lock.
-func (in *InMem) scanLocked(start, end Key, max int64, data llrb.Tree) ([]proto.RawKeyValue, error) {
-	var scanned []proto.RawKeyValue
+func (in *InMem) iterateLocked(start, end Key, f func(proto.RawKeyValue) (bool, error), data llrb.Tree) error {
 	if bytes.Compare(start, end) >= 0 {
-		return scanned, nil
+		return nil
 	}
+	var err error
 	data.DoRange(func(kv llrb.Comparable) (done bool) {
-		if max != 0 && int64(len(scanned)) >= max {
+		if done, err = f(kv.(proto.RawKeyValue)); done || err != nil {
 			done = true
 			return
 		}
-		scanned = append(scanned, kv.(proto.RawKeyValue))
 		return
 	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
 
-	return scanned, nil
+	return err
 }
 
 // Clear removes the item from the db with the given key.

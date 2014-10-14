@@ -296,20 +296,20 @@ func TestEngineScan1(t *testing.T) {
 		}
 		sort.Strings(sortedKeys)
 
-		keyvals, err := engine.Scan([]byte("chinese"), []byte("german"), 0)
+		keyvals, err := Scan(engine, []byte("chinese"), []byte("german"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:4], keyMap, keyvals)
 
 		// Check an end of range which does not equal an existing key.
-		keyvals, err = engine.Scan([]byte("chinese"), []byte("german1"), 0)
+		keyvals, err = Scan(engine, []byte("chinese"), []byte("german1"), 0)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
 		ensureRangeEqual(t, sortedKeys[1:5], keyMap, keyvals)
 
-		keyvals, err = engine.Scan([]byte("chinese"), []byte("german"), 2)
+		keyvals, err = Scan(engine, []byte("chinese"), []byte("german"), 2)
 		if err != nil {
 			t.Fatalf("could not run scan: %v", err)
 		}
@@ -320,7 +320,7 @@ func TestEngineScan1(t *testing.T) {
 		// a special case in engine.scan, that's why we test it here.
 		startKeys := []Key{Key("cat"), Key("")}
 		for _, startKey := range startKeys {
-			keyvals, err := engine.Scan(startKey, KeyMax, 0)
+			keyvals, err := Scan(engine, startKey, KeyMax, 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -374,7 +374,7 @@ func TestEngineIncrement(t *testing.T) {
 }
 
 func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *testing.T) {
-	kvs, err := engine.Scan(start, end, max)
+	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
 	}
@@ -496,8 +496,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := engine.Scan(key, KeyMax, 0)
-		keyvalsSnapshot, error := engine.ScanSnapshot(key, KeyMax, 0, snapshotID)
+		keyvals, _ := Scan(engine, key, KeyMax, 0)
+		keyvalsSnapshot, error := ScanSnapshot(engine, key, KeyMax, 0, snapshotID)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}

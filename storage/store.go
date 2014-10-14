@@ -229,7 +229,7 @@ func (s *Store) Init() error {
 	end := endKey.Encode(nil)
 	const rows = 64
 	for {
-		kvs, err := s.engine.Scan(start, end, rows)
+		kvs, err := engine.Scan(s.engine, start, end, rows)
 		if err != nil {
 			return err
 		}
@@ -265,7 +265,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 		return err
 	}
 	s.Ident = ident
-	kvs, err := s.engine.Scan(engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
+	kvs, err := engine.Scan(s.engine, engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %s", err)
 	} else if len(kvs) > 0 {

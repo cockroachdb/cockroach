@@ -143,13 +143,13 @@ func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
 	}
 	rc.Lock()
 	defer rc.Unlock()
+
 	prefix := rc.makePrefix()
-	kvs, err := rc.engine.Scan(prefix.Encode(nil), prefix.PrefixEnd().Encode(nil), 0)
-	if err != nil {
-		return err
-	}
+	start := prefix.Encode(nil)
+	end := prefix.PrefixEnd().Encode(nil)
 	batch := []interface{}(nil)
-	for _, kv := range kvs {
+
+	err := rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
 		if cmdID, err := rc.decodeKey(kv.Key); err == nil {
@@ -161,6 +161,10 @@ func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
 			// we're very interested in finding out.
 			glog.Warningf("could not copy a response cache entry: %v", err)
 		}
+		return false, nil
+	})
+	if err != nil {
+		return err
 	}
 	return destRC.engine.WriteBatch(batch)
 }
