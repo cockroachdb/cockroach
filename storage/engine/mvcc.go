@@ -34,6 +34,21 @@ const (
 	splitReservoirSize = 100
 )
 
+// encodeMVCCStatValue constructs a proto.Value using the supplied
+// stat increment and then encodes that into a byte slice. Encoding
+// errors cause panics (as they should never happen). Returns false
+// if stat is equal to 0 to avoid unnecessary merge.
+func encodeMVCCStatValue(stat int64) (ok bool, enc []byte) {
+	if stat == 0 {
+		return false, nil
+	}
+	data, err := gogoproto.Marshal(&proto.Value{Integer: gogoproto.Int64(stat)})
+	if err != nil {
+		panic(fmt.Sprintf("could not marshal proto.Value: %s", err))
+	}
+	return true, data
+}
+
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
 //    note that this includes intent keys and values, but not keys and
@@ -610,6 +625,28 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto
 	}
 
 	return num, nil
+}
+
+// FlushStat flushes the specified stat to merge counters for both
+// the affected range and store.
+func (mvcc *MVCC) FlushStat(rangeID int64, storeID int32, stat Key, statVal int64) {
+	if ok, encStat := encodeMVCCStatValue(statVal); ok {
+		mvcc.batch.Merge(MakeRangeStatKey(rangeID, stat), encStat)
+		mvcc.batch.Merge(MakeStoreStatKey(storeID, stat), encStat)
+	}
+}
+
+// FlushStats flushes stats to merge counters for both the affected
+// range and store.
+func (mvcc *MVCC) FlushStats(rangeID int64, storeID int32) {
+	mvcc.FlushStat(rangeID, storeID, StatLiveBytes, mvcc.LiveBytes)
+	mvcc.FlushStat(rangeID, storeID, StatKeyBytes, mvcc.KeyBytes)
+	mvcc.FlushStat(rangeID, storeID, StatValBytes, mvcc.ValBytes)
+	mvcc.FlushStat(rangeID, storeID, StatIntentBytes, mvcc.IntentBytes)
+	mvcc.FlushStat(rangeID, storeID, StatLiveCount, mvcc.LiveCount)
+	mvcc.FlushStat(rangeID, storeID, StatKeyCount, mvcc.KeyCount)
+	mvcc.FlushStat(rangeID, storeID, StatValCount, mvcc.ValCount)
+	mvcc.FlushStat(rangeID, storeID, StatIntentCount, mvcc.IntentCount)
 }
 
 // a splitSampleItem wraps a key along with an aggregate over key range

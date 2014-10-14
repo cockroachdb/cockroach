@@ -325,6 +325,7 @@ func (s *Store) BootstrapRangeMetadata() *proto.RangeMetadata {
 }
 
 // The following methods are accessors implementation the RangeManager interface.
+func (s *Store) StoreID() int32         { return s.Ident.StoreID }
 func (s *Store) Clock() *hlc.Clock      { return s.clock }
 func (s *Store) Engine() engine.Engine  { return s.engine }
 func (s *Store) Allocator() *allocator  { return s.allocator }
@@ -577,6 +578,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 // (i.e. splitting and merging) operations.
 type RangeManager interface {
 	// Accessors for shared state.
+	StoreID() int32
 	Clock() *hlc.Clock
 	Engine() engine.Engine
 	Allocator() *allocator

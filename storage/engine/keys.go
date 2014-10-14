@@ -207,11 +207,55 @@ func ValidateRangeMetaKey(key Key) error {
 	return nil
 }
 
+// MakeRangeStatKey returns the key for accessing the named stat
+// for the specified range ID.
+func MakeRangeStatKey(rangeID int64, stat Key) Key {
+	encRangeID := encoding.EncodeInt(nil, rangeID)
+	return MakeKey(KeyLocalRangeStatPrefix, encRangeID, stat)
+}
+
+// MakeStoreStatKey returns the key for accessing the named stat
+// for the specified store ID.
+func MakeStoreStatKey(storeID int32, stat Key) Key {
+	encStoreID := encoding.EncodeInt(nil, int64(storeID))
+	return MakeKey(KeyLocalStoreStatPrefix, encStoreID, stat)
+}
+
 func init() {
 	if KeyLocalPrefixLength%7 != 0 {
 		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
 	}
 }
+
+// Constants for key construction.
+var (
+	// StatLiveBytes counts how many bytes are "live", including bytes
+	// from both keys and values. Live rows include only non-deleted
+	// keys and only the most recent value.
+	StatLiveBytes = Key("live-bytes")
+	// StatKeyBytes counts how many bytes are used to store all keys,
+	// including bytes from deleted keys. Key bytes are re-counted for
+	// each versioned value.
+	StatKeyBytes = Key("key-bytes")
+	// StatValBytes counts how many bytes are used to store all values,
+	// including all historical versions and deleted tombstones.
+	StatValBytes = Key("val-bytes")
+	// StatIntentBytes counts how many bytes are used to store values
+	// which are unresolved intents. Includes bytes used for both intent
+	// keys and values.
+	StatIntentBytes = Key("intent-bytes")
+	// StatLiveCount counts how many keys are "live". This includes only
+	// non-deleted keys.
+	StatLiveCount = Key("live-count")
+	// StatKeyCount counts the total number of keys, including both live
+	// and deleted keys.
+	StatKeyCount = Key("key-count")
+	// StatValCount counts the total number of values, including all
+	// historical versions and deleted tombstones.
+	StatValCount = Key("val-count")
+	// StatIntentCount counts the number of unresolved intents.
+	StatIntentCount = Key("intent-count")
+)
 
 // Constants for system-reserved keys in the KV map.
 var (
@@ -263,15 +307,15 @@ var (
 	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
 	// The value is a struct of type RangeMetadata.
 	KeyLocalRangeMetadataPrefix = MakeKey(KeyLocalPrefix, Key("rng-"))
+	// KeyLocalRangeStatPrefix is the prefix for range statistics.
+	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, Key("rst-"))
 	// KeyLocalResponseCachePrefix is the prefix for keys storing command
-	// responses used to guarantee idempotency (see ResponseCache). This key
-	// prefix is duplicated in rocksdb_compaction.cc and must be kept in sync
-	// if modified here.
+	// responses used to guarantee idempotency (see ResponseCache).
 	KeyLocalResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("res-"))
+	// KeyLocalStoreStatPrefix is the prefix for store statistics.
+	KeyLocalStoreStatPrefix = MakeKey(KeyLocalPrefix, Key("sst-"))
 	// KeyLocalTransactionPrefix specifies the key prefix for
-	// transaction records. The suffix is the transaction id. This key
-	// prefix is duplicated in rocksdb_compaction.cc and must be kept in
-	// sync if modified here.
+	// transaction records. The suffix is the transaction id.
 	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("txn-"))
 	// KeyLocalSnapshotIDGenerator is a snapshot ID generator sequence.
 	// Snapshot IDs must be unique per store ID.
