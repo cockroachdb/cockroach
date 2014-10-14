@@ -98,7 +98,7 @@ func (b *Batch) Get(key Key) ([]byte, error) {
 }
 
 // iterateUpdates scans the updates tree from start to end, invoking f
-// on each value.
+// on each value until f returns false or an error.
 func (b *Batch) iterateUpdates(start, end Key, f func(proto.RawKeyValue) (bool, error)) (bool, error) {
 	var done bool
 	var err error
@@ -123,6 +123,11 @@ func (b *Batch) iterateUpdates(start, end Key, f func(proto.RawKeyValue) (bool, 
 // Iterate invokes f on key/value pairs merged from the underlying
 // engine and pending batch updates. If f returns done or an error,
 // the iteration ends and propagates the error.
+//
+// TODO(spencer): this implementation could benefit from an
+// iterator-style interface to the update map. If/when one is
+// provided by the llrb implementation it should be used here
+// to make this code more efficient.
 func (b *Batch) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
 	last := start
 	if err := b.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
