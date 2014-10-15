@@ -32,13 +32,13 @@ type Transport interface {
 	// Listen informs the Transport of the local node's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id int64, server ServerInterface) error
+	Listen(id uint64, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id int64)
+	Stop(id uint64)
 
 	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
-	Connect(id int64) (ClientInterface, error)
+	Connect(id uint64) (ClientInterface, error)
 }
 
 // SendMessageRequest wraps a raft message.
@@ -87,7 +87,7 @@ func (r *rpcAdapter) SendMessage(req *SendMessageRequest, resp *SendMessageRespo
 // Outgoing requests are run in a goroutine and their response ops are returned on the
 // given channel.
 type asyncClient struct {
-	nodeID int64
+	nodeID uint64
 	conn   ClientInterface
 	ch     chan *rpc.Call
 }

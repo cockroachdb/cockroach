@@ -21,7 +21,7 @@ package multiraft
 // TODO(bdarnell): emit EventLeaderElection from follower nodes as well.
 type EventLeaderElection struct {
 	GroupID GroupID
-	NodeID  int64
+	NodeID  uint64
 }
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
