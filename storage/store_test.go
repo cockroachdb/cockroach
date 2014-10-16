@@ -264,25 +264,25 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	}
 }
 
-// TestStoreExecuteCmdWithClockDrift verifies that if the request
+// TestStoreExecuteCmdWithClockOffset verifies that if the request
 // specifies a timestamp further into the future than the node's
-// maximum allowed clock drift, the cmd fails with an error.
-func TestStoreExecuteCmdWithClockDrift(t *testing.T) {
+// maximum allowed clock offset, the cmd fails with an error.
+func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	store, mc := createTestStore(true, t)
 	defer store.Close()
 	args, reply := getArgs([]byte("a"), 2)
 
 	// Set clock to time 1.
 	*mc = hlc.ManualClock(1)
-	// Set clock max drift to 250ms.
-	maxDrift := 250 * time.Millisecond
-	store.clock.SetMaxDrift(maxDrift)
-	// Set args timestamp to exceed max drift.
+	// Set clock max offset to 250ms.
+	maxOffset := 250 * time.Millisecond
+	store.clock.SetMaxOffset(maxOffset)
+	// Set args timestamp to exceed max offset.
 	args.Timestamp = store.clock.Now()
-	args.Timestamp.WallTime += maxDrift.Nanoseconds() + 1
+	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
 	err := store.ExecuteCmd(Get, args, reply)
 	if err == nil {
-		t.Error("expected max drift clock error")
+		t.Error("expected max offset clock error")
 	}
 }
 

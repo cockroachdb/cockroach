@@ -28,13 +28,13 @@ import (
 )
 
 const (
-	maxClockSkew = 250 * time.Millisecond
+	maxClockOffset = 250 * time.Millisecond
 )
 
 func TestTimestampCache(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxDrift(maxClockSkew)
+	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
 
 	// First simulate a read of just "a" at time 0.
@@ -44,24 +44,24 @@ func TestTimestampCache(t *testing.T) {
 	if tc.cache.Len() > 0 {
 		t.Errorf("expected cache to be empty, but contains %d elements", tc.cache.Len())
 	}
-	// Verify GetMax returns the lowWater mark which is maxClockSkew.
-	if rTS, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"a\"")
+	// Verify GetMax returns the lowWater mark which is maxClockOffset.
+	if rTS, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"a\"")
 	}
-	if rTS, _ := tc.GetMax(engine.Key("notincache"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"notincache\"")
+	if rTS, _ := tc.GetMax(engine.Key("notincache"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"notincache\"")
 	}
 
 	// Advance the clock and verify same low water mark.
-	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
-	if rTS, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"a\"")
+	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
+	if rTS, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"a\"")
 	}
-	if rTS, _ := tc.GetMax(engine.Key("notincache"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"notincache\"")
+	if rTS, _ := tc.GetMax(engine.Key("notincache"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"notincache\"")
 	}
 
-	// Sim a read of "b"-"c" at time maxClockSkew + 1.
+	// Sim a read of "b"-"c" at time maxClockOffset + 1.
 	ts := clock.Now()
 	tc.Add(engine.Key("b"), engine.Key("c"), ts, proto.NoTxnMD5, true)
 
@@ -72,8 +72,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _ := tc.GetMax(engine.Key("bb"), nil, proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"bb\"")
 	}
-	if rTS, _ := tc.GetMax(engine.Key("c"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"c\"")
+	if rTS, _ := tc.GetMax(engine.Key("c"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"c\"")
 	}
 	if rTS, _ := tc.GetMax(engine.Key("b"), engine.Key("c"), proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"b\"-\"c\"")
@@ -81,8 +81,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _ := tc.GetMax(engine.Key("bb"), engine.Key("bz"), proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"bb\"-\"bz\"")
 	}
-	if rTS, _ := tc.GetMax(engine.Key("a"), engine.Key("b"), proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"a\"-\"b\"")
+	if rTS, _ := tc.GetMax(engine.Key("a"), engine.Key("b"), proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"a\"-\"b\"")
 	}
 	if rTS, _ := tc.GetMax(engine.Key("a"), engine.Key("bb"), proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"a\"-\"bb\"")
@@ -96,8 +96,8 @@ func TestTimestampCache(t *testing.T) {
 	if rTS, _ := tc.GetMax(engine.Key("bz"), engine.Key("d"), proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"bz\"-\"d\"")
 	}
-	if rTS, _ := tc.GetMax(engine.Key("c"), engine.Key("d"), proto.NoTxnMD5); rTS.WallTime != maxClockSkew.Nanoseconds() {
-		t.Error("expected maxClockSkew for key \"c\"-\"d\"")
+	if rTS, _ := tc.GetMax(engine.Key("c"), engine.Key("d"), proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
+		t.Error("expected maxClockOffset for key \"c\"-\"d\"")
 	}
 }
 
@@ -106,11 +106,11 @@ func TestTimestampCache(t *testing.T) {
 func TestTimestampCacheEviction(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxDrift(maxClockSkew)
+	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
 
-	// Increment time to the maxClockSkew low water mark + 1.
-	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
+	// Increment time to the maxClockOffset low water mark + 1.
+	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
 	aTS := clock.Now()
 	tc.Add(engine.Key("a"), nil, aTS, proto.NoTxnMD5, true)
 
@@ -130,9 +130,9 @@ func TestTimestampCacheEviction(t *testing.T) {
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxDrift(maxClockSkew)
+	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
-	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
+	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
 
 	adTS := clock.Now()
 	tc.Add(engine.Key("a"), engine.Key("d"), adTS, proto.NoTxnMD5, true)
@@ -179,21 +179,21 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 func TestTimestampCacheClear(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	clock.SetMaxDrift(maxClockSkew)
+	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
 
-	// Increment time to the maxClockSkew low water mark + 1.
-	manual = hlc.ManualClock(maxClockSkew.Nanoseconds() + 1)
+	// Increment time to the maxClockOffset low water mark + 1.
+	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
 	ts := clock.Now()
 	tc.Add(engine.Key("a"), nil, ts, proto.NoTxnMD5, true)
 
 	// Clear the cache, which will reset the low water mark to
-	// the current time + maxClockSkew.
+	// the current time + maxClockOffset.
 	tc.Clear(clock)
 
-	// Fetching any keys should give current time + maxClockSkew
+	// Fetching any keys should give current time + maxClockOffset
 	expTS := clock.Timestamp()
-	expTS.WallTime += maxClockSkew.Nanoseconds()
+	expTS.WallTime += maxClockOffset.Nanoseconds()
 	if rTS, _ := tc.GetMax(engine.Key("a"), nil, proto.NoTxnMD5); !rTS.Equal(expTS) {
 		t.Error("expected \"a\" to have cleared timestamp")
 	}

@@ -72,9 +72,9 @@ var (
 		"might include specialized hardware or number of cores (e.g. \"gpu\", "+
 		"\"x16c\"). For example: -attrs=us-west-1b,gpu")
 
-	maxDrift = flag.Duration("max_drift", 250*time.Millisecond, "specify "+
-		"the maximum clock drift for the cluster. Clock drift is measured on all "+
-		"node-to-node links and if any node notices it has clock drift in excess "+
+	maxOffset = flag.Duration("max_offset", 250*time.Millisecond, "specify "+
+		"the maximum clock offset for the cluster. Clock offset is measured on all "+
+		"node-to-node links and if any node notices it has clock offset in excess "+
 		"of -max_drift, it will commit suicide.")
 
 	bootstrapOnly = flag.Bool("bootstrap_only", false, "specify --bootstrap_only "+
@@ -317,11 +317,10 @@ func newServer() (*server, error) {
 		mux:   http.NewServeMux(),
 		clock: hlc.NewClock(hlc.UnixNano),
 	}
-	// TODO(embark): use rpc/clock_offset.go to periodically test that the
-	// server's clock offset is within maxDrift
-	s.clock.SetMaxDrift(*maxDrift)
+	s.clock.SetMaxOffset(*maxOffset)
 
 	rpcContext := rpc.NewContext(s.clock, tlsConfig)
+	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), rpcContext)
 	s.gossip = gossip.New(rpcContext)

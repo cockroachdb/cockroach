@@ -76,6 +76,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.
@@ -85,7 +86,6 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 		t.Error("unexpected client heartbeat success")
 	case <-c.Closed:
 	}
-	s.Close()
 }
 
 func TestOffsetMeasurement(t *testing.T) {
@@ -106,12 +106,13 @@ func TestOffsetMeasurement(t *testing.T) {
 	}
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: newRemoteClockMonitor(serverClock.MaxDrift()),
+		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
 	s.RegisterName("Heartbeat", heartbeat)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
@@ -125,13 +126,11 @@ func TestOffsetMeasurement(t *testing.T) {
 	}
 
 	// Ensure the offsets map was updated properly too.
-	context.remoteClocks.mu.Lock()
-	if o := context.remoteClocks.offsets[c.addr.String()]; o != expectedOffset {
+	context.RemoteClocks.mu.Lock()
+	if o := context.RemoteClocks.offsets[c.addr.String()]; o != expectedOffset {
 		t.Errorf("espected offset %v, actual %v", expectedOffset, o)
 	}
-	context.remoteClocks.mu.Unlock()
-
-	s.Close()
+	context.RemoteClocks.mu.Unlock()
 }
 
 func TestFailedOffestMeasurement(t *testing.T) {
@@ -152,13 +151,14 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	}
 	heartbeat := &ManualHeartbeatService{
 		clock:              serverClock,
-		remoteClockMonitor: newRemoteClockMonitor(serverClock.MaxDrift()),
+		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 		ready:              make(chan bool),
 	}
 	s.RegisterName("Heartbeat", heartbeat)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer s.Close()
 
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.ManualClock(0)
@@ -180,13 +180,11 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	}
 
 	// Ensure the general offsets map was updated properly too.
-	context.remoteClocks.mu.Lock()
-	if o := context.remoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
+	context.RemoteClocks.mu.Lock()
+	if o := context.RemoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
 		t.Errorf("espected offset %v, actual %v", InfiniteOffset, o)
 	}
-	context.remoteClocks.mu.Unlock()
-
-	s.Close()
+	context.RemoteClocks.mu.Unlock()
 }
 
 type AdvancingClock struct {

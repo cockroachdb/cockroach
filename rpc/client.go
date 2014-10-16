@@ -114,7 +114,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client
 		Ready:        make(chan struct{}),
 		Closed:       make(chan struct{}),
 		clock:        context.localClock,
-		remoteClocks: context.remoteClocks,
+		remoteClocks: context.RemoteClocks,
 	}
 	clients[c.Addr().String()] = c
 	clientMu.Unlock()
@@ -232,15 +232,17 @@ func (c *Client) startHeartbeat() {
 	}
 }
 
-// heartbeat sends a single heartbeat RPC.
+// heartbeat sends a single heartbeat RPC. As part of the heartbeat protocol,
+// it measures the clock of the remote to determine the node's clock offset
+// from the remote.
 func (c *Client) heartbeat() error {
 	request := &PingRequest{Offset: c.RemoteOffset(), Addr: c.LocalAddr().String()}
 	response := &PingResponse{}
-	sendTime := c.clock.Now().WallTime
+	sendTime := c.clock.PhysicalNow()
 	call := c.Go("Heartbeat.Ping", request, response, nil)
 	select {
 	case <-call.Done:
-		receiveTime := c.clock.Now().WallTime
+		receiveTime := c.clock.PhysicalNow()
 		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		c.mu.Lock()
 		c.healthy = true
@@ -260,7 +262,7 @@ func (c *Client) heartbeat() error {
 		c.mu.Lock()
 		c.healthy = false
 		c.offset = InfiniteOffset
-		c.offset.MeasuredAt = c.clock.Now().WallTime
+		c.offset.MeasuredAt = c.clock.PhysicalNow()
 		c.mu.Unlock()
 		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)

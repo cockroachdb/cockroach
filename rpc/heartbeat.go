@@ -55,7 +55,7 @@ func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(args.Addr, serverOffset)
-	reply.ServerTime = hs.clock.Now().WallTime
+	reply.ServerTime = hs.clock.PhysicalNow()
 	return nil
 }
 

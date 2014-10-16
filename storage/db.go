@@ -438,7 +438,7 @@ func NewTransaction(name string, baseKey engine.Key, userPriority int32,
 	// Compute timestamp and max timestamp.
 	now := clock.Now()
 	max := now
-	max.WallTime += clock.MaxDrift().Nanoseconds()
+	max.WallTime += clock.MaxOffset().Nanoseconds()
 
 	return &proto.Transaction{
 		Name:         name,

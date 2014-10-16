@@ -103,11 +103,11 @@ func TestEqual(t *testing.T) {
 }
 
 // TestClock performs a complete test of all basic phenomena,
-// including backward jumps in local physical time and clock drift.
+// including backward jumps in local physical time and clock offset.
 func TestClock(t *testing.T) {
 	var m ManualClock
 	c := NewClock(m.UnixNano)
-	c.SetMaxDrift(1000)
+	c.SetMaxOffset(1000)
 	expectedHistory := []struct {
 		// The physical time that this event should take place at.
 		wallClock int64
@@ -158,18 +158,18 @@ func TestClock(t *testing.T) {
 	c.Now()
 }
 
-// TestSetMaxDrift ensures that checking received timestamps
-// for excessive drifts works correctly.
-func TestSetMaxDrift(t *testing.T) {
+// TestSetMaxOffset ensures that checking received timestamps
+// for excessive offsets works correctly.
+func TestSetMaxOffset(t *testing.T) {
 	var m ManualClock = 123456789
 	skewedTime := int64(123456789 + 51)
 	c := NewClock(m.UnixNano)
-	if c.MaxDrift() != 0 {
-		t.Fatalf("unexpected drift setting")
+	if c.MaxOffset() != 0 {
+		t.Fatalf("unexpected offset setting")
 	}
-	c.SetMaxDrift(50)
-	if c.MaxDrift() != 50 {
-		t.Fatalf("unexpected drift setting")
+	c.SetMaxOffset(50)
+	if c.MaxOffset() != 50 {
+		t.Fatalf("unexpected offset setting")
 	}
 	c.Now()
 	if c.Timestamp().WallTime != int64(m) {
@@ -177,13 +177,13 @@ func TestSetMaxDrift(t *testing.T) {
 	}
 	_, err := c.Update(proto.Timestamp{WallTime: skewedTime})
 	if err == nil {
-		t.Fatalf("clock drift not recognized")
+		t.Fatalf("clock offset not recognized")
 	}
-	// Disable drift checking.
-	c.SetMaxDrift(0)
+	// Disable offset checking.
+	c.SetMaxOffset(0)
 	_, err = c.Update(proto.Timestamp{WallTime: skewedTime})
 	if err != nil || c.Timestamp().WallTime != skewedTime {
-		t.Fatalf("failed to disable drift checking")
+		t.Fatalf("failed to disable offset checking")
 	}
 }
 
