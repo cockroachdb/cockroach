@@ -6,7 +6,7 @@ MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 RUN apt-get update -y -qq
 RUN apt-get dist-upgrade -y -qq
 # TODO(pmattis): Use the vendored snappy and gflags.
-RUN apt-get install --auto-remove -y -qq git mercurial build-essential pkg-config bzr zlib1g-dev libbz2-dev libsnappy-dev libgflags-dev libprotobuf-dev protobuf-compiler
+RUN apt-get install --auto-remove -y -qq git mercurial build-essential pkg-config bzr zlib1g-dev libbz2-dev libsnappy-dev libgflags-dev libprotobuf-dev protobuf-compiler gcc-4.7 g++-4.7
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.7 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.7 50
