@@ -11,7 +11,7 @@ import (
 )
 
 type localRPCTransport struct {
-	listeners map[int64]net.Listener
+	listeners map[uint64]net.Listener
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -20,10 +20,10 @@ type localRPCTransport struct {
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
-	return &localRPCTransport{make(map[int64]net.Listener)}
+	return &localRPCTransport{make(map[uint64]net.Listener)}
 }
 
-func (lt *localRPCTransport) Listen(id int64, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
 	rpcServer := rpc.NewServer()
 	err := rpcServer.RegisterName("MultiRaft", &rpcAdapter{server})
 	if err != nil {
@@ -55,12 +55,12 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 	}
 }
 
-func (lt *localRPCTransport) Stop(id int64) {
+func (lt *localRPCTransport) Stop(id uint64) {
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
 }
 
-func (lt *localRPCTransport) Connect(id int64) (ClientInterface, error) {
+func (lt *localRPCTransport) Connect(id uint64) (ClientInterface, error) {
 	address := lt.listeners[id].Addr().String()
 	client, err := rpc.Dial("tcp", address)
 	if err != nil {

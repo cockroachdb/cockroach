@@ -25,9 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/third_party/code.google.com/p/go.net/context"
 )
 
 // GroupID is a unique identifier for a consensus group within the cluster.
@@ -78,14 +78,14 @@ func (c *Config) Validate() error {
 type MultiRaft struct {
 	Config
 	Events   chan interface{}
-	nodeID   int64
+	nodeID   uint64
 	ops      chan interface{}
 	requests chan *rpc.Call
 	stopped  chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID int64, config *Config) (*MultiRaft, error) {
+func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 	if nodeID == 0 {
 		return nil, util.Error("Invalid NodeID")
 	}
@@ -171,7 +171,7 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 
 // CreateGroup creates a new consensus group and joins it. The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []int64) error {
+func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []uint64) error {
 	for _, id := range initialMembers {
 		if id == 0 {
 			return util.Error("Invalid NodeID")
@@ -202,7 +202,7 @@ func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
 // level or does MultiRaft take care of the non-member -> observer -> full member
 // cycle?
 func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMembershipOperation,
-	nodeID int64) error {
+	nodeID uint64) error {
 	op := &changeGroupMembershipOp{
 		groupID,
 		ChangeMembershipPayload{changeOp, nodeID},
@@ -235,9 +235,13 @@ type group struct {
 	softState raft.SoftState
 }
 
-func (m *MultiRaft) newGroup(groupID GroupID, members []int64) *group {
+func (m *MultiRaft) newGroup(groupID GroupID, members []uint64) *group {
+	peers := make([]raft.Peer, len(members))
+	for i, member := range members {
+		peers[i].ID = member
+	}
 	return &group{
-		node: raft.StartNode(int64(m.nodeID), members,
+		node: raft.StartNode(uint64(m.nodeID), peers,
 			m.ElectionTimeoutTicks, m.HeartbeatIntervalTicks),
 		groupID: groupID,
 	}
@@ -247,7 +251,7 @@ type stopOp struct{}
 
 type createGroupOp struct {
 	group          *group
-	initialMembers []int64
+	initialMembers []uint64
 	ch             chan error
 }
 
@@ -265,7 +269,7 @@ type changeGroupMembershipOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   int64
+	nodeID   uint64
 	refCount int
 	client   *asyncClient
 }
@@ -278,7 +282,7 @@ type state struct {
 	rand          *rand.Rand
 	groups        map[GroupID]*group
 	dirtyGroups   map[GroupID]*group
-	nodes         map[int64]*node
+	nodes         map[uint64]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
 	writeTask     *writeTask
@@ -290,7 +294,7 @@ func newState(m *MultiRaft) *state {
 		rand:        util.NewPseudoRand(),
 		groups:      make(map[GroupID]*group),
 		dirtyGroups: make(map[GroupID]*group),
-		nodes:       make(map[int64]*node),
+		nodes:       make(map[uint64]*node),
 		responses:   make(chan *rpc.Call, 100),
 		writeTask:   newWriteTask(m.Storage),
 	}
@@ -317,12 +321,27 @@ func (s *state) start() {
 				}
 				// TODO(bdarnell): write ready.HardState, .Entries, and .Snapshot to storage.
 				for _, entry := range ready.CommittedEntries {
-					// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
-					if entry.Type == raftpb.EntryNormal && entry.Data != nil {
-						s.sendEvent(&EventCommandCommitted{entry.Data})
+					switch entry.Type {
+					case raftpb.EntryNormal:
+						// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
+						if entry.Data != nil {
+							s.sendEvent(&EventCommandCommitted{entry.Data})
+						}
+					case raftpb.EntryConfChange:
+						cc := raftpb.ConfChange{}
+						err := cc.Unmarshal(entry.Data)
+						if err != nil {
+							log.Fatalf("invalid ConfChange data: %s", err)
+						}
+						g.node.ApplyConfChange(cc)
 					}
 				}
 				for _, msg := range ready.Messages {
+					if msg.To == 0 {
+						// TODO(bdarnell): figure out why these are happening
+						log.Warningf("dropping message for node 0")
+						continue
+					}
 					s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
 				}
 			default:

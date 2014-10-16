@@ -49,7 +49,7 @@ const (
 // the new configuration.
 type ChangeMembershipPayload struct {
 	Operation ChangeMembershipOperation
-	Node      int64
+	Node      uint64
 }
 
 // LogEntry is the persistent form of a raft log entry.
