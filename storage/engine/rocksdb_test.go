@@ -112,6 +112,6 @@ func TestRocksDBCompaction(t *testing.T) {
 		MakeLocalKey(txnPre, Key("b")).Encode(nil),
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
-		t.Errorf("expected keys %s, got keys %s", expKeys, keys)
+		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)
 	}
 }

@@ -20,16 +20,14 @@
 
 package engine
 
-/*
-#cgo pkg-config: ./engine.pc
-#include <stdlib.h>
-#include "rocksdb/c.h"
-#include "rocksdb_merge.h"
-#include "rocksdb_compaction.h"
-*/
+// #cgo pkg-config: ./engine.pc
+// #include <stdlib.h>
+// #include "db.h"
+// #include "helper.h"
 import "C"
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"sync"
@@ -51,27 +49,20 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb           *C.rocksdb_t               // The DB handle
-	opts          *C.rocksdb_options_t       // Options used when creating or destroying
-	rOpts         *C.rocksdb_readoptions_t   // The default read options
-	wOpts         *C.rocksdb_writeoptions_t  // The default write options
-	mergeOperator *C.rocksdb_mergeoperator_t // Custom RocksDB merge operator
-
-	// Custom RocksDB compaction filter.
-	compactionFilterFactory *C.rocksdb_compactionfilterfactory_t
+	rdb *C.DBEngine
 
 	attrs      proto.Attributes // Attributes for this engine
 	dir        string           // The data directory
 	gcTimeouts func() (minTxnTS, minRCacheTS int64)
 
-	sync.Mutex                                  // Protects the snapshots map.
-	snapshots  map[string]*C.rocksdb_snapshot_t // Map of snapshot handles by snapshot ID
+	sync.Mutex                          // Protects the snapshots map.
+	snapshots  map[string]*C.DBSnapshot // Map of snapshot handles by snapshot ID
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 	return &RocksDB{
-		snapshots: map[string]*C.rocksdb_snapshot_t{},
+		snapshots: map[string]*C.DBSnapshot{},
 		attrs:     attrs,
 		dir:       dir,
 	}
@@ -80,75 +71,9 @@ func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 //export getGCTimeouts
 // getGCTimeouts returns timestamp values (in unix nanos) for garbage
 // collecting transaction rows and response cache rows respectively.
-func getGCTimeouts(rocksdbPtr unsafe.Pointer) (minTxnTS, minRCacheTS int64) {
+func getGCTimeouts(rocksdbPtr unsafe.Pointer, minTxnTS, minRCacheTS *int64) {
 	rocksdb := (*RocksDB)(rocksdbPtr)
-	return rocksdb.gcTimeouts()
-}
-
-//export getGCPrefixes
-// getGCPrefixes returns key prefixes for transaction and response
-// cache rows, in that order. Each prefix is encoded to match the raw
-// keys in the underlying storage engine. Ownership for the returned
-// strings is assumed by the caller. They should be deallocated using
-// free().
-func getGCPrefixes() (*C.char, *C.char) {
-	// Since we're converting to a C-string, the prefixes which we'll
-	// match against will end at the first null character, or just after
-	// the encoded transaction prefix, up to but not including the
-	// terminating null character.
-	// TODO(spencer): it's fragile to rely on this behavior. Should
-	// consider changing.
-	txnPrefix := KeyLocalTransactionPrefix.Encode(nil)
-	rcachePrefix := KeyLocalResponseCachePrefix.Encode(nil)
-	return C.CString(string(txnPrefix)), C.CString(string(rcachePrefix))
-}
-
-//export reportGCError
-// reportGCError is a callback for the rocksdb custom compaction filter
-// to log errors encountered while trying to parse response cache entries
-// and transaction entires for garbage collection.
-func reportGCError(errMsg *C.char, key *C.char, keyLen C.int, value *C.char, valueLen C.int) {
-	log.Errorf("%s: key=%q, value=%q", C.GoString(errMsg), C.GoStringN(key, keyLen), C.GoStringN(value, valueLen))
-}
-
-// createOptions sets the default options for creating, reading, and writing
-// from the db. destroyOptions should be called when the options aren't needed
-// anymore.
-func (r *RocksDB) createOptions() {
-	// TODO(andybons): Set the cache size.
-	r.opts = C.rocksdb_options_create()
-	C.rocksdb_options_set_create_if_missing(r.opts, 1)
-	// This enables us to use rocksdb_merge with counter semantics.
-	// See rocksdb.{c,h} for the C implementation.
-	r.mergeOperator = C.make_merge_operator()
-	C.rocksdb_options_set_merge_operator(r.opts, r.mergeOperator)
-	// This enables garbage collection of transaction and response cache rows.
-	r.compactionFilterFactory = C.make_gc_compaction_filter_factory(unsafe.Pointer(r))
-	C.rocksdb_options_set_compaction_filter_factory(r.opts, r.compactionFilterFactory)
-
-	r.wOpts = C.rocksdb_writeoptions_create()
-	r.rOpts = C.rocksdb_readoptions_create()
-}
-
-// destroyOptions destroys the options used for creating, reading, and writing
-// from the db. It is meant to be used in conjunction with createOptions.
-func (r *RocksDB) destroyOptions() {
-	// The merge operator and compaction filter are stored inside of
-	// r.opts using std::shared_ptrs, so they'll be freed
-	// automatically. Calling the *_destroy methods directly would
-	// ignore the shared_ptrs, and a subsequent rocksdb_options_destroy
-	// would segfault. The following lines zero the shared_ptrs instead,
-	// which deletes the underlying values.
-	C.rocksdb_options_set_merge_operator(r.opts, nil)
-	C.rocksdb_options_set_compaction_filter_factory(r.opts, nil)
-	C.rocksdb_options_destroy(r.opts)
-	C.rocksdb_readoptions_destroy(r.rOpts)
-	C.rocksdb_writeoptions_destroy(r.wOpts)
-	r.mergeOperator = nil
-	r.compactionFilterFactory = nil
-	r.opts = nil
-	r.rOpts = nil
-	r.wOpts = nil
+	*minTxnTS, *minRCacheTS = rocksdb.gcTimeouts()
 }
 
 // String formatter.
@@ -163,17 +88,28 @@ func (r *RocksDB) Start() error {
 	if r.rdb != nil {
 		return nil
 	}
-	r.createOptions()
 
-	cDir := C.CString(r.dir)
-	defer C.free(unsafe.Pointer(cDir))
+	// TODO(peter): Why do the encoded keys have a nul-byte for a
+	// suffix?
+	txnPrefix := goToCSlice(KeyLocalTransactionPrefix.Encode(nil))
+	txnPrefix.len-- // Trim nul-byte suffix
+	rcachePrefix := goToCSlice(KeyLocalResponseCachePrefix.Encode(nil))
+	rcachePrefix.len-- // Trim nul-byte suffix
 
-	var cErr *C.char
-	if r.rdb = C.rocksdb_open(r.opts, cDir, &cErr); cErr != nil {
-		r.rdb = nil
-		r.destroyOptions()
-		return charToErr(cErr)
+	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
+		C.DBOptions{
+			cache_size:    C.int64_t(*cacheSize),
+			txn_prefix:    txnPrefix,
+			rcache_prefix: rcachePrefix,
+			logger:        C.DBLoggerFunc(nil),
+			gc_timeouts:   C.DBGCTimeoutsFunc(C.getGCTimeoutsHelper),
+			state:         unsafe.Pointer(r),
+		})
+	err := statusToError(status)
+	if err != nil {
+		return err
 	}
+
 	if _, err := r.Capacity(); err != nil {
 		if err := r.Destroy(); err != nil {
 			log.Warningf("could not destroy db at %s", r.dir)
@@ -185,7 +121,7 @@ func (r *RocksDB) Start() error {
 
 // Stop closes the database by deallocating the underlying handle.
 func (r *RocksDB) Stop() {
-	C.rocksdb_close(r.rdb)
+	C.DBClose(r.rdb)
 	r.rdb = nil
 }
 
@@ -200,7 +136,7 @@ func (r *RocksDB) CreateSnapshot(snapshotID string) error {
 	if ok {
 		return util.Errorf("snapshotID %s already exists", snapshotID)
 	}
-	snapshotHandle := C.rocksdb_create_snapshot(r.rdb)
+	snapshotHandle := C.DBNewSnapshot(r.rdb)
 	r.snapshots[snapshotID] = snapshotHandle
 	return nil
 }
@@ -217,7 +153,7 @@ func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
 	if !ok {
 		return util.Errorf("snapshotID %s does not exist", snapshotID)
 	}
-	C.rocksdb_release_snapshot(r.rdb, snapshotHandle)
+	C.DBSnapshotRelease(snapshotHandle)
 	delete(r.snapshots, snapshotID)
 	return nil
 }
@@ -230,26 +166,8 @@ func (r *RocksDB) Attrs() proto.Attributes {
 	return r.attrs
 }
 
-// charToErr converts a *C.char to an error, freeing the given
-// C string in the process.
-func charToErr(c *C.char) error {
-	s := C.GoString(c)
-	C.free(unsafe.Pointer(c))
-	return util.ErrorSkipFrames(1, s)
-}
-
 func emptyKeyError() error {
 	return util.ErrorSkipFrames(1, "attempted access to empty key")
-}
-
-// bytesPointer returns a pointer to the first byte of the slice or
-// nil if the byte slice is empty.
-func bytesPointer(bytes []byte) *C.char {
-	if len(bytes) > 0 {
-		return (*C.char)(unsafe.Pointer(&bytes[0]))
-	}
-	// Empty values correspond to a null pointer.
-	return (*C.char)(nil)
 }
 
 // Put sets the given key to the value provided.
@@ -261,23 +179,10 @@ func (r *RocksDB) Put(key Key, value []byte) error {
 		return emptyKeyError()
 	}
 
-	// rocksdb_put, _get, and _delete call memcpy() (by way of MemTable::Add)
-	// when called, so we do not need to worry about these byte slices being
-	// reclaimed by the GC.
-	var cErr *C.char
-	C.rocksdb_put(
-		r.rdb,
-		r.wOpts,
-		bytesPointer(key),
-		C.size_t(len(key)),
-		bytesPointer(value),
-		C.size_t(len(value)),
-		&cErr)
-
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	// *Put, *Get, and *Delete call memcpy() (by way of MemTable::Add)
+	// when called, so we do not need to worry about these byte slices
+	// being reclaimed by the GC.
+	return statusToError(C.DBPut(r.rdb, goToCSlice(key), goToCSlice(value)))
 }
 
 // Merge implements the RocksDB merge operator using the function goMergeInit
@@ -293,28 +198,15 @@ func (r *RocksDB) Merge(key Key, value []byte) error {
 		return emptyKeyError()
 	}
 
-	// rocksdb_merge calls memcpy() (by way of MemTable::Add)
+	// DBMerge calls memcpy() (by way of MemTable::Add)
 	// when called, so we do not need to worry about these byte slices being
 	// reclaimed by the GC.
-	var cErr *C.char
-	C.rocksdb_merge(
-		r.rdb,
-		r.wOpts,
-		bytesPointer(key),
-		C.size_t(len(key)),
-		bytesPointer(value),
-		C.size_t(len(value)),
-		&cErr)
-
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	return statusToError(C.DBMerge(r.rdb, goToCSlice(key), goToCSlice(value)))
 }
 
 // Get returns the value for the given key.
 func (r *RocksDB) Get(key Key) ([]byte, error) {
-	return r.getInternal(key, r.rOpts)
+	return r.getInternal(key, nil)
 }
 
 // GetSnapshot returns the value for the given key from the given
@@ -327,38 +219,20 @@ func (r *RocksDB) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
 	}
 	r.Unlock()
 
-	opts := C.rocksdb_readoptions_create()
-	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
-	defer C.rocksdb_readoptions_destroy(opts)
-	return r.getInternal(key, opts)
+	return r.getInternal(key, snapshotHandle)
 }
 
 // Get returns the value for the given key.
-func (r *RocksDB) getInternal(key Key, rOpts *C.rocksdb_readoptions_t) ([]byte, error) {
+func (r *RocksDB) getInternal(key Key, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
-	var (
-		cValLen C.size_t
-		cErr    *C.char
-	)
-
-	cVal := C.rocksdb_get(
-		r.rdb,
-		rOpts,
-		bytesPointer(key),
-		C.size_t(len(key)),
-		&cValLen,
-		&cErr)
-
-	if cErr != nil {
-		return nil, charToErr(cErr)
+	var result C.DBString
+	err := statusToError(C.DBGet(r.rdb, snapshotHandle, goToCSlice(key), &result))
+	if err != nil {
+		return nil, err
 	}
-	if cVal == nil {
-		return nil, nil
-	}
-	defer C.free(unsafe.Pointer(cVal))
-	return C.GoBytes(unsafe.Pointer(cVal), C.int(cValLen)), nil
+	return cStringToGoBytes(result), nil
 }
 
 // Clear removes the item from the db with the given key.
@@ -366,27 +240,13 @@ func (r *RocksDB) Clear(key Key) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	var cErr *C.char
-	C.rocksdb_delete(
-		r.rdb,
-		r.wOpts,
-		bytesPointer(key),
-		C.size_t(len(key)),
-		&cErr)
-
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	return statusToError(C.DBDelete(r.rdb, goToCSlice(key)))
 }
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
 func (r *RocksDB) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
-	opts := C.rocksdb_readoptions_create()
-	C.rocksdb_readoptions_set_fill_cache(opts, 0)
-	defer C.rocksdb_readoptions_destroy(opts)
-	return r.iterateInternal(start, end, f, opts)
+	return r.iterateInternal(start, end, f, nil)
 }
 
 // IterateSnapshot iterates from start to end keys, invoking f on
@@ -399,14 +259,11 @@ func (r *RocksDB) IterateSnapshot(start, end Key, snapshotID string, f func(prot
 	}
 	r.Unlock()
 
-	opts := C.rocksdb_readoptions_create()
-	C.rocksdb_readoptions_set_fill_cache(opts, 0)
-	C.rocksdb_readoptions_set_snapshot(opts, snapshotHandle)
-	defer C.rocksdb_readoptions_destroy(opts)
-	return r.iterateInternal(start, end, f, opts)
+	return r.iterateInternal(start, end, f, snapshotHandle)
 }
 
-func (r *RocksDB) iterateInternal(start, end Key, f func(proto.RawKeyValue) (bool, error), opts *C.rocksdb_readoptions_t) error {
+func (r *RocksDB) iterateInternal(start, end Key, f func(proto.RawKeyValue) (bool, error),
+	snapshotHandle *C.DBSnapshot) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
@@ -414,40 +271,33 @@ func (r *RocksDB) iterateInternal(start, end Key, f func(proto.RawKeyValue) (boo
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
-	it := C.rocksdb_create_iterator(r.rdb, opts)
-	defer C.rocksdb_iter_destroy(it)
+	it := C.DBNewIter(r.rdb, snapshotHandle)
+	defer C.DBIterDestroy(it)
 
-	byteCount := len(start)
-	if byteCount == 0 {
+	if len(start) == 0 {
 		// start=Key("") needs special treatment since we need
 		// to access start[0] in an explicit seek.
-		C.rocksdb_iter_seek_to_first(it)
+		C.DBIterSeekToFirst(it)
 	} else {
-		C.rocksdb_iter_seek(it, bytesPointer(start), C.size_t(byteCount))
+		C.DBIterSeek(it, goToCSlice(start))
 	}
-	for ; C.rocksdb_iter_valid(it) == 1; C.rocksdb_iter_next(it) {
-		var l C.size_t
+	for ; C.DBIterValid(it) == 1; C.DBIterNext(it) {
 		// The data returned by rocksdb_iter_{key,value} is not meant to be
 		// freed by the client. It is a direct reference to the data managed
 		// by the iterator, so it is copied instead of freed.
-		data := C.rocksdb_iter_key(it, &l)
-		k := C.GoBytes(unsafe.Pointer(data), C.int(l))
+		data := C.DBIterKey(it)
+		k := cSliceToGoBytes(data)
 		if bytes.Compare(k, end) >= 0 {
 			break
 		}
-		data = C.rocksdb_iter_value(it, &l)
-		v := C.GoBytes(unsafe.Pointer(data), C.int(l))
+		data = C.DBIterValue(it)
+		v := cSliceToGoBytes(data)
 		if done, err := f(proto.RawKeyValue{Key: k, Value: v}); done || err != nil {
 			return err
 		}
 	}
 	// Check for any errors during iteration.
-	var cErr *C.char
-	C.rocksdb_iter_get_error(it, &cErr)
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	return statusToError(C.DBIterError(it))
 }
 
 // WriteBatch applies the puts, merges and deletes atomically via
@@ -457,47 +307,28 @@ func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 	if len(cmds) == 0 {
 		return nil
 	}
-	batch := C.rocksdb_writebatch_create()
-	defer C.rocksdb_writebatch_destroy(batch)
+	batch := C.DBNewBatch()
+	defer C.DBBatchDestroy(batch)
+
 	for i, e := range cmds {
 		switch v := e.(type) {
 		case BatchDelete:
 			if len(v.Key) == 0 {
 				return emptyKeyError()
 			}
-			C.rocksdb_writebatch_delete(
-				batch,
-				bytesPointer(v.Key),
-				C.size_t(len(v.Key)))
+			C.DBBatchDelete(batch, goToCSlice(v.Key))
 		case BatchPut:
-			key, value := v.Key, v.Value
 			// We write the batch before returning from this method, so we
 			// don't need to worry about the GC reclaiming the data stored.
-			C.rocksdb_writebatch_put(
-				batch,
-				bytesPointer(key),
-				C.size_t(len(key)),
-				bytesPointer(value),
-				C.size_t(len(value)))
+			C.DBBatchPut(batch, goToCSlice(v.Key), goToCSlice(v.Value))
 		case BatchMerge:
-			key, value := v.Key, v.Value
-			C.rocksdb_writebatch_merge(
-				batch,
-				bytesPointer(key),
-				C.size_t(len(key)),
-				bytesPointer(value),
-				C.size_t(len(value)))
+			C.DBBatchMerge(batch, goToCSlice(v.Key), goToCSlice(v.Value))
 		default:
 			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
 		}
 	}
 
-	var cErr *C.char
-	C.rocksdb_write(r.rdb, r.wOpts, batch, &cErr)
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	return statusToError(C.DBWrite(r.rdb, batch))
 }
 
 // Capacity queries the underlying file system for disk capacity
@@ -524,63 +355,91 @@ func (r *RocksDB) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
 // last key. Note that the use of the word "Range" here does not refer
 // to Cockroach ranges, just to a generalized key range.
 func (r *RocksDB) CompactRange(start, end Key) {
-	C.rocksdb_compact_range(r.rdb, bytesPointer(start), (C.size_t)(len(start)),
-		bytesPointer(end), (C.size_t)(len(end)))
+	var (
+		s, e       C.DBSlice
+		sPtr, ePtr *C.DBSlice
+	)
+	if start != nil {
+		sPtr = &s
+		s = goToCSlice(start)
+	}
+	if end != nil {
+		ePtr = &e
+		e = goToCSlice(end)
+	}
+	err := statusToError(C.DBCompactRange(r.rdb, sPtr, ePtr))
+	if err != nil {
+		log.Warningf("compact range: %s", err)
+	}
 }
 
 // Destroy destroys the underlying filesystem data associated with the database.
 func (r *RocksDB) Destroy() error {
-	cDir := C.CString(r.dir)
-	defer C.free(unsafe.Pointer(cDir))
-
-	defer r.destroyOptions()
-
-	var cErr *C.char
-	C.rocksdb_destroy_db(r.opts, cDir, &cErr)
-	if cErr != nil {
-		return charToErr(cErr)
-	}
-	return nil
+	return statusToError(C.DBDestroy(goToCSlice([]byte(r.dir))))
 }
 
 // ApproximateSize returns the approximate number of bytes on disk that RocksDB
 // is using to store data for the given range of keys.
 func (r *RocksDB) ApproximateSize(start, end Key) (uint64, error) {
-	// RocksDB's ApproximateSizes function operates on a set of ranges, the
-	// various values of which are passed as parallel arrays. We are only
-	// operating on a single range, but the call is still structured as if there
-	// are multiple ranges.
-	var (
-		rngStarts   = []*C.char{bytesPointer(start)}
-		rngLimits   = []*C.char{bytesPointer(end)}
-		startSizes  = []C.size_t{(C.size_t)(len(start))}
-		limitSizes  = []C.size_t{(C.size_t)(len(end))}
-		returnSizes = make([]uint64, 1)
-	)
-	C.rocksdb_approximate_sizes(
-		r.rdb,
-		C.int(1),
-		&rngStarts[0],
-		&startSizes[0],
-		&rngLimits[0],
-		&limitSizes[0],
-		(*C.uint64_t)(&returnSizes[0]),
-	)
-	return returnSizes[0], nil
+	return uint64(C.DBApproximateSize(r.rdb, goToCSlice(start), goToCSlice(end))), nil
 }
 
 // Flush causes RocksDB to write all in-memory data to disk immediately.
 func (r *RocksDB) Flush() error {
-	flushopts := C.rocksdb_flushoptions_create()
-	defer C.rocksdb_flushoptions_destroy(flushopts)
-	C.rocksdb_flushoptions_set_wait(flushopts, 1)
+	return statusToError(C.DBFlush(r.rdb))
+}
 
-	var cErr *C.char
-	C.rocksdb_flush(r.rdb,
-		flushopts,
-		&cErr)
-	if cErr != nil {
-		return charToErr(cErr)
+func goToCSlice(b []byte) C.DBSlice {
+	if len(b) == 0 {
+		return C.DBSlice{data: nil, len: 0}
 	}
-	return nil
+	return C.DBSlice{
+		data: (*C.char)(unsafe.Pointer(&b[0])),
+		len:  C.int(len(b)),
+	}
+}
+
+func cStringToGoString(s C.DBString) string {
+	if s.data == nil {
+		return ""
+	}
+	result := C.GoStringN(s.data, s.len)
+	C.free(unsafe.Pointer(s.data))
+	return result
+}
+
+func cStringToGoBytes(s C.DBString) []byte {
+	if s.data == nil {
+		return nil
+	}
+	result := C.GoBytes(unsafe.Pointer(s.data), s.len)
+	C.free(unsafe.Pointer(s.data))
+	return result
+}
+
+func cSliceToGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	return C.GoBytes(unsafe.Pointer(s.data), s.len)
+}
+
+func statusToError(s C.DBStatus) error {
+	if s.data == nil {
+		return nil
+	}
+	return errors.New(cStringToGoString(s))
+}
+
+// goMerge takes existing and update byte slices that are expected to
+// be marshalled proto.Values and merges the two values returning a
+// marshalled proto.Value or an error.
+func goMerge(existing, update []byte) ([]byte, error) {
+	var result C.DBString
+	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)
+	if status.data != nil {
+		return nil, util.Errorf("%s: existing=%q, update=%q",
+			cStringToGoString(status), existing, update)
+	}
+	return cStringToGoBytes(result), nil
 }

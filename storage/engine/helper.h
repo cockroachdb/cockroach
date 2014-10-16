@@ -13,8 +13,8 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Peter Mattis (peter.mattis@gmail.com)
 
-#include "rocksdb/c.h"
+#include <stdint.h>
 
-rocksdb_compactionfilterfactory_t* make_gc_compaction_filter_factory(void* rocksdb);
+void getGCTimeoutsHelper(void* rocksdb, int64_t* min_txn_ts, int64_t* min_rcache_ts);
