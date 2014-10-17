@@ -555,9 +555,6 @@ void DBBatchDelete(DBBatch* batch, DBSlice key) {
   batch->rep.Delete(ToSlice(key));
 }
 
-// DBMergeOne implements the merge operator on a single pair of
-// values. update is merged with existing. This method is provided
-// for invocation from Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   new_value->len = 0;
 
