@@ -74,11 +74,12 @@ func (c *Config) Validate() error {
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
-	Events   chan interface{}
-	nodeID   uint64
-	ops      chan interface{}
-	requests chan *rpc.Call
-	stopped  chan struct{}
+	multiNode raft.MultiNode
+	Events    chan interface{}
+	nodeID    uint64
+	ops       chan interface{}
+	requests  chan *rpc.Call
+	stopped   chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
@@ -96,7 +97,9 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 	}
 
 	m := &MultiRaft{
-		Config:   *config,
+		Config: *config,
+		multiNode: raft.StartMultiNode(nodeID, config.ElectionTimeoutTicks,
+			config.HeartbeatIntervalTicks),
 		nodeID:   nodeID,
 		Events:   make(chan interface{}, 1000),
 		ops:      make(chan interface{}, 100),
@@ -123,6 +126,7 @@ func (m *MultiRaft) Stop() {
 	m.Transport.Stop(m.nodeID)
 	m.ops <- &stopOp{}
 	<-m.stopped
+	m.multiNode.Stop()
 }
 
 // DoRPC implements ServerInterface
@@ -175,7 +179,7 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 		}
 	}
 	op := &createGroupOp{
-		m.newGroup(groupID, initialMembers),
+		groupID,
 		initialMembers,
 		make(chan error),
 	}
@@ -220,8 +224,6 @@ type pendingCall struct {
 
 // group represents the state of a consensus group.
 type group struct {
-	node raft.Node
-
 	groupID uint64
 
 	// a List of *pendingCall
@@ -232,22 +234,10 @@ type group struct {
 	softState raft.SoftState
 }
 
-func (m *MultiRaft) newGroup(groupID uint64, members []uint64) *group {
-	peers := make([]raft.Peer, len(members))
-	for i, member := range members {
-		peers[i].ID = member
-	}
-	return &group{
-		node: raft.StartNode(uint64(m.nodeID), peers,
-			m.ElectionTimeoutTicks, m.HeartbeatIntervalTicks),
-		groupID: groupID,
-	}
-}
-
 type stopOp struct{}
 
 type createGroupOp struct {
-	group          *group
+	groupID        uint64
 	initialMembers []uint64
 	ch             chan error
 }
@@ -301,50 +291,6 @@ func (s *state) start() {
 	log.V(1).Infof("node %v starting", s.nodeID)
 	go s.writeTask.start()
 	for {
-		// TODO(bdarnell): this is just enough to get some basic tests
-		// working; it needs to change dramatically when we move from Node
-		// to using the underlying raft objects directly.
-		// HACK: Sleep a bit to allow the Node's goroutine to catch up.
-		time.Sleep(3 * time.Millisecond)
-		for groupID, g := range s.groups {
-			select {
-			case ready := <-g.node.Ready():
-				log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
-				if ready.SoftState != nil {
-					if ready.SoftState.Lead != g.softState.Lead {
-						s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
-					}
-					g.softState = *ready.SoftState
-				}
-				// TODO(bdarnell): write ready.HardState, .Entries, and .Snapshot to storage.
-				for _, entry := range ready.CommittedEntries {
-					switch entry.Type {
-					case raftpb.EntryNormal:
-						// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
-						if entry.Data != nil {
-							s.sendEvent(&EventCommandCommitted{entry.Data})
-						}
-					case raftpb.EntryConfChange:
-						cc := raftpb.ConfChange{}
-						err := cc.Unmarshal(entry.Data)
-						if err != nil {
-							log.Fatalf("invalid ConfChange data: %s", err)
-						}
-						g.node.ApplyConfChange(cc)
-					}
-				}
-				for _, msg := range ready.Messages {
-					if msg.To == 0 {
-						// TODO(bdarnell): figure out why these are happening
-						log.Warningf("dropping message for node 0")
-						continue
-					}
-					s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
-				}
-			default:
-			}
-		}
-
 		var writeReady chan struct{}
 		if len(s.dirtyGroups) > 0 {
 			writeReady = s.writeTask.ready
@@ -400,10 +346,44 @@ func (s *state) start() {
 			s.handleWriteResponse(resp)
 
 		case <-s.Ticker.Chan():
-			// TODO(bdarnell): get rid of this loop over all groups on each tick.
 			log.V(6).Infof("node %v: got tick", s.nodeID)
-			for _, g := range s.groups {
-				g.node.Tick()
+			s.multiNode.Tick()
+
+		case readies := <-s.multiNode.Ready():
+			for groupID, ready := range readies {
+				g := s.groups[groupID]
+				log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
+				if ready.SoftState != nil {
+					if ready.SoftState.Lead != g.softState.Lead {
+						s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
+					}
+					g.softState = *ready.SoftState
+				}
+				// TODO(bdarnell): write ready.HardState, .Entries, and .Snapshot to storage.
+				for _, entry := range ready.CommittedEntries {
+					switch entry.Type {
+					case raftpb.EntryNormal:
+						// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
+						if entry.Data != nil {
+							s.sendEvent(&EventCommandCommitted{entry.Data})
+						}
+					case raftpb.EntryConfChange:
+						cc := raftpb.ConfChange{}
+						err := cc.Unmarshal(entry.Data)
+						if err != nil {
+							log.Fatalf("invalid ConfChange data: %s", err)
+						}
+						s.multiNode.ApplyConfChange(groupID, cc)
+					}
+				}
+				for _, msg := range ready.Messages {
+					if msg.To == 0 {
+						// TODO(bdarnell): figure out why these are happening
+						log.Warningf("dropping message for node 0")
+						continue
+					}
+					s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
+				}
 			}
 		}
 	}
@@ -422,12 +402,15 @@ func (s *state) stop() {
 }
 
 func (s *state) createGroup(op *createGroupOp) {
-	log.V(6).Infof("node %v creating group %v", s.nodeID, op.group.groupID)
-	if _, ok := s.groups[op.group.groupID]; ok {
-		op.ch <- util.Errorf("group %v already exists", op.group.groupID)
+	if _, ok := s.groups[op.groupID]; ok {
+		op.ch <- util.Errorf("group %v already exists", op.groupID)
 		return
 	}
-	for _, member := range op.initialMembers {
+	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
+
+	peers := make([]raft.Peer, len(op.initialMembers))
+	for i, member := range op.initialMembers {
+		peers[i].ID = member
 		if node, ok := s.nodes[member]; ok {
 			node.refCount++
 			continue
@@ -439,28 +422,28 @@ func (s *state) createGroup(op *createGroupOp) {
 		}
 		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
 	}
-	s.groups[op.group.groupID] = op.group
+	s.multiNode.CreateGroup(op.groupID, peers)
+	s.groups[op.groupID] = &group{
+		groupID: op.groupID,
+	}
 	op.ch <- nil
 }
 
 func (s *state) submitCommand(op *submitCommandOp) {
 	log.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
-	g := s.groups[op.groupID]
-	err := g.node.Propose(context.Background(), op.command)
+	err := s.multiNode.Propose(context.Background(), op.groupID, op.command)
 	op.ch <- err
 }
 
 func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
 	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
-	g := s.groups[op.groupID]
-	err := g.node.ProposeConfChange(context.Background(), raftpb.ConfChange{})
+	err := s.multiNode.ProposeConfChange(context.Background(), op.groupID, raftpb.ConfChange{})
 	op.ch <- err
 }
 
 func (s *state) sendMessageRequest(req *SendMessageRequest, resp *SendMessageResponse,
 	call *rpc.Call) {
-	g := s.groups[req.GroupID]
-	err := g.node.Step(context.Background(), req.Message)
+	err := s.multiNode.Step(context.Background(), req.GroupID, req.Message)
 	if err != nil {
 		log.Errorf("raft: %s", err)
 	}
