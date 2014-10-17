@@ -36,28 +36,28 @@ func (b *BlockableStorage) Unblock() {
 	return b.storage.LoadGroups()
 }*/
 
-func (b *BlockableStorage) SetGroupState(groupID GroupID,
+func (b *BlockableStorage) SetGroupState(groupID uint64,
 	state *GroupPersistentState) error {
 	b.wait()
 	return b.storage.SetGroupState(groupID, state)
 }
 
-func (b *BlockableStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry) error {
+func (b *BlockableStorage) AppendLogEntries(groupID uint64, entries []*LogEntry) error {
 	b.wait()
 	return b.storage.AppendLogEntries(groupID, entries)
 }
 
-/*func (b *BlockableStorage) TruncateLog(groupID GroupID, lastIndex int) error {
+/*func (b *BlockableStorage) TruncateLog(groupID uint64, lastIndex int) error {
 	b.wait()
 	return b.storage.TruncateLog(groupID, lastIndex)
 }
 
-func (b *BlockableStorage) GetLogEntry(groupID GroupID, index int) (*LogEntry, error) {
+func (b *BlockableStorage) GetLogEntry(groupID uint64, index int) (*LogEntry, error) {
 	b.wait()
 	return b.storage.GetLogEntry(groupID, index)
 }
 
-func (b *BlockableStorage) GetLogEntries(groupID GroupID, firstIndex, lastIndex int,
+func (b *BlockableStorage) GetLogEntries(groupID uint64, firstIndex, lastIndex int,
 	ch chan<- *LogEntryState) {
 	b.wait()
 	b.storage.GetLogEntries(groupID, firstIndex, lastIndex, ch)

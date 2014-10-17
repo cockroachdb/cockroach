@@ -30,9 +30,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-// GroupID is a unique identifier for a consensus group within the cluster.
-type GroupID int64
-
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
 	Storage   Storage
@@ -171,7 +168,7 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 
 // CreateGroup creates a new consensus group and joins it. The application should
 // arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []uint64) error {
+func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 	for _, id := range initialMembers {
 		if id == 0 {
 			return util.Error("Invalid NodeID")
@@ -190,7 +187,7 @@ func (m *MultiRaft) CreateGroup(groupID GroupID, initialMembers []uint64) error 
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
-func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
+func (m *MultiRaft) SubmitCommand(groupID uint64, command []byte) error {
 	op := &submitCommandOp{groupID, command, make(chan error, 1)}
 	m.ops <- op
 	return <-op.ch
@@ -201,7 +198,7 @@ func (m *MultiRaft) SubmitCommand(groupID GroupID, command []byte) error {
 // TODO(bdarnell): do we expose ChangeMembershipAdd{Member,Observer} to the application
 // level or does MultiRaft take care of the non-member -> observer -> full member
 // cycle?
-func (m *MultiRaft) ChangeGroupMembership(groupID GroupID, changeOp ChangeMembershipOperation,
+func (m *MultiRaft) ChangeGroupMembership(groupID uint64, changeOp ChangeMembershipOperation,
 	nodeID uint64) error {
 	op := &changeGroupMembershipOp{
 		groupID,
@@ -225,7 +222,7 @@ type pendingCall struct {
 type group struct {
 	node raft.Node
 
-	groupID GroupID
+	groupID uint64
 
 	// a List of *pendingCall
 	pendingCalls list.List
@@ -235,7 +232,7 @@ type group struct {
 	softState raft.SoftState
 }
 
-func (m *MultiRaft) newGroup(groupID GroupID, members []uint64) *group {
+func (m *MultiRaft) newGroup(groupID uint64, members []uint64) *group {
 	peers := make([]raft.Peer, len(members))
 	for i, member := range members {
 		peers[i].ID = member
@@ -256,13 +253,13 @@ type createGroupOp struct {
 }
 
 type submitCommandOp struct {
-	groupID GroupID
+	groupID uint64
 	command []byte
 	ch      chan error
 }
 
 type changeGroupMembershipOp struct {
-	groupID GroupID
+	groupID uint64
 	payload ChangeMembershipPayload
 	ch      chan error
 }
@@ -280,8 +277,8 @@ type node struct {
 type state struct {
 	*MultiRaft
 	rand          *rand.Rand
-	groups        map[GroupID]*group
-	dirtyGroups   map[GroupID]*group
+	groups        map[uint64]*group
+	dirtyGroups   map[uint64]*group
 	nodes         map[uint64]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
@@ -292,8 +289,8 @@ func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft:   m,
 		rand:        util.NewPseudoRand(),
-		groups:      make(map[GroupID]*group),
-		dirtyGroups: make(map[GroupID]*group),
+		groups:      make(map[uint64]*group),
+		dirtyGroups: make(map[uint64]*group),
 		nodes:       make(map[uint64]*node),
 		responses:   make(chan *rpc.Call, 100),
 		writeTask:   newWriteTask(m.Storage),

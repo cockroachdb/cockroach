@@ -76,7 +76,7 @@ func (c *testCluster) stop() {
 }
 
 // createGroup replicates a group among the first numReplicas nodes in the cluster
-func (c *testCluster) createGroup(groupID GroupID, numReplicas int) {
+func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 	var replicaIDs []uint64
 	var replicaNodes []*state
 	for i := 0; i < numReplicas; i++ {
@@ -105,7 +105,7 @@ func TestInitialLeaderElection(t *testing.T) {
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		cluster := newTestCluster(3, t)
-		groupID := GroupID(1)
+		groupID := uint64(1)
 		cluster.createGroup(groupID, 3)
 
 		event := cluster.waitForElection(leaderIndex)
@@ -123,7 +123,7 @@ func TestInitialLeaderElection(t *testing.T) {
 func TestCommand(t *testing.T) {
 	cluster := newTestCluster(3, t)
 	defer cluster.stop()
-	groupID := GroupID(1)
+	groupID := uint64(1)
 	cluster.createGroup(groupID, 3)
 	cluster.waitForElection(0)
 
@@ -144,7 +144,7 @@ func TestCommand(t *testing.T) {
 func disabledTestSlowStorage(t *testing.T) {
 	cluster := newTestCluster(3, t)
 	defer cluster.stop()
-	groupID := GroupID(1)
+	groupID := uint64(1)
 	cluster.createGroup(groupID, 3)
 
 	cluster.waitForElection(0)
@@ -189,7 +189,7 @@ func TestMembershipChange(t *testing.T) {
 	defer cluster.stop()
 
 	// Create a group with a single member, cluster.nodes[0].
-	groupID := GroupID(1)
+	groupID := uint64(1)
 	cluster.createGroup(groupID, 1)
 	cluster.waitForElection(0)
 
