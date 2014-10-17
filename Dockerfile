@@ -1,4 +1,4 @@
-FROM golang
+FROM golang:latest
 
 MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 
