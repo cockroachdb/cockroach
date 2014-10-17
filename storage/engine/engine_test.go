@@ -186,7 +186,7 @@ func TestEngineBatch(t *testing.T) {
 func TestEnginePutGetDelete(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Test for correct handling of empty keys, which should produce errors.
-		for _, err := range []error{
+		for i, err := range []error{
 			engine.Put([]byte(""), []byte("")),
 			engine.Put(nil, []byte("")),
 			func() error {
@@ -202,7 +202,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 			engine.Clear([]byte("")),
 		} {
 			if err == nil {
-				t.Fatalf("illegal handling of empty key")
+				t.Fatalf("%d: illegal handling of empty key", i)
 			}
 		}
 

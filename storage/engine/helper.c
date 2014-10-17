@@ -13,8 +13,14 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Peter Mattis (peter.mattis@gmail.com)
 
-#include "rocksdb/c.h"
+#include "helper.h"
+#include "_cgo_export.h"
 
-rocksdb_mergeoperator_t *make_merge_operator();
+void getGCTimeoutsHelper(void* rocksdb, int64_t* min_txn_ts, int64_t* min_rcache_ts) {
+  // NOTE(peter): This function exists because I can't figure out how
+  // to set a pointer to the function getGCTimeouts directly in
+  // DBOptions.gc_timeouts.
+  getGCTimeouts(rocksdb, (GoInt64*)min_txn_ts, (GoInt64*)min_rcache_ts);
+}
