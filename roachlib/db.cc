@@ -270,8 +270,7 @@ bool MergeValues(proto::Value *left, const proto::Value &right) {
 DBStatus MergeResult(proto::Value* value, DBString* result) {
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
-  // to what is being done in Go. Worst case we can port the Go crc32
-  // back to C/C++.
+  // to what is being done in Go. Zlib's crc32 should be sufficient.
   value->clear_checksum();
   result->len = value->ByteSize();
   result->data = static_cast<char*>(malloc(result->len));
@@ -370,9 +369,11 @@ class DBLogger : public rocksdb::Logger {
       : func_(f) {
   }
   virtual void Logv(const char* format, va_list ap) {
-    // TODO(pmattis): forward to Go logging.
-    // vfprintf(stderr, format, ap);
-    // fprintf(stderr, "\n");
+    // TODO(pmattis): forward to Go logging. Also need to benchmark
+    // calling Go exported methods from C++ to determine if this is
+    // too slow.
+    vfprintf(stderr, format, ap);
+    fprintf(stderr, "\n");
   }
 
  private:

@@ -89,8 +89,9 @@ func (r *RocksDB) Start() error {
 		return nil
 	}
 
-	// TODO(peter): Why do the encoded keys have a nul-byte for a
-	// suffix?
+	// Encoded keys have a nul-byte suffix as part of their encoding. We
+	// need to trim this suffix in order to get the prefix that is
+	// common to transaction and response cache keys.
 	txnPrefix := goToCSlice(KeyLocalTransactionPrefix.Encode(nil))
 	txnPrefix.len-- // Trim nul-byte suffix
 	rcachePrefix := goToCSlice(KeyLocalResponseCachePrefix.Encode(nil))
@@ -389,6 +390,12 @@ func (r *RocksDB) Flush() error {
 	return statusToError(C.DBFlush(r.rdb))
 }
 
+// goToCSlice converts a go byte slice to a DBSlice. Note that this is
+// potentially dangerous as the DBSlice holds a reference to the go
+// byte slice memory that the Go GC does not know about. This method
+// is only intended for use in converting arguments to C
+// functions. The C function must copy any data that it wishes to
+// retain once the function returns.
 func goToCSlice(b []byte) C.DBSlice {
 	if len(b) == 0 {
 		return C.DBSlice{data: nil, len: 0}
