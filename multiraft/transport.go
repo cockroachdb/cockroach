@@ -43,7 +43,7 @@ type Transport interface {
 
 // SendMessageRequest wraps a raft message.
 type SendMessageRequest struct {
-	GroupID GroupID
+	GroupID uint64
 	Message raftpb.Message
 }
 

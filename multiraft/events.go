@@ -20,7 +20,7 @@ package multiraft
 // An EventLeaderElection is broadcast when a group completes an election.
 // TODO(bdarnell): emit EventLeaderElection from follower nodes as well.
 type EventLeaderElection struct {
-	GroupID GroupID
+	GroupID uint64
 	NodeID  uint64
 }
 

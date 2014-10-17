@@ -60,7 +60,7 @@ type LogEntry struct {
 // GroupPersistentState is a unified view of the readable data (except for log entries)
 // about a group; used by Storage.LoadGroups.
 type GroupPersistentState struct {
-	GroupID   GroupID
+	GroupID   uint64
 	HardState raftpb.HardState
 }
 
@@ -80,23 +80,23 @@ type Storage interface {
 	//LoadGroups() <-chan *GroupPersistentState
 
 	// SetGroupState is called to update the persistent state for the given group.
-	SetGroupState(groupID GroupID, state *GroupPersistentState) error
+	SetGroupState(groupID uint64, state *GroupPersistentState) error
 
 	// AppendLogEntries is called to add entries to the log. The entries will always span
 	// a contiguous range of indices just after the current end of the log.
-	AppendLogEntries(groupID GroupID, entries []*LogEntry) error
+	AppendLogEntries(groupID uint64, entries []*LogEntry) error
 
 	// TruncateLog is called to delete all log entries with index > lastIndex.
-	//TruncateLog(groupID GroupID, lastIndex int) error
+	//TruncateLog(groupID uint64, lastIndex int) error
 
 	// GetLogEntry is called to synchronously retrieve an entry from the log.
-	//GetLogEntry(groupID GroupID, index int) (*LogEntry, error)
+	//GetLogEntry(groupID uint64, index int) (*LogEntry, error)
 
 	// GetLogEntries is called to asynchronously retrieve entries from the log,
 	// from firstIndex to lastIndex inclusive. If there is an error the storage
 	// layer should send one LogEntryState with a non-nil error and then close the
 	// channel.
-	//GetLogEntries(groupID GroupID, firstIndex, lastIndex int, ch chan<- *LogEntryState)
+	//GetLogEntries(groupID uint64, firstIndex, lastIndex int, ch chan<- *LogEntryState)
 }
 
 type memoryGroup struct {
@@ -106,7 +106,7 @@ type memoryGroup struct {
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
-	groups map[GroupID]*memoryGroup
+	groups map[uint64]*memoryGroup
 }
 
 // Verifying implementation of Storage interface.
@@ -114,7 +114,7 @@ var _ Storage = (*MemoryStorage)(nil)
 
 // NewMemoryStorage creates a MemoryStorage.
 func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{make(map[GroupID]*memoryGroup)}
+	return &MemoryStorage{make(map[uint64]*memoryGroup)}
 }
 
 // LoadGroups implements the Storage interface.
@@ -126,31 +126,31 @@ func NewMemoryStorage() *MemoryStorage {
 }*/
 
 // SetGroupState implements the Storage interface.
-func (m *MemoryStorage) SetGroupState(groupID GroupID,
+func (m *MemoryStorage) SetGroupState(groupID uint64,
 	state *GroupPersistentState) error {
 	m.getGroup(groupID).state = *state
 	return nil
 }
 
 // AppendLogEntries implements the Storage interface.
-func (m *MemoryStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry) error {
+func (m *MemoryStorage) AppendLogEntries(groupID uint64, entries []*LogEntry) error {
 	g := m.getGroup(groupID)
 	g.entries = append(g.entries, entries...)
 	return nil
 }
 
 // TruncateLog implements the Storage interface.
-/*func (m *MemoryStorage) TruncateLog(groupID GroupID, lastIndex int) error {
+/*func (m *MemoryStorage) TruncateLog(groupID uint64, lastIndex int) error {
 	panic("unimplemented")
 }*/
 
 // GetLogEntry implements the Storage interface.
-/*func (m *MemoryStorage) GetLogEntry(groupID GroupID, index int) (*LogEntry, error) {
+/*func (m *MemoryStorage) GetLogEntry(groupID uint64, index int) (*LogEntry, error) {
 	panic("unimplemented")
 }*/
 
 // GetLogEntries implements the Storage interface.
-/*func (m *MemoryStorage) GetLogEntries(groupID GroupID, firstIndex, lastIndex int,
+/*func (m *MemoryStorage) GetLogEntries(groupID uint64, firstIndex, lastIndex int,
 	ch chan<- *LogEntryState) {
 	g := m.getGroup(groupID)
 	for i := firstIndex; i <= lastIndex; i++ {
@@ -160,7 +160,7 @@ func (m *MemoryStorage) AppendLogEntries(groupID GroupID, entries []*LogEntry) e
 }*/
 
 // getGroup returns a mutable memoryGroup object, creating if necessary.
-func (m *MemoryStorage) getGroup(groupID GroupID) *memoryGroup {
+func (m *MemoryStorage) getGroup(groupID uint64) *memoryGroup {
 	g, ok := m.groups[groupID]
 	if !ok {
 		g = &memoryGroup{
@@ -180,12 +180,12 @@ type groupWriteRequest struct {
 
 // writeRequest is a collection of groupWriteRequests.
 type writeRequest struct {
-	groups map[GroupID]*groupWriteRequest
+	groups map[uint64]*groupWriteRequest
 }
 
 // newWriteRequest creates a writeRequest.
 func newWriteRequest() *writeRequest {
-	return &writeRequest{make(map[GroupID]*groupWriteRequest)}
+	return &writeRequest{make(map[uint64]*groupWriteRequest)}
 }
 
 // groupWriteResponse represents the final state of a persistent group.
@@ -201,7 +201,7 @@ type groupWriteResponse struct {
 
 // writeResponse is a collection of groupWriteResponses.
 type writeResponse struct {
-	groups map[GroupID]*groupWriteResponse
+	groups map[uint64]*groupWriteResponse
 }
 
 // writeTask manages a goroutine that interacts with the storage system.
@@ -241,7 +241,7 @@ func (w *writeTask) start() {
 		case request = <-w.in:
 		}
 		log.V(6).Infof("writeTask got request %#v", *request)
-		response := &writeResponse{make(map[GroupID]*groupWriteResponse)}
+		response := &writeResponse{make(map[uint64]*groupWriteResponse)}
 
 		for groupID, groupReq := range request.groups {
 			groupResp := &groupWriteResponse{nil, -1, -1, groupReq.entries}
