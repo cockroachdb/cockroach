@@ -33,9 +33,11 @@ import (
 )
 
 // startTestWriter creates a writer which intiates a sequence of
-// transactions, each which writes up to 10 times to random keys
-// with random values.
-func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32, done <-chan struct{}, t *testing.T) {
+// transactions, each which writes up to 10 times to random keys with
+// random values. If not nil, txnChannel is written to every time a
+// new transaction starts.
+func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
+	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
 	for {
 		select {
@@ -55,7 +57,9 @@ func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			}
 			first := true
 			err := db.RunTransaction(txnOpts, func(txn storage.DB) error {
-				if !first && retries != nil {
+				if first && txnChannel != nil {
+					txnChannel <- struct{}{}
+				} else if !first && retries != nil {
 					atomic.AddInt32(retries, 1)
 				}
 				first = false
@@ -88,6 +92,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 
 	// This channel shuts the whole apparatus down.
 	done := make(chan struct{})
+	txnChannel := make(chan struct{}, 1000)
 
 	// Set five split keys, about evenly spaced along the range of random keys.
 	splitKeys := []engine.Key{engine.Key("G"), engine.Key("R"), engine.Key("a"), engine.Key("l"), engine.Key("s")}
@@ -98,12 +103,15 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		go startTestWriter(db, int64(i), 1<<7, &wg, &retries, done, t)
+		go startTestWriter(db, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
-		time.Sleep(5 * time.Millisecond) // allow some time for transactions to make progress
+		// Allow txns to start before initiating split.
+		for i := 0; i < concurrency; i++ {
+			<-txnChannel
+		}
 		log.Infof("starting split at key %q..", splitKey)
 		splitR := <-db.AdminSplit(&proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey})
 		if splitR.GoError() != nil {
@@ -151,7 +159,9 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 
 	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})
-	go startTestWriter(db, int64(0), 1<<15, nil, nil, done, t)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go startTestWriter(db, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
@@ -177,4 +187,5 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		t.Errorf("failed to split 5 times: %s", err)
 	}
 	close(done)
+	wg.Wait()
 }
