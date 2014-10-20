@@ -245,3 +245,9 @@ func TestRangeMetaKey(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyString(t *testing.T) {
+	if KeyMax.String() != "\xff..." {
+		t.Errorf("expected key max to display a compact version: %s", KeyMax.String())
+	}
+}
