@@ -6,6 +6,7 @@ package multiraft
 import (
 	"net"
 	"net/rpc"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -44,12 +45,11 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			if opError, ok := err.(*net.OpError); ok {
-				if opError.Err.Error() == "use of closed network connection" {
-					return
-				}
+			if strings.HasSuffix(err.Error(), "use of closed network connection") {
+				return
 			}
-			log.Errorf("rpc.Serve: accept: %s", err.Error())
+			log.Errorf("localRPCTransport.accept: %s", err.Error())
+			continue
 		}
 		go server.ServeConn(conn)
 	}
