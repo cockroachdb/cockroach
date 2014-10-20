@@ -1454,7 +1454,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	updatedDesc.EndKey = splitKey
 
 	log.Infof("initiating a split of range %d %q-%q at key %q", r.RangeID,
-		r.Desc.StartKey, r.Desc.EndKey, splitKey)
+		engine.Key(r.Desc.StartKey), engine.Key(r.Desc.EndKey), splitKey)
 
 	txnOpts := &TransactionOptions{
 		Name:         fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),

@@ -136,6 +136,13 @@ func (k Key) Compare(b interval.Comparable) int {
 	return bytes.Compare(k, b.(Key))
 }
 
+func (k Key) String() string {
+	if k.Equal(KeyMax) {
+		return "\xff..."
+	}
+	return string(k)
+}
+
 // Value specifies the value at a key. Multiple values at the same key
 // are supported based on timestamp.
 type Value struct {
