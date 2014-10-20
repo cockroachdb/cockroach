@@ -59,7 +59,7 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("permission config has invalid format: %s: %s", configStr, err)
 	}
 	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
-	if err := storage.PutProto(ph.db, permKey, config, proto.Timestamp{}); err != nil {
+	if err := storage.PutProto(ph.db, permKey, config); err != nil {
 		return err
 	}
 	return nil

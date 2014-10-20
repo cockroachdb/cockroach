@@ -155,7 +155,7 @@ func EncodeBinary(b []byte, i []byte) []byte {
 // the input buffer, after decoding the binary value.
 func DecodeBinary(buf []byte) ([]byte, []byte) {
 	if buf[0] != orderedEncodingBinary {
-		panic("doesn't begin with binary encoding byte")
+		panic(fmt.Sprintf("%q doesn't begin with binary encoding byte", buf))
 	}
 	out := new(bytes.Buffer)
 	s := uint(6)
@@ -192,7 +192,7 @@ func DecodeBinary(buf []byte) ([]byte, []byte) {
 // (see documentation for EncodeBinary for more details).
 func DecodeBinaryFinal(buf []byte) []byte {
 	if buf[0] != orderedEncodingBinaryNoTermination {
-		panic("doesn't begin with binary encoding byte")
+		panic(fmt.Sprintf("%q doesn't begin with binary-no-termination encoding byte", buf))
 	}
 	out := make([]byte, len(buf)-1)
 	copy(buf[1:], out)

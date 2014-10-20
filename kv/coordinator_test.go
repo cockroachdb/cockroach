@@ -21,7 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -32,18 +34,19 @@ import (
 // a store using an in-memory engine. Returns the created kv.DB and
 // associated clock's manual time.
 func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
+	g := gossip.New(rpcContext)
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
 	kv := NewLocalKV()
 	db := NewDB(kv, clock)
-	store := storage.NewStore(clock, eng, db, nil)
+	store := storage.NewStore(clock, eng, db, g)
 	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	kv.AddStore(store)
-	_, err := store.CreateRange(store.BootstrapRangeMetadata())
-	if err != nil {
+	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Init(); err != nil {

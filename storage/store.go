@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -45,22 +44,30 @@ const (
 	raftIDAllocCount = 10
 	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
 	rangeIDAllocCount = 10
+	// uuidLength is the length of a UUID string, used to allot extra
+	// key length to transaction records, which have a UUID appended.
+	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
+	uuidLength = 36
 )
 
-// rangeMetadataKeyPrefix and hexadecimal-formatted range ID.
-func makeRangeKey(rangeID int64) engine.Key {
-	return engine.MakeLocalKey(engine.KeyLocalRangeMetadataPrefix, engine.Key(strconv.FormatInt(rangeID, 10)))
-}
-
 // verifyKeyLength verifies key length. Extra key length is allowed for
-// keys prefixed with the meta1 or meta2 addressing prefixes.
+// the local key prefix (for example, a transaction record), and also for
+// keys prefixed with the meta1 or meta2 addressing prefixes. There is a
+// special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key engine.Key) error {
 	maxLength := engine.KeyMaxLength
-	if bytes.HasPrefix(key, engine.KeyMeta1Prefix) || bytes.HasPrefix(key, engine.KeyMeta2Prefix) {
-		maxLength += len(engine.KeyMeta1Prefix)
+	// Transaction records get a UUID appended, so we increase allowed max length.
+	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
+		maxLength += uuidLength
+	}
+	if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
+		key = key[engine.KeyLocalPrefixLength:]
+	}
+	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {
+		key = key[len(engine.KeyMeta1Prefix):]
 	}
 	if len(key) > maxLength {
-		return util.Errorf("maximum key length exceeded for %q: %d > %d", key, len(key), maxLength)
+		return util.Errorf("maximum key length exceeded for %q", key)
 	}
 	return nil
 }
@@ -94,7 +101,7 @@ func verifyKeys(start, end engine.Key) error {
 type RangeSlice []*Range
 
 // Implementation of sort.Interface which sorts by StartKey from each
-// range's metadata.
+// range's descriptor.
 func (rs RangeSlice) Len() int {
 	return len(rs)
 }
@@ -102,7 +109,7 @@ func (rs RangeSlice) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 func (rs RangeSlice) Less(i, j int) bool {
-	return bytes.Compare(rs[i].Meta.StartKey, rs[j].Meta.StartKey) < 0
+	return bytes.Compare(rs[i].Desc.StartKey, rs[j].Desc.StartKey) < 0
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -223,33 +230,29 @@ func (s *Store) Init() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	startKey := engine.KeyLocalRangeMetadataPrefix
-	endKey := startKey.PrefixEnd()
-	start := startKey.Encode(nil)
-	end := endKey.Encode(nil)
-	const rows = 64
-	for {
-		kvs, err := engine.Scan(s.engine, start, end, rows)
-		if err != nil {
-			return err
+	mvcc := engine.NewMVCC(engine.NewBatch(s.engine))
+	start := engine.KeyLocalRangeDescriptorPrefix
+	end := start.PrefixEnd()
+
+	// Iterate over all range descriptors, using just committed
+	// versions. Uncommitted intents which have been abandoned due to a
+	// split crashing halfway will simply be resolved on the next split
+	// attempt. They can otherwise be ignored.
+	if err := mvcc.IterateCommitted(start, end, func(kv proto.KeyValue) (bool, error) {
+		var desc proto.RangeDescriptor
+		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
+			return false, err
 		}
-		for _, kv := range kvs {
-			var meta proto.RangeMetadata
-			if err := gogoproto.Unmarshal(kv.Value, &meta); err != nil {
-				return err
-			}
-			rng := NewRange(&meta, s)
-			rng.Start()
-			s.ranges[meta.RangeID] = rng
-			s.rangesByKey = append(s.rangesByKey, rng)
-		}
-		if len(kvs) < rows {
-			break
-		}
-		start = engine.Key(kvs[rows-1].Key).Next()
+		rangeID := desc.FindReplica(s.Ident.StoreID).RangeID
+		rng := NewRange(rangeID, &desc, s)
+		rng.Start()
+		s.ranges[rangeID] = rng
+		s.rangesByKey = append(s.rangesByKey, rng)
+		return false, nil
+	}); err != nil {
+		return err
 	}
 
-	// Ensure that ranges are sorted.
 	sort.Sort(s.rangesByKey)
 
 	return nil
@@ -295,132 +298,184 @@ func (s *Store) LookupRange(start, end engine.Key) *Range {
 	startAddr := start.Address()
 	endAddr := end.Address()
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
-		return startAddr.Less(s.rangesByKey[i].Meta.EndKey)
+		return startAddr.Less(s.rangesByKey[i].Desc.EndKey)
 	})
-	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Meta.ContainsKeyRange(startAddr, endAddr) {
+	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKeyRange(startAddr, endAddr) {
 		return nil
 	}
 	return s.rangesByKey[n]
 }
 
-// BootstrapRangeMetadata returns a range metadata for the very first range
-// in a cluster.
-func (s *Store) BootstrapRangeMetadata() *proto.RangeMetadata {
-	return &proto.RangeMetadata{
-		ClusterID: s.Ident.ClusterID,
-		RangeDescriptor: proto.RangeDescriptor{
-			RaftID:   1,
-			StartKey: engine.KeyMin,
-			EndKey:   engine.KeyMax,
-			Replicas: []proto.Replica{
-				proto.Replica{
-					NodeID:  1,
-					StoreID: 1,
-					RangeID: 1,
-				},
+// BootstrapRange creates the first range in the cluster and manually
+// writes it to the store. Default range addressing records are
+// created for meta1 and meta2. Default configurations for accounting,
+// permissions, and zones are created. All configs are specified for
+// the empty key prefix, meaning they apply to the entire
+// database. Permissions are granted to all users and the zone
+// requires three replicas with no other specifications.
+func (s *Store) BootstrapRange() (*Range, error) {
+	desc := &proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: engine.KeyMin,
+		EndKey:   engine.KeyMax,
+		Replicas: []proto.Replica{
+			proto.Replica{
+				NodeID:  1,
+				StoreID: 1,
+				RangeID: 1,
 			},
 		},
-		RangeID: 1,
 	}
-}
-
-// The following methods are accessors implementation the RangeManager interface.
-func (s *Store) StoreID() int32         { return s.Ident.StoreID }
-func (s *Store) Clock() *hlc.Clock      { return s.clock }
-func (s *Store) Engine() engine.Engine  { return s.engine }
-func (s *Store) Allocator() *allocator  { return s.allocator }
-func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
-
-// NewRangeMetadata creates a new RangeMetadata based on start and
-// end keys and the supplied proto.Replicas slice. It allocates new
-// Raft and range IDs to fill out the supplied RangeMetadata. Returns
-// the new RangeMetadata.
-func (s *Store) NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata {
-	meta := &proto.RangeMetadata{
-		ClusterID: s.Ident.ClusterID,
-		RangeDescriptor: proto.RangeDescriptor{
-			RaftID:   s.raftIDAlloc.Allocate(),
-			StartKey: start,
-			EndKey:   end,
-			Replicas: replicas,
+	batch := engine.NewBatch(s.engine)
+	mvcc := engine.NewMVCC(batch)
+	now := s.clock.Now()
+	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Write meta1.
+	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Write meta2.
+	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Accounting config.
+	acctConfig := &proto.AcctConfig{}
+	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, acctConfig); err != nil {
+		return nil, err
+	}
+	// Permission config.
+	permConfig := &proto.PermConfig{
+		Read:  []string{UserRoot}, // root user
+		Write: []string{UserRoot}, // root user
+	}
+	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, permConfig); err != nil {
+		return nil, err
+	}
+	// Zone config.
+	// TODO(spencer): change this when zone specifications change to elect for three
+	// replicas with no specific features set.
+	zoneConfig := &proto.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			proto.Attributes{},
+			proto.Attributes{},
+			proto.Attributes{},
 		},
-		// Note that RangeID is specifically left blank, as it varies
-		// for each replica which belongs to the range.
+		RangeMinBytes: 1048576,
+		RangeMaxBytes: 67108864,
 	}
-
-	// Allocate a range ID for each replica.
-	for i := range meta.Replicas {
-		meta.Replicas[i].RangeID = s.rangeIDAlloc.Allocate()
+	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, zoneConfig); err != nil {
+		return nil, err
 	}
-
-	return meta
-}
-
-// CreateRange creates a new Range using the provided RangeMetadata.
-// It persists the metadata locally and adds the new range to the
-// ranges map and sorted rangesByKey slice for doing range lookups
-// by key.
-func (s *Store) CreateRange(meta *proto.RangeMetadata) (*Range, error) {
-	// Set the RangeID for meta based on the replica which matches this store.
-	for _, repl := range meta.Replicas {
-		if repl.StoreID == s.Ident.StoreID {
-			meta.RangeID = repl.RangeID
-			break
-		}
-	}
-	if meta.RangeID == 0 {
-		return nil, util.Errorf("unable to determine range ID for this range; no replicas match store %d: %v",
-			s.Ident.StoreID, meta.Replicas)
-	}
-
-	rng := NewRange(meta, s)
-	err := s.writeRangeToEngine(rng)
-	if err != nil {
+	if err := batch.Commit(); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
-	s.ranges[meta.RangeID] = rng
+	defer s.mu.Unlock()
+	rng := NewRange(1, desc, s)
+	rng.Start()
+	s.ranges[rng.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
-	sort.Sort(s.rangesByKey)
-	s.mu.Unlock()
-
 	return rng, nil
 }
 
-// UpdateRange writes the range metadata of a range contained in this store to
-// the engine, overwriting previously stored metadata for the given rangeID.
-func (s *Store) UpdateRange(rangeID int64) error {
-	rng, err := s.GetRange(rangeID)
-	if err != nil {
-		return err
+// The following methods are accessors implementation the RangeManager interface.
+
+// ClusterID accessor.
+func (s *Store) ClusterID() string { return s.Ident.ClusterID }
+
+// StoreID accessor.
+func (s *Store) StoreID() int32 { return s.Ident.StoreID }
+
+// Clock accessor.
+func (s *Store) Clock() *hlc.Clock { return s.clock }
+
+// Engine accessor.
+func (s *Store) Engine() engine.Engine { return s.engine }
+
+// DB accessor.
+func (s *Store) DB() DB { return s.db }
+
+// Allocator accessor.
+func (s *Store) Allocator() *allocator { return s.allocator }
+
+// Gossip accessor.
+func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
+
+// NewRangeDescriptor creates a new descriptor based on start and end
+// keys and the supplied proto.Replicas slice. It allocates new Raft
+// and range IDs to fill out the supplied replicas.
+func (s *Store) NewRangeDescriptor(start, end engine.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
+	desc := &proto.RangeDescriptor{
+		RaftID:   s.raftIDAlloc.Allocate(),
+		StartKey: start,
+		EndKey:   end,
+		Replicas: append([]proto.Replica(nil), replicas...),
 	}
-	return s.writeRangeToEngine(rng)
+	// Allocate a range ID for each replica.
+	for i := range desc.Replicas {
+		desc.Replicas[i].RangeID = s.rangeIDAlloc.Allocate()
+	}
+	return desc, nil
 }
 
-// writeRangeToEngine does the actual work for UpdateRange().
-func (s *Store) writeRangeToEngine(rng *Range) error {
-	if rng == nil {
-		return util.Error("no range given")
+// SplitRange shortens the original range to accommodate the new
+// range. The new range is added to the ranges map and the rangesByKey
+// sorted slice.
+func (s *Store) SplitRange(origRng, newRng *Range) error {
+	if !bytes.Equal(origRng.Desc.EndKey, newRng.Desc.EndKey) ||
+		bytes.Compare(origRng.Desc.StartKey, newRng.Desc.StartKey) >= 0 {
+		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origRng.Desc, newRng.Desc)
 	}
-	return engine.PutProto(s.engine, makeRangeKey(rng.Meta.RangeID).Encode(nil), rng.Meta)
-}
-
-// DropRange removes the specified range from the store's map, and also
-// depersists the range so that the store will not know about it the next time
-// it is initialized. DropRange does not affect any of the data stored inside
-// the range and it will not Stop() it.
-//
-// For a rangeID that is not known to the store, DropRange is a noop.
-func (s *Store) DropRange(rangeID int64) error {
+	// Replace the end key of the original range with the start key of
+	// the new range. We do this here, with the store lock, in order to
+	// prevent any races while searching through rangesByKey in
+	// concurrent accesses to LookupRange. Since this call is made from
+	// within a command execution, Desc.EndKey is protected from other
+	// concurrent range accesses.
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if rng, ok := s.ranges[rangeID]; ok {
-		rng.Stop()
+	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
+	newRng.Start()
+	s.ranges[newRng.RangeID] = newRng
+	s.rangesByKey = append(s.rangesByKey, newRng)
+	sort.Sort(s.rangesByKey)
+	return nil
+}
+
+// AddRange adds the range to the store's range map and to the sorted
+// rangesByKey slice.
+func (s *Store) AddRange(rng *Range) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rng.Start()
+	s.ranges[rng.RangeID] = rng
+	s.rangesByKey = append(s.rangesByKey, rng)
+	sort.Sort(s.rangesByKey)
+}
+
+// RemoveRange removes the range from the store's range map and from
+// the sorted rangesByKey slice.
+func (s *Store) RemoveRange(rng *Range) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rng.Stop()
+	delete(s.ranges, rng.RangeID)
+	// Find the range in rangesByKey slice and swap it to end of slice
+	// and truncate.
+	n := sort.Search(len(s.rangesByKey), func(i int) bool {
+		return bytes.Compare(rng.Desc.StartKey, s.rangesByKey[i].Desc.EndKey) < 0
+	})
+	if n >= len(s.rangesByKey) {
+		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
-	delete(s.ranges, rangeID)
-	if err := s.engine.Clear(makeRangeKey(rangeID).Encode(nil)); err != nil {
-		return err
-	}
+	lastIdx := len(s.rangesByKey) - 1
+	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
+	s.rangesByKey = s.rangesByKey[:lastIdx]
 	return nil
 }
 
@@ -516,7 +571,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
-		Abort:     !IsReadOnly(method), // abort if cmd isn't read-only
+		Abort:     IsReadWrite(method), // abort if cmd is read/write
 	}
 	pushReply := <-s.db.InternalPushTxn(pushArgs)
 	if pushReply.Header().GoError() != nil {
@@ -525,15 +580,14 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		// For write/write conflicts, propagate the push failure, not the
 		// original write intent error. The push failure will instruct the
 		// client to restart the transaction with a backoff.
-		if !IsReadOnly(method) {
+		if IsReadWrite(method) {
 			reply.Header().Error = pushReply.Header().Error
 			return reply.Header().GoError()
-		} else {
-			// For read/write conflicts, return the write intent error which
-			// engages client's backoff/retry (with !Resolved). We don't need
-			// to restart the txn, only resend the read with a backoff.
-			return err
 		}
+		// For read/write conflicts, return the write intent error which
+		// engages client's backoff/retry (with !Resolved). We don't need
+		// to restart the txn, only resend the read with a backoff.
+		return err
 	}
 
 	// Note that even though we're setting Resolved = true here, it'll
@@ -578,15 +632,17 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 // (i.e. splitting and merging) operations.
 type RangeManager interface {
 	// Accessors for shared state.
+	ClusterID() string
 	StoreID() int32
 	Clock() *hlc.Clock
 	Engine() engine.Engine
+	DB() DB
 	Allocator() *allocator
 	Gossip() *gossip.Gossip
 
 	// Range manipulation methods.
-	NewRangeMetadata(start, end engine.Key, replicas []proto.Replica) *proto.RangeMetadata
-	CreateRange(meta *proto.RangeMetadata) (*Range, error)
-	UpdateRange(rangeID int64) error
-	DropRange(rangeID int64) error
+	NewRangeDescriptor(start, end engine.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
+	SplitRange(origRng, newRng *Range) error
+	AddRange(rng *Range)
+	RemoveRange(rng *Range) error
 }

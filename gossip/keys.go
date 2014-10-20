@@ -56,11 +56,11 @@ const (
 	// node considers itself partitioned and will retry with bootstrap hosts.
 	KeySentinel = KeyClusterID
 
-	// KeyFirstRangeMetadata is the metadata for the "first" range. The
-	// "first" range contains the meta1 key range, the first level of
-	// the bi-level key addressing scheme. The value is a slice of
-	// storage.Replica structs.
-	KeyFirstRangeMetadata = "first-range"
+	// KeyFirstRangeDescriptor is the descriptor for the "first"
+	// range. The "first" range contains the meta1 key range, the first
+	// level of the bi-level key addressing scheme. The value is a slice
+	// of storage.Replica structs.
+	KeyFirstRangeDescriptor = "first-range"
 )
 
 // MakeNodeIDGossipKey returns the gossip key for node ID info.

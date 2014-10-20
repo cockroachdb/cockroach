@@ -17,11 +17,11 @@
 # Author: Andrew Bonventre (andybons@gmail.com)
 
 PROTO_LIB   := lib/libroachproto.a
-PROTOS      := api.proto config.proto data.proto errors.proto
+PROTOS      := api.proto config.proto data.proto errors.proto internal.proto
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../code.google.com/p/gogoprotobuf/gogoproto/gogo.proto
-SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.cc
-HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.h
+SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc lib/internal.pb.cc lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.cc
+HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/internal.pb.h lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.h
 LIBOBJECTS  := $(SOURCES:.cc=.o)
 
 CXXFLAGS += -Ilib

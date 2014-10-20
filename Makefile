@@ -33,6 +33,7 @@ SQL_PARSER  := sql/parser
 PKG       := "./..."
 TESTS     := ".*"
 TESTFLAGS := -logtostderr -timeout 10s
+RACEFLAGS := -logtostderr -timeout 1m
 
 OS := $(shell uname -s)
 
@@ -70,7 +71,7 @@ test: auxiliary
 	$(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace: auxiliary
-	$(GO) test -race -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
 coverage: build
 	$(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)

@@ -112,7 +112,6 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 		StoreID:   1,
 	}
 	clock := hlc.NewClock(hlc.UnixNano)
-	now := clock.Now()
 	s := storage.NewStore(clock, eng, nil, nil)
 
 	// Verify the store isn't already part of a cluster.
@@ -126,27 +125,15 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	}
 
 	// Create first range.
-	rng, err := s.CreateRange(s.BootstrapRangeMetadata())
+	_, err := s.BootstrapRange()
 	if err != nil {
 		return nil, err
 	}
-	rng.Start()
 
 	// Create a KV DB with a local KV to directly modify the new range.
 	localKV := kv.NewLocalKV()
 	localKV.AddStore(s)
 	localDB := kv.NewDB(localKV, clock)
-
-	// Initialize range addressing records and default administrative configs.
-	desc := &rng.Meta.RangeDescriptor
-	if err := storage.BootstrapRangeDescriptor(localDB, desc, now); err != nil {
-		return nil, err
-	}
-
-	// Write default configs to local DB.
-	if err := storage.BootstrapConfigs(localDB, now); err != nil {
-		return nil, err
-	}
 
 	// Initialize node and store ids after the fact to account
 	// for use of node ID = 1 and store ID = 1.
@@ -473,9 +460,19 @@ func (n *Node) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.En
 	return n.executeCmd(storage.EnqueueMessage, args, reply)
 }
 
+// AdminSplit .
+func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
+	return n.executeCmd(storage.AdminSplit, args, reply)
+}
+
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(storage.InternalRangeLookup, args, reply)
+}
+
+// InternalEndTxn .
+func (n *Node) InternalEndTxn(args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) error {
+	return n.executeCmd(storage.InternalEndTxn, args, reply)
 }
 
 // InternalHeartbeatTxn .

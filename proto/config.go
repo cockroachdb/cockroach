@@ -68,7 +68,7 @@ func (r *RangeDescriptor) ContainsKey(key []byte) bool {
 // key range from start to end.
 func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	if len(end) == 0 {
-		end = start
+		end = append(append([]byte(nil), start...), byte(0))
 	}
 	if bytes.Compare(end, start) < 0 {
 		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
@@ -76,16 +76,15 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
 }
 
-// GetReplica returns the replica matching this RangeMetadata's RangeID.
-// Each RangeMetadata is keyed to just one of the replicas based on
-// RangeID. We simply find the matching entry in the replicas slice.
-func (r *RangeMetadata) GetReplica() *Replica {
+// FindReplica returns the replica which matches the specified store
+// ID. Panic in the event that no replica matches.
+func (r *RangeDescriptor) FindReplica(storeID int32) *Replica {
 	for i := range r.Replicas {
-		if r.Replicas[i].RangeID == r.RangeID {
+		if r.Replicas[i].StoreID == storeID {
 			return &r.Replicas[i]
 		}
 	}
-	panic(fmt.Sprintf("could not locate replica matching range %d: %v", r.RangeID, r.Replicas))
+	panic(fmt.Sprintf("unable to find matching replica for store %d: %v", storeID, r.Replicas))
 }
 
 // CanRead does a linear search for user to verify read permission.

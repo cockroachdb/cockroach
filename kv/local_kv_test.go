@@ -100,6 +100,22 @@ func TestLocalKVGetStore(t *testing.T) {
 	}
 }
 
+func splitTestRange(store *storage.Store, key, splitKey engine.Key, t *testing.T) *storage.Range {
+	rng := store.LookupRange(key, key)
+	if rng == nil {
+		t.Fatalf("couldn't lookup range for key %q", key)
+	}
+	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc.EndKey, rng.Desc.Replicas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRng := storage.NewRange(desc.FindReplica(store.StoreID()).RangeID, desc, store)
+	if err := store.SplitRange(rng, newRng); err != nil {
+		t.Fatal(err)
+	}
+	return newRng
+}
+
 func TestLocalKVLookupReplica(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -111,15 +127,17 @@ func TestLocalKVLookupReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	kv.AddStore(store)
-	meta := store.BootstrapRangeMetadata()
-	meta.StartKey = engine.KeySystemPrefix
-	meta.EndKey = engine.KeySystemPrefix.PrefixEnd()
-	if _, err := store.CreateRange(meta); err != nil {
+	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
+	rng := splitTestRange(store, engine.KeyMin, engine.Key("a"), t)
+	if err := store.RemoveRange(rng); err != nil {
+		t.Fatal(err)
+	}
+
 	// Create two new stores with ranges we care about.
 	var s [2]*storage.Store
 	ranges := []struct {
@@ -132,11 +150,12 @@ func TestLocalKVLookupReplica(t *testing.T) {
 	for i, rng := range ranges {
 		s[i] = storage.NewStore(clock, eng, db, nil)
 		s[i].Ident.StoreID = rng.storeID
-		replica := proto.Replica{StoreID: rng.storeID}
-		_, err := s[i].CreateRange(store.NewRangeMetadata(rng.start, rng.end, []proto.Replica{replica}))
+		desc, err := store.NewRangeDescriptor(rng.start, rng.end, []proto.Replica{{StoreID: rng.storeID}})
 		if err != nil {
 			t.Fatal(err)
 		}
+		newRng := storage.NewRange(desc.FindReplica(rng.storeID).RangeID, desc, s[i])
+		s[i].AddRange(newRng)
 		kv.AddStore(s[i])
 	}
 

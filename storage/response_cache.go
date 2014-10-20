@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
-	"github.com/golang/glog"
 )
 
 type cmdIDKey struct {
@@ -84,9 +83,9 @@ func (rc *ResponseCache) ClearInflight() {
 // ClearData removes all items stored in the persistent cache. It does not alter
 // the inflight map.
 func (rc *ResponseCache) ClearData() error {
-	p := rc.makePrefix()
+	p := responseCacheKeyPrefix(rc.rangeID)
 	end := p.PrefixEnd()
-	_, err := engine.ClearRange(rc.engine, p.Encode(nil), end.Encode(nil), 0)
+	_, err := engine.ClearRange(rc.engine, p.Encode(nil), end.Encode(nil))
 	return err
 }
 
@@ -120,7 +119,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
-	encKey := rc.makeKey(cmdID).Encode(nil)
+	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
 	if ok, err := engine.GetProto(rc.engine, encKey, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
@@ -134,39 +133,27 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 	return false, nil
 }
 
-// CopyInto copies all the cached results from one response cache into another.
-// The cache will be locked while copying is in progress; failures decoding
-// individual cache entries will only trigger a warning.
-func (rc *ResponseCache) CopyInto(destRC *ResponseCache) error {
-	if destRC == nil {
-		return util.Errorf("destination response cache missing")
-	}
+// CopyInto copies all the cached results from one response cache into
+// another. The cache will be locked while copying is in progress;
+// failures decoding individual cache entries return an error.
+func (rc *ResponseCache) CopyInto(batch *engine.Batch, destRangeID int64) error {
 	rc.Lock()
 	defer rc.Unlock()
 
-	prefix := rc.makePrefix()
+	prefix := responseCacheKeyPrefix(rc.rangeID)
 	start := prefix.Encode(nil)
 	end := prefix.PrefixEnd().Encode(nil)
-	batch := []interface{}(nil)
 
-	err := rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+	return rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
-		if cmdID, err := rc.decodeKey(kv.Key); err == nil {
-			encKey := destRC.makeKey(cmdID).Encode(nil)
-			batch = append(batch, engine.BatchPut{proto.RawKeyValue{Key: encKey, Value: kv.Value}})
-			//destRC.engine.Put(destRC.makeKey(cmdID), kv.Value)
-		} else {
-			// This is near impossible to ever happen in practice, so if it happens
-			// we're very interested in finding out.
-			glog.Warningf("could not copy a response cache entry: %v", err)
+		cmdID, err := rc.decodeKey(kv.Key)
+		if err != nil {
+			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
 		}
-		return false, nil
+		encKey := responseCacheKey(destRangeID, cmdID).Encode(nil)
+		return false, batch.Put(encKey, kv.Value)
 	})
-	if err != nil {
-		return err
-	}
-	return destRC.engine.WriteBatch(batch)
 }
 
 // PutResponse writes a response to the cache for the specified cmdID.
@@ -180,7 +167,7 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{})
 		return nil
 	}
 	// Write the response value to the engine.
-	encKey := rc.makeKey(cmdID).Encode(nil)
+	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
 	rwResp := &proto.ReadWriteCmdResponse{}
 	rwResp.SetValue(reply)
 	err := engine.PutProto(rc.engine, encKey, rwResp)
@@ -217,22 +204,22 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 	}
 }
 
-// makeKey encodes the range ID and client command ID into a key
-// for storage in the underlying engine. Note that the prefix for
+// responseCacheKeyPrefix generates the prefix under which all entries
+// for the given range are stored in the engine.
+func responseCacheKeyPrefix(rangeID int64) engine.Key {
+	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)
+	return encoding.EncodeInt(b, rangeID)
+}
+
+// responseCacheKey encodes the range ID and client command ID into a
+// key for storage in the underlying engine. Note that the prefix for
 // response cache keys sorts them at the very top of the engine's
 // keyspace.
-func (rc *ResponseCache) makeKey(cmdID proto.ClientCmdID) engine.Key {
-	b := rc.makePrefix()
+func responseCacheKey(rangeID int64, cmdID proto.ClientCmdID) engine.Key {
+	b := responseCacheKeyPrefix(rangeID)
 	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
 	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64
 	return b
-}
-
-// makePrefix generates the prefix under which all entries for the given range
-// are stored in the engine.
-func (rc *ResponseCache) makePrefix() engine.Key {
-	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)
-	return encoding.EncodeInt(b, rc.rangeID)
 }
 
 func (rc *ResponseCache) decodeKey(encKey []byte) (proto.ClientCmdID, error) {

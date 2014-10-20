@@ -110,6 +110,26 @@ func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.En
 	return replyChan
 }
 
+// InternalEndTxn intercepts the normal reply to inform the
+// transaction coordinator of the final state of the transaction so it
+// can resolve intents.
+func (db *DB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *proto.InternalEndTxnResponse {
+	interceptChan := make(chan *proto.InternalEndTxnResponse, 1)
+	replyChan := make(chan *proto.InternalEndTxnResponse, 1)
+	go func() {
+		db.Executor(storage.InternalEndTxn, args, interceptChan)
+		// Intercept the reply and end transaction on coordinator
+		// depending on final state.
+		reply := <-interceptChan
+		if reply.Error == nil && reply.Txn.Status != proto.PENDING {
+			db.coordinator.EndTxn(reply.Txn)
+		}
+		// Go ahead and return the result to the client.
+		replyChan <- reply
+	}()
+	return replyChan
+}
+
 // RunTransaction executes retryable in the context of a distributed
 // transaction.
 // TODO(Spencer): write or copy a more descriptive comment here as various

@@ -59,7 +59,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("zone config has invalid format: %s: %s", configStr, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
-	if err := storage.PutProto(zh.db, zoneKey, config, proto.Timestamp{}); err != nil {
+	if err := storage.PutProto(zh.db, zoneKey, config); err != nil {
 		return err
 	}
 	return nil

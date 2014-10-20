@@ -53,15 +53,6 @@ message RangeDescriptor {
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }
 
-// A RangeMetadata holds information about the range. This includes
-// the cluster ID, a RangeDescriptor describing the contents of the
-// range, and the range ID which owns the metadata.
-message RangeMetadata {
-  optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
-  optional RangeDescriptor desc = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
-}
-
 // GCPolicy defines garbage collection policies which apply to MVCC
 // values within a zone.
 //

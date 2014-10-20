@@ -26,6 +26,7 @@
 #include "rocksdb/options.h"
 #include "api.pb.h"
 #include "data.pb.h"
+#include "internal.pb.h"
 #include "db.h"
 
 extern "C" {
@@ -114,8 +115,12 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.enqueue_update().header();
   } else if (rwResp.has_enqueue_message()) {
     return &rwResp.enqueue_message().header();
+  } else if (rwResp.has_internal_end_txn()) {
+    return &rwResp.internal_end_txn().header();
   } else if (rwResp.has_internal_heartbeat_txn()) {
     return &rwResp.internal_heartbeat_txn().header();
+  } else if (rwResp.has_internal_push_txn()) {
+    return &rwResp.internal_push_txn().header();
   } else if (rwResp.has_internal_resolve_intent()) {
     return &rwResp.internal_resolve_intent().header();
   }

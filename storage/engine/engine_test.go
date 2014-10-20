@@ -439,7 +439,7 @@ func TestEngineDeleteRange(t *testing.T) {
 		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := ClearRange(engine, Key("aa"), Key("abc"), 0)
+		numDeleted, err := ClearRange(engine, Key("aa"), Key("abc"))
 		// Verify what was deleted
 		if err != nil {
 			t.Error("Not expecting an error")
@@ -449,17 +449,6 @@ func TestEngineDeleteRange(t *testing.T) {
 		}
 		// Verify what's left
 		verifyScan(KeyMin, KeyMax, 10, []Key{Key("a"), Key("abc")}, engine, t)
-
-		// Reinstate removed entries
-		insertKeys(keys, engine, t)
-		numDeleted, err = ClearRange(engine, Key("aa"), Key("abc"), 2) // Max of 2 entries only
-		if err != nil {
-			t.Error("Not expecting an error")
-		}
-		if numDeleted != 2 {
-			t.Errorf("Expected to delete 2 entries; was %v", numDeleted)
-		}
-		verifyScan(KeyMin, KeyMax, 10, []Key{Key("a"), Key("ab"), Key("abc")}, engine, t)
 	}, t)
 }
 

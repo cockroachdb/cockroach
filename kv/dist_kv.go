@@ -83,7 +83,7 @@ type DistKV struct {
 	// ranges.
 	gossip *gossip.Gossip
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache *RangeMetadataCache
+	rangeCache *RangeDescriptorCache
 }
 
 // NewDistKV returns a key-value datastore client which connects to the
@@ -92,7 +92,7 @@ func NewDistKV(gossip *gossip.Gossip) *DistKV {
 	kv := &DistKV{
 		gossip: gossip,
 	}
-	kv.rangeCache = NewRangeMetadataCache(kv)
+	kv.rangeCache = NewRangeDescriptorCache(kv)
 	return kv
 }
 
@@ -104,6 +104,10 @@ func NewDistKV(gossip *gossip.Gossip) *DistKV {
 // configs, both configs must allow read permissions or the entire
 // scan will fail.
 func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) error {
+	// Check for admin methods.
+	if storage.NeedAdminPerm(method) && header.User != storage.UserRoot {
+		return util.Errorf("user %q cannot invoke admin command %s", header.User, method)
+	}
 	// Get permissions map from gossip.
 	permMap, err := kv.gossip.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
@@ -122,12 +126,12 @@ func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) 
 		header.Key, end, func(start, end engine.Key, config interface{}) error {
 			perm := config.(*proto.PermConfig)
 			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
-				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
-					header.User, string(start), string(end), perm)
+				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
+					header.User, method, string(start), string(end), perm)
 			}
 			if storage.NeedWritePerm(method) && !perm.CanWrite(header.User) {
-				return util.Errorf("user %q cannot read range %q-%q; permissions: %+v",
-					header.User, string(start), string(end), perm)
+				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
+					header.User, method, string(start), string(end), perm)
 			}
 			return nil
 		})
@@ -170,7 +174,7 @@ func (kv *DistKV) internalRangeLookup(key engine.Key,
 // the cluster, which is retrieved from the gossip protocol instead of the
 // datastore.
 func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
-	infoI, err := kv.gossip.GetInfo(gossip.KeyFirstRangeMetadata)
+	infoI, err := kv.gossip.GetInfo(gossip.KeyFirstRangeDescriptor)
 	if err != nil {
 		return nil, firstRangeMissingError{}
 	}
@@ -178,21 +182,22 @@ func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
 	return &info, nil
 }
 
-// getRangeMetadata retrieves metadata for the range containing the given key
-// from storage. This function returns a sorted slice of RangeDescriptors for a
-// set of consecutive ranges, the first which must contain the requested key.
-// The additional RangeDescriptors are returned with the intent of pre-caching
-// subsequent ranges which are likely to be requested soon by the current
-// workload.
-func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, error) {
+// getRangeDescriptor retrieves the descriptor for the range
+// containing the given key from storage. This function returns a
+// sorted slice of RangeDescriptors for a set of consecutive ranges,
+// the first which must contain the requested key.  The additional
+// RangeDescriptors are returned with the intent of pre-caching
+// subsequent ranges which are likely to be requested soon by the
+// current workload.
+func (kv *DistKV) getRangeDescriptor(key engine.Key) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
 		metadataKey = engine.RangeMetaKey(key)
-		// metadataRange is the RangeDescriptor for the range which contains
+		// desc is the RangeDescriptor for the range which contains
 		// metadataKey.
-		metadataRange *proto.RangeDescriptor
-		err           error
+		desc *proto.RangeDescriptor
+		err  error
 	)
 	if len(metadataKey) == 0 {
 		// In this case, the requested key is stored in the cluster's first
@@ -205,20 +210,20 @@ func (kv *DistKV) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, err
 		return []proto.RangeDescriptor{*rd}, nil
 	}
 	if bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
-		// In this case, metadataRange is the cluster's first range.
-		if metadataRange, err = kv.getFirstRangeDescriptor(); err != nil {
+		// In this case, desc is the cluster's first range.
+		if desc, err = kv.getFirstRangeDescriptor(); err != nil {
 			return nil, err
 		}
 	} else {
-		// Look up metadataRange from the cache, which will recursively call
-		// into kv.getRangeMetadata if it is not cached.
-		metadataRange, err = kv.rangeCache.LookupRangeMetadata(metadataKey)
+		// Look up desc from the cache, which will recursively call into
+		// kv.getRangeDescriptor if it is not cached.
+		desc, err = kv.rangeCache.LookupRangeDescriptor(metadataKey)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return kv.internalRangeLookup(metadataKey, metadataRange)
+	return kv.internalRangeLookup(metadataKey, desc)
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied
@@ -277,18 +282,26 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 		MaxAttempts: 0, // retry indefinitely
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		desc, err := kv.rangeCache.LookupRangeMetadata(args.Header().Key)
+		desc, err := kv.rangeCache.LookupRangeDescriptor(args.Header().Key)
 		if err == nil {
 			err = kv.sendRPC(desc, method, args, replyChan)
 		}
 		if err != nil {
-			// Range metadata might be out of date - evict it.
-			kv.rangeCache.EvictCachedRangeMetadata(args.Header().Key)
-
-			// If retryable, allow outer loop to retry.
-			if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
-				log.Warningf("failed to invoke %s: %v", method, err)
-				return util.RetryContinue, nil
+			log.Warningf("failed to invoke %s: %v", method, err)
+			// If retryable, allow outer loop to retry. We treat a range not found
+			// or range key mismatch errors special. In these cases, we don't want
+			// to backoff on the retry, but reset the backoff loop so we can retry
+			// immediately.
+			switch err.(type) {
+			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
+				// Range descriptor might be out of date - evict it.
+				kv.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
+				// On addressing errors, don't backoff and retry immediately.
+				return util.RetryReset, nil
+			default:
+				if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
+					return util.RetryContinue, nil
+				}
 			}
 		}
 		return util.RetryBreak, err

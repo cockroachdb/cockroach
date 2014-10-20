@@ -42,7 +42,6 @@ var transactionalActions = map[string]struct{}{
 	storage.EnqueueUpdate:  struct{}{},
 	storage.Get:            struct{}{},
 	storage.Increment:      struct{}{},
-	storage.InternalSplit:  struct{}{},
 	storage.Put:            struct{}{},
 	storage.ReapQueue:      struct{}{},
 	storage.Scan:           struct{}{},

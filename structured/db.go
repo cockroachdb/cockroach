@@ -52,7 +52,7 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 		return err
 	}
 	k := engine.MakeKey(engine.KeySchemaPrefix, engine.Key(s.Key))
-	return storage.PutI(db.kvDB, k, s, proto.Timestamp{})
+	return storage.PutI(db.kvDB, k, s)
 }
 
 // DeleteSchema removes s from the kv store.

@@ -515,6 +515,53 @@ func TestMVCCScanInTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCIterateCommitted writes several values, some as intents
+// and verifies that IterateCommitted sees only the committed versions.
+func TestMVCCIterateCommitted(t *testing.T) {
+	mvcc := createTestMVCC()
+	ts1 := makeTS(1, 0)
+	ts2 := makeTS(2, 0)
+	ts3 := makeTS(3, 0)
+	ts4 := makeTS(4, 0)
+	ts5 := makeTS(5, 0)
+	ts6 := makeTS(6, 0)
+	if err := mvcc.Put(testKey1, ts1, value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey1, ts2, value2, txn1); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey2, ts3, value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey2, ts4, value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey3, ts5, value3, txn2); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey4, ts6, value4, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	kvs := []proto.KeyValue(nil)
+	if err := mvcc.IterateCommitted(testKey1, testKey4.Next(), func(kv proto.KeyValue) (bool, error) {
+		kvs = append(kvs, kv)
+		return false, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	expKVs := []proto.KeyValue{
+		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
+		proto.KeyValue{Key: testKey2, Value: proto.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
+		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
+	}
+	if !reflect.DeepEqual(kvs, expKVs) {
+		t.Errorf("expected key values equal %v != %v", kvs, expKVs)
+	}
+}
+
 func TestMVCCDeleteRange(t *testing.T) {
 	mvcc := createTestMVCC()
 	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)

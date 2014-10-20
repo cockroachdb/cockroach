@@ -18,6 +18,7 @@
 
 package proto;
 
+import "config.proto";
 import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
 
 // Timestamp represents a state of the hybrid logical clock.
@@ -87,6 +88,16 @@ message StoreIdent {
   optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
   optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
   optional int32 store_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+}
+
+// A SplitTrigger is run after a successful commit of an AdminSplit
+// command. It provides the updated range descriptor covering the
+// first half of the split and the new range descriptor covering the
+// second half. This information allows the final bookkeeping for
+// the split to be completed and the new range put into operation.
+message SplitTrigger {
+  optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
+  optional RangeDescriptor new_desc = 2 [(gogoproto.nullable) = false];
 }
 
 // IsolationType TODO(jiajia) Needs documentation.

@@ -63,6 +63,31 @@ func TestAttributesSortedString(t *testing.T) {
 	}
 }
 
+func TestRangeDescriptorFindReplica(t *testing.T) {
+	desc := RangeDescriptor{
+		Replicas: []Replica{
+			{StoreID: 1, RangeID: 1},
+			{StoreID: 2, RangeID: 2},
+			{StoreID: 3, RangeID: 3},
+		},
+	}
+	for i, r := range desc.Replicas {
+		if rID := desc.FindReplica(r.StoreID).RangeID; rID != r.RangeID {
+			t.Errorf("%d: expected to find range %d for store %d; got %d", i, r.RangeID, r.StoreID, rID)
+		}
+	}
+}
+
+func TestRangeDescriptorMissingReplica(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic due to no matching replica")
+		}
+	}()
+	desc := RangeDescriptor{}
+	desc.FindReplica(0)
+}
+
 // TestRangeDescriptorContains verifies methods to check whether a key
 // or key range is contained within the range.
 func TestRangeDescriptorContains(t *testing.T) {
@@ -76,9 +101,11 @@ func TestRangeDescriptorContains(t *testing.T) {
 	}{
 		// Single keys.
 		{[]byte("a"), []byte("a"), true},
+		{[]byte("a"), nil, true},
 		{[]byte("aa"), []byte("aa"), true},
 		{[]byte("`"), []byte("`"), false},
 		{[]byte("b"), []byte("b"), false},
+		{[]byte("b"), nil, false},
 		{[]byte("c"), []byte("c"), false},
 		// Key ranges.
 		{[]byte("a"), []byte("b"), true},
