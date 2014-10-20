@@ -92,6 +92,18 @@ type Engine interface {
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end Key) (uint64, error)
+	// NewBatch returns a new instance of a batched engine which wraps
+	// this engine. Batched engines accumulate all mutations and apply
+	// them atomically on a call to Commit().
+	NewBatch() Engine
+	// Commit atomically applies any batched updates to the underlying
+	// engine. This is a noop unless the engine was created via NewBatch().
+	Commit() error
+
+	// TODO(petermattis): Remove the WriteBatch functionality from this
+	//   interface. Add a "NewSnapshot() Engine" method which works
+	//   similarly to NewBatch and remove CreateSnapshot, GetSnapshot,
+	//   IterateSnapshot.
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
@@ -110,32 +122,42 @@ type BatchMerge struct {
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp.
-func PutProto(engine Engine, key Key, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return err
+// of msg and the provided timestamp. Returns the length in bytes of
+// key and the value.
+func PutProto(engine Engine, key Key, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
+	var data []byte
+	if data, err = gogoproto.Marshal(msg); err != nil {
+		return
 	}
-	return engine.Put(key, data)
+	if err = engine.Put(key, data); err != nil {
+		return
+	}
+	keyBytes = int64(len(key))
+	valBytes = int64(len(data))
+	return
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
 // using a protobuf decoder. Returns true on success or false if the
-// key was not found.
-func GetProto(engine Engine, key Key, msg gogoproto.Message) (bool, error) {
-	val, err := engine.Get(key)
-	if err != nil {
-		return false, err
+// key was not found. On success, returns the length in bytes of the
+// key and the value.
+func GetProto(engine Engine, key Key, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+	var data []byte
+	if data, err = engine.Get(key); err != nil {
+		return
 	}
-	if val == nil {
-		return false, nil
+	if data == nil {
+		return
 	}
+	ok = true
 	if msg != nil {
-		if err := gogoproto.Unmarshal(val, msg); err != nil {
-			return true, err
+		if err = gogoproto.Unmarshal(data, msg); err != nil {
+			return
 		}
 	}
-	return true, nil
+	keyBytes = int64(len(key))
+	valBytes = int64(len(data))
+	return
 }
 
 // Increment fetches the varint encoded int64 value specified by key

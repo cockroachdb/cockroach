@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// TODO(petermattis): Remove this file.
+
 var (
 	llrbNodeSize = int64(unsafe.Sizeof(llrb.Node{}))
 	keyValueSize = int64(unsafe.Sizeof(proto.RawKeyValue{}))
@@ -328,4 +330,14 @@ func (in *InMem) ApproximateSize(start, end Key) (uint64, error) {
 		return false
 	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
 	return size, nil
+}
+
+// Returns a new Batch wrapping this in-memory engine.
+func (in *InMem) NewBatch() Engine {
+	return &Batch{engine: in}
+}
+
+// Commit is a noop for in-memory engine.
+func (in *InMem) Commit() error {
+	return nil
 }
