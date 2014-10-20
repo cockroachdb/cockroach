@@ -56,7 +56,7 @@ func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			first := true
 			err := db.RunTransaction(txnOpts, func(txn storage.DB) error {
 				if !first && retries != nil {
-					atomic.AddInt32(retries, int32(1))
+					atomic.AddInt32(retries, 1)
 				}
 				first = false
 				for j := 0; j <= int(src.Int31n(10)); j++ {
@@ -122,7 +122,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 }
 
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
-// a range to 1K and writes data until there are five ranges.
+// a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	db, _, _ := createTestDB(t)
 	defer db.Close()
@@ -153,7 +153,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	done := make(chan struct{})
 	go startTestWriter(db, int64(0), 1<<15, nil, nil, done, t)
 
-	// Check that we split 5 times with (a very generous for slow test machines) 500ms.
+	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records (in a txn due to possible retries) to see number of ranges.
 		var kvs []proto.KeyValue
@@ -173,7 +173,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			t.Fatalf("failed to scan meta1 keys: %s", err)
 		}
 		return len(kvs) >= 5
-	}, 500*time.Millisecond); err != nil {
+	}, 2*time.Second); err != nil {
 		t.Errorf("failed to split 5 times: %s", err)
 	}
 	close(done)

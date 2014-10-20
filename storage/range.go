@@ -676,10 +676,11 @@ func (r *Range) maybeUpdateGossipConfigs(key engine.Key) {
 // shouldSplit returns whether the current size of the range exceeds
 // the max size specified in the zone config.
 func (r *Range) shouldSplit() bool {
-	// If already splitting or not the leader, ignore.
+	// If not the leader or gossip is not enabled, ignore.
 	if !r.IsLeader() || r.rm.Gossip() == nil {
 		return false
 	}
+
 	// Fetch the zone config for the zone containing this range's start key.
 	zoneMap, err := r.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil || zoneMap == nil {
@@ -708,6 +709,10 @@ func (r *Range) shouldSplit() bool {
 // if shouldSplit is true. This operation is invoked after each
 // successful execution of a read/write command.
 func (r *Range) maybeSplit() {
+	// If we're already splitting, ignore.
+	if atomic.LoadInt32(&r.splitting) == int32(1) {
+		return
+	}
 	// If this zone's total bytes are in excess, split the range. We omit
 	// the split key in order to have AdminSplit determine it via scan
 	// of range data.

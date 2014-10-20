@@ -22,18 +22,22 @@ import "config.proto";
 import "data.proto";
 import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
 
-// An InternalRangeLookupRequest is arguments to the InternalRangeLookup()
-// method. It specifies the key for which the containing range is being
-// requested, and the maximum number of total ranges that should be returned.
+// An InternalRangeLookupRequest is arguments to the
+// InternalRangeLookup() method. It specifies the key for which the
+// containing range is being requested, and the maximum number of
+// total range descriptors that should be returned, if there are
+// additional consecutive addressable ranges. Specify max_ranges > 1
+// to pre-fill the range descriptor cache.
 message InternalRangeLookupRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
 }
 
 // An InternalRangeLookupResponse is the return value from the
-// InternalRangeLookup() method. It returns metadata for the range containing
-// the requested key, optionally returning the metadata for additional
-// consecutive ranges beyond the requested range.
+// InternalRangeLookup() method. It returns metadata for the range
+// containing the requested key, optionally returning the metadata for
+// additional consecutive ranges beyond the requested range to pre-fill
+// the range descriptor cache.
 message InternalRangeLookupResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];

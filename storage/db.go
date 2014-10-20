@@ -329,8 +329,7 @@ func getInternal(db DB, key engine.Key) (*proto.Value, error) {
 	return nil, nil
 }
 
-// PutI sets the given key to the gob-serialized byte string of value
-// and the provided timestamp.
+// PutI sets the given key to the gob-serialized byte string of value.
 func PutI(db DB, key engine.Key, iface interface{}) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
@@ -340,7 +339,7 @@ func PutI(db DB, key engine.Key, iface interface{}) error {
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp.
+// of msg.
 func PutProto(db DB, key engine.Key, msg gogoproto.Message) error {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {

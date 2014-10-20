@@ -460,6 +460,11 @@ func (n *Node) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.En
 	return n.executeCmd(storage.EnqueueMessage, args, reply)
 }
 
+// AdminSplit .
+func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
+	return n.executeCmd(storage.AdminSplit, args, reply)
+}
+
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(storage.InternalRangeLookup, args, reply)

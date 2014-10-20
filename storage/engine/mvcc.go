@@ -749,6 +749,12 @@ type splitSampleItem struct {
 // given, and in that case may safely be invoked in a goroutine.
 // TODO(Tobias): leverage the work done here anyways to gather stats.
 func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, error) {
+	if key.Less(KeyLocalMax) {
+		key = KeyLocalMax
+	}
+	binStartKey := key.Encode(nil)
+	binEndKey := endKey.Encode(nil)
+
 	rs := util.NewWeightedReservoirSample(splitReservoirSize, nil)
 	h := rs.Heap.(*util.WeightedValueHeap)
 
@@ -756,8 +762,6 @@ func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, e
 	// normalize to obtain typical weights that are numerically unproblematic.
 	// The relevant expression is rand(0,1)**(1/weight).
 	normalize := float64(1 << 6)
-	binStartKey := key.Encode(nil)
-	binEndKey := endKey.Encode(nil)
 	totalSize := 0
 	err := engine.IterateSnapshot(binStartKey, binEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
 		byteCount := len(kv.Key) + len(kv.Value)
@@ -770,7 +774,7 @@ func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, e
 	}
 
 	if totalSize == 0 {
-		return nil, util.Errorf("the range is empty")
+		return nil, util.Errorf("the range cannot be split; considered range %q-%q is empty", key, endKey)
 	}
 
 	// Inspect the sample to get the closest candidate that has sizeBefore >= totalSize/2.
@@ -782,13 +786,13 @@ func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, e
 			(cb > halfSize && cb > sb && sb > halfSize) {
 			// The current candidate hasn't yet cracked 50% and the this value
 			// is closer to doing so or we're already above but now we can
-			// decrese the gap.
+			// decrease the gap.
 			candidate = (*h)[i].Value.(splitSampleItem)
 			cb = candidate.sizeBefore
 		}
 	}
 	// The key is an MVCC key, so to avoid corrupting MVCC we get the
-	// associated sentinel metadata key, which is fine to split in front of.
+	// associated mvcc metadata key, which is fine to split in front of.
 	binKey, _, _ := mvccDecodeKey(candidate.Key)
 	rest, humanKey := DecodeKey(binKey)
 	if len(rest) > 0 {

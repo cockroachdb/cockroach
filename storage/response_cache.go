@@ -204,7 +204,7 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 	}
 }
 
-// resopnseCacheKeyPrefix generates the prefix under which all entries
+// responseCacheKeyPrefix generates the prefix under which all entries
 // for the given range are stored in the engine.
 func responseCacheKeyPrefix(rangeID int64) engine.Key {
 	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)

@@ -70,9 +70,7 @@ func (db *testDB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *prot
 			if err := rng.splitTrigger(batch, args.SplitTrigger); err != nil {
 				reply.SetGoError(err)
 			} else {
-				if err := batch.Commit(); err != nil {
-					reply.SetGoError(err)
-				}
+				reply.SetGoError(batch.Commit())
 			}
 		}
 	} else {
@@ -104,13 +102,6 @@ func meta1Key(key engine.Key) engine.Key {
 
 func meta2Key(key engine.Key) engine.Key {
 	return engine.MakeKey(engine.KeyMeta2Prefix, key)
-}
-
-func maxKey(key engine.Key) engine.Key {
-	if len(key) > 1024 {
-		return key[:10]
-	}
-	return key
 }
 
 // TestUpdateRangeAddressing verifies range addressing records are
@@ -202,7 +193,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		if !reflect.DeepEqual(expMetas, metas) {
 			t.Errorf("expected metas don't match")
 			for i, meta := range expMetas {
-				fmt.Printf("%d: expected %q vs %q\n", i, maxKey(meta.key), maxKey(metas[i].key))
+				fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
 			}
 		}
 	}

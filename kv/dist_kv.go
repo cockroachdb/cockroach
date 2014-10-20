@@ -182,12 +182,13 @@ func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
 	return &info, nil
 }
 
-// getRangeDescriptor retrieves descriptor for the range containing the given key
-// from storage. This function returns a sorted slice of RangeDescriptors for a
-// set of consecutive ranges, the first which must contain the requested key.
-// The additional RangeDescriptors are returned with the intent of pre-caching
-// subsequent ranges which are likely to be requested soon by the current
-// workload.
+// getRangeDescriptor retrieves the descriptor for the range
+// containing the given key from storage. This function returns a
+// sorted slice of RangeDescriptors for a set of consecutive ranges,
+// the first which must contain the requested key.  The additional
+// RangeDescriptors are returned with the intent of pre-caching
+// subsequent ranges which are likely to be requested soon by the
+// current workload.
 func (kv *DistKV) getRangeDescriptor(key engine.Key) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the

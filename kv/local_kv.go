@@ -120,18 +120,16 @@ func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan inter
 		} else {
 			if err = store.ExecuteCmd(method, args, reply); err != nil {
 				reply.Header().SetGoError(err)
-			}
-			if reply.Header().GoError() == nil {
-				if err = reply.Verify(args); err != nil {
-					reply.Header().SetGoError(err)
-				}
-			} else {
 				// Check for case of range splitting to continue and retry the
 				// local replica lookup.
-				switch reply.Header().GoError().(type) {
+				switch err.(type) {
 				case *proto.RangeKeyMismatchError:
 					header.Replica = proto.Replica{}
 					continue
+				}
+			} else {
+				if err = reply.Verify(args); err != nil {
+					reply.Header().SetGoError(err)
 				}
 			}
 		}
