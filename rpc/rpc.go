@@ -6,7 +6,7 @@ import "github.com/cockroachdb/cockroach/util/hlc"
 type Context struct {
 	localClock   *hlc.Clock
 	tlsConfig    *TLSConfig
-	remoteClocks *RemoteClockMonitor
+	RemoteClocks *RemoteClockMonitor
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -14,6 +14,6 @@ func NewContext(clock *hlc.Clock, config *TLSConfig) *Context {
 	return &Context{
 		localClock:   clock,
 		tlsConfig:    config,
-		remoteClocks: newRemoteClockMonitor(clock.MaxDrift()),
+		RemoteClocks: newRemoteClockMonitor(clock),
 	}
 }

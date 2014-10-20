@@ -78,7 +78,7 @@ func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.cache.Clear()
 	tc.lowWater = clock.Now()
-	tc.lowWater.WallTime += clock.MaxDrift().Nanoseconds()
+	tc.lowWater.WallTime += clock.MaxOffset().Nanoseconds()
 	tc.latest = tc.lowWater
 }
 

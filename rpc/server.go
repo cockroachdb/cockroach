@@ -31,8 +31,7 @@ import (
 // server struct. By default it handles a simple heartbeat protocol
 // to measure link health. It also supports close callbacks.
 //
-// TODO(spencer): heartbeat protocol should also measure link latency
-// and clock skew.
+// TODO(spencer): heartbeat protocol should also measure link latency.
 type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
@@ -54,7 +53,7 @@ func NewServer(addr net.Addr, context *Context) *Server {
 	}
 	heartbeat := &HeartbeatService{
 		clock:              context.localClock,
-		remoteClockMonitor: context.remoteClocks,
+		remoteClockMonitor: context.RemoteClocks,
 	}
 	s.RegisterName("Heartbeat", heartbeat)
 	return s

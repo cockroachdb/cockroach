@@ -18,17 +18,26 @@
 package rpc
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
+)
+
+var (
+	// How often the cluster offset is measured.
+	monitorInterval = heartbeatInterval * 10
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	offsets  map[string]RemoteOffset // Maps remote string addr to offset.
-	maxDrift time.Duration           // The max drift of a node in the cluster.
-	mu       sync.Mutex
+	offsets map[string]RemoteOffset // Maps remote string addr to offset.
+	lClock  *hlc.Clock              // The server clock.
+	mu      sync.Mutex
 }
 
 // ClusterOffsetInterval is the best interval we can construct to estimate this
@@ -36,6 +45,15 @@ type RemoteClockMonitor struct {
 type ClusterOffsetInterval struct {
 	Lowerbound int64 // The lowerbound on the offset in nanoseconds.
 	Upperbound int64 // The upperbound on the offset in nanoseconds.
+}
+
+// MajorityIntervalNotFoundError indicates that we could not find a majority
+// overlap in our estimate of remote clocks.
+type MajorityIntervalNotFoundError struct{}
+
+func (MajorityIntervalNotFoundError) Error() string {
+	return "a majority of connected remote clocks have " +
+		"failed to encompass the true time for the cluster"
 }
 
 // endpoint represents an endpoint in the interval estimation of a single
@@ -68,12 +86,12 @@ func (l endpointList) Less(i, j int) bool {
 	return l[i].offset < l[j].offset
 }
 
-// newRemoteClockMonitor returns a monitor with the value of maxDrift, which
-// should be the maximum drift of all nodes in the server's cluster.
-func newRemoteClockMonitor(maxDrift time.Duration) *RemoteClockMonitor {
+// newRemoteClockMonitor returns a monitor with the value of maxOffset, which
+// should be the maximum offset of all nodes in the server's cluster.
+func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 	return &RemoteClockMonitor{
-		offsets:  make(map[string]RemoteOffset),
-		maxDrift: maxDrift,
+		offsets: make(map[string]RemoteOffset),
+		lClock:  clock,
 	}
 }
 
@@ -89,6 +107,50 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 	}
 }
 
+// MonitorRemoteOffsets periodically checks that the offset of this server's
+// clock from the true cluster time is within MaxOffset. If the offset exceeds
+// MaxOffset, then this method will trigger a fatal error, causing the node to
+// suicide.
+func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
+	log.V(1).Infof("monitoring cluster offset")
+	for {
+		time.Sleep(monitorInterval)
+		offsetInterval, err := r.findOffsetInterval()
+		// By the contract of the hlc, if the value is 0, then safety checking
+		// of the max offset is disabled. However we may still want to
+		// propagate the information to a status node.
+		// TODO(embark): propagate status.
+		if r.lClock.MaxOffset() != 0 {
+			if err != nil {
+				log.Fatalf("clock offset from the cluster time "+
+					"for remote clocks %v could not be determined: %s",
+					r.offsets, err)
+			}
+
+			if !isHealthyOffsetInterval(offsetInterval, r.lClock.MaxOffset()) {
+				log.Fatalf("clock offset from the cluster time "+
+					"for remote clocks: %v is in interval: %v, which "+
+					"indicates that the true offset is greater than %d",
+					r.offsets, offsetInterval, r.lClock.MaxOffset())
+			}
+			log.V(1).Infof("healthy cluster offset: %v", offsetInterval)
+		}
+	}
+}
+
+// isHealthyOffsetInterval returns true if the ClusterOffsetInterval indicates
+// that the node's offset is within maxOffset, else false. For example, if the
+// offset interval is [-20, -11] and the maxOffset is 10 nanoseconds, then the
+// clock offset must be too great, because no point in the interval is within
+// the maxOffset.
+func isHealthyOffsetInterval(i ClusterOffsetInterval, maxOffset time.Duration) bool {
+	if i.Lowerbound > maxOffset.Nanoseconds() ||
+		i.Upperbound < -maxOffset.Nanoseconds() {
+		return false
+	}
+	return true
+}
+
 // The routine that measures this node's probable offset from the rest of the
 // cluster. This offset is measured as a ClusterOffsetInterval. For example,
 // the output might be [-5, 10], which would indicate that this node's offset
@@ -96,59 +158,57 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 // cluster.
 //
 // The intersection algorithm used here is documented at:
-// https://www.eecis.udel.edu/~mills/ntp/html/select.html
-// If a remote clock is correct, its offset interval should encompass this
-// clock's offset from the cluster time (see buildEndpointList()).
-// If the majority of remote clock are correct, then their intevals should
-// overlap over some region, which should include the true offset from the
-// cluster time. This algorithm ought to return this region.
+// http://infolab.stanford.edu/pub/cstr/reports/csl/tr/83/247/CSL-TR-83-247.pdf,
+// commonly known as Marzullo's algorithm. If a remote clock is correct, its
+// offset interval should encompass this clock's offset from the cluster time
+// (see buildEndpointList()). If the majority of remote clock are correct, then
+// their intevals should overlap over some region, which should include the
+// true offset from the cluster time. This algorithm returns this region.
 //
-//TODO(embark): create a routine that periodically invodes this method, and
-//causes the server to suicide if the offset is greater than MaxDrift.
-func (r *RemoteClockMonitor) findOffsetInterval() ClusterOffsetInterval {
+// If an interval cannot be found, an error is returned, indicating that
+// a majority of remote node offset intervals do not overlap the cluster time.
+func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error) {
 	endpoints := r.buildEndpointList()
 	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
-	// falsechimers are remote clocks which appear to have too great an offset
-	// from the cluster time. Their offset measurement is probably misleading,
-	// and should be ignored.
-	falsechimers := 0
-	endcount := 0
-	var lowerBound int64
-	var upperBound int64
-	for falsechimers = 0; falsechimers < numClocks/2; falsechimers++ {
-		// Find lowerbound of the interval.
-		endcount = 0
-		for _, endpoint := range endpoints {
-			endcount -= endpoint.endType
-			lowerBound = endpoint.offset
-			if endcount >= numClocks-falsechimers {
-				break
-			}
-		}
+	if numClocks == 0 {
+		return ClusterOffsetInterval{
+			Lowerbound: 0,
+			Upperbound: 0,
+		}, nil
+	}
 
-		// Find upperbound of the interval.
-		endcount = 0
-		for i := len(endpoints) - 1; i >= 0; i-- {
-			endpoint := endpoints[i]
-			endcount += endpoint.endType
-			upperBound = endpoint.offset
-			if endcount >= numClocks-falsechimers {
-				break
-			}
-		}
+	best := 0
+	count := 0
+	var lowerbound int64
+	var upperbound int64
 
-		if lowerBound < upperBound {
-			return ClusterOffsetInterval{
-				Lowerbound: lowerBound,
-				Upperbound: upperBound,
-			}
+	// Find the interval which the most offset intervals overlap.
+	for i, endpoint := range endpoints {
+		count -= endpoint.endType
+		if count > best {
+			best = count
+			lowerbound = endpoint.offset
+			// Note the endType of the last endpoint is +1, so count < best.
+			// Thus this code will never run when i = len(endpoint)-1.
+			upperbound = endpoints[i+1].offset
 		}
 	}
-	// TODO(embark): If execution gets to here, that indicates that fewer than
-	// a majority of connected remote clocks seem to encompass the central
-	// time of the cluster. It's not clear what should be done in this case.
-	return ClusterOffsetInterval{}
+
+	// Indicates that fewer than a majority of connected remote clocks seem to
+	// encompass the central offset from the cluster, an error condition.
+	if best <= numClocks/2 {
+		return ClusterOffsetInterval{
+			Lowerbound: math.MaxInt64,
+			Upperbound: math.MaxInt64}, MajorityIntervalNotFoundError{}
+	}
+
+	// A majority of offset intervals overlap at this interval, which should
+	// contain the true cluster offset.
+	return ClusterOffsetInterval{
+		Lowerbound: lowerbound,
+		Upperbound: upperbound,
+	}, nil
 }
 
 // buildEndpointList() takes all the RemoteOffsets that are in the monitor, and
@@ -156,27 +216,37 @@ func (r *RemoteClockMonitor) findOffsetInterval() ClusterOffsetInterval {
 // offset from the cluster time. It returns a list including the two endpoints
 // of each interval.
 //
+// As a side effect, any RemoteOffsets that haven't been
+// updated since the last monitoring are removed. (Side effects are nasty, but
+// prevent us from running through the list an extra time under a lock).
+//
 // A RemoteOffset r is represented by this interval:
-// [r.Offset - r.Error - MaxDrift, r.Offset + r.Error + MaxDrift],
-// where MaxDrift is the furthest a node's clock can deviate from the cluster
+// [r.Offset - r.Error - MaxOffset, r.Offset + r.Error + MaxOffset],
+// where MaxOffset is the furthest a node's clock can deviate from the cluster
 // time. While the offset between this node and the remote time is actually
 // within [r.Offset - r.Error, r.Offset + r.Error], we also must expand the
-// interval by MaxDrift. This accounts for the fact that the remote clock is at
-// most MaxDrift distance from the cluster time. Thus the expanded interval
+// interval by MaxOffset. This accounts for the fact that the remote clock is at
+// most MaxOffset distance from the cluster time. Thus the expanded interval
 // ought to contain this node's offset from the true cluster time, not just the
 // offset from the remote clock's time.
 func (r *RemoteClockMonitor) buildEndpointList() endpointList {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// TODO(embark) Figure out when we need to remove entries from r.offsets.
+	cutoff := r.lClock.PhysicalNow() - monitorInterval.Nanoseconds()
+
 	endpoints := make(endpointList, 0, len(r.offsets)*2)
-	for _, o := range r.offsets {
+	for addr, o := range r.offsets {
+		if o.MeasuredAt < cutoff {
+			delete(r.offsets, addr)
+			continue
+		}
+
 		lowpoint := endpoint{
-			offset:  o.Offset - o.Error - r.maxDrift.Nanoseconds(),
+			offset:  o.Offset - o.Error - r.lClock.MaxOffset().Nanoseconds(),
 			endType: -1,
 		}
 		highpoint := endpoint{
-			offset:  o.Offset + o.Error + r.maxDrift.Nanoseconds(),
+			offset:  o.Offset + o.Error + r.lClock.MaxOffset().Nanoseconds(),
 			endType: +1,
 		}
 		endpoints = append(endpoints, lowpoint, highpoint)

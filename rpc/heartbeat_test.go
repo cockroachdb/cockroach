@@ -30,7 +30,7 @@ func TestHeartbeatReply(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock.MaxDrift()),
+		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
 	request := &PingRequest{
@@ -53,12 +53,12 @@ func TestManualHeartbeat(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock.MaxDrift()),
+		remoteClockMonitor: newRemoteClockMonitor(clock),
 		ready:              make(chan bool, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock.MaxDrift()),
+		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
 	request := &PingRequest{
@@ -111,7 +111,7 @@ func TestUpdateOffset(t *testing.T) {
 	if call.Error != nil {
 		t.Fatal(call.Error)
 	}
-	o := sContext.remoteClocks.offsets[conn.LocalAddr().String()]
+	o := sContext.RemoteClocks.offsets[conn.LocalAddr().String()]
 	if o != serverOffset {
 		t.Errorf("expected updated offset %v, instead %v", serverOffset, o)
 	}

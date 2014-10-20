@@ -51,10 +51,10 @@ type Clock struct {
 	// fields while methods operate on them.
 	sync.Mutex
 	state proto.Timestamp
-	// maxDrift specifies how far ahead of the physical
-	// clock the wall time can be.
-	// See SetMaxDrift.
-	maxDrift time.Duration
+	// MaxOffset specifies how far ahead of the physical
+	// clock (and cluster time) the wall time can be.
+	// See SetMaxOffset.
+	maxOffset time.Duration
 }
 
 // ManualClock is a convenience type to facilitate
@@ -87,27 +87,28 @@ func NewClock(physicalClock func() int64) *Clock {
 	}
 }
 
-// SetMaxDrift sets the maximal drift from the physical clock that a
-// call to Update may cause. A well-chosen value is large enough to
-// ignore a reasonable amount of clock skew but will prevent
-// ill-configured nodes from dramatically skewing the wall time of the
-// clock into the future.
+// SetMaxOffset sets the maximal offset of the physical clock from the cluster.
+// It is used to set the max offset a call to Update may cause and to ensure
+// an upperbound on timestamp WallTime in transactions. A well-chosen value is
+// large enough to ignore a reasonable amount of clock skew but will prevent
+// ill-configured nodes from dramatically skewing the wall time of the clock
+// into the future.
 //
-// A value of zero disables this safety feature.
+// A value of zero disables all safety features.
 // The default value for a new instance is zero.
-func (c *Clock) SetMaxDrift(delta time.Duration) {
+func (c *Clock) SetMaxOffset(delta time.Duration) {
 	c.Lock()
 	defer c.Unlock()
-	c.maxDrift = delta
+	c.maxOffset = delta
 }
 
-// MaxDrift returns the maximal drift allowed.
-// A value of 0 means drift checking is disabled.
-// See SetMaxDrift for details.
-func (c *Clock) MaxDrift() time.Duration {
+// MaxOffset returns the maximal offset allowed.
+// A value of 0 means offset checking is disabled.
+// See SetMaxOffset for details.
+func (c *Clock) MaxOffset() time.Duration {
 	c.Lock()
 	defer c.Unlock()
-	return c.maxDrift
+	return c.maxOffset
 }
 
 // Timestamp returns a copy of the clock's current timestamp,
@@ -151,12 +152,21 @@ func (c *Clock) Now() (result proto.Timestamp) {
 	return
 }
 
+// PhysicalNow returns the local wall time. It corresponds to the physicalClock
+// provided at instantiation. For a timestamp value, use Now() instead.
+func (c *Clock) PhysicalNow() int64 {
+	c.Lock()
+	defer c.Unlock()
+	wallTime := c.physicalClock()
+	return wallTime
+}
+
 // Update takes a hybrid timestamp, usually originating from
 // an event received from another member of a distributed
 // system. The clock is updated and the hybrid timestamp
 // associated to the receipt of the event returned.
-// An error may only occur if drift checking is active and
-// the remote timestamp was rejected due to clock drift,
+// An error may only occur if offset checking is active and
+// the remote timestamp was rejected due to clock offset,
 // in which case the state of the clock will not have been
 // altered.
 // To timestamp events of local origin, use Now instead.
@@ -180,10 +190,10 @@ func (c *Clock) Update(rt proto.Timestamp) (result proto.Timestamp, err error) {
 	// as it is behind the local and remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.state.WallTime {
-		if c.maxDrift.Nanoseconds() > 0 &&
-			rt.WallTime-physicalClock > c.maxDrift.Nanoseconds() {
+		if c.maxOffset.Nanoseconds() > 0 &&
+			rt.WallTime-physicalClock > c.maxOffset.Nanoseconds() {
 			// The remote wall time is too far ahead to be trustworthy.
-			err = util.Errorf("Remote wall time drifts from local physical clock: %d (%dns ahead)",
+			err = util.Errorf("Remote wall time offsets from local physical clock: %d (%dns ahead)",
 				rt.WallTime, rt.WallTime-physicalClock)
 			return
 		}
