@@ -1,4 +1,3 @@
-.git
 _vendor
 roachlib/*.o
 roachlib/*.a
