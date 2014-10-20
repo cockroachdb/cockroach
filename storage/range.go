@@ -249,7 +249,7 @@ type Range struct {
 	splitting int32         // 1 if a split is underway
 	closer    chan struct{} // Channel for closing the range
 
-	sync.RWMutex                 // Protects cmdQ, tsCache & respCache
+	sync.RWMutex                 // Protects cmdQ, tsCache & respCache (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	respCache    *ResponseCache  // Provides idempotence for retries
@@ -330,12 +330,18 @@ func (r *Range) GetReplica() *proto.Replica {
 
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key engine.Key) bool {
+	// Read-lock the mutex to protect access to Desc, which might be changed
+	// concurrently via range split.
+	r.RLock()
+	defer r.RUnlock()
 	return r.Desc.ContainsKey(key.Address())
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
+	r.RLock()
+	defer r.RUnlock()
 	return r.Desc.ContainsKeyRange(start.Address(), end.Address())
 }
 
@@ -1380,6 +1386,10 @@ func (r *Range) splitTrigger(batch *engine.Batch, split *proto.SplitTrigger) err
 	// updates the EndKey of the updated range and also adds the
 	// new range to the store's range map.
 	newRng := NewRange(newRangeID, &split.NewDesc, r.rm)
+	// Write-lock the mutex to protect Desc, as SplitRange will modify
+	// Desc.EndKey.
+	r.Lock()
+	defer r.Unlock()
 	return r.rm.SplitRange(r, newRng)
 }
 
