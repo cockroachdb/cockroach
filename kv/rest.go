@@ -20,7 +20,6 @@ package kv
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -113,6 +112,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
+// writeJSON marshals v to JSON and writes the result to w with
+// the given status code.
+func writeJSON(w http.ResponseWriter, statusCode int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Errorf("could not json encode response: %v", err)
+	}
+}
+
 // keyedAction wraps the given actionKeyHandler func in a closure that
 // extracts the key from the request and passes it on to the handler.
 // The closure is then returned for later execution.
@@ -148,7 +157,7 @@ const (
 func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	// TODO(andybons): Allow the client to specify range parameters via
 	// request headers as well, allowing query parameters to override the
-	// ranger headers if necessary.
+	// range headers if necessary.
 	// http://www.restapitutorial.com/media/RESTful_Best_Practices-v1_1.pdf
 	startKey := engine.Key(r.FormValue(rangeParamStart))
 	endKey := engine.Key(r.FormValue(rangeParamEnd))
@@ -195,11 +204,7 @@ func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	if results == nil {
 		panic("results from range operation cannot be nil")
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(results); err != nil {
-		log.Errorf("could not json encode scan response: %v", err)
-		return
-	}
+	writeJSON(w, http.StatusOK, results)
 }
 
 func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
@@ -227,11 +232,11 @@ func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key
 		},
 		Increment: inputVal,
 	})
+	status := http.StatusOK
 	if gr.Error != nil {
-		http.Error(w, gr.GoError().Error(), http.StatusInternalServerError)
-		return
+		status = http.StatusInternalServerError
 	}
-	fmt.Fprintf(w, "%d", gr.NewValue)
+	writeJSON(w, status, gr)
 }
 
 func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
@@ -248,11 +253,11 @@ func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key eng
 		},
 		Value: proto.Value{Bytes: b},
 	})
+	status := http.StatusOK
 	if pr.Error != nil {
-		http.Error(w, pr.GoError().Error(), http.StatusInternalServerError)
-		return
+		status = http.StatusInternalServerError
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, status, pr)
 }
 
 func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
@@ -262,21 +267,15 @@ func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key eng
 			User: storage.UserRoot,
 		},
 	})
+	status := http.StatusOK
 	if gr.Error != nil {
-		http.Error(w, gr.GoError().Error(), http.StatusInternalServerError)
-		return
+		status = http.StatusInternalServerError
 	}
 	// An empty key will not be nil, but have zero length.
 	if gr.Value == nil {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
+		status = http.StatusNotFound
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	if gr.Value.Bytes != nil {
-		fmt.Fprintf(w, "%s", string(gr.Value.Bytes))
-	} else if gr.Value.Integer != nil {
-		fmt.Fprintf(w, "%d", gr.Value.GetInteger())
-	}
+	writeJSON(w, status, gr)
 }
 
 func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
@@ -286,15 +285,14 @@ func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key en
 			User: storage.UserRoot,
 		},
 	})
+	status := http.StatusOK
 	if cr.Error != nil {
-		http.Error(w, cr.GoError().Error(), http.StatusInternalServerError)
-		return
+		status = http.StatusInternalServerError
 	}
 	if !cr.Exists {
-		w.WriteHeader(http.StatusNotFound)
-		return
+		status = http.StatusNotFound
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, status, cr)
 }
 
 func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
@@ -304,9 +302,9 @@ func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key 
 			User: storage.UserRoot,
 		},
 	})
+	status := http.StatusOK
 	if dr.Error != nil {
-		http.Error(w, dr.GoError().Error(), http.StatusInternalServerError)
-		return
+		status = http.StatusInternalServerError
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, status, dr)
 }
