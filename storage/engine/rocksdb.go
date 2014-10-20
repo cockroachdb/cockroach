@@ -450,3 +450,13 @@ func goMerge(existing, update []byte) ([]byte, error) {
 	}
 	return cStringToGoBytes(result), nil
 }
+
+// Returns a new Batch wrapping this rocksdb engine.
+func (r *RocksDB) NewBatch() Engine {
+	return &Batch{engine: r}
+}
+
+// Commit is a noop for RocksDB engine.
+func (r *RocksDB) Commit() error {
+	return nil
+}

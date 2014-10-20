@@ -649,7 +649,7 @@ func (r *Range) maybeGossipConfigs() {
 func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
-	mvcc := engine.NewMVCC(engine.NewBatch(r.rm.Engine()))
+	mvcc := engine.NewMVCC(r.rm.Engine())
 	kvs, err := mvcc.Scan(keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
@@ -751,7 +751,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Create a new batch for the command to ensure all or nothing semantics.
-	batch := engine.NewBatch(r.rm.Engine())
+	batch := r.rm.Engine().NewBatch()
 	// Create an MVCC instance wrapping the batch for commands which require MVCC.
 	mvcc := engine.NewMVCC(batch)
 
@@ -901,7 +901,7 @@ func (r *Range) Scan(mvcc *engine.MVCC, args *proto.ScanRequest, reply *proto.Sc
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
 	if args.Txn == nil {
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
@@ -912,7 +912,7 @@ func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRe
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, _, _, err := batch.GetProto(encKey, existTxn)
+	ok, _, _, err := engine.GetProto(batch, encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -977,7 +977,7 @@ func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRe
 	}
 
 	// Persist the transaction record with updated status (& possibly timestmap).
-	if _, _, err := batch.PutProto(encKey, reply.Txn); err != nil {
+	if _, _, err := engine.PutProto(batch, encKey, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -1087,7 +1087,7 @@ func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRange
 
 // InternalEndTxn invokes EndTransaction. On success, it executes any
 // triggers specified in args.
-func (r *Range) InternalEndTxn(batch *engine.Batch, args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) {
+func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) {
 	etArgs := &proto.EndTransactionRequest{}
 	etReply := &proto.EndTransactionResponse{}
 	etArgs.RequestHeader = args.RequestHeader
@@ -1113,12 +1113,12 @@ func (r *Range) InternalEndTxn(batch *engine.Batch, args *proto.InternalEndTxnRe
 // InternalHeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
-func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
+func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Encode the key for direct access to/from the engine.
 	encKey := engine.Key(args.Key).Encode(nil)
 
 	var txn proto.Transaction
-	ok, _, _, err := batch.GetProto(encKey, &txn)
+	ok, _, _, err := engine.GetProto(batch, encKey, &txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1135,7 +1135,7 @@ func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHe
 		if txn.LastHeartbeat.Less(args.Header().Timestamp) {
 			*txn.LastHeartbeat = args.Header().Timestamp
 		}
-		if _, _, err := batch.PutProto(encKey, &txn); err != nil {
+		if _, _, err := engine.PutProto(batch, encKey, &txn); err != nil {
 			reply.SetGoError(err)
 			return
 		}
@@ -1176,7 +1176,7 @@ func (r *Range) InternalHeartbeatTxn(batch *engine.Batch, args *proto.InternalHe
 // Higher Txn Priority: If pushee txn has a higher priority than
 // pusher, return TransactionRetryError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
-func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
+func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
 	key := engine.Key(args.Key)
 	if !bytes.Equal(key.Address(), args.PusheeTxn.ID) {
 		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q",
@@ -1189,7 +1189,7 @@ func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxn
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, _, _, err := batch.GetProto(encKey, existTxn)
+	ok, _, _, err := engine.GetProto(batch, encKey, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1290,7 +1290,7 @@ func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxn
 	}
 
 	// Persist the pushed transaction.
-	if _, _, err := batch.PutProto(encKey, reply.PusheeTxn); err != nil {
+	if _, _, err := engine.PutProto(batch, encKey, reply.PusheeTxn); err != nil {
 		reply.SetGoError(err)
 		return
 	}
@@ -1355,7 +1355,7 @@ func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapsh
 // transaction. It copies the response cache for the new range and
 // recomputes stats for both the existing, updated range and the new
 // range.
-func (r *Range) splitTrigger(batch *engine.Batch, split *proto.SplitTrigger) error {
+func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
 	if !bytes.Equal(r.Desc.StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(r.Desc.EndKey, split.NewDesc.EndKey) {
 		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,

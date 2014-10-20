@@ -19,8 +19,8 @@ package engine
 
 import (
 	"code.google.com/p/biogo.store/llrb"
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // Batch wrap an instance of Engine and provides a limited subset of
@@ -38,26 +38,9 @@ type Batch struct {
 	committed bool
 }
 
-// NewBatch returns a new instance of Batch wrapping engine.
+// NewBatch returns a new instance of Batch which wraps engine.
 func NewBatch(engine Engine) *Batch {
-	return &Batch{
-		engine: engine,
-	}
-}
-
-// Commit writes all pending updates to the underlying engine in
-// an atomic write batch.
-func (b *Batch) Commit() error {
-	if b.committed {
-		panic("this batch was already committed")
-	}
-	var batch []interface{}
-	b.updates.DoRange(func(n llrb.Comparable) (done bool) {
-		batch = append(batch, n)
-		return false
-	}, proto.RawKeyValue{Key: KeyMin}, proto.RawKeyValue{Key: KeyMax})
-	b.committed = true
-	return b.engine.WriteBatch(batch)
+	return &Batch{engine: engine}
 }
 
 // Put stores the key / value as a BatchPut in the updates tree.
@@ -225,41 +208,76 @@ func (b *Batch) Merge(key Key, value []byte) error {
 	return nil
 }
 
-// PutProto sets the given key to the protobuf-serialized byte string
-// of msg and the provided timestamp. Returns the length in bytes of
-// key and the value.
-func (b *Batch) PutProto(key Key, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
-	var data []byte
-	if data, err = gogoproto.Marshal(msg); err != nil {
-		return
+// Commit writes all pending updates to the underlying engine in
+// an atomic write batch.
+func (b *Batch) Commit() error {
+	if b.committed {
+		panic("this batch was already committed")
 	}
-	if err = b.Put(key, data); err != nil {
-		return
-	}
-	keyBytes = int64(len(key))
-	valBytes = int64(len(data))
+	var batch []interface{}
+	b.updates.DoRange(func(n llrb.Comparable) (done bool) {
+		batch = append(batch, n)
+		return false
+	}, proto.RawKeyValue{Key: KeyMin}, proto.RawKeyValue{Key: KeyMax})
+	b.committed = true
+	return b.engine.WriteBatch(batch)
+}
+
+// Start returns an error if called on a Batch.
+func (b *Batch) Start() error {
+	return util.Errorf("cannot start a batch")
+}
+
+// Stop is a noop for Batch.
+func (b *Batch) Stop() {
+}
+
+// Attrs is a noop for Batch.
+func (b *Batch) Attrs() proto.Attributes {
+	return proto.Attributes{}
+}
+
+// WriteBatch returns an error if called on a Batch.
+func (b *Batch) WriteBatch([]interface{}) error {
+	return util.Errorf("cannot report capacity from a Batch")
+}
+
+// Capacity returns an error if called on a Batch.
+func (b *Batch) Capacity() (StoreCapacity, error) {
+	return StoreCapacity{}, util.Errorf("cannot report capacity from a Batch")
+}
+
+// SetGCTimeouts is a noop for Batch.
+func (b *Batch) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {
 	return
 }
 
-// GetProto fetches the value at the specified key and unmarshals it
-// using a protobuf decoder. Returns true on success or false if the
-// key was not found. On success, returns the length in bytes of the
-// key and the value.
-func (b *Batch) GetProto(key Key, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
-	var data []byte
-	if data, err = b.Get(key); err != nil {
-		return
-	}
-	if data == nil {
-		return
-	}
-	ok = true
-	if msg != nil {
-		if err = gogoproto.Unmarshal(data, msg); err != nil {
-			return
-		}
-	}
-	keyBytes = int64(len(key))
-	valBytes = int64(len(data))
-	return
+// CreateSnapshot returns an error if called on a Batch.
+func (b *Batch) CreateSnapshot(snapshotID string) error {
+	return util.Errorf("cannot create a snapshot from a Batch")
+}
+
+// ReleaseSnapshot returns an error if called on a Batch.
+func (b *Batch) ReleaseSnapshot(snapshotID string) error {
+	return util.Errorf("cannot release a snapshot from a Batch")
+}
+
+// GetSnapshot returns an error if called on a Batch.
+func (b *Batch) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+	return nil, util.Errorf("cannot get with a snapshot from a Batch")
+}
+
+// IterateSnapshot returns an error if called on a Batch.
+func (b *Batch) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+	return util.Errorf("cannot iterate with a snapshot from a Batch")
+}
+
+// ApproximateSize returns an error if called on a Batch.
+func (b *Batch) ApproximateSize(start, end Key) (uint64, error) {
+	return 0, util.Errorf("cannot get approximate size from a Batch")
+}
+
+// NewBatch returns a new Batch instance wrapping same underlying engine.
+func (b *Batch) NewBatch() Engine {
+	return &Batch{engine: b.engine}
 }

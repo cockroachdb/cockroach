@@ -82,41 +82,41 @@ func GetRangeMVCCStats(engine Engine, rangeID int64) (*MVCCStats, error) {
 
 // MergeStats merges accumulated stats to stat counters for both the
 // affected range and store.
-func (ms *MVCCStats) MergeStats(batch *Batch, rangeID int64, storeID int32) {
-	MergeStat(batch, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
-	MergeStat(batch, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
-	MergeStat(batch, rangeID, storeID, StatValBytes, ms.ValBytes)
-	MergeStat(batch, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
-	MergeStat(batch, rangeID, storeID, StatLiveCount, ms.LiveCount)
-	MergeStat(batch, rangeID, storeID, StatKeyCount, ms.KeyCount)
-	MergeStat(batch, rangeID, storeID, StatValCount, ms.ValCount)
-	MergeStat(batch, rangeID, storeID, StatIntentCount, ms.IntentCount)
+func (ms *MVCCStats) MergeStats(engine Engine, rangeID int64, storeID int32) {
+	MergeStat(engine, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
+	MergeStat(engine, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
+	MergeStat(engine, rangeID, storeID, StatValBytes, ms.ValBytes)
+	MergeStat(engine, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
+	MergeStat(engine, rangeID, storeID, StatLiveCount, ms.LiveCount)
+	MergeStat(engine, rangeID, storeID, StatKeyCount, ms.KeyCount)
+	MergeStat(engine, rangeID, storeID, StatValCount, ms.ValCount)
+	MergeStat(engine, rangeID, storeID, StatIntentCount, ms.IntentCount)
 }
 
 // SetStats sets stat counters for both the affected range and store.
-func (ms *MVCCStats) SetStats(batch *Batch, rangeID int64, storeID int32) {
-	SetStat(batch, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
-	SetStat(batch, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
-	SetStat(batch, rangeID, storeID, StatValBytes, ms.ValBytes)
-	SetStat(batch, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
-	SetStat(batch, rangeID, storeID, StatLiveCount, ms.LiveCount)
-	SetStat(batch, rangeID, storeID, StatKeyCount, ms.KeyCount)
-	SetStat(batch, rangeID, storeID, StatValCount, ms.ValCount)
-	SetStat(batch, rangeID, storeID, StatIntentCount, ms.IntentCount)
+func (ms *MVCCStats) SetStats(engine Engine, rangeID int64, storeID int32) {
+	SetStat(engine, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
+	SetStat(engine, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
+	SetStat(engine, rangeID, storeID, StatValBytes, ms.ValBytes)
+	SetStat(engine, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
+	SetStat(engine, rangeID, storeID, StatLiveCount, ms.LiveCount)
+	SetStat(engine, rangeID, storeID, StatKeyCount, ms.KeyCount)
+	SetStat(engine, rangeID, storeID, StatValCount, ms.ValCount)
+	SetStat(engine, rangeID, storeID, StatIntentCount, ms.IntentCount)
 }
 
 // MVCC wraps the mvcc operations of a key/value store. MVCC instances
-// are instantiated with a Batch object, meant to carry out a single
+// are instantiated with an Engine object, meant to carry out a single
 // operation and commit the results to the underlying engine atomically.
 type MVCC struct {
-	batch *Batch
+	engine Engine
 	MVCCStats
 }
 
-// NewMVCC returns a new instance of MVCC, wrapping batch.
-func NewMVCC(batch *Batch) *MVCC {
+// NewMVCC returns a new instance of MVCC, wrapping engine.
+func NewMVCC(engine Engine) *MVCC {
 	return &MVCC{
-		batch: batch,
+		engine: engine,
 	}
 }
 
@@ -170,7 +170,7 @@ func (mvcc *MVCC) PutProto(key Key, timestamp proto.Timestamp, txn *proto.Transa
 func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction) (*proto.Value, error) {
 	binKey := key.Encode(nil)
 	meta := &proto.MVCCMetadata{}
-	ok, _, _, err := mvcc.batch.GetProto(binKey, meta)
+	ok, _, _, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 		if meta.Txn != nil && txn.Epoch != meta.Txn.Epoch {
 			valBytes, ts, isValue, err = mvcc.scanNextVersion(latestKey.Next(), Key(binKey).PrefixEnd())
 		} else {
-			valBytes, err = mvcc.batch.Get(latestKey)
+			valBytes, err = mvcc.engine.Get(latestKey)
 			ts = meta.Timestamp
 			isValue = true
 		}
@@ -224,14 +224,14 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	return value.Value, nil
 }
 
-// scanNextVersion scans the value from batch starting at nextKey,
+// scanNextVersion scans the value from engine starting at nextKey,
 // limited by endKey. Both values are binary-encoded. Returns the
 // bytes and timestamp if read, nil otherwise.
 func (mvcc *MVCC) scanNextVersion(nextKey, endKey Key) ([]byte, proto.Timestamp, bool, error) {
 	// We use the PrefixEndKey(key) as the upper bound for scan.
 	// If there is no other version after nextKey, it won't return
 	// the value of the next key.
-	kvs, err := mvcc.batch.Scan(nextKey, endKey, 1)
+	kvs, err := Scan(mvcc.engine, nextKey, endKey, 1)
 	if len(kvs) == 0 || err != nil {
 		return nil, proto.Timestamp{}, false, err
 	}
@@ -267,7 +267,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	}
 
 	meta := &proto.MVCCMetadata{}
-	ok, origMetaKeySize, origMetaValSize, err := mvcc.batch.GetProto(binKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 		if !timestamp.Less(meta.Timestamp) && (meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
 			// If this is an intent and timestamps have changed, need to remove old version.
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
-				mvcc.batch.Clear(mvccEncodeKey(binKey, meta.Timestamp))
+				mvcc.engine.Clear(mvccEncodeKey(binKey, meta.Timestamp))
 			}
 			newMeta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
@@ -316,7 +316,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	valueKeySize, valueSize, err := mvcc.batch.PutProto(mvccEncodeKey(binKey, timestamp), &value)
+	valueKeySize, valueSize, err := PutProto(mvcc.engine, mvccEncodeKey(binKey, timestamp), &value)
 	if err != nil {
 		return err
 	}
@@ -325,7 +325,7 @@ func (mvcc *MVCC) putInternal(key Key, timestamp proto.Timestamp, value proto.MV
 	newMeta.KeyBytes = valueKeySize
 	newMeta.ValBytes = valueSize
 	newMeta.Deleted = value.Deleted
-	metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, newMeta)
+	metaKeySize, metaValSize, err := PutProto(mvcc.engine, binKey, newMeta)
 	if err != nil {
 		return err
 	}
@@ -435,7 +435,7 @@ func (mvcc *MVCC) Scan(key, endKey Key, max int64, timestamp proto.Timestamp, tx
 
 	res := []proto.KeyValue{}
 	for {
-		kvs, err := mvcc.batch.Scan(nextKey, binEndKey, 1)
+		kvs, err := Scan(mvcc.engine, nextKey, binEndKey, 1)
 		if err != nil {
 			return nil, err
 		}
@@ -501,7 +501,7 @@ func (mvcc *MVCC) IterateCommitted(key, endKey Key, f func(proto.KeyValue) (bool
 	var currentKey Key
 	var versionKey Key // Need to read this version of the key
 	nextKey := encKey  // The next key--no additional versions of currentKey past this
-	return mvcc.batch.Iterate(encKey, encEndKey, func(rawKV proto.RawKeyValue) (bool, error) {
+	return mvcc.engine.Iterate(encKey, encEndKey, func(rawKV proto.RawKeyValue) (bool, error) {
 		if bytes.Compare(nextKey, rawKV.Key) <= 0 {
 			var remainder []byte
 			remainder, currentKey = DecodeKey(rawKV.Key)
@@ -574,7 +574,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 
 	binKey := key.Encode(nil)
 	meta := &proto.MVCCMetadata{}
-	ok, origMetaKeySize, origMetaValSize, err := mvcc.batch.GetProto(binKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := GetProto(mvcc.engine, binKey, meta)
 	if err != nil {
 		return err
 	}
@@ -600,7 +600,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 		} else {
 			newMeta.Txn = nil
 		}
-		metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, &newMeta)
+		metaKeySize, metaValSize, err := PutProto(mvcc.engine, binKey, &newMeta)
 		if err != nil {
 			return err
 		}
@@ -615,12 +615,12 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 		if !origTimestamp.Equal(txn.Timestamp) {
 			origKey := mvccEncodeKey(binKey, origTimestamp)
 			newKey := mvccEncodeKey(binKey, txn.Timestamp)
-			valBytes, err := mvcc.batch.Get(origKey)
+			valBytes, err := mvcc.engine.Get(origKey)
 			if err != nil {
 				return err
 			}
-			mvcc.batch.Clear(origKey)
-			mvcc.batch.Put(newKey, valBytes)
+			mvcc.engine.Clear(origKey)
+			mvcc.engine.Put(newKey, valBytes)
 		}
 		return nil
 	}
@@ -638,19 +638,19 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 
 	// First clear the intent value.
 	latestKey := mvccEncodeKey(binKey, meta.Timestamp)
-	mvcc.batch.Clear(latestKey)
+	mvcc.engine.Clear(latestKey)
 
 	// Compute the next possible mvcc value for this key.
 	nextKey := latestKey.Next()
 	// Compute the last possible mvcc value for this key.
 	endScanKey := key.Next().Encode(nil)
-	kvs, err := mvcc.batch.Scan(nextKey, endScanKey, 1)
+	kvs, err := Scan(mvcc.engine, nextKey, endScanKey, 1)
 	if err != nil {
 		return err
 	}
 	// If there is no other version, we should just clean up the key entirely.
 	if len(kvs) == 0 {
-		mvcc.batch.Clear(binKey)
+		mvcc.engine.Clear(binKey)
 		// Clear stat counters attributable to the intent we're aborting.
 		mvcc.updateStatsOnAbort(origMetaKeySize, origMetaValSize, 0, 0, meta, nil)
 	} else {
@@ -660,7 +660,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 		}
 		// Get the bytes for the next version so we have size for stat counts.
 		value := proto.MVCCValue{}
-		ok, valueKeySize, valueSize, err := mvcc.batch.GetProto(kvs[0].Key, &value)
+		ok, valueKeySize, valueSize, err := GetProto(mvcc.engine, kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}
@@ -671,7 +671,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key Key, txn *proto.Transaction) error {
 			KeyBytes:  valueKeySize,
 			ValBytes:  valueSize,
 		}
-		metaKeySize, metaValSize, err := mvcc.batch.PutProto(binKey, newMeta)
+		metaKeySize, metaValSize, err := PutProto(mvcc.engine, binKey, newMeta)
 		if err != nil {
 			return err
 		}
@@ -698,7 +698,7 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto
 
 	num := int64(0)
 	for {
-		kvs, err := mvcc.batch.Scan(nextKey, binEndKey, 1)
+		kvs, err := Scan(mvcc.engine, nextKey, binEndKey, 1)
 		if err != nil {
 			return num, err
 		}
@@ -732,7 +732,7 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto
 // MergeStats merges stats to stat counters for both the affected
 // range and store.
 func (mvcc *MVCC) MergeStats(rangeID int64, storeID int32) {
-	mvcc.MVCCStats.MergeStats(mvcc.batch, rangeID, storeID)
+	mvcc.MVCCStats.MergeStats(mvcc.engine, rangeID, storeID)
 }
 
 // a splitSampleItem wraps a key along with an aggregate over key range

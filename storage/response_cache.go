@@ -120,7 +120,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
 	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
-	if ok, err := engine.GetProto(rc.engine, encKey, &rwResp); ok || err != nil {
+	if ok, _, _, err := engine.GetProto(rc.engine, encKey, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
 		rc.removeInflightLocked(cmdID)
@@ -136,7 +136,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 // CopyInto copies all the cached results from one response cache into
 // another. The cache will be locked while copying is in progress;
 // failures decoding individual cache entries return an error.
-func (rc *ResponseCache) CopyInto(batch *engine.Batch, destRangeID int64) error {
+func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID int64) error {
 	rc.Lock()
 	defer rc.Unlock()
 
@@ -152,7 +152,7 @@ func (rc *ResponseCache) CopyInto(batch *engine.Batch, destRangeID int64) error 
 			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
 		}
 		encKey := responseCacheKey(destRangeID, cmdID).Encode(nil)
-		return false, batch.Put(encKey, kv.Value)
+		return false, e.Put(encKey, kv.Value)
 	})
 }
 
@@ -170,7 +170,7 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{})
 	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
 	rwResp := &proto.ReadWriteCmdResponse{}
 	rwResp.SetValue(reply)
-	err := engine.PutProto(rc.engine, encKey, rwResp)
+	_, _, err := engine.PutProto(rc.engine, encKey, rwResp)
 
 	// Take lock after writing response to cache!
 	rc.Lock()

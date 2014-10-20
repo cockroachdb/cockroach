@@ -66,7 +66,7 @@ func (db *testDB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *prot
 	// Lookup range.
 	if rng := db.store.LookupRange(args.Key, args.EndKey); rng != nil {
 		if args.Commit == true && args.SplitTrigger != nil {
-			batch := engine.NewBatch(rng.rm.Engine())
+			batch := rng.rm.Engine().NewBatch()
 			if err := rng.splitTrigger(batch, args.SplitTrigger); err != nil {
 				reply.SetGoError(err)
 			} else {
@@ -160,7 +160,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Scan meta keys directly from engine.
-		mvcc := engine.NewMVCC(engine.NewBatch(store.Engine()))
+		mvcc := engine.NewMVCC(store.Engine())
 		kvs, err := mvcc.Scan(engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, nil)
 		if err != nil {
 			t.Fatal(err)

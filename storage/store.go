@@ -221,7 +221,7 @@ func (s *Store) Init() error {
 	})
 
 	// Read store ident and return a not-bootstrapped error if necessary.
-	ok, err := engine.GetProto(s.engine, engine.KeyLocalIdent, &s.Ident)
+	ok, _, _, err := engine.GetProto(s.engine, engine.KeyLocalIdent, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -230,7 +230,7 @@ func (s *Store) Init() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	mvcc := engine.NewMVCC(engine.NewBatch(s.engine))
+	mvcc := engine.NewMVCC(s.engine)
 	start := engine.KeyLocalRangeDescriptorPrefix
 	end := start.PrefixEnd()
 
@@ -274,7 +274,8 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	return engine.PutProto(s.engine, engine.KeyLocalIdent, &s.Ident)
+	_, _, err = engine.PutProto(s.engine, engine.KeyLocalIdent, &s.Ident)
+	return err
 }
 
 // GetRange fetches a range by ID. Returns an error if no range is found.
@@ -326,7 +327,7 @@ func (s *Store) BootstrapRange() (*Range, error) {
 			},
 		},
 	}
-	batch := engine.NewBatch(s.engine)
+	batch := s.engine.NewBatch()
 	mvcc := engine.NewMVCC(batch)
 	now := s.clock.Now()
 	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {

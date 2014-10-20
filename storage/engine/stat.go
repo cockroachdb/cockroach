@@ -89,7 +89,7 @@ func MakeStoreStatKey(storeID int32, stat Key) Key {
 // on stat decode error.
 func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
 	val := &proto.Value{}
-	ok, err := GetProto(engine, MakeRangeStatKey(rangeID, stat).Encode(nil), val)
+	ok, _, _, err := GetProto(engine, MakeRangeStatKey(rangeID, stat).Encode(nil), val)
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -97,29 +97,29 @@ func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
 }
 
 // MergeStat flushes the specified stat to merge counters via the
-// provided batch for both the affected range and store. Only
+// provided engine for both the affected range and store. Only
 // updates range or store stats if the corresponding ID is non-zero.
-func MergeStat(batch *Batch, rangeID int64, storeID int32, stat Key, statVal int64) {
+func MergeStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
-			batch.Merge(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
+			engine.Merge(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
 		}
 		if storeID != 0 {
-			batch.Merge(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
+			engine.Merge(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
 		}
 	}
 }
 
 // SetStat writes the specified stat to counters via the provided
-// batch for both the affected range and store. Only updates range or
+// engine for both the affected range and store. Only updates range or
 // store stats if the corresponding ID is non-zero.
-func SetStat(batch *Batch, rangeID int64, storeID int32, stat Key, statVal int64) {
+func SetStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
-			batch.Put(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
+			engine.Put(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
 		}
 		if storeID != 0 {
-			batch.Put(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
+			engine.Put(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
 		}
 	}
 }

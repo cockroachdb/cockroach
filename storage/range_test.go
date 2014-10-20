@@ -73,8 +73,7 @@ var (
 
 // initConfigs creates default configuration entries.
 func initConfigs(e engine.Engine, t *testing.T) {
-	batch := engine.NewBatch(e)
-	mvcc := engine.NewMVCC(batch)
+	mvcc := engine.NewMVCC(e)
 	if err := mvcc.PutProto(engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +81,6 @@ func initConfigs(e engine.Engine, t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mvcc.PutProto(engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
-		t.Fatal(err)
-	}
-	if err := batch.Commit(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -177,8 +173,7 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // key prefixes for a config are gossipped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	e := createTestEngine(t)
-	batch := engine.NewBatch(e)
-	mvcc := engine.NewMVCC(batch)
+	mvcc := engine.NewMVCC(e)
 	// Add a permission for a new key prefix.
 	db1Perm := proto.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
@@ -186,9 +181,6 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
 	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
-		t.Fatal(err)
-	}
-	if err := batch.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	r, g := createTestRange(e, t)
@@ -307,6 +299,10 @@ func (be *blockingEngine) Put(key engine.Key, value []byte) error {
 	}
 	be.Unlock()
 	return be.InMem.Put(key, value)
+}
+
+func (be *blockingEngine) NewBatch() engine.Engine {
+	return engine.NewBatch(be)
 }
 
 // createTestRangeWithClock creates a range using a blocking engine. Returns
@@ -608,7 +604,7 @@ func TestRangeCommandQueue(t *testing.T) {
 			case <-cmd2Done:
 				// success.
 			case <-cmd1Done:
-				t.Fatalf("test %d: should not have been able execute cmd1 while blocked", i)
+				t.Fatalf("test %d: should not have been able to execute cmd1 while blocked", i)
 			case <-time.After(500 * time.Millisecond):
 				t.Fatalf("test %d: waited 500ms for cmd2 of key1", i)
 			}
@@ -1074,7 +1070,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
 		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key).Encode(nil)
-		if err := engine.PutProto(rng.rm.Engine(), txnKey, &existTxn); err != nil {
+		if _, _, err := engine.PutProto(rng.rm.Engine(), txnKey, &existTxn); err != nil {
 			t.Fatal(err)
 		}
 
