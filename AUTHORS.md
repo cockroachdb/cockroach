@@ -11,3 +11,4 @@
 - Zach Brock <zbrock@gmail.com>
 - Matthew O'Connor <matthew.t.oconnor@gmail.com>
 - Jiang-Ming Yang <jiangming.yang@gmail.com>
+- Kathy Spradlin <kathyspradlin@gmail.com>
