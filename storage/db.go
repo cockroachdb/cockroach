@@ -58,11 +58,12 @@ type DB interface {
 	ReapQueue(args *proto.ReapQueueRequest) <-chan *proto.ReapQueueResponse
 	EnqueueUpdate(args *proto.EnqueueUpdateRequest) <-chan *proto.EnqueueUpdateResponse
 	EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *proto.EnqueueMessageResponse
+	InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *proto.InternalEndTxnResponse
 	InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest) <-chan *proto.InternalHeartbeatTxnResponse
 	InternalPushTxn(args *proto.InternalPushTxnRequest) <-chan *proto.InternalPushTxnResponse
 	InternalResolveIntent(args *proto.InternalResolveIntentRequest) <-chan *proto.InternalResolveIntentResponse
 	InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) <-chan *proto.InternalSnapshotCopyResponse
-	InternalSplit(args *proto.InternalSplitRequest) <-chan *proto.InternalSplitResponse
+	AdminSplit(args *proto.AdminSplitRequest) <-chan *proto.AdminSplitResponse
 
 	RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error
 }
@@ -206,6 +207,14 @@ func (db *BaseDB) EnqueueMessage(args *proto.EnqueueMessageRequest) <-chan *prot
 	return replyChan
 }
 
+// InternalEndTxn is similar to EndTransaction, except additionally
+// provides support for system-specific triggers on successful commit.
+func (db *BaseDB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *proto.InternalEndTxnResponse {
+	replyChan := make(chan *proto.InternalEndTxnResponse, 1)
+	go db.Executor(InternalEndTxn, args, replyChan)
+	return replyChan
+}
+
 // InternalHeartbeatTxn sends a periodic heartbeat to extant
 // transaction rows to indicate the client is still alive and
 // the transaction should not be considered abandoned.
@@ -247,10 +256,10 @@ func (db *BaseDB) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest) 
 	return replyChan
 }
 
-// InternalSplit is called by a range leader coordinating a split of its range.
-func (db *BaseDB) InternalSplit(args *proto.InternalSplitRequest) <-chan *proto.InternalSplitResponse {
-	replyChan := make(chan *proto.InternalSplitResponse, 1)
-	go db.Executor(InternalSplit, args, replyChan)
+// AdminSplit is called to coordinate a split of a range.
+func (db *BaseDB) AdminSplit(args *proto.AdminSplitRequest) <-chan *proto.AdminSplitResponse {
+	replyChan := make(chan *proto.AdminSplitResponse, 1)
+	go db.Executor(AdminSplit, args, replyChan)
 	return replyChan
 }
 
@@ -322,32 +331,31 @@ func getInternal(db DB, key engine.Key) (*proto.Value, error) {
 
 // PutI sets the given key to the gob-serialized byte string of value
 // and the provided timestamp.
-func PutI(db DB, key engine.Key, iface interface{}, timestamp proto.Timestamp) error {
+func PutI(db DB, key engine.Key, iface interface{}) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
 		return err
 	}
-	return putInternal(db, key, proto.Value{Bytes: buf.Bytes()}, timestamp)
+	return putInternal(db, key, proto.Value{Bytes: buf.Bytes()})
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp.
-func PutProto(db DB, key engine.Key, msg gogoproto.Message, timestamp proto.Timestamp) error {
+func PutProto(db DB, key engine.Key, msg gogoproto.Message) error {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	return putInternal(db, key, proto.Value{Bytes: data}, timestamp)
+	return putInternal(db, key, proto.Value{Bytes: data})
 }
 
 // putInternal writes the specified value to key.
-func putInternal(db DB, key engine.Key, value proto.Value, timestamp proto.Timestamp) error {
+func putInternal(db DB, key engine.Key, value proto.Value) error {
 	value.InitChecksum(key)
 	pr := <-db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       key,
-			User:      UserRoot,
-			Timestamp: timestamp,
+			Key:  key,
+			User: UserRoot,
 		},
 		Value: value,
 	})
@@ -356,13 +364,13 @@ func putInternal(db DB, key engine.Key, value proto.Value, timestamp proto.Times
 
 // BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
 // using the provided replica.
-func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor, timestamp proto.Timestamp) error {
+func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor) error {
 	// Write meta1.
-	if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc, timestamp); err != nil {
+	if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := PutProto(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc, timestamp); err != nil {
+	if err := PutProto(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc); err != nil {
 		return err
 	}
 	return nil
@@ -373,11 +381,11 @@ func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor, timestamp prot
 // prefix, meaning they apply to the entire database. Permissions are
 // granted to all users and the zone requires three replicas with no
 // other specifications.
-func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
+func BootstrapConfigs(db DB) error {
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
-	if err := PutProto(db, key, acctConfig, timestamp); err != nil {
+	if err := PutProto(db, key, acctConfig); err != nil {
 		return err
 	}
 	// Permission config.
@@ -386,7 +394,7 @@ func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
 		Write: []string{UserRoot}, // root user
 	}
 	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
-	if err := PutProto(db, key, permConfig, timestamp); err != nil {
+	if err := PutProto(db, key, permConfig); err != nil {
 		return err
 	}
 	// Zone config.
@@ -402,24 +410,53 @@ func BootstrapConfigs(db DB, timestamp proto.Timestamp) error {
 		RangeMaxBytes: 67108864,
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
-	if err := PutProto(db, key, zoneConfig, timestamp); err != nil {
+	if err := PutProto(db, key, zoneConfig); err != nil {
 		return err
 	}
 	return nil
 }
 
-// UpdateRangeDescriptor updates the range locations metadata for the
-// range specified by the meta parameter. This always involves a write
-// to "meta2", and may require a write to "meta1", in the event that
-// meta.EndKey is a "meta2" key (prefixed by KeyMeta2Prefix).
-func UpdateRangeDescriptor(db DB, meta proto.RangeMetadata,
-	desc *proto.RangeDescriptor, timestamp proto.Timestamp) error {
-	// TODO(spencer): a lot more work here to actually implement this.
-
-	// Write meta2.
-	key := engine.MakeKey(engine.KeyMeta2Prefix, meta.EndKey)
-	if err := PutProto(db, key, desc, timestamp); err != nil {
-		return err
+// UpdateRangeAddressing updates the range addressing metadata for the
+// range specified by desc.
+//
+// TODO(spencer): rewrite this to do all writes in parallel.
+func UpdateRangeAddressing(db DB, desc *proto.RangeDescriptor) error {
+	// First, the case of the range ending with a meta2 prefix. This
+	// means the range is full of meta2. We must update the relevant
+	// meta1 entry pointing to the end of this range.
+	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
+		if err := PutProto(db, engine.RangeMetaKey(desc.EndKey), desc); err != nil {
+			return err
+		}
+	} else {
+		// In this case, the range ends with a normal user key, so we must
+		// update the relevant meta2 entry pointing to the end of this range.
+		if err := PutProto(db, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
+			return err
+		}
+		// If the range starts with KeyMin, we update the appropriate
+		// meta1 entry.
+		if bytes.Equal(desc.StartKey, engine.KeyMin) {
+			if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
+				if err := PutProto(db, engine.RangeMetaKey(desc.EndKey), desc); err != nil {
+					return err
+				}
+			} else if !bytes.HasPrefix(desc.EndKey, engine.KeyMetaPrefix) {
+				if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
+					return err
+				}
+			} else {
+				return util.Errorf("meta1 addressing records cannot be split: %+v", desc)
+			}
+		} else if bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
+			// If the range contains the final set of meta2 addressing
+			// records, we update the meta1 entry pointing to KeyMax.
+			if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
+				return err
+			}
+		} else if bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {
+			return util.Errorf("meta1 addressing records cannot be split: %+v", desc)
+		}
 	}
 	return nil
 }

@@ -25,16 +25,28 @@
     further intents after a txn has already been aborted or its
     timestamp moved forward.
 
+* Reorganize the db interface to use a style more like Go's RPC
+  interface, where the client can either call methods synchronously
+  via DB.Call() error, or asynchronously via DB.Go() *Call. This
+  should make it much simpler to handle various error conditions at
+  intermediate steps.
+
+  - Use this new format to handle TransactionAbortedError at the
+    kv.DB and invoke db.coordinator.EndTxn(false) to clean up
+    intents.
+
+* Eliminate use of binary-encoded keys
+
+* Store all values as MVCC
+
+* Inline proto.Value for latest MVCC version in the MVCCMetadata
+
+* Propagate errors from storage/id_alloc.go
+
+* Accept a list of acknowledged client command ids in RequestHeader,
+  allowing the server to garbage collect response cache entries.
+
 * StoreFinder using Gossip protocol to filter
-
-* Range split
-
-  - Split criteria: is range larger than max_range_bytes?
-
-  - Transactionally rewrite range addressing indexes.
-
-    - Need a range-wide "split" intent which blocks all mutating
-      ops to range.
 
 * Rebalance range replica. Only fully-replicated ranges may be
   rebalanced.

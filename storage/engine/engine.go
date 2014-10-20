@@ -20,9 +20,6 @@
 package engine
 
 import (
-	"bytes"
-	"encoding/gob"
-
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -112,16 +109,6 @@ type BatchMerge struct {
 	proto.RawKeyValue
 }
 
-// PutI sets the given key to the gob-serialized byte string of the
-// value provided. Used internally.
-func PutI(engine Engine, key Key, value interface{}) error {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(value); err != nil {
-		return err
-	}
-	return engine.Put(key, buf.Bytes())
-}
-
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp.
 func PutProto(engine Engine, key Key, msg gogoproto.Message) error {
@@ -130,25 +117,6 @@ func PutProto(engine Engine, key Key, msg gogoproto.Message) error {
 		return err
 	}
 	return engine.Put(key, data)
-}
-
-// GetI fetches the specified key and gob-deserializes it into
-// "value". Returns true on success or false if the key was not
-// found.
-func GetI(engine Engine, key Key, value interface{}) (bool, error) {
-	val, err := engine.Get(key)
-	if err != nil {
-		return false, err
-	}
-	if len(val) == 0 {
-		return false, nil
-	}
-	if value != nil {
-		if err = gob.NewDecoder(bytes.NewBuffer(val)).Decode(value); err != nil {
-			return true, err
-		}
-	}
-	return true, nil
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
@@ -240,31 +208,19 @@ func ScanSnapshot(engine Engine, start, end Key, max int64, snapshotID string) (
 	return kvs, err
 }
 
-// ClearRange removes a set of entries, from start (inclusive)
-// to end (exclusive), up to max entries. If max is 0, all
-// entries between start and end are deleted. This function
-// returns the number of entries removed. Either all entries
-// within the range, up to max, will be deleted, or none, and
-// an error will be returned. Note that this function actually
-// removes entries from the storage engine, rather than inserting
-// tombstones.
-func ClearRange(engine Engine, start, end Key, max int64) (int, error) {
-	scanned, err := Scan(engine, start, end, max)
-
-	if err != nil {
+// ClearRange removes a set of entries, from start (inclusive) to end
+// (exclusive). This function returns the number of entries
+// removed. Either all entries within the range will be deleted, or
+// none, and an error will be returned. Note that this function
+// actually removes entries from the storage engine, rather than
+// inserting tombstones, as with deletion through the MVCC.
+func ClearRange(engine Engine, start, end Key) (int, error) {
+	var deletes []interface{}
+	if err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+		deletes = append(deletes, BatchDelete{proto.RawKeyValue{Key: kv.Key}})
+		return false, nil
+	}); err != nil {
 		return 0, err
 	}
-
-	var numElements = len(scanned)
-	var deletes = make([]interface{}, numElements, numElements)
-	// Loop over the scanned entries and add to a delete batch
-	for idx, kv := range scanned {
-		deletes[idx] = BatchDelete{proto.RawKeyValue{Key: kv.Key}}
-	}
-
-	err = engine.WriteBatch(deletes)
-	if err != nil {
-		return 0, err
-	}
-	return numElements, nil
+	return len(deletes), engine.WriteBatch(deletes)
 }

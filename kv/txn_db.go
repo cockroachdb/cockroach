@@ -110,7 +110,7 @@ func runTransaction(db *DB, opts *storage.TransactionOptions, retryable func(db 
 		}
 	}); err != nil && !tdb.txnEnd {
 		if etReply := <-tdb.EndTransaction(&proto.EndTransactionRequest{Commit: false}); etReply.GoError() != nil {
-			log.Errorf("failure aborting transaction %s", etReply.GoError())
+			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.GoError(), err)
 		}
 		return err
 	}
@@ -130,14 +130,15 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 	// If the transaction hasn't yet been created, create now, using
 	// this command's key as the base key.
 	if tdb.txn == nil {
-		tdb.txn = storage.NewTransaction(tdb.Name, args.Header().Key,
+		// Use Key.Address() for base key or else the txn record isn't
+		// guaranteed to be located on the same range as the first key.
+		tdb.txn = storage.NewTransaction(tdb.Name, engine.Key(args.Header().Key).Address(),
 			tdb.UserPriority, tdb.Isolation, tdb.clock)
 		tdb.timestamp = tdb.txn.Timestamp
 	}
-	if method == storage.EndTransaction {
+	if method == storage.EndTransaction || method == storage.InternalEndTxn {
 		// For EndTransaction, make sure key is set to txn ID.
 		args.Header().Key = engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, tdb.txn.ID)
-		tdb.txnEnd = true // set this txn as having been ended
 	} else if !isTransactional(method) {
 		tdb.DB.executeCmd(method, args, replyChan)
 		tdb.Unlock()
@@ -160,7 +161,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// On mutating commands, set a client command ID. This prevents
 		// mutations from being run multiple times on RPC retries.
-		if !storage.IsReadOnly(method) {
+		if storage.IsReadWrite(method) {
 			args.Header().CmdID = proto.ClientCmdID{
 				WallTime: tdb.clock.Now().WallTime,
 				Random:   rand.Int63(),
@@ -198,7 +199,6 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 					tdb.timestamp.Logical++ // ensure this txn's timestamp > other txn
 				}
 			}
-			// Abort if this isn't the same transaction.
 			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, t.Txn.Priority-1, tdb.timestamp)
 		case *proto.TransactionAbortedError:
 			// Increase timestamp if applicable.
@@ -233,6 +233,10 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 			// Backoff on unresolvable intent and retry command.
 			// Make sure to upgrade our priority to the conflicting txn's - 1.
 			return util.RetryContinue, nil
+		case nil:
+			if method == storage.EndTransaction || method == storage.InternalEndTxn {
+				tdb.txnEnd = true // set this txn as having been ended
+			}
 		}
 		proto.SendReply(replyChan, reply)
 		return util.RetryBreak, nil

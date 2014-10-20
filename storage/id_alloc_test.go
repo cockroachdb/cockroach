@@ -31,7 +31,7 @@ import (
 // channel, which is queried at the end to ensure that all IDs
 // from 2 to 101 are present.
 func TestIDAllocator(t *testing.T) {
-	store, _ := createTestStore(false, t)
+	store, _ := createTestStore(t)
 	allocd := make(chan int, 100)
 	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
 
@@ -69,7 +69,7 @@ func TestIDAllocator(t *testing.T) {
 // the id allocator makes a double-alloc to make up the difference
 // and push the id allocation into positive integers.
 func TestIDAllocatorNegativeValue(t *testing.T) {
-	store, _ := createTestStore(false, t)
+	store, _ := createTestStore(t)
 	// Increment our key to a negative value.
 	mvcc := engine.NewMVCC(engine.NewBatch(store.engine))
 	newValue, err := mvcc.Increment(engine.KeyRaftIDGenerator.Encode(nil), store.clock.Now(), nil, -1024)

@@ -94,35 +94,50 @@ func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
 // the command is being executed locally, and the replica is
 // determined via lookup through each of the stores.
 func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
-	// If the replica isn't specified in the header, look it up.
-	var err error
-	var store *storage.Store
-	// If we aren't given a Replica, then a little bending over
-	// backwards here. We need to find the Store, but all we have is the
-	// Key. So find its Range locally. This lets us use the same
-	// codepath below (store.ExecuteCmd) for both locally and remotely
-	// originated commands.
-	header := args.Header()
-	if header.Replica.StoreID == 0 {
-		var repl *proto.Replica
-		repl, err = kv.lookupReplica(header.Key, header.EndKey)
+	for {
+		var err error
+		var store *storage.Store
+
+		// If we aren't given a Replica, then a little bending over
+		// backwards here. We need to find the Store, but all we have is the
+		// Key. So find its Range locally. This lets us use the same
+		// codepath below (store.ExecuteCmd) for both locally and remotely
+		// originated commands.
+		header := args.Header()
+		if header.Replica.StoreID == 0 {
+			var repl *proto.Replica
+			repl, err = kv.lookupReplica(header.Key, header.EndKey)
+			if err == nil {
+				header.Replica = *repl
+			}
+		}
 		if err == nil {
-			header.Replica = *repl
+			store, err = kv.GetStore(header.Replica.StoreID)
 		}
-	}
-	if err == nil {
-		store, err = kv.GetStore(header.Replica.StoreID)
-	}
-	reply := proto.NewReply(replyChan)
-	if err != nil {
-		reply.Header().SetGoError(err)
-	} else {
-		store.ExecuteCmd(method, args, reply)
-		if err := reply.Verify(args); err != nil {
+		reply := proto.NewReply(replyChan)
+		if err != nil {
 			reply.Header().SetGoError(err)
+		} else {
+			if err = store.ExecuteCmd(method, args, reply); err != nil {
+				reply.Header().SetGoError(err)
+			}
+			if reply.Header().GoError() == nil {
+				if err = reply.Verify(args); err != nil {
+					reply.Header().SetGoError(err)
+				}
+			} else {
+				// Check for case of range splitting to continue and retry the
+				// local replica lookup.
+				switch reply.Header().GoError().(type) {
+				case *proto.RangeKeyMismatchError:
+					header.Replica = proto.Replica{}
+					continue
+				}
+			}
 		}
+		proto.SendReply(replyChan, reply)
+		return
 	}
-	proto.SendReply(replyChan, reply)
 }
 
 // Close closes all stores.
@@ -141,7 +156,7 @@ func (kv *LocalKV) lookupReplica(start, end engine.Key) (*proto.Replica, error) 
 	defer kv.mu.RUnlock()
 	for _, store := range kv.storeMap {
 		if rng := store.LookupRange(start, end); rng != nil {
-			return rng.Meta.GetReplica(), nil
+			return rng.GetReplica(), nil
 		}
 	}
 	return nil, proto.NewRangeKeyMismatchError(start, end, nil)

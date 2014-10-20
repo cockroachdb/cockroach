@@ -34,21 +34,6 @@ const (
 	splitReservoirSize = 100
 )
 
-// encodeMVCCStatValue constructs a proto.Value using the supplied
-// stat increment and then encodes that into a byte slice. Encoding
-// errors cause panics (as they should never happen). Returns false
-// if stat is equal to 0 to avoid unnecessary merge.
-func encodeMVCCStatValue(stat int64) (ok bool, enc []byte) {
-	if stat == 0 {
-		return false, nil
-	}
-	data, err := gogoproto.Marshal(&proto.Value{Integer: gogoproto.Int64(stat)})
-	if err != nil {
-		panic(fmt.Sprintf("could not marshal proto.Value: %s", err))
-	}
-	return true, data
-}
-
 // MVCCStats tracks byte and instance counts for:
 //  - Live key/values (i.e. what a scan at current time will reveal;
 //    note that this includes intent keys and values, but not keys and
@@ -61,6 +46,63 @@ func encodeMVCCStatValue(stat int64) (ok bool, enc []byte) {
 type MVCCStats struct {
 	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
 	LiveCount, KeyCount, ValCount, IntentCount int64
+}
+
+// GetRangeMVCCStats reads stat counters for the specified range
+// and returns an MVCCStats object on success.
+func GetRangeMVCCStats(engine Engine, rangeID int64) (*MVCCStats, error) {
+	ms := &MVCCStats{}
+	var err error
+	if ms.LiveBytes, err = GetRangeStat(engine, rangeID, StatLiveBytes); err != nil {
+		return nil, err
+	}
+	if ms.KeyBytes, err = GetRangeStat(engine, rangeID, StatKeyBytes); err != nil {
+		return nil, err
+	}
+	if ms.ValBytes, err = GetRangeStat(engine, rangeID, StatValBytes); err != nil {
+		return nil, err
+	}
+	if ms.IntentBytes, err = GetRangeStat(engine, rangeID, StatIntentBytes); err != nil {
+		return nil, err
+	}
+	if ms.LiveCount, err = GetRangeStat(engine, rangeID, StatLiveCount); err != nil {
+		return nil, err
+	}
+	if ms.KeyCount, err = GetRangeStat(engine, rangeID, StatKeyCount); err != nil {
+		return nil, err
+	}
+	if ms.ValCount, err = GetRangeStat(engine, rangeID, StatValCount); err != nil {
+		return nil, err
+	}
+	if ms.IntentCount, err = GetRangeStat(engine, rangeID, StatIntentCount); err != nil {
+		return nil, err
+	}
+	return ms, nil
+}
+
+// MergeStats merges accumulated stats to stat counters for both the
+// affected range and store.
+func (ms *MVCCStats) MergeStats(batch *Batch, rangeID int64, storeID int32) {
+	MergeStat(batch, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
+	MergeStat(batch, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
+	MergeStat(batch, rangeID, storeID, StatValBytes, ms.ValBytes)
+	MergeStat(batch, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
+	MergeStat(batch, rangeID, storeID, StatLiveCount, ms.LiveCount)
+	MergeStat(batch, rangeID, storeID, StatKeyCount, ms.KeyCount)
+	MergeStat(batch, rangeID, storeID, StatValCount, ms.ValCount)
+	MergeStat(batch, rangeID, storeID, StatIntentCount, ms.IntentCount)
+}
+
+// SetStats sets stat counters for both the affected range and store.
+func (ms *MVCCStats) SetStats(batch *Batch, rangeID int64, storeID int32) {
+	SetStat(batch, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
+	SetStat(batch, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
+	SetStat(batch, rangeID, storeID, StatValBytes, ms.ValBytes)
+	SetStat(batch, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
+	SetStat(batch, rangeID, storeID, StatLiveCount, ms.LiveCount)
+	SetStat(batch, rangeID, storeID, StatKeyCount, ms.KeyCount)
+	SetStat(batch, rangeID, storeID, StatValCount, ms.ValCount)
+	SetStat(batch, rangeID, storeID, StatIntentCount, ms.IntentCount)
 }
 
 // MVCC wraps the mvcc operations of a key/value store. MVCC instances
@@ -386,7 +428,7 @@ func (mvcc *MVCC) DeleteRange(key Key, endKey Key, max int64, timestamp proto.Ti
 // Scan scans the key range specified by start key through end key
 // up to some maximum number of results. Specify max=0 for unbounded
 // scans.
-func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) ([]proto.KeyValue, error) {
+func (mvcc *MVCC) Scan(key, endKey Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) ([]proto.KeyValue, error) {
 	binKey := key.Encode(nil)
 	binEndKey := endKey.Encode(nil)
 	nextKey := binKey
@@ -443,6 +485,66 @@ func (mvcc *MVCC) Scan(key Key, endKey Key, max int64, timestamp proto.Timestamp
 	}
 
 	return res, nil
+}
+
+// IterateCommitted iterates over the key range specified by start and
+// end keys, returning only the most recently committed version of
+// each key/value pair. Intents are ignored. If a key has an intent
+// but no earlier, committed version, nothing is returned. At each
+// step of the iteration, f() is invoked with the current key/value
+// pair. If f returns true (done) or an error, the iteration
+// stops and the error is propagated.
+func (mvcc *MVCC) IterateCommitted(key, endKey Key, f func(proto.KeyValue) (bool, error)) error {
+	encKey := key.Encode(nil)
+	encEndKey := endKey.Encode(nil)
+
+	var currentKey Key
+	var versionKey Key // Need to read this version of the key
+	nextKey := encKey  // The next key--no additional versions of currentKey past this
+	return mvcc.batch.Iterate(encKey, encEndKey, func(rawKV proto.RawKeyValue) (bool, error) {
+		if bytes.Compare(nextKey, rawKV.Key) <= 0 {
+			var remainder []byte
+			remainder, currentKey = DecodeKey(rawKV.Key)
+			if len(remainder) != 0 {
+				return false, util.Errorf("expected an MVCC metadata key: %q", rawKV.Key)
+			}
+			meta := &proto.MVCCMetadata{}
+			if err := gogoproto.Unmarshal(rawKV.Value, meta); err != nil {
+				return false, err
+			}
+			nextKey = currentKey.Next().Encode(nil)
+			// If most recent value isn't an intent, the key to read will be next in iteration.
+			if meta.Txn == nil {
+				versionKey = rawKV.Key
+			} else {
+				// Otherwise, this is an intent; the version we want is one
+				// after the encoded MVCC intent key; this gives us the next
+				// version, if one exists.
+				versionKey = mvccEncodeKey(rawKV.Key, meta.Timestamp).Next()
+			}
+		} else {
+			// If we encountered a version >= our version key, we're golden.
+			if bytes.Compare(rawKV.Key, versionKey) >= 0 {
+				// First, set our versionKey to nextKey so we don't try any older versions.
+				versionKey = nextKey
+				// Now, read the mvcc value and pull timestamp from encoded key.
+				_, ts, isValue := mvccDecodeKey(rawKV.Key)
+				if !isValue {
+					return false, util.Errorf("expected an MVCC value at key %q", rawKV.Key)
+				}
+				value := &proto.MVCCValue{}
+				if err := gogoproto.Unmarshal(rawKV.Value, value); err != nil {
+					return false, err
+				}
+				if value.Deleted {
+					return false, nil
+				}
+				value.Value.Timestamp = &ts
+				return f(proto.KeyValue{Key: currentKey, Value: *value.Value})
+			}
+		}
+		return false, nil
+	})
 }
 
 // ResolveWriteIntent either commits or aborts (rolls back) an
@@ -627,26 +729,10 @@ func (mvcc *MVCC) ResolveWriteIntentRange(key, endKey Key, max int64, txn *proto
 	return num, nil
 }
 
-// FlushStat flushes the specified stat to merge counters for both
-// the affected range and store.
-func (mvcc *MVCC) FlushStat(rangeID int64, storeID int32, stat Key, statVal int64) {
-	if ok, encStat := encodeMVCCStatValue(statVal); ok {
-		mvcc.batch.Merge(MakeRangeStatKey(rangeID, stat), encStat)
-		mvcc.batch.Merge(MakeStoreStatKey(storeID, stat), encStat)
-	}
-}
-
-// FlushStats flushes stats to merge counters for both the affected
+// MergeStats merges stats to stat counters for both the affected
 // range and store.
-func (mvcc *MVCC) FlushStats(rangeID int64, storeID int32) {
-	mvcc.FlushStat(rangeID, storeID, StatLiveBytes, mvcc.LiveBytes)
-	mvcc.FlushStat(rangeID, storeID, StatKeyBytes, mvcc.KeyBytes)
-	mvcc.FlushStat(rangeID, storeID, StatValBytes, mvcc.ValBytes)
-	mvcc.FlushStat(rangeID, storeID, StatIntentBytes, mvcc.IntentBytes)
-	mvcc.FlushStat(rangeID, storeID, StatLiveCount, mvcc.LiveCount)
-	mvcc.FlushStat(rangeID, storeID, StatKeyCount, mvcc.KeyCount)
-	mvcc.FlushStat(rangeID, storeID, StatValCount, mvcc.ValCount)
-	mvcc.FlushStat(rangeID, storeID, StatIntentCount, mvcc.IntentCount)
+func (mvcc *MVCC) MergeStats(rangeID int64, storeID int32) {
+	mvcc.MVCCStats.MergeStats(mvcc.batch, rangeID, storeID)
 }
 
 // a splitSampleItem wraps a key along with an aggregate over key range
@@ -712,9 +798,15 @@ func MVCCFindSplitKey(engine Engine, key, endKey Key, snapshotID string) (Key, e
 }
 
 // MVCCComputeStats scans the underlying engine from start to end keys
-// and computes stats counters based on the values. This method is used
-// after a range is split to recompute stats for each subrange.
+// and computes stats counters based on the values. This method is
+// used after a range is split to recompute stats for each
+// subrange. The start key is always adjusted to avoid counting local
+// keys in the event stats are being recomputed for the first range
+// (i.e. the one with start key == KeyMin).
 func MVCCComputeStats(engine Engine, key, endKey Key) (MVCCStats, error) {
+	if key.Less(KeyLocalMax) {
+		key = KeyLocalMax
+	}
 	binStartKey := key.Encode(nil)
 	binEndKey := endKey.Encode(nil)
 

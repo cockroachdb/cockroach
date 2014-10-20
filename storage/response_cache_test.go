@@ -103,8 +103,12 @@ func TestResposeCacheCopyInto(t *testing.T) {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
 	// Copy the first cache into the second.
-	if err := rc1.CopyInto(rc2); err != nil {
+	batch := engine.NewBatch(rc2.engine)
+	if err := rc1.CopyInto(batch, rc2.rangeID); err != nil {
 		t.Errorf("unexpected error while copying response cache: %v", err)
+	}
+	if err := batch.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	// Get should return 1 for both caches.
 	if ok, err := rc1.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {

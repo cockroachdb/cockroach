@@ -45,7 +45,7 @@ message RangeNotFoundError {
 message RangeKeyMismatchError {
   optional bytes request_start_key = 1 [(gogoproto.nullable) = false];
   optional bytes request_end_key = 2 [(gogoproto.nullable) = false];
-  optional RangeMetadata range = 3;
+  optional RangeDescriptor range = 3;
 }
 
 // A TransactionAbortedError indicates that the transaction was

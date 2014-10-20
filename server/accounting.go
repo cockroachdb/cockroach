@@ -59,7 +59,7 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("accounting config has invalid format: %s: %s", configStr, err)
 	}
 	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
-	if err := storage.PutProto(ah.db, acctKey, config, proto.Timestamp{}); err != nil {
+	if err := storage.PutProto(ah.db, acctKey, config); err != nil {
 		return err
 	}
 	return nil

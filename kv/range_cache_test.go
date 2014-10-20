@@ -26,26 +26,26 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-type testMetadataDB struct {
+type testDescriptorDB struct {
 	data     llrb.Tree
-	cache    *RangeMetadataCache
+	cache    *RangeDescriptorCache
 	hitCount int
 }
 
-type testMetadataNode struct {
+type testDescriptorNode struct {
 	*proto.RangeDescriptor
 }
 
-func (a testMetadataNode) Compare(b llrb.Comparable) int {
-	aKey := engine.RangeMetadataLookupKey(a.RangeDescriptor)
-	bKey := engine.RangeMetadataLookupKey(b.(testMetadataNode).RangeDescriptor)
+func (a testDescriptorNode) Compare(b llrb.Comparable) int {
+	aKey := engine.RangeMetaLookupKey(a.RangeDescriptor)
+	bKey := engine.RangeMetaLookupKey(b.(testDescriptorNode).RangeDescriptor)
 	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testMetadataDB) getMetadata(key engine.Key) []proto.RangeDescriptor {
+func (db *testDescriptorDB) getDescriptor(key engine.Key) []proto.RangeDescriptor {
 	response := make([]proto.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
-		v := db.data.Ceil(testMetadataNode{
+		v := db.data.Ceil(testDescriptorNode{
 			&proto.RangeDescriptor{
 				EndKey: key.Next(),
 			},
@@ -53,40 +53,40 @@ func (db *testMetadataDB) getMetadata(key engine.Key) []proto.RangeDescriptor {
 		if v == nil {
 			break
 		}
-		response = append(response, *(v.(testMetadataNode).RangeDescriptor))
+		response = append(response, *(v.(testDescriptorNode).RangeDescriptor))
 		key = engine.Key(response[i].EndKey).Next()
 	}
 	return response
 }
 
-func (db *testMetadataDB) getRangeMetadata(key engine.Key) ([]proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) getRangeDescriptor(key engine.Key) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
 	metadataKey := engine.RangeMetaKey(key)
 
 	// Recursively call into cache as the real DB would, terminating recursion
 	// when a meta1key is encountered.
 	if len(metadataKey) > 0 && !bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
-		db.cache.LookupRangeMetadata(metadataKey)
+		db.cache.LookupRangeDescriptor(metadataKey)
 	}
-	return db.getMetadata(key), nil
+	return db.getDescriptor(key), nil
 }
 
-func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
-	v := db.data.Ceil(testMetadataNode{&proto.RangeDescriptor{EndKey: key}})
+func (db *testDescriptorDB) splitRange(t *testing.T, key engine.Key) {
+	v := db.data.Ceil(testDescriptorNode{&proto.RangeDescriptor{EndKey: key}})
 	if v == nil {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
 	}
-	val := v.(testMetadataNode)
+	val := v.(testDescriptorNode)
 	if bytes.Compare(val.EndKey, key) == 0 {
 		t.Fatalf("Attempt to split existing range at Endkey: %s", string(key))
 	}
-	db.data.Insert(testMetadataNode{
+	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
 			StartKey: val.StartKey,
 			EndKey:   key,
 		},
 	})
-	db.data.Insert(testMetadataNode{
+	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
 			StartKey: key,
 			EndKey:   val.EndKey,
@@ -94,15 +94,15 @@ func (db *testMetadataDB) splitRange(t *testing.T, key engine.Key) {
 	})
 }
 
-func newTestMetadataDB() *testMetadataDB {
-	db := &testMetadataDB{}
-	db.data.Insert(testMetadataNode{
+func newTestDescriptorDB() *testDescriptorDB {
+	db := &testDescriptorDB{}
+	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
 			StartKey: engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMin),
 			EndKey:   engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax),
 		},
 	})
-	db.data.Insert(testMetadataNode{
+	db.data.Insert(testDescriptorNode{
 		&proto.RangeDescriptor{
 			StartKey: engine.KeyMetaMax,
 			EndKey:   engine.KeyMax,
@@ -111,17 +111,17 @@ func newTestMetadataDB() *testMetadataDB {
 	return db
 }
 
-func (db *testMetadataDB) assertHitCount(t *testing.T, expected int) {
+func (db *testDescriptorDB) assertHitCount(t *testing.T, expected int) {
 	if db.hitCount != expected {
 		t.Errorf("Expected hit count to be %d, was %d", expected, db.hitCount)
 	}
 	db.hitCount = 0
 }
 
-func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
-	r, err := rc.LookupRangeMetadata(engine.Key(key))
+func doLookup(t *testing.T, rc *RangeDescriptorCache, key string) {
+	r, err := rc.LookupRangeDescriptor(engine.Key(key))
 	if err != nil {
-		t.Fatalf("Unexpected error from LookupRangeMetadata: %s", err.Error())
+		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}
 	if !r.ContainsKey(engine.Key(key).Address()) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
@@ -133,7 +133,7 @@ func doLookup(t *testing.T, rc *RangeMetadataCache, key string) {
 // store for the cache, and measures how often that backing store is
 // accessed when looking up metadata keys through the cache.
 func TestRangeCache(t *testing.T) {
-	db := newTestMetadataDB()
+	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		db.splitRange(t, engine.Key(string(char)))
 		if i > 0 && i%6 == 0 {
@@ -141,13 +141,13 @@ func TestRangeCache(t *testing.T) {
 		}
 	}
 
-	rangeCache := NewRangeMetadataCache(db)
+	rangeCache := NewRangeDescriptorCache(db)
 	db.cache = rangeCache
 
 	doLookup(t, rangeCache, "aa")
 	db.assertHitCount(t, 2)
 
-	// Metadata for the following ranges should be cached
+	// Descriptors for the following ranges should be cached
 	doLookup(t, rangeCache, "ab")
 	db.assertHitCount(t, 0)
 	doLookup(t, rangeCache, "ba")
@@ -176,7 +176,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertHitCount(t, 0)
 
 	// Evict clears one level 1 and one level 2 cache
-	rangeCache.EvictCachedRangeMetadata(engine.Key("da"))
+	rangeCache.EvictCachedRangeDescriptor(engine.Key("da"))
 	doLookup(t, rangeCache, "fa")
 	db.assertHitCount(t, 0)
 	doLookup(t, rangeCache, "da")

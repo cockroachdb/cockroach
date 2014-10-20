@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -79,26 +80,29 @@ var configPrefixes = []struct {
 
 // The following are the method names supported by the KV API.
 const (
-	Contains              = "Contains"
-	Get                   = "Get"
-	Put                   = "Put"
-	ConditionalPut        = "ConditionalPut"
-	Increment             = "Increment"
-	Scan                  = "Scan"
-	Delete                = "Delete"
-	DeleteRange           = "DeleteRange"
-	BeginTransaction      = "BeginTransaction"
-	EndTransaction        = "EndTransaction"
-	AccumulateTS          = "AccumulateTS"
-	ReapQueue             = "ReapQueue"
-	EnqueueUpdate         = "EnqueueUpdate"
-	EnqueueMessage        = "EnqueueMessage"
+	Contains         = "Contains"
+	Get              = "Get"
+	Put              = "Put"
+	ConditionalPut   = "ConditionalPut"
+	Increment        = "Increment"
+	Scan             = "Scan"
+	Delete           = "Delete"
+	DeleteRange      = "DeleteRange"
+	BeginTransaction = "BeginTransaction"
+	EndTransaction   = "EndTransaction"
+	AccumulateTS     = "AccumulateTS"
+	ReapQueue        = "ReapQueue"
+	EnqueueUpdate    = "EnqueueUpdate"
+	EnqueueMessage   = "EnqueueMessage"
+
+	InternalEndTxn        = "InternalEndTxn"
 	InternalRangeLookup   = "InternalRangeLookup"
 	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
 	InternalPushTxn       = "InternalPushTxn"
 	InternalResolveIntent = "InternalResolveIntent"
 	InternalSnapshotCopy  = "InternalSnapshotCopy"
-	InternalSplit         = "InternalSplit"
+
+	AdminSplit = "AdminSplit"
 )
 
 type stringSet map[string]struct{}
@@ -135,13 +139,21 @@ var writeMethods = stringSet{
 	ReapQueue:             struct{}{},
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
+	InternalEndTxn:        struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
-	InternalSplit:         struct{}{},
 }
 
-// tsCacheMethods specifies the set of methods which affect the timestamp cache.
+// adminMethods specifies the set of methods which are neither
+// read-only nor read-write commands but instead execute directly on
+// the Raft leader.
+var adminMethods = stringSet{
+	AdminSplit: struct{}{},
+}
+
+// tsCacheMethods specifies the set of methods which affect the
+// timestamp cache.
 var tsCacheMethods = stringSet{
 	Contains:              struct{}{},
 	Get:                   struct{}{},
@@ -179,9 +191,25 @@ func NeedWritePerm(method string) bool {
 	return ok
 }
 
+// NeedAdminPerm returns true if the specified method requires admin permissions.
+func NeedAdminPerm(method string) bool {
+	_, ok := adminMethods[method]
+	return ok
+}
+
 // IsReadOnly returns true if the specified method only requires read permissions.
 func IsReadOnly(method string) bool {
-	return !NeedWritePerm(method)
+	return NeedReadPerm(method) && !NeedWritePerm(method)
+}
+
+// IsReadWrite returns true if the specified method requires write permissions.
+func IsReadWrite(method string) bool {
+	return NeedWritePerm(method)
+}
+
+// IsAdmin returns true if the specified method requires admin permissions.
+func IsAdmin(method string) bool {
+	return NeedAdminPerm(method)
 }
 
 // UsesTimestampCache returns true if the method affects or is
@@ -201,6 +229,12 @@ type Cmd struct {
 	done   chan error // Used to signal waiting RPC handler
 }
 
+// makeRangeKey returns a key addressing the range descriptor for the range
+// with specified start key.
+func makeRangeKey(startKey engine.Key) engine.Key {
+	return engine.MakeLocalKey(engine.KeyLocalRangeDescriptorPrefix, startKey)
+}
+
 // A Range is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -208,10 +242,12 @@ type Cmd struct {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	Meta   *proto.RangeMetadata
-	rm     RangeManager  // Makes some store methods available
-	raft   chan *Cmd     // Raft commands
-	closer chan struct{} // Channel for closing the range
+	RangeID   int64
+	Desc      *proto.RangeDescriptor
+	rm        RangeManager  // Makes some store methods available
+	raft      chan *Cmd     // Raft commands
+	splitting int32         // 1 if a split is underway
+	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects cmdQ, tsCache & respCache
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -220,15 +256,16 @@ type Range struct {
 }
 
 // NewRange initializes the range using the given metadata.
-func NewRange(meta *proto.RangeMetadata, rm RangeManager) *Range {
+func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Range {
 	r := &Range{
-		Meta:      meta,
+		RangeID:   rangeID,
+		Desc:      desc,
 		rm:        rm,
 		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
 		closer:    make(chan struct{}),
 		cmdQ:      NewCommandQueue(),
 		tsCache:   NewTimestampCache(rm.Clock()),
-		respCache: NewResponseCache(meta.RangeID, rm.Engine()),
+		respCache: NewResponseCache(rangeID, rm.Engine()),
 	}
 	return r
 }
@@ -251,30 +288,33 @@ func (r *Range) Stop() {
 	close(r.closer)
 }
 
-// Update must be called after the metadata of the range have been adapted to
-// make sure the updates are properly taken into account and persisted.
-func (r *Range) Update() error {
-	if r.rm == nil {
-		return nil
-	}
-	return r.rm.UpdateRange(r.Meta.RangeID)
-}
-
-// Destroy must be called for a range that is being dismantled to make sure it
-// is properly handling pending clients and cleans up persisted data.
-//
-// Destroy() will not Stop() the range; this has to be done manually before.
+// Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	if r.rm == nil {
-		return nil
+	start := engine.Key(r.Desc.StartKey).Encode(nil)
+	end := engine.Key(r.Desc.EndKey).Encode(nil)
+	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
+		return util.Errorf("unable to clear key/value data for range %d: %s", r.RangeID, err)
 	}
-	r.respCache.ClearData() // Ignore the result. If it fails, GC should get it.
-	return r.rm.DropRange(r.Meta.RangeID)
+	start = engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.StartKey).Encode(nil)
+	end = engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.EndKey).Encode(nil)
+	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
+		return util.Errorf("unable to clear txn records for range %d: %s", r.RangeID, err)
+	}
+	if err := r.respCache.ClearData(); err != nil {
+		return util.Errorf("unable to clear response cache for range %d: %s", r.RangeID, err)
+	}
+	if err := engine.ClearRangeStats(r.rm.Engine(), r.RangeID); err != nil {
+		return util.Errorf("unable to clear range stats for range %d: %s", r.RangeID, err)
+	}
+	if err := r.rm.Engine().Clear(makeRangeKey(r.Desc.StartKey)); err != nil {
+		return util.Errorf("unable to clear metadata for range %d: %s", r.RangeID, err)
+	}
+	return nil
 }
 
 // IsFirstRange returns true if this is the first range.
 func (r *Range) IsFirstRange() bool {
-	return bytes.Equal(r.Meta.StartKey, engine.KeyMin)
+	return bytes.Equal(r.Desc.StartKey, engine.KeyMin)
 }
 
 // IsLeader returns true if this range replica is the raft leader.
@@ -283,15 +323,20 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
+// GetReplica returns the replica for this range from the range descriptor.
+func (r *Range) GetReplica() *proto.Replica {
+	return r.Desc.FindReplica(r.rm.StoreID())
+}
+
 // ContainsKey returns whether this range contains the specified key.
 func (r *Range) ContainsKey(key engine.Key) bool {
-	return r.Meta.ContainsKey(key.Address())
+	return r.Desc.ContainsKey(key.Address())
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
-	return r.Meta.ContainsKeyRange(start.Address(), end.Address())
+	return r.Desc.ContainsKeyRange(start.Address(), end.Address())
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -301,24 +346,17 @@ func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
-	header := args.Header()
-	var err error
-	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		err = proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Meta)
-	} else if !r.IsLeader() {
+	if !r.IsLeader() {
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		err = &proto.NotLeaderError{}
-	}
-	if err != nil {
+		err := &proto.NotLeaderError{}
 		reply.Header().SetGoError(err)
 		return err
 	}
 
 	// Differentiate between read-only and read-write.
-	if IsReadOnly(method) {
-		if !wait {
-			return util.Errorf("cannot specify !wait for read-only requests")
-		}
+	if IsAdmin(method) {
+		return r.addAdminCmd(method, args, reply)
+	} else if IsReadOnly(method) {
 		return r.addReadOnlyCmd(method, args, reply)
 	}
 	return r.addReadWriteCmd(method, args, reply, wait)
@@ -338,6 +376,19 @@ func (r *Range) beginCmd(start, end engine.Key, readOnly bool) interface{} {
 	r.Unlock()
 	wg.Wait()
 	return cmdKey
+}
+
+// addAdminCmd executes the command directly. There is no interaction
+// with the command queue or the timestamp cache, as admin commands
+// are not meant to consistently access or modify the underlying data.
+func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Response) error {
+	switch method {
+	case AdminSplit:
+		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
+	default:
+		return util.Errorf("unrecognized admin command type: %s", method)
+	}
+	return reply.Header().GoError()
 }
 
 // addReadOnlyCmd updates the read timestamp cache and waits for any
@@ -542,8 +593,8 @@ func (r *Range) startGossip() {
 // the start of the key space and the raft leader.
 func (r *Range) maybeGossipClusterID() {
 	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
-		if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.Meta.ClusterID, ttlClusterIDGossip); err != nil {
-			log.Errorf("failed to gossip cluster ID %s: %s", r.Meta.ClusterID, err)
+		if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
+			log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 		}
 	}
 }
@@ -552,7 +603,7 @@ func (r *Range) maybeGossipClusterID() {
 // the start of the key space and the raft leader.
 func (r *Range) maybeGossipFirstRange() {
 	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
-		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeMetadata, r.Meta.RangeDescriptor, 0*time.Second); err != nil {
+		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc, 0*time.Second); err != nil {
 			log.Errorf("failed to gossip first range metadata: %s", err)
 		}
 	}
@@ -566,6 +617,10 @@ func (r *Range) maybeGossipConfigs() {
 	if r.rm.Gossip() != nil && r.IsLeader() {
 		for _, cp := range configPrefixes {
 			if cp.dirty && r.ContainsKey(cp.keyPrefix) {
+				// Check for a bad range split.
+				if !r.ContainsKey(cp.keyPrefix.PrefixEnd()) {
+					log.Fatalf("range splits configuration values for %q", cp.keyPrefix)
+				}
 				configMap, err := r.loadConfigMap(cp.keyPrefix, cp.configI)
 				if err != nil {
 					log.Errorf("failed loading %s config map: %s", cp.gossipKey, err)
@@ -618,6 +673,52 @@ func (r *Range) maybeUpdateGossipConfigs(key engine.Key) {
 	}
 }
 
+// shouldSplit returns whether the current size of the range exceeds
+// the max size specified in the zone config.
+func (r *Range) shouldSplit() bool {
+	// If already splitting or not the leader, ignore.
+	if !r.IsLeader() || r.rm.Gossip() == nil {
+		return false
+	}
+	// Fetch the zone config for the zone containing this range's start key.
+	zoneMap, err := r.rm.Gossip().GetInfo(gossip.KeyConfigZone)
+	if err != nil || zoneMap == nil {
+		log.Errorf("unable to fetch zone config from gossip: %s", err)
+		return false
+	}
+	prefixConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(r.Desc.StartKey)
+	zone := prefixConfig.Config.(*proto.ZoneConfig)
+
+	// Fetch the current size of this range in total bytes.
+	keyBytes, err := engine.GetRangeStat(r.rm.Engine(), r.RangeID, engine.StatKeyBytes)
+	if err != nil {
+		log.Errorf("unable to fetch key bytes for range %d: %s", r.RangeID, err)
+		return false
+	}
+	valBytes, err := engine.GetRangeStat(r.rm.Engine(), r.RangeID, engine.StatValBytes)
+	if err != nil {
+		log.Errorf("unable to fetch value bytes for range %d: %s", r.RangeID, err)
+		return false
+	}
+
+	return keyBytes+valBytes > zone.RangeMaxBytes
+}
+
+// maybeSplit initiates an asynchronous split via AdminSplit request
+// if shouldSplit is true. This operation is invoked after each
+// successful execution of a read/write command.
+func (r *Range) maybeSplit() {
+	// If this zone's total bytes are in excess, split the range. We omit
+	// the split key in order to have AdminSplit determine it via scan
+	// of range data.
+	if r.shouldSplit() {
+		// Admin commands run synchronously, so run this in a goroutine.
+		go r.AddCmd(AdminSplit, &proto.AdminSplitRequest{
+			RequestHeader: proto.RequestHeader{Key: r.Desc.StartKey},
+		}, &proto.AdminSplitResponse{}, false)
+	}
+}
+
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
 //
@@ -629,6 +730,15 @@ func (r *Range) maybeUpdateGossipConfigs(key engine.Key) {
 // bubble up to the point where we've just tried to execute a Raft command, the
 // Raft replica would need to stall itself.
 func (r *Range) executeCmd(method string, args proto.Request, reply proto.Response) error {
+	// Verify key is contained within range here to catch any range split
+	// or merge activity.
+	header := args.Header()
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc)
+		reply.Header().SetGoError(err)
+		return err
+	}
+
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := engine.NewBatch(r.rm.Engine())
 	// Create an MVCC instance wrapping the batch for commands which require MVCC.
@@ -663,6 +773,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.EnqueueMessage(mvcc, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
 	case InternalRangeLookup:
 		r.InternalRangeLookup(mvcc, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
+	case InternalEndTxn:
+		r.InternalEndTxn(batch, args.(*proto.InternalEndTxnRequest), reply.(*proto.InternalEndTxnResponse))
 	case InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case InternalPushTxn:
@@ -670,18 +782,20 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	case InternalResolveIntent:
 		r.InternalResolveIntent(mvcc, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case InternalSnapshotCopy:
-		// InternalSnapshotCopy is special--it operates directly on the engine.
 		r.InternalSnapshotCopy(r.rm.Engine(), args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
-	case InternalSplit:
-		r.InternalSplit(mvcc, args.(*proto.InternalSplitRequest), reply.(*proto.InternalSplitResponse))
 	default:
 		return util.Errorf("unrecognized command type: %s", method)
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
-	if !IsReadOnly(method) && reply.Header().Error == nil {
-		mvcc.FlushStats(r.Meta.RangeID, r.rm.StoreID())
-		reply.Header().SetGoError(batch.Commit())
+	if IsReadWrite(method) && reply.Header().Error == nil {
+		mvcc.MergeStats(r.RangeID, r.rm.StoreID())
+		if err := batch.Commit(); err != nil {
+			reply.Header().SetGoError(err)
+		} else {
+			// If the commit succeeded, potentially initiate a split of this range.
+			r.maybeSplit()
+		}
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
@@ -698,7 +812,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// read/write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
-	if !IsReadOnly(method) {
+	if IsReadWrite(method) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
 			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
 				args, reply, putErr)
@@ -777,6 +891,11 @@ func (r *Range) Scan(mvcc *engine.MVCC, args *proto.ScanRequest, reply *proto.Sc
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
 func (r *Range) EndTransaction(batch *engine.Batch, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+	if args.Txn == nil {
+		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
+		return
+	}
+
 	// Encode the key for direct access to/from the engine.
 	encKey := engine.Key(args.Key).Encode(nil)
 
@@ -935,7 +1054,7 @@ func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRange
 		// key, but no matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just treat it
 		// as a retryable Key Mismatch error.
-		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Meta)
+		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc)
 		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
 		return
@@ -953,6 +1072,31 @@ func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRange
 
 	reply.Ranges = rds
 	return
+}
+
+// InternalEndTxn invokes EndTransaction. On success, it executes any
+// triggers specified in args.
+func (r *Range) InternalEndTxn(batch *engine.Batch, args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) {
+	etArgs := &proto.EndTransactionRequest{}
+	etReply := &proto.EndTransactionResponse{}
+	etArgs.RequestHeader = args.RequestHeader
+	etArgs.Commit = args.Commit
+
+	r.EndTransaction(batch, etArgs, etReply)
+
+	reply.ResponseHeader = etReply.ResponseHeader
+	reply.Txn = etReply.Txn
+	reply.CommitWait = etReply.CommitWait
+
+	// Run triggers if successfully committed. An failures running
+	// triggers will set an error and prevent the batch from committing.
+	if reply.Txn.Status == proto.COMMITTED {
+		if args.SplitTrigger != nil {
+			if err := r.splitTrigger(batch, args.SplitTrigger); err != nil {
+				reply.SetGoError(err)
+			}
+		}
+	}
 }
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
@@ -1146,6 +1290,10 @@ func (r *Range) InternalPushTxn(batch *engine.Batch, args *proto.InternalPushTxn
 // coordinator. The range will return the current status for this
 // transaction to the coordinator.
 func (r *Range) InternalResolveIntent(mvcc *engine.MVCC, args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) {
+	if args.Txn == nil {
+		reply.SetGoError(util.Errorf("no transaction specified to InternalResolveIntent"))
+		return
+	}
 	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
 		reply.SetGoError(mvcc.ResolveWriteIntent(args.Key, args.Txn))
 	} else {
@@ -1169,104 +1317,166 @@ func (r *Range) createSnapshot(e engine.Engine) (string, error) {
 // end key up to some maximum number of results from the given snapshot_id.
 // It will create a snapshot if snapshot_id is empty.
 func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
-	if len(args.SnapshotId) == 0 {
+	if len(args.SnapshotID) == 0 {
 		snapshotID, err := r.createSnapshot(e)
 		if err != nil {
 			reply.SetGoError(err)
 			return
 		}
-		args.SnapshotId = snapshotID
+		args.SnapshotID = snapshotID
 	}
 
-	kvs, err := engine.ScanSnapshot(e, args.Key, args.EndKey, args.MaxResults, args.SnapshotId)
+	kvs, err := engine.ScanSnapshot(e, args.Key, args.EndKey, args.MaxResults, args.SnapshotID)
 	if err != nil {
 		reply.SetGoError(err)
 		return
 	}
 	if len(kvs) == 0 {
-		err = e.ReleaseSnapshot(args.SnapshotId)
+		err = e.ReleaseSnapshot(args.SnapshotID)
 	}
 
 	reply.Rows = kvs
-	reply.SnapshotId = args.SnapshotId
+	reply.SnapshotID = args.SnapshotID
 	reply.SetGoError(err)
 }
 
-// InternalSplit shrinks the given range, using args.SplitKey as its new end.
-// A new range is created, containing the remaining range from args.SplitKey to
-// the original end key of the first range. The split is only carried out if
-// args.Key and args.EndKey match precisely the split key and EndKey of the
-// original range, respectively.
-//
-// TODO(Tobias): This version, as is, is provisional. A correct implementation
-// is much more subtle and requires a transaction. See:
-// https://github.com/cockroachdb/cockroach/pull/64/files#r17667926
-func (r *Range) InternalSplit(mvcc *engine.MVCC, args *proto.InternalSplitRequest, reply *proto.InternalSplitResponse) {
-	var err error
-	if r.rm == nil {
-		reply.SetGoError(util.Error("cannot split without an underlying store"))
-		return
+// splitTrigger is called on a successful commit of an AdminSplit
+// transaction. It copies the response cache for the new range and
+// recomputes stats for both the existing, updated range and the new
+// range.
+func (r *Range) splitTrigger(batch *engine.Batch, split *proto.SplitTrigger) error {
+	if !bytes.Equal(r.Desc.StartKey, split.UpdatedDesc.StartKey) ||
+		!bytes.Equal(r.Desc.EndKey, split.NewDesc.EndKey) {
+		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,
+			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
 	}
-	desc := r.Meta.RangeDescriptor
-	// InternalSplit affects the whole range, but in fact only needs to block
-	// everything that is to be moved into the new range beginning at the split
-	// key. To make sure that the range is protecting those and only those
-	// keys, we check that args.Key == splitKey and args.EndKey = desc.EndKey.
-	if !bytes.Equal(args.Key, args.SplitKey) || !bytes.Equal(args.EndKey, desc.EndKey) {
-		reply.SetGoError(util.Error("key range indicated does not match range"))
-		return
-	}
-	splitKey := args.SplitKey
-	if !r.ContainsKey(splitKey) {
-		reply.SetGoError(util.Errorf("split key not contained in range"))
-		return
-	}
+	// Find range ID for this replica.
+	newRangeID := split.NewDesc.FindReplica(r.rm.StoreID()).RangeID
 
-	// Lock the range for the duration of the split.
-	r.Lock()
-	defer r.Unlock()
-
-	// Create a new range, beginning with the split key. The new range is
-	// initialized with fresh timestamp cache and read queue, which is the
-	// correct behavior. However, the new response cache must know about cached
-	// data which now belongs to the new queue. Since caching a little
-	// redundant data does not matter, we simply clone the response cache of
-	// the old range.
-
-	meta := r.rm.NewRangeMetadata(splitKey, desc.EndKey, desc.Replicas)
-	newRange, err := r.rm.CreateRange(meta)
+	// Compute stats for new range.
+	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey)
 	if err != nil {
-		reply.SetGoError(err)
+		return util.Errorf("unable to compute stats for new range after split: %s", err)
+	}
+	ms.SetStats(batch, newRangeID, 0)
+	// Compute stats for updated range.
+	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey)
+	if err != nil {
+		return util.Errorf("unable to compute stats for updated range after split: %s", err)
+	}
+	ms.SetStats(batch, r.RangeID, 0)
+
+	// Initialize the new range's response cache by copying the original's.
+	if err = r.respCache.CopyInto(batch, newRangeID); err != nil {
+		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	}
+
+	// Add the new split range to the store. This step atomically
+	// updates the EndKey of the updated range and also adds the
+	// new range to the store's range map.
+	newRng := NewRange(newRangeID, &split.NewDesc, r.rm)
+	return r.rm.SplitRange(r, newRng)
+}
+
+// AdminSplit uses args.SplitKey as the split key to divide the range
+// into two ranges. The split is done inside a distributed txn which
+// writes updated and new range descriptor, and updates range
+// addressing metadata. The range descriptors are written as
+// intents. All commands executed against the range read the range
+// descriptor, which will cause them to attempt to push this
+// transaction or else backoff until the split completes.
+func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
+	// Only allow a single split per range at a time.
+	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {
+		reply.SetGoError(util.Errorf("already splitting range %d", r.RangeID))
 		return
 	}
-	// Initialize the new range's response cache with a copy of the old one.
-	// This may be a little expensive. Note that the new range has not been
-	// started yet and that the original range is serving requests for the keys
-	// that will remain with it, which is roughly 50%.
-	if err = r.respCache.CopyInto(newRange.respCache); err != nil {
-		reply.SetGoError(err)
-		return
-	}
-	// TODO(Tobias): Check for possible problems with temporarily having two
-	// overlapping ranges.
-	newRange.Start()
-	// Only now do we lock the range, blocking process on other writes and
-	// reads in the original half as well.
-	newRange.Lock()
-	defer newRange.Unlock()
-	// Shrink the existing range and commit to disk.
-	oldEndKey := r.Meta.RangeDescriptor.EndKey
-	r.Meta.RangeDescriptor.EndKey = splitKey
-	if err = r.Update(); err != nil {
-		reply.SetGoError(util.Errorf("cannot save range, split aborted: %s", err))
-		r.Meta.RangeDescriptor.EndKey = oldEndKey
-		newRange.Stop()
-		if err = newRange.Destroy(); err != nil {
-			log.Errorf("unable to drop obsolete range (error: %s), manual cleanup necessary: %v", err, newRange)
+	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
+
+	// Determine split key if not provided with args. This scan can be
+	// relatively slow because admin commands do not prevent any other
+	// concurrent commands from executing.
+	splitKey := engine.Key(args.SplitKey)
+	if len(splitKey) == 0 {
+		snapshotID, err := r.createSnapshot(r.rm.Engine())
+		if err != nil {
+			reply.SetGoError(util.Errorf("unable to create snapshot: %s", err))
+			return
 		}
+		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.Desc.StartKey, r.Desc.EndKey, snapshotID)
+		if releaseErr := r.rm.Engine().ReleaseSnapshot(snapshotID); releaseErr != nil {
+			log.Errorf("unable to release snapshot: %s", releaseErr)
+		}
+		if err != nil {
+			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
+			return
+		}
+	}
+
+	// Verify some properties of split key.
+	if !r.ContainsKey(splitKey) {
+		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, r.Desc))
 		return
 	}
-	// TODO(mrtracy): Transactionally update the Meta{1,2} keys so that both
-	// ranges have their correct key spaces reflected.
-	// Special case: This range contains Meta{1,2} keys (-> possible deadlock)
+	if splitKey.Less(engine.KeyMeta2Prefix) {
+		reply.SetGoError(util.Errorf("cannot split meta1 addressing keys: %q", splitKey))
+		return
+	}
+	if splitKey.Equal(r.Desc.StartKey) || splitKey.Equal(r.Desc.EndKey) {
+		reply.SetGoError(util.Errorf("range has already been split by key %q", splitKey))
+		return
+	}
+
+	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
+	newDesc, err := r.rm.NewRangeDescriptor(splitKey, r.Desc.EndKey, r.Desc.Replicas)
+	if err != nil {
+		reply.SetGoError(util.Errorf("unable to allocate new range descriptor: %s", err))
+		return
+	}
+
+	// Init updated version of existing range descriptor.
+	updatedDesc := *r.Desc
+	updatedDesc.EndKey = splitKey
+
+	log.Infof("initiating a split of range %d %q-%q at key %q", r.RangeID,
+		r.Desc.StartKey, r.Desc.EndKey, splitKey)
+
+	txnOpts := &TransactionOptions{
+		Name:         fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
+		User:         UserRoot,
+		UserPriority: 100000, // High user priority prevents aborts
+	}
+	if err = r.rm.DB().RunTransaction(txnOpts, func(txn DB) error {
+		// Create range descriptor for second half of split.
+		// Note that this put must go first in order to locate the
+		// transaction record on the correct range.
+		if err := PutProto(txn, makeRangeKey(newDesc.StartKey), newDesc); err != nil {
+			return err
+		}
+		// Update existing range descriptor for first half of split.
+		if err := PutProto(txn, makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+			return err
+		}
+		// Update range descriptor addressing record(s).
+		if err := UpdateRangeAddressing(txn, newDesc); err != nil {
+			return err
+		}
+		if err := UpdateRangeAddressing(txn, &updatedDesc); err != nil {
+			return err
+		}
+		// End the transaction manually (instead of letting RunTransaction
+		// loop do it) using the InternalEndTxn API call in order to
+		// provide a split trigger.
+		endReply := <-txn.InternalEndTxn(&proto.InternalEndTxnRequest{
+			RequestHeader: proto.RequestHeader{Key: args.Key},
+			Commit:        true,
+			SplitTrigger: &proto.SplitTrigger{
+				UpdatedDesc: updatedDesc,
+				NewDesc:     *newDesc,
+			},
+		})
+		return endReply.GoError()
+	}); err != nil {
+		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
+	}
 }

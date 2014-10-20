@@ -41,7 +41,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	// Add first RangeDescriptor to a node different from the node for this kv
 	// and ensure that this kv has the information within a given time.
 	n.Nodes[1].Gossip.AddInfo(
-		gossip.KeyFirstRangeMetadata, *expectedDesc, time.Hour)
+		gossip.KeyFirstRangeDescriptor, *expectedDesc, time.Hour)
 	maxCycles := 10
 	n.SimulateNetwork(func(cycle int, network *gossip.SimulationNetwork) bool {
 		desc, err := kv.getFirstRangeDescriptor()

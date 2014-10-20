@@ -43,7 +43,7 @@ func NewRangeNotFoundError(rid int64) *RangeNotFoundError {
 
 // Error formats error.
 func (e *RangeNotFoundError) Error() string {
-	return fmt.Sprintf("range %d was not found at requested store.", e.RangeID)
+	return fmt.Sprintf("range %d was not found", e.RangeID)
 }
 
 // CanRetry indicates whether or not this RangeNotFoundError can be retried.
@@ -52,19 +52,19 @@ func (e *RangeNotFoundError) CanRetry() bool {
 }
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end []byte, meta *RangeMetadata) *RangeKeyMismatchError {
+func NewRangeKeyMismatchError(start, end []byte, desc *RangeDescriptor) *RangeKeyMismatchError {
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
-		Range:           meta,
+		Range:           desc,
 	}
 }
 
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
 	if e.Range != nil {
-		return fmt.Sprintf("key range %q-%q outside of bounds of range %d: %q-%q",
-			string(e.RequestStartKey), string(e.RequestEndKey), e.Range.RangeID,
+		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q",
+			string(e.RequestStartKey), string(e.RequestEndKey),
 			string(e.Range.StartKey), string(e.Range.EndKey))
 	}
 	return fmt.Sprintf("key range %q-%q could not be located within a range on store",

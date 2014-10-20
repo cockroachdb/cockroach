@@ -49,26 +49,27 @@ func rangeCacheShouldEvict(size int, k, v interface{}) bool {
 	return size > rangeCacheSize
 }
 
-// rangeMetadataDB is a type which can query metadata range information from an
-// underlying datastore. This interface is used by RangeMetadataCache to
+// rangeDescriptorDB is a type which can query range descriptors from an
+// underlying datastore. This interface is used by RangeDescriptorCache to
 // initially retrieve information which will be cached.
-type rangeMetadataDB interface {
-	// getRangeMetadata retrieves metadata for the range containing the given
-	// key from storage. This function returns a sorted slice of
-	// RangeDescriptors for a set of consecutive ranges, the first which must
-	// contain the requested key. The additional RangeDescriptors are returned
-	// with the intent of pre-caching subsequent ranges which are likely to be
-	// requested soon by the current workload.
-	getRangeMetadata(engine.Key) ([]proto.RangeDescriptor, error)
+type rangeDescriptorDB interface {
+	// getRangeDescriptor retrieves a descriptor for the range
+	// containing the given key from storage. This function returns a
+	// sorted slice of RangeDescriptors for a set of consecutive ranges,
+	// the first which must contain the requested key. The additional
+	// RangeDescriptors are returned with the intent of pre-caching
+	// subsequent ranges which are likely to be requested soon by the
+	// current workload.
+	getRangeDescriptor(engine.Key) ([]proto.RangeDescriptor, error)
 }
 
-// RangeMetadataCache is used to retrieve range metadata for arbitrary keys.
-// Metadata is initially queried from storage using a rangeMetadataDB, but is
-// cached for subsequent lookups.
-type RangeMetadataCache struct {
-	// rangeMetadataDB is used to retrieve metadata range information from the
+// RangeDescriptorCache is used to retrieve range descriptors for
+// arbitrary keys. Descriptors are initially queried from storage
+// using a rangeDescriptorDB, but is cached for subsequent lookups.
+type RangeDescriptorCache struct {
+	// rangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
-	db rangeMetadataDB
+	db rangeDescriptorDB
 	// rangeCache caches replica metadata for key ranges. The cache is
 	// filled while servicing read and write requests to the key value
 	// store.
@@ -77,10 +78,11 @@ type RangeMetadataCache struct {
 	rangeCacheMu sync.RWMutex
 }
 
-// NewRangeMetadataCache returns a new RangeMetadataCache which uses the given
-// rangeMetadataDB as the underlying source of range metadata.
-func NewRangeMetadataCache(db rangeMetadataDB) *RangeMetadataCache {
-	return &RangeMetadataCache{
+// NewRangeDescriptorCache returns a new RangeDescriptorCache which
+// uses the given rangeDescriptorDB as the underlying source of range
+// descriptors.
+func NewRangeDescriptorCache(db rangeDescriptorDB) *RangeDescriptorCache {
+	return &RangeDescriptorCache{
 		db: db,
 		rangeCache: util.NewOrderedCache(util.CacheConfig{
 			Policy:      util.CacheLRU,
@@ -89,43 +91,44 @@ func NewRangeMetadataCache(db rangeMetadataDB) *RangeMetadataCache {
 	}
 }
 
-// LookupRangeMetadata attempts to locate metadata for the range containing the
-// given Key. This is done by querying the two-level lookup table of range
-// metadata which cockroach maintains.
+// LookupRangeDescriptor attempts to locate a descriptor for the range
+// containing the given Key. This is done by querying the two-level
+// lookup table of range descriptors which cockroach maintains.
 //
-// This method first looks up the specified key in the first level of range
-// metadata, which returns the location of the key within the second level of
-// range metadata. This second level location is then queried to retrieve
-// metadata for the range where the key's value resides. Range metadata
-// descriptors retrieved during each search are cached for subsequent lookups.
+// This method first looks up the specified key in the first level of
+// range metadata, which returns the location of the key within the
+// second level of range metadata. This second level location is then
+// queried to retrieve a descriptor for the range where the key's
+// value resides. Range descriptors retrieved during each search are
+// cached for subsequent lookups.
 //
-// This method returns the RangeDescriptor for the range containing the key's
-// data, or an error if any occurred.
-func (rmc *RangeMetadataCache) LookupRangeMetadata(key engine.Key) (*proto.RangeDescriptor, error) {
-	_, r := rmc.getCachedRangeMetadata(key)
+// This method returns the RangeDescriptor for the range containing
+// the key's data, or an error if any occurred.
+func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key engine.Key) (*proto.RangeDescriptor, error) {
+	_, r := rmc.getCachedRangeDescriptor(key)
 	if r != nil {
 		return r, nil
 	}
 
-	rs, err := rmc.db.getRangeMetadata(key)
+	rs, err := rmc.db.getRangeDescriptor(key)
 	if err != nil {
 		return nil, err
 	}
 	rmc.rangeCacheMu.Lock()
 	for i := range rs {
-		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetadataLookupKey(&rs[i])), &rs[i])
+		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetaLookupKey(&rs[i])), &rs[i])
 	}
 	rmc.rangeCacheMu.Unlock()
 	return &rs[0], nil
 }
 
-// EvictCachedRangeMetadata will evict any cached metadata range descriptors for
-// the given key. It is intended that this method be called from a consumer of
-// RangeMetadataCache when the returned range metadata is discovered to be
-// stale.
-func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key engine.Key) {
+// EvictCachedRangeDescriptor will evict any cached range descriptors
+// for the given key. It is intended that this method be called from a
+// consumer of RangeDescriptorCache if the returned range descriptor is
+// discovered to be stale.
+func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key engine.Key) {
 	for {
-		k, _ := rmc.getCachedRangeMetadata(key)
+		k, _ := rmc.getCachedRangeDescriptor(key)
 		if k != nil {
 			rmc.rangeCacheMu.Lock()
 			rmc.rangeCache.Del(k)
@@ -141,9 +144,10 @@ func (rmc *RangeMetadataCache) EvictCachedRangeMetadata(key engine.Key) {
 	}
 }
 
-// getCachedRangeMetadata is a helper function to retrieve the metadata
-// range which contains the given key, if present in the cache.
-func (rmc *RangeMetadataCache) getCachedRangeMetadata(key engine.Key) (
+// getCachedRangeDescriptor is a helper function to retrieve the
+// descriptor of the range which contains the given key, if present in
+// the cache.
+func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key engine.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	metaKey := engine.RangeMetaKey(key)
 	rmc.rangeCacheMu.RLock()

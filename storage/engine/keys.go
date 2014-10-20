@@ -62,6 +62,12 @@ func MakeLocalKey(keys ...Key) Key {
 // prefix removed. In this way, local keys address to the same range
 // as non-local keys, but are stored separately so that they don't
 // collide with user-space or global system keys.
+//
+// However, not all local keys are addressable in the global map.
+// Range metadata, response cache entries, and various other keys are
+// strictly local, as the non-local suffix is not itself a key
+// (e.g. in the case of range metadata, it's the encoded range ID) and
+// so are not globally addressable.
 func (k Key) Address() Key {
 	if !bytes.HasPrefix(k, KeyLocalPrefix) {
 		return k
@@ -170,9 +176,9 @@ func RangeMetaKey(key Key) Key {
 	return KeyMin
 }
 
-// RangeMetadataLookupKey returns the metadata key at which this range
+// RangeMetaLookupKey returns the metadata key at which this range
 // descriptor should be stored as a value.
-func RangeMetadataLookupKey(r *proto.RangeDescriptor) Key {
+func RangeMetaLookupKey(r *proto.RangeDescriptor) Key {
 	return RangeMetaKey(r.EndKey)
 }
 
@@ -207,55 +213,11 @@ func ValidateRangeMetaKey(key Key) error {
 	return nil
 }
 
-// MakeRangeStatKey returns the key for accessing the named stat
-// for the specified range ID.
-func MakeRangeStatKey(rangeID int64, stat Key) Key {
-	encRangeID := encoding.EncodeInt(nil, rangeID)
-	return MakeKey(KeyLocalRangeStatPrefix, encRangeID, stat)
-}
-
-// MakeStoreStatKey returns the key for accessing the named stat
-// for the specified store ID.
-func MakeStoreStatKey(storeID int32, stat Key) Key {
-	encStoreID := encoding.EncodeInt(nil, int64(storeID))
-	return MakeKey(KeyLocalStoreStatPrefix, encStoreID, stat)
-}
-
 func init() {
 	if KeyLocalPrefixLength%7 != 0 {
 		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
 	}
 }
-
-// Constants for key construction.
-var (
-	// StatLiveBytes counts how many bytes are "live", including bytes
-	// from both keys and values. Live rows include only non-deleted
-	// keys and only the most recent value.
-	StatLiveBytes = Key("live-bytes")
-	// StatKeyBytes counts how many bytes are used to store all keys,
-	// including bytes from deleted keys. Key bytes are re-counted for
-	// each versioned value.
-	StatKeyBytes = Key("key-bytes")
-	// StatValBytes counts how many bytes are used to store all values,
-	// including all historical versions and deleted tombstones.
-	StatValBytes = Key("val-bytes")
-	// StatIntentBytes counts how many bytes are used to store values
-	// which are unresolved intents. Includes bytes used for both intent
-	// keys and values.
-	StatIntentBytes = Key("intent-bytes")
-	// StatLiveCount counts how many keys are "live". This includes only
-	// non-deleted keys.
-	StatLiveCount = Key("live-count")
-	// StatKeyCount counts the total number of keys, including both live
-	// and deleted keys.
-	StatKeyCount = Key("key-count")
-	// StatValCount counts the total number of values, including all
-	// historical versions and deleted tombstones.
-	StatValCount = Key("val-count")
-	// StatIntentCount counts the number of unresolved intents.
-	StatIntentCount = Key("intent-count")
-)
 
 // Constants for system-reserved keys in the KV map.
 var (
@@ -304,9 +266,9 @@ var (
 	// KeyLocalIdent stores an immutable identifier for this store,
 	// created when the store is first bootstrapped.
 	KeyLocalIdent = MakeKey(KeyLocalPrefix, Key("iden"))
-	// KeyLocalRangeMetadataPrefix is the prefix for keys storing range metadata.
-	// The value is a struct of type RangeMetadata.
-	KeyLocalRangeMetadataPrefix = MakeKey(KeyLocalPrefix, Key("rng-"))
+	// KeyLocalRangeDescriptorPrefix is the prefix for keys storing
+	// range descriptors. The value is a struct of type RangeDescriptor.
+	KeyLocalRangeDescriptorPrefix = MakeKey(KeyLocalPrefix, Key("rng-"))
 	// KeyLocalRangeStatPrefix is the prefix for range statistics.
 	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, Key("rst-"))
 	// KeyLocalResponseCachePrefix is the prefix for keys storing command
@@ -320,6 +282,9 @@ var (
 	// KeyLocalSnapshotIDGenerator is a snapshot ID generator sequence.
 	// Snapshot IDs must be unique per store ID.
 	KeyLocalSnapshotIDGenerator = MakeKey(KeyLocalPrefix, Key("ssid"))
+
+	// KeyLocalMax is the end of the local key range.
+	KeyLocalMax = KeyLocalPrefix.PrefixEnd()
 
 	// KeySystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
