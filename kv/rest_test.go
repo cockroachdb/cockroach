@@ -73,6 +73,10 @@ const (
 	methodOptions = "OPTIONS"
 )
 
+type protoResp struct {
+	Value proto.Value `json:"value"`
+}
+
 func TestMethods(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	testKey, testVal := "Hello, 世界", "世界 is cool"
@@ -85,29 +89,29 @@ func TestMethods(t *testing.T) {
 		// The order of the operations within these groups must be preserved.
 		// Test basic CRUD; PUT, GET, DELETE, etc.
 		{methodHead, testKey, nil, http.StatusNotFound, nil},
-		{methodGet, testKey, nil, http.StatusNotFound, []byte(statusText(http.StatusNotFound))},
+		{methodGet, testKey, nil, http.StatusNotFound, nil},
 		{methodPut, testKey, strings.NewReader(testVal), http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusOK, nil},
 		{methodGet, testKey, nil, http.StatusOK, []byte(testVal)},
 		{methodDelete, testKey, nil, http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusNotFound, nil},
-		{methodGet, testKey, nil, http.StatusNotFound, []byte(statusText(http.StatusNotFound))},
+		{methodGet, testKey, nil, http.StatusNotFound, nil},
 		// Test that POST behaves just like PUT.
 		{methodPost, testKey, strings.NewReader(testVal), http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusOK, nil},
 		{methodGet, testKey, nil, http.StatusOK, []byte(testVal)},
 		// Test that unsupported methods are not acceptable.
-		{methodPatch, testKey, nil, http.StatusMethodNotAllowed, []byte(statusText(http.StatusMethodNotAllowed))},
-		{methodOptions, testKey, nil, http.StatusMethodNotAllowed, []byte(statusText(http.StatusMethodNotAllowed))},
+		{methodPatch, testKey, nil, http.StatusMethodNotAllowed, nil},
+		{methodOptions, testKey, nil, http.StatusMethodNotAllowed, nil},
 		// Test that empty keys are not acceptable, but empty values are.
-		{methodGet, "", nil, http.StatusBadRequest, []byte("empty key not allowed\n")},
-		{methodPost, "", nil, http.StatusBadRequest, []byte("empty key not allowed\n")},
+		{methodGet, "", nil, http.StatusBadRequest, nil},
+		{methodPost, "", nil, http.StatusBadRequest, nil},
 		{methodPut, testKey, nil, http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusOK, nil},
 		{methodGet, testKey, nil, http.StatusOK, nil},
 		{methodDelete, testKey, nil, http.StatusOK, nil},
 		{methodHead, testKey, nil, http.StatusNotFound, nil},
-		{methodGet, testKey, nil, http.StatusNotFound, []byte(statusText(http.StatusNotFound))},
+		{methodGet, testKey, nil, http.StatusNotFound, nil},
 	}
 	for _, tc := range testCases {
 		resp, err := httpDo(tc.method, EntryPrefix+tc.key, tc.body)
@@ -120,19 +124,24 @@ func TestMethods(t *testing.T) {
 			t.Errorf("[%s] %s: expected status code to be %d; got %d", tc.method, tc.key, tc.statusCode, resp.StatusCode)
 			continue
 		}
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.key, err)
+		if tc.method == methodHead ||
+			resp.StatusCode == http.StatusMethodNotAllowed ||
+			resp.StatusCode == http.StatusBadRequest {
 			continue
 		}
-		if !bytes.Equal(b, tc.resp) {
-			t.Errorf("[%s] %s: response bytes not equal: expected %q, got %q", tc.method, tc.key, string(tc.resp), string(b))
+		var pr protoResp
+		if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
+			t.Errorf("[%s] %s: could not json decode response body: %v", tc.method, tc.key, err)
+			continue
+		}
+		if !bytes.Equal(pr.Value.Bytes, tc.resp) {
+			t.Errorf("[%s] %s: response bytes not equal: expected %q, got %q", tc.method, tc.key, string(tc.resp), string(pr.Value.Bytes))
 			continue
 		}
 		contentType := resp.Header.Get("Content-Type")
 		if tc.method == methodGet &&
 			tc.statusCode == http.StatusOK &&
-			contentType != "application/octet-stream" {
+			contentType != "application/json" {
 			t.Errorf("[%s] %s: unexpected content type %s", tc.method, tc.key, contentType)
 			continue
 		}
@@ -275,8 +284,9 @@ func TestIncrement(t *testing.T) {
 	once.Do(func() { startServer(t) })
 	testKey := "Hello, 世界"
 	testCases := []struct {
-		method, key           string
-		val, statusCode, resp int
+		method, key     string
+		val, statusCode int
+		resp            int64
 	}{
 		// The order of the operations within these groups must be preserved.
 		{methodPost, "", 0, http.StatusBadRequest, 0},
@@ -309,22 +319,17 @@ func TestIncrement(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			continue
 		}
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("[%s] %s: could not read response body: %v", tc.method, tc.key, err)
-			continue
-		}
 		// Responses are empty for HEAD and DELETE requests.
 		if tc.method != methodGet && tc.method != methodPost {
 			continue
 		}
-		i, err := strconv.Atoi(string(b))
-		if err != nil {
-			t.Errorf("[%s] %s: could not convert body %s to int: %v", tc.method, tc.key, string(b), err)
+		var incResp proto.IncrementResponse
+		if err := json.NewDecoder(resp.Body).Decode(&incResp); err != nil {
+			t.Errorf("[%s] %s: could not decode response body: %v", tc.method, tc.key, err)
 			continue
 		}
-		if i != tc.resp {
-			t.Errorf("[%s] %s: expected response to be %d; got %d", tc.method, tc.key, tc.resp, i)
+		if incResp.NewValue != tc.resp {
+			t.Errorf("[%s] %s: expected response to be %d; got %d", tc.method, tc.key, tc.resp, incResp.NewValue)
 			continue
 		}
 	}
@@ -358,14 +363,22 @@ func TestSystemKeys(t *testing.T) {
 	encMeta1Key := url.QueryEscape(string(metaKey))
 	url := "http://" + serverAddr + EntryPrefix + encMeta1Key
 	resp := getURL(url, t)
-	if resp != string(protoBytes) {
-		t.Fatalf("expected %q; got %q", string(protoBytes), resp)
+	var pr protoResp
+	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
+		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+	}
+	if !bytes.Equal(pr.Value.Bytes, protoBytes) {
+		t.Fatalf("expected %q; got %q", string(protoBytes), pr.Value.Bytes)
 	}
 	val := "Hello, 世界"
 	postURL(url, strings.NewReader(val), t)
 	resp = getURL(url, t)
-	if resp != val {
-		t.Fatalf("expected %q; got %q", val, resp)
+	pr = protoResp{}
+	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
+		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+	}
+	if string(pr.Value.Bytes) != val {
+		t.Fatalf("expected %q; got %q", val, string(pr.Value.Bytes))
 	}
 }
 
@@ -375,9 +388,13 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	encBody := "%00some%2FBODY%20that%20encodes"
 	url := "http://" + serverAddr + EntryPrefix + encKey
 	postURL(url, strings.NewReader(encBody), t)
-	val := getURL(url, t)
-	if encBody != val {
-		t.Fatalf("expected body to be %s; got %s", encBody, val)
+	resp := getURL(url, t)
+	var pr protoResp
+	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
+		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+	}
+	if !bytes.Equal([]byte(encBody), pr.Value.Bytes) {
+		t.Fatalf("expected body to be %q; got %q", encBody, string(pr.Value.Bytes))
 	}
 	gr := <-testDB.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
