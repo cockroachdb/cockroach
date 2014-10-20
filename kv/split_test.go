@@ -35,8 +35,7 @@ import (
 // startTestWriter creates a writer which intiates a sequence of
 // transactions, each which writes up to 10 times to random keys
 // with random values.
-func startTestWriter(db storage.DB, i int64, pause time.Duration, wg *sync.WaitGroup,
-	retries *int32, done <-chan struct{}, t *testing.T) {
+func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
 	for {
 		select {
@@ -62,7 +61,7 @@ func startTestWriter(db storage.DB, i int64, pause time.Duration, wg *sync.WaitG
 				first = false
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := []byte(util.RandString(src, 10))
-					val := []byte(util.RandString(src, int(src.Int31n(1<<8))))
+					val := []byte(util.RandString(src, int(src.Int31n(valBytes))))
 					putR := <-txn.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}})
 					if putR.GoError() != nil {
 						log.Infof("experienced an error in routine %d: %s", i, putR.GoError())
@@ -73,8 +72,8 @@ func startTestWriter(db storage.DB, i int64, pause time.Duration, wg *sync.WaitG
 			})
 			if err != nil {
 				t.Error(err)
-			} else if pause != 0 {
-				time.Sleep(pause)
+			} else {
+				time.Sleep(1 * time.Millisecond)
 			}
 		}
 	}
@@ -90,12 +89,8 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	// This channel shuts the whole apparatus down.
 	done := make(chan struct{})
 
-	// Compute the split keys.
-	const splits = 5
-	splitKeys := []engine.Key(nil)
-	for i := 0; i < splits; i++ {
-		splitKeys = append(splitKeys, engine.Key(fmt.Sprintf("%02d", i)))
-	}
+	// Set five split keys, about evenly spaced along the range of random keys.
+	splitKeys := []engine.Key{engine.Key("G"), engine.Key("R"), engine.Key("a"), engine.Key("l"), engine.Key("s")}
 
 	// Start up the concurrent goroutines which run transactions.
 	const concurrency = 10
@@ -103,7 +98,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		go startTestWriter(db, int64(i), 1*time.Millisecond, &wg, &retries, done, t)
+		go startTestWriter(db, int64(i), 1<<7, &wg, &retries, done, t)
 	}
 
 	// Execute the consecutive splits.
@@ -148,15 +143,15 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			proto.Attributes{},
 		},
 		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 10,
+		RangeMaxBytes: 1 << 18,
 	}
 	if err := storage.PutProto(db, engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
-	// Start test writer.
+	// Start test writer write about a 32K/key so there aren't too many writes necessary to split 64K range.
 	done := make(chan struct{})
-	go startTestWriter(db, int64(0), 500*time.Microsecond, nil, nil, done, t)
+	go startTestWriter(db, int64(0), 1<<15, nil, nil, done, t)
 
 	// Check that we split 5 times with (a very generous for slow test machines) 500ms.
 	if err := util.IsTrueWithin(func() bool {

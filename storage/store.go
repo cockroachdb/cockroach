@@ -307,7 +307,12 @@ func (s *Store) LookupRange(start, end engine.Key) *Range {
 }
 
 // BootstrapRange creates the first range in the cluster and manually
-// writes it to the store.
+// writes it to the store. Default range addressing records are
+// created for meta1 and meta2. Default configurations for accounting,
+// permissions, and zones are created. All configs are specified for
+// the empty key prefix, meaning they apply to the entire
+// database. Permissions are granted to all users and the zone
+// requires three replicas with no other specifications.
 func (s *Store) BootstrapRange() (*Range, error) {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
@@ -323,7 +328,47 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	}
 	batch := engine.NewBatch(s.engine)
 	mvcc := engine.NewMVCC(batch)
-	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), s.clock.Now(), nil, desc); err != nil {
+	now := s.clock.Now()
+	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Write meta1.
+	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Write meta2.
+	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
+		return nil, err
+	}
+	// Accounting config.
+	acctConfig := &proto.AcctConfig{}
+	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, acctConfig); err != nil {
+		return nil, err
+	}
+	// Permission config.
+	permConfig := &proto.PermConfig{
+		Read:  []string{UserRoot}, // root user
+		Write: []string{UserRoot}, // root user
+	}
+	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, permConfig); err != nil {
+		return nil, err
+	}
+	// Zone config.
+	// TODO(spencer): change this when zone specifications change to elect for three
+	// replicas with no specific features set.
+	zoneConfig := &proto.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			proto.Attributes{},
+			proto.Attributes{},
+			proto.Attributes{},
+		},
+		RangeMinBytes: 1048576,
+		RangeMaxBytes: 67108864,
+	}
+	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
+	if err := mvcc.PutProto(key, now, nil, zoneConfig); err != nil {
 		return nil, err
 	}
 	if err := batch.Commit(); err != nil {
@@ -392,8 +437,13 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	// concurrent accesses to LookupRange. Since this call is made from
 	// within a command execution, Desc.EndKey is protected from other
 	// concurrent range accesses.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
-	s.AddRange(newRng)
+	newRng.Start()
+	s.ranges[newRng.RangeID] = newRng
+	s.rangesByKey = append(s.rangesByKey, newRng)
+	sort.Sort(s.rangesByKey)
 	return nil
 }
 

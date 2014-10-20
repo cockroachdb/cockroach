@@ -125,7 +125,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	}
 
 	// Create first range.
-	rng, err := s.BootstrapRange()
+	_, err := s.BootstrapRange()
 	if err != nil {
 		return nil, err
 	}
@@ -134,16 +134,6 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*kv.DB, error) {
 	localKV := kv.NewLocalKV()
 	localKV.AddStore(s)
 	localDB := kv.NewDB(localKV, clock)
-
-	// Initialize range addressing records and default administrative configs.
-	if err := storage.BootstrapRangeDescriptor(localDB, rng.Desc); err != nil {
-		return nil, err
-	}
-
-	// Write default configs to local DB.
-	if err := storage.BootstrapConfigs(localDB); err != nil {
-		return nil, err
-	}
 
 	// Initialize node and store ids after the fact to account
 	// for use of node ID = 1 and store ID = 1.

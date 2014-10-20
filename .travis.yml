@@ -18,7 +18,7 @@ script:
   # Note that testrace runs with some tests excluded for performance
   # This means that we should always run both test and testrace.
   - make test TESTFLAGS="-logtostderr -timeout 30s"
-  - make testrace TESTFLAGS="-logtostderr -timeout 30s"
+  - make testrace
 
 notifications:
   email:

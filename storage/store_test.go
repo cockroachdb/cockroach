@@ -65,7 +65,6 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
-	initConfigs(eng, t)
 	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
@@ -1030,6 +1029,20 @@ func TestStoreShouldSplit(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 
+	// Rewrite zone config with range max bytes set to 256K.
+	zoneConfig := &proto.ZoneConfig{
+		ReplicaAttrs: []proto.Attributes{
+			proto.Attributes{},
+			proto.Attributes{},
+			proto.Attributes{},
+		},
+		RangeMinBytes: 1 << 8,
+		RangeMaxBytes: 1 << 18,
+	}
+	if err := PutProto(store.DB(), engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+		t.Fatal(err)
+	}
+
 	rng := store.LookupRange(engine.KeyMin, nil)
 	if ok := rng.shouldSplit(); ok {
 		t.Errorf("range should not split with no data in it")
@@ -1039,7 +1052,7 @@ func TestStoreShouldSplit(t *testing.T) {
 	fillRange(store, rng.RangeID, engine.Key("test"), maxBytes, t)
 
 	if ok := rng.shouldSplit(); !ok {
-		t.Errorf("range should after writing %d bytes", maxBytes)
+		t.Errorf("range should split after writing %d bytes", maxBytes)
 	}
 
 	// Verify that the range is in fact split (give it a second for very slow test machines).

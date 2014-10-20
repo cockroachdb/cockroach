@@ -362,60 +362,6 @@ func putInternal(db DB, key engine.Key, value proto.Value) error {
 	return pr.GoError()
 }
 
-// BootstrapRangeDescriptor sets meta1 and meta2 values for KeyMax,
-// using the provided replica.
-func BootstrapRangeDescriptor(db DB, desc *proto.RangeDescriptor) error {
-	// Write meta1.
-	if err := PutProto(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
-		return err
-	}
-	// Write meta2.
-	if err := PutProto(db, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), desc); err != nil {
-		return err
-	}
-	return nil
-}
-
-// BootstrapConfigs sets default configurations for accounting,
-// permissions, and zones. All configs are specified for the empty key
-// prefix, meaning they apply to the entire database. Permissions are
-// granted to all users and the zone requires three replicas with no
-// other specifications.
-func BootstrapConfigs(db DB) error {
-	// Accounting config.
-	acctConfig := &proto.AcctConfig{}
-	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
-	if err := PutProto(db, key, acctConfig); err != nil {
-		return err
-	}
-	// Permission config.
-	permConfig := &proto.PermConfig{
-		Read:  []string{UserRoot}, // root user
-		Write: []string{UserRoot}, // root user
-	}
-	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
-	if err := PutProto(db, key, permConfig); err != nil {
-		return err
-	}
-	// Zone config.
-	// TODO(spencer): change this when zone specifications change to elect for three
-	// replicas with no specific features set.
-	zoneConfig := &proto.ZoneConfig{
-		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{},
-			proto.Attributes{},
-			proto.Attributes{},
-		},
-		RangeMinBytes: 1048576,
-		RangeMaxBytes: 67108864,
-	}
-	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
-	if err := PutProto(db, key, zoneConfig); err != nil {
-		return err
-	}
-	return nil
-}
-
 // UpdateRangeAddressing updates the range addressing metadata for the
 // range specified by desc.
 //
