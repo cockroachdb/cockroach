@@ -38,12 +38,20 @@ RUN go get github.com/golang/glog
 RUN go get gopkg.in/yaml.v1
 
 # Get RocksDB, Etcd sources from github.
+# We will run 'git submodule update' below which will ensure we have the correct
+# version, but running an initial download here speeds things up by baking
+# the bulk of the download into a lower layer of the image.
 # See the NOTE below if hacking directly on the _vendor/
 # submodules. In that case, uncomment the "_vendor" exclude from
 # .dockerignore and comment out the following lines.
-RUN cd $ROCKSDBPATH && git clone --depth=1 https://github.com/cockroachdb/rocksdb.git
+RUN cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git
+RUN cd $COREOSPATH && git clone https://github.com/cockroachdb/etcd.git
+
+# Build rocksdb before adding the current directory. If there are
+# changes made by 'git submodule update' it will get rebuilt by
+# 'make', but this lets us reuse most of the results of an earlier
+# build of the image.
 RUN cd $ROCKSDBPATH/rocksdb && make static_lib
-RUN cd $COREOSPATH && git clone --depth=1 https://github.com/cockroachdb/etcd.git
 
 # Copy the contents of the cockroach source directory to the image.
 # Any changes which have been made to the source directory will cause
@@ -54,6 +62,8 @@ RUN cd $COREOSPATH && git clone --depth=1 https://github.com/cockroachdb/etcd.gi
 # are only made to cockroach. If rocksdb is being hacked, remove the
 # "_vendor" exclude from .dockerignore.
 ADD . $ROACHPATH/cockroach
+
+RUN cd $ROACHPATH/cockroach && git submodule update
 
 # Now build the cockroach executable and run the tests.
 RUN cd $ROACHPATH/cockroach && make
