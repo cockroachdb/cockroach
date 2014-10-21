@@ -18,7 +18,6 @@
 package rpc
 
 import (
-	"net"
 	"net/rpc"
 	"testing"
 	"time"
@@ -58,29 +57,13 @@ func TestClientHeartbeat(t *testing.T) {
 // TestClientHeartbeatBadServer verifies that the client is not marked
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig("..")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := NewContext(clock, tlsConfig)
-	addr := util.CreateTestAddr("tcp")
-	// Create a server which doesn't support heartbeats.
-	s := &Server{
-		Server:         rpc.NewServer(),
-		context:        rpcContext,
-		addr:           addr,
-		closeCallbacks: make([]func(conn net.Conn), 0, 1),
-	}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	// Create a server without registering a heartbeat service.
+	s := createTestServer(hlc.NewClock(hlc.UnixNano), t)
 	defer s.Close()
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.
-	c := NewClient(s.Addr(), nil, rpcContext)
+	c := NewClient(s.Addr(), nil, s.context)
 	select {
 	case <-c.Ready:
 		t.Error("unexpected client heartbeat success")
@@ -89,41 +72,26 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 }
 
 func TestOffsetMeasurement(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig("..")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create the server so that we can register a manual clock.
-	addr := util.CreateTestAddr("tcp")
 	serverManual := hlc.ManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
-	serverContext := NewContext(serverClock, tlsConfig)
-	s := &Server{
-		Server:  rpc.NewServer(),
-		context: serverContext,
-		addr:    addr,
-	}
+	s := createTestServer(serverClock, t)
+	defer s.Close()
+
 	heartbeat := &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
 	}
 	s.RegisterName("Heartbeat", heartbeat)
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
 
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewContext(clientClock, tlsConfig)
+	context := NewContext(clientClock, s.context.tlsConfig)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
 	// Ensure we get a good heartbeat before continuing.
-	err = util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10)
-	if err != nil {
+	if err := util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10); err != nil {
 		t.Fatal(err)
 	}
 
@@ -135,47 +103,79 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Ensure the offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
 	if o := context.RemoteClocks.offsets[c.addr.String()]; o != expectedOffset {
-		t.Errorf("espected offset %v, actual %v", expectedOffset, o)
+		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
+	}
+	context.RemoteClocks.mu.Unlock()
+}
+
+// TestDelayedOffsetMeasurement tests that the client will record an
+// InfiniteOffset if the heartbeat reply exceeds the maximumClockReadingDelay,
+// but not the heartbeat timeout.
+func TestDelayedOffsetMeasurement(t *testing.T) {
+	serverManual := hlc.ManualClock(10)
+	serverClock := hlc.NewClock(serverManual.UnixNano)
+	s := createTestServer(serverClock, t)
+	defer s.Close()
+
+	heartbeat := &HeartbeatService{
+		clock:              serverClock,
+		remoteClockMonitor: newRemoteClockMonitor(serverClock),
+	}
+	s.RegisterName("Heartbeat", heartbeat)
+
+	// Create a client that receives a heartbeat right after the
+	// maximumClockReadingDelay.
+	advancing := AdvancingClock{
+		time:                0,
+		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
+	}
+	clientClock := hlc.NewClock(advancing.UnixNano)
+	context := NewContext(clientClock, s.context.tlsConfig)
+	c := NewClient(s.Addr(), nil, context)
+	<-c.Ready
+
+	// Ensure we get a good heartbeat before continuing.
+	if err := util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10); err != nil {
+		t.Fatal(err)
+	}
+
+	// Since the reply took too long, we should have an InfiniteOffset, even
+	// though the client is still healthy because it received a heartbeat
+	// reply.
+	if o := c.RemoteOffset(); o != InfiniteOffset {
+		t.Errorf("expected offset %v, actual %v", InfiniteOffset, o)
+	}
+
+	// Ensure the general offsets map was updated properly too.
+	context.RemoteClocks.mu.Lock()
+	if o := context.RemoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
+		t.Errorf("expected offset %v, actual %v", InfiniteOffset, o)
 	}
 	context.RemoteClocks.mu.Unlock()
 }
 
 func TestFailedOffestMeasurement(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig("..")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create the server so that we can register the heartbeat manually.
-	addr := util.CreateTestAddr("tcp")
-	serverManual := hlc.ManualClock(10)
+	serverManual := hlc.ManualClock(0)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
-	serverContext := NewContext(serverClock, tlsConfig)
-	s := &Server{
-		Server:  rpc.NewServer(),
-		context: serverContext,
-		addr:    addr,
-	}
+	s := createTestServer(serverClock, t)
+	defer s.Close()
+
 	heartbeat := &ManualHeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: newRemoteClockMonitor(serverClock),
-		ready:              make(chan bool),
+		ready:              make(chan struct{}),
 	}
 	s.RegisterName("Heartbeat", heartbeat)
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
 
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.ManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := NewContext(clientClock, tlsConfig)
+	context := NewContext(clientClock, s.context.tlsConfig)
 	c := NewClient(s.Addr(), nil, context)
-	heartbeat.ready <- true // Allow one heartbeat for initialization.
+	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Ready
 	// Synchronously wait on missing the next heartbeat.
-	err = util.IsTrueWithin(func() bool {
+	err := util.IsTrueWithin(func() bool {
 		return !c.IsHealthy()
 	}, heartbeatInterval*10)
 	if err != nil {
@@ -185,13 +185,6 @@ func TestFailedOffestMeasurement(t *testing.T) {
 		t.Errorf("expected offset %v, actual %v",
 			InfiniteOffset, c.RemoteOffset())
 	}
-
-	// Ensure the general offsets map was updated properly too.
-	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
-		t.Errorf("espected offset %v, actual %v", InfiniteOffset, o)
-	}
-	context.RemoteClocks.mu.Unlock()
 }
 
 type AdvancingClock struct {
@@ -203,4 +196,27 @@ func (ac *AdvancingClock) UnixNano() int64 {
 	time := ac.time
 	ac.time = time + ac.advancementInterval
 	return time
+}
+
+// createTestServer creates and starts a new server with a test tlsConfig and
+// addr. Be sure to close the server when done. Building the server manually
+// like this allows for manual registration of the heartbeat service.
+func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
+	tlsConfig, err := LoadTestTLSConfig("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create the server so that we can register a manual clock.
+	addr := util.CreateTestAddr("tcp")
+	serverContext := NewContext(serverClock, tlsConfig)
+	s := &Server{
+		Server:  rpc.NewServer(),
+		context: serverContext,
+		addr:    addr,
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

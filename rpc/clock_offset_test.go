@@ -25,7 +25,62 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-// Test the sort interface for endpointLists.
+// TestUpdateOffset tests the three cases that UpdateOffset should or should
+// not update the offset for an addr.
+func TestUpdateOffset(t *testing.T) {
+	monitor := newRemoteClockMonitor(hlc.NewClock(hlc.UnixNano))
+
+	// Case 1: There is no prior offset for the address.
+	offset1 := RemoteOffset{}
+	monitor.UpdateOffset("addr", offset1)
+	if o := monitor.offsets["addr"]; o != offset1 {
+		t.Errorf("expected offset %v, instead %v", offset1, o)
+	}
+
+	// Case 2: The old offset for addr was measured before lastMonitoredAt.
+	monitor.lastMonitoredAt = 5
+	offset2 := RemoteOffset{
+		Offset:     0,
+		Error:      20,
+		MeasuredAt: 6,
+	}
+	monitor.UpdateOffset("addr", offset2)
+	if o := monitor.offsets["addr"]; o != offset2 {
+		t.Errorf("expected offset %v, instead %v", offset2, o)
+	}
+
+	// Case 3: The new offset's error is smaller.
+	offset3 := RemoteOffset{
+		Offset:     0,
+		Error:      10,
+		MeasuredAt: 8,
+	}
+	monitor.UpdateOffset("addr", offset3)
+	if o := monitor.offsets["addr"]; o != offset3 {
+		t.Errorf("expected offset %v, instead %v", offset3, o)
+	}
+
+	// Larger error and offset3.MeasuredAt > lastMonitoredAt, so no update.
+	monitor.UpdateOffset("addr", offset2)
+	if o := monitor.offsets["addr"]; o != offset3 {
+		t.Errorf("expected offset %v, instead %v", offset3, o)
+	}
+
+	// InfiniteOffset, shouldn't update because it has larger error.
+	monitor.UpdateOffset("addr", InfiniteOffset)
+	if o := monitor.offsets["addr"]; o != offset3 {
+		t.Errorf("expected offset %v, instead %v", offset3, o)
+	}
+
+	// LastMonitoredAt moved up, so InfiniteOffset can be added now.
+	monitor.lastMonitoredAt = 10
+	monitor.UpdateOffset("addr", InfiniteOffset)
+	if o := monitor.offsets["addr"]; o != InfiniteOffset {
+		t.Errorf("expected offset %v, instead %v", InfiniteOffset, o)
+	}
+}
+
+// TestEndpointListSort tests the sort interface for endpointLists.
 func TestEndpointListSort(t *testing.T) {
 	list := endpointList{
 		endpoint{offset: 5, endType: +1},
@@ -57,15 +112,16 @@ func TestEndpointListSort(t *testing.T) {
 	}
 }
 
-// Test that the map of RemoteOffsets is correctly manipulated into a list of
-// endpoints used in Marzullo's algorithm.
+// TestBuildEndpointList tests that the map of RemoteOffsets is correctly
+// manipulated into a list of endpoints used in Marzullo's algorithm.
 func TestBuildEndpointList(t *testing.T) {
 	// Build the offsets we will turn into an endpoint list.
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 10}
-	offsets["1"] = RemoteOffset{Offset: 1, Error: 10}
-	offsets["2"] = RemoteOffset{Offset: 2, Error: 10}
-	offsets["3"] = RemoteOffset{Offset: 3, Error: 10}
+	offsets := map[string]RemoteOffset{
+		"0": RemoteOffset{Offset: 0, Error: 10},
+		"1": RemoteOffset{Offset: 1, Error: 10},
+		"2": RemoteOffset{Offset: 2, Error: 10},
+		"3": RemoteOffset{Offset: 3, Error: 10},
+	}
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
@@ -101,14 +157,15 @@ func TestBuildEndpointList(t *testing.T) {
 	}
 }
 
-// Test the side effect of removing older offsets when we build an endpoint
-// list.
+// TestBuildEndpointListRemoveStagnantClocks tests the side effect of removing
+// older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 10}
-	offsets["stagnant0"] = RemoteOffset{Offset: 1, Error: 10, MeasuredAt: -11}
-	offsets["1"] = RemoteOffset{Offset: 2, Error: 10}
-	offsets["stagnant1"] = RemoteOffset{Offset: 3, Error: 10, MeasuredAt: -20}
+	offsets := map[string]RemoteOffset{
+		"0":         RemoteOffset{Offset: 0, Error: 10, MeasuredAt: 11},
+		"stagnant0": RemoteOffset{Offset: 1, Error: 10, MeasuredAt: 0},
+		"1":         RemoteOffset{Offset: 2, Error: 10, MeasuredAt: 20},
+		"stagnant1": RemoteOffset{Offset: 3, Error: 10, MeasuredAt: 9},
+	}
 
 	// The stagnant offsets older than 10ns ago will be removed.
 	monitorInterval = 10 * time.Nanosecond
@@ -117,8 +174,9 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
-		offsets: offsets,
-		lClock:  clock,
+		offsets:         offsets,
+		lClock:          clock,
+		lastMonitoredAt: 10, // offsets measured before this will be removed.
 	}
 
 	remoteClocks.buildEndpointList()
@@ -131,16 +189,17 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	}
 }
 
-// Test that we correctly determine the interval that a majority of remote
-// offsets overlap.
+// TestFindOffsetInterval tests that we correctly determine the interval that
+// a majority of remote offsets overlap.
 func TestFindOffsetInterval(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 20, Error: 10}
-	offsets["1"] = RemoteOffset{Offset: 58, Error: 20}
-	offsets["2"] = RemoteOffset{Offset: 71, Error: 25}
-	offsets["3"] = RemoteOffset{Offset: 91, Error: 31}
+	offsets := map[string]RemoteOffset{
+		"0": RemoteOffset{Offset: 20, Error: 10},
+		"1": RemoteOffset{Offset: 58, Error: 20},
+		"2": RemoteOffset{Offset: 71, Error: 25},
+		"3": RemoteOffset{Offset: 91, Error: 31},
+	}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -153,15 +212,17 @@ func TestFindOffsetInterval(t *testing.T) {
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
-// Test that, if a majority of offsets do not overlap, an error is returned.
+// TestFindOffsetIntervalNoMajorityOverlap tests that, if a majority of offsets
+// do not overlap, an error is returned.
 func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 1}
-	offsets["1"] = RemoteOffset{Offset: 1, Error: 1}
-	offsets["2"] = RemoteOffset{Offset: 3, Error: 1}
-	offsets["3"] = RemoteOffset{Offset: 4, Error: 1}
+	offsets := map[string]RemoteOffset{
+		"0": RemoteOffset{Offset: 0, Error: 1},
+		"1": RemoteOffset{Offset: 1, Error: 1},
+		"2": RemoteOffset{Offset: 3, Error: 1},
+		"3": RemoteOffset{Offset: 4, Error: 1},
+	}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -173,14 +234,16 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
-// Test that, if most of the clocks have an InfiniteOffset (they missed their
-// last heartbeat), then we get an interval for an infinite offset.
+// TestFindOffsetIntervalWithInfinites tests that, if most of the clocks have
+// an InfiniteOffset (they missed their last heartbeat), then we get an
+// interval for an infinite offset.
 func TestFindOffsetIntervalWithInfinites(t *testing.T) {
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 1}
-	offsets["1"] = InfiniteOffset
-	offsets["2"] = InfiniteOffset
-	offsets["3"] = InfiniteOffset
+	offsets := map[string]RemoteOffset{
+		"0": RemoteOffset{Offset: 0, Error: 1},
+		"1": InfiniteOffset,
+		"2": InfiniteOffset,
+		"3": InfiniteOffset,
+	}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -196,9 +259,10 @@ func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
-// Test that we measure 0 offset if there are no recent remote clock readings.
+// TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
+// no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
-	offsets := make(map[string]RemoteOffset)
+	offsets := map[string]RemoteOffset{}
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(10 * time.Nanosecond)
@@ -210,10 +274,12 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
-// Test that we return the entire remote offset of the single remote clock.
+// TestFindOffsetIntervalOneClock tests that we return the entire remote offset
+// of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
-	offsets := make(map[string]RemoteOffset)
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 10}
+	offsets := map[string]RemoteOffset{
+		"0": RemoteOffset{Offset: 0, Error: 10},
+	}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -228,9 +294,9 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
 
-// Test the edge case of having just two remote clocks.
+// TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
 func TestFindOffsetIntervalTwoClocks(t *testing.T) {
-	offsets := make(map[string]RemoteOffset)
+	offsets := map[string]RemoteOffset{}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -252,8 +318,9 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
-// Tests if we correctly determine if a ClusterOffsetInterval is healthy or not
-// i.e. if it indicates that the local clock has too great an offset or not.
+// TestIsHealthyOffsetInterval tests if we correctly determine if
+// a ClusterOffsetInterval is healthy or not i.e. if it indicates that the
+// local clock has too great an offset or not.
 func TestIsHealthyOffsetInterval(t *testing.T) {
 	maxOffset := 10 * time.Nanosecond
 
