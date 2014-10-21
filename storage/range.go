@@ -290,13 +290,13 @@ func (r *Range) Stop() {
 
 // Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	start := engine.Key(r.Desc.StartKey).Encode(nil)
-	end := engine.Key(r.Desc.EndKey).Encode(nil)
+	start := engine.MVCCEncodeKey(engine.Key(r.Desc.StartKey))
+	end := engine.MVCCEncodeKey(engine.Key(r.Desc.EndKey))
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
 		return util.Errorf("unable to clear key/value data for range %d: %s", r.RangeID, err)
 	}
-	start = engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.StartKey).Encode(nil)
-	end = engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.EndKey).Encode(nil)
+	start = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.StartKey))
+	end = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.EndKey))
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
 		return util.Errorf("unable to clear txn records for range %d: %s", r.RangeID, err)
 	}
@@ -306,7 +306,7 @@ func (r *Range) Destroy() error {
 	if err := engine.ClearRangeStats(r.rm.Engine(), r.RangeID); err != nil {
 		return util.Errorf("unable to clear range stats for range %d: %s", r.RangeID, err)
 	}
-	if err := r.rm.Engine().Clear(makeRangeKey(r.Desc.StartKey)); err != nil {
+	if err := r.rm.Engine().Clear(engine.MVCCEncodeKey(makeRangeKey(r.Desc.StartKey))); err != nil {
 		return util.Errorf("unable to clear metadata for range %d: %s", r.RangeID, err)
 	}
 	return nil
@@ -908,7 +908,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 	}
 
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.Key(args.Key).Encode(nil)
+	encKey := engine.MVCCEncodeKey(engine.Key(args.Key))
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1115,7 +1115,7 @@ func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRe
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.Key(args.Key).Encode(nil)
+	encKey := engine.MVCCEncodeKey(engine.Key(args.Key))
 
 	var txn proto.Transaction
 	ok, _, _, err := engine.GetProto(batch, encKey, &txn)
@@ -1185,7 +1185,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	}
 
 	// Encode the key for direct access to/from the engine.
-	encKey := key.Encode(nil)
+	encKey := engine.MVCCEncodeKey(key)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}

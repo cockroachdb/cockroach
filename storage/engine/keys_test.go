@@ -38,23 +38,6 @@ func TestKeySorting(t *testing.T) {
 	}
 }
 
-func TestKeyEncodeDecode(t *testing.T) {
-	a := Key("a")
-	aEnc := a.Encode(nil)
-	b := Key("b")
-	bEnc := b.Encode(nil)
-	if bytes.Compare(bEnc, aEnc) < 0 {
-		t.Errorf("expected bEnc > aEnc")
-	}
-	aLeftover, aDec := DecodeKey(aEnc)
-	if !aDec.Equal(a) {
-		t.Errorf("exected a == aDec")
-	}
-	if len(aLeftover) != 0 {
-		t.Errorf("expected leftover to be empty; got %q", aLeftover)
-	}
-}
-
 // TestKeyNext tests that the method for creating lexicographic
 // successors to byte slices works as expected.
 func TestKeyNext(t *testing.T) {

@@ -25,12 +25,14 @@ import (
 
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Key defines the key in the key-value datastore.
 type Key []byte
+
+// EncKey is an encoded version of Key.
+type EncKey []byte
 
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
@@ -76,24 +78,6 @@ func (k Key) Address() Key {
 		log.Fatalf("local key %q malformed; should contain prefix %q and four-character designation", k, KeyLocalPrefix)
 	}
 	return k[KeyLocalPrefixLength:]
-}
-
-// DecodeKey returns a Key initialized by decoding a binary-encoded
-// prefix from the passed in bytes slice. Any leftover bytes are
-// returned.
-func DecodeKey(b []byte) ([]byte, Key) {
-	if len(b) == 0 {
-		panic("cannot decode an empty key")
-	}
-	var keyBytes []byte
-	b, keyBytes = encoding.DecodeBinary(b)
-	return b, Key(keyBytes)
-}
-
-// Encode returns a binary-encoded version of the key appended to the
-// supplied byte string, b.
-func (k Key) Encode(b []byte) []byte {
-	return encoding.EncodeBinary(b, []byte(k))
 }
 
 // Next returns the next key in lexicographic sort order.
@@ -222,7 +206,7 @@ func ValidateRangeMetaKey(key Key) error {
 
 func init() {
 	if KeyLocalPrefixLength%7 != 0 {
-		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
+		log.Fatalf("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
 	}
 }
 

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -267,7 +266,7 @@ func (be *blockingEngine) block(key engine.Key) {
 	be.Lock()
 	defer be.Unlock()
 	// Need to binary encode the key so it matches when accessed through MVCC.
-	be.key = key.Encode(nil)
+	be.key = engine.MVCCEncodeKey(key)
 	// Get() and Put() will try to get this lock, so they will wait.
 	be.blocker.Lock()
 }
@@ -806,14 +805,14 @@ func TestRangeSnapshot(t *testing.T) {
 			gReply.Value.Bytes, val1)
 	}
 
-	iscArgs, iscReply := internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd().Encode(nil), engine.KeyMax, 50, "", 1)
+	iscArgs, iscReply := internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
 	snapshotID := iscReply.SnapshotID
-	expectedKey := encoding.EncodeBinary(nil, key1)
+	expectedKey := engine.MVCCEncodeKey(key1)
 	expectedVal := getSerializedMVCCValue(&proto.Value{Bytes: val1})
 	if len(iscReply.Rows) != 4 ||
 		!bytes.Equal(iscReply.Rows[0].Key, expectedKey) ||
@@ -827,13 +826,13 @@ func TestRangeSnapshot(t *testing.T) {
 	err = rng.AddCmd(Put, pArgs, pReply, true)
 
 	// Scan with the previous snapshot will get the old value val2 of key2.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd().Encode(nil), engine.KeyMax, 50, snapshotID, 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, snapshotID, 1)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
-	expectedKey = encoding.EncodeBinary(nil, key2)
+	expectedKey = engine.MVCCEncodeKey(key2)
 	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val2})
 	if len(iscReply.Rows) != 4 ||
 		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
@@ -844,14 +843,14 @@ func TestRangeSnapshot(t *testing.T) {
 	snapshotLastKey := engine.Key(iscReply.Rows[3].Key)
 
 	// Create a new snapshot to cover the latest value.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.KeyLocalPrefix.PrefixEnd().Encode(nil), engine.KeyMax, 50, "", 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1)
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
 		t.Fatalf("error : %s", err)
 	}
 	snapshotID2 := iscReply.SnapshotID
-	expectedKey = encoding.EncodeBinary(nil, key2)
+	expectedKey = engine.MVCCEncodeKey(key2)
 	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val3})
 	// Expect one more mvcc version.
 	if len(iscReply.Rows) != 5 ||
@@ -1069,7 +1068,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key).Encode(nil)
+		txnKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key))
 		if _, _, err := engine.PutProto(rng.rm.Engine(), txnKey, &existTxn); err != nil {
 			t.Fatal(err)
 		}

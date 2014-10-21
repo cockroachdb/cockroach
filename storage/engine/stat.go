@@ -89,7 +89,7 @@ func MakeStoreStatKey(storeID int32, stat Key) Key {
 // on stat decode error.
 func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
 	val := &proto.Value{}
-	ok, _, _, err := GetProto(engine, MakeRangeStatKey(rangeID, stat).Encode(nil), val)
+	ok, _, _, err := GetProto(engine, MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), val)
 	if err != nil || !ok {
 		return 0, err
 	}
@@ -102,10 +102,10 @@ func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
 func MergeStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
-			engine.Merge(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
+			engine.Merge(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)
 		}
 		if storeID != 0 {
-			engine.Merge(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
+			engine.Merge(MVCCEncodeKey(MakeStoreStatKey(storeID, stat)), encStat)
 		}
 	}
 }
@@ -116,10 +116,10 @@ func MergeStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal in
 func SetStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
-			engine.Put(MakeRangeStatKey(rangeID, stat).Encode(nil), encStat)
+			engine.Put(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)
 		}
 		if storeID != 0 {
-			engine.Put(MakeStoreStatKey(storeID, stat).Encode(nil), encStat)
+			engine.Put(MVCCEncodeKey(MakeStoreStatKey(storeID, stat)), encStat)
 		}
 	}
 }
@@ -127,6 +127,6 @@ func SetStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int6
 // ClearRangeStats clears stats for the specified range.
 func ClearRangeStats(engine Engine, rangeID int64) error {
 	statStartKey := MakeKey(KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, rangeID))
-	_, err := ClearRange(engine, statStartKey.Encode(nil), statStartKey.PrefixEnd().Encode(nil))
+	_, err := ClearRange(engine, MVCCEncodeKey(statStartKey), MVCCEncodeKey(statStartKey.PrefixEnd()))
 	return err
 }

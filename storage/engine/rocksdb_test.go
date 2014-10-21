@@ -87,11 +87,31 @@ func TestRocksDBCompaction(t *testing.T) {
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	batch := []interface{}{
 		// TODO(spencer): use Transaction and Response protobufs here.
-		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(rcPre, Key("a")).Encode(nil), Value: encodePutResponse(makeTS(2, 0), t)}},
-		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(rcPre, Key("b")).Encode(nil), Value: encodePutResponse(makeTS(3, 0), t)}},
+		BatchPut{
+			proto.RawKeyValue{
+				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, Key("a"))),
+				Value: encodePutResponse(makeTS(2, 0), t),
+			},
+		},
+		BatchPut{
+			proto.RawKeyValue{
+				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, Key("b"))),
+				Value: encodePutResponse(makeTS(3, 0), t),
+			},
+		},
 
-		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(txnPre, Key("a")).Encode(nil), Value: encodeTransaction(makeTS(1, 0), t)}},
-		BatchPut{proto.RawKeyValue{Key: MakeLocalKey(txnPre, Key("b")).Encode(nil), Value: encodeTransaction(makeTS(2, 0), t)}},
+		BatchPut{
+			proto.RawKeyValue{
+				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, Key("a"))),
+				Value: encodeTransaction(makeTS(1, 0), t),
+			},
+		},
+		BatchPut{
+			proto.RawKeyValue{
+				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, Key("b"))),
+				Value: encodeTransaction(makeTS(2, 0), t),
+			},
+		},
 	}
 	if err := rocksdb.WriteBatch(batch); err != nil {
 		t.Fatal(err)
@@ -108,8 +128,8 @@ func TestRocksDBCompaction(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	expKeys := []Key{
-		MakeLocalKey(rcPre, Key("b")).Encode(nil),
-		MakeLocalKey(txnPre, Key("b")).Encode(nil),
+		MVCCEncodeKey(MakeLocalKey(rcPre, Key("b"))),
+		MVCCEncodeKey(MakeLocalKey(txnPre, Key("b"))),
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)
