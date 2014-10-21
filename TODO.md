@@ -35,8 +35,6 @@
     kv.DB and invoke db.coordinator.EndTxn(false) to clean up
     intents.
 
-* Investigate slowdown in server/ unittests.
-
 * In find mvcc split key, avoid illegal split keys such as meta1
   records and configuration keys. Probably ought to move to a single
   pass through the data instead of the weighted reservoir sample.

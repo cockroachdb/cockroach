@@ -29,8 +29,12 @@ import (
 
 var (
 	// How often the cluster offset is measured.
-	monitorInterval = heartbeatInterval * 10
+	monitorInterval time.Duration
 )
+
+func init() {
+	monitorInterval = heartbeatInterval * 10
+}
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
@@ -171,6 +175,8 @@ func (r *RemoteClockMonitor) findOffsetInterval() (ClusterOffsetInterval, error)
 	endpoints := r.buildEndpointList()
 	sort.Sort(endpoints)
 	numClocks := len(endpoints) / 2
+	log.V(1).Infof("finding offset interval for monitorInterval: %d, numOffsets %d",
+		monitorInterval, numClocks)
 	if numClocks == 0 {
 		return ClusterOffsetInterval{
 			Lowerbound: 0,

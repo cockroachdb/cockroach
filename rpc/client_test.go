@@ -120,6 +120,13 @@ func TestOffsetMeasurement(t *testing.T) {
 	context := NewContext(clientClock, tlsConfig)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
+
+	// Ensure we get a good heartbeat before continuing.
+	err = util.IsTrueWithin(c.IsHealthy, heartbeatInterval*10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	expectedOffset := RemoteOffset{Offset: 5, Error: 5, MeasuredAt: 10}
 	if o := c.RemoteOffset(); o != expectedOffset {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
