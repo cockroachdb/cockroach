@@ -979,7 +979,7 @@ func MVCCEncodeVersionKey(key Key, timestamp proto.Timestamp) Key {
 // exactly 12 trailing bytes and they're decoded into a timestamp.
 // The decoded key, timestamp and true are returned to indicate the
 // key is for an MVCC versioned value.
-func MVCCDecodeKey(encodedKey []byte) (Key, proto.Timestamp, bool) {
+func MVCCDecodeKey(encodedKey Key) (Key, proto.Timestamp, bool) {
 	tsBytes, key := encoding.DecodeBinary(encodedKey)
 	if len(tsBytes) == 0 {
 		return key, proto.Timestamp{}, false

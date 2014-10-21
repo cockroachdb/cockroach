@@ -31,6 +31,9 @@ import (
 // Key defines the key in the key-value datastore.
 type Key []byte
 
+// EncKey is an encoded version of Key.
+type EncKey []byte
+
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
 func MakeKey(keys ...Key) Key {
@@ -203,7 +206,7 @@ func ValidateRangeMetaKey(key Key) error {
 
 func init() {
 	if KeyLocalPrefixLength%7 != 0 {
-		log.Fatal("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
+		log.Fatalf("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
 	}
 }
 

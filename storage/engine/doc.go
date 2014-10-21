@@ -16,6 +16,11 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 /*
+Package engine provides low-level storage. It interacts with storage
+backends (e.g. LevelDB, RocksDB, etc.) via the Engine interface. At
+one level higher, MVCC provides multi-version concurrency control
+capability on top of an Engine instance.
+
 The Engine interface provides an API for key-value stores. InMem
 implements an in-memory engine using a sorted map. RocksDB implements
 an engine for data stored to local disk using RocksDB, a variant of
@@ -26,9 +31,9 @@ engine. MVCC is the basis for Cockroach's support for distributed
 transactions. It is intended for direct use from storage.Range
 objects.
 
-Some notes on MVCC architecture
+Notes on MVCC architecture
 
-Each MVCC value contains a metadata key/value pair and one more more
+Each MVCC value contains a metadata key/value pair and one or more
 version key/value pairs. The MVCC metadata key is the actual key for
 the value, binary encoded using the SQL binary encoding scheme which
 contains a sentinel byte of 0x25, following by a 7-bit encoding of the
@@ -42,19 +47,19 @@ computations.
 
 Each MVCC version key/value pair has a key which is also
 binary-encoded, but is suffixed with a decreasing, big-endian encoding
-of timestamp. 8 bytes for the nanosecond wall time, followed by 4
-bytes for the logical time. The MVCC version value is a message of
+of the timestamp (8 bytes for the nanosecond wall time, followed by 4
+bytes for the logical time). The MVCC version value is a message of
 type proto.MVCCValue which indicates whether the version is a deletion
 timestamp and if not, contains a proto.Value object which holds the
 actual value. The decreasing encoding on the timestamp sorts the most
-recent version directly after the metadata key. This increasing the
+recent version directly after the metadata key. This increases the
 likelihood that an Engine.Get() of the MVCC metadata will get the same
-block containing the most recent version, even in the event there are
-many versions. We rely on getting the MVCC metadata key/value and then
+block containing the most recent version, even if there are many
+versions. We rely on getting the MVCC metadata key/value and then
 using it to directly get the MVCC version using the metadata's most
-recent version timestamp to avoid using an expensive merge iterator to
-scan the most recent version. This also allows us to leverage leveldb's
-bloom filters.
+recent version timestamp. This avoids using an expensive merge
+iterator to scan the most recent version. It also allows us to
+leverage RocksDB's bloom filters.
 
 The 7-bit binary encoding used on the MVCC keys allows arbitrary keys
 to be stored in the map (no restrictions on intermediate nil-bytes,
@@ -63,7 +68,7 @@ that all timestamp-suffixed MVCC version keys sort consecutively with
 the metadata key. It should be noted that the 7-bit binary encoding is
 distasteful and we'd like to substitute it with something which
 preserves at least 7-bit ascii visibility, but has the same sort
-properties. We considered using leveldb's custom key comparator
+properties. We considered using RocksDB's custom key comparator
 functionality, but the attendant risks seemed too great. What risks?
 Mostly that RocksDB is unlikely to have tested custom key comparators
 with their more advanced (and ever-growing) functionality. Further,
@@ -71,19 +76,15 @@ bugs in our code (both C++ and Go) related to the custom comparator
 seemed more likely to be painful than just dealing with the 7-bit
 binary encoding.
 
-Another design point with addressing: does it make sense to inline the
-most recent MVCC version with the MVCCMetadata. The pros are that the
-total byte count would more closely track the "expected" byte count
-when writing single key/value pairs to the store. Also, you might
-expected better scan efficiency, though this wasn't confirmed through
-benchmarks. It might also be the case that multiple versions in many
-databases turns out to be the exception, no the rule. Instead,
-Cockroach always writes the version separately from the metadata to
-avoid a double write when adding all versions beyond the first (the
-original value needs to be rewritten using a version key with
-timestamp appended, and new version written as inlined metadata).
-Further, on the topic of byte counts, the duplicate key prefixes
-between metadata and version keys largely disappears through block
-compression.
+We considered inlining the most recent MVCC version in the
+MVCCMetadata. This would reduce the storage overhead of storing the
+same key twice (which is small due to block compression), and the
+runtime overhead of two separate DB lookups. On the other hand, all
+writes that create a new version of an existing key would incur a
+double write as the previous value is moved out of the MVCCMetadata
+into its versioned key. Preliminary benchmarks have not shown enough
+performance improvement to justify this change, although we may
+revisit this decision if it turns out that multiple versions of the
+same key are rare in practice.
 */
 package engine
