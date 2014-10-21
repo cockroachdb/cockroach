@@ -58,7 +58,7 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 	if err != nil {
 		return util.Errorf("accounting config has invalid format: %s: %s", configStr, err)
 	}
-	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
+	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
 	if err := storage.PutProto(ah.db, acctKey, config); err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("unable to format accouting configurations: %s", err)
 		}
 	} else {
-		acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
+		acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.AcctConfig{}
 		if ok, _, err = storage.GetProto(ah.db, acctKey, config); err != nil {
@@ -149,7 +149,7 @@ func (ah *acctHandler) Delete(path string, r *http.Request) error {
 	if path == "/" {
 		return util.Errorf("the default accounting configuration cannot be deleted")
 	}
-	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.Key(path[1:]))
+	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
 	dr := <-ah.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  acctKey,

@@ -42,7 +42,7 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
-func (db *testDescriptorDB) getDescriptor(key engine.Key) []proto.RangeDescriptor {
+func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor {
 	response := make([]proto.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testDescriptorNode{
@@ -54,12 +54,12 @@ func (db *testDescriptorDB) getDescriptor(key engine.Key) []proto.RangeDescripto
 			break
 		}
 		response = append(response, *(v.(testDescriptorNode).RangeDescriptor))
-		key = engine.Key(response[i].EndKey).Next()
+		key = proto.Key(response[i].EndKey).Next()
 	}
 	return response
 }
 
-func (db *testDescriptorDB) getRangeDescriptor(key engine.Key) ([]proto.RangeDescriptor, error) {
+func (db *testDescriptorDB) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
 	db.hitCount++
 	metadataKey := engine.RangeMetaKey(key)
 
@@ -71,7 +71,7 @@ func (db *testDescriptorDB) getRangeDescriptor(key engine.Key) ([]proto.RangeDes
 	return db.getDescriptor(key), nil
 }
 
-func (db *testDescriptorDB) splitRange(t *testing.T, key engine.Key) {
+func (db *testDescriptorDB) splitRange(t *testing.T, key proto.Key) {
 	v := db.data.Ceil(testDescriptorNode{&proto.RangeDescriptor{EndKey: key}})
 	if v == nil {
 		t.Fatalf("Error splitting range at key %s, range to split not found", string(key))
@@ -119,11 +119,11 @@ func (db *testDescriptorDB) assertHitCount(t *testing.T, expected int) {
 }
 
 func doLookup(t *testing.T, rc *RangeDescriptorCache, key string) {
-	r, err := rc.LookupRangeDescriptor(engine.Key(key))
+	r, err := rc.LookupRangeDescriptor(proto.Key(key))
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
 	}
-	if !r.ContainsKey(engine.Key(key).Address()) {
+	if !r.ContainsKey(engine.KeyAddress(proto.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 }
@@ -135,9 +135,9 @@ func doLookup(t *testing.T, rc *RangeDescriptorCache, key string) {
 func TestRangeCache(t *testing.T) {
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
-		db.splitRange(t, engine.Key(string(char)))
+		db.splitRange(t, proto.Key(string(char)))
 		if i > 0 && i%6 == 0 {
-			db.splitRange(t, engine.RangeMetaKey(engine.Key(string(char))))
+			db.splitRange(t, engine.RangeMetaKey(proto.Key(string(char))))
 		}
 	}
 
@@ -176,7 +176,7 @@ func TestRangeCache(t *testing.T) {
 	db.assertHitCount(t, 0)
 
 	// Evict clears one level 1 and one level 2 cache
-	rangeCache.EvictCachedRangeDescriptor(engine.Key("da"))
+	rangeCache.EvictCachedRangeDescriptor(proto.Key("da"))
 	doLookup(t, rangeCache, "fa")
 	db.assertHitCount(t, 0)
 	doLookup(t, rangeCache, "da")

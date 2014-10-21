@@ -50,25 +50,25 @@ type Engine interface {
 	// Attrs returns the engine/store attributes.
 	Attrs() proto.Attributes
 	// Put sets the given key to the value provided.
-	Put(key Key, value []byte) error
+	Put(key proto.EncodedKey, value []byte) error
 	// Get returns the value for the given key, nil otherwise.
-	Get(key Key) ([]byte, error)
+	Get(key proto.EncodedKey) ([]byte, error)
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
 	// invoked. If f returns an error or if the scan itself encounters
 	// an error, the iteration will stop and return f.
-	Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error
+	Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
 	// engine, rather than inserting tombstones.
-	Clear(key Key) error
+	Clear(key proto.EncodedKey) error
 	// WriteBatch atomically applies the specified writes, deletions and
 	// merges. The list passed to WriteBatch must only contain elements
 	// of type Batch{Put,Merge,Delete}.
 	WriteBatch([]interface{}) error
 	// Merge implements a merge operation with counter semantics.
 	// See the docs for goMergeInit and goMerge for details.
-	Merge(key Key, value []byte) error
+	Merge(key proto.EncodedKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (StoreCapacity, error)
 	// SetGCTimeouts sets a function which yields timeout values for GC
@@ -85,13 +85,13 @@ type Engine interface {
 	ReleaseSnapshot(snapshotID string) error
 	// GetSnapshot returns the value for the given key from the given
 	// snapshotID, nil otherwise.
-	GetSnapshot(key Key, snapshotID string) ([]byte, error)
+	GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error)
 	// IterateSnapshot scans from start to end keys, visiting at
 	// most max key/value pairs from the specified snapshot ID.
-	IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error
+	IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
-	ApproximateSize(start, end Key) (uint64, error)
+	ApproximateSize(start, end proto.EncodedKey) (uint64, error)
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
@@ -124,7 +124,7 @@ type BatchMerge struct {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Engine, key Key, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
+func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBytes, valBytes int64, err error) {
 	var data []byte
 	if data, err = gogoproto.Marshal(msg); err != nil {
 		return
@@ -141,7 +141,7 @@ func PutProto(engine Engine, key Key, msg gogoproto.Message) (keyBytes, valBytes
 // using a protobuf decoder. Returns true on success or false if the
 // key was not found. On success, returns the length in bytes of the
 // key and the value.
-func GetProto(engine Engine, key Key, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+func GetProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
 	var data []byte
 	if data, err = engine.Get(key); err != nil {
 		return
@@ -163,7 +163,7 @@ func GetProto(engine Engine, key Key, msg gogoproto.Message) (ok bool, keyBytes,
 // Increment fetches the varint encoded int64 value specified by key
 // and adds "inc" to it then re-encodes as varint. The newly incremented
 // value is returned.
-func Increment(engine Engine, key Key, inc int64) (int64, error) {
+func Increment(engine Engine, key proto.EncodedKey, inc int64) (int64, error) {
 	// First retrieve existing value.
 	val, err := engine.Get(key)
 	if err != nil {
@@ -205,7 +205,7 @@ func Increment(engine Engine, key Key, inc int64) (int64, error) {
 // Scan returns up to max key/value objects starting from
 // start (inclusive) and ending at end (non-inclusive).
 // Specify max=0 for unbounded scans.
-func Scan(engine Engine, start, end Key, max int64) ([]proto.RawKeyValue, error) {
+func Scan(engine Engine, start, end proto.EncodedKey, max int64) ([]proto.RawKeyValue, error) {
 	var kvs []proto.RawKeyValue
 	err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -218,7 +218,7 @@ func Scan(engine Engine, start, end Key, max int64) ([]proto.RawKeyValue, error)
 }
 
 // ScanSnapshot scans using the given snapshot ID.
-func ScanSnapshot(engine Engine, start, end Key, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
+func ScanSnapshot(engine Engine, start, end proto.EncodedKey, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
 	var kvs []proto.RawKeyValue
 	err := engine.IterateSnapshot(start, end, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -236,7 +236,7 @@ func ScanSnapshot(engine Engine, start, end Key, max int64, snapshotID string) (
 // none, and an error will be returned. Note that this function
 // actually removes entries from the storage engine, rather than
 // inserting tombstones, as with deletion through the MVCC.
-func ClearRange(engine Engine, start, end Key) (int, error) {
+func ClearRange(engine Engine, start, end proto.EncodedKey) (int, error) {
 	var deletes []interface{}
 	if err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		deletes = append(deletes, BatchDelete{proto.RawKeyValue{Key: kv.Key}})

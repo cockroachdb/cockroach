@@ -40,13 +40,13 @@ func ExampleSetAndGetAccts() {
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
-		prefix engine.Key
+		prefix proto.Key
 		yaml   string
 	}{
 		{engine.KeyMin, testAcctConfig},
-		{engine.Key("db1"), testAcctConfig},
-		{engine.Key("db 2"), testAcctConfig},
-		{engine.Key("\xfe"), testAcctConfig},
+		{proto.Key("db1"), testAcctConfig},
+		{proto.Key("db 2"), testAcctConfig},
+		{proto.Key("\xfe"), testAcctConfig},
 	}
 
 	for _, test := range testData {
@@ -81,12 +81,12 @@ func ExampleLsAccts() {
 	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
-		engine.Key("db2"),
-		engine.Key("db3"),
-		engine.Key("user"),
+		proto.Key("db1"),
+		proto.Key("db2"),
+		proto.Key("db3"),
+		proto.Key("user"),
 	}
 
 	regexps := []string{
@@ -139,9 +139,9 @@ func ExampleRmAccts() {
 	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
+		proto.Key("db1"),
 	}
 
 	for _, key := range keys {

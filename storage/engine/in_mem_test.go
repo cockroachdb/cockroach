@@ -43,7 +43,7 @@ func TestInMemCapacity(t *testing.T) {
 	bytes := []byte("0123456789")
 
 	// Add a key.
-	err = engine.Put(Key(bytes), bytes)
+	err = engine.Put(proto.EncodedKey(bytes), bytes)
 	if err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
 	}
@@ -58,7 +58,7 @@ func TestInMemCapacity(t *testing.T) {
 	}
 
 	// Remove key.
-	err = engine.Clear(Key(bytes))
+	err = engine.Clear(proto.EncodedKey(bytes))
 	if err != nil {
 		t.Errorf("delete: expected no error, but got %s", err)
 	}
@@ -74,12 +74,12 @@ func TestInMemOverCapacity(t *testing.T) {
 	value := []byte("0123456789")
 	// Create an engine with enough space for one, but not two, nodes.
 	engine := NewInMem(proto.Attributes{},
-		int64(float64(computeSize(proto.RawKeyValue{Key: Key("X"), Value: value}))*1.5))
+		int64(float64(computeSize(proto.RawKeyValue{Key: proto.EncodedKey("X"), Value: value}))*1.5))
 	var err error
-	if err = engine.Put(Key("1"), value); err != nil {
+	if err = engine.Put(proto.EncodedKey("1"), value); err != nil {
 		t.Errorf("put: expected no error, but got %s", err)
 	}
-	if err = engine.Put(Key("2"), value); err == nil {
+	if err = engine.Put(proto.EncodedKey("2"), value); err == nil {
 		t.Error("put: expected error, but got none")
 	}
 }
@@ -88,7 +88,7 @@ func BenchmarkCapacity(b *testing.B) {
 	engine := NewInMem(proto.Attributes{}, 1<<30)
 	bytes := []byte("0123456789")
 	for i := 0; i < b.N; i++ {
-		if err := engine.Put(Key(fmt.Sprintf("%d", i)), bytes); err != nil {
+		if err := engine.Put(proto.EncodedKey(fmt.Sprintf("%d", i)), bytes); err != nil {
 			b.Fatalf("put: expected no error, but got %s", err)
 		}
 		if i%10000 == 0 {

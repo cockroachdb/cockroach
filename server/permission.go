@@ -58,7 +58,7 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 	if err != nil {
 		return util.Errorf("permission config has invalid format: %s: %s", configStr, err)
 	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
+	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
 	if err := storage.PutProto(ph.db, permKey, config); err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("unable to format permission configurations: %s", err)
 		}
 	} else {
-		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
+		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.PermConfig{}
 		if ok, _, err = storage.GetProto(ph.db, permKey, config); err != nil {
@@ -149,7 +149,7 @@ func (ph *permHandler) Delete(path string, r *http.Request) error {
 	if path == "/" {
 		return util.Errorf("the default permission configuration cannot be deleted")
 	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key(path[1:]))
+	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
 	dr := <-ph.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  permKey,

@@ -35,7 +35,7 @@ const (
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
-type rangeCacheKey engine.Key
+type rangeCacheKey proto.Key
 
 // Compare implements the llrb.Comparable interface for rangeCacheKey, so that
 // it can be used as a key for util.OrderedCache.
@@ -60,7 +60,7 @@ type rangeDescriptorDB interface {
 	// RangeDescriptors are returned with the intent of pre-caching
 	// subsequent ranges which are likely to be requested soon by the
 	// current workload.
-	getRangeDescriptor(engine.Key) ([]proto.RangeDescriptor, error)
+	getRangeDescriptor(proto.Key) ([]proto.RangeDescriptor, error)
 }
 
 // RangeDescriptorCache is used to retrieve range descriptors for
@@ -104,7 +104,7 @@ func NewRangeDescriptorCache(db rangeDescriptorDB) *RangeDescriptorCache {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key engine.Key) (*proto.RangeDescriptor, error) {
+func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
 	_, r := rmc.getCachedRangeDescriptor(key)
 	if r != nil {
 		return r, nil
@@ -126,7 +126,7 @@ func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key engine.Key) (*proto.R
 // for the given key. It is intended that this method be called from a
 // consumer of RangeDescriptorCache if the returned range descriptor is
 // discovered to be stale.
-func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key engine.Key) {
+func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 	for {
 		k, _ := rmc.getCachedRangeDescriptor(key)
 		if k != nil {
@@ -147,7 +147,7 @@ func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key engine.Key) {
 // getCachedRangeDescriptor is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in
 // the cache.
-func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key engine.Key) (
+func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	metaKey := engine.RangeMetaKey(key)
 	rmc.rangeCacheMu.RLock()
@@ -161,7 +161,7 @@ func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key engine.Key) (
 	rd := v.(*proto.RangeDescriptor)
 
 	// Check that key actually belongs to range
-	if !rd.ContainsKey(key.Address()) {
+	if !rd.ContainsKey(engine.KeyAddress(key)) {
 		return nil, nil
 	}
 	return metaEndKey, rd

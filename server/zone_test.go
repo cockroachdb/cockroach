@@ -47,13 +47,13 @@ func ExampleSetAndGetZone() {
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
-		prefix engine.Key
+		prefix proto.Key
 		yaml   string
 	}{
 		{engine.KeyMin, testZoneConfig},
-		{engine.Key("db1"), testZoneConfig},
-		{engine.Key("db 2"), testZoneConfig},
-		{engine.Key("\xfe"), testZoneConfig},
+		{proto.Key("db1"), testZoneConfig},
+		{proto.Key("db 2"), testZoneConfig},
+		{proto.Key("\xfe"), testZoneConfig},
 	}
 
 	for _, test := range testData {
@@ -108,12 +108,12 @@ func ExampleLsZones() {
 	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
-		engine.Key("db2"),
-		engine.Key("db3"),
-		engine.Key("user"),
+		proto.Key("db1"),
+		proto.Key("db2"),
+		proto.Key("db3"),
+		proto.Key("user"),
 	}
 
 	regexps := []string{
@@ -166,9 +166,9 @@ func ExampleRmZones() {
 	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
+		proto.Key("db1"),
 	}
 
 	for _, key := range keys {

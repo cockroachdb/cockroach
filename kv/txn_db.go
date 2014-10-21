@@ -135,7 +135,7 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 	if tdb.txn == nil {
 		// Use Key.Address() for base key or else the txn record isn't
 		// guaranteed to be located on the same range as the first key.
-		tdb.txn = storage.NewTransaction(tdb.Name, engine.Key(args.Header().Key).Address(),
+		tdb.txn = storage.NewTransaction(tdb.Name, engine.KeyAddress(args.Header().Key),
 			tdb.UserPriority, tdb.Isolation, tdb.clock)
 		tdb.timestamp = tdb.txn.Timestamp
 	}

@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -149,7 +148,7 @@ func (kv *LocalKV) Close() {
 
 // lookupReplica looks up replica by key [range]. Lookups are done
 // by consulting each store in turn via Store.LookupRange(key).
-func (kv *LocalKV) lookupReplica(start, end engine.Key) (*proto.Replica, error) {
+func (kv *LocalKV) lookupReplica(start, end proto.Key) (*proto.Replica, error) {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
 	for _, store := range kv.storeMap {

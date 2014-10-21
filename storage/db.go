@@ -281,7 +281,7 @@ func (db *BaseDB) RunTransaction(opts *TransactionOptions, retryable func(db DB)
 // value. The first result parameter is "ok": true if a value was
 // found for the requested key; false otherwise. An error is returned
 // on error fetching from underlying storage or deserializing value.
-func GetI(db DB, key engine.Key, iface interface{}) (bool, proto.Timestamp, error) {
+func GetI(db DB, key proto.Key, iface interface{}) (bool, proto.Timestamp, error) {
 	value, err := getInternal(db, key)
 	if err != nil || value == nil {
 		return false, proto.Timestamp{}, err
@@ -298,7 +298,7 @@ func GetI(db DB, key engine.Key, iface interface{}) (bool, proto.Timestamp, erro
 // GetProto fetches the value at the specified key and unmarshals it
 // using a protobuf decoder. See comments for GetI for details on
 // return values.
-func GetProto(db DB, key engine.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
+func GetProto(db DB, key proto.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
 	value, err := getInternal(db, key)
 	if err != nil || value == nil {
 		return false, proto.Timestamp{}, err
@@ -313,7 +313,7 @@ func GetProto(db DB, key engine.Key, msg gogoproto.Message) (bool, proto.Timesta
 }
 
 // getInternal fetches the requested key and returns the value.
-func getInternal(db DB, key engine.Key) (*proto.Value, error) {
+func getInternal(db DB, key proto.Key) (*proto.Value, error) {
 	gr := <-db.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -330,7 +330,7 @@ func getInternal(db DB, key engine.Key) (*proto.Value, error) {
 }
 
 // PutI sets the given key to the gob-serialized byte string of value.
-func PutI(db DB, key engine.Key, iface interface{}) error {
+func PutI(db DB, key proto.Key, iface interface{}) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
 		return err
@@ -340,7 +340,7 @@ func PutI(db DB, key engine.Key, iface interface{}) error {
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg.
-func PutProto(db DB, key engine.Key, msg gogoproto.Message) error {
+func PutProto(db DB, key proto.Key, msg gogoproto.Message) error {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return err
@@ -349,7 +349,7 @@ func PutProto(db DB, key engine.Key, msg gogoproto.Message) error {
 }
 
 // putInternal writes the specified value to key.
-func putInternal(db DB, key engine.Key, value proto.Value) error {
+func putInternal(db DB, key proto.Key, value proto.Value) error {
 	value.InitChecksum(key)
 	pr := <-db.Put(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
@@ -413,7 +413,7 @@ func UpdateRangeAddressing(db DB, desc *proto.RangeDescriptor) error {
 // a randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Range.InternalPushTxn).
-func NewTransaction(name string, baseKey engine.Key, userPriority int32,
+func NewTransaction(name string, baseKey proto.Key, userPriority int32,
 	isolation proto.IsolationType, clock *hlc.Clock) *proto.Transaction {
 	// Compute priority by adjusting based on userPriority factor.
 	priority := proto.MakePriority(userPriority)

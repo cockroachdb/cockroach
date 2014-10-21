@@ -44,7 +44,7 @@ func NewBatch(engine Engine) *Batch {
 }
 
 // Put stores the key / value as a BatchPut in the updates tree.
-func (b *Batch) Put(key Key, value []byte) error {
+func (b *Batch) Put(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -58,7 +58,7 @@ func (b *Batch) Put(key Key, value []byte) error {
 // merge is performed on the fly to combine with the value from the
 // underlying engine. Otherwise, the Get is simply passed through to
 // the wrapped engine.
-func (b *Batch) Get(key Key) ([]byte, error) {
+func (b *Batch) Get(key proto.EncodedKey) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -82,7 +82,7 @@ func (b *Batch) Get(key Key) ([]byte, error) {
 
 // iterateUpdates scans the updates tree from start to end, invoking f
 // on each value until f returns false or an error.
-func (b *Batch) iterateUpdates(start, end Key, f func(proto.RawKeyValue) (bool, error)) (bool, error) {
+func (b *Batch) iterateUpdates(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) (bool, error) {
 	var done bool
 	var err error
 	// Scan the updates tree for the key range, merging as we go.
@@ -111,12 +111,12 @@ func (b *Batch) iterateUpdates(start, end Key, f func(proto.RawKeyValue) (bool, 
 // iterator-style interface to the update map. If/when one is
 // provided by the llrb implementation it should be used here
 // to make this code more efficient.
-func (b *Batch) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
+func (b *Batch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
 	last := start
 	if err := b.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Merge iteration from updates tree at each key/value.
 		done, err := b.iterateUpdates(last, kv.Key, f)
-		last = Key(kv.Key).Next()
+		last = proto.EncodedKey(proto.Key(kv.Key).Next())
 		if !done && err == nil {
 			val := b.updates.Get(proto.RawKeyValue{Key: kv.Key})
 			if val != nil {
@@ -148,7 +148,7 @@ func (b *Batch) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error))
 
 // Scan scans from both the updates tree and the underlying engine
 // and combines the results, up to max.
-func (b *Batch) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
+func (b *Batch) Scan(start, end proto.EncodedKey, max int64) ([]proto.RawKeyValue, error) {
 	var kvs []proto.RawKeyValue
 	err := b.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
@@ -161,7 +161,7 @@ func (b *Batch) Scan(start, end Key, max int64) ([]proto.RawKeyValue, error) {
 }
 
 // Clear stores the key as a BatchDelete in the updates tree.
-func (b *Batch) Clear(key Key) error {
+func (b *Batch) Clear(key proto.EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -176,7 +176,7 @@ func (b *Batch) Clear(key Key) error {
 // existing BatchMerge and kept as a BatchMerge. If the updates map
 // contains a BatchDelete, then this value is merged with a nil byte
 // slice and stored as a BatchPut.
-func (b *Batch) Merge(key Key, value []byte) error {
+func (b *Batch) Merge(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -218,7 +218,7 @@ func (b *Batch) Commit() error {
 	b.updates.DoRange(func(n llrb.Comparable) (done bool) {
 		batch = append(batch, n)
 		return false
-	}, proto.RawKeyValue{Key: KeyMin}, proto.RawKeyValue{Key: KeyMax})
+	}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMin)}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
 	b.committed = true
 	return b.engine.WriteBatch(batch)
 }
@@ -263,17 +263,17 @@ func (b *Batch) ReleaseSnapshot(snapshotID string) error {
 }
 
 // GetSnapshot returns an error if called on a Batch.
-func (b *Batch) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+func (b *Batch) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
 	return nil, util.Errorf("cannot get with a snapshot from a Batch")
 }
 
 // IterateSnapshot returns an error if called on a Batch.
-func (b *Batch) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+func (b *Batch) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
 	return util.Errorf("cannot iterate with a snapshot from a Batch")
 }
 
 // ApproximateSize returns an error if called on a Batch.
-func (b *Batch) ApproximateSize(start, end Key) (uint64, error) {
+func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return 0, util.Errorf("cannot get approximate size from a Batch")
 }
 

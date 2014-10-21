@@ -95,7 +95,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	txnChannel := make(chan struct{}, 1000)
 
 	// Set five split keys, about evenly spaced along the range of random keys.
-	splitKeys := []engine.Key{engine.Key("G"), engine.Key("R"), engine.Key("a"), engine.Key("l"), engine.Key("s")}
+	splitKeys := []proto.Key{proto.Key("G"), proto.Key("R"), proto.Key("a"), proto.Key("l"), proto.Key("s")}
 
 	// Start up the concurrent goroutines which run transactions.
 	const concurrency = 10

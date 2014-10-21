@@ -123,7 +123,7 @@ func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) 
 		end = header.Key
 	}
 	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
-		header.Key, end, func(start, end engine.Key, config interface{}) error {
+		header.Key, end, func(start, end proto.Key, config interface{}) error {
 			perm := config.(*proto.PermConfig)
 			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
 				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
@@ -150,7 +150,7 @@ func (kv *DistKV) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
-func (kv *DistKV) internalRangeLookup(key engine.Key,
+func (kv *DistKV) internalRangeLookup(key proto.Key,
 	info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
@@ -189,7 +189,7 @@ func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
 // RangeDescriptors are returned with the intent of pre-caching
 // subsequent ranges which are likely to be requested soon by the
 // current workload.
-func (kv *DistKV) getRangeDescriptor(key engine.Key) ([]proto.RangeDescriptor, error) {
+func (kv *DistKV) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.

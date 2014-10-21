@@ -54,9 +54,9 @@ message RequestHeader {
   optional ClientCmdID cmd_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
-  optional bytes key = 3 [(gogoproto.nullable) = false];
+  optional bytes key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // End key is empty if request spans only a single key.
-  optional bytes end_key = 4 [(gogoproto.nullable) = false];
+  optional bytes end_key = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // User is the originating user. Used to lookup priority when
   // scheduling queued operations at target node.
   optional string user = 5 [(gogoproto.nullable) = false];
@@ -345,7 +345,7 @@ message EnqueueMessageResponse {
 // recomputed).
 message AdminSplitRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bytes split_key = 2;
+  optional bytes split_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

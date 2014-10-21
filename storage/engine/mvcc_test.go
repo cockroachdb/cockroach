@@ -38,10 +38,10 @@ import (
 
 // Constants for system-reserved keys in the KV map.
 var (
-	testKey1     = Key("/db1")
-	testKey2     = Key("/db2")
-	testKey3     = Key("/db3")
-	testKey4     = Key("/db4")
+	testKey1     = proto.Key("/db1")
+	testKey2     = proto.Key("/db2")
+	testKey3     = proto.Key("/db3")
+	testKey4     = proto.Key("/db4")
 	txn1         = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1}
 	txn1Commit   = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.COMMITTED}
 	txn1Abort    = &proto.Transaction{ID: []byte("Txn1"), Epoch: 1, Status: proto.ABORTED}
@@ -93,8 +93,8 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 // a\x00<t=1>
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
-	aKey := []byte("a")
-	a0Key := []byte("a\x00")
+	aKey := proto.Key("a")
+	a0Key := proto.Key("a\x00")
 	keys := []string{
 		string(MVCCEncodeKey(aKey)),
 		string(MVCCEncodeVersionKey(aKey, makeTS(math.MaxInt64, 0))),
@@ -544,19 +544,19 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	err := mvcc.Put(Key("/a"), makeTS(1, 0), value1, nil)
-	err = mvcc.Put(Key("/a"), makeTS(2, 0), value2, nil)
-	err = mvcc.Put(Key("/aa"), makeTS(2, 0), value2, nil)
-	err = mvcc.Put(Key("/aa"), makeTS(3, 0), value3, nil)
-	err = mvcc.Put(Key("/b"), makeTS(1, 0), value3, nil)
+	err := mvcc.Put(proto.Key("/a"), makeTS(1, 0), value1, nil)
+	err = mvcc.Put(proto.Key("/a"), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(proto.Key("/aa"), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(proto.Key("/aa"), makeTS(3, 0), value3, nil)
+	err = mvcc.Put(proto.Key("/b"), makeTS(1, 0), value3, nil)
 
-	kvs, err := mvcc.Scan(Key("/a"), Key("/b"), 0, makeTS(2, 0), nil)
+	kvs, err := mvcc.Scan(proto.Key("/a"), proto.Key("/b"), 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, Key("/a")) ||
-		!bytes.Equal(kvs[1].Key, Key("/aa")) ||
+		!bytes.Equal(kvs[0].Key, proto.Key("/a")) ||
+		!bytes.Equal(kvs[1].Key, proto.Key("/aa")) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
 		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
@@ -1199,7 +1199,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Put a value.
 	ts := makeTS(0, 1)
-	key := Key("a")
+	key := proto.Key("a")
 	value := proto.Value{Bytes: []byte("value")}
 	if err := mvcc.Put(key, ts, value, nil); err != nil {
 		t.Fatal(err)
