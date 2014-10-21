@@ -27,22 +27,22 @@ import (
 )
 
 var (
-	aKey  = Key("a").Encode(nil)
-	bKey  = Key("b").Encode(nil)
-	cKey  = Key("c").Encode(nil)
+	aKey  = Key("a")
+	bKey  = Key("b")
+	cKey  = Key("c")
 	aKeys = []Key{
-		aKey,
-		mvccEncodeKey(aKey, makeTS(2E9, 0)),
-		mvccEncodeKey(aKey, makeTS(1E9, 1)),
-		mvccEncodeKey(aKey, makeTS(1E9, 0)),
+		MVCCEncodeKey(aKey),
+		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
+		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
+		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
 	}
 	bKeys = []Key{
-		bKey,
-		mvccEncodeKey(bKey, makeTS(2E9, 0)),
-		mvccEncodeKey(bKey, makeTS(1E9, 0)),
+		MVCCEncodeKey(bKey),
+		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
+		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
 	}
 	cKeys = []Key{
-		mvccEncodeKey(cKey, makeTS(1E9, 0)),
+		MVCCEncodeKey(cKey),
 	}
 	keys = append(aKeys, append(bKeys, cKeys...)...)
 )
@@ -59,14 +59,14 @@ func serializedMVCCValue(deleted bool, t *testing.T) []byte {
 // key are grouped together and non-MVCC keys are considered singly.
 func TestGarbageCollectorMVCCPrefix(t *testing.T) {
 	expPrefixes := []Key{
-		aKey,
-		aKey,
-		aKey,
-		aKey,
-		bKey,
-		bKey,
-		bKey,
-		cKey,
+		MVCCEncodeKey(aKey),
+		MVCCEncodeKey(aKey),
+		MVCCEncodeKey(aKey),
+		MVCCEncodeKey(aKey),
+		MVCCEncodeKey(bKey),
+		MVCCEncodeKey(bKey),
+		MVCCEncodeKey(bKey),
+		MVCCEncodeKey(cKey),
 	}
 	gc := NewGarbageCollector(makeTS(0, 0), nil)
 	prefixes := []Key{}

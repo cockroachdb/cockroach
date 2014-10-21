@@ -25,7 +25,6 @@ import (
 
 	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -76,24 +75,6 @@ func (k Key) Address() Key {
 		log.Fatalf("local key %q malformed; should contain prefix %q and four-character designation", k, KeyLocalPrefix)
 	}
 	return k[KeyLocalPrefixLength:]
-}
-
-// DecodeKey returns a Key initialized by decoding a binary-encoded
-// prefix from the passed in bytes slice. Any leftover bytes are
-// returned.
-func DecodeKey(b []byte) ([]byte, Key) {
-	if len(b) == 0 {
-		panic("cannot decode an empty key")
-	}
-	var keyBytes []byte
-	b, keyBytes = encoding.DecodeBinary(b)
-	return b, Key(keyBytes)
-}
-
-// Encode returns a binary-encoded version of the key appended to the
-// supplied byte string, b.
-func (k Key) Encode(b []byte) []byte {
-	return encoding.EncodeBinary(b, []byte(k))
 }
 
 // Next returns the next key in lexicographic sort order.

@@ -33,7 +33,6 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -94,17 +93,17 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 // a\x00<t=1>
 // a\x00<t=0>
 func TestMVCCKeys(t *testing.T) {
-	aBinKey := encoding.EncodeBinary(nil, []byte("a"))
-	a0BinKey := encoding.EncodeBinary(nil, []byte("a\x00"))
+	aKey := []byte("a")
+	a0Key := []byte("a\x00")
 	keys := []string{
-		string(aBinKey),
-		string(mvccEncodeKey(aBinKey, makeTS(math.MaxInt64, 0))),
-		string(mvccEncodeKey(aBinKey, makeTS(1, 0))),
-		string(mvccEncodeKey(aBinKey, makeTS(0, 0))),
-		string(a0BinKey),
-		string(mvccEncodeKey(a0BinKey, makeTS(math.MaxInt64, 0))),
-		string(mvccEncodeKey(a0BinKey, makeTS(1, 0))),
-		string(mvccEncodeKey(a0BinKey, makeTS(0, 0))),
+		string(MVCCEncodeKey(aKey)),
+		string(MVCCEncodeVersionKey(aKey, makeTS(math.MaxInt64, 0))),
+		string(MVCCEncodeVersionKey(aKey, makeTS(1, 0))),
+		string(MVCCEncodeVersionKey(aKey, makeTS(0, 0))),
+		string(MVCCEncodeKey(a0Key)),
+		string(MVCCEncodeVersionKey(a0Key, makeTS(math.MaxInt64, 0))),
+		string(MVCCEncodeVersionKey(a0Key, makeTS(1, 0))),
+		string(MVCCEncodeVersionKey(a0Key, makeTS(0, 0))),
 	}
 	sortKeys := make([]string, len(keys))
 	copy(sortKeys, keys)
@@ -328,7 +327,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify nothing is written to the engine.
-	if val, err := engine.Get(encoding.EncodeBinary(nil, testKey1)); err != nil || val != nil {
+	if val, err := engine.Get(MVCCEncodeKey(testKey1)); err != nil || val != nil {
 		t.Fatal("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
 	}
 }
@@ -472,20 +471,19 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	// b<T=5>
 	// In this case, if we scan from "a"-"b", we wish to skip
 	// a<T=2> and a<T=1> and find "aa'.
-	err := mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(1, 0), value1, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/a")), makeTS(2, 0), value2, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(2, 0), value2, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/aa")), makeTS(3, 0), value3, nil)
-	err = mvcc.Put(Key(encoding.EncodeString([]byte{}, "/b")), makeTS(1, 0), value3, nil)
+	err := mvcc.Put(Key("/a"), makeTS(1, 0), value1, nil)
+	err = mvcc.Put(Key("/a"), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(Key("/aa"), makeTS(2, 0), value2, nil)
+	err = mvcc.Put(Key("/aa"), makeTS(3, 0), value3, nil)
+	err = mvcc.Put(Key("/b"), makeTS(1, 0), value3, nil)
 
-	kvs, err := mvcc.Scan(Key(encoding.EncodeString([]byte{}, "/a")),
-		Key(encoding.EncodeString([]byte{}, "/b")), 0, makeTS(2, 0), nil)
+	kvs, err := mvcc.Scan(Key("/a"), Key("/b"), 0, makeTS(2, 0), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(kvs) != 2 ||
-		!bytes.Equal(kvs[0].Key, Key(encoding.EncodeString([]byte{}, "/a"))) ||
-		!bytes.Equal(kvs[1].Key, Key(encoding.EncodeString([]byte{}, "/aa"))) ||
+		!bytes.Equal(kvs[0].Key, Key("/a")) ||
+		!bytes.Equal(kvs[1].Key, Key("/aa")) ||
 		!bytes.Equal(kvs[0].Value.Bytes, value2.Bytes) ||
 		!bytes.Equal(kvs[1].Value.Bytes, value2.Bytes) {
 		t.Fatal("the value should not be empty")
@@ -745,7 +743,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 	if err != nil || value != nil {
 		t.Fatalf("the value should be empty: %s", err)
 	}
-	meta, err := engine.Get(encoding.EncodeBinary(nil, testKey1))
+	meta, err := engine.Get(MVCCEncodeKey(testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +762,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meta, err := engine.Get(encoding.EncodeBinary(nil, testKey1))
+	meta, err := engine.Get(MVCCEncodeKey(testKey1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1133,9 +1131,9 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := mvcc.Put(key, ts, value, nil); err != nil {
 		t.Fatal(err)
 	}
-	mKeySize := int64(len(key.Encode(nil)))
+	mKeySize := int64(len(MVCCEncodeKey(key)))
 	mValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts}, t)
-	vKeySize := int64(len(mvccEncodeKey(key.Encode(nil), ts)))
+	vKeySize := int64(len(MVCCEncodeVersionKey(key, ts)))
 	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
 
 	ms := MVCCStats{
@@ -1155,7 +1153,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
-	v2KeySize := int64(len(mvccEncodeKey(key.Encode(nil), ts2)))
+	v2KeySize := int64(len(MVCCEncodeVersionKey(key, ts2)))
 	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
 	ms2 := MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,

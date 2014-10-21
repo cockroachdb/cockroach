@@ -85,7 +85,7 @@ func (rc *ResponseCache) ClearInflight() {
 func (rc *ResponseCache) ClearData() error {
 	p := responseCacheKeyPrefix(rc.rangeID)
 	end := p.PrefixEnd()
-	_, err := engine.ClearRange(rc.engine, p.Encode(nil), end.Encode(nil))
+	_, err := engine.ClearRange(rc.engine, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
 	return err
 }
 
@@ -119,7 +119,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
-	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
+	encKey := engine.MVCCEncodeKey(responseCacheKey(rc.rangeID, cmdID))
 	if ok, _, _, err := engine.GetProto(rc.engine, encKey, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
@@ -141,8 +141,8 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID int64) error {
 	defer rc.Unlock()
 
 	prefix := responseCacheKeyPrefix(rc.rangeID)
-	start := prefix.Encode(nil)
-	end := prefix.PrefixEnd().Encode(nil)
+	start := engine.MVCCEncodeKey(prefix)
+	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
 	return rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
@@ -151,7 +151,7 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID int64) error {
 		if err != nil {
 			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
 		}
-		encKey := responseCacheKey(destRangeID, cmdID).Encode(nil)
+		encKey := engine.MVCCEncodeKey(responseCacheKey(destRangeID, cmdID))
 		return false, e.Put(encKey, kv.Value)
 	})
 }
@@ -167,7 +167,7 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{})
 		return nil
 	}
 	// Write the response value to the engine.
-	encKey := responseCacheKey(rc.rangeID, cmdID).Encode(nil)
+	encKey := engine.MVCCEncodeKey(responseCacheKey(rc.rangeID, cmdID))
 	rwResp := &proto.ReadWriteCmdResponse{}
 	rwResp.SetValue(reply)
 	_, _, err := engine.PutProto(rc.engine, encKey, rwResp)
@@ -224,16 +224,16 @@ func responseCacheKey(rangeID int64, cmdID proto.ClientCmdID) engine.Key {
 
 func (rc *ResponseCache) decodeKey(encKey []byte) (proto.ClientCmdID, error) {
 	ret := proto.ClientCmdID{}
-	leftover, decKey := engine.DecodeKey(encKey)
-	if len(leftover) != 0 {
-		return ret, util.Errorf("key %q contains extra bytes: %q", encKey, leftover)
+	key, _, isValue := engine.MVCCDecodeKey(encKey)
+	if isValue {
+		return ret, util.Errorf("key %q is not a raw MVCC value", encKey)
 	}
 	minLen := len(engine.KeyLocalResponseCachePrefix)
-	if len(decKey) < minLen {
-		return ret, util.Errorf("key not long enough to be decoded: %q", decKey)
+	if len(key) < minLen {
+		return ret, util.Errorf("key not long enough to be decoded: %q", key)
 	}
 	// First, Cut the prefix and the range ID.
-	b := decKey[minLen:]
+	b := key[minLen:]
 	b, _ = encoding.DecodeInt(b)
 	// Second, read the wall time.
 	b, wt := encoding.DecodeInt(b)

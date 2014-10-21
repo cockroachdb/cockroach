@@ -20,6 +20,7 @@ package engine
 import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -42,10 +43,8 @@ func NewGarbageCollector(now proto.Timestamp, policyFn func(key Key) *proto.GCPo
 // MVCCPrefix returns the full key as prefix for non-version MVCC
 // keys and otherwise just the encoded key portion of version MVCC keys.
 func (gc *GarbageCollector) MVCCPrefix(key Key) int {
-	if dKey, _, isValue := mvccDecodeKey(key); isValue {
-		return len(dKey)
-	}
-	return len(key)
+	remaining, _ := encoding.DecodeBinary(key)
+	return len(key) - len(remaining)
 }
 
 // Filter makes decisions about garbage collection based on the
@@ -59,8 +58,8 @@ func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
 		return nil
 	}
 	// Look up the policy which applies to this set of MVCC values.
-	_, decKey := DecodeKey(keys[0])
-	policy := gc.policyFn(decKey)
+	dKey, ts, isValue := MVCCDecodeKey(keys[0])
+	policy := gc.policyFn(dKey)
 	if policy == nil || policy.TTLSeconds <= 0 {
 		return nil
 	}
@@ -70,7 +69,6 @@ func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
 
 	var survivors bool
 	for i, key := range keys {
-		_, ts, isValue := mvccDecodeKey(key)
 		if i == 0 {
 			if isValue {
 				log.Errorf("unexpected MVCC value encountered: %q", key)
@@ -78,6 +76,7 @@ func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
 			}
 			continue
 		}
+		_, ts, isValue = MVCCDecodeKey(key)
 		if !isValue {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
 			return make([]bool, len(keys))
