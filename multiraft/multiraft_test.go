@@ -94,6 +94,11 @@ func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 // Trigger an election on node i and wait for it to complete.
 // TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
 func (c *testCluster) waitForElection(i int) *EventLeaderElection {
+	// TODO(bdarnell): remove this sleep.
+	// It addresses a race in which the node's initial configuration is not ready until
+	// a write task has completed, so if our second tick happens before that happens
+	// the election won't occur.
+	time.Sleep(time.Millisecond)
 	// Elections are currently triggered after ElectionTimeoutTicks+1 ticks.
 	c.tickers[i].Tick()
 	c.tickers[i].Tick()
@@ -104,6 +109,7 @@ func TestInitialLeaderElection(t *testing.T) {
 	// Run the test three times, each time triggering a different node's election clock.
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
+		log.Infof("testing leader election for node %v", leaderIndex)
 		cluster := newTestCluster(3, t)
 		groupID := uint64(1)
 		cluster.createGroup(groupID, 3)
@@ -141,7 +147,7 @@ func TestCommand(t *testing.T) {
 }
 
 // TODO(bdarnell): reinstate this test once we re-integrate the storage system.
-func disabledTestSlowStorage(t *testing.T) {
+func TestSlowStorage(t *testing.T) {
 	cluster := newTestCluster(3, t)
 	defer cluster.stop()
 	groupID := uint64(1)
