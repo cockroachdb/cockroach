@@ -64,7 +64,8 @@ func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
 type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
-	ready              chan bool // Heartbeats are processed when a value is sent here.
+	// Heartbeats are processed when a value is sent here.
+	ready chan struct{}
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.

@@ -54,7 +54,7 @@ func TestManualHeartbeat(t *testing.T) {
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock),
-		ready:              make(chan bool, 1),
+		ready:              make(chan struct{}, 1),
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
@@ -64,7 +64,7 @@ func TestManualHeartbeat(t *testing.T) {
 	request := &PingRequest{
 		Ping: "testManual",
 	}
-	manualHeartbeat.ready <- true
+	manualHeartbeat.ready <- struct{}{}
 	manualResponse := &PingResponse{}
 	regularResponse := &PingResponse{}
 	regularHeartbeat.Ping(request, regularResponse)
@@ -81,7 +81,7 @@ func TestManualHeartbeat(t *testing.T) {
 	}
 }
 
-func TestUpdateOffset(t *testing.T) {
+func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	tlsConfig, err := LoadTestTLSConfig("..")
 	if err != nil {
 		t.Fatal(err)

@@ -32,6 +32,11 @@ import (
 
 const (
 	defaultHeartbeatInterval = 3 * time.Second // 3s
+
+	// Affects maximum error in reading the clock of the remote. 1.5 seconds is
+	// the longest NTP allows for a remote clock reading. After 1.5 seconds, we
+	// assume that the offset from the clock is infinite.
+	maximumClockReadingDelay = 1500 * time.Millisecond
 )
 
 var (
@@ -246,14 +251,19 @@ func (c *Client) heartbeat() error {
 		log.V(1).Infof("client %s heartbeat: %v", c.Addr(), call.Error)
 		c.mu.Lock()
 		c.healthy = true
-		// TODO(embark) consider max clock drift and min message delivery time
-		// Not including clock drift might decrease accuracy, while not
-		// including min message delivery time might increase the error
-		// estimate.
-		c.offset.Error = (receiveTime - sendTime) / 2
-		remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
-		c.offset.Offset = remoteTimeNow - receiveTime
 		c.offset.MeasuredAt = receiveTime
+		if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
+			c.offset = InfiniteOffset
+		} else {
+			// Offset and error are measured using the remote clock reading
+			// technique described in
+			// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+			// However, we assume that drift and min message delay are 0, for
+			// now.
+			c.offset.Error = (receiveTime - sendTime) / 2
+			remoteTimeNow := response.ServerTime + (receiveTime-sendTime)/2
+			c.offset.Offset = remoteTimeNow - receiveTime
+		}
 		c.mu.Unlock()
 		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		return call.Error
