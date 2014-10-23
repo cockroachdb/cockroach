@@ -4,23 +4,6 @@
 
 * Transactions
 
-  - Modified ops:
-
-    - Get: logic to support clock skew uncertainty and concurrency.
-
-      If most recent timestamp for key is greater than MaxTimestamp
-      (it can be either committed or an intent), and there are no
-      versions of key between Timestamp and MaxTimestamp, read value
-      for key at Timestamp.
-
-      If there are version(s) of the key (can include most recent
-      intent) with timestamp between Timestamp and MaxTimestamp,
-      return WriteWithinUncertaintyInterval error. The ResponseHeader
-      will contain the latest version's timestamp (actually, just the
-      latest version with timestamp <= MaxTimestamp); on transaction
-      retry, Timestamp will be min(key's timestamp + 1, MaxTimestamp),
-      and MaxTimestamp will be max(key's timestamp + 1, MaxTimestamp).
-
   - Keep a cache of pushed transactions on a store to avoid repushing
     further intents after a txn has already been aborted or its
     timestamp moved forward.

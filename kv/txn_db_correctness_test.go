@@ -58,15 +58,18 @@ var testTxnRetryOpts = &util.RetryOptions{
 // enforce an ordering. If a previous wait channel is set, the
 // command waits on it before execution.
 type cmd struct {
-	name        string                                          // name of the cmd for debug output
-	key, endKey string                                          // key and optional endKey
-	debug       string                                          // optional debug string
-	txnIdx      int                                             // transaction index in the history
-	historyIdx  int                                             // this suffixes key so tests get unique keys
-	fn          func(c *cmd, db storage.DB, t *testing.T) error // execution function
-	ch          chan struct{}                                   // channel for other commands to wait
-	prev        <-chan struct{}                                 // channel this command must wait on before executing
-	env         map[string]int64                                // contains all previously read values
+	name        string // name of the cmd for debug output
+	key, endKey string // key and optional endKey
+	debug       string // optional debug string
+	txnIdx      int    // transaction index in the history
+	historyIdx  int    // this suffixes key so tests get unique keys
+	fn          func(
+		c *cmd,
+		db storage.DB,
+		t *testing.T) error // execution function
+	ch   chan struct{}    // channel for other commands to wait
+	prev <-chan struct{}  // channel this command must wait on before executing
+	env  map[string]int64 // contains all previously read values
 }
 
 func (c *cmd) init(prevCmd *cmd) {
