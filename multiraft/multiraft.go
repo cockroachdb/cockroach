@@ -268,7 +268,6 @@ type state struct {
 	*MultiRaft
 	rand          *rand.Rand
 	groups        map[uint64]*group
-	dirtyGroups   map[uint64]*group
 	nodes         map[uint64]*node
 	electionTimer *time.Timer
 	responses     chan *rpc.Call
@@ -277,26 +276,49 @@ type state struct {
 
 func newState(m *MultiRaft) *state {
 	return &state{
-		MultiRaft:   m,
-		rand:        util.NewPseudoRand(),
-		groups:      make(map[uint64]*group),
-		dirtyGroups: make(map[uint64]*group),
-		nodes:       make(map[uint64]*node),
-		responses:   make(chan *rpc.Call, 100),
-		writeTask:   newWriteTask(m.Storage),
+		MultiRaft: m,
+		rand:      util.NewPseudoRand(),
+		groups:    make(map[uint64]*group),
+		nodes:     make(map[uint64]*node),
+		responses: make(chan *rpc.Call, 100),
+		writeTask: newWriteTask(m.Storage),
 	}
 }
 
 func (s *state) start() {
 	log.V(1).Infof("node %v starting", s.nodeID)
 	go s.writeTask.start()
+	// These maps form a kind of state machine: We don't want to read from the
+	// ready channel until the groups we got from the last read have made their
+	// way through the rest of the pipeline.
+	// TODO(bdarnell): Does it still make sense to structure this as a select loop?
+	// I think we can untangle some of the channels here now that the core raft
+	// implementation has been moved to etcd.
+	var readyGroups map[uint64]raft.Ready
+	var writingGroups map[uint64]raft.Ready
 	for {
+		// raftReady signals that the Raft state machine has pending
+		// work. That work is supplied over the raftReady channel as a map
+		// from group ID to raft.Ready struct.
+		var raftReady <-chan map[uint64]raft.Ready
+		// writeReady is set to the write task's ready channel, which
+		// receives when the write task is prepared to persist ready data
+		// from the Raft state machine.
 		var writeReady chan struct{}
-		if len(s.dirtyGroups) > 0 {
+
+		// The order of operations in this loop structure is as follows:
+		// start by setting raftReady to the multiNode's Ready()
+		// channel. Once a new raftReady has been consumed from the
+		// channel, set writeReady to the write task's ready channel and
+		// set raftReady back to nil. This advances our read-from-raft /
+		// write-to-storage state machine to the next step: wait for the
+		// write task to be ready to persist the new data.
+		if readyGroups != nil {
 			writeReady = s.writeTask.ready
-		} else {
-			writeReady = nil
+		} else if writingGroups == nil {
+			raftReady = s.multiNode.Ready()
 		}
+
 		log.V(8).Infof("node %v: selecting", s.nodeID)
 		select {
 		case op := <-s.ops:
@@ -340,51 +362,20 @@ func (s *state) start() {
 			}
 
 		case writeReady <- struct{}{}:
-			s.handleWriteReady()
+			s.handleWriteReady(readyGroups)
+			writingGroups = readyGroups
+			readyGroups = nil
 
 		case resp := <-s.writeTask.out:
-			s.handleWriteResponse(resp)
+			s.handleWriteResponse(resp, writingGroups)
+			writingGroups = nil
 
 		case <-s.Ticker.Chan():
 			log.V(6).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
 
-		case readies := <-s.multiNode.Ready():
-			for groupID, ready := range readies {
-				g := s.groups[groupID]
-				log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
-				if ready.SoftState != nil {
-					if ready.SoftState.Lead != g.softState.Lead {
-						s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
-					}
-					g.softState = *ready.SoftState
-				}
-				// TODO(bdarnell): write ready.HardState, .Entries, and .Snapshot to storage.
-				for _, entry := range ready.CommittedEntries {
-					switch entry.Type {
-					case raftpb.EntryNormal:
-						// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
-						if entry.Data != nil {
-							s.sendEvent(&EventCommandCommitted{entry.Data})
-						}
-					case raftpb.EntryConfChange:
-						cc := raftpb.ConfChange{}
-						err := cc.Unmarshal(entry.Data)
-						if err != nil {
-							log.Fatalf("invalid ConfChange data: %s", err)
-						}
-						s.multiNode.ApplyConfChange(groupID, cc)
-					}
-				}
-				for _, msg := range ready.Messages {
-					if msg.To == 0 {
-						// TODO(bdarnell): figure out why these are happening
-						log.Warningf("dropping message for node 0")
-						continue
-					}
-					s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
-				}
-			}
+		case readyGroups = <-raftReady:
+			s.handleRaftReady(readyGroups)
 		}
 	}
 }
@@ -451,16 +442,74 @@ func (s *state) sendMessageRequest(req *SendMessageRequest, resp *SendMessageRes
 	call.Done <- call
 }
 
-func (s *state) handleWriteReady() {
+func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
+	// Soft state is updated immediately; everything else waits for handleWriteReady.
+	for groupID, ready := range readyGroups {
+		g := s.groups[groupID]
+		log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
+		if ready.SoftState != nil {
+			if ready.SoftState.Lead != g.softState.Lead {
+				s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
+			}
+			g.softState = *ready.SoftState
+		}
+	}
+}
+
+func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	log.V(6).Infof("node %v write ready, preparing request", s.nodeID)
 	writeRequest := newWriteRequest()
-	// TODO(bdarnell): re-implement storage layer
+	for groupID, ready := range readyGroups {
+		gwr := &groupWriteRequest{}
+		if !raft.IsEmptyHardState(ready.HardState) {
+			gwr.state = &GroupPersistentState{
+				GroupID:   groupID,
+				HardState: ready.HardState,
+			}
+		}
+		if len(ready.Entries) > 0 {
+			gwr.entries = make([]*LogEntry, len(ready.Entries))
+			for i, ent := range ready.Entries {
+				gwr.entries[i] = &LogEntry{ent}
+			}
+		}
+		writeRequest.groups[groupID] = gwr
+	}
 	s.writeTask.in <- writeRequest
 }
 
-func (s *state) handleWriteResponse(response *writeResponse) {
+func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uint64]raft.Ready) {
 	log.V(6).Infof("node %v got write response: %#v", s.nodeID, *response)
-	// TODO(bdarnell): re-implement storage layer
+	// Everything has been written to disk; now we can apply updates to the state machine
+	// and send outgoing messages.
+	for groupID, ready := range readyGroups {
+		for _, entry := range ready.CommittedEntries {
+			switch entry.Type {
+			case raftpb.EntryNormal:
+				// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
+				if entry.Data != nil {
+					s.sendEvent(&EventCommandCommitted{entry.Data})
+				}
+			case raftpb.EntryConfChange:
+				cc := raftpb.ConfChange{}
+				err := cc.Unmarshal(entry.Data)
+				if err != nil {
+					log.Fatalf("invalid ConfChange data: %s", err)
+				}
+				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+				s.multiNode.ApplyConfChange(groupID, cc)
+			}
+		}
+		for _, msg := range ready.Messages {
+			if msg.To == 0 {
+				// TODO(bdarnell): figure out why these are happening
+				log.Warningf("dropping message for node 0")
+				continue
+			}
+			log.V(6).Infof("node %v sending %s message to %v", s.nodeID, msg.Type, msg.To)
+			s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
+		}
+	}
 }
 
 func (s *state) addPendingCall(g *group, call *pendingCall) {
@@ -482,23 +531,4 @@ func (s *state) resolvePendingCall(g *group, call *pendingCall) bool {
 	}*/
 	call.call.Done <- call.call
 	return true
-}
-
-// updateDirtyStatus sets the dirty flag for the given group.
-func (s *state) updateDirtyStatus(g *group) {
-	dirty := false
-	// TODO(bdarnell): rewrite updateDirtyStatus for etcd raft
-	/*
-		if !g.electionState.Equal(g.persistedElectionState) {
-			dirty = true
-		}
-		if len(g.pendingEntries) > 0 {
-			dirty = true
-		}
-	*/
-	if dirty {
-		s.dirtyGroups[g.groupID] = g
-	} else {
-		delete(s.dirtyGroups, g.groupID)
-	}
 }
