@@ -297,8 +297,22 @@ func (s *state) start() {
 	var readyGroups map[uint64]raft.Ready
 	var writingGroups map[uint64]raft.Ready
 	for {
+		// raftReady signals that the Raft state machine has pending
+		// work. That work is supplied over the raftReady channel as a map
+		// from group ID to raft.Ready struct.
 		var raftReady <-chan map[uint64]raft.Ready
+		// writeReady is set to the write task's ready channel, which
+		// receives when the write task is prepared to persist ready data
+		// from the Raft state machine.
 		var writeReady chan struct{}
+
+		// The order of operations in this loop structure is as follows:
+		// start by setting raftReady to the multiNode's Ready()
+		// channel. Once a new raftReady has been consumed from the
+		// channel, set writeReady to the write task's ready channel and
+		// set raftReady back to nil. This advances our read-from-raft /
+		// write-to-storage state machine to the next step: wait for the
+		// write task to be ready to persist the new data.
 		if readyGroups != nil {
 			writeReady = s.writeTask.ready
 		} else if writingGroups == nil {
