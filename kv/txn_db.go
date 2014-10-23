@@ -104,6 +104,9 @@ func runTransaction(db *DB, opts *storage.TransactionOptions, retryable func(db 
 		case *proto.WriteTooOldError:
 			// Retry immediately on write-too-old.
 			return util.RetryReset, nil
+		case *proto.ReadWithinUncertaintyIntervalError:
+			// Retry immediately.
+			return util.RetryReset, nil
 		default:
 			// For all other cases, finish retry loop, returning possible error.
 			return util.RetryBreak, t
@@ -215,6 +218,22 @@ func (tdb *txnDB) executeCmd(method string, args proto.Request, replyChan interf
 				tdb.timestamp.Logical++
 			}
 			tdb.txn.Restart(true /* Abort */, tdb.UserPriority, tdb.txn.Priority, tdb.timestamp)
+		case *proto.ReadWithinUncertaintyIntervalError:
+			// If the reader encountered a newer write within the uncertainty
+			// interval, move the timestamp forward, just past that write or
+			// up to MaxTimestamp, whichever comes first.
+			var candidateTS proto.Timestamp
+			if t.ExistingTimestamp.Less(tdb.txn.MaxTimestamp) {
+				candidateTS = t.ExistingTimestamp
+				candidateTS.Logical++
+			} else {
+				candidateTS = tdb.txn.MaxTimestamp
+			}
+			// Only change the timestamp if we're moving it forward.
+			if tdb.timestamp.Less(candidateTS) {
+				tdb.timestamp = candidateTS
+			}
+			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, tdb.txn.Priority, tdb.timestamp)
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
 			// immediately retry.

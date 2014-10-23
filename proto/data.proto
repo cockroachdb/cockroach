@@ -149,9 +149,11 @@ message Transaction {
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
   optional Timestamp timestamp = 7 [(gogoproto.nullable) = false];
-  // Timestamp + clock skew. Reads which encounter values with
+  // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
   // retry error.
+  // The case MaxTimestamp < Timestamp is possible for transactions which have
+  // been pushed; in this case, MaxTimestamp should be ignored.
   optional Timestamp max_timestamp = 8 [(gogoproto.nullable) = false];
   // The last hearbeat timestamp.
   optional Timestamp last_heartbeat = 9;

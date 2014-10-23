@@ -179,10 +179,13 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	var valBytes []byte
 	var isValue bool
 
-	// Always read latest value in the event the txns match.
+	// First case: Our read timestamp is ahead of the latest write, or the
+	// latest write and current read are within the same transaction.
 	if !timestamp.Less(meta.Timestamp) ||
 		(meta.Txn != nil && txn != nil && bytes.Equal(meta.Txn.ID, txn.ID)) {
 		if meta.Txn != nil && (txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID)) {
+			// Trying to read the last value, but it's another transaction's
+			// intent; the reader will have to act on this.
 			return nil, &proto.WriteIntentError{Key: key, Txn: *meta.Txn}
 		}
 		latestKey := MVCCEncodeVersionKey(key, meta.Timestamp)
@@ -192,15 +195,54 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 		// txn was restarted and an earlier iteration wrote the value
 		// we're now reading. In this case, we skip the intent.
 		if meta.Txn != nil && txn.Epoch != meta.Txn.Epoch {
-			valBytes, ts, isValue, err = mvcc.scanNextVersion(latestKey.Next(), metaKey.PrefixEnd())
+			valBytes, ts, isValue, err = mvcc.scanEarlierVersion(latestKey.Next(), metaKey.PrefixEnd())
 		} else {
 			valBytes, err = mvcc.engine.Get(latestKey)
 			ts = meta.Timestamp
 			isValue = true
 		}
+	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
+		// In this branch, the latest timestamp is ahead, and so the read of an
+		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
+		// occurs, leading to a clock uncertainty error if a version exists in
+		// that time interval.
+		if !txn.MaxTimestamp.Less(meta.Timestamp) {
+			// Second case: Our read timestamp is behind the latest write, but the
+			// latest write could possibly have happened before our read in
+			// absolute time if the writer had a fast clock.
+			// The reader should try again at meta.Timestamp+1.
+			return nil, &proto.ReadWithinUncertaintyIntervalError{
+				Timestamp:         timestamp,
+				ExistingTimestamp: meta.Timestamp,
+			}
+		}
+
+		// We want to know if anything has been written ahead of timestamp, but
+		// before MaxTimestamp.
+		nextKey := MVCCEncodeVersionKey(key, txn.MaxTimestamp)
+		valBytes, ts, isValue, err = mvcc.scanEarlierVersion(nextKey, metaKey.PrefixEnd())
+		if err == nil && timestamp.Less(ts) {
+			// Third case: Our read timestamp is sufficiently behind the newest
+			// value, but there is another previous write with the same issues
+			// as in the second case, so the reader will have to come again
+			// with a higher read timestamp.
+			return nil, &proto.ReadWithinUncertaintyIntervalError{
+				Timestamp:         timestamp,
+				ExistingTimestamp: ts,
+			}
+		}
+		if valBytes == nil {
+			panic(fmt.Sprintf("%q, %v, %v", key, txn.MaxTimestamp, meta.Timestamp))
+		}
+		// Fourth case: There's no value in our future up to MaxTimestamp, and
+		// those are the only ones that we're not certain about. The correct
+		// key has already been read above, so there's nothing left to do.
 	} else {
+		// Fifth case: We're reading a historic value either outside of
+		// a transaction, or in the absence of future versions that clock
+		// uncertainty would apply to.
 		nextKey := MVCCEncodeVersionKey(key, timestamp)
-		valBytes, ts, isValue, err = mvcc.scanNextVersion(nextKey, metaKey.PrefixEnd())
+		valBytes, ts, isValue, err = mvcc.scanEarlierVersion(nextKey, metaKey.PrefixEnd())
 	}
 	if valBytes == nil || err != nil {
 		return nil, err
@@ -218,15 +260,17 @@ func (mvcc *MVCC) Get(key Key, timestamp proto.Timestamp, txn *proto.Transaction
 	if value.Value != nil {
 		value.Value.Timestamp = &ts
 	} else if !value.Deleted {
-		log.Warningf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value)
+		// Sanity check.
+		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value))
 	}
+
 	return value.Value, nil
 }
 
-// scanNextVersion scans the value from engine starting at nextKey,
+// scanEarlierVersion scans the value from engine starting at nextKey,
 // limited by endKey. Both values are binary-encoded. Returns the
 // bytes and timestamp if read, nil otherwise.
-func (mvcc *MVCC) scanNextVersion(nextKey, endKey Key) ([]byte, proto.Timestamp, bool, error) {
+func (mvcc *MVCC) scanEarlierVersion(nextKey, endKey Key) ([]byte, proto.Timestamp, bool, error) {
 	// We use the PrefixEndKey(key) as the upper bound for scan.
 	// If there is no other version after nextKey, it won't return
 	// the value of the next key.

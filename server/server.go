@@ -75,7 +75,8 @@ var (
 	maxOffset = flag.Duration("max_offset", 250*time.Millisecond, "specify "+
 		"the maximum clock offset for the cluster. Clock offset is measured on all "+
 		"node-to-node links and if any node notices it has clock offset in excess "+
-		"of -max_drift, it will commit suicide.")
+		"of -max_drift, it will commit suicide. Setting this value too high may "+
+		"decrease transaction performance in the presence of contention.")
 
 	bootstrapOnly = flag.Bool("bootstrap_only", false, "specify --bootstrap_only "+
 		"to avoid starting the server after bootstrapping with the init command.")

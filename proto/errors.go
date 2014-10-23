@@ -118,3 +118,8 @@ func (e *WriteIntentError) Error() string {
 func (e *WriteTooOldError) Error() string {
 	return fmt.Sprintf("failed write with timestamp %s < %s", e.Timestamp, e.ExistingTimestamp)
 }
+
+// Error formats error.
+func (e *ReadWithinUncertaintyIntervalError) Error() string {
+	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
+}

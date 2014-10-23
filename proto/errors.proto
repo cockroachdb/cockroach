@@ -89,8 +89,17 @@ message WriteIntentError {
 
 // A WriteTooOldError indicates that a write encountered a versioned
 // value newer than its timestamp, making it impossible to rewrite
-// history. The write should be retried at the Timestamp + 1.
+// history. The write should be retried at existing_timestamp+1.
 message WriteTooOldError {
+  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+// A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
+// encountered a versioned value at existing_timestamp within the uncertainty
+// interval of the reader.
+// The read should be retried at existing_timestamp+1.
+message ReadWithinUncertaintyIntervalError {
   optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }

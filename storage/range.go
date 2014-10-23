@@ -1099,13 +1099,11 @@ func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRe
 	reply.Txn = etReply.Txn
 	reply.CommitWait = etReply.CommitWait
 
-	// Run triggers if successfully committed. An failures running
+	// Run triggers if successfully committed. Any failures running
 	// triggers will set an error and prevent the batch from committing.
 	if reply.Txn.Status == proto.COMMITTED {
 		if args.SplitTrigger != nil {
-			if err := r.splitTrigger(batch, args.SplitTrigger); err != nil {
-				reply.SetGoError(err)
-			}
+			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
 		}
 	}
 }
@@ -1393,13 +1391,13 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	return r.rm.SplitRange(r, newRng)
 }
 
-// AdminSplit uses args.SplitKey as the split key to divide the range
-// into two ranges. The split is done inside a distributed txn which
-// writes updated and new range descriptor, and updates range
-// addressing metadata. The range descriptors are written as
-// intents. All commands executed against the range read the range
-// descriptor, which will cause them to attempt to push this
-// transaction or else backoff until the split completes.
+// AdminSplit divides the range into into two ranges, using either
+// args.SplitKey (if provided) or an internally computed key that aims to
+// roughly equipartition the range by size. The split is done inside of
+// a distributed txn which writes updated and new range descriptors, and
+// updates the range addressing metadata. The handover of responsibility for
+// the reassigned key range is carried out seamlessly through a split trigger
+// carried out as part of the commit of that transaction.
 func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
 	// Only allow a single split per range at a time.
 	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {

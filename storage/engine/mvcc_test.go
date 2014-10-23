@@ -283,6 +283,79 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	}
 }
 
+// TestMVCCGetUncertainty verifies that the appropriate error results when
+// a transaction reads a key at a timestamp that has versions newer than that
+// timestamp, but older than the transaction's MaxTimestamp.
+// TODO(Tobias): Test this in a live transactions as well, verifying the
+// necessary transaction restarts happen correctly etc.
+// Spencer's suggestion:
+// Create 3 clocks, each with max drift (offset) set to 100ms. Set clock one to
+// time=t, clock two to time=t+50ms, clock three to time=t+100ms. Write three
+// values at current time according to each of the three clocks. Start three
+// txns, each using one of the three clocks. In each txn, read the three values
+// and ensure that all txns read the correct values.
+func TestMVCCGetUncertainty(t *testing.T) {
+	mvcc, _ := createTestMVCC()
+	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}
+	// Put a value from the past.
+	if err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Put a value that is ahead of MaxTimestamp, it should not interfere.
+	if err := mvcc.Put(testKey1, makeTS(12, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Read with transaction, should get a value back.
+	val, err := mvcc.Get(testKey1, makeTS(7, 0), txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val == nil || !bytes.Equal(val.Bytes, value1.Bytes) {
+		t.Fatalf("wanted %q, got %v", value1.Bytes, val)
+	}
+
+	// Now using testKey2.
+	// Put a value that conflicts with MaxTimestamp.
+	if err := mvcc.Put(testKey2, makeTS(9, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Read with transaction, should get error back.
+	if _, err := mvcc.Get(testKey2, makeTS(7, 0), txn); err == nil {
+		t.Fatal("wanted an error")
+	} else if e, ok := err.(*proto.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", e)
+	}
+	if _, err := mvcc.Scan(testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), txn); err == nil {
+		t.Fatal("wanted an error")
+	}
+	// Adjust MaxTimestamp and retry.
+	txn.MaxTimestamp = makeTS(7, 0)
+	if _, err := mvcc.Get(testKey2, makeTS(7, 0), txn); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mvcc.Scan(testKey2, testKey2.PrefixEnd(), 10, makeTS(7, 0), txn); err != nil {
+		t.Fatal(err)
+	}
+
+	txn.MaxTimestamp = makeTS(10, 0)
+	// Now using testKey3.
+	// Put a value that conflicts with MaxTimestamp and another write further
+	// ahead and not conflicting any longer. The first write should still ruin
+	// it.
+	if err := mvcc.Put(testKey3, makeTS(9, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := mvcc.Put(testKey3, makeTS(99, 0), value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mvcc.Scan(testKey3, testKey3.PrefixEnd(), 10, makeTS(7, 0), txn); err == nil {
+		t.Fatal("wanted an error")
+	}
+	if _, err := mvcc.Get(testKey3, makeTS(7, 0), txn); err == nil {
+		t.Fatalf("wanted an error")
+	}
+}
+
 func TestMVCCGetAndDelete(t *testing.T) {
 	mvcc, _ := createTestMVCC()
 	err := mvcc.Put(testKey1, makeTS(1, 0), value1, nil)
@@ -328,7 +401,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	}
 	// Verify nothing is written to the engine.
 	if val, err := engine.Get(MVCCEncodeKey(testKey1)); err != nil || val != nil {
-		t.Fatal("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
+		t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %s", val, err)
 	}
 }
 
@@ -893,7 +966,7 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 	// Attempt to read using naive txn's previous timestamp.
 	value, err := mvcc.Get(testKey1, makeTS(0, 0), txn1)
 	if err != nil || value == nil || !bytes.Equal(value.Bytes, value1.Bytes) {
-		t.Errorf("expected value %q, err nil; got %+v, %v", value.Bytes, value, err)
+		t.Errorf("expected value %q, err nil; got %+v, %v", value1.Bytes, value, err)
 	}
 }
 
@@ -961,7 +1034,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	}
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
-	// This respresents a straightforward push (i.e. from a read/write conflict).
+	// This represents a straightforward push (i.e. from a read/write conflict).
 	err = mvcc.ResolveWriteIntent(testKey1, makeTxn(txn1, makeTS(1, 0)))
 	if err != nil {
 		t.Fatal(err)
