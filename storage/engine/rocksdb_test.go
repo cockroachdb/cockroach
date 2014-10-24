@@ -89,26 +89,26 @@ func TestRocksDBCompaction(t *testing.T) {
 		// TODO(spencer): use Transaction and Response protobufs here.
 		BatchPut{
 			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, Key("a"))),
+				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("a"))),
 				Value: encodePutResponse(makeTS(2, 0), t),
 			},
 		},
 		BatchPut{
 			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, Key("b"))),
+				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("b"))),
 				Value: encodePutResponse(makeTS(3, 0), t),
 			},
 		},
 
 		BatchPut{
 			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, Key("a"))),
+				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("a"))),
 				Value: encodeTransaction(makeTS(1, 0), t),
 			},
 		},
 		BatchPut{
 			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, Key("b"))),
+				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("b"))),
 				Value: encodeTransaction(makeTS(2, 0), t),
 			},
 		},
@@ -119,17 +119,17 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	keyvals, err := Scan(rocksdb, KeyMin, KeyMax, 0)
+	keyvals, err := Scan(rocksdb, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}
-	var keys []Key
+	var keys []proto.EncodedKey
 	for _, kv := range keyvals {
 		keys = append(keys, kv.Key)
 	}
-	expKeys := []Key{
-		MVCCEncodeKey(MakeLocalKey(rcPre, Key("b"))),
-		MVCCEncodeKey(MakeLocalKey(txnPre, Key("b"))),
+	expKeys := []proto.EncodedKey{
+		MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("b"))),
+		MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("b"))),
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)

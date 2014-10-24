@@ -30,29 +30,29 @@ var (
 	// StatLiveBytes counts how many bytes are "live", including bytes
 	// from both keys and values. Live rows include only non-deleted
 	// keys and only the most recent value.
-	StatLiveBytes = Key("live-bytes")
+	StatLiveBytes = proto.Key("live-bytes")
 	// StatKeyBytes counts how many bytes are used to store all keys,
 	// including bytes from deleted keys. Key bytes are re-counted for
 	// each versioned value.
-	StatKeyBytes = Key("key-bytes")
+	StatKeyBytes = proto.Key("key-bytes")
 	// StatValBytes counts how many bytes are used to store all values,
 	// including all historical versions and deleted tombstones.
-	StatValBytes = Key("val-bytes")
+	StatValBytes = proto.Key("val-bytes")
 	// StatIntentBytes counts how many bytes are used to store values
 	// which are unresolved intents. Includes bytes used for both intent
 	// keys and values.
-	StatIntentBytes = Key("intent-bytes")
+	StatIntentBytes = proto.Key("intent-bytes")
 	// StatLiveCount counts how many keys are "live". This includes only
 	// non-deleted keys.
-	StatLiveCount = Key("live-count")
+	StatLiveCount = proto.Key("live-count")
 	// StatKeyCount counts the total number of keys, including both live
 	// and deleted keys.
-	StatKeyCount = Key("key-count")
+	StatKeyCount = proto.Key("key-count")
 	// StatValCount counts the total number of values, including all
 	// historical versions and deleted tombstones.
-	StatValCount = Key("val-count")
+	StatValCount = proto.Key("val-count")
 	// StatIntentCount counts the number of unresolved intents.
-	StatIntentCount = Key("intent-count")
+	StatIntentCount = proto.Key("intent-count")
 )
 
 // encodeStatValue constructs a proto.Value using the supplied stat
@@ -72,14 +72,14 @@ func encodeStatValue(stat int64) (ok bool, enc []byte) {
 
 // MakeRangeStatKey returns the key for accessing the named stat
 // for the specified range ID.
-func MakeRangeStatKey(rangeID int64, stat Key) Key {
+func MakeRangeStatKey(rangeID int64, stat proto.Key) proto.Key {
 	encRangeID := encoding.EncodeInt(nil, rangeID)
 	return MakeKey(KeyLocalRangeStatPrefix, encRangeID, stat)
 }
 
 // MakeStoreStatKey returns the key for accessing the named stat
 // for the specified store ID.
-func MakeStoreStatKey(storeID int32, stat Key) Key {
+func MakeStoreStatKey(storeID int32, stat proto.Key) proto.Key {
 	encStoreID := encoding.EncodeInt(nil, int64(storeID))
 	return MakeKey(KeyLocalStoreStatPrefix, encStoreID, stat)
 }
@@ -87,7 +87,7 @@ func MakeStoreStatKey(storeID int32, stat Key) Key {
 // GetRangeStat fetches the specified stat from the provided engine.
 // If the stat could not be found, returns 0. An error is returned
 // on stat decode error.
-func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
+func GetRangeStat(engine Engine, rangeID int64, stat proto.Key) (int64, error) {
 	val := &proto.Value{}
 	ok, _, _, err := GetProto(engine, MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), val)
 	if err != nil || !ok {
@@ -99,7 +99,7 @@ func GetRangeStat(engine Engine, rangeID int64, stat Key) (int64, error) {
 // MergeStat flushes the specified stat to merge counters via the
 // provided engine for both the affected range and store. Only
 // updates range or store stats if the corresponding ID is non-zero.
-func MergeStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
+func MergeStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
 			engine.Merge(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)
@@ -113,7 +113,7 @@ func MergeStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal in
 // SetStat writes the specified stat to counters via the provided
 // engine for both the affected range and store. Only updates range or
 // store stats if the corresponding ID is non-zero.
-func SetStat(engine Engine, rangeID int64, storeID int32, stat Key, statVal int64) {
+func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) {
 	if ok, encStat := encodeStatValue(statVal); ok {
 		if rangeID != 0 {
 			engine.Put(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)

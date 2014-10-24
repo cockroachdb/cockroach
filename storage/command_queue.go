@@ -20,7 +20,7 @@ package storage
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -81,7 +81,7 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 // confirmation that all gating commands have completed or
 // failed. readOnly is true if the requester is a read-only command;
 // false for read-write.
-func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.WaitGroup) {
+func (cq *CommandQueue) GetWait(start, end proto.Key, readOnly bool, wg *sync.WaitGroup) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -104,7 +104,7 @@ func (cq *CommandQueue) GetWait(start, end engine.Key, readOnly bool, wg *sync.W
 // Add should be invoked after waiting on already-executing,
 // overlapping commands via the WaitGroup initialized through
 // GetWait().
-func (cq *CommandQueue) Add(start, end engine.Key, readOnly bool) interface{} {
+func (cq *CommandQueue) Add(start, end proto.Key, readOnly bool) interface{} {
 	if len(end) == 0 {
 		end = start.Next()
 	}

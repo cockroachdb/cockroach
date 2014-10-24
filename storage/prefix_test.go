@@ -22,6 +22,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -36,9 +37,9 @@ const (
 func buildTestPrefixConfigMap() PrefixConfigMap {
 	configs := []*PrefixConfig{
 		{engine.KeyMin, nil, config1},
-		{engine.Key("/db1"), nil, config2},
-		{engine.Key("/db1/table"), nil, config3},
-		{engine.Key("/db3"), nil, config4},
+		{proto.Key("/db1"), nil, config2},
+		{proto.Key("/db1/table"), nil, config3},
+		{proto.Key("/db3"), nil, config4},
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
@@ -50,15 +51,15 @@ func buildTestPrefixConfigMap() PrefixConfigMap {
 // TestPrefixEndKey verifies the end keys on prefixes.
 func TestPrefixEndKey(t *testing.T) {
 	testData := []struct {
-		prefix, expEnd engine.Key
+		prefix, expEnd proto.Key
 	}{
 		{engine.KeyMin, engine.KeyMax},
-		{engine.Key("0"), engine.Key("1")},
-		{engine.Key("a"), engine.Key("b")},
-		{engine.Key("db0"), engine.Key("db1")},
-		{engine.Key("\xfe"), engine.Key("\xff")},
+		{proto.Key("0"), proto.Key("1")},
+		{proto.Key("a"), proto.Key("b")},
+		{proto.Key("db0"), proto.Key("db1")},
+		{proto.Key("\xfe"), proto.Key("\xff")},
 		{engine.KeyMax, engine.KeyMax},
-		{engine.Key("\xff\xff"), engine.Key("\xff\xff")},
+		{proto.Key("\xff\xff"), proto.Key("\xff\xff")},
 	}
 
 	for i, test := range testData {
@@ -70,22 +71,22 @@ func TestPrefixEndKey(t *testing.T) {
 
 // TestPrefixConfigSort verifies sorting of keys.
 func TestPrefixConfigSort(t *testing.T) {
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMax,
-		engine.Key("c"),
-		engine.Key("a"),
-		engine.Key("b"),
-		engine.Key("aa"),
-		engine.Key("\xfe"),
+		proto.Key("c"),
+		proto.Key("a"),
+		proto.Key("b"),
+		proto.Key("aa"),
+		proto.Key("\xfe"),
 		engine.KeyMin,
 	}
-	expKeys := []engine.Key{
+	expKeys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("a"),
-		engine.Key("aa"),
-		engine.Key("b"),
-		engine.Key("c"),
-		engine.Key("\xfe"),
+		proto.Key("a"),
+		proto.Key("aa"),
+		proto.Key("b"),
+		proto.Key("c"),
+		proto.Key("\xfe"),
 		engine.KeyMax,
 	}
 	pcc := PrefixConfigMap{}
@@ -105,12 +106,12 @@ func TestPrefixConfigSort(t *testing.T) {
 func TestPrefixConfigBuild(t *testing.T) {
 	expPrefixConfigs := []PrefixConfig{
 		{engine.KeyMin, nil, config1},
-		{engine.Key("/db1"), nil, config2},
-		{engine.Key("/db1/table"), nil, config3},
-		{engine.Key("/db1/tablf"), nil, config2},
-		{engine.Key("/db2"), nil, config1},
-		{engine.Key("/db3"), nil, config4},
-		{engine.Key("/db4"), nil, config1},
+		{proto.Key("/db1"), nil, config2},
+		{proto.Key("/db1/table"), nil, config3},
+		{proto.Key("/db1/tablf"), nil, config2},
+		{proto.Key("/db2"), nil, config1},
+		{proto.Key("/db3"), nil, config4},
+		{proto.Key("/db4"), nil, config1},
 	}
 	pcc := buildTestPrefixConfigMap()
 	if len(pcc) != len(expPrefixConfigs) {
@@ -132,22 +133,22 @@ func TestPrefixConfigBuild(t *testing.T) {
 func TestMatchByPrefix(t *testing.T) {
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
-		key       engine.Key
+		key       proto.Key
 		expConfig interface{}
 	}{
 		{engine.KeyMin, config1},
-		{engine.Key("\x01"), config1},
-		{engine.Key("/db"), config1},
-		{engine.Key("/db1"), config2},
-		{engine.Key("/db1/a"), config2},
-		{engine.Key("/db1/table1"), config3},
-		{engine.Key("/db1/table\xff"), config3},
-		{engine.Key("/db2"), config1},
-		{engine.Key("/db3"), config4},
-		{engine.Key("/db3\xff"), config4},
-		{engine.Key("/db5"), config1},
-		{engine.Key("/xfe"), config1},
-		{engine.Key("/xff"), config1},
+		{proto.Key("\x01"), config1},
+		{proto.Key("/db"), config1},
+		{proto.Key("/db1"), config2},
+		{proto.Key("/db1/a"), config2},
+		{proto.Key("/db1/table1"), config3},
+		{proto.Key("/db1/table\xff"), config3},
+		{proto.Key("/db2"), config1},
+		{proto.Key("/db3"), config4},
+		{proto.Key("/db3\xff"), config4},
+		{proto.Key("/db5"), config1},
+		{proto.Key("/xfe"), config1},
+		{proto.Key("/xff"), config1},
 	}
 	for i, test := range testData {
 		pc := pcc.MatchByPrefix(test.key)
@@ -161,22 +162,22 @@ func TestMatchByPrefix(t *testing.T) {
 func TestMatchesByPrefix(t *testing.T) {
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
-		key        engine.Key
+		key        proto.Key
 		expConfigs []interface{}
 	}{
 		{engine.KeyMin, []interface{}{config1}},
-		{engine.Key("\x01"), []interface{}{config1}},
-		{engine.Key("/db"), []interface{}{config1}},
-		{engine.Key("/db1"), []interface{}{config2, config1}},
-		{engine.Key("/db1/a"), []interface{}{config2, config1}},
-		{engine.Key("/db1/table1"), []interface{}{config3, config2, config1}},
-		{engine.Key("/db1/table\xff"), []interface{}{config3, config2, config1}},
-		{engine.Key("/db2"), []interface{}{config1}},
-		{engine.Key("/db3"), []interface{}{config4, config1}},
-		{engine.Key("/db3\xff"), []interface{}{config4, config1}},
-		{engine.Key("/db5"), []interface{}{config1}},
-		{engine.Key("/xfe"), []interface{}{config1}},
-		{engine.Key("/xff"), []interface{}{config1}},
+		{proto.Key("\x01"), []interface{}{config1}},
+		{proto.Key("/db"), []interface{}{config1}},
+		{proto.Key("/db1"), []interface{}{config2, config1}},
+		{proto.Key("/db1/a"), []interface{}{config2, config1}},
+		{proto.Key("/db1/table1"), []interface{}{config3, config2, config1}},
+		{proto.Key("/db1/table\xff"), []interface{}{config3, config2, config1}},
+		{proto.Key("/db2"), []interface{}{config1}},
+		{proto.Key("/db3"), []interface{}{config4, config1}},
+		{proto.Key("/db3\xff"), []interface{}{config4, config1}},
+		{proto.Key("/db5"), []interface{}{config1}},
+		{proto.Key("/xfe"), []interface{}{config1}},
+		{proto.Key("/xff"), []interface{}{config1}},
 	}
 	for i, test := range testData {
 		pcs := pcc.MatchesByPrefix(test.key)
@@ -215,50 +216,50 @@ func TestSplitRangeByPrefixesError(t *testing.T) {
 func TestSplitRangeByPrefixes(t *testing.T) {
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
-		start, end engine.Key
+		start, end proto.Key
 		expRanges  []*RangeResult
 	}{
 		// The full range.
 		{engine.KeyMin, engine.KeyMax, []*RangeResult{
-			{engine.KeyMin, engine.Key("/db1"), config1},
-			{engine.Key("/db1"), engine.Key("/db1/table"), config2},
-			{engine.Key("/db1/table"), engine.Key("/db1/tablf"), config3},
-			{engine.Key("/db1/tablf"), engine.Key("/db2"), config2},
-			{engine.Key("/db2"), engine.Key("/db3"), config1},
-			{engine.Key("/db3"), engine.Key("/db4"), config4},
-			{engine.Key("/db4"), engine.KeyMax, config1},
+			{engine.KeyMin, proto.Key("/db1"), config1},
+			{proto.Key("/db1"), proto.Key("/db1/table"), config2},
+			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
+			{proto.Key("/db1/tablf"), proto.Key("/db2"), config2},
+			{proto.Key("/db2"), proto.Key("/db3"), config1},
+			{proto.Key("/db3"), proto.Key("/db4"), config4},
+			{proto.Key("/db4"), engine.KeyMax, config1},
 		}},
 		// A subrange containing all databases.
-		{engine.Key("/db"), engine.Key("/dc"), []*RangeResult{
-			{engine.Key("/db"), engine.Key("/db1"), config1},
-			{engine.Key("/db1"), engine.Key("/db1/table"), config2},
-			{engine.Key("/db1/table"), engine.Key("/db1/tablf"), config3},
-			{engine.Key("/db1/tablf"), engine.Key("/db2"), config2},
-			{engine.Key("/db2"), engine.Key("/db3"), config1},
-			{engine.Key("/db3"), engine.Key("/db4"), config4},
-			{engine.Key("/db4"), engine.Key("/dc"), config1},
+		{proto.Key("/db"), proto.Key("/dc"), []*RangeResult{
+			{proto.Key("/db"), proto.Key("/db1"), config1},
+			{proto.Key("/db1"), proto.Key("/db1/table"), config2},
+			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
+			{proto.Key("/db1/tablf"), proto.Key("/db2"), config2},
+			{proto.Key("/db2"), proto.Key("/db3"), config1},
+			{proto.Key("/db3"), proto.Key("/db4"), config4},
+			{proto.Key("/db4"), proto.Key("/dc"), config1},
 		}},
 		// A subrange spanning from arbitrary points within zones.
-		{engine.Key("/db1/a"), engine.Key("/db3/b"), []*RangeResult{
-			{engine.Key("/db1/a"), engine.Key("/db1/table"), config2},
-			{engine.Key("/db1/table"), engine.Key("/db1/tablf"), config3},
-			{engine.Key("/db1/tablf"), engine.Key("/db2"), config2},
-			{engine.Key("/db2"), engine.Key("/db3"), config1},
-			{engine.Key("/db3"), engine.Key("/db3/b"), config4},
+		{proto.Key("/db1/a"), proto.Key("/db3/b"), []*RangeResult{
+			{proto.Key("/db1/a"), proto.Key("/db1/table"), config2},
+			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
+			{proto.Key("/db1/tablf"), proto.Key("/db2"), config2},
+			{proto.Key("/db2"), proto.Key("/db3"), config1},
+			{proto.Key("/db3"), proto.Key("/db3/b"), config4},
 		}},
 		// A subrange containing only /db1.
-		{engine.Key("/db1"), engine.Key("/db2"), []*RangeResult{
-			{engine.Key("/db1"), engine.Key("/db1/table"), config2},
-			{engine.Key("/db1/table"), engine.Key("/db1/tablf"), config3},
-			{engine.Key("/db1/tablf"), engine.Key("/db2"), config2},
+		{proto.Key("/db1"), proto.Key("/db2"), []*RangeResult{
+			{proto.Key("/db1"), proto.Key("/db1/table"), config2},
+			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
+			{proto.Key("/db1/tablf"), proto.Key("/db2"), config2},
 		}},
 		// A subrange containing only /db1/table.
-		{engine.Key("/db1/table"), engine.Key("/db1/tablf"), []*RangeResult{
-			{engine.Key("/db1/table"), engine.Key("/db1/tablf"), config3},
+		{proto.Key("/db1/table"), proto.Key("/db1/tablf"), []*RangeResult{
+			{proto.Key("/db1/table"), proto.Key("/db1/tablf"), config3},
 		}},
 		// A subrange within /db1/table.
-		{engine.Key("/db1/table3"), engine.Key("/db1/table4"), []*RangeResult{
-			{engine.Key("/db1/table3"), engine.Key("/db1/table4"), config3},
+		{proto.Key("/db1/table3"), proto.Key("/db1/table4"), []*RangeResult{
+			{proto.Key("/db1/table3"), proto.Key("/db1/table4"), config3},
 		}},
 	}
 	for i, test := range testData {

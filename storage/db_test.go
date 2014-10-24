@@ -86,7 +86,7 @@ func (db *testDB) RunTransaction(opts *TransactionOptions, retryable func(db DB)
 }
 
 type metaRecord struct {
-	key  engine.Key
+	key  proto.Key
 	desc *proto.RangeDescriptor
 }
 type metaSlice []metaRecord
@@ -96,11 +96,11 @@ func (ms metaSlice) Len() int           { return len(ms) }
 func (ms metaSlice) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms metaSlice) Less(i, j int) bool { return ms[i].key.Less(ms[j].key) }
 
-func meta1Key(key engine.Key) engine.Key {
+func meta1Key(key proto.Key) proto.Key {
 	return engine.MakeKey(engine.KeyMeta1Prefix, key)
 }
 
-func meta2Key(key engine.Key) engine.Key {
+func meta2Key(key proto.Key) proto.Key {
 	return engine.MakeKey(engine.KeyMeta2Prefix, key)
 }
 
@@ -109,48 +109,48 @@ func meta2Key(key engine.Key) engine.Key {
 func TestUpdateRangeAddressing(t *testing.T) {
 	store, _ := createTestStore(t)
 	testCases := []struct {
-		start, end engine.Key
-		expNew     []engine.Key
+		start, end proto.Key
+		expNew     []proto.Key
 	}{
 		// Start out with whole range.
 		{engine.KeyMin, engine.KeyMax,
-			[]engine.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
+			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
 		// First half of splitting the range at key "a".
-		{engine.KeyMin, engine.Key("a"),
-			[]engine.Key{meta1Key(engine.KeyMax), meta2Key(engine.Key("a"))}},
+		{engine.KeyMin, proto.Key("a"),
+			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
 		// Second half of splitting the range at key "a".
-		{engine.Key("a"), engine.KeyMax,
-			[]engine.Key{meta2Key(engine.KeyMax)}},
+		{proto.Key("a"), engine.KeyMax,
+			[]proto.Key{meta2Key(engine.KeyMax)}},
 		// First half of splitting the range at key "z".
-		{engine.Key("a"), engine.Key("z"),
-			[]engine.Key{meta2Key(engine.Key("z"))}},
+		{proto.Key("a"), proto.Key("z"),
+			[]proto.Key{meta2Key(proto.Key("z"))}},
 		// Second half of splitting the range at key "z"
-		{engine.Key("z"), engine.KeyMax,
-			[]engine.Key{meta2Key(engine.KeyMax)}},
+		{proto.Key("z"), engine.KeyMax,
+			[]proto.Key{meta2Key(engine.KeyMax)}},
 		// First half of splitting the range at key "m".
-		{engine.Key("a"), engine.Key("m"),
-			[]engine.Key{meta2Key(engine.Key("m"))}},
+		{proto.Key("a"), proto.Key("m"),
+			[]proto.Key{meta2Key(proto.Key("m"))}},
 		// Second half of splitting the range at key "m"
-		{engine.Key("m"), engine.Key("z"),
-			[]engine.Key{meta2Key(engine.Key("z"))}},
+		{proto.Key("m"), proto.Key("z"),
+			[]proto.Key{meta2Key(proto.Key("z"))}},
 		// First half of splitting at meta2(m).
-		{engine.KeyMin, engine.RangeMetaKey(engine.Key("m")),
-			[]engine.Key{meta1Key(engine.Key("m"))}},
+		{engine.KeyMin, engine.RangeMetaKey(proto.Key("m")),
+			[]proto.Key{meta1Key(proto.Key("m"))}},
 		// Second half of splitting at meta2(m).
-		{engine.RangeMetaKey(engine.Key("m")), engine.Key("a"),
-			[]engine.Key{meta1Key(engine.KeyMax), meta2Key(engine.Key("a"))}},
+		{engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
 		// First half of splitting at meta2(z).
-		{engine.RangeMetaKey(engine.Key("m")), engine.RangeMetaKey(engine.Key("z")),
-			[]engine.Key{meta1Key(engine.Key("z"))}},
+		{engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
+			[]proto.Key{meta1Key(proto.Key("z"))}},
 		// Second half of splitting at meta2(z).
-		{engine.RangeMetaKey(engine.Key("z")), engine.Key("a"),
-			[]engine.Key{meta1Key(engine.KeyMax), meta2Key(engine.Key("a"))}},
+		{engine.RangeMetaKey(proto.Key("z")), proto.Key("a"),
+			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
 		// First half of splitting at meta2(r).
-		{engine.RangeMetaKey(engine.Key("m")), engine.RangeMetaKey(engine.Key("r")),
-			[]engine.Key{meta1Key(engine.Key("r"))}},
+		{engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")),
+			[]proto.Key{meta1Key(proto.Key("r"))}},
 		// Second half of splitting at meta2(r).
-		{engine.RangeMetaKey(engine.Key("r")), engine.RangeMetaKey(engine.Key("z")),
-			[]engine.Key{meta1Key(engine.Key("z"))}},
+		{engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("z")),
+			[]proto.Key{meta1Key(proto.Key("z"))}},
 	}
 	expMetas := metaSlice{}
 
@@ -204,11 +204,11 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	store, _ := createTestStore(t)
-	desc := &proto.RangeDescriptor{StartKey: meta1Key(engine.Key("a")), EndKey: engine.KeyMax}
+	desc := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
 	if err := UpdateRangeAddressing(store.DB(), desc); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
-	desc = &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(engine.Key("a"))}
+	desc = &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
 	if err := UpdateRangeAddressing(store.DB(), desc); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}

@@ -77,7 +77,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 // or it contains the final value, but never a value in between.
 func TestEngineWriteBatch(t *testing.T) {
 	numWrites := 10000
-	key := Key("a")
+	key := proto.EncodedKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
 
 	runWithAllEngines(func(e Engine, t *testing.T) {
@@ -125,7 +125,7 @@ func TestEngineWriteBatch(t *testing.T) {
 func TestEngineBatch(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		numShuffles := 100
-		key := Key("a")
+		key := proto.EncodedKey("a")
 		// Those are randomized below.
 		batch := []interface{}{
 			BatchPut{proto.RawKeyValue{Key: key, Value: appender("~ockroachDB")}},
@@ -253,7 +253,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 // exhaustively in the merge tests themselves.
 func TestEngineMerge(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		testKey := Key("haste not in life")
+		testKey := proto.EncodedKey("haste not in life")
 		merges := [][]byte{
 			appender("x"),
 			appender("y"),
@@ -318,9 +318,9 @@ func TestEngineScan1(t *testing.T) {
 		// Should return all key/value pairs in lexicographic order.
 		// Note that []byte("") is the lowest key possible and is
 		// a special case in engine.scan, that's why we test it here.
-		startKeys := []Key{Key("cat"), Key("")}
+		startKeys := []proto.EncodedKey{proto.EncodedKey("cat"), proto.EncodedKey("")}
 		for _, startKey := range startKeys {
-			keyvals, err := Scan(engine, startKey, KeyMax, 0)
+			keyvals, err := Scan(engine, startKey, proto.EncodedKey(KeyMax), 0)
 			if err != nil {
 				t.Fatalf("could not run scan: %v", err)
 			}
@@ -332,7 +332,7 @@ func TestEngineScan1(t *testing.T) {
 func TestEngineIncrement(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Start with increment of an empty key.
-		val, err := Increment(engine, Key("a"), 1)
+		val, err := Increment(engine, proto.EncodedKey("a"), 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -340,31 +340,31 @@ func TestEngineIncrement(t *testing.T) {
 			t.Errorf("expected increment to be %d; got %d", 1, val)
 		}
 		// Increment same key by 1.
-		if val, err = Increment(engine, Key("a"), 1); err != nil {
+		if val, err = Increment(engine, proto.EncodedKey("a"), 1); err != nil {
 			t.Fatal(err)
 		}
 		if val != 2 {
 			t.Errorf("expected increment to be %d; got %d", 2, val)
 		}
 		// Increment same key by 2.
-		if val, err = Increment(engine, Key("a"), 2); err != nil {
+		if val, err = Increment(engine, proto.EncodedKey("a"), 2); err != nil {
 			t.Fatal(err)
 		}
 		if val != 4 {
 			t.Errorf("expected increment to be %d; got %d", 4, val)
 		}
 		// Decrement same key by -1.
-		if val, err = Increment(engine, Key("a"), -1); err != nil {
+		if val, err = Increment(engine, proto.EncodedKey("a"), -1); err != nil {
 			t.Fatal(err)
 		}
 		if val != 3 {
 			t.Errorf("expected increment to be %d; got %d", 3, val)
 		}
 		// Increment same key by max int64 value to cause overflow; should return error.
-		if val, err = Increment(engine, Key("a"), math.MaxInt64); err == nil {
+		if val, err = Increment(engine, proto.EncodedKey("a"), math.MaxInt64); err == nil {
 			t.Error("expected an overflow error")
 		}
-		if val, err = Increment(engine, Key("a"), 0); err != nil {
+		if val, err = Increment(engine, proto.EncodedKey("a"), 0); err != nil {
 			t.Fatal(err)
 		}
 		if val != 3 {
@@ -373,7 +373,7 @@ func TestEngineIncrement(t *testing.T) {
 	}, t)
 }
 
-func verifyScan(start, end Key, max int64, expKeys []Key, engine Engine, t *testing.T) {
+func verifyScan(start, end proto.EncodedKey, max int64, expKeys []proto.EncodedKey, engine Engine, t *testing.T) {
 	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", string(start), string(end), err)
@@ -394,52 +394,52 @@ func TestEngineScan2(t *testing.T) {
 	// TODO(Tobias): Merge this with TestEngineScan1 and remove
 	// either verifyScan or the other helper function.
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []Key{
-			Key("a"),
-			Key("aa"),
-			Key("aaa"),
-			Key("ab"),
-			Key("abc"),
-			KeyMax,
+		keys := []proto.EncodedKey{
+			proto.EncodedKey("a"),
+			proto.EncodedKey("aa"),
+			proto.EncodedKey("aaa"),
+			proto.EncodedKey("ab"),
+			proto.EncodedKey("abc"),
+			proto.EncodedKey(KeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
-		verifyScan(Key("a"), KeyMax, 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey("a"), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
 
 		// Scan sub range.
-		verifyScan(Key("aab"), Key("abcc"), 10, keys[3:5], engine, t)
-		verifyScan(Key("aa0"), Key("abcc"), 10, keys[2:5], engine, t)
+		verifyScan(proto.EncodedKey("aab"), proto.EncodedKey("abcc"), 10, keys[3:5], engine, t)
+		verifyScan(proto.EncodedKey("aa0"), proto.EncodedKey("abcc"), 10, keys[2:5], engine, t)
 
 		// Scan with max values.
-		verifyScan(KeyMin, KeyMax, 3, keys[0:3], engine, t)
-		verifyScan(Key("a0"), KeyMax, 3, keys[1:4], engine, t)
+		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 3, keys[0:3], engine, t)
+		verifyScan(proto.EncodedKey("a0"), proto.EncodedKey(KeyMax), 3, keys[1:4], engine, t)
 
 		// Scan with max value 0 gets all values.
-		verifyScan(KeyMin, KeyMax, 0, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0, keys[0:5], engine, t)
 	}, t)
 }
 
 func TestEngineDeleteRange(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		keys := []Key{
-			Key("a"),
-			Key("aa"),
-			Key("aaa"),
-			Key("ab"),
-			Key("abc"),
-			KeyMax,
+		keys := []proto.EncodedKey{
+			proto.EncodedKey("a"),
+			proto.EncodedKey("aa"),
+			proto.EncodedKey("aaa"),
+			proto.EncodedKey("ab"),
+			proto.EncodedKey("abc"),
+			proto.EncodedKey(KeyMax),
 		}
 
 		insertKeys(keys, engine, t)
 
 		// Scan all keys (non-inclusive of final key).
-		verifyScan(KeyMin, KeyMax, 10, keys[0:5], engine, t)
+		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10, keys[0:5], engine, t)
 
 		// Delete a range of keys
-		numDeleted, err := ClearRange(engine, Key("aa"), Key("abc"))
+		numDeleted, err := ClearRange(engine, proto.EncodedKey("aa"), proto.EncodedKey("abc"))
 		// Verify what was deleted
 		if err != nil {
 			t.Error("Not expecting an error")
@@ -448,7 +448,8 @@ func TestEngineDeleteRange(t *testing.T) {
 			t.Errorf("Expected to delete 3 entries; was %v", numDeleted)
 		}
 		// Verify what's left
-		verifyScan(KeyMin, KeyMax, 10, []Key{Key("a"), Key("abc")}, engine, t)
+		verifyScan(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 10,
+			[]proto.EncodedKey{proto.EncodedKey("a"), proto.EncodedKey("abc")}, engine, t)
 	}, t)
 }
 
@@ -485,8 +486,8 @@ func TestSnapshot(t *testing.T) {
 				valSnapshot, val1)
 		}
 
-		keyvals, _ := Scan(engine, key, KeyMax, 0)
-		keyvalsSnapshot, error := ScanSnapshot(engine, key, KeyMax, 0, snapshotID)
+		keyvals, _ := Scan(engine, key, proto.EncodedKey(KeyMax), 0)
+		keyvalsSnapshot, error := ScanSnapshot(engine, key, proto.EncodedKey(KeyMax), 0, snapshotID)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -507,7 +508,7 @@ func TestApproximateSize(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		var (
 			count    = 10000
-			keys     = make([]Key, count)
+			keys     = make([]proto.EncodedKey, count)
 			values   = make([][]byte, count) // Random values to prevent compression
 			rand     = util.NewPseudoRand()
 			valueLen = 10
@@ -532,11 +533,11 @@ func TestApproximateSize(t *testing.T) {
 	}, t)
 }
 
-func insertKeys(keys []Key, engine Engine, t *testing.T) {
+func insertKeys(keys []proto.EncodedKey, engine Engine, t *testing.T) {
 	insertKeysAndValues(keys, nil, engine, t)
 }
 
-func insertKeysAndValues(keys []Key, values [][]byte, engine Engine, t *testing.T) {
+func insertKeysAndValues(keys []proto.EncodedKey, values [][]byte, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))
 	for _, idx := range order {
@@ -552,7 +553,7 @@ func insertKeysAndValues(keys []Key, values [][]byte, engine Engine, t *testing.
 	}
 }
 
-func verifyApproximateSize(keys []Key, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
+func verifyApproximateSize(keys []proto.EncodedKey, engine Engine, sizePerRecord int, ratio float64, t *testing.T) {
 	sz, err := engine.ApproximateSize(keys[0], keys[len(keys)-1])
 	if err != nil {
 		t.Errorf("Error from ApproximateSize(): %s", err)

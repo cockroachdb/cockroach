@@ -108,19 +108,19 @@ func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip
 func TestRangeContains(t *testing.T) {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
-		StartKey: engine.Key("a"),
-		EndKey:   engine.Key("b"),
+		StartKey: proto.Key("a"),
+		EndKey:   proto.Key("b"),
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano)
 	r := NewRange(0, desc, NewStore(clock, nil, nil, nil))
-	if !r.ContainsKey(engine.Key("aa")) {
+	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
 	if !r.ContainsKey(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa"))) {
 		t.Errorf("expected range to contain key transaction key for \"aa\"")
 	}
-	if !r.ContainsKeyRange(engine.Key("aa"), engine.Key("b")) {
+	if !r.ContainsKeyRange(proto.Key("aa"), proto.Key("b")) {
 		t.Errorf("expected range to contain key range \"aa\"-\"b\"")
 	}
 	if !r.ContainsKeyRange(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa")),
@@ -178,7 +178,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
-	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
+	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
 	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
@@ -192,8 +192,8 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
 		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{engine.Key("/db1"), nil, &db1Perm},
-		&PrefixConfig{engine.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		&PrefixConfig{proto.Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -211,7 +211,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		Read:  []string{"spencer"},
 		Write: []string{"spencer"},
 	}
-	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.Key("/db1"))
+	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
 	data, err := gogoproto.Marshal(db1Perm)
 	if err != nil {
 		t.Fatal(err)
@@ -232,8 +232,8 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
 		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{engine.Key("/db1"), nil, db1Perm},
-		&PrefixConfig{engine.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		&PrefixConfig{proto.Key("/db1"), nil, db1Perm},
+		&PrefixConfig{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -252,7 +252,7 @@ type blockingEngine struct {
 	blocker sync.Mutex // blocks Get() and Put()
 	*engine.InMem
 	sync.Mutex // protects key
-	key        engine.Key
+	key        proto.EncodedKey
 }
 
 func newBlockingEngine() *blockingEngine {
@@ -262,7 +262,7 @@ func newBlockingEngine() *blockingEngine {
 	return be
 }
 
-func (be *blockingEngine) block(key engine.Key) {
+func (be *blockingEngine) block(key proto.Key) {
 	be.Lock()
 	defer be.Unlock()
 	// Need to binary encode the key so it matches when accessed through MVCC.
@@ -280,7 +280,7 @@ func (be *blockingEngine) wait() {
 	be.blocker.Unlock()
 }
 
-func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
+func (be *blockingEngine) Get(key proto.EncodedKey) ([]byte, error) {
 	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
@@ -290,7 +290,7 @@ func (be *blockingEngine) Get(key engine.Key) ([]byte, error) {
 	return be.InMem.Get(key)
 }
 
-func (be *blockingEngine) Put(key engine.Key, value []byte) error {
+func (be *blockingEngine) Put(key proto.EncodedKey, value []byte) error {
 	be.Lock()
 	if bytes.Equal(key, be.key) {
 		be.key = nil
@@ -345,7 +345,7 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key engine.Key, rangeID int64) (*proto.DeleteRequest, *proto.DeleteResponse) {
+func deleteArgs(key proto.Key, rangeID int64) (*proto.DeleteRequest, *proto.DeleteResponse) {
 	args := &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -359,7 +359,7 @@ func deleteArgs(key engine.Key, rangeID int64) (*proto.DeleteRequest, *proto.Del
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key engine.Key, read bool) (string, proto.Request, proto.Response) {
+func readOrWriteArgs(key proto.Key, read bool) (string, proto.Request, proto.Response) {
 	if read {
 		gArgs, gReply := getArgs(key, 1)
 		return Get, gArgs, gReply
@@ -513,17 +513,17 @@ func TestRangeUpdateTSCache(t *testing.T) {
 		t.Error(err)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	rTS, wTS := rng.tsCache.GetMax(engine.Key("a"), nil, proto.NoTxnMD5)
+	rTS, wTS := rng.tsCache.GetMax(proto.Key("a"), nil, proto.NoTxnMD5)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s", rTS, wTS)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, wTS = rng.tsCache.GetMax(engine.Key("b"), nil, proto.NoTxnMD5)
+	rTS, wTS = rng.tsCache.GetMax(proto.Key("b"), nil, proto.NoTxnMD5)
 	if rTS.WallTime != 0 || wTS.WallTime != t1.Nanoseconds() {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s", rTS, wTS)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, wTS = rng.tsCache.GetMax(engine.Key("c"), nil, proto.NoTxnMD5)
+	rTS, wTS = rng.tsCache.GetMax(proto.Key("c"), nil, proto.NoTxnMD5)
 	if rTS.WallTime != 0 || wTS.WallTime != 0 {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s", rTS, wTS)
 	}
@@ -550,8 +550,8 @@ func TestRangeCommandQueue(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key1 := engine.Key(fmt.Sprintf("key1-%d", i))
-		key2 := engine.Key(fmt.Sprintf("key2-%d", i))
+		key1 := proto.Key(fmt.Sprintf("key1-%d", i))
+		key2 := proto.Key(fmt.Sprintf("key2-%d", i))
 		// Asynchronously put a value to the rng with blocking enabled.
 		be.block(key1)
 		cmd1Done := make(chan struct{})
@@ -653,7 +653,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 
 	// Test for both read & write attempts.
 	for i, read := range []bool{true, false} {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 
 		// Start by laying down an intent to trip up future read or write to same key.
 		pArgs, pReply := putArgs(key, []byte("value"), 1)
@@ -688,7 +688,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	defer rng.Stop()
 
 	// Test for both read & write attempts.
-	key := engine.Key("a")
+	key := proto.Key("a")
 	txn := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 	// Start with a read to warm the timestamp cache.
@@ -840,7 +840,7 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshotLastKey := engine.Key(iscReply.Rows[3].Key)
+	snapshotLastKey := proto.Key(iscReply.Rows[3].Key)
 
 	// Create a new snapshot to cover the latest value.
 	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1)
@@ -859,7 +859,7 @@ func TestRangeSnapshot(t *testing.T) {
 		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
 			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
 	}
-	snapshot2LastKey := engine.Key(iscReply.Rows[4].Key)
+	snapshot2LastKey := proto.Key(iscReply.Rows[4].Key)
 
 	iscArgs, iscReply = internalSnapshotCopyArgs(snapshotLastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID, 1)
 	iscArgs.Timestamp = clock.Now()
@@ -1046,19 +1046,19 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 	regressTS := clock.Now()
 	*mc = hlc.ManualClock(1)
-	txn := NewTransaction("test", engine.Key(""), 1, proto.SERIALIZABLE, clock)
+	txn := NewTransaction("test", proto.Key(""), 1, proto.SERIALIZABLE, clock)
 
 	testCases := []struct {
-		key          engine.Key
+		key          proto.Key
 		existStatus  proto.TransactionStatus
 		existEpoch   int32
 		existTS      proto.Timestamp
 		expErrRegexp string
 	}{
-		{engine.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: already committed"},
-		{engine.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: aborted"},
-		{engine.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" {.*}: epoch regression: 0"},
-		{engine.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn \"test\" {.*}: timestamp regression: 0.000000001,0"},
+		{proto.Key("a"), proto.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: already committed"},
+		{proto.Key("b"), proto.ABORTED, txn.Epoch, txn.Timestamp, "txn \"test\" {.*}: aborted"},
+		{proto.Key("c"), proto.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" {.*}: epoch regression: 0"},
+		{proto.Key("d"), proto.PENDING, txn.Epoch, regressTS, "txn \"test\" {.*}: timestamp regression: 0.000000001,0"},
 	}
 	for _, test := range testCases {
 		// Establish existing txn state by writing directly to range engine.
@@ -1086,8 +1086,8 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
 
 	args, reply := pushTxnArgs(pusher, pushee, true, 1)
 	args.Key = pusher.ID
@@ -1101,7 +1101,7 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 	defer rng.Stop()
 
 	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = 1
@@ -1154,7 +1154,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 1
@@ -1211,7 +1211,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
@@ -1260,7 +1260,7 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee.Priority = 2
@@ -1325,7 +1325,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pusher.Priority = test.pusherPriority
@@ -1355,8 +1355,8 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
 	pusher.Priority = 2
 	pushee.Priority = 1 // pusher will win
 	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 25}
@@ -1385,8 +1385,8 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	rng, _, clock, _ := createTestRangeWithClock(t)
 	defer rng.Stop()
 
-	pusher := NewTransaction("test", engine.Key("a"), 1, proto.SERIALIZABLE, clock)
-	pushee := NewTransaction("test", engine.Key("b"), 1, proto.SERIALIZABLE, clock)
+	pusher := NewTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
+	pushee := NewTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
 	pusher.Priority = 1
 	pushee.Priority = 2 // pusher will lose
 	pusher.Timestamp = proto.Timestamp{WallTime: 50, Logical: 0}

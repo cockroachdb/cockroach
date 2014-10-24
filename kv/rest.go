@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -48,7 +47,7 @@ const (
 type actionHandler func(*Server, http.ResponseWriter, *http.Request)
 
 // Function signture for an HTTP handler that takes a writer and a request and a storage key
-type actionKeyHandler func(*Server, http.ResponseWriter, *http.Request, engine.Key)
+type actionKeyHandler func(*Server, http.ResponseWriter, *http.Request, proto.Key)
 
 // HTTP methods, defined in RFC 2616.
 const (
@@ -136,10 +135,10 @@ func keyedAction(pathPrefix string, act actionKeyHandler) actionHandler {
 	}
 }
 
-func dbKey(path, apiPrefix string) (engine.Key, error) {
+func dbKey(path, apiPrefix string) (proto.Key, error) {
 	result, err := url.QueryUnescape(strings.TrimPrefix(path, apiPrefix))
 	if err == nil {
-		k := engine.Key(result)
+		k := proto.Key(result)
 		if len(k) == 0 {
 			return nil, errors.New("empty key not allowed")
 		}
@@ -159,8 +158,8 @@ func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	// request headers as well, allowing query parameters to override the
 	// range headers if necessary.
 	// http://www.restapitutorial.com/media/RESTful_Best_Practices-v1_1.pdf
-	startKey := engine.Key(r.FormValue(rangeParamStart))
-	endKey := engine.Key(r.FormValue(rangeParamEnd))
+	startKey := proto.Key(r.FormValue(rangeParamStart))
+	endKey := proto.Key(r.FormValue(rangeParamEnd))
 	if len(startKey) == 0 {
 		http.Error(w, "start key must be non-empty", http.StatusBadRequest)
 		return
@@ -207,7 +206,7 @@ func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, results)
 }
 
-func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	// GET Requests are just an increment with 0 value.
 	var inputVal int64
 
@@ -239,7 +238,7 @@ func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key
 	writeJSON(w, status, gr)
 }
 
-func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -260,7 +259,7 @@ func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key eng
 	writeJSON(w, status, pr)
 }
 
-func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	gr := <-s.db.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -278,7 +277,7 @@ func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key eng
 	writeJSON(w, status, gr)
 }
 
-func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	cr := <-s.db.Contains(&proto.ContainsRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -295,7 +294,7 @@ func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key en
 	writeJSON(w, status, cr)
 }
 
-func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key engine.Key) {
+func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	dr := <-s.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,

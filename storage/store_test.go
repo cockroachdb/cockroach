@@ -122,7 +122,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
-	if err := eng.Put(engine.Key("foo"), []byte("bar")); err != nil {
+	if err := eng.Put(proto.EncodedKey("foo"), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
 	manual := hlc.ManualClock(0)
@@ -144,7 +144,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 func TestRangeSliceSort(t *testing.T) {
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
-		key := engine.Key(fmt.Sprintf("foo%d", i))
+		key := proto.Key(fmt.Sprintf("foo%d", i))
 		rs = append(rs, &Range{
 			Desc: &proto.RangeDescriptor{StartKey: key},
 		})
@@ -152,7 +152,7 @@ func TestRangeSliceSort(t *testing.T) {
 
 	sort.Sort(rs)
 	for i := 0; i < 5; i++ {
-		expectedKey := engine.Key(fmt.Sprintf("foo%d", i))
+		expectedKey := proto.Key(fmt.Sprintf("foo%d", i))
 		if !bytes.Equal(rs[i].Desc.StartKey, expectedKey) {
 			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Desc.StartKey)
 		}
@@ -289,7 +289,7 @@ func TestStoreExecuteCmdBadRange(t *testing.T) {
 	}
 }
 
-func splitTestRange(store *Store, key, splitKey engine.Key, t *testing.T) *Range {
+func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range {
 	rng := store.LookupRange(key, key)
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
@@ -311,7 +311,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 	// Split the range and then remove the second half to clear up some space.
-	rng := splitTestRange(store, engine.KeyMin, engine.Key("a"), t)
+	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 	// to raftIDAllocCount * 3 + 1.
 	for i := 0; i < raftIDAllocCount*3; i++ {
 		replicas := []proto.Replica{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(engine.Key(fmt.Sprintf("%03d", i)), engine.Key(fmt.Sprintf("%03d", i+1)), replicas)
+		desc, err := store.NewRangeDescriptor(proto.Key(fmt.Sprintf("%03d", i)), proto.Key(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -351,30 +351,30 @@ func TestStoreRangesByKey(t *testing.T) {
 	defer store.Close()
 
 	r0 := store.LookupRange(engine.KeyMin, engine.KeyMin)
-	r1 := splitTestRange(store, engine.KeyMin, engine.Key("A"), t)
-	r2 := splitTestRange(store, engine.Key("A"), engine.Key("C"), t)
-	r3 := splitTestRange(store, engine.Key("C"), engine.Key("X"), t)
-	r4 := splitTestRange(store, engine.Key("X"), engine.Key("ZZ"), t)
+	r1 := splitTestRange(store, engine.KeyMin, proto.Key("A"), t)
+	r2 := splitTestRange(store, proto.Key("A"), proto.Key("C"), t)
+	r3 := splitTestRange(store, proto.Key("C"), proto.Key("X"), t)
+	r4 := splitTestRange(store, proto.Key("X"), proto.Key("ZZ"), t)
 
-	if r := store.LookupRange(engine.Key("0"), nil); r != r0 {
+	if r := store.LookupRange(proto.Key("0"), nil); r != r0 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r0.Desc)
 	}
-	if r := store.LookupRange(engine.Key("B"), nil); r != r1 {
+	if r := store.LookupRange(proto.Key("B"), nil); r != r1 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r1.Desc)
 	}
-	if r := store.LookupRange(engine.Key("C"), nil); r != r2 {
+	if r := store.LookupRange(proto.Key("C"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r2.Desc)
 	}
-	if r := store.LookupRange(engine.Key("M"), nil); r != r2 {
+	if r := store.LookupRange(proto.Key("M"), nil); r != r2 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r2.Desc)
 	}
-	if r := store.LookupRange(engine.Key("X"), nil); r != r3 {
+	if r := store.LookupRange(proto.Key("X"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r3.Desc)
 	}
-	if r := store.LookupRange(engine.Key("Z"), nil); r != r3 {
+	if r := store.LookupRange(proto.Key("Z"), nil); r != r3 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r3.Desc)
 	}
-	if r := store.LookupRange(engine.Key("ZZ"), nil); r != r4 {
+	if r := store.LookupRange(proto.Key("ZZ"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc, r4.Desc)
 	}
 	if r := store.LookupRange(engine.KeyMax[:engine.KeyMaxLength-1], nil); r != r4 {
@@ -395,7 +395,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer store.Close()
 
 	for i, resolvable := range []bool{true, false} {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 		pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 		if resolvable {
@@ -457,7 +457,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 
-	key := engine.Key("a")
+	key := proto.Key("a")
 	pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 	pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 	pushee.Priority = 1
@@ -510,7 +510,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		{false, proto.SNAPSHOT},
 	}
 	for i, test := range testCases {
-		key := engine.Key(fmt.Sprintf("key-%d", i))
+		key := proto.Key(fmt.Sprintf("key-%d", i))
 		pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 		pushee := NewTransaction("test", key, 1, test.pusheeIso, store.clock)
 		if test.resolvable {
@@ -600,7 +600,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 
-	key := engine.Key("a")
+	key := proto.Key("a")
 	pusher := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 	pushee := NewTransaction("test", key, 1, proto.SNAPSHOT, store.clock)
 	pushee.Priority = 2
@@ -653,7 +653,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 
-	key := engine.Key("a")
+	key := proto.Key("a")
 	pushee := NewTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
 	pushee.Priority = 0 // pushee should lose all conflicts
 
@@ -810,8 +810,8 @@ func TestStoreRangeSplit(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Close()
 	rangeID := int64(1)
-	splitKey := engine.Key("m")
-	content := engine.Key("asdvb")
+	splitKey := proto.Key("m")
+	content := proto.Key("asdvb")
 
 	// First, write some values left and right of the proposed split key.
 	pArgs, pReply := putArgs([]byte("c"), content, rangeID)
@@ -938,12 +938,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	defer store.Close()
 
 	// Split the range at the first user key.
-	args, reply := adminSplitArgs(engine.KeyMin, engine.Key("\x01"), 1)
+	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1)
 	if err := store.ExecuteCmd(AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
 	// Verify empty range has empty stats.
-	rng := store.LookupRange(engine.Key("\x01"), nil)
+	rng := store.LookupRange(proto.Key("\x01"), nil)
 	verifyRangeStats(store.Engine(), rng.RangeID, engine.MVCCStats{}, t)
 
 	// Write random data.
@@ -964,7 +964,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	args, reply = adminSplitArgs(engine.Key("\x01"), engine.Key("Z"), rng.RangeID)
+	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.RangeID)
 	if err := store.ExecuteCmd(AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
@@ -973,7 +973,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rngRight := store.LookupRange(engine.Key("Z"), nil)
+	rngRight := store.LookupRange(proto.Key("Z"), nil)
 	msRight, err := engine.GetRangeMVCCStats(store.Engine(), rngRight.RangeID)
 	if err != nil {
 		t.Fatal(err)
@@ -997,7 +997,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *Store, rangeID int64, prefix engine.Key, bytes int64, t *testing.T) {
+func fillRange(store *Store, rangeID int64, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
 		keyBytes, err := engine.GetRangeStat(store.engine, rangeID, engine.StatKeyBytes)
@@ -1049,7 +1049,7 @@ func TestStoreShouldSplit(t *testing.T) {
 	}
 
 	maxBytes := testDefaultZoneConfig.RangeMaxBytes
-	fillRange(store, rng.RangeID, engine.Key("test"), maxBytes, t)
+	fillRange(store, rng.RangeID, proto.Key("test"), maxBytes, t)
 
 	if ok := rng.shouldSplit(); !ok {
 		t.Errorf("range should split after writing %d bytes", maxBytes)

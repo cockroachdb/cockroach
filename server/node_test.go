@@ -70,7 +70,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	return rpcServer, node
 }
 
-func formatKeys(keys []engine.Key) string {
+func formatKeys(keys []proto.Key) string {
 	var buf bytes.Buffer
 	for i, key := range keys {
 		buf.WriteString(fmt.Sprintf("%d: %s\n", i, key))
@@ -100,18 +100,18 @@ func TestBootstrapCluster(t *testing.T) {
 	if sr.Error != nil {
 		t.Fatal(sr.Error)
 	}
-	var keys []engine.Key
+	var keys []proto.Key
 	for _, kv := range sr.Rows {
 		keys = append(keys, kv.Key)
 	}
-	var expectedKeys = []engine.Key{
-		engine.MakeKey(engine.Key("\x00\x00meta1"), engine.KeyMax),
-		engine.MakeKey(engine.Key("\x00\x00meta2"), engine.KeyMax),
-		engine.Key("\x00acct"),
-		engine.Key("\x00node-idgen"),
-		engine.Key("\x00perm"),
-		engine.Key("\x00store-idgen-1"),
-		engine.Key("\x00zone"),
+	var expectedKeys = []proto.Key{
+		engine.MakeKey(proto.Key("\x00\x00meta1"), engine.KeyMax),
+		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
+		proto.Key("\x00acct"),
+		proto.Key("\x00node-idgen"),
+		proto.Key("\x00perm"),
+		proto.Key("\x00store-idgen-1"),
+		proto.Key("\x00zone"),
 	}
 	if !reflect.DeepEqual(keys, expectedKeys) {
 		t.Errorf("expected keys mismatch:\n%s\n  -- vs. -- \n\n%s",

@@ -23,7 +23,6 @@ import (
 	"crypto/md5"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -86,7 +85,7 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnMD5 is empty for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
-func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
+func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -126,7 +125,7 @@ func (tc *TimestampCache) Add(start, end engine.Key, timestamp proto.Timestamp, 
 // timestamp for "a". Then the write (for the same transaction) would
 // get that as the max timestamp and be forced to increment it. The MD5
 // allows timestamps from the same txn to be ignored.
-func (tc *TimestampCache) GetMax(start, end engine.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
+func (tc *TimestampCache) GetMax(start, end proto.Key, txnMD5 [md5.Size]byte) (proto.Timestamp, proto.Timestamp) {
 	if len(end) == 0 {
 		end = start.Next()
 	}

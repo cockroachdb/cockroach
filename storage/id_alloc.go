@@ -19,7 +19,6 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -30,7 +29,7 @@ const allocationTrigger = 0
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
 type IDAllocator struct {
-	idKey     engine.Key
+	idKey     proto.Key
 	db        DB
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
@@ -41,7 +40,7 @@ type IDAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey engine.Key, db DB, minID int64, blockSize int64) *IDAllocator {
+func NewIDAllocator(idKey proto.Key, db DB, minID int64, blockSize int64) *IDAllocator {
 	if minID <= allocationTrigger {
 		log.Fatalf("minID must be > %d", allocationTrigger)
 	}

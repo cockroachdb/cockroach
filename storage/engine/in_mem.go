@@ -132,14 +132,14 @@ func (in *InMem) Attrs() proto.Attributes {
 }
 
 // Put sets the given key to the value provided.
-func (in *InMem) Put(key Key, value []byte) error {
+func (in *InMem) Put(key proto.EncodedKey, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.putLocked(key, value)
 }
 
 // putLocked assumes mutex is already held by caller. See Put().
-func (in *InMem) putLocked(key Key, value []byte) error {
+func (in *InMem) putLocked(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -162,14 +162,14 @@ func (in *InMem) putLocked(key Key, value []byte) error {
 // Merge implements a merge operation which updates the existing value stored
 // under key based on the value passed.
 // See the documentation of goMerge and goMergeInit for details.
-func (in *InMem) Merge(key Key, value []byte) error {
+func (in *InMem) Merge(key proto.EncodedKey, value []byte) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.mergeLocked(key, value)
 }
 
 // mergeLocked assumes the mutex is already held by the caller. See merge().
-func (in *InMem) mergeLocked(key Key, value []byte) error {
+func (in *InMem) mergeLocked(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -183,7 +183,7 @@ func (in *InMem) mergeLocked(key Key, value []byte) error {
 }
 
 // Get returns the value for the given key, nil otherwise.
-func (in *InMem) Get(key Key) ([]byte, error) {
+func (in *InMem) Get(key proto.EncodedKey) ([]byte, error) {
 	in.RLock()
 	defer in.RUnlock()
 	return in.getLocked(key, in.data)
@@ -191,7 +191,7 @@ func (in *InMem) Get(key Key) ([]byte, error) {
 
 // GetSnapshot returns the value for the given key from the given
 // snapshotID, nil otherwise.
-func (in *InMem) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+func (in *InMem) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
 	in.RLock()
 	defer in.RUnlock()
 	snapshotHandle, ok := in.snapshots[snapshotID]
@@ -203,7 +203,7 @@ func (in *InMem) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
 
 // getLocked performs a get operation assuming that the caller
 // is already holding the mutex.
-func (in *InMem) getLocked(key Key, data llrb.Tree) ([]byte, error) {
+func (in *InMem) getLocked(key proto.EncodedKey, data llrb.Tree) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -217,7 +217,7 @@ func (in *InMem) getLocked(key Key, data llrb.Tree) ([]byte, error) {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (in *InMem) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
+func (in *InMem) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
 	in.RLock()
 	defer in.RUnlock()
 	return in.iterateLocked(start, end, f, in.data)
@@ -225,7 +225,7 @@ func (in *InMem) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)
 
 // Iterate iterates from start to end keys using snapshot ID, invoking
 // f on each key/value pair. See engine.IterateSnapshot for details.
-func (in *InMem) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+func (in *InMem) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
 	in.RLock()
 	defer in.RUnlock()
 	snapshotHandle, ok := in.snapshots[snapshotID]
@@ -235,7 +235,7 @@ func (in *InMem) IterateSnapshot(start, end Key, snapshotID string, f func(proto
 	return in.iterateLocked(start, end, f, snapshotHandle)
 }
 
-func (in *InMem) iterateLocked(start, end Key, f func(proto.RawKeyValue) (bool, error), data llrb.Tree) error {
+func (in *InMem) iterateLocked(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error), data llrb.Tree) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
@@ -252,14 +252,14 @@ func (in *InMem) iterateLocked(start, end Key, f func(proto.RawKeyValue) (bool, 
 }
 
 // Clear removes the item from the db with the given key.
-func (in *InMem) Clear(key Key) error {
+func (in *InMem) Clear(key proto.EncodedKey) error {
 	in.Lock()
 	defer in.Unlock()
 	return in.clearLocked(key)
 }
 
 // clearLocked assumes mutex is already held by caller. See clear().
-func (in *InMem) clearLocked(key Key) error {
+func (in *InMem) clearLocked(key proto.EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -321,7 +321,7 @@ func (in *InMem) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) 
 
 // ApproximateSize computes the size of data used to store all keys in the given
 // key range.
-func (in *InMem) ApproximateSize(start, end Key) (uint64, error) {
+func (in *InMem) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	var size uint64
 	in.RLock()
 	defer in.RUnlock()

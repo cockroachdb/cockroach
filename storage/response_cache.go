@@ -206,7 +206,7 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 
 // responseCacheKeyPrefix generates the prefix under which all entries
 // for the given range are stored in the engine.
-func responseCacheKeyPrefix(rangeID int64) engine.Key {
+func responseCacheKeyPrefix(rangeID int64) proto.Key {
 	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)
 	return encoding.EncodeInt(b, rangeID)
 }
@@ -215,7 +215,7 @@ func responseCacheKeyPrefix(rangeID int64) engine.Key {
 // key for storage in the underlying engine. Note that the prefix for
 // response cache keys sorts them at the very top of the engine's
 // keyspace.
-func responseCacheKey(rangeID int64, cmdID proto.ClientCmdID) engine.Key {
+func responseCacheKey(rangeID int64, cmdID proto.ClientCmdID) proto.Key {
 	b := responseCacheKeyPrefix(rangeID)
 	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
 	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64

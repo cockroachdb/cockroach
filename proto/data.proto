@@ -71,13 +71,13 @@ message MVCCValue {
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
 // from ScanRequest/ScanResponse. It embeds a Key and a Value.
 message KeyValue {
-  optional bytes key = 1 [(gogoproto.nullable) = false];
+  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   optional Value value = 2 [(gogoproto.nullable) = false];
 }
 
 // RawKeyValue contains the raw bytes of the value for a key.
 message RawKeyValue {
-  optional bytes key = 1 [(gogoproto.nullable) = false];
+  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "EncodedKey"];
   optional bytes value = 2 [(gogoproto.nullable) = false];
 }
 

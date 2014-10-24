@@ -20,17 +20,19 @@ package engine
 import (
 	"encoding/gob"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // InvalidRangeMetaKeyError indicates that a Range Metadata key is somehow
 // invalid.
 type InvalidRangeMetaKeyError struct {
 	Msg string
-	Key Key
+	Key proto.Key
 }
 
 // NewInvalidRangeMetaKeyError returns a new InvalidRangeMetaKeyError
-func NewInvalidRangeMetaKeyError(msg string, k Key) *InvalidRangeMetaKeyError {
+func NewInvalidRangeMetaKeyError(msg string, k proto.Key) *InvalidRangeMetaKeyError {
 	return &InvalidRangeMetaKeyError{Msg: msg, Key: k}
 }
 

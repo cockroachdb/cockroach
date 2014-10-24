@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // waitForCmd launches a goroutine to wait on the supplied
@@ -54,14 +54,14 @@ func TestCommandQueue(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Try a command with no overlapping already-running commands.
-	cq.GetWait(engine.Key("a"), nil, false, &wg)
+	cq.GetWait(proto.Key("a"), nil, false, &wg)
 	wg.Wait()
-	cq.GetWait(engine.Key("a"), engine.Key("b"), false, &wg)
+	cq.GetWait(proto.Key("a"), proto.Key("b"), false, &wg)
 	wg.Wait()
 
 	// Add a command and verify wait group is returned.
-	wk := cq.Add(engine.Key("a"), nil, false)
-	cq.GetWait(engine.Key("a"), nil, false, &wg)
+	wk := cq.Add(proto.Key("a"), nil, false)
+	cq.GetWait(proto.Key("a"), nil, false, &wg)
 	cmdDone := waitForCmd(&wg)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
@@ -76,12 +76,12 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 	// Add a read-only command.
-	wk := cq.Add(engine.Key("a"), nil, true)
+	wk := cq.Add(proto.Key("a"), nil, true)
 	// Verify no wait on another read-only command.
-	cq.GetWait(engine.Key("a"), nil, true, &wg)
+	cq.GetWait(proto.Key("a"), nil, true, &wg)
 	wg.Wait()
 	// Verify wait with a read-write command.
-	cq.GetWait(engine.Key("a"), nil, false, &wg)
+	cq.GetWait(proto.Key("a"), nil, false, &wg)
 	cmdDone := waitForCmd(&wg)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
 		t.Fatal("command should not finish with command outstanding")
@@ -97,10 +97,10 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Add multiple commands and add a command which overlaps them all.
-	wk1 := cq.Add(engine.Key("a"), nil, false)
-	wk2 := cq.Add(engine.Key("b"), engine.Key("c"), false)
-	wk3 := cq.Add(engine.Key("0"), engine.Key("d"), false)
-	cq.GetWait(engine.Key("a"), engine.Key("cc"), false, &wg)
+	wk1 := cq.Add(proto.Key("a"), nil, false)
+	wk2 := cq.Add(proto.Key("b"), proto.Key("c"), false)
+	wk3 := cq.Add(proto.Key("0"), proto.Key("d"), false)
+	cq.GetWait(proto.Key("a"), proto.Key("cc"), false, &wg)
 	cmdDone := waitForCmd(&wg)
 	cq.Remove(wk1)
 	if testCmdDone(cmdDone, 1*time.Millisecond) {
@@ -123,10 +123,10 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 	wg3 := sync.WaitGroup{}
 
 	// Add a command which will overlap all commands.
-	wk := cq.Add(engine.Key("a"), engine.Key("d"), false)
-	cq.GetWait(engine.Key("a"), nil, false, &wg1)
-	cq.GetWait(engine.Key("b"), nil, false, &wg2)
-	cq.GetWait(engine.Key("c"), nil, false, &wg3)
+	wk := cq.Add(proto.Key("a"), proto.Key("d"), false)
+	cq.GetWait(proto.Key("a"), nil, false, &wg1)
+	cq.GetWait(proto.Key("b"), nil, false, &wg2)
+	cq.GetWait(proto.Key("c"), nil, false, &wg3)
 	cmdDone1 := waitForCmd(&wg1)
 	cmdDone2 := waitForCmd(&wg2)
 	cmdDone3 := waitForCmd(&wg3)
@@ -150,10 +150,10 @@ func TestCommandQueueClear(t *testing.T) {
 	wg2 := sync.WaitGroup{}
 
 	// Add multiple commands and commands which access each.
-	cq.Add(engine.Key("a"), nil, false)
-	cq.Add(engine.Key("b"), nil, false)
-	cq.GetWait(engine.Key("a"), nil, false, &wg1)
-	cq.GetWait(engine.Key("b"), nil, false, &wg2)
+	cq.Add(proto.Key("a"), nil, false)
+	cq.Add(proto.Key("b"), nil, false)
+	cq.GetWait(proto.Key("a"), nil, false, &wg1)
+	cq.GetWait(proto.Key("b"), nil, false, &wg2)
 	cmdDone1 := waitForCmd(&wg1)
 	cmdDone2 := waitForCmd(&wg2)
 

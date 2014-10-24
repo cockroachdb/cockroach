@@ -175,7 +175,7 @@ func emptyKeyError() error {
 //
 // The key and value byte slices may be reused safely. put takes a copy of
 // them before returning.
-func (r *RocksDB) Put(key Key, value []byte) error {
+func (r *RocksDB) Put(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -194,7 +194,7 @@ func (r *RocksDB) Put(key Key, value []byte) error {
 //
 // The key and value byte slices may be reused safely. merge takes a copy
 // of them before returning.
-func (r *RocksDB) Merge(key Key, value []byte) error {
+func (r *RocksDB) Merge(key proto.EncodedKey, value []byte) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -206,13 +206,13 @@ func (r *RocksDB) Merge(key Key, value []byte) error {
 }
 
 // Get returns the value for the given key.
-func (r *RocksDB) Get(key Key) ([]byte, error) {
+func (r *RocksDB) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
 // GetSnapshot returns the value for the given key from the given
 // snapshotID, nil otherwise.
-func (r *RocksDB) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
+func (r *RocksDB) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
 	r.Lock()
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
@@ -224,7 +224,7 @@ func (r *RocksDB) GetSnapshot(key Key, snapshotID string) ([]byte, error) {
 }
 
 // Get returns the value for the given key.
-func (r *RocksDB) getInternal(key Key, snapshotHandle *C.DBSnapshot) ([]byte, error) {
+func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -237,7 +237,7 @@ func (r *RocksDB) getInternal(key Key, snapshotHandle *C.DBSnapshot) ([]byte, er
 }
 
 // Clear removes the item from the db with the given key.
-func (r *RocksDB) Clear(key Key) error {
+func (r *RocksDB) Clear(key proto.EncodedKey) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -246,13 +246,13 @@ func (r *RocksDB) Clear(key Key) error {
 
 // Iterate iterates from start to end keys, invoking f on each
 // key/value pair. See engine.Iterate for details.
-func (r *RocksDB) Iterate(start, end Key, f func(proto.RawKeyValue) (bool, error)) error {
+func (r *RocksDB) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
 	return r.iterateInternal(start, end, f, nil)
 }
 
 // IterateSnapshot iterates from start to end keys, invoking f on
 // each key/value pair. See engine.IterateSnapshot for details.
-func (r *RocksDB) IterateSnapshot(start, end Key, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
+func (r *RocksDB) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
 	r.Lock()
 	snapshotHandle, ok := r.snapshots[snapshotID]
 	if !ok {
@@ -263,7 +263,7 @@ func (r *RocksDB) IterateSnapshot(start, end Key, snapshotID string, f func(prot
 	return r.iterateInternal(start, end, f, snapshotHandle)
 }
 
-func (r *RocksDB) iterateInternal(start, end Key, f func(proto.RawKeyValue) (bool, error),
+func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error),
 	snapshotHandle *C.DBSnapshot) error {
 	if bytes.Compare(start, end) >= 0 {
 		return nil
@@ -355,7 +355,7 @@ func (r *RocksDB) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
 // Similarly, specifying nil for the end key will compact through the
 // last key. Note that the use of the word "Range" here does not refer
 // to Cockroach ranges, just to a generalized key range.
-func (r *RocksDB) CompactRange(start, end Key) {
+func (r *RocksDB) CompactRange(start, end proto.EncodedKey) {
 	var (
 		s, e       C.DBSlice
 		sPtr, ePtr *C.DBSlice
@@ -381,7 +381,7 @@ func (r *RocksDB) Destroy() error {
 
 // ApproximateSize returns the approximate number of bytes on disk that RocksDB
 // is using to store data for the given range of keys.
-func (r *RocksDB) ApproximateSize(start, end Key) (uint64, error) {
+func (r *RocksDB) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return uint64(C.DBApproximateSize(r.rdb, goToCSlice(start), goToCSlice(end))), nil
 }
 

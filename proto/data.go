@@ -22,13 +22,149 @@ import (
 	"crypto/md5"
 	"fmt"
 	"math"
+	"strings"
 
+	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
 	"code.google.com/p/go-uuid/uuid"
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 )
+
+// KeyMaxLength is the maximum length of a Key in bytes.
+const KeyMaxLength = 4096
+
+var (
+	// KeyMin is a minimum key value which sorts before all other keys.
+	KeyMin = Key("")
+	// KeyMax is a maximum key value which sorts after all other keys.
+	KeyMax = Key(strings.Repeat("\xff", KeyMaxLength))
+)
+
+// Key is a custom type for a byte string in proto
+// messages which refer to Cockroach keys.
+type Key []byte
+
+// EncodedKey is an encoded key, distinguished from Key in that it is
+// an encoded version.
+type EncodedKey []byte
+
+func bytesNext(b []byte) []byte {
+	return bytes.Join([][]byte{b, []byte{0}}, nil)
+}
+
+func bytesPrefixEnd(b []byte) []byte {
+	end := append([]byte(nil), b...)
+	for i := len(end) - 1; i >= 0; i-- {
+		end[i] = end[i] + 1
+		if end[i] != 0 {
+			return end
+		}
+	}
+	// This statement will only be reached if the key is already a
+	// maximal byte string (i.e. already \xff...).
+	return b
+}
+
+// Next returns the next key in lexicographic sort order.
+func (k Key) Next() Key {
+	return Key(bytesNext(k))
+}
+
+// Next returns the next key in lexicographic sort order.
+func (k EncodedKey) Next() EncodedKey {
+	return EncodedKey(bytes.Join([][]byte{k, Key{0}}, nil))
+}
+
+// PrefixEnd determines the end key given key as a prefix, that is the
+// key that sorts precisely behind all keys starting with prefix: "1"
+// is added to the final byte and the carry propagated. The special
+// cases of nil and KeyMin always returns KeyMax.
+func (k Key) PrefixEnd() Key {
+	if len(k) == 0 {
+		return KeyMax
+	}
+	return Key(bytesPrefixEnd(k))
+}
+
+// PrefixEnd determines the key directly after the last key which has
+// this key as a prefix. See comments for Key.
+func (k EncodedKey) PrefixEnd() EncodedKey {
+	if len(k) == 0 {
+		return EncodedKey(KeyMax)
+	}
+	return EncodedKey(bytesPrefixEnd(k))
+}
+
+// Less implements the util.Ordered interface.
+func (k Key) Less(l Key) bool {
+	return bytes.Compare(k, l) < 0
+}
+
+// Equal returns whether two keys are identical.
+func (k Key) Equal(l Key) bool {
+	return bytes.Equal(k, l)
+}
+
+// Compare implements the llrb.Comparable interface for tree nodes.
+func (k Key) Compare(b interval.Comparable) int {
+	return bytes.Compare(k, b.(Key))
+}
+
+// String returns a string-formatted version, with a maximum
+// key formatted for brevity as "\xff...".
+func (k Key) String() string {
+	if len(k) != KeyMaxLength {
+		return string(k)
+	}
+	for _, b := range k {
+		if b != byte(0xff) {
+			return string(k)
+		}
+	}
+	return "\xff..."
+}
+
+// The following methods implement the custom marshalling and
+// unmarshalling necessary to define gogoproto custom types.
+
+// Marshal implements the gogoproto Marshaler interface.
+func (k *Key) Marshal() ([]byte, error) {
+	return []byte(*k), nil
+}
+
+// Marshal implements the gogoproto Marshaler interface.
+func (k *EncodedKey) Marshal() ([]byte, error) {
+	return []byte(*k), nil
+}
+
+// Unmarshal implements the gogoproto Unmarshaler interface.
+func (k *Key) Unmarshal(bytes []byte) error {
+	*k = Key(append([]byte(nil), bytes...))
+	return nil
+}
+
+// Unmarshal implements the gogoproto Unmarshaler interface.
+func (k *EncodedKey) Unmarshal(bytes []byte) error {
+	*k = EncodedKey(append([]byte(nil), bytes...))
+	return nil
+}
+
+// The following methods implement custom unmarshalling necessary
+// for key objects to be converted from JSON.
+
+// UnmarshalJSON implements the json Unmarshaler interface.
+func (k *Key) UnmarshalJSON(bytes []byte) error {
+	*k = Key(append([]byte(nil), bytes...))
+	return nil
+}
+
+// UnmarshalJSON implements the json Unmarshaler interface.
+func (k *EncodedKey) UnmarshalJSON(bytes []byte) error {
+	*k = EncodedKey(append([]byte(nil), bytes...))
+	return nil
+}
 
 // Timestamp constant values.
 var (

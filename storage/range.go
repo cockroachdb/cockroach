@@ -24,7 +24,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -68,7 +67,7 @@ const (
 // configPrefixes describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 var configPrefixes = []struct {
-	keyPrefix engine.Key  // Range key prefix
+	keyPrefix proto.Key   // Range key prefix
 	gossipKey string      // Gossip key
 	configI   interface{} // Config struct interface
 	dirty     bool        // Info in this config has changed; need to re-init and gossip
@@ -231,7 +230,7 @@ type Cmd struct {
 
 // makeRangeKey returns a key addressing the range descriptor for the range
 // with specified start key.
-func makeRangeKey(startKey engine.Key) engine.Key {
+func makeRangeKey(startKey proto.Key) proto.Key {
 	return engine.MakeLocalKey(engine.KeyLocalRangeDescriptorPrefix, startKey)
 }
 
@@ -290,8 +289,8 @@ func (r *Range) Stop() {
 
 // Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	start := engine.MVCCEncodeKey(engine.Key(r.Desc.StartKey))
-	end := engine.MVCCEncodeKey(engine.Key(r.Desc.EndKey))
+	start := engine.MVCCEncodeKey(proto.Key(r.Desc.StartKey))
+	end := engine.MVCCEncodeKey(proto.Key(r.Desc.EndKey))
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
 		return util.Errorf("unable to clear key/value data for range %d: %s", r.RangeID, err)
 	}
@@ -329,20 +328,20 @@ func (r *Range) GetReplica() *proto.Replica {
 }
 
 // ContainsKey returns whether this range contains the specified key.
-func (r *Range) ContainsKey(key engine.Key) bool {
+func (r *Range) ContainsKey(key proto.Key) bool {
 	// Read-lock the mutex to protect access to Desc, which might be changed
 	// concurrently via range split.
 	r.RLock()
 	defer r.RUnlock()
-	return r.Desc.ContainsKey(key.Address())
+	return r.Desc.ContainsKey(engine.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
-func (r *Range) ContainsKeyRange(start, end engine.Key) bool {
+func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
 	r.RLock()
 	defer r.RUnlock()
-	return r.Desc.ContainsKeyRange(start.Address(), end.Address())
+	return r.Desc.ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -374,7 +373,7 @@ func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, 
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
 // invocation of cmdQ.Remove().
-func (r *Range) beginCmd(start, end engine.Key, readOnly bool) interface{} {
+func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
 	r.cmdQ.GetWait(start, end, readOnly, &wg)
@@ -646,7 +645,7 @@ func (r *Range) maybeGossipConfigs() {
 // loadConfigMap scans the config entries under keyPrefix and
 // instantiates/returns a config map. Prefix configuration maps
 // include accounting, permissions, and zones.
-func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (PrefixConfigMap, error) {
+func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, error) {
 	// TODO(spencer): need to make sure range splitting never
 	// crosses a configuration map's key prefix.
 	mvcc := engine.NewMVCC(r.rm.Engine())
@@ -668,7 +667,7 @@ func (r *Range) loadConfigMap(keyPrefix engine.Key, configI interface{}) (Prefix
 }
 
 // maybeUpdateGossipConfigs is used to update gossip configs.
-func (r *Range) maybeUpdateGossipConfigs(key engine.Key) {
+func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
 	// Check whether this put has modified a configuration map.
 	for _, cp := range configPrefixes {
 		if bytes.HasPrefix(key, cp.keyPrefix) {
@@ -908,7 +907,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 	}
 
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.MVCCEncodeKey(engine.Key(args.Key))
+	encKey := engine.MVCCEncodeKey(proto.Key(args.Key))
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1051,8 +1050,8 @@ func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRange
 	// We want to search for the metadata key just greater than args.Key. Scan
 	// for both the requested key and the keys immediately afterwards, up to
 	// MaxRanges.
-	metaPrefix := engine.Key(args.Key[:len(engine.KeyMeta1Prefix)])
-	nextKey := engine.Key(args.Key).Next()
+	metaPrefix := proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
+	nextKey := proto.Key(args.Key).Next()
 	kvs, err := mvcc.Scan(nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
@@ -1113,7 +1112,7 @@ func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRe
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.MVCCEncodeKey(engine.Key(args.Key))
+	encKey := engine.MVCCEncodeKey(proto.Key(args.Key))
 
 	var txn proto.Transaction
 	ok, _, _, err := engine.GetProto(batch, encKey, &txn)
@@ -1175,10 +1174,10 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 // pusher, return TransactionRetryError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	key := engine.Key(args.Key)
-	if !bytes.Equal(key.Address(), args.PusheeTxn.ID) {
+	key := proto.Key(args.Key)
+	if !bytes.Equal(engine.KeyAddress(key), args.PusheeTxn.ID) {
 		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q",
-			key.Address(), args.PusheeTxn.ID))
+			engine.KeyAddress(key), args.PusheeTxn.ID))
 		return
 	}
 
@@ -1311,23 +1310,12 @@ func (r *Range) InternalResolveIntent(mvcc *engine.MVCC, args *proto.InternalRes
 	}
 }
 
-// createSnapshot creates a new snapshot, named using an internal counter.
-func (r *Range) createSnapshot(e engine.Engine) (string, error) {
-	candidateID, err := engine.Increment(e, engine.KeyLocalSnapshotIDGenerator, 1)
-	if err != nil {
-		return "", err
-	}
-	snapshotID := strconv.FormatInt(candidateID, 10)
-	err = e.CreateSnapshot(snapshotID)
-	return snapshotID, err
-}
-
 // InternalSnapshotCopy scans the key range specified by start key through
 // end key up to some maximum number of results from the given snapshot_id.
 // It will create a snapshot if snapshot_id is empty.
 func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
 	if len(args.SnapshotID) == 0 {
-		snapshotID, err := r.createSnapshot(e)
+		snapshotID, err := r.rm.CreateSnapshot()
 		if err != nil {
 			reply.SetGoError(err)
 			return
@@ -1335,7 +1323,7 @@ func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapsh
 		args.SnapshotID = snapshotID
 	}
 
-	kvs, err := engine.ScanSnapshot(e, args.Key, args.EndKey, args.MaxResults, args.SnapshotID)
+	kvs, err := engine.ScanSnapshot(e, proto.EncodedKey(args.Key), proto.EncodedKey(args.EndKey), args.MaxResults, args.SnapshotID)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1409,9 +1397,9 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	// Determine split key if not provided with args. This scan can be
 	// relatively slow because admin commands do not prevent any other
 	// concurrent commands from executing.
-	splitKey := engine.Key(args.SplitKey)
+	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
-		snapshotID, err := r.createSnapshot(r.rm.Engine())
+		snapshotID, err := r.rm.CreateSnapshot()
 		if err != nil {
 			reply.SetGoError(util.Errorf("unable to create snapshot: %s", err))
 			return
@@ -1452,7 +1440,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	updatedDesc.EndKey = splitKey
 
 	log.Infof("initiating a split of range %d %q-%q at key %q", r.RangeID,
-		engine.Key(r.Desc.StartKey), engine.Key(r.Desc.EndKey), splitKey)
+		proto.Key(r.Desc.StartKey), proto.Key(r.Desc.EndKey), splitKey)
 
 	txnOpts := &TransactionOptions{
 		Name:         fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),

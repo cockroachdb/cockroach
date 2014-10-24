@@ -43,13 +43,13 @@ func ExampleSetAndGetPerms() {
 	defer os.Remove(testConfigFn)
 
 	testData := []struct {
-		prefix engine.Key
+		prefix proto.Key
 		yaml   string
 	}{
 		{engine.KeyMin, testPermConfig},
-		{engine.Key("db1"), testPermConfig},
-		{engine.Key("db 2"), testPermConfig},
-		{engine.Key("\xfe"), testPermConfig},
+		{proto.Key("db1"), testPermConfig},
+		{proto.Key("db 2"), testPermConfig},
+		{proto.Key("\xfe"), testPermConfig},
 	}
 
 	for _, test := range testData {
@@ -104,12 +104,12 @@ func ExampleLsPerms() {
 	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
-		engine.Key("db2"),
-		engine.Key("db3"),
-		engine.Key("user"),
+		proto.Key("db1"),
+		proto.Key("db2"),
+		proto.Key("db3"),
+		proto.Key("user"),
 	}
 
 	regexps := []string{
@@ -162,9 +162,9 @@ func ExampleRmPerms() {
 	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
-	keys := []engine.Key{
+	keys := []proto.Key{
 		engine.KeyMin,
-		engine.Key("db1"),
+		proto.Key("db1"),
 	}
 
 	for _, key := range keys {

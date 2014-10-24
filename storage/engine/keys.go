@@ -21,32 +21,24 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
-	"code.google.com/p/biogo.store/interval"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// Key defines the key in the key-value datastore.
-type Key []byte
-
-// EncKey is an encoded version of Key.
-type EncKey []byte
-
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
-func MakeKey(keys ...Key) Key {
+func MakeKey(keys ...proto.Key) proto.Key {
 	byteSlices := make([][]byte, len(keys))
 	for i, k := range keys {
 		byteSlices[i] = []byte(k)
 	}
-	return Key(bytes.Join(byteSlices, nil))
+	return proto.Key(bytes.Join(byteSlices, nil))
 }
 
 // MakeLocalKey is a simple passthrough to MakeKey, with verification
 // that the first key has length KeyLocalPrefixLength.
-func MakeLocalKey(keys ...Key) Key {
+func MakeLocalKey(keys ...proto.Key) proto.Key {
 	if len(keys) == 0 {
 		log.Fatal("no key components specified in call to MakeLocalKey")
 	}
@@ -56,9 +48,9 @@ func MakeLocalKey(keys ...Key) Key {
 	return MakeKey(keys...)
 }
 
-// Address returns the address for the key, used to lookup the range
-// containing the key. In the normal case, this is simply the key's
-// value. However, for local keys, such as transaction records,
+// KeyAddress returns the address for the key, used to lookup the
+// range containing the key. In the normal case, this is simply the
+// key's value. However, for local keys, such as transaction records,
 // range-spanning binary tree node pointers, and message queues, the
 // address is the trailing suffix of the key, with the local key
 // prefix removed. In this way, local keys address to the same range
@@ -70,7 +62,7 @@ func MakeLocalKey(keys ...Key) Key {
 // strictly local, as the non-local suffix is not itself a key
 // (e.g. in the case of range metadata, it's the encoded range ID) and
 // so are not globally addressable.
-func (k Key) Address() Key {
+func KeyAddress(k proto.Key) proto.Key {
 	if !bytes.HasPrefix(k, KeyLocalPrefix) {
 		return k
 	}
@@ -80,83 +72,14 @@ func (k Key) Address() Key {
 	return k[KeyLocalPrefixLength:]
 }
 
-// Next returns the next key in lexicographic sort order.
-func (k Key) Next() Key {
-	return MakeKey(k, Key{0})
-}
-
-// PrefixEnd determines the end key given key as a prefix, that is the
-// key that sorts precisely behind all keys starting with prefix: "1"
-// is added to the final byte and the carry propagated. The special
-// cases of nil and KeyMin always returns KeyMax.
-func (k Key) PrefixEnd() Key {
-	if len(k) == 0 {
-		return KeyMax
-	}
-	end := append([]byte(nil), k...)
-	for i := len(end) - 1; i >= 0; i-- {
-		end[i] = end[i] + 1
-		if end[i] != 0 {
-			return end
-		}
-	}
-	// This statement will only be reached if the key is already a
-	// maximal byte string (i.e. already \xff...).
-	return k
-}
-
-// Less implements the util.Ordered interface.
-func (k Key) Less(l Key) bool {
-	return bytes.Compare(k, l) < 0
-}
-
-// Equal returns whether two keys are identical.
-func (k Key) Equal(l Key) bool {
-	return bytes.Equal(k, l)
-}
-
-// Compare implements the llrb.Comparable interface for tree nodes.
-func (k Key) Compare(b interval.Comparable) int {
-	return bytes.Compare(k, b.(Key))
-}
-
-func (k Key) String() string {
-	if k.Equal(KeyMax) {
-		return "\xff..."
-	}
-	return string(k)
-}
-
-// Value specifies the value at a key. Multiple values at the same key
-// are supported based on timestamp.
-type Value struct {
-	// Bytes is the byte string value.
-	Bytes []byte
-	// Checksum is a CRC-32-IEEE checksum. A Value will only be used in
-	// a write operation by the database if either its checksum is zero
-	// or the CRC checksum of Bytes matches it.
-	// Values returned by the database will contain a checksum of the
-	// contained value.
-	Checksum uint32
-	// Timestamp of value.
-	Timestamp proto.Timestamp
-}
-
-// KeyValue is a pair of Key and Value for returned Key/Value pairs
-// from ScanRequest/ScanResponse. It embeds a Key and a Value.
-type KeyValue struct {
-	Key
-	Value
-}
-
 // RangeMetaKey returns a range metadata key for the given key. For ordinary
 // keys this returns a level 2 metadata key - for level 2 keys, it returns a
 // level 1 key. For level 1 keys and local keys, KeyMin is returned.
-func RangeMetaKey(key Key) Key {
+func RangeMetaKey(key proto.Key) proto.Key {
 	if len(key) == 0 {
 		return KeyMin
 	}
-	addr := key.Address()
+	addr := KeyAddress(key)
 	if !bytes.HasPrefix(addr, KeyMetaPrefix) {
 		return MakeKey(KeyMeta2Prefix, addr)
 	}
@@ -169,7 +92,7 @@ func RangeMetaKey(key Key) Key {
 
 // RangeMetaLookupKey returns the metadata key at which this range
 // descriptor should be stored as a value.
-func RangeMetaLookupKey(r *proto.RangeDescriptor) Key {
+func RangeMetaLookupKey(r *proto.RangeDescriptor) proto.Key {
 	return RangeMetaKey(r.EndKey)
 }
 
@@ -177,7 +100,7 @@ func RangeMetaLookupKey(r *proto.RangeDescriptor) Key {
 // key. It must have an appropriate metadata range prefix, and the original key
 // value must be less than KeyMax. As a special case, KeyMin is considered a
 // valid Range Metadata Key.
-func ValidateRangeMetaKey(key Key) error {
+func ValidateRangeMetaKey(key proto.Key) error {
 	// KeyMin is a valid key.
 	if len(key) == 0 {
 		return nil
@@ -218,12 +141,12 @@ var (
 	// a limit which would affect the performance of the system, both
 	// from performance of key comparisons and from memory usage for
 	// things like the timestamp cache, lookup cache, and command queue.
-	KeyMaxLength = 4096
+	KeyMaxLength = proto.KeyMaxLength
 
 	// KeyMin is a minimum key value which sorts before all other keys.
-	KeyMin = Key("")
+	KeyMin = proto.KeyMin
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = Key(strings.Repeat("\xff", KeyMaxLength))
+	KeyMax = proto.KeyMax
 
 	// KeyLocalPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as range accounting information
@@ -240,7 +163,7 @@ var (
 	// The local key prefix has been deliberately chosen to sort before
 	// the KeySystemPrefix, because these local keys are not addressable
 	// via the meta range addressing indexes.
-	KeyLocalPrefix = Key("\x00\x00\x00")
+	KeyLocalPrefix = proto.Key("\x00\x00\x00")
 
 	// KeyLocalPrefixLength is the maximum length of the local prefix.
 	// It includes both the standard prefix and an additional four
@@ -256,64 +179,64 @@ var (
 
 	// KeyLocalIdent stores an immutable identifier for this store,
 	// created when the store is first bootstrapped.
-	KeyLocalIdent = MakeKey(KeyLocalPrefix, Key("iden"))
+	KeyLocalIdent = MakeKey(KeyLocalPrefix, proto.Key("iden"))
 	// KeyLocalRangeDescriptorPrefix is the prefix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
-	KeyLocalRangeDescriptorPrefix = MakeKey(KeyLocalPrefix, Key("rng-"))
+	KeyLocalRangeDescriptorPrefix = MakeKey(KeyLocalPrefix, proto.Key("rng-"))
 	// KeyLocalRangeStatPrefix is the prefix for range statistics.
-	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, Key("rst-"))
+	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, proto.Key("rst-"))
 	// KeyLocalResponseCachePrefix is the prefix for keys storing command
 	// responses used to guarantee idempotency (see ResponseCache).
-	KeyLocalResponseCachePrefix = MakeKey(KeyLocalPrefix, Key("res-"))
+	KeyLocalResponseCachePrefix = MakeKey(KeyLocalPrefix, proto.Key("res-"))
 	// KeyLocalStoreStatPrefix is the prefix for store statistics.
-	KeyLocalStoreStatPrefix = MakeKey(KeyLocalPrefix, Key("sst-"))
+	KeyLocalStoreStatPrefix = MakeKey(KeyLocalPrefix, proto.Key("sst-"))
 	// KeyLocalTransactionPrefix specifies the key prefix for
 	// transaction records. The suffix is the transaction id.
-	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, Key("txn-"))
+	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, proto.Key("txn-"))
 	// KeyLocalSnapshotIDGenerator is a snapshot ID generator sequence.
 	// Snapshot IDs must be unique per store ID.
-	KeyLocalSnapshotIDGenerator = MakeKey(KeyLocalPrefix, Key("ssid"))
+	KeyLocalSnapshotIDGenerator = MakeKey(KeyLocalPrefix, proto.Key("ssid"))
 
 	// KeyLocalMax is the end of the local key range.
 	KeyLocalMax = KeyLocalPrefix.PrefixEnd()
 
 	// KeySystemPrefix indicates the beginning of the key range for
 	// global, system data which are replicated across the cluster.
-	KeySystemPrefix = Key("\x00")
-	KeySystemMax    = Key("\x01")
+	KeySystemPrefix = proto.Key("\x00")
+	KeySystemMax    = proto.Key("\x01")
 
 	// KeyMetaPrefix is the prefix for range metadata keys. Notice that
 	// an extra null character in the prefix causes all range addressing
 	// records to sort before any system tables which they might describe.
-	KeyMetaPrefix = MakeKey(KeySystemPrefix, Key("\x00meta"))
+	KeyMetaPrefix = MakeKey(KeySystemPrefix, proto.Key("\x00meta"))
 	// KeyMeta1Prefix is the first level of key addressing. The value is a
 	// RangeDescriptor struct.
-	KeyMeta1Prefix = MakeKey(KeyMetaPrefix, Key("1"))
+	KeyMeta1Prefix = MakeKey(KeyMetaPrefix, proto.Key("1"))
 	// KeyMeta2Prefix is the second level of key addressing. The value is a
 	// RangeDescriptor struct.
-	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, Key("2"))
+	KeyMeta2Prefix = MakeKey(KeyMetaPrefix, proto.Key("2"))
 
 	// KeyMetaMax is the end of the range of addressing keys.
-	KeyMetaMax = MakeKey(KeySystemPrefix, Key("\x01"))
+	KeyMetaMax = MakeKey(KeySystemPrefix, proto.Key("\x01"))
 
 	// KeyConfigAccountingPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigAccountingPrefix = MakeKey(KeySystemPrefix, Key("acct"))
+	KeyConfigAccountingPrefix = MakeKey(KeySystemPrefix, proto.Key("acct"))
 	// KeyConfigPermissionPrefix specifies the key prefix for accounting
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigPermissionPrefix = MakeKey(KeySystemPrefix, Key("perm"))
+	KeyConfigPermissionPrefix = MakeKey(KeySystemPrefix, proto.Key("perm"))
 	// KeyConfigZonePrefix specifies the key prefix for zone
 	// configurations. The suffix is the affected key prefix.
-	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, Key("zone"))
+	KeyConfigZonePrefix = MakeKey(KeySystemPrefix, proto.Key("zone"))
 	// KeyNodeIDGenerator is the global node ID generator sequence.
-	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, Key("node-idgen"))
+	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, proto.Key("node-idgen"))
 	// KeyRaftIDGenerator is the global Raft consensus group ID generator sequence.
-	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, Key("raft-idgen"))
+	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, proto.Key("raft-idgen"))
 	// KeyRangeIDGenerator is the global range ID generator sequence.
-	KeyRangeIDGenerator = MakeKey(KeySystemPrefix, Key("range-idgen"))
+	KeyRangeIDGenerator = MakeKey(KeySystemPrefix, proto.Key("range-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.
-	KeySchemaPrefix = MakeKey(KeySystemPrefix, Key("schema"))
+	KeySchemaPrefix = MakeKey(KeySystemPrefix, proto.Key("schema"))
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
-	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, Key("store-idgen-"))
+	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, proto.Key("store-idgen-"))
 )

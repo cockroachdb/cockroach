@@ -18,11 +18,148 @@
 package proto
 
 import (
+	"bytes"
 	"math"
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 )
+
+// TestKeyNext tests that the method for creating lexicographic
+// successors to byte slices works as expected.
+func TestKeyNext(t *testing.T) {
+	a := Key("a")
+	aNext := a.Next()
+	if a.Equal(aNext) {
+		t.Errorf("expected key not equal to next")
+	}
+	if !a.Less(aNext) {
+		t.Errorf("expected next key to be greater")
+	}
+
+	testCases := []struct {
+		key  Key
+		next Key
+	}{
+		{nil, Key("\x00")},
+		{Key(""), Key("\x00")},
+		{Key("test key"), Key("test key\x00")},
+		{Key("\xff"), Key("\xff\x00")},
+		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
+	}
+	for i, c := range testCases {
+		if !bytes.Equal(c.key.Next(), c.next) {
+			t.Errorf("%d: unexpected next bytes for %q: %q", i, c.key, c.key.Next())
+		}
+	}
+}
+
+func TestKeyPrefixEnd(t *testing.T) {
+	a := Key("a1")
+	aNext := a.Next()
+	aEnd := a.PrefixEnd()
+	if !a.Less(aEnd) {
+		t.Errorf("expected end key to be greater")
+	}
+	if !aNext.Less(aEnd) {
+		t.Errorf("expected end key to be greater than next")
+	}
+
+	testCases := []struct {
+		key Key
+		end Key
+	}{
+		{Key{}, KeyMax},
+		{Key{0}, Key{0x01}},
+		{Key{0xff}, Key{0xff}},
+		{Key{0xff, 0xff}, Key{0xff, 0xff}},
+		{KeyMax, KeyMax},
+		{Key{0xff, 0xfe}, Key{0xff, 0xff}},
+		{Key{0x00, 0x00}, Key{0x00, 0x01}},
+		{Key{0x00, 0xff}, Key{0x01, 0x00}},
+		{Key{0x00, 0xff, 0xff}, Key{0x01, 0x00, 0x00}},
+	}
+	for i, c := range testCases {
+		if !bytes.Equal(c.key.PrefixEnd(), c.end) {
+			t.Errorf("%d: unexpected prefix end bytes for %q: %q", i, c.key, c.key.PrefixEnd())
+		}
+	}
+}
+
+func TestKeyEqual(t *testing.T) {
+	a1 := Key("a1")
+	a2 := Key("a2")
+	if !a1.Equal(a1) {
+		t.Errorf("expected keys equal")
+	}
+	if a1.Equal(a2) {
+		t.Errorf("expected different keys not equal")
+	}
+}
+
+func TestKeyLess(t *testing.T) {
+	testCases := []struct {
+		a, b Key
+		less bool
+	}{
+		{nil, Key("\x00"), true},
+		{Key(""), Key("\x00"), true},
+		{Key("a"), Key("b"), true},
+		{Key("a\x00"), Key("a"), false},
+		{Key("a\x00"), Key("a\x01"), true},
+	}
+	for i, c := range testCases {
+		if c.a.Less(c.b) != c.less {
+			t.Fatalf("%d: unexpected %q < %q: %t", i, c.a, c.b, c.less)
+		}
+	}
+}
+
+func TestKeyCompare(t *testing.T) {
+	testCases := []struct {
+		a, b    Key
+		compare int
+	}{
+		{nil, nil, 0},
+		{nil, Key("\x00"), -1},
+		{Key("\x00"), Key("\x00"), 0},
+		{Key(""), Key("\x00"), -1},
+		{Key("a"), Key("b"), -1},
+		{Key("a\x00"), Key("a"), 1},
+		{Key("a\x00"), Key("a\x01"), -1},
+	}
+	for i, c := range testCases {
+		if c.a.Compare(c.b) != c.compare {
+			t.Fatalf("%d: unexpected %q.Compare(%q): %d", i, c.a, c.b, c.compare)
+		}
+	}
+}
+
+// TestNextKey tests that the method for creating successors of a Key
+// works as expected.
+func TestNextKey(t *testing.T) {
+	testCases := []struct {
+		key  Key
+		next Key
+	}{
+		{nil, Key("\x00")},
+		{Key(""), Key("\x00")},
+		{Key("test key"), Key("test key\x00")},
+		{Key("\xff\xff"), Key("\xff\xff\x00")},
+		{Key("xoxo\x00"), Key("xoxo\x00\x00")},
+	}
+	for i, c := range testCases {
+		if !c.key.Next().Equal(c.next) {
+			t.Fatalf("%d: unexpected next key for %q: %s", i, c.key, c.key.Next())
+		}
+	}
+}
+
+func TestKeyString(t *testing.T) {
+	if KeyMax.String() != "\xff..." {
+		t.Errorf("expected key max to display a compact version: %s", KeyMax.String())
+	}
+}
 
 func makeTS(walltime int64, logical int32) Timestamp {
 	return Timestamp{

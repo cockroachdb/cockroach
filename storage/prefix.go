@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -39,8 +40,8 @@ import (
 // key refers to this "higher-up" PrefixConfig by specifying its prefix
 // so it can be binary searched from within a PrefixConfigMap.
 type PrefixConfig struct {
-	Prefix    engine.Key  // the prefix the config affects
-	Canonical engine.Key  // the prefix for the canonical config, if applicable
+	Prefix    proto.Key   // the prefix the config affects
+	Canonical proto.Key   // the prefix for the canonical config, if applicable
 	Config    interface{} // the config object
 }
 
@@ -52,7 +53,7 @@ type PrefixConfigMap []*PrefixConfig
 
 // RangeResult is returned by SplitRangeByPrefixes.
 type RangeResult struct {
-	start, end engine.Key
+	start, end proto.Key
 	config     interface{}
 }
 
@@ -137,7 +138,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 //
 // To find the longest matching prefix, we take the lower bound of the
 // specified key.
-func (p PrefixConfigMap) MatchByPrefix(key engine.Key) *PrefixConfig {
+func (p PrefixConfigMap) MatchByPrefix(key proto.Key) *PrefixConfig {
 	n := sort.Search(len(p), func(i int) bool {
 		return key.Compare(p[i].Prefix) < 0
 	})
@@ -163,7 +164,7 @@ func (p PrefixConfigMap) MatchByPrefix(key engine.Key) *PrefixConfig {
 // MatchesByPrefix returns a list of PrefixConfig objects with
 // prefixes satisfying the specified key. The results are returned in
 // order of longest matching prefix to shortest.
-func (p PrefixConfigMap) MatchesByPrefix(key engine.Key) []*PrefixConfig {
+func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []*PrefixConfig {
 	var configs []*PrefixConfig
 	prefix := key
 	for {
@@ -180,8 +181,8 @@ func (p PrefixConfigMap) MatchesByPrefix(key engine.Key) []*PrefixConfig {
 
 // VisitPrefixes invokes the visitor function for each prefix overlapped
 // by the specified key range [start, end).
-func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
-	visitor func(start, end engine.Key, config interface{}) error) error {
+func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
+	visitor func(start, end proto.Key, config interface{}) error) error {
 	comp := start.Compare(end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
@@ -247,9 +248,9 @@ func (p PrefixConfigMap) VisitPrefixes(start, end engine.Key,
 // prefixes. Lookup start key; that is first config. Lookup end key:
 // that is last config. We then step through the intervening
 // PrefixConfig records and create a RangeResult for each.
-func (p PrefixConfigMap) SplitRangeByPrefixes(start, end engine.Key) ([]*RangeResult, error) {
+func (p PrefixConfigMap) SplitRangeByPrefixes(start, end proto.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
-	err := p.VisitPrefixes(start, end, func(start, end engine.Key, config interface{}) error {
+	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config interface{}) error {
 		results = append(results, &RangeResult{start: start, end: end, config: config})
 		return nil
 	})

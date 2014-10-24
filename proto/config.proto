@@ -44,11 +44,11 @@ message Replica {
 message RangeDescriptor {
   optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
   // StartKey is the first key which may be contained by this range.
-  optional bytes start_key = 2 [(gogoproto.nullable) = false];
+  optional bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // EndKey marks the end of the range's possible keys.  EndKey itself is not
   // contained in this range - it will be contained in the immediately
   // subsequent range.
-  optional bytes end_key = 3 [(gogoproto.nullable) = false];
+  optional bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
   // List of replicas where this range is stored.
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }

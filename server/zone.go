@@ -58,7 +58,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if err != nil {
 		return util.Errorf("zone config has invalid format: %s: %s", configStr, err)
 	}
-	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
+	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 	if err := storage.PutProto(zh.db, zoneKey, config); err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("unable to format zone configurations: %s", err)
 		}
 	} else {
-		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
+		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.ZoneConfig{}
 		if ok, _, err = storage.GetProto(zh.db, zoneKey, config); err != nil {
@@ -149,7 +149,7 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 	if path == "/" {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
-	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, engine.Key(path[1:]))
+	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 	dr := <-zh.db.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  zoneKey,

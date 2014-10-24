@@ -97,7 +97,7 @@ type txnMetadata struct {
 // addKeyRange adds the specified key range to the interval cache,
 // taking care not to add this range if existing entries already
 // completely cover the range.
-func (tm *txnMetadata) addKeyRange(start, end engine.Key) {
+func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
@@ -124,8 +124,8 @@ func (tm *txnMetadata) close(txn *proto.Transaction, db *DB) {
 		db.InternalResolveIntent(&proto.InternalResolveIntentRequest{
 			RequestHeader: proto.RequestHeader{
 				Timestamp: txn.Timestamp,
-				Key:       o.Key.Start().(engine.Key),
-				EndKey:    o.Key.End().(engine.Key),
+				Key:       o.Key.Start().(proto.Key),
+				EndKey:    o.Key.End().(proto.Key),
 				User:      storage.UserRoot,
 				Txn:       txn,
 			},
@@ -234,7 +234,7 @@ func (tc *coordinator) EndTxn(txn *proto.Transaction) {
 // txnID has not been updated by the client adding a request within
 // the allowed timeout. If abandoned, the transaction is removed from
 // the txns map.
-func (tc *coordinator) hasClientAbandonedCoord(txnID engine.Key) bool {
+func (tc *coordinator) hasClientAbandonedCoord(txnID proto.Key) bool {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txnID)]

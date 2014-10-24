@@ -51,7 +51,7 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	k := engine.MakeKey(engine.KeySchemaPrefix, engine.Key(s.Key))
+	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key))
 	return storage.PutI(db.kvDB, k, s)
 }
 
@@ -59,7 +59,7 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 func (db *structuredDB) DeleteSchema(s *Schema) error {
 	return (<-db.kvDB.Delete(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: engine.MakeKey(engine.KeySchemaPrefix, engine.Key(s.Key)),
+			Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
 		},
 	})).GoError()
 }
@@ -69,7 +69,7 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 // with the given key cannot be found.
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	s := &Schema{}
-	k := engine.MakeKey(engine.KeySchemaPrefix, engine.Key(key))
+	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(key))
 	found, _, err := storage.GetI(db.kvDB, k, s)
 	if err != nil || !found {
 		s = nil

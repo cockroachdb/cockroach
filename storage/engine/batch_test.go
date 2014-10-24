@@ -31,31 +31,31 @@ import (
 func TestBatchBasics(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
-	if err := b.Put(Key("a"), []byte("value")); err != nil {
+	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be deleted.
-	if err := e.Put(Key("b"), []byte("value")); err != nil {
+	if err := e.Put(proto.EncodedKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(Key("b")); err != nil {
+	if err := b.Clear(proto.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
 	// Write an engine value to be merged.
-	if err := e.Put(Key("c"), appender("foo")); err != nil {
+	if err := e.Put(proto.EncodedKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), appender("bar")); err != nil {
+	if err := b.Merge(proto.EncodedKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Check all keys are in initial state (nothing from batch has gone
 	// through to engine until commit).
 	expValues := []proto.RawKeyValue{
-		{Key: Key("b"), Value: []byte("value")},
-		{Key: Key("c"), Value: appender("foo")},
+		{Key: proto.EncodedKey("b"), Value: []byte("value")},
+		{Key: proto.EncodedKey("c"), Value: appender("foo")},
 	}
-	kvs, err := Scan(e, KeyMin, KeyMax, 0)
+	kvs, err := Scan(e, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,11 +65,11 @@ func TestBatchBasics(t *testing.T) {
 
 	// Now, merged values should be:
 	expValues = []proto.RawKeyValue{
-		{Key: Key("a"), Value: []byte("value")},
-		{Key: Key("c"), Value: appender("foobar")},
+		{Key: proto.EncodedKey("a"), Value: []byte("value")},
+		{Key: proto.EncodedKey("c"), Value: appender("foobar")},
 	}
 	// Scan values from batch directly.
-	kvs, err = Scan(b, KeyMin, KeyMax, 0)
+	kvs, err = Scan(b, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestBatchBasics(t *testing.T) {
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err = Scan(e, KeyMin, KeyMax, 0)
+	kvs, err = Scan(e, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,27 +94,27 @@ func TestBatchGet(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
 	// Write initial values, then write to batch.
-	if err := e.Put(Key("b"), []byte("value")); err != nil {
+	if err := e.Put(proto.EncodedKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(Key("c"), appender("foo")); err != nil {
+	if err := e.Put(proto.EncodedKey("c"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Write batch values.
-	if err := b.Put(Key("a"), []byte("value")); err != nil {
+	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(Key("b")); err != nil {
+	if err := b.Clear(proto.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), appender("bar")); err != nil {
+	if err := b.Merge(proto.EncodedKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
 
 	expValues := []proto.RawKeyValue{
-		{Key: Key("a"), Value: []byte("value")},
-		{Key: Key("b"), Value: nil},
-		{Key: Key("c"), Value: appender("foobar")},
+		{Key: proto.EncodedKey("a"), Value: []byte("value")},
+		{Key: proto.EncodedKey("b"), Value: nil},
+		{Key: proto.EncodedKey("c"), Value: appender("foobar")},
 	}
 	for i, expKV := range expValues {
 		kv, err := b.Get(expKV.Key)
@@ -131,29 +131,29 @@ func TestBatchMerge(t *testing.T) {
 	b := NewInMem(proto.Attributes{}, 1<<20).NewBatch()
 
 	// Write batch put, delete & merge.
-	if err := b.Put(Key("a"), appender("a-value")); err != nil {
+	if err := b.Put(proto.EncodedKey("a"), appender("a-value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(Key("b")); err != nil {
+	if err := b.Clear(proto.EncodedKey("b")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), appender("c-value")); err != nil {
+	if err := b.Merge(proto.EncodedKey("c"), appender("c-value")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, merge to all three keys.
-	if err := b.Merge(Key("a"), appender("append")); err != nil {
+	if err := b.Merge(proto.EncodedKey("a"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("b"), appender("append")); err != nil {
+	if err := b.Merge(proto.EncodedKey("b"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Merge(Key("c"), appender("append")); err != nil {
+	if err := b.Merge(proto.EncodedKey("c"), appender("append")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify values.
-	val, err := b.Get(Key("a"))
+	val, err := b.Get(proto.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 
-	val, err = b.Get(Key("b"))
+	val, err = b.Get(proto.EncodedKey("b"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestBatchMerge(t *testing.T) {
 		t.Error("mismatch of \"b\"")
 	}
 
-	val, err = b.Get(Key("c"))
+	val, err = b.Get(proto.EncodedKey("c"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,10 +181,10 @@ func TestBatchMerge(t *testing.T) {
 func TestBatchProto(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
-	kv := &proto.RawKeyValue{Key: Key("a"), Value: []byte("value")}
-	PutProto(b, Key("proto"), kv)
+	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
+	PutProto(b, proto.EncodedKey("proto"), kv)
 	getKV := &proto.RawKeyValue{}
-	ok, keySize, valSize, err := GetProto(b, Key("proto"), getKV)
+	ok, keySize, valSize, err := GetProto(b, proto.EncodedKey("proto"), getKV)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
@@ -202,14 +202,14 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected %v; got %v", kv, getKV)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err := GetProto(e, Key("proto"), getKV); ok || err != nil {
+	if ok, _, _, err := GetProto(e, proto.EncodedKey("proto"), getKV); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err := GetProto(e, Key("proto"), getKV); !ok || err != nil {
+	if ok, _, _, err := GetProto(e, proto.EncodedKey("proto"), getKV); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !reflect.DeepEqual(getKV, kv) {
@@ -221,19 +221,19 @@ func TestBatchScan(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
 	existingVals := []proto.RawKeyValue{
-		{Key: Key("a"), Value: []byte("1")},
-		{Key: Key("b"), Value: []byte("2")},
-		{Key: Key("c"), Value: []byte("3")},
-		{Key: Key("d"), Value: []byte("4")},
-		{Key: Key("e"), Value: []byte("5")},
-		{Key: Key("f"), Value: []byte("6")},
-		{Key: Key("g"), Value: []byte("7")},
-		{Key: Key("h"), Value: []byte("8")},
-		{Key: Key("i"), Value: []byte("9")},
-		{Key: Key("j"), Value: []byte("10")},
-		{Key: Key("k"), Value: []byte("11")},
-		{Key: Key("l"), Value: []byte("12")},
-		{Key: Key("m"), Value: []byte("13")},
+		{Key: proto.EncodedKey("a"), Value: []byte("1")},
+		{Key: proto.EncodedKey("b"), Value: []byte("2")},
+		{Key: proto.EncodedKey("c"), Value: []byte("3")},
+		{Key: proto.EncodedKey("d"), Value: []byte("4")},
+		{Key: proto.EncodedKey("e"), Value: []byte("5")},
+		{Key: proto.EncodedKey("f"), Value: []byte("6")},
+		{Key: proto.EncodedKey("g"), Value: []byte("7")},
+		{Key: proto.EncodedKey("h"), Value: []byte("8")},
+		{Key: proto.EncodedKey("i"), Value: []byte("9")},
+		{Key: proto.EncodedKey("j"), Value: []byte("10")},
+		{Key: proto.EncodedKey("k"), Value: []byte("11")},
+		{Key: proto.EncodedKey("l"), Value: []byte("12")},
+		{Key: proto.EncodedKey("m"), Value: []byte("13")},
 	}
 	for _, kv := range existingVals {
 		if err := e.Put(kv.Key, kv.Value); err != nil {
@@ -242,16 +242,16 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	batchVals := []proto.RawKeyValue{
-		{Key: Key("a"), Value: []byte("b1")},
-		{Key: Key("bb"), Value: []byte("b2")},
-		{Key: Key("c"), Value: []byte("b3")},
-		{Key: Key("dd"), Value: []byte("b4")},
-		{Key: Key("e"), Value: []byte("b5")},
-		{Key: Key("ff"), Value: []byte("b6")},
-		{Key: Key("g"), Value: []byte("b7")},
-		{Key: Key("hh"), Value: []byte("b8")},
-		{Key: Key("i"), Value: []byte("b9")},
-		{Key: Key("jj"), Value: []byte("b10")},
+		{Key: proto.EncodedKey("a"), Value: []byte("b1")},
+		{Key: proto.EncodedKey("bb"), Value: []byte("b2")},
+		{Key: proto.EncodedKey("c"), Value: []byte("b3")},
+		{Key: proto.EncodedKey("dd"), Value: []byte("b4")},
+		{Key: proto.EncodedKey("e"), Value: []byte("b5")},
+		{Key: proto.EncodedKey("ff"), Value: []byte("b6")},
+		{Key: proto.EncodedKey("g"), Value: []byte("b7")},
+		{Key: proto.EncodedKey("hh"), Value: []byte("b8")},
+		{Key: proto.EncodedKey("i"), Value: []byte("b9")},
+		{Key: proto.EncodedKey("jj"), Value: []byte("b10")},
 	}
 	for _, kv := range batchVals {
 		if err := b.Put(kv.Key, kv.Value); err != nil {
@@ -260,21 +260,21 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	scans := []struct {
-		start, end Key
+		start, end proto.EncodedKey
 		max        int64
 	}{
 		// Full monty.
-		{start: Key("a"), end: Key("z"), max: 0},
+		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 0},
 		// Select ~half.
-		{start: Key("a"), end: Key("z"), max: 9},
+		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 9},
 		// Select one.
-		{start: Key("a"), end: Key("z"), max: 1},
+		{start: proto.EncodedKey("a"), end: proto.EncodedKey("z"), max: 1},
 		// Select half by end key.
-		{start: Key("a"), end: Key("f0"), max: 0},
+		{start: proto.EncodedKey("a"), end: proto.EncodedKey("f0"), max: 0},
 		// Start at half and select rest.
-		{start: Key("f"), end: Key("z"), max: 0},
+		{start: proto.EncodedKey("f"), end: proto.EncodedKey("z"), max: 0},
 		// Start at last and select max=10.
-		{start: Key("m"), end: Key("z"), max: 10},
+		{start: proto.EncodedKey("m"), end: proto.EncodedKey("z"), max: 10},
 	}
 
 	// Scan each case using the batch and store the results.
@@ -308,13 +308,13 @@ func TestBatchScanWithDelete(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
 	// Write initial value, then delete via batch.
-	if err := e.Put(Key("a"), []byte("value")); err != nil {
+	if err := e.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Clear(Key("a")); err != nil {
+	if err := b.Clear(proto.EncodedKey("a")); err != nil {
 		t.Fatal(err)
 	}
-	kvs, err := Scan(b, KeyMin, KeyMax, 0)
+	kvs, err := Scan(b, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,18 +330,18 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
 	// Write two values.
-	if err := e.Put(Key("a"), []byte("value1")); err != nil {
+	if err := e.Put(proto.EncodedKey("a"), []byte("value1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Put(Key("b"), []byte("value2")); err != nil {
+	if err := e.Put(proto.EncodedKey("b"), []byte("value2")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, delete "a" in batch.
-	if err := b.Clear(Key("a")); err != nil {
+	if err := b.Clear(proto.EncodedKey("a")); err != nil {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
-	kvs, err := Scan(b, KeyMin, KeyMax, 1)
+	kvs, err := Scan(b, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,10 +358,10 @@ func TestBatchConcurrency(t *testing.T) {
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	b := e.NewBatch()
 	// Write a merge to the batch.
-	if err := b.Merge(Key("a"), appender("bar")); err != nil {
+	if err := b.Merge(proto.EncodedKey("a"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
-	val, err := b.Get(Key("a"))
+	val, err := b.Get(proto.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,11 +369,11 @@ func TestBatchConcurrency(t *testing.T) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.
-	if err := e.Put(Key("a"), appender("foo")); err != nil {
+	if err := e.Put(proto.EncodedKey("a"), appender("foo")); err != nil {
 		t.Fatal(err)
 	}
 	// Now, read again and verify that the merge happens on top of the mod.
-	val, err = b.Get(Key("a"))
+	val, err = b.Get(proto.EncodedKey("a"))
 	if err != nil {
 		t.Fatal(err)
 	}

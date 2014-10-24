@@ -35,8 +35,8 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &proto.RangeDescriptor{}
-	expectedDesc.StartKey = engine.Key("a")
-	expectedDesc.EndKey = engine.Key("c")
+	expectedDesc.StartKey = proto.Key("a")
+	expectedDesc.EndKey = proto.Key("c")
 
 	// Add first RangeDescriptor to a node different from the node for this kv
 	// and ensure that this kv has the information within a given time.
@@ -73,7 +73,7 @@ func TestVerifyPermissions(t *testing.T) {
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
 	configs := []*storage.PrefixConfig{
 		{engine.KeyMin, nil, config1},
-		{engine.Key("a"), nil, config2},
+		{proto.Key("a"), nil, config2},
 	}
 	configMap, err := storage.NewPrefixConfigMap(configs)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestVerifyPermissions(t *testing.T) {
 		// Permission-based db methods from the storage package.
 		methods          []string
 		user             string
-		startKey, endKey engine.Key
+		startKey, endKey proto.Key
 		hasPermission    bool
 	}{
 		// Test permissions within a single range
@@ -119,26 +119,26 @@ func TestVerifyPermissions(t *testing.T) {
 		{writeOnlyMethods, "read1", engine.KeyMin, engine.KeyMin, false},
 		{writeOnlyMethods, "random", engine.KeyMin, engine.KeyMin, false},
 		// Test permissions across both ranges
-		{readOnlyMethods, "readAll", engine.KeyMin, engine.Key("b"), true},
-		{readOnlyMethods, "read1", engine.KeyMin, engine.Key("b"), false},
-		{readOnlyMethods, "read2", engine.KeyMin, engine.Key("b"), false},
-		{readOnlyMethods, "random", engine.KeyMin, engine.Key("b"), false},
-		{readWriteMethods, "rwAll", engine.KeyMin, engine.Key("b"), true},
-		{readWriteMethods, "rw", engine.KeyMin, engine.Key("b"), false},
-		{readWriteMethods, "random", engine.KeyMin, engine.Key("b"), false},
-		{writeOnlyMethods, "writeAll", engine.KeyMin, engine.Key("b"), true},
-		{writeOnlyMethods, "write1", engine.KeyMin, engine.Key("b"), false},
-		{writeOnlyMethods, "write2", engine.KeyMin, engine.Key("b"), false},
-		{writeOnlyMethods, "random", engine.KeyMin, engine.Key("b"), false},
+		{readOnlyMethods, "readAll", engine.KeyMin, proto.Key("b"), true},
+		{readOnlyMethods, "read1", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyMethods, "read2", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
+		{readWriteMethods, "rwAll", engine.KeyMin, proto.Key("b"), true},
+		{readWriteMethods, "rw", engine.KeyMin, proto.Key("b"), false},
+		{readWriteMethods, "random", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyMethods, "writeAll", engine.KeyMin, proto.Key("b"), true},
+		{writeOnlyMethods, "write1", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyMethods, "write2", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
 		// Test permissions within and around the boundaries of a range,
 		// representatively using rw methods.
-		{readWriteMethods, "rw2", engine.Key("a"), engine.Key("b"), true},
-		{readWriteMethods, "rwAll", engine.Key("a"), engine.Key("b"), true},
-		{readWriteMethods, "rw2", engine.Key("a"), engine.Key("a"), true},
-		{readWriteMethods, "rw2", engine.Key("a"), engine.Key("a1"), true},
-		{readWriteMethods, "rw2", engine.Key("a"), engine.Key("b1"), false},
-		{readWriteMethods, "rw2", engine.Key("a3"), engine.Key("a4"), true},
-		{readWriteMethods, "rw2", engine.Key("a3"), engine.Key("b1"), false},
+		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("b"), true},
+		{readWriteMethods, "rwAll", proto.Key("a"), proto.Key("b"), true},
+		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("a"), true},
+		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("a1"), true},
+		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("b1"), false},
+		{readWriteMethods, "rw2", proto.Key("a3"), proto.Key("a4"), true},
+		{readWriteMethods, "rw2", proto.Key("a3"), proto.Key("b1"), false},
 	}
 
 	for _, test := range testData {

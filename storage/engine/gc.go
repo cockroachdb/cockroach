@@ -29,11 +29,11 @@ import (
 // versions and maximum age.
 type GarbageCollector struct {
 	now      proto.Timestamp // time at start of GC
-	policyFn func(key Key) *proto.GCPolicy
+	policyFn func(key proto.Key) *proto.GCPolicy
 }
 
 // NewGarbageCollector allocates and returns a new GC.
-func NewGarbageCollector(now proto.Timestamp, policyFn func(key Key) *proto.GCPolicy) *GarbageCollector {
+func NewGarbageCollector(now proto.Timestamp, policyFn func(key proto.Key) *proto.GCPolicy) *GarbageCollector {
 	return &GarbageCollector{
 		now:      now,
 		policyFn: policyFn,
@@ -42,7 +42,7 @@ func NewGarbageCollector(now proto.Timestamp, policyFn func(key Key) *proto.GCPo
 
 // MVCCPrefix returns the full key as prefix for non-version MVCC
 // keys and otherwise just the encoded key portion of version MVCC keys.
-func (gc *GarbageCollector) MVCCPrefix(key Key) int {
+func (gc *GarbageCollector) MVCCPrefix(key proto.EncodedKey) int {
 	remaining, _ := encoding.DecodeBinary(key)
 	return len(key) - len(remaining)
 }
@@ -53,7 +53,7 @@ func (gc *GarbageCollector) MVCCPrefix(key Key) int {
 // GarbageCollector was created. Returns a slice of deletions, one
 // per incoming keys. If an index in the returned array is set to
 // true, then that value will be garbage collected.
-func (gc *GarbageCollector) Filter(keys []Key, values [][]byte) []bool {
+func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) []bool {
 	if len(keys) == 1 {
 		return nil
 	}

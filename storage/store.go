@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -54,7 +55,7 @@ const (
 // the local key prefix (for example, a transaction record), and also for
 // keys prefixed with the meta1 or meta2 addressing prefixes. There is a
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
-func verifyKeyLength(key engine.Key) error {
+func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
 	// Transaction records get a UUID appended, so we increase allowed max length.
 	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
@@ -75,7 +76,7 @@ func verifyKeyLength(key engine.Key) error {
 // verifyKeys verifies key length for start and end. Also verifies
 // that start key is less than KeyMax and end key is less than or
 // equal to KeyMax. If end is non-empty, it must be >= start.
-func verifyKeys(start, end engine.Key) error {
+func verifyKeys(start, end proto.Key) error {
 	if err := verifyKeyLength(start); err != nil {
 		return err
 	}
@@ -221,7 +222,8 @@ func (s *Store) Init() error {
 	})
 
 	// Read store ident and return a not-bootstrapped error if necessary.
-	ok, _, _, err := engine.GetProto(s.engine, engine.KeyLocalIdent, &s.Ident)
+	identKey := engine.MVCCEncodeKey(engine.KeyLocalIdent)
+	ok, _, _, err := engine.GetProto(s.engine, identKey, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -268,13 +270,14 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 		return err
 	}
 	s.Ident = ident
-	kvs, err := engine.Scan(s.engine, engine.KeyMin, engine.KeyMax, 1 /* only need one entry to fail! */)
+	kvs, err := engine.Scan(s.engine, proto.EncodedKey(engine.KeyMin), proto.EncodedKey(engine.KeyMax), 1)
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %s", err)
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	_, _, err = engine.PutProto(s.engine, engine.KeyLocalIdent, &s.Ident)
+	identKey := engine.MVCCEncodeKey(engine.KeyLocalIdent)
+	_, _, err = engine.PutProto(s.engine, identKey, &s.Ident)
 	return err
 }
 
@@ -293,11 +296,11 @@ func (s *Store) GetRange(rangeID int64) (*Range, error) {
 // specified key range. Note that the specified keys are transformed
 // using Key.Address() to ensure we lookup ranges correctly for local
 // keys.
-func (s *Store) LookupRange(start, end engine.Key) *Range {
+func (s *Store) LookupRange(start, end proto.Key) *Range {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	startAddr := start.Address()
-	endAddr := end.Address()
+	startAddr := engine.KeyAddress(start)
+	endAddr := engine.KeyAddress(end)
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
 		return startAddr.Less(s.rangesByKey[i].Desc.EndKey)
 	})
@@ -410,7 +413,7 @@ func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
 // and range IDs to fill out the supplied replicas.
-func (s *Store) NewRangeDescriptor(start, end engine.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
+func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
 	desc := &proto.RangeDescriptor{
 		RaftID:   s.raftIDAlloc.Allocate(),
 		StartKey: start,
@@ -478,6 +481,19 @@ func (s *Store) RemoveRange(rng *Range) error {
 	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
 	s.rangesByKey = s.rangesByKey[:lastIdx]
 	return nil
+}
+
+// CreateSnapshot creates a new snapshot, named using an internal counter.
+func (s *Store) CreateSnapshot() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := engine.MVCCEncodeKey(engine.KeyLocalSnapshotIDGenerator)
+	candidateID, err := engine.Increment(s.engine, key, 1)
+	if err != nil {
+		return "", err
+	}
+	snapshotID := strconv.FormatInt(candidateID, 10)
+	return snapshotID, s.engine.CreateSnapshot(snapshotID)
 }
 
 // Attrs returns the attributes of the underlying store.
@@ -642,8 +658,9 @@ type RangeManager interface {
 	Gossip() *gossip.Gossip
 
 	// Range manipulation methods.
-	NewRangeDescriptor(start, end engine.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
+	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	SplitRange(origRng, newRng *Range) error
 	AddRange(rng *Range)
 	RemoveRange(rng *Range) error
+	CreateSnapshot() (string, error)
 }

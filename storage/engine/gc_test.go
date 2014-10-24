@@ -27,21 +27,21 @@ import (
 )
 
 var (
-	aKey  = Key("a")
-	bKey  = Key("b")
-	cKey  = Key("c")
-	aKeys = []Key{
+	aKey  = proto.Key("a")
+	bKey  = proto.Key("b")
+	cKey  = proto.Key("c")
+	aKeys = []proto.EncodedKey{
 		MVCCEncodeKey(aKey),
 		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
 	}
-	bKeys = []Key{
+	bKeys = []proto.EncodedKey{
 		MVCCEncodeKey(bKey),
 		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
 	}
-	cKeys = []Key{
+	cKeys = []proto.EncodedKey{
 		MVCCEncodeKey(cKey),
 	}
 	keys = append(aKeys, append(bKeys, cKeys...)...)
@@ -58,7 +58,7 @@ func serializedMVCCValue(deleted bool, t *testing.T) []byte {
 // TestGarbageCollectorMVCCPrefix verifies that MVCC variants of same
 // key are grouped together and non-MVCC keys are considered singly.
 func TestGarbageCollectorMVCCPrefix(t *testing.T) {
-	expPrefixes := []Key{
+	expPrefixes := []proto.EncodedKey{
 		MVCCEncodeKey(aKey),
 		MVCCEncodeKey(aKey),
 		MVCCEncodeKey(aKey),
@@ -69,7 +69,7 @@ func TestGarbageCollectorMVCCPrefix(t *testing.T) {
 		MVCCEncodeKey(cKey),
 	}
 	gc := NewGarbageCollector(makeTS(0, 0), nil)
-	prefixes := []Key{}
+	prefixes := []proto.EncodedKey{}
 	for _, key := range keys {
 		prefixes = append(prefixes, key[:gc.MVCCPrefix(key)])
 	}
@@ -81,11 +81,11 @@ func TestGarbageCollectorMVCCPrefix(t *testing.T) {
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
-	gc := NewGarbageCollector(makeTS(0, 0), func(key Key) *proto.GCPolicy {
+	gc := NewGarbageCollector(makeTS(0, 0), func(key proto.Key) *proto.GCPolicy {
 		var seconds int32
-		if bytes.Compare(key, Key("b")) < 0 {
+		if bytes.Compare(key, proto.Key("b")) < 0 {
 			seconds = 1
-		} else if bytes.Compare(key, Key("c")) < 0 {
+		} else if bytes.Compare(key, proto.Key("c")) < 0 {
 			seconds = 2
 		} else {
 			seconds = 0
@@ -99,7 +99,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	d := serializedMVCCValue(true, t)
 	testData := []struct {
 		time      proto.Timestamp
-		keys      []Key
+		keys      []proto.EncodedKey
 		values    [][]byte
 		expDelete []bool
 	}{

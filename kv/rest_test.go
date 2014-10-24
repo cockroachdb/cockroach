@@ -398,7 +398,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	}
 	gr := <-testDB.Get(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  engine.Key("\x00some/key that encodes世界"),
+			Key:  proto.Key("\x00some/key that encodes世界"),
 			User: storage.UserRoot,
 		},
 	})

@@ -57,7 +57,7 @@ func createTestDB(t *testing.T) (*DB, *hlc.Clock, *hlc.ManualClock) {
 
 // createPutRequest returns a ready-made request using the
 // specified key, value & txn ID.
-func createPutRequest(key engine.Key, value, txnID []byte) *proto.PutRequest {
+func createPutRequest(key proto.Key, value, txnID []byte) *proto.PutRequest {
 	return &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
@@ -74,8 +74,8 @@ func TestCoordinatorAddRequest(t *testing.T) {
 	db, clock, manual := createTestDB(t)
 	defer db.Close()
 
-	txnID := engine.Key("txn")
-	putReq := createPutRequest(engine.Key("a"), []byte("value"), txnID)
+	txnID := proto.Key("txn")
+	putReq := createPutRequest(proto.Key("a"), []byte("value"), txnID)
 
 	// Put request will create a new transaction.
 	<-db.Put(putReq)
@@ -108,19 +108,19 @@ func TestCoordinatorAddRequest(t *testing.T) {
 // the minimum number of ranges.
 func TestCoordinatorKeyRanges(t *testing.T) {
 	ranges := []struct {
-		start, end engine.Key
+		start, end proto.Key
 	}{
-		{engine.Key("a"), engine.Key(nil)},
-		{engine.Key("a"), engine.Key(nil)},
-		{engine.Key("aa"), engine.Key(nil)},
-		{engine.Key("b"), engine.Key(nil)},
-		{engine.Key("aa"), engine.Key("c")},
-		{engine.Key("b"), engine.Key("c")},
+		{proto.Key("a"), proto.Key(nil)},
+		{proto.Key("a"), proto.Key(nil)},
+		{proto.Key("aa"), proto.Key(nil)},
+		{proto.Key("b"), proto.Key(nil)},
+		{proto.Key("aa"), proto.Key("c")},
+		{proto.Key("b"), proto.Key("c")},
 	}
 
 	db, _, _ := createTestDB(t)
 	defer db.Close()
-	txnID := engine.Key("txn")
+	txnID := proto.Key("txn")
 
 	for _, rng := range ranges {
 		putReq := createPutRequest(rng.start, []byte("value"), txnID)
@@ -147,10 +147,10 @@ func TestCoordinatorMultipleTxns(t *testing.T) {
 	db, _, _ := createTestDB(t)
 	defer db.Close()
 
-	txn1ID := engine.Key("txn1")
-	txn2ID := engine.Key("txn2")
-	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txn1ID))
-	<-db.Put(createPutRequest(engine.Key("b"), []byte("value"), txn2ID))
+	txn1ID := proto.Key("txn1")
+	txn2ID := proto.Key("txn2")
+	<-db.Put(createPutRequest(proto.Key("a"), []byte("value"), txn1ID))
+	<-db.Put(createPutRequest(proto.Key("b"), []byte("value"), txn2ID))
 
 	if len(db.coordinator.txns) != 2 {
 		t.Errorf("expected length of transactions map to be 2; got %d", len(db.coordinator.txns))
@@ -166,8 +166,8 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	db.coordinator.heartbeatInterval = 1 * time.Millisecond
 
-	txnID := engine.Key("txn")
-	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
+	txnID := proto.Key("txn")
+	<-db.Put(createPutRequest(proto.Key("a"), []byte("value"), txnID))
 
 	// Verify 3 heartbeats.
 	var heartbeatTS proto.Timestamp
@@ -194,7 +194,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *DB, key engine.Key) (bool, *proto.Transaction, error) {
+func getTxn(db *DB, key proto.Key) (bool, *proto.Transaction, error) {
 	hr := <-db.InternalHeartbeatTxn(&proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
@@ -214,10 +214,10 @@ func TestCoordinatorEndTxn(t *testing.T) {
 	defer db.Close()
 
 	txn := &proto.Transaction{
-		ID:     engine.Key("txn"),
+		ID:     proto.Key("txn"),
 		Status: proto.COMMITTED,
 	}
-	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txn.ID))
+	<-db.Put(createPutRequest(proto.Key("a"), []byte("value"), txn.ID))
 
 	db.coordinator.EndTxn(txn)
 	if len(db.coordinator.txns) != 0 {
@@ -236,8 +236,8 @@ func TestCoordinatorGC(t *testing.T) {
 	// Set heartbeat interval to 1ms for testing.
 	db.coordinator.heartbeatInterval = 1 * time.Millisecond
 
-	txnID := engine.Key("txn")
-	<-db.Put(createPutRequest(engine.Key("a"), []byte("value"), txnID))
+	txnID := proto.Key("txn")
+	<-db.Put(createPutRequest(proto.Key("a"), []byte("value"), txnID))
 
 	// Now, advance clock past the default client timeout.
 	// Locking the coordinator to prevent a data race.
