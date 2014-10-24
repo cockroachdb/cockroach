@@ -16,6 +16,9 @@ make
 ### Code review workflow
 
 + Create a local feature branch to do work on, ideally on one thing at a time.
+  If you are working on your own fork, see 
+  [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
+  on forking in Go, which ensures that Go import paths will be correct.
 
 `git checkout -b andybons/update-readme`
 
