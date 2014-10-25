@@ -351,6 +351,6 @@ func (t *Transaction) MD5() [md5.Size]byte {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
-	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s}",
-		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp)
+	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s maxts=%s}",
+		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.MaxTimestamp)
 }

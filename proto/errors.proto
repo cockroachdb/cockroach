@@ -113,7 +113,8 @@ message WriteTooOldError {
 }
 
 // Error is a union type containing all available errors.
-// NOTE: new error types must be added here.
+// NOTE: new error types must be added here, and potentially in
+// the two locations (*ResponseHeader).{,Set}GoError().
 message Error {
   optional GenericError generic = 1;
   optional NotLeaderError not_leader = 2;
