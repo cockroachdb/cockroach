@@ -23,8 +23,12 @@ git submodule update --init
 
 # Grab binaries required by git hooks.
 go_get github.com/golang/lint/golint
-go_get code.google.com/p/go.tools/cmd/vet
 go_get code.google.com/p/go.tools/cmd/goimports
+# go vet is special: it installs into $GOROOT (which $USER may not have
+# write access to) instead of $GOPATH. It is usually but not always
+# installed along with the rest of the go toolchain. Don't try to
+# install it if it's already there.
+go vet 2>/dev/null || go_get code.google.com/p/go.tools/cmd/vet
 
 # Grab dependencies.
 # TODO(bdarnell): make these submodules like etcd/raft, so we can pin versions?
