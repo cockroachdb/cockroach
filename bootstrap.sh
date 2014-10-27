@@ -18,8 +18,8 @@ function go_get() {
   go get -u -v "$@"
 }
 
-# Update the code
-git pull && git submodule update --init
+# Update submodules
+git submodule update --init
 
 # Grab binaries required by git hooks.
 go_get github.com/golang/lint/golint
