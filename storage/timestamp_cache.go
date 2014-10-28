@@ -86,8 +86,10 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 // key only. txnMD5 is empty for no transaction. readOnly specifies
 // whether the command adding this timestamp was read-only or not.
 func (tc *TimestampCache) Add(start, end proto.Key, timestamp proto.Timestamp, txnMD5 [md5.Size]byte, readOnly bool) {
+	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
+		start = end[:len(start)]
 	}
 	if tc.latest.Less(timestamp) {
 		tc.latest = timestamp

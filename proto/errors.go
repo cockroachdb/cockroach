@@ -52,7 +52,7 @@ func (e *RangeNotFoundError) CanRetry() bool {
 }
 
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end []byte, desc *RangeDescriptor) *RangeKeyMismatchError {
+func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
 	return &RangeKeyMismatchError{
 		RequestStartKey: start,
 		RequestEndKey:   end,
@@ -63,12 +63,10 @@ func NewRangeKeyMismatchError(start, end []byte, desc *RangeDescriptor) *RangeKe
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
 	if e.Range != nil {
-		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q",
-			string(e.RequestStartKey), string(e.RequestEndKey),
-			string(e.Range.StartKey), string(e.Range.EndKey))
+		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q (%+v)",
+			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey, e.Range.Replicas[0])
 	}
-	return fmt.Sprintf("key range %q-%q could not be located within a range on store",
-		string(e.RequestStartKey), string(e.RequestEndKey))
+	return fmt.Sprintf("key range %q-%q could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
 }
 
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
@@ -83,17 +81,29 @@ func NewTransactionAbortedError(txn *Transaction) *TransactionAbortedError {
 
 // Error formats error.
 func (e *TransactionAbortedError) Error() string {
-	return fmt.Sprintf("txn %s: aborted", e.Txn)
+	return fmt.Sprintf("txn aborted %s", e.Txn)
+}
+
+// NewTransactionPushError initializes a new TransactionPushError.
+// Txn is the transaction which will be retried.
+func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
+	return &TransactionPushError{Txn: *txn, PusheeTxn: *pusheeTxn}
+}
+
+// Error formats error.
+func (e *TransactionPushError) Error() string {
+	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
-func NewTransactionRetryError(txn *Transaction, backoff bool) *TransactionRetryError {
-	return &TransactionRetryError{Txn: *txn, Backoff: backoff}
+// Txn is the transaction which will be retried.
+func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
+	return &TransactionRetryError{Txn: *txn}
 }
 
 // Error formats error.
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("retry txn: %s, backoff? %t", e.Txn, e.Backoff)
+	return fmt.Sprintf("retry txn %s", e.Txn)
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError.
@@ -116,7 +126,7 @@ func (e *WriteIntentError) Error() string {
 
 // Error formats error.
 func (e *WriteTooOldError) Error() string {
-	return fmt.Sprintf("failed write with timestamp %s < %s", e.Timestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("write too old: timestamp %s < %s", e.Timestamp, e.ExistingTimestamp)
 }
 
 // Error formats error.

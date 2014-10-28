@@ -39,7 +39,7 @@ non-ascii bytes or spaces.
 
 // runGetPerms invokes the REST API with GET action and key prefix as path.
 func runGetPerms(cmd *commander.Command, args []string) {
-	runGetConfig(permKeyPrefix, cmd, args)
+	runGetConfig(permPathPrefix, cmd, args)
 }
 
 // A CmdLsPerms command displays a list of perm configs by prefix.
@@ -61,7 +61,7 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsPerms(cmd *commander.Command, args []string) {
-	runLsConfigs(permKeyPrefix, cmd, args)
+	runLsConfigs(permPathPrefix, cmd, args)
 
 }
 
@@ -83,7 +83,7 @@ contains non-ascii bytes or spaces.
 // runRmPerms invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmPerms(cmd *commander.Command, args []string) {
-	runRmConfig(permKeyPrefix, cmd, args)
+	runRmConfig(permPathPrefix, cmd, args)
 }
 
 // A CmdSetPerms command creates a new or updates an existing perm
@@ -129,7 +129,7 @@ this key prefix and all sub prefixes of the one that is set
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetPerms(cmd *commander.Command, args []string) {
-	runSetConfig(permKeyPrefix, cmd, args)
+	runSetConfig(permPathPrefix, cmd, args)
 }
 
 // TODO:(bram) Add inline json for setting

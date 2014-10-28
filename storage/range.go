@@ -29,6 +29,7 @@ import (
 	"time"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -77,138 +78,22 @@ var configPrefixes = []struct {
 	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}, true},
 }
 
-// The following are the method names supported by the KV API.
-const (
-	Contains         = "Contains"
-	Get              = "Get"
-	Put              = "Put"
-	ConditionalPut   = "ConditionalPut"
-	Increment        = "Increment"
-	Scan             = "Scan"
-	Delete           = "Delete"
-	DeleteRange      = "DeleteRange"
-	BeginTransaction = "BeginTransaction"
-	EndTransaction   = "EndTransaction"
-	AccumulateTS     = "AccumulateTS"
-	ReapQueue        = "ReapQueue"
-	EnqueueUpdate    = "EnqueueUpdate"
-	EnqueueMessage   = "EnqueueMessage"
-
-	InternalEndTxn        = "InternalEndTxn"
-	InternalRangeLookup   = "InternalRangeLookup"
-	InternalHeartbeatTxn  = "InternalHeartbeatTxn"
-	InternalPushTxn       = "InternalPushTxn"
-	InternalResolveIntent = "InternalResolveIntent"
-	InternalSnapshotCopy  = "InternalSnapshotCopy"
-
-	AdminSplit = "AdminSplit"
-)
-
-type stringSet map[string]struct{}
-
-func (s stringSet) keys() []string {
-	keys := make([]string, 0, len(s))
-	for k := range s {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// readMethods specifies the set of methods which read and return data.
-var readMethods = stringSet{
-	Contains:             struct{}{},
-	Get:                  struct{}{},
-	ConditionalPut:       struct{}{},
-	Increment:            struct{}{},
-	Scan:                 struct{}{},
-	ReapQueue:            struct{}{},
-	InternalRangeLookup:  struct{}{},
-	InternalSnapshotCopy: struct{}{},
-}
-
-// writeMethods specifies the set of methods which write data.
-var writeMethods = stringSet{
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	EndTransaction:        struct{}{},
-	AccumulateTS:          struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	InternalEndTxn:        struct{}{},
-	InternalHeartbeatTxn:  struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-}
-
-// adminMethods specifies the set of methods which are neither
-// read-only nor read-write commands but instead execute directly on
-// the Raft leader.
-var adminMethods = stringSet{
-	AdminSplit: struct{}{},
-}
-
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
-var tsCacheMethods = stringSet{
-	Contains:              struct{}{},
-	Get:                   struct{}{},
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Scan:                  struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	AccumulateTS:          struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	InternalResolveIntent: struct{}{},
-}
-
-// ReadMethods lists the read-only methods supported by a range.
-var ReadMethods = readMethods.keys()
-
-// WriteMethods lists the methods supported by a range which write data.
-var WriteMethods = writeMethods.keys()
-
-// Methods lists all the methods supported by a range.
-var Methods = append(ReadMethods, WriteMethods...)
-
-// NeedReadPerm returns true if the specified method requires read permissions.
-func NeedReadPerm(method string) bool {
-	_, ok := readMethods[method]
-	return ok
-}
-
-// NeedWritePerm returns true if the specified method requires write permissions.
-func NeedWritePerm(method string) bool {
-	_, ok := writeMethods[method]
-	return ok
-}
-
-// NeedAdminPerm returns true if the specified method requires admin permissions.
-func NeedAdminPerm(method string) bool {
-	_, ok := adminMethods[method]
-	return ok
-}
-
-// IsReadOnly returns true if the specified method only requires read permissions.
-func IsReadOnly(method string) bool {
-	return NeedReadPerm(method) && !NeedWritePerm(method)
-}
-
-// IsReadWrite returns true if the specified method requires write permissions.
-func IsReadWrite(method string) bool {
-	return NeedWritePerm(method)
-}
-
-// IsAdmin returns true if the specified method requires admin permissions.
-func IsAdmin(method string) bool {
-	return NeedAdminPerm(method)
+var tsCacheMethods = map[string]struct{}{
+	proto.Contains:              struct{}{},
+	proto.Get:                   struct{}{},
+	proto.Put:                   struct{}{},
+	proto.ConditionalPut:        struct{}{},
+	proto.Increment:             struct{}{},
+	proto.Scan:                  struct{}{},
+	proto.Delete:                struct{}{},
+	proto.DeleteRange:           struct{}{},
+	proto.AccumulateTS:          struct{}{},
+	proto.ReapQueue:             struct{}{},
+	proto.EnqueueUpdate:         struct{}{},
+	proto.EnqueueMessage:        struct{}{},
+	proto.InternalResolveIntent: struct{}{},
 }
 
 // UsesTimestampCache returns true if the method affects or is
@@ -359,9 +244,9 @@ func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, 
 	}
 
 	// Differentiate between read-only and read-write.
-	if IsAdmin(method) {
+	if proto.IsAdmin(method) {
 		return r.addAdminCmd(method, args, reply)
-	} else if IsReadOnly(method) {
+	} else if proto.IsReadOnly(method) {
 		return r.addReadOnlyCmd(method, args, reply)
 	}
 	return r.addReadWriteCmd(method, args, reply, wait)
@@ -388,7 +273,7 @@ func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
 // are not meant to consistently access or modify the underlying data.
 func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Response) error {
 	switch method {
-	case AdminSplit:
+	case proto.AdminSplit:
 		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
 	default:
 		return util.Errorf("unrecognized admin command type: %s", method)
@@ -476,7 +361,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// be written with a greater timestamp than the most recent read to
 	// the same key. Check the timestamp cache for reads/writes which
 	// are at least as recent as the timestamp of this write. For
-	// writes, send TransactionRetryError; for reads, update the write's
+	// writes, send WriteTooOldError; for reads, update the write's
 	// timestamp. When the write returns, the updated timestamp will
 	// inform the final commit timestamp.
 	if UsesTimestampCache(method) {
@@ -723,7 +608,7 @@ func (r *Range) maybeSplit() {
 	// of range data.
 	if r.shouldSplit() {
 		// Admin commands run synchronously, so run this in a goroutine.
-		go r.AddCmd(AdminSplit, &proto.AdminSplitRequest{
+		go r.AddCmd(proto.AdminSplit, &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{Key: r.Desc.StartKey},
 		}, &proto.AdminSplitResponse{}, false)
 	}
@@ -755,50 +640,50 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	mvcc := engine.NewMVCC(batch)
 
 	switch method {
-	case Contains:
+	case proto.Contains:
 		r.Contains(mvcc, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
-	case Get:
+	case proto.Get:
 		r.Get(mvcc, args.(*proto.GetRequest), reply.(*proto.GetResponse))
-	case Put:
+	case proto.Put:
 		r.Put(mvcc, args.(*proto.PutRequest), reply.(*proto.PutResponse))
-	case ConditionalPut:
+	case proto.ConditionalPut:
 		r.ConditionalPut(mvcc, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
-	case Increment:
+	case proto.Increment:
 		r.Increment(mvcc, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
-	case Delete:
+	case proto.Delete:
 		r.Delete(mvcc, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
-	case DeleteRange:
+	case proto.DeleteRange:
 		r.DeleteRange(mvcc, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
-	case Scan:
+	case proto.Scan:
 		r.Scan(mvcc, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
-	case EndTransaction:
+	case proto.EndTransaction:
 		r.EndTransaction(batch, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
-	case AccumulateTS:
+	case proto.AccumulateTS:
 		r.AccumulateTS(mvcc, args.(*proto.AccumulateTSRequest), reply.(*proto.AccumulateTSResponse))
-	case ReapQueue:
+	case proto.ReapQueue:
 		r.ReapQueue(mvcc, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
-	case EnqueueUpdate:
+	case proto.EnqueueUpdate:
 		r.EnqueueUpdate(mvcc, args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
-	case EnqueueMessage:
+	case proto.EnqueueMessage:
 		r.EnqueueMessage(mvcc, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
-	case InternalRangeLookup:
+	case proto.InternalRangeLookup:
 		r.InternalRangeLookup(mvcc, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
-	case InternalEndTxn:
+	case proto.InternalEndTxn:
 		r.InternalEndTxn(batch, args.(*proto.InternalEndTxnRequest), reply.(*proto.InternalEndTxnResponse))
-	case InternalHeartbeatTxn:
+	case proto.InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
-	case InternalPushTxn:
+	case proto.InternalPushTxn:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
-	case InternalResolveIntent:
+	case proto.InternalResolveIntent:
 		r.InternalResolveIntent(mvcc, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
-	case InternalSnapshotCopy:
+	case proto.InternalSnapshotCopy:
 		r.InternalSnapshotCopy(r.rm.Engine(), args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
 	default:
-		return util.Errorf("unrecognized command type: %s", method)
+		return util.Errorf("unrecognized command %q", method)
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
-	if IsReadWrite(method) && reply.Header().Error == nil {
+	if proto.IsReadWrite(method) && reply.Header().Error == nil {
 		mvcc.MergeStats(r.RangeID, r.rm.StoreID())
 		if err := batch.Commit(); err != nil {
 			reply.Header().SetGoError(err)
@@ -809,7 +694,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
-	if (method == Put || method == ConditionalPut) && reply.Header().Error == nil {
+	if (method == proto.Put || method == proto.ConditionalPut) && reply.Header().Error == nil {
 		r.maybeUpdateGossipConfigs(args.Header().Key)
 	}
 
@@ -822,7 +707,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// read/write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
-	if IsReadWrite(method) {
+	if proto.IsReadWrite(method) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
 			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
 				args, reply, putErr)
@@ -907,7 +792,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 	}
 
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.MVCCEncodeKey(proto.Key(args.Key))
+	encKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key))
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -967,7 +852,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
 		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.Timestamp) {
-			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn, false /* !Backoff */))
+			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn))
 			return
 		}
 		reply.Txn.Status = proto.COMMITTED
@@ -1112,7 +997,7 @@ func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRe
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.MVCCEncodeKey(proto.Key(args.Key))
+	encKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key))
 
 	var txn proto.Transaction
 	ok, _, _, err := engine.GetProto(batch, encKey, &txn)
@@ -1171,18 +1056,16 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 // args timestamp can advance during the txn).
 //
 // Higher Txn Priority: If pushee txn has a higher priority than
-// pusher, return TransactionRetryError. Transaction will be retried
+// pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	key := proto.Key(args.Key)
-	if !bytes.Equal(engine.KeyAddress(key), args.PusheeTxn.ID) {
-		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q",
-			engine.KeyAddress(key), args.PusheeTxn.ID))
+	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
 		return
 	}
 
 	// Encode the key for direct access to/from the engine.
-	encKey := engine.MVCCEncodeKey(key)
+	encKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key))
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1270,7 +1153,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 
 	if !pusherWins {
 		log.V(1).Infof("failed to push intent %s vs %s using priority=%d", reply.PusheeTxn, args.Txn, priority)
-		reply.SetGoError(proto.NewTransactionRetryError(reply.PusheeTxn, true /* Backoff */))
+		reply.SetGoError(proto.NewTransactionPushError(args.Txn, reply.PusheeTxn))
 		return
 	}
 
@@ -1442,20 +1325,20 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	log.Infof("initiating a split of range %d %q-%q at key %q", r.RangeID,
 		proto.Key(r.Desc.StartKey), proto.Key(r.Desc.EndKey), splitKey)
 
-	txnOpts := &TransactionOptions{
+	txnOpts := &client.TransactionOptions{
 		Name:         fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
 		User:         UserRoot,
 		UserPriority: 100000, // High user priority prevents aborts
 	}
-	if err = r.rm.DB().RunTransaction(txnOpts, func(txn DB) error {
+	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
-		if err := PutProto(txn, makeRangeKey(newDesc.StartKey), newDesc); err != nil {
+		if err := txn.PutProto(makeRangeKey(newDesc.StartKey), newDesc); err != nil {
 			return err
 		}
 		// Update existing range descriptor for first half of split.
-		if err := PutProto(txn, makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		if err := txn.PutProto(makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
@@ -1468,15 +1351,14 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// End the transaction manually (instead of letting RunTransaction
 		// loop do it) using the InternalEndTxn API call in order to
 		// provide a split trigger.
-		endReply := <-txn.InternalEndTxn(&proto.InternalEndTxnRequest{
+		return txn.Call(proto.InternalEndTxn, &proto.InternalEndTxnRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			SplitTrigger: &proto.SplitTrigger{
 				UpdatedDesc: updatedDesc,
 				NewDesc:     *newDesc,
 			},
-		})
-		return endReply.GoError()
+		}, &proto.InternalEndTxnResponse{})
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
 	}

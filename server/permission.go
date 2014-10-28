@@ -19,11 +19,10 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -33,7 +32,7 @@ import (
 
 // A permHandler implements the adminHandler interface.
 type permHandler struct {
-	db storage.DB // Key-value database client
+	db *client.KV // Key-value database client
 }
 
 // Put writes a perm config for the specified key prefix (which is treated as
@@ -44,22 +43,12 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for permission Put")
 	}
-	configStr := string(body)
-	var err error
-	var config *proto.PermConfig
-	switch GetContentType(r) {
-	case "application/json", "application/x-json":
-		config, err = proto.PermConfigFromJSON(body)
-	case "text/yaml", "application/x-yaml":
-		config, err = proto.PermConfigFromYAML(body)
-	default:
-		err = util.Errorf("invalid content type: %q", GetContentType(r))
-	}
-	if err != nil {
-		return util.Errorf("permission config has invalid format: %s: %s", configStr, err)
+	config := &proto.PermConfig{}
+	if err := util.UnmarshalRequest(r, body, config); err != nil {
+		return util.Errorf("permission config has invalid format: %s: %s", config, err)
 	}
 	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
-	if err := storage.PutProto(ph.db, permKey, config); err != nil {
+	if err := ph.db.PutProto(permKey, config); err != nil {
 		return err
 	}
 	return nil
@@ -76,16 +65,15 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all perms if the key is empty.
 	if len(path) == 0 {
-		sr := <-ph.db.Scan(&proto.ScanRequest{
+		sr := &proto.ScanResponse{}
+		if err = ph.db.Call(proto.Scan, &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    engine.KeyConfigPermissionPrefix,
 				EndKey: engine.KeyConfigPermissionPrefix.PrefixEnd(),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,
-		})
-		if sr.Error != nil {
-			err = sr.GoError()
+		}, sr); err != nil {
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
@@ -96,16 +84,13 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigPermissionPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
-		// JSON-encode the prefixes array.
-		contentType = "application/json"
-		if body, err = json.Marshal(prefixes); err != nil {
-			err = util.Errorf("unable to format permission configurations: %s", err)
-		}
+		// Encode the response.
+		body, contentType, err = util.MarshalResponse(r, prefixes)
 	} else {
 		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.PermConfig{}
-		if ok, _, err = storage.GetProto(ph.db, permKey, config); err != nil {
+		if ok, _, err = ph.db.GetProto(permKey, config); err != nil {
 			return
 		}
 		// On get, if there's no perm config for the requested prefix,
@@ -114,28 +99,7 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		// TODO(spencer): until there's a nice (free) way to parse the Accept
-		//   header and properly use the request's preference for a content
-		//   type, we simply find out which of "yaml" or "json" appears first
-		//   in the Accept header. If neither do, we default to JSON.
-		accept := r.Header.Get("Accept")
-		jsonIdx := strings.Index(accept, "json")
-		yamlIdx := strings.Index(accept, "yaml")
-		if (jsonIdx != -1 && yamlIdx != -1 && yamlIdx < jsonIdx) || (yamlIdx != -1 && jsonIdx == -1) {
-			// YAML-encode the config.
-			contentType = "text/yaml"
-			if body, err = config.ToYAML(); err != nil {
-				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
-				return
-			}
-		} else {
-			// JSON-encode the config.
-			contentType = "application/json"
-			if body, err = config.ToJSON(); err != nil {
-				err = util.Errorf("unable to marshal perm config %+v to json: %s", config, err)
-				return
-			}
-		}
+		body, contentType, err = util.MarshalResponse(r, config)
 	}
 
 	return
@@ -150,14 +114,10 @@ func (ph *permHandler) Delete(path string, r *http.Request) error {
 		return util.Errorf("the default permission configuration cannot be deleted")
 	}
 	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
-	dr := <-ph.db.Delete(&proto.DeleteRequest{
+	return ph.db.Call(proto.Delete, &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  permKey,
 			User: storage.UserRoot,
 		},
-	})
-	if dr.Error != nil {
-		return dr.GoError()
-	}
-	return nil
+	}, &proto.DeleteResponse{})
 }

@@ -78,11 +78,13 @@ func CreateTestAddr(network string) net.Addr {
 // invoked at most 10 times over the course of the specified time
 // duration.
 func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
-	for i := 0; i < 10; i++ {
+	total := time.Duration(0)
+	for wait := time.Duration(1); total < duration; wait *= 2 {
 		if trueFunc() {
 			return nil
 		}
-		time.Sleep(duration / 10)
+		time.Sleep(wait)
+		total += wait
 	}
 	return fmt.Errorf("condition failed to evaluate true within %s", duration)
 }

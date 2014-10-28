@@ -19,11 +19,10 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -33,33 +32,23 @@ import (
 
 // A zoneHandler implements the adminHandler interface.
 type zoneHandler struct {
-	db storage.DB // Key-value database client
+	db *client.KV // Key-value database client
 }
 
-// Put writes a zone config for the specified key prefix (which is treated as
-// a key). The zone config is parsed from the input "body". The zone config is
-// stored gob-encoded. The specified body must validly parse into
-// a zone config struct.
+// Put writes a zone config for the specified key prefix (which is
+// treated as a key). The zone config is parsed from the input
+// "body". The specified body must validly parse into a zone config
+// struct.
 func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for zone Put")
 	}
-	configStr := string(body)
-	var err error
-	var config *proto.ZoneConfig
-	switch GetContentType(r) {
-	case "application/json", "application/x-json":
-		config, err = proto.ZoneConfigFromJSON(body)
-	case "text/yaml", "application/x-yaml":
-		config, err = proto.ZoneConfigFromYAML(body)
-	default:
-		err = util.Errorf("invalid content type: %q", GetContentType(r))
-	}
-	if err != nil {
-		return util.Errorf("zone config has invalid format: %s: %s", configStr, err)
+	config := &proto.ZoneConfig{}
+	if err := util.UnmarshalRequest(r, body, config); err != nil {
+		return util.Errorf("zone config has invalid format: %q: %s", body, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
-	if err := storage.PutProto(zh.db, zoneKey, config); err != nil {
+	if err := zh.db.PutProto(zoneKey, config); err != nil {
 		return err
 	}
 	return nil
@@ -76,16 +65,15 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all zones if the key is empty.
 	if len(path) == 0 {
-		sr := <-zh.db.Scan(&proto.ScanRequest{
+		sr := &proto.ScanResponse{}
+		if err = zh.db.Call(proto.Scan, &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    engine.KeyConfigZonePrefix,
 				EndKey: engine.KeyConfigZonePrefix.PrefixEnd(),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,
-		})
-		if sr.Error != nil {
-			err = sr.GoError()
+		}, sr); err != nil {
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
@@ -96,16 +84,13 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigZonePrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
-		// JSON-encode the prefixes array.
-		contentType = "application/json"
-		if body, err = json.Marshal(prefixes); err != nil {
-			err = util.Errorf("unable to format zone configurations: %s", err)
-		}
+		// Encode the response.
+		body, contentType, err = util.MarshalResponse(r, prefixes)
 	} else {
 		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.ZoneConfig{}
-		if ok, _, err = storage.GetProto(zh.db, zoneKey, config); err != nil {
+		if ok, _, err = zh.db.GetProto(zoneKey, config); err != nil {
 			return
 		}
 		// On get, if there's no zone config for the requested prefix,
@@ -114,28 +99,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		// TODO(spencer): until there's a nice (free) way to parse the Accept
-		//   header and properly use the request's preference for a content
-		//   type, we simply find out which of "yaml" or "json" appears first
-		//   in the Accept header. If neither do, we default to JSON.
-		accept := r.Header.Get("Accept")
-		jsonIdx := strings.Index(accept, "json")
-		yamlIdx := strings.Index(accept, "yaml")
-		if (jsonIdx != -1 && yamlIdx != -1 && yamlIdx < jsonIdx) || (yamlIdx != -1 && jsonIdx == -1) {
-			// YAML-encode the config.
-			contentType = "text/yaml"
-			if body, err = config.ToYAML(); err != nil {
-				err = util.Errorf("unable to marshal zone config %+v to json: %s", config, err)
-				return
-			}
-		} else {
-			// JSON-encode the config.
-			contentType = "application/json"
-			if body, err = config.ToJSON(); err != nil {
-				err = util.Errorf("unable to marshal zone config %+v to json: %s", config, err)
-				return
-			}
-		}
+		body, contentType, err = util.MarshalResponse(r, config)
 	}
 
 	return
@@ -150,14 +114,10 @@ func (zh *zoneHandler) Delete(path string, r *http.Request) error {
 		return util.Errorf("the default zone configuration cannot be deleted")
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
-	dr := <-zh.db.Delete(&proto.DeleteRequest{
+	return zh.db.Call(proto.Delete, &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  zoneKey,
 			User: storage.UserRoot,
 		},
-	})
-	if dr.Error != nil {
-		return dr.GoError()
-	}
-	return nil
+	}, &proto.DeleteResponse{})
 }

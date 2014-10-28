@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
@@ -62,7 +63,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetBootstrap([]net.Addr{gossipBS})
 		g.Start(rpcServer)
 	}
-	db := kv.NewDB(kv.NewDistKV(g), clock)
+	db := &client.KV{Sender: kv.NewDistSender(g)}
 	node := NewNode(db, g)
 	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
 		t.Fatal(err)
@@ -89,16 +90,16 @@ func TestBootstrapCluster(t *testing.T) {
 	defer localDB.Close()
 
 	// Scan the complete contents of the local database.
-	sr := <-localDB.Scan(&proto.ScanRequest{
+	sr := &proto.ScanResponse{}
+	if err := localDB.Call(proto.Scan, &proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:    engine.KeyLocalPrefix.PrefixEnd(), // skip local keys
 			EndKey: engine.KeyMax,
 			User:   storage.UserRoot,
 		},
 		MaxResults: math.MaxInt64,
-	})
-	if sr.Error != nil {
-		t.Fatal(sr.Error)
+	}, sr); err != nil {
+		t.Fatal(err)
 	}
 	var keys []proto.Key
 	for _, kv := range sr.Rows {
@@ -144,7 +145,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	// store) will be bootstrapped by the node upon start. This happens
 	// in a goroutine, so we'll have to wait a bit (maximum 1s) until
 	// we can find the new node.
-	if err := util.IsTrueWithin(func() bool { return node.localKV.GetStoreCount() == 3 }, 1*time.Second); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node.lSender.GetStoreCount() == 3 }, 1*time.Second); err != nil {
 		t.Error(err)
 	}
 }
@@ -173,7 +174,7 @@ func TestNodeJoin(t *testing.T) {
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
-	if err := util.IsTrueWithin(func() bool { return node2.localKV.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
+	if err := util.IsTrueWithin(func() bool { return node2.lSender.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 

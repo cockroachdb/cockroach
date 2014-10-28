@@ -29,11 +29,7 @@ import (
 // MakeKey makes a new key which is the concatenation of the
 // given inputs, in order.
 func MakeKey(keys ...proto.Key) proto.Key {
-	byteSlices := make([][]byte, len(keys))
-	for i, k := range keys {
-		byteSlices[i] = []byte(k)
-	}
-	return proto.Key(bytes.Join(byteSlices, nil))
+	return proto.MakeKey(keys...)
 }
 
 // MakeLocalKey is a simple passthrough to MakeKey, with verification
@@ -45,7 +41,7 @@ func MakeLocalKey(keys ...proto.Key) proto.Key {
 	if len(keys[0]) != KeyLocalPrefixLength {
 		log.Fatalf("local key prefix length must be %d: %q", KeyLocalPrefixLength, keys[0])
 	}
-	return MakeKey(keys...)
+	return proto.MakeKey(keys...)
 }
 
 // KeyAddress returns the address for the key, used to lookup the

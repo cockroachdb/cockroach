@@ -31,26 +31,30 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/client"
 )
 
 const (
 	maxGetResults = 0 // TODO(spencer): maybe we need paged query support
 
-	// acctKeyPrefix is the prefix for accounting configuration changes.
-	acctKeyPrefix = adminKeyPrefix + "acct"
-	// adminKeyPrefix is the prefix for RESTful endpoints used to
+	// adminScheme is the scheme for connecting to the admin endpoint.
+	// TODO(spencer): change this to CONSTANT https. We shouldn't be
+	// supporting http here at all.
+	adminScheme = "http"
+	// adminEndpoint is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
-	adminKeyPrefix = "/_admin/"
-	// debugKeyPrefix is the prefix of golang's standard debug functionality
+	adminEndpoint = "/_admin/"
+	// debugEndpoint is the prefix of golang's standard debug functionality
 	// for access to exported vars and pprof tools.
-	debugKeyPrefix = "/debug/"
-	// healthzKey is the healthz endpoint.
-	healthzKey = adminKeyPrefix + "healthz"
-	// permKeyPrefix is the prefix for permission configuration changes.
-	permKeyPrefix = adminKeyPrefix + "perms"
-	// zoneKeyPrefix is the prefix for zone configuration changes.
-	zoneKeyPrefix = adminKeyPrefix + "zones"
+	debugEndpoint = "/debug/"
+	// healthzPath is the healthz endpoint.
+	healthzPath = adminEndpoint + "healthz"
+	// acctPathPrefix is the prefix for accounting configuration changes.
+	acctPathPrefix = adminEndpoint + "acct"
+	// permPathPrefix is the prefix for permission configuration changes.
+	permPathPrefix = adminEndpoint + "perms"
+	// zonePathPrefix is the prefix for zone configuration changes.
+	zonePathPrefix = adminEndpoint + "zones"
 )
 
 // An actionHandler is an interface which provides Get, Put & Delete
@@ -64,7 +68,7 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	db   storage.DB // Key-value database client
+	db   *client.KV // Key-value database client
 	acct *acctHandler
 	perm *permHandler
 	zone *zoneHandler
@@ -72,7 +76,7 @@ type adminServer struct {
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db storage.DB) *adminServer {
+func newAdminServer(db *client.KV) *adminServer {
 	return &adminServer{
 		db:   db,
 		acct: &acctHandler{db: db},
@@ -86,14 +90,14 @@ func newAdminServer(db storage.DB) *adminServer {
 func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
 	// Pass through requests to /debug to the default serve mux so we
 	// get exported variables and pprof tools.
-	mux.HandleFunc(acctKeyPrefix, s.handleAcctAction)
-	mux.HandleFunc(acctKeyPrefix+"/", s.handleAcctAction)
-	mux.HandleFunc(debugKeyPrefix, s.handleDebug)
-	mux.HandleFunc(healthzKey, s.handleHealthz)
-	mux.HandleFunc(permKeyPrefix, s.handlePermAction)
-	mux.HandleFunc(permKeyPrefix+"/", s.handlePermAction)
-	mux.HandleFunc(zoneKeyPrefix, s.handleZoneAction)
-	mux.HandleFunc(zoneKeyPrefix+"/", s.handleZoneAction)
+	mux.HandleFunc(acctPathPrefix, s.handleAcctAction)
+	mux.HandleFunc(acctPathPrefix+"/", s.handleAcctAction)
+	mux.HandleFunc(debugEndpoint, s.handleDebug)
+	mux.HandleFunc(healthzPath, s.handleHealthz)
+	mux.HandleFunc(permPathPrefix, s.handlePermAction)
+	mux.HandleFunc(permPathPrefix+"/", s.handlePermAction)
+	mux.HandleFunc(zonePathPrefix, s.handleZoneAction)
+	mux.HandleFunc(zonePathPrefix+"/", s.handleZoneAction)
 }
 
 // handleHealthz responds to health requests from monitoring services.
@@ -102,7 +106,7 @@ func (s *adminServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "ok")
 }
 
-// handleDebug passes requests with the debugKeyPrefix onto the default
+// handleDebug passes requests with the debugPathPrefix onto the default
 // serve mux, which is preconfigured (by import of expvar and net/http/pprof)
 // to serve endpoints which access exported variables and pprof tools.
 func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
@@ -115,11 +119,11 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.acct, w, r, acctKeyPrefix)
+		s.handleGetAction(s.acct, w, r, acctPathPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.acct, w, r, acctKeyPrefix)
+		s.handlePutAction(s.acct, w, r, acctPathPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.acct, w, r, acctKeyPrefix)
+		s.handleDeleteAction(s.acct, w, r, acctPathPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
@@ -129,11 +133,11 @@ func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.perm, w, r, permKeyPrefix)
+		s.handleGetAction(s.perm, w, r, permPathPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.perm, w, r, permKeyPrefix)
+		s.handlePutAction(s.perm, w, r, permPathPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.perm, w, r, permKeyPrefix)
+		s.handleDeleteAction(s.perm, w, r, permPathPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
@@ -143,11 +147,11 @@ func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
 func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.zone, w, r, zoneKeyPrefix)
+		s.handleGetAction(s.zone, w, r, zonePathPrefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.zone, w, r, zoneKeyPrefix)
+		s.handlePutAction(s.zone, w, r, zonePathPrefix)
 	case "DELETE":
-		s.handleDeleteAction(s.zone, w, r, zoneKeyPrefix)
+		s.handleDeleteAction(s.zone, w, r, zonePathPrefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}

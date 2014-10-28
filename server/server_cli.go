@@ -20,6 +20,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -28,19 +29,20 @@ import (
 	"regexp"
 
 	commander "code.google.com/p/go-commander"
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+var addr = flag.String("addr", "127.0.0.1:8080", "address for connection to cockroach cluster")
 
 // sendAdminRequest send an HTTP request and processes the response for
 // its body or error message if a non-200 response code.
 func sendAdminRequest(req *http.Request) ([]byte, error) {
 	resp, err := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, util.Errorf("admin REST request failed: %s", err)
 	}
+	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, util.Errorf("unable to read admin REST response: %s", err)
@@ -54,11 +56,11 @@ func sendAdminRequest(req *http.Request) ([]byte, error) {
 // Gets a friendly name for output based on the passed in config prefix.
 func getFriendlyNameFromPrefix(prefix string) string {
 	switch prefix {
-	case acctKeyPrefix:
+	case acctPathPrefix:
 		return "accounting"
-	case permKeyPrefix:
+	case permPathPrefix:
 		return "permission"
-	case zoneKeyPrefix:
+	case zonePathPrefix:
 		return "zone"
 	default:
 		return "unknown"
@@ -72,12 +74,12 @@ func runGetConfig(prefix string, cmd *commander.Command, args []string) {
 		return
 	}
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("GET", kv.HTTPAddr()+prefix+"/"+args[0], nil)
-	req.Header.Add("Accept", "text/yaml")
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s/%s", adminScheme, *addr, prefix, args[0]), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
+	req.Header.Add("Accept", "text/yaml")
 	// TODO(spencer): need to move to SSL.
 	b, err := sendAdminRequest(req)
 	if err != nil {
@@ -98,7 +100,7 @@ func runLsConfigs(prefix string, cmd *commander.Command, args []string) {
 		return
 	}
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("GET", kv.HTTPAddr()+prefix, nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, *addr, prefix), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -142,7 +144,7 @@ func runRmConfig(prefix string, cmd *commander.Command, args []string) {
 		return
 	}
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("DELETE", kv.HTTPAddr()+prefix+"/"+args[0], nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s://%s%s/%s", adminScheme, *addr, prefix, args[0]), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -173,12 +175,12 @@ func runSetConfig(prefix string, cmd *commander.Command, args []string) {
 		return
 	}
 	// Send to admin REST API.
-	req, err := http.NewRequest("POST", kv.HTTPAddr()+prefix+"/"+args[0], bytes.NewReader(body))
-	req.Header.Add("Content-Type", "text/yaml")
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", adminScheme, *addr, prefix, args[0]), bytes.NewReader(body))
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
+	req.Header.Add("Content-Type", "text/yaml")
 	// TODO(spencer): need to move to SSL.
 	_, err = sendAdminRequest(req)
 	if err != nil {

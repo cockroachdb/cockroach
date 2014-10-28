@@ -52,3 +52,20 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 		t.Error("expected generic error to be retryable")
 	}
 }
+
+func TestCanonicalMethod(t *testing.T) {
+	testCases := []struct {
+		method, expCanon string
+	}{
+		{"ConTAINS", "Contains"},
+		{"contains", "Contains"},
+		{"endtransaction", "EndTransaction"},
+		{"internalendtxn", "InternalEndTxn"},
+		{"end_transaction", "end_transaction"},
+	}
+	for i, test := range testCases {
+		if canon := CanonicalMethod(test.method); canon != test.expCanon {
+			t.Errorf("%d: expected %s; got %s", i, test.expCanon, canon)
+		}
+	}
+}

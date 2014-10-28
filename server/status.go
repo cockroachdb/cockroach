@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/server/status"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,12 +60,12 @@ const (
 
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	db     storage.DB
+	db     *client.KV
 	gossip *gossip.Gossip
 }
 
 // newStatusServer allocates and returns a statusServer.
-func newStatusServer(db storage.DB, gossip *gossip.Gossip) *statusServer {
+func newStatusServer(db *client.KV, gossip *gossip.Gossip) *statusServer {
 	return &statusServer{
 		db:     db,
 		gossip: gossip,

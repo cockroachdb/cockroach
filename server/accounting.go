@@ -19,11 +19,10 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -33,7 +32,7 @@ import (
 
 // An acctHandler implements the adminHandler interface.
 type acctHandler struct {
-	db storage.DB // Key-value database client
+	db *client.KV // Key-value database client
 }
 
 // Put writes an accounting config for the specified key prefix (which is
@@ -44,22 +43,12 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 	if len(path) == 0 {
 		return util.Errorf("no path specified for accounting Put")
 	}
-	configStr := string(body)
-	var err error
-	var config *proto.AcctConfig
-	switch GetContentType(r) {
-	case "application/json", "application/x-json":
-		config, err = proto.AcctConfigFromJSON(body)
-	case "text/yaml", "application/x-yaml":
-		config, err = proto.AcctConfigFromYAML(body)
-	default:
-		err = util.Errorf("invalid content type: %q", GetContentType(r))
-	}
-	if err != nil {
-		return util.Errorf("accounting config has invalid format: %s: %s", configStr, err)
+	config := &proto.AcctConfig{}
+	if err := util.UnmarshalRequest(r, body, config); err != nil {
+		return util.Errorf("accounting config has invalid format: %+v: %s", config, err)
 	}
 	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
-	if err := storage.PutProto(ah.db, acctKey, config); err != nil {
+	if err := ah.db.PutProto(acctKey, config); err != nil {
 		return err
 	}
 	return nil
@@ -76,16 +65,15 @@ func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
 func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
 	// Scan all accts if the key is empty.
 	if len(path) == 0 {
-		sr := <-ah.db.Scan(&proto.ScanRequest{
+		sr := &proto.ScanResponse{}
+		if err = ah.db.Call(proto.Scan, &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    engine.KeyConfigAccountingPrefix,
 				EndKey: engine.KeyConfigAccountingPrefix.PrefixEnd(),
 				User:   storage.UserRoot,
 			},
 			MaxResults: maxGetResults,
-		})
-		if sr.Error != nil {
-			err = sr.GoError()
+		}, sr); err != nil {
 			return
 		}
 		if len(sr.Rows) == maxGetResults {
@@ -96,16 +84,13 @@ func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigAccountingPrefix)
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
-		// JSON-encode the prefixes array.
-		contentType = "application/json"
-		if body, err = json.Marshal(prefixes); err != nil {
-			err = util.Errorf("unable to format accouting configurations: %s", err)
-		}
+		// Encode the response.
+		body, contentType, err = util.MarshalResponse(r, prefixes)
 	} else {
 		acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
 		var ok bool
 		config := &proto.AcctConfig{}
-		if ok, _, err = storage.GetProto(ah.db, acctKey, config); err != nil {
+		if ok, _, err = ah.db.GetProto(acctKey, config); err != nil {
 			return
 		}
 		// On get, if there's no perm config for the requested prefix,
@@ -114,28 +99,7 @@ func (ah *acctHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		// TODO(spencer): until there's a nice (free) way to parse the Accept
-		//   header and properly use the request's preference for a content
-		//   type, we simply find out which of "yaml" or "json" appears first
-		//   in the Accept header. If neither do, we default to JSON.
-		accept := r.Header.Get("Accept")
-		jsonIdx := strings.Index(accept, "json")
-		yamlIdx := strings.Index(accept, "yaml")
-		if (jsonIdx != -1 && yamlIdx != -1 && yamlIdx < jsonIdx) || (yamlIdx != -1 && jsonIdx == -1) {
-			// YAML-encode the config.
-			contentType = "text/yaml"
-			if body, err = config.ToYAML(); err != nil {
-				err = util.Errorf("unable to marshal acct config %+v to json: %s", config, err)
-				return
-			}
-		} else {
-			// JSON-encode the config.
-			contentType = "application/json"
-			if body, err = config.ToJSON(); err != nil {
-				err = util.Errorf("unable to marshal acct config %+v to json: %s", config, err)
-				return
-			}
-		}
+		body, contentType, err = util.MarshalResponse(r, config)
 	}
 
 	return
@@ -150,14 +114,10 @@ func (ah *acctHandler) Delete(path string, r *http.Request) error {
 		return util.Errorf("the default accounting configuration cannot be deleted")
 	}
 	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
-	dr := <-ah.db.Delete(&proto.DeleteRequest{
+	return ah.db.Call(proto.Delete, &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  acctKey,
 			User: storage.UserRoot,
 		},
-	})
-	if dr.Error != nil {
-		return dr.GoError()
-	}
-	return nil
+	}, &proto.DeleteResponse{})
 }

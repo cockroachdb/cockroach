@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
@@ -34,43 +35,51 @@ import (
 // uncommitted writes cannot be read outside of the txn but can be
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
-	db, clock, _ := createTestDB(t)
+	db, _, clock, _ := createTestDB(t)
 	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		txnOpts := &storage.TransactionOptions{
+		txnOpts := &client.TransactionOptions{
 			Name:         "test",
 			User:         storage.UserRoot,
 			UserPriority: 1,
 			Isolation:    proto.SNAPSHOT,
 		}
-		err := db.RunTransaction(txnOpts, func(txn storage.DB) error {
+		err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
 			// Put transactional value.
-			if pr := <-txn.Put(&proto.PutRequest{
+			pr := &proto.PutResponse{}
+			if err := txn.Call(proto.Put, &proto.PutRequest{
 				RequestHeader: proto.RequestHeader{Key: key},
 				Value:         proto.Value{Bytes: value},
-			}); pr.GoError() != nil {
-				return nil
+			}, pr); err != nil {
+				return err
 			}
 
 			// Attempt to read outside of txn.
-			if gr := <-db.Get(&proto.GetRequest{
+			gr := &proto.GetResponse{}
+			if err := db.Call(proto.Get, &proto.GetRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:       key,
 					Timestamp: clock.Now(),
 				},
-			}); gr.GoError() != nil || gr.Value != nil {
-				return util.Errorf("expected success reading nil value: %+v, %v", gr.Value, gr.GoError())
+			}, gr); err != nil {
+				return err
+			}
+			if gr.Value != nil {
+				return util.Errorf("expected nil value; got %+v", gr.Value)
 			}
 
 			// Read within the transaction.
-			if gr := <-txn.Get(&proto.GetRequest{
+			if err := txn.Call(proto.Get, &proto.GetRequest{
 				RequestHeader: proto.RequestHeader{Key: key},
-			}); gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-				return util.Errorf("expected success reading value %+v: %v", gr.Value, gr.GoError())
+			}, gr); err != nil {
+				return err
+			}
+			if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
+				return util.Errorf("expected value %q; got %q", value, gr.Value.Bytes)
 			}
 
 			if !commit {
@@ -80,25 +89,26 @@ func TestTxnDBBasics(t *testing.T) {
 		})
 
 		if commit != (err == nil) {
-			t.Errorf("expected success? %t; got %v", commit, err)
+			t.Errorf("expected success? %t; got %s", commit, err)
 		} else if !commit && err.Error() != "purposefully failing transaction" {
-			t.Errorf("unexpected failure with !commit: %v", err)
+			t.Errorf("unexpected failure with !commit: %s", err)
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		gr := <-db.Get(&proto.GetRequest{
+		gr := &proto.GetResponse{}
+		err = db.Call(proto.Get, &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       key,
 				Timestamp: clock.Now(),
 			},
-		})
+		}, gr)
 		if commit {
-			if gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-				t.Errorf("expected success reading value: %+v, %v", gr.Value, gr.GoError())
+			if err != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
+				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)
 			}
 		} else {
-			if gr.GoError() != nil || gr.Value != nil {
-				t.Errorf("expected success and nil value: %+v, %v", gr.Value, gr.GoError())
+			if err != nil || gr.Value != nil {
+				t.Errorf("expected success and nil value: %+v, %s", gr.Value, err)
 			}
 		}
 	}

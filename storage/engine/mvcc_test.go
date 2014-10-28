@@ -113,6 +113,25 @@ func TestMVCCKeys(t *testing.T) {
 	}
 }
 
+func TestMVCCEmptyKey(t *testing.T) {
+	mvcc, _ := createTestMVCC()
+	if _, err := mvcc.Get(proto.Key{}, makeTS(0, 0), nil); err == nil {
+		t.Error("expected empty key error")
+	}
+	if err := mvcc.Put(proto.Key{}, makeTS(0, 0), value1, nil); err == nil {
+		t.Error("expected empty key error")
+	}
+	if _, err := mvcc.Scan(proto.Key{}, testKey1, 0, makeTS(0, 0), nil); err != nil {
+		t.Errorf("empty key allowed for start key in scan; got %s", err)
+	}
+	if _, err := mvcc.Scan(testKey1, proto.Key{}, 0, makeTS(0, 0), nil); err == nil {
+		t.Error("expected empty key error")
+	}
+	if err := mvcc.ResolveWriteIntent(proto.Key{}, txn1); err == nil {
+		t.Error("expected empty key error")
+	}
+}
+
 func TestMVCCGetNotExist(t *testing.T) {
 	mvcc, _ := createTestMVCC()
 	value, err := mvcc.Get(testKey1, makeTS(0, 0), nil)

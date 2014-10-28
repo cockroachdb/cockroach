@@ -239,7 +239,7 @@ func (b *Batch) Attrs() proto.Attributes {
 
 // WriteBatch returns an error if called on a Batch.
 func (b *Batch) WriteBatch([]interface{}) error {
-	return util.Errorf("cannot report capacity from a Batch")
+	return util.Errorf("cannot write batch from a Batch")
 }
 
 // Capacity returns an error if called on a Batch.

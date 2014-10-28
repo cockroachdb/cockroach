@@ -42,7 +42,7 @@ non-ascii bytes or spaces.
 
 // runGetAcct invokes the REST API with GET action and key prefix as path.
 func runGetAcct(cmd *commander.Command, args []string) {
-	runGetConfig(acctKeyPrefix, cmd, args)
+	runGetConfig(acctPathPrefix, cmd, args)
 }
 
 // A CmdLsAccts command displays a list of acct configs by prefix.
@@ -64,7 +64,7 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsAccts(cmd *commander.Command, args []string) {
-	runLsConfigs(acctKeyPrefix, cmd, args)
+	runLsConfigs(acctPathPrefix, cmd, args)
 
 }
 
@@ -86,7 +86,7 @@ contains non-ascii bytes or spaces.
 // runRmAcct invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmAcct(cmd *commander.Command, args []string) {
-	runRmConfig(acctKeyPrefix, cmd, args)
+	runRmConfig(acctPathPrefix, cmd, args)
 }
 
 // A CmdSetAcct command creates a new or updates an existing acct
@@ -117,7 +117,7 @@ For example:
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetAcct(cmd *commander.Command, args []string) {
-	runSetConfig(acctKeyPrefix, cmd, args)
+	runSetConfig(acctPathPrefix, cmd, args)
 }
 
 // TODO:(bram) Add inline json for setting

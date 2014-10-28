@@ -27,6 +27,7 @@ import (
 	"time"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -158,7 +159,7 @@ type Store struct {
 	Ident        proto.StoreIdent
 	clock        *hlc.Clock
 	engine       engine.Engine  // The underlying key-value store
-	db           DB             // Cockroach KV DB
+	db           *client.KV     // Cockroach KV DB
 	allocator    *allocator     // Makes allocation decisions
 	gossip       *gossip.Gossip // Passed to new ranges
 	raftIDAlloc  *IDAllocator   // Raft ID allocator
@@ -170,7 +171,7 @@ type Store struct {
 }
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.Clock, eng engine.Engine, db DB, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
 	return &Store{
 		clock:     clock,
 		engine:    eng,
@@ -402,7 +403,7 @@ func (s *Store) Clock() *hlc.Clock { return s.clock }
 func (s *Store) Engine() engine.Engine { return s.engine }
 
 // DB accessor.
-func (s *Store) DB() DB { return s.db }
+func (s *Store) DB() *client.KV { return s.db }
 
 // Allocator accessor.
 func (s *Store) Allocator() *allocator { return s.allocator }
@@ -582,24 +583,27 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    args.Header().Timestamp,
-			Key:          engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, wiErr.Txn.ID), // Address to pushee's txn
+			Key:          wiErr.Txn.ID,
 			User:         args.Header().User,
 			UserPriority: args.Header().UserPriority,
 			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
-		Abort:     IsReadWrite(method), // abort if cmd is read/write
+		Abort:     proto.IsReadWrite(method), // abort if cmd is read/write
 	}
-	pushReply := <-s.db.InternalPushTxn(pushArgs)
-	if pushReply.Header().GoError() != nil {
-		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushReply.Header().GoError())
+	pushReply := &proto.InternalPushTxnResponse{}
+	// Note that we go direct through the client's sender instead of
+	// using the client's Call() to avoid buffering and retries.
+	s.db.Sender.Send(&client.Call{Method: proto.InternalPushTxn, Args: pushArgs, Reply: pushReply})
+	if pushErr := pushReply.GoError(); pushErr != nil {
+		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushErr)
 
 		// For write/write conflicts, propagate the push failure, not the
 		// original write intent error. The push failure will instruct the
 		// client to restart the transaction with a backoff.
-		if IsReadWrite(method) {
-			reply.Header().Error = pushReply.Header().Error
-			return reply.Header().GoError()
+		if proto.IsReadWrite(method) {
+			reply.Header().SetGoError(pushErr)
+			return pushErr
 		}
 		// For read/write conflicts, return the write intent error which
 		// engages client's backoff/retry (with !Resolved). We don't need
@@ -631,14 +635,14 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	}
 	resolveReply := &proto.InternalResolveIntentResponse{}
 	// Add resolve command with wait=false to add to Raft but not wait for completion.
-	if resolveErr := rng.AddCmd(InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
+	if resolveErr := rng.AddCmd(proto.InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
 		log.Warningf("resolve %+v failed: +v", resolveArgs, resolveErr)
 	}
 
 	// If the command is read-write, we must return the error to the
 	// client so it can resubmit the command with a new ClientCmdID. For
 	// read-only commands, we can resubmit immediately instead.
-	if IsReadOnly(method) {
+	if proto.IsReadOnly(method) {
 		return rng.AddCmd(method, args, reply, true)
 	}
 	return wiErr
@@ -653,7 +657,7 @@ type RangeManager interface {
 	StoreID() int32
 	Clock() *hlc.Clock
 	Engine() engine.Engine
-	DB() DB
+	DB() *client.KV
 	Allocator() *allocator
 	Gossip() *gossip.Gossip
 

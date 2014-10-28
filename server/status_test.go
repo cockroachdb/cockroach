@@ -21,10 +21,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -43,11 +41,6 @@ func startStatusServer() *httptest.Server {
 	mux := http.NewServeMux()
 	status.RegisterHandlers(mux)
 	httpServer := httptest.NewServer(mux)
-	if strings.HasPrefix(httpServer.URL, "http://") {
-		*kv.Addr = strings.TrimPrefix(httpServer.URL, "http://")
-	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		*kv.Addr = strings.TrimPrefix(httpServer.URL, "https://")
-	}
 	return httpServer
 }
 

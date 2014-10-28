@@ -50,6 +50,16 @@ type Key []byte
 // an encoded version.
 type EncodedKey []byte
 
+// MakeKey makes a new key which is the concatenation of the
+// given inputs, in order.
+func MakeKey(keys ...Key) Key {
+	byteSlices := make([][]byte, len(keys))
+	for i, k := range keys {
+		byteSlices[i] = []byte(k)
+	}
+	return Key(bytes.Join(byteSlices, nil))
+}
+
 func bytesNext(b []byte) []byte {
 	return bytes.Join([][]byte{b, []byte{0}}, nil)
 }
@@ -115,15 +125,10 @@ func (k Key) Compare(b interval.Comparable) int {
 // String returns a string-formatted version, with a maximum
 // key formatted for brevity as "\xff...".
 func (k Key) String() string {
-	if len(k) != KeyMaxLength {
-		return string(k)
+	if idx := bytes.Index(k, KeyMax); idx != -1 {
+		return string(MakeKey(k[:idx], Key("\xff..."), k[idx+KeyMaxLength:]))
 	}
-	for _, b := range k {
-		if b != byte(0xff) {
-			return string(k)
-		}
-	}
-	return "\xff..."
+	return string(k)
 }
 
 // The following methods implement the custom marshalling and
@@ -247,6 +252,31 @@ func (kv RawKeyValue) KeyGet() []byte { return kv.Key }
 // Compare implements the llrb.Comparable interface for tree nodes.
 func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
+}
+
+// NewTransaction creates a new transaction. The transaction key is
+// composed using the specified baseKey (for locality with data
+// affected by the transaction) and a random UUID to guarantee
+// uniqueness. The specified user-level priority is combined with
+// a randomly chosen value to yield a final priority, used to settle
+// write conflicts in a way that avoids starvation of long-running
+// transactions (see Range.InternalPushTxn).
+func NewTransaction(name string, baseKey Key, userPriority int32,
+	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
+	// Compute priority by adjusting based on userPriority factor.
+	priority := MakePriority(userPriority)
+	// Compute timestamp and max timestamp.
+	max := now
+	max.WallTime += maxOffset
+
+	return &Transaction{
+		Name:         name,
+		ID:           append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
+		Priority:     priority,
+		Isolation:    isolation,
+		Timestamp:    now,
+		MaxTimestamp: max,
+	}
 }
 
 // MakePriority generates a random priority value, biased by the
