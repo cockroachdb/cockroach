@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 
 	"code.google.com/p/biogo.store/interval"
@@ -304,7 +305,7 @@ func MakePriority(userPriority int32) int32 {
 	//   100           |  top 99/100ths of positive int32s
 	//   1000          |  top 999/1000ths of positive int32s
 	//   ...etc
-	return math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
+	return math.MaxInt32 - rand.Int31n(math.MaxInt32/userPriority)
 }
 
 // MD5Equal returns whether the specified md5.Size byte arrays are equal.
