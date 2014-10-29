@@ -197,6 +197,14 @@ func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }
 
+// Add returns a timestamp with the WallTime and Logical components increased.
+func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
+	return Timestamp{
+		WallTime: t.WallTime + wallTime,
+		Logical:  t.Logical + logical,
+	}
+}
+
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly; if the value contains an integer,

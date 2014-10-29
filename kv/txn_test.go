@@ -100,13 +100,6 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
-func addTS(ts proto.Timestamp, d time.Duration) proto.Timestamp {
-	return proto.Timestamp{
-		WallTime: ts.WallTime + d.Nanoseconds(),
-		Logical:  ts.Logical + 1,
-	}
-}
-
 // verifyUncertainty writes values to a key in 5ns intervals and then launches
 // a transaction at each value's timestamp reading that value with
 // the maximumOffset given, verifying in the process that the correct values
@@ -129,18 +122,20 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 	}
 
 	key := []byte("key-test")
-	var wgI, wgO sync.WaitGroup
-	wgO.Add(concurrency)
-	wgI.Add(concurrency + 1)
+	// wgStart waits for all transactions to line up, wgEnd has the main
+	// function wait for them to finish.
+	var wgStart, wgEnd sync.WaitGroup
+	wgStart.Add(concurrency + 1)
+	wgEnd.Add(concurrency)
 
 	// Initial high offset to allow for future writes.
 	clock.SetMaxOffset(999 * time.Nanosecond)
 	for i := 0; i < concurrency; i++ {
 		value := []byte(fmt.Sprintf("value-%d", i))
 		// Values will be written with 5ns spacing.
-		futureTS := addTS(clock.Now(), 5*time.Nanosecond)
+		futureTS := clock.Now().Add(5, 0)
 		// Expected number of versions skipped.
-		skipCount := int(maxOffset) / 5 * (1 - (i+1)/concurrency)
+		skipCount := int(maxOffset) / 5
 		if i+skipCount >= concurrency {
 			skipCount = concurrency - i - 1
 		}
@@ -164,13 +159,17 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 		}
 
 		go func(i int) {
-			defer wgO.Done()
-			wgI.Wait()
+			defer wgEnd.Done()
+			wgStart.Done()
+			// Wait until the other goroutines are running.
+			wgStart.Wait()
 			txnManual := hlc.ManualClock(futureTS.WallTime)
 			txnClock := hlc.NewClock(txnManual.UnixNano)
 			// Make sure to incorporate the logical component if the wall time
-			// hasn't changed (i=0).
-			txnClock.Update(futureTS)
+			// hasn't changed (i=0). The logical component will change
+			// internally in a way we can't track, but we want to be just
+			// ahead.
+			txnClock.Update(futureTS.Add(0, 999))
 			// The written values are spaced out in intervals of 5ns, so
 			// setting <5ns here should make do without any restarts while
 			// higher values require roughly offset/5 restarts.
@@ -190,7 +189,6 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 					}
 					return util.Errorf("unexpected read error of type %s: %v", reflect.TypeOf(err), err)
 				}
-				// TODO: figure out correct values and compare them.
 				if gr.Value == nil || gr.Value.Bytes == nil {
 					return util.Errorf("no value read")
 				}
@@ -202,24 +200,30 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 				t.Error(err)
 			}
 		}(i)
-		wgI.Done()
 	}
 	// Kick the goroutines loose.
-	wgI.Done()
+	wgStart.Done()
 	// Wait for the goroutines to finish.
-	wgO.Wait()
+	wgEnd.Wait()
 }
 
 // TestTxnDBUncertainty verifies that transactions restart correctly and
 // finally read the correct value when encountering writes in the near future.
 func TestTxnDBUncertainty(t *testing.T) {
 	// < 5ns means no uncertainty & no restarts.
-	// Those run very fast since no restarts are required.
 	verifyUncertainty(1, 3*time.Nanosecond, t)
 	verifyUncertainty(8, 4*time.Nanosecond, t)
 	verifyUncertainty(80, 3*time.Nanosecond, t)
+
 	// Below we'll see restarts.
-	// TODO(Spencer): This is awfully slow for a single restart (even with the
-	// first parameter set to 2). Anything to be done?
+
+	// Spencer's originally suggested test:
+	// Three transactions at t=0, t=5 and t=10 with a MaxOffset of 10ns.
+	// They all need to read the latest value for this test to pass, requiring
+	// a restart for the first two.
+	verifyUncertainty(3, 10*time.Nanosecond, t)
+
+	// Some more, just for kicks.
 	verifyUncertainty(7, 12*time.Nanosecond, t)
+	verifyUncertainty(100, 10*time.Nanosecond, t)
 }
