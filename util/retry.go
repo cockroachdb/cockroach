@@ -19,7 +19,6 @@ package util
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
@@ -88,10 +87,10 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 		var wait time.Duration
 		if status == RetryReset {
 			backoff = opts.Backoff
-			wait = time.Duration(math.Abs(rand.Float64()) * float64(backoff.Nanoseconds()) * retryJitter)
+			wait = 0
 			count = 0
 			if !opts.UseV1Info || log.V(1) == true {
-				log.Infof("%s failed; retrying in 0ms", opts.Tag)
+				log.Infof("%s failed; retrying immediately", opts.Tag)
 			}
 		} else {
 			if opts.MaxAttempts > 0 && count >= opts.MaxAttempts {
