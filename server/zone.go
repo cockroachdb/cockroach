@@ -44,7 +44,7 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("no path specified for zone Put")
 	}
 	config := &proto.ZoneConfig{}
-	if err := util.UnmarshalRequest(r, body, config); err != nil {
+	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
 		return util.Errorf("zone config has invalid format: %q: %s", body, err)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
@@ -85,7 +85,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// Encode the response.
-		body, contentType, err = util.MarshalResponse(r, prefixes)
+		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 		var ok bool
@@ -99,7 +99,7 @@ func (zh *zoneHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		body, contentType, err = util.MarshalResponse(r, config)
+		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)
 	}
 
 	return

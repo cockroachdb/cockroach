@@ -594,7 +594,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	pushReply := &proto.InternalPushTxnResponse{}
 	// Note that we go direct through the client's sender instead of
 	// using the client's Call() to avoid buffering and retries.
-	s.db.Sender.Send(&client.Call{Method: proto.InternalPushTxn, Args: pushArgs, Reply: pushReply})
+	s.db.Sender().Send(&client.Call{Method: proto.InternalPushTxn, Args: pushArgs, Reply: pushReply})
 	if pushErr := pushReply.GoError(); pushErr != nil {
 		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushErr)
 

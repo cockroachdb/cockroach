@@ -19,12 +19,12 @@ package proto
 
 import (
 	"reflect"
-	"strings"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// TODO(spencer): change these string constants into a type.
 const (
 	// Contains determines whether the KV map contains the specified key.
 	Contains = "Contains"
@@ -89,8 +89,11 @@ func (s stringSet) keys() []string {
 	return keys
 }
 
-// allMethods specifies the complete set of methods.
-var allMethods = stringSet{
+// TODO(spencer): replaces these individual maps with a bitmask or
+//   equivalent listing each method's attributes.
+
+// AllMethods specifies the complete set of methods.
+var AllMethods = stringSet{
 	Contains:              struct{}{},
 	Get:                   struct{}{},
 	Put:                   struct{}{},
@@ -113,9 +116,9 @@ var allMethods = stringSet{
 	InternalSnapshotCopy:  struct{}{},
 }
 
-// publicMethods specifies the set of methods accessible via the
+// PublicMethods specifies the set of methods accessible via the
 // public key-value API.
-var publicMethods = stringSet{
+var PublicMethods = stringSet{
 	Contains:         struct{}{},
 	Get:              struct{}{},
 	Put:              struct{}{},
@@ -133,9 +136,9 @@ var publicMethods = stringSet{
 	AdminSplit:       struct{}{},
 }
 
-// internalMethods specifies the set of methods accessible only
+// InternalMethods specifies the set of methods accessible only
 // via the internal node RPC API.
-var internalMethods = stringSet{
+var InternalMethods = stringSet{
 	InternalEndTxn:        struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
@@ -143,8 +146,8 @@ var internalMethods = stringSet{
 	InternalSnapshotCopy:  struct{}{},
 }
 
-// readMethods specifies the set of methods which read and return data.
-var readMethods = stringSet{
+// ReadMethods specifies the set of methods which read and return data.
+var ReadMethods = stringSet{
 	Contains:             struct{}{},
 	Get:                  struct{}{},
 	ConditionalPut:       struct{}{},
@@ -155,8 +158,8 @@ var readMethods = stringSet{
 	InternalSnapshotCopy: struct{}{},
 }
 
-// writeMethods specifies the set of methods which write data.
-var writeMethods = stringSet{
+// WriteMethods specifies the set of methods which write data.
+var WriteMethods = stringSet{
 	Put:                   struct{}{},
 	ConditionalPut:        struct{}{},
 	Increment:             struct{}{},
@@ -173,9 +176,9 @@ var writeMethods = stringSet{
 	InternalResolveIntent: struct{}{},
 }
 
-// txnMethods specifies the set of methods which may be part of a
+// TxnMethods specifies the set of methods which may be part of a
 // transaction.
-var txnMethods = stringSet{
+var TxnMethods = stringSet{
 	Contains:       struct{}{},
 	Get:            struct{}{},
 	Put:            struct{}{},
@@ -197,31 +200,15 @@ var adminMethods = stringSet{
 	AdminSplit: struct{}{},
 }
 
-// ReadMethods lists the read-only methods supported by a range.
-var ReadMethods = readMethods.keys()
-
-// WriteMethods lists the methods supported by a range which write data.
-var WriteMethods = writeMethods.keys()
-
-// caseMap is a map from a lower-cased version of the method
-// name to the canonical method name.
-var caseMap = map[string]string{}
-
-func init() {
-	for m := range allMethods {
-		caseMap[strings.ToLower(m)] = m
-	}
-}
-
 // NeedReadPerm returns true if the specified method requires read permissions.
 func NeedReadPerm(method string) bool {
-	_, ok := readMethods[method]
+	_, ok := ReadMethods[method]
 	return ok
 }
 
 // NeedWritePerm returns true if the specified method requires write permissions.
 func NeedWritePerm(method string) bool {
-	_, ok := writeMethods[method]
+	_, ok := WriteMethods[method]
 	return ok
 }
 
@@ -234,14 +221,14 @@ func NeedAdminPerm(method string) bool {
 // IsPublic returns true if the specified method is in the public
 // key-value API.
 func IsPublic(method string) bool {
-	_, ok := publicMethods[method]
+	_, ok := PublicMethods[method]
 	return ok
 }
 
 // IsInternal returns true if the specified method is only available
 // via the internal node RPC API.
 func IsInternal(method string) bool {
-	_, ok := internalMethods[method]
+	_, ok := InternalMethods[method]
 	return ok
 }
 
@@ -266,20 +253,8 @@ func IsAdmin(method string) bool {
 // IsTransactional returns true if the specified method can be part of
 // a transaction.
 func IsTransactional(method string) bool {
-	_, ok := txnMethods[method]
+	_, ok := TxnMethods[method]
 	return ok
-}
-
-// CanonicalMethod returns the canonical method name. This is used
-// for HTTP API, where the method name is part of the URL path,
-// which is case-insensitive. If there's no match in the caseMap,
-// the supplied method is returned.
-func CanonicalMethod(method string) string {
-	lower := strings.ToLower(method)
-	if canon, ok := caseMap[lower]; ok {
-		return canon
-	}
-	return method
 }
 
 // GetArgs returns a GetRequest object initialized to get the
@@ -303,6 +278,54 @@ func PutArgs(key Key, valueBytes []byte) *PutRequest {
 		},
 		Value: value,
 	}
+}
+
+// CreateArgsAndReply returns allocated request and response pairs
+// according to the specified method.
+func CreateArgsAndReply(method string) (Request, Response, error) {
+	switch method {
+	case Contains:
+		return &ContainsRequest{}, &ContainsResponse{}, nil
+	case Get:
+		return &GetRequest{}, &GetResponse{}, nil
+	case Put:
+		return &PutRequest{}, &PutResponse{}, nil
+	case ConditionalPut:
+		return &ConditionalPutRequest{}, &ConditionalPutResponse{}, nil
+	case Increment:
+		return &IncrementRequest{}, &IncrementResponse{}, nil
+	case Delete:
+		return &DeleteRequest{}, &DeleteResponse{}, nil
+	case DeleteRange:
+		return &DeleteRangeRequest{}, &DeleteRangeResponse{}, nil
+	case Scan:
+		return &ScanRequest{}, &ScanResponse{}, nil
+	case BeginTransaction:
+		return &BeginTransactionRequest{}, &BeginTransactionResponse{}, nil
+	case EndTransaction:
+		return &EndTransactionRequest{}, &EndTransactionResponse{}, nil
+	case AccumulateTS:
+		return &AccumulateTSRequest{}, &AccumulateTSResponse{}, nil
+	case ReapQueue:
+		return &ReapQueueRequest{}, &ReapQueueResponse{}, nil
+	case EnqueueUpdate:
+		return &EnqueueUpdateRequest{}, &EnqueueUpdateResponse{}, nil
+	case EnqueueMessage:
+		return &EnqueueMessageRequest{}, &EnqueueMessageResponse{}, nil
+	case AdminSplit:
+		return &AdminSplitRequest{}, &AdminSplitResponse{}, nil
+	case InternalEndTxn:
+		return &InternalEndTxnRequest{}, &InternalEndTxnResponse{}, nil
+	case InternalHeartbeatTxn:
+		return &InternalHeartbeatTxnRequest{}, &InternalHeartbeatTxnResponse{}, nil
+	case InternalPushTxn:
+		return &InternalPushTxnRequest{}, &InternalPushTxnResponse{}, nil
+	case InternalResolveIntent:
+		return &InternalResolveIntentRequest{}, &InternalResolveIntentResponse{}, nil
+	case InternalSnapshotCopy:
+		return &InternalSnapshotCopyRequest{}, &InternalSnapshotCopyResponse{}, nil
+	}
+	return nil, nil, util.Errorf("unhandled method %s", method)
 }
 
 // IsEmpty returns true if the client command ID has zero values.

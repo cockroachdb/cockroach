@@ -19,7 +19,6 @@ package client
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -39,13 +38,16 @@ const (
 	// TODO(spencer): change this to CONSTANT https. We shouldn't be
 	// supporting http here at all.
 	KVDBScheme = "http"
-	// defaultMaxIdleConns controls the maximum idle (keep-alive)
-	// connections to the Cockroach gateway node (or redirects).  A
-	// higher value here means lower latency when activity spikes,
-	// especially in light of the latency required to establish a new
-	// SSL connection.
-	defaultMaxIdleConns = 5
+	// StatusTooManyRequests indicates client should retry due to
+	// server having too many requests.
+	StatusTooManyRequests = 429
 )
+
+// httpSendError wraps any error returned when sending an HTTP request
+// in order to signal the retry loop that it should backoff and retry.
+type httpSendError struct {
+	error
+}
 
 // HTTPRetryOptions sets the retry options for handling retryable
 // HTTP errors and connection I/O errors.
@@ -56,30 +58,21 @@ var HTTPRetryOptions = util.RetryOptions{
 	MaxAttempts: 0, // retry indefinitely
 }
 
-// httpSendError wraps any error returned when sending an HTTP request
-// in order to signal the retry loop that it should backoff and retry.
-type httpSendError struct {
-	error
-}
-
-// httpSender is an implementation of KVSender which exposes the
+// HTTPSender is an implementation of KVSender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
 // this client to other nodes.
-type httpSender struct {
+type HTTPSender struct {
 	server string       // The host:port address of the Cockroach gateway node
 	client *http.Client // The HTTP client
 }
 
-// newHTTPSender returns a new instance of httpSender.
-func newHTTPSender(server string, tlsConfig *tls.Config) *httpSender {
-	return &httpSender{
+// NewHTTPSender returns a new instance of HTTPSender.
+func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
+	return &HTTPSender{
 		server: server,
 		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig:     tlsConfig,
-				MaxIdleConnsPerHost: defaultMaxIdleConns,
-			},
+			Transport: transport,
 		},
 	}
 }
@@ -92,22 +85,21 @@ func newHTTPSender(server string, tlsConfig *tls.Config) *httpSender {
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *httpSender) Send(call *Call) {
-	retryOpts := HTTPRetryOptions
+func (s *HTTPSender) Send(call *Call) {
+	var retryOpts util.RetryOptions = HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("http %s", call.Method)
+
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		resp, err := s.post(call)
 		if err != nil {
 			if resp != nil {
+				log.Warningf("failed to send HTTP request with status code %d", resp.StatusCode)
 				// See if we can retry based on HTTP response code.
 				switch resp.StatusCode {
-				case http.StatusServiceUnavailable, http.StatusRequestTimeout,
-					http.StatusMovedPermanently, http.StatusTemporaryRedirect:
-					// Retry on service unavailable and request timeout. We also
-					// try on the redirection statuses because of the redirect
-					// limit in the default http.Client CheckRedirect
-					// implementation. We want to backoff in case the cluster is
-					// giving us the run around with endless redirects.
+				case http.StatusServiceUnavailable, http.StatusGatewayTimeout, StatusTooManyRequests:
+					// Retry on service unavailable and request timeout.
+					// TODO(spencer): consider respecting the Retry-After header for
+					// backoff / retry duration.
 					return util.RetryContinue, nil
 				default:
 					// Can't recover from all other errors.
@@ -137,13 +129,17 @@ func (s *httpSender) Send(call *Call) {
 	}
 }
 
+// Close implements the KVSender interface.
+func (s *HTTPSender) Close() {
+}
+
 // post posts the call using the HTTP client. The call's method is
 // appended to KVDBEndpoint and set as the URL path. The call's arguments
 // are protobuf-serialized and written as the POST body. The content
 // type is set to application/x-protobuf.
 //
 // On success, the response body is unmarshalled into call.Reply.
-func (s *httpSender) post(call *Call) (*http.Response, error) {
+func (s *HTTPSender) post(call *Call) (*http.Response, error) {
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(call.Args)
 	if err != nil {
@@ -159,31 +155,22 @@ func (s *httpSender) post(call *Call) (*http.Response, error) {
 	req.Header.Add("Accept", "application/x-protobuf")
 	resp, err := s.client.Do(req)
 	if resp == nil {
-		fmt.Println("connection closed")
-		return nil, &httpSendError{util.Errorf("http client was closed")}
+		return nil, &httpSendError{util.Errorf("http client was closed: %s", err)}
 	}
 	defer resp.Body.Close()
 	if err != nil {
-		fmt.Println("response error")
 		return nil, &httpSendError{err}
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("response read error")
 		return nil, &httpSendError{err}
 	}
 	if resp.StatusCode != 200 {
 		return resp, errors.New(resp.Status)
 	}
 	if err := gogoproto.Unmarshal(b, call.Reply); err != nil {
-		fmt.Println("unmarshal error")
 		log.Errorf("request completed, but unable to unmarshal response from server: %s; body=%q", err, b)
 		return nil, &httpSendError{err}
 	}
 	return resp, nil
-}
-
-// Close sets the client to nil.
-func (s *httpSender) Close() {
-	s.client = nil
 }

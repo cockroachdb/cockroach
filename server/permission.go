@@ -44,7 +44,7 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 		return util.Errorf("no path specified for permission Put")
 	}
 	config := &proto.PermConfig{}
-	if err := util.UnmarshalRequest(r, body, config); err != nil {
+	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
 		return util.Errorf("permission config has invalid format: %s: %s", config, err)
 	}
 	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
@@ -85,7 +85,7 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
 		}
 		// Encode the response.
-		body, contentType, err = util.MarshalResponse(r, prefixes)
+		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
 		var ok bool
@@ -99,7 +99,7 @@ func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentTy
 			err = util.Errorf("no config found for key prefix %q", path)
 			return
 		}
-		body, contentType, err = util.MarshalResponse(r, config)
+		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)
 	}
 
 	return

@@ -115,7 +115,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := &client.KV{Sender: kv.NewCoordinator(lSender, clock)}
+	localDB := client.NewKV(kv.NewCoordinator(lSender, clock), nil)
 	s := storage.NewStore(clock, eng, localDB, nil)
 
 	// Verify the store isn't already part of a cluster.

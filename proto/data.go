@@ -135,13 +135,13 @@ func (k Key) String() string {
 // unmarshalling necessary to define gogoproto custom types.
 
 // Marshal implements the gogoproto Marshaler interface.
-func (k *Key) Marshal() ([]byte, error) {
-	return []byte(*k), nil
+func (k Key) Marshal() ([]byte, error) {
+	return []byte(k), nil
 }
 
 // Marshal implements the gogoproto Marshaler interface.
-func (k *EncodedKey) Marshal() ([]byte, error) {
-	return []byte(*k), nil
+func (k EncodedKey) Marshal() ([]byte, error) {
+	return []byte(k), nil
 }
 
 // Unmarshal implements the gogoproto Unmarshaler interface.

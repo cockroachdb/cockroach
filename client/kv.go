@@ -19,7 +19,6 @@ package client
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/gob"
 	"time"
 
@@ -64,19 +63,36 @@ type Clock interface {
 // KV provides access to a KV store via Call() and Prepare() /
 // Flush().
 type KV struct {
-	Clock  Clock    // Used to formulate client command IDs
-	Sender KVSender // The KVSender instance
-	User   string   // If blank, relies on certificate for user
-	inTxn  bool     // Is this KV transactional?
+	User   string
+	sender KVSender
+	clock  Clock
 }
 
-// NewKV creates a new instance of KV which connects to the specified
-// Cockroach node at address (in host:port format), using the provided
-// tls config.
-func NewKV(server string, tlsConfig *tls.Config) *KV {
+// NewKV creates a new instance of KV using the specified sender. By
+// default, the sender is wrapped in a singleCallSender for retries in
+// a non-transactional context. To create a transactional client, the
+// KV struct should be manually initialized in order to utilize a
+// txnSender. Clock is used to formulate client command IDs, which
+// provide idempotency on API calls. If clock is nil, uses
+// time.UnixNanos as default implementation.
+func NewKV(sender KVSender, clock Clock) *KV {
 	return &KV{
-		Sender: newHTTPSender(server, tlsConfig),
+		sender: newSingleCallSender(sender, clock),
+		clock:  clock,
 	}
+}
+
+// Sender returns the sender supplied to NewKV.
+func (kv *KV) Sender() KVSender {
+	switch t := kv.sender.(type) {
+	case *singleCallSender:
+		return t.wrapped
+	case *txnSender:
+		return t.wrapped
+	default:
+		log.Fatalf("unexpected sender type in KV client: %t", kv.sender)
+	}
+	return nil
 }
 
 // Call invokes the KV command synchronously and returns the response
@@ -87,62 +103,12 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 		Args:   args,
 		Reply:  reply,
 	}
-	if !kv.inTxn {
-		kv.runSingleCall(call)
-	} else {
-		kv.Sender.Send(call)
-	}
+	kv.sender.Send(call)
 	return call.Reply.Header().GoError()
 }
 
 // TODO(spencer): implement Prepare.
-
 // TODO(spencer): implement Flush.
-
-// runSingleCall executes the supplied call with necessary retry logic
-// to account for concurrency errors such as resolved/unresolved write
-// intents and transaction retry errors.
-func (kv *KV) runSingleCall(call *Call) {
-	// Zero timestamp on any read-write call.
-	if proto.IsReadWrite(call.Method) {
-		call.Args.Header().Timestamp = proto.Timestamp{}
-	}
-	retryOpts := TxnRetryOptions
-	retryOpts.Tag = call.Method
-	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		// Reset client command ID (if applicable) on every retry at this
-		// level--retries due to network timeouts or disconnects are
-		// handled at lower levels by the KVSender implementation(s).
-		call.resetClientCmdID(kv.Clock)
-
-		// Send the call.
-		kv.Sender.Send(call)
-
-		if call.Reply.Header().Error != nil {
-			log.Infof("failed %s: %s", call.Method, call.Reply.Header().GoError())
-		}
-		switch t := call.Reply.Header().GoError().(type) {
-		case *proto.TransactionPushError:
-			// Backoff on failure to push conflicting txn; on a single call,
-			// this means we encountered a write intent but were unable to
-			// push the transaction.
-			return util.RetryContinue, nil
-		case *proto.WriteTooOldError:
-			// Retry immediately on write-too-old.
-			return util.RetryReset, nil
-		case *proto.WriteIntentError:
-			// Backoff if necessary; otherwise reset for immediate retry (intent was pushed)
-			if t.Resolved {
-				return util.RetryReset, nil
-			}
-			return util.RetryContinue, nil
-		}
-		// For all other cases, break out of retry loop.
-		return util.RetryBreak, nil
-	}); err != nil {
-		call.Reply.Header().SetGoError(err)
-	}
-}
 
 // RunTransaction executes retryable in the context of a distributed
 // transaction. The transaction is automatically aborted if retryable
@@ -150,12 +116,19 @@ func (kv *KV) runSingleCall(call *Call) {
 // automatically committed otherwise. retryable should have no side
 // effects which could cause problems in the event it must be run more
 // than once. The opts struct contains transaction settings.
-func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(kv *KV) error) error {
+//
+// Calling RunTransaction on the transactional KV client which is
+// supplied to the retryable function is an error.
+func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) error) error {
+	if _, ok := kv.sender.(*txnSender); ok {
+		return util.Errorf("cannot invoke RunTransaction on an already-transactional client")
+	}
+
 	// Create a new KV for the transaction using a transactional KV sender.
-	txnSender := newTxnSender(kv.Sender, kv.Clock, opts)
+	txnSender := newTxnSender(kv.Sender(), kv.clock, opts)
 	txnKV := &KV{
-		Sender: txnSender,
-		inTxn:  true,
+		User:   kv.User,
+		sender: txnSender,
 	}
 	defer txnKV.Close()
 
@@ -294,5 +267,5 @@ func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 
 // Close closes the KV client and its sender.
 func (kv *KV) Close() {
-	kv.Sender.Close()
+	kv.sender.Close()
 }

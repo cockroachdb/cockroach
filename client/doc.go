@@ -40,15 +40,15 @@ error. The example below shows a get and a put.
   }
 
 The API is synchronous, but accommodates efficient parallel updates
-and queries using the Prepare method. Invoking an API call via Prepare
-returns a call token. The call token is used to access the results map
-returned after flushing the client. Until the flush, request are
-buffered locally in anticipation of being sent to Cockroach as part of
-a batch. Note however that API calls which are buffered and sent
-together are not guaranteed to have atomic semantics. A transaction
-must be used for that purpose. A simple example of using the API which
-does two scans in parallel and then sends a sequence of puts in
-parallel:
+and queries using the Prepare method. An arbitrary number of Prepare
+invocations are followed up with a call to Flush. Until the Flush,
+requests are buffered locally in anticipation of being sent to
+Cockroach as part of a batch. The Flush batches prepared calls and
+sends them together. Note however that API calls which are buffered
+and sent together are not guaranteed to have atomic semantics. A
+transaction must be used to guarantee atomicity. A simple example of
+using the API which does two scans in parallel and then sends a
+sequence of puts in parallel:
 
   kv := client.NewKV("localhost:8080", tlsConfig)
 
@@ -89,7 +89,7 @@ of using transactions with parallel writes:
   kv := client.NewKV("localhost:8080", tlsConfig)
 
   opts := client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-  kv.RunTransaction(opts, func(txn *client.KV) error {
+  err := kv.RunTransaction(opts, func(txn *client.KV) error {
     for i := 0; i < 100; i++ {
       key := proto.Key(fmt.Sprintf("testkey-%02d", i))
       txn.Prepare(proto.Put, proto.PutArgs(key, []byte("test value")), &proto.PutResponse{})
@@ -101,6 +101,9 @@ of using transactions with parallel writes:
     // action.
     return nil
   })
+  if err != nil {
+    log.Fatal(err)
+  }
 
 Note that with Cockroach's lock-free transactions, clients should
 expect retries as a matter of course. This is why the transaction

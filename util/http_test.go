@@ -114,12 +114,12 @@ func TestUnmarshalRequest(t *testing.T) {
 		body     []byte
 		expError bool
 	}{
-		{"application/json", jsonConfig, false},
-		{"application/x-json", jsonConfig, false},
-		{"application/x-protobuf", protobufConfig, false},
-		{"application/x-google-protobuf", protobufConfig, false},
-		{"text/yaml", yamlConfig, false},
-		{"application/x-yaml", yamlConfig, false},
+		{util.JSONContentType, jsonConfig, false},
+		{util.AltJSONContentType, jsonConfig, false},
+		{util.ProtoContentType, protobufConfig, false},
+		{util.AltProtoContentType, protobufConfig, false},
+		{util.YAMLContentType, yamlConfig, false},
+		{util.AltYAMLContentType, yamlConfig, false},
 		{"foo", jsonConfig, true},
 		{"baz", protobufConfig, true},
 		{"bar", yamlConfig, true},
@@ -130,9 +130,9 @@ func TestUnmarshalRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Add("Content-Type", test.cType)
+		req.Header.Add(util.ContentTypeHeader, test.cType)
 		config := &proto.ZoneConfig{}
-		err = util.UnmarshalRequest(req, test.body, config)
+		err = util.UnmarshalRequest(req, test.body, config, util.AllEncodings)
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: unexpected success", i)
@@ -179,9 +179,9 @@ func TestMarshalResponse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req.Header.Add("Content-Type", test.cType)
-		req.Header.Add("Accept", test.accept)
-		body, cType, err := util.MarshalResponse(req, &testConfig)
+		req.Header.Add(util.ContentTypeHeader, test.cType)
+		req.Header.Add(util.AcceptHeader, test.accept)
+		body, cType, err := util.MarshalResponse(req, &testConfig, util.AllEncodings)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}

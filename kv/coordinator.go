@@ -78,6 +78,10 @@ type txnMetadata struct {
 // completely cover the range.
 func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 	// This gives us a memory-efficient end key if end is empty.
+	// The most common case for keys in the intents interval map
+	// is for single keys. However, the interval cache requires
+	// a non-empty interval, so we create two key slices which
+	// share the same underlying byte array.
 	if len(end) == 0 {
 		end = start.Next()
 		start = end[:len(start)]

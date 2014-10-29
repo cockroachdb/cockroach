@@ -332,7 +332,8 @@ func newServer() (*server, error) {
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), rpcContext)
 	s.gossip = gossip.New(rpcContext)
-	s.kv = &client.KV{Sender: sender, User: storage.UserRoot}
+	s.kv = client.NewKV(sender, nil)
+	s.kv.User = storage.UserRoot
 	s.kvDB = kv.NewDBServer(sender)
 	s.kvREST = kv.NewRESTServer(s.kv)
 	s.node = NewNode(s.kv, s.gossip)

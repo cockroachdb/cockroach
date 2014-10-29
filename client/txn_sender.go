@@ -36,9 +36,9 @@ import (
 // txnSender is thread safe and safely accommodates concurrent
 // invocations of Send().
 type txnSender struct {
-	sender KVSender
-	clock  Clock
-	TransactionOptions
+	wrapped KVSender
+	clock   Clock
+	*TransactionOptions
 	txnEnd bool // True if EndTransaction was invoked internally
 
 	sync.Mutex // Protects variables below.
@@ -47,12 +47,12 @@ type txnSender struct {
 }
 
 // newTxnSender returns a new instance of txnSender which wraps a
-// KV,Sender and uses the supplied transaction options.
-func newTxnSender(sender KVSender, clock Clock, opts *TransactionOptions) *txnSender {
+// KVSender and uses the supplied transaction options.
+func newTxnSender(wrapped KVSender, clock Clock, opts *TransactionOptions) *txnSender {
 	return &txnSender{
-		sender:             sender,
+		wrapped:            wrapped,
 		clock:              clock,
-		TransactionOptions: *opts,
+		TransactionOptions: opts,
 	}
 }
 
@@ -71,26 +71,26 @@ func newTxnSender(sender KVSender, clock Clock, opts *TransactionOptions) *txnSe
 // If limits for backoff / retry are enabled through the options and
 // reached during transaction execution, TransactionRetryError will be
 // returned.
-func (tdb *txnSender) Send(call *Call) {
-	tdb.Lock()
+func (ts *txnSender) Send(call *Call) {
+	ts.Lock()
 	// If the transaction hasn't yet been created, create now, using
 	// this command's key as the base key.
-	if tdb.txn == nil {
+	if ts.txn == nil {
 		btReply := &proto.BeginTransactionResponse{}
 		btCall := &Call{
 			Method: proto.BeginTransaction,
 			Args: &proto.BeginTransactionRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:          call.Args.Header().Key,
-					User:         tdb.User,
-					UserPriority: gogoproto.Int32(tdb.UserPriority),
+					User:         ts.User,
+					UserPriority: gogoproto.Int32(ts.UserPriority),
 				},
-				Name:      tdb.Name,
-				Isolation: tdb.Isolation,
+				Name:      ts.Name,
+				Isolation: ts.Isolation,
 			},
 			Reply: btReply,
 		}
-		tdb.sender.Send(btCall)
+		ts.wrapped.Send(btCall)
 		if err := btCall.Reply.Header().GoError(); err != nil {
 			call.Reply.Header().SetGoError(err)
 			return
@@ -99,41 +99,41 @@ func (tdb *txnSender) Send(call *Call) {
 			call.Reply.Header().SetGoError(util.Errorf("begin transaction returned Txn=nil"))
 			return
 		}
-		tdb.txn = btReply.Txn
-		tdb.timestamp = tdb.txn.Timestamp
+		ts.txn = btReply.Txn
+		ts.timestamp = ts.txn.Timestamp
 	}
 	if call.Method == proto.EndTransaction || call.Method == proto.InternalEndTxn {
 		// For EndTransaction, make sure key is set to txn ID.
-		call.Args.Header().Key = tdb.txn.ID
+		call.Args.Header().Key = ts.txn.ID
 	} else if !proto.IsTransactional(call.Method) {
-		tdb.sender.Send(call)
-		tdb.Unlock()
+		call.Reply.Header().SetGoError(util.Errorf("cannot invoke %s command within a transaction", call.Method))
+		ts.Unlock()
 		return
 	}
 	// Set Args.Timestamp & Args.Txn to reflect current values.
-	txnCopy := *tdb.txn
-	call.Args.Header().User = tdb.User
-	call.Args.Header().Timestamp = tdb.timestamp
+	txnCopy := *ts.txn
+	call.Args.Header().User = ts.User
+	call.Args.Header().Timestamp = ts.timestamp
 	call.Args.Header().Txn = &txnCopy
-	tdb.Unlock()
+	ts.Unlock()
 
 	// Backoff and retry loop for handling errors.
-	retryOpts := TxnRetryOptions
+	var retryOpts util.RetryOptions = TxnRetryOptions
 	retryOpts.Tag = call.Method
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// Reset client command ID (if applicable) on every retry at this
 		// level--retries due to network timeouts or disconnects are
 		// handled by lower-level KVSender implementation(s).
-		call.resetClientCmdID(tdb.clock)
+		call.resetClientCmdID(ts.clock)
 
 		// Send call through wrapped sender.
-		tdb.sender.Send(call)
-		tdb.Lock()
-		defer tdb.Unlock()
+		ts.wrapped.Send(call)
+		ts.Lock()
+		defer ts.Unlock()
 
 		// Update max timestamp using the response header's timestamp.
-		if tdb.timestamp.Less(call.Reply.Header().Timestamp) {
-			tdb.timestamp = call.Reply.Header().Timestamp
+		if ts.timestamp.Less(call.Reply.Header().Timestamp) {
+			ts.timestamp = call.Reply.Header().Timestamp
 		}
 		if log.V(1) && call.Reply.Header().GoError() != nil {
 			log.Infof("command %s %+v failed: %s", call.Method, call.Args, call.Reply.Header().GoError())
@@ -145,45 +145,45 @@ func (tdb *txnSender) Send(call *Call) {
 			// interval, move the timestamp forward, just past that write or
 			// up to MaxTimestamp, whichever comes first.
 			var candidateTS proto.Timestamp
-			if t.ExistingTimestamp.Less(tdb.txn.MaxTimestamp) {
+			if t.ExistingTimestamp.Less(ts.txn.MaxTimestamp) {
 				candidateTS = t.ExistingTimestamp
 				candidateTS.Logical++
 			} else {
-				candidateTS = tdb.txn.MaxTimestamp
+				candidateTS = ts.txn.MaxTimestamp
 			}
 			// Only change the timestamp if we're moving it forward.
-			if tdb.timestamp.Less(candidateTS) {
-				tdb.timestamp = candidateTS
+			if ts.timestamp.Less(candidateTS) {
+				ts.timestamp = candidateTS
 			}
-			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, tdb.txn.Priority, tdb.timestamp)
+			ts.txn.Restart(false /* !Abort */, ts.UserPriority, ts.txn.Priority, ts.timestamp)
 		case *proto.TransactionAbortedError:
 			// Increase timestamp if applicable.
-			if tdb.timestamp.Less(t.Txn.Timestamp) {
-				tdb.timestamp = t.Txn.Timestamp
+			if ts.timestamp.Less(t.Txn.Timestamp) {
+				ts.timestamp = t.Txn.Timestamp
 			}
-			tdb.txn.Restart(true /* Abort */, tdb.UserPriority, t.Txn.Priority, tdb.timestamp)
+			ts.txn.Restart(true /* Abort */, ts.UserPriority, t.Txn.Priority, ts.timestamp)
 		case *proto.TransactionPushError:
 			// Increase timestamp if applicable.
-			if tdb.timestamp.Less(t.PusheeTxn.Timestamp) {
-				tdb.timestamp = t.PusheeTxn.Timestamp
-				tdb.timestamp.Logical++ // ensure this txn's timestamp > other txn
+			if ts.timestamp.Less(t.PusheeTxn.Timestamp) {
+				ts.timestamp = t.PusheeTxn.Timestamp
+				ts.timestamp.Logical++ // ensure this txn's timestamp > other txn
 			}
-			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, t.Txn.Priority-1, tdb.timestamp)
+			ts.txn.Restart(false /* !Abort */, ts.UserPriority, t.PusheeTxn.Priority-1, ts.timestamp)
 		case *proto.TransactionRetryError:
 			// Increase timestamp if applicable.
-			if tdb.timestamp.Less(t.Txn.Timestamp) {
-				tdb.timestamp = t.Txn.Timestamp
+			if ts.timestamp.Less(t.Txn.Timestamp) {
+				ts.timestamp = t.Txn.Timestamp
 			}
-			tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, t.Txn.Priority, tdb.timestamp)
+			ts.txn.Restart(false /* !Abort */, ts.UserPriority, t.Txn.Priority, ts.timestamp)
 		case *proto.WriteTooOldError:
 			// If write is too old, update the timestamp and immediately retry.
-			if tdb.timestamp.Less(t.ExistingTimestamp) {
-				tdb.timestamp = t.ExistingTimestamp
-				tdb.timestamp.Logical++
+			if ts.timestamp.Less(t.ExistingTimestamp) {
+				ts.timestamp = t.ExistingTimestamp
+				ts.timestamp.Logical++
 			}
 			// Update the header so we use the newer timestamp on retry within
 			// this backoff loop.
-			call.Args.Header().Timestamp = tdb.timestamp
+			call.Args.Header().Timestamp = ts.timestamp
 			return util.RetryReset, nil
 		case *proto.WriteIntentError:
 			// If write intent error is resolved, exit retry/backoff loop to
@@ -193,30 +193,31 @@ func (tdb *txnSender) Send(call *Call) {
 			}
 			// Otherwise, update this txn's priority and timestamp to reflect
 			// the unresolved intent.
-			tdb.txn.UpgradePriority(t.Txn.Priority - 1)
-			if tdb.timestamp.Less(t.Txn.Timestamp) {
-				tdb.timestamp = t.Txn.Timestamp
+			ts.txn.UpgradePriority(t.Txn.Priority - 1)
+			if ts.timestamp.Less(t.Txn.Timestamp) {
+				ts.timestamp = t.Txn.Timestamp
+				ts.timestamp.Logical++
 			}
 			// Update the header so we use the newer timestamp on retry within
 			// this backoff loop.
-			call.Args.Header().Timestamp = tdb.timestamp
+			call.Args.Header().Timestamp = ts.timestamp
 			// Backoff on unresolvable intent and retry command.
 			// Make sure to upgrade our priority to the conflicting txn's - 1.
 			return util.RetryContinue, nil
 		case nil:
 			if call.Method == proto.EndTransaction || call.Method == proto.InternalEndTxn {
-				tdb.txnEnd = true // set this txn as having been ended
+				ts.txnEnd = true // set this txn as having been ended
 			}
 		}
 		return util.RetryBreak, nil
 	})
 
 	if _, ok := err.(*util.RetryMaxAttemptsError); ok {
-		tdb.txn.Restart(false /* !Abort */, tdb.UserPriority, tdb.txn.Priority, tdb.timestamp)
-		call.Reply.Header().SetGoError(proto.NewTransactionRetryError(tdb.txn))
+		ts.txn.Restart(false /* !Abort */, ts.UserPriority, ts.txn.Priority, ts.timestamp)
+		call.Reply.Header().SetGoError(proto.NewTransactionRetryError(ts.txn))
 	}
 }
 
 // Close is a noop for the txnSender.
-func (tdb *txnSender) Close() {
+func (ts *txnSender) Close() {
 }

@@ -28,6 +28,49 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
+const (
+	// ContentTypeHeader is the canonical header name for content type.
+	ContentTypeHeader = "Content-Type"
+	// AcceptHeader is the canonical header name for accept.
+	AcceptHeader = "Accept"
+	// JSON content type.
+	JSONContentType = "application/json"
+	// Alternate JSON content type.
+	AltJSONContentType = "application/x-json"
+	// Protobuf content type.
+	ProtoContentType = "application/x-protobuf"
+	// Alternate protobuf content type.
+	AltProtoContentType = "application/x-google-protobuf"
+	// YAML content type.
+	YAMLContentType = "text/yaml"
+	// Alternate YAML content type.
+	AltYAMLContentType = "application/x-yaml"
+)
+
+// EncodingType is an enum describing available encodings.
+type EncodingType int
+
+const (
+	// JSONEncoding includes application/json and application/x-json.
+	JSONEncoding EncodingType = iota
+	// ProtoEncoding includes application/x-protobuf and application/x-google-protobuf.
+	ProtoEncoding
+	// YAMLEncoding includes text/yaml and application/x-yaml.
+	YAMLEncoding
+)
+
+// AllEncodings includes all supported encodings.
+var AllEncodings = []EncodingType{JSONEncoding, ProtoEncoding, YAMLEncoding}
+
+func isAllowed(encType EncodingType, allowed []EncodingType) bool {
+	for _, et := range allowed {
+		if encType == et {
+			return true
+		}
+	}
+	return false
+}
+
 var yamlXXXUnrecognizedRE = regexp.MustCompile(` *xxx_unrecognized: \[\]\n?`)
 
 // sanitizeYAML filters lines in the input which match xxx_unrecognized, a
@@ -50,7 +93,7 @@ func getEncodingIndex(enc, accept string) int32 {
 // GetContentType pulls out the content type from a request header
 // it ignores every value after the first semicolon
 func GetContentType(request *http.Request) string {
-	contentType := request.Header.Get("Content-Type")
+	contentType := request.Header.Get(ContentTypeHeader)
 	semicolonIndex := strings.Index(contentType, ";")
 	if semicolonIndex > -1 {
 		contentType = contentType[0:semicolonIndex]
@@ -69,18 +112,23 @@ func GetContentType(request *http.Request) string {
 // The body is unmarshalled into the supplied value parameter. An
 // error is returned on an unmarshalling error or on an unsupported
 // content type.
-func UnmarshalRequest(r *http.Request, body []byte, value interface{}) error {
+func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed []EncodingType) error {
 	contentType := GetContentType(r)
 	switch contentType {
-	case "application/json", "application/x-json":
-		return json.Unmarshal(body, value)
-	case "application/x-protobuf", "application/x-google-protobuf":
-		return gogoproto.Unmarshal(body, value.(gogoproto.Message))
-	case "text/yaml", "application/x-yaml":
-		return yaml.Unmarshal(body, value)
-	default:
-		return Errorf("unsupported content type: %q", contentType)
+	case JSONContentType, AltJSONContentType:
+		if isAllowed(JSONEncoding, allowed) {
+			return json.Unmarshal(body, value)
+		}
+	case ProtoContentType, AltProtoContentType:
+		if isAllowed(ProtoEncoding, allowed) {
+			return gogoproto.Unmarshal(body, value.(gogoproto.Message))
+		}
+	case YAMLContentType, AltYAMLContentType:
+		if isAllowed(YAMLEncoding, allowed) {
+			return yaml.Unmarshal(body, value)
+		}
 	}
+	return Errorf("unsupported content type: %q", contentType)
 }
 
 // MarshalResponse examines the request Accept header to determine the
@@ -90,39 +138,56 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}) error {
 // is used. The value parameter is marshalled using the response
 // encoding and the resulting body and content type are returned. If
 // the encoding could not be determined by either header, the response
-// is marshalled using JSON.  An error is retruned on marshalling
+// is marshalled using JSON. An error is retruned on marshalling
 // failure.
-func MarshalResponse(r *http.Request, value interface{}) (body []byte, contentType string, err error) {
+func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType) (
+	body []byte, contentType string, err error) {
 	// TODO(spencer): until there's a nice (free) way to parse the
 	//   Accept header and properly use the request's preference for a
 	//   content type, we simply find out which of "json", "protobuf" or
 	//   "yaml" appears first in the Accept header. If neither do, we
 	//   default to JSON.
-	accept := r.Header.Get("Accept")
-	jsonIdx := getEncodingIndex("json", accept)
-	protoIdx := getEncodingIndex("protobuf", accept)
-	yamlIdx := getEncodingIndex("yaml", accept)
+	jsonIdx := int32(math.MaxInt32)
+	protoIdx := int32(math.MaxInt32)
+	yamlIdx := int32(math.MaxInt32)
+
+	accept := r.Header.Get(AcceptHeader)
+	if isAllowed(JSONEncoding, allowed) {
+		jsonIdx = getEncodingIndex("json", accept)
+	}
+	if isAllowed(ProtoEncoding, allowed) {
+		protoIdx = getEncodingIndex("protobuf", accept)
+	}
+	if isAllowed(YAMLEncoding, allowed) {
+		yamlIdx = getEncodingIndex("yaml", accept)
+	}
 
 	if jsonIdx == math.MaxInt32 && yamlIdx == math.MaxInt32 && protoIdx == math.MaxInt32 {
 		switch GetContentType(r) {
-		case "application/json", "application/x-json":
-			jsonIdx = 0
-		case "application/x-protobuf", "application/x-google-protobuf":
-			protoIdx = 0
-		case "text/yaml", "application/x-yaml":
-			yamlIdx = 0
+		case JSONContentType, AltJSONContentType:
+			if isAllowed(JSONEncoding, allowed) {
+				jsonIdx = 0
+			}
+		case ProtoContentType, AltProtoContentType:
+			if isAllowed(ProtoEncoding, allowed) {
+				protoIdx = 0
+			}
+		case YAMLContentType, AltYAMLContentType:
+			if isAllowed(YAMLEncoding, allowed) {
+				yamlIdx = 0
+			}
 		}
 	}
 
 	if protoIdx < jsonIdx && protoIdx < yamlIdx {
 		// Protobuf-encode the config.
-		contentType = "application/x-protobuf"
+		contentType = ProtoContentType
 		if body, err = gogoproto.Marshal(value.(gogoproto.Message)); err != nil {
 			err = Errorf("unable to marshal %+v to protobuf: %s", value, err)
 		}
 	} else if yamlIdx < jsonIdx && yamlIdx < protoIdx {
 		// YAML-encode the config.
-		contentType = "text/yaml"
+		contentType = YAMLContentType
 		if body, err = yaml.Marshal(value); err != nil {
 			err = Errorf("unable to marshal %+v to yaml: %s", value, err)
 		} else {
@@ -130,7 +195,7 @@ func MarshalResponse(r *http.Request, value interface{}) (body []byte, contentTy
 		}
 	} else {
 		// Always fall back to JSON-encode the config.
-		contentType = "application/json"
+		contentType = JSONContentType
 		if body, err = json.MarshalIndent(value, "", "  "); err != nil {
 			err = Errorf("unable to marshal %+v to json: %s", value, err)
 		}

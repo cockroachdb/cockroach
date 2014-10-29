@@ -83,19 +83,17 @@ func TestVerifyPermissions(t *testing.T) {
 	}
 	ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
 
-	readMethods := proto.ReadMethods
-	writeMethods := proto.WriteMethods
-	readOnlyMethods := make([]string, 0, len(readMethods))
-	writeOnlyMethods := make([]string, 0, len(writeMethods))
-	readWriteMethods := make([]string, 0, len(readMethods)+len(writeMethods))
-	for _, readM := range readMethods {
+	readOnlyMethods := make([]string, 0, len(proto.ReadMethods))
+	writeOnlyMethods := make([]string, 0, len(proto.WriteMethods))
+	readWriteMethods := make([]string, 0, len(proto.ReadMethods)+len(proto.WriteMethods))
+	for readM := range proto.ReadMethods {
 		if proto.IsReadOnly(readM) {
 			readOnlyMethods = append(readOnlyMethods, readM)
 		} else {
 			readWriteMethods = append(readWriteMethods, readM)
 		}
 	}
-	for _, writeM := range writeMethods {
+	for writeM := range proto.WriteMethods {
 		if !proto.NeedReadPerm(writeM) {
 			writeOnlyMethods = append(writeOnlyMethods, writeM)
 		}

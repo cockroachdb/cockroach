@@ -36,6 +36,7 @@ import (
 // createTestDB creates a *client.KV using a LocalSender object built
 // with a store using an in-memory engine. Returns the created kv
 // client and associated clock's manual time.
+// TODO(spencer): return a struct.
 func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.ManualClock) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
@@ -44,7 +45,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
 	lSender := NewLocalSender()
 	sender := NewCoordinator(lSender, clock)
-	db := &client.KV{Sender: sender}
+	db := client.NewKV(sender, nil)
 	store := storage.NewStore(clock, eng, db, g)
 	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)
@@ -59,8 +60,13 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	return db, eng, clock, &manual
 }
 
-// beginTxn begins a transaction.
-func beginTxn(db *client.KV, clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
+// getCoord type casts the db's sender to a coordinator and returns it.
+func getCoord(db *client.KV) *Coordinator {
+	return db.Sender().(*Coordinator)
+}
+
+// newTxn begins a transaction.
+func newTxn(db *client.KV, clock *hlc.Clock, baseKey proto.Key) *proto.Transaction {
 	return proto.NewTransaction("test", baseKey, 1, proto.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
@@ -82,14 +88,17 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 // transaction ID updates the last update timestamp.
 func TestCoordinatorAddRequest(t *testing.T) {
 	db, _, clock, manual := createTestDB(t)
+	coord := getCoord(db)
 	defer db.Close()
 
-	txn := beginTxn(db, clock, proto.Key("a"))
+	txn := newTxn(db, clock, proto.Key("a"))
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	db.Call(proto.Put, putReq, &proto.PutResponse{})
-	txnMeta, ok := db.Sender.(*Coordinator).txns[string(txn.ID)]
+	if err := db.Call(proto.Put, putReq, &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
+	}
+	txnMeta, ok := coord.txns[string(txn.ID)]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
 	}
@@ -100,14 +109,16 @@ func TestCoordinatorAddRequest(t *testing.T) {
 
 	// Advance time and send another put request. Lock the coordinator
 	// to prevent a data race.
-	db.Sender.(*Coordinator).Lock()
+	coord.Lock()
 	*manual = hlc.ManualClock(1)
-	db.Sender.(*Coordinator).Unlock()
-	db.Call(proto.Put, putReq, &proto.PutResponse{})
-	if len(db.Sender.(*Coordinator).txns) != 1 {
-		t.Errorf("expected length of transactions map to be 1; got %d", len(db.Sender.(*Coordinator).txns))
+	coord.Unlock()
+	if err := db.Call(proto.Put, putReq, &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
 	}
-	txnMeta = db.Sender.(*Coordinator).txns[string(txn.ID)]
+	if len(coord.txns) != 1 {
+		t.Errorf("expected length of transactions map to be 1; got %d", len(coord.txns))
+	}
+	txnMeta = coord.txns[string(txn.ID)]
 	if !ts.Less(txnMeta.lastUpdateTS) || txnMeta.lastUpdateTS.WallTime != int64(*manual) {
 		t.Errorf("expected last update time to advance; got %+v", txnMeta.lastUpdateTS)
 	}
@@ -119,7 +130,7 @@ func TestCoordinatorBeginTransaction(t *testing.T) {
 
 	reply := &proto.BeginTransactionResponse{}
 	key := proto.Key("base-key")
-	db.Sender.Send(&client.Call{
+	db.Sender().Send(&client.Call{
 		Method: proto.BeginTransaction,
 		Args: &proto.BeginTransactionRequest{
 			RequestHeader: proto.RequestHeader{
@@ -165,20 +176,23 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 	}
 
 	db, _, clock, _ := createTestDB(t)
+	coord := getCoord(db)
 	defer db.Close()
-	txn := beginTxn(db, clock, proto.Key("a"))
+	txn := newTxn(db, clock, proto.Key("a"))
 
 	for _, rng := range ranges {
 		putReq := createPutRequest(rng.start, []byte("value"), txn)
 		// Trick the coordinator into using the EndKey for coordinator
 		// resolve keys interval cache.
 		putReq.EndKey = rng.end
-		db.Call(proto.Put, putReq, &proto.PutResponse{})
+		if err := db.Call(proto.Put, putReq, &proto.PutResponse{}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" interval cache. "a" and range "aa"-"c".
-	txnMeta, ok := db.Sender.(*Coordinator).txns[string(txn.ID)]
+	txnMeta, ok := coord.txns[string(txn.ID)]
 	if !ok {
 		t.Fatalf("expected a transaction to be created on coordinator")
 	}
@@ -191,15 +205,20 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 // multiple outstanding transactions.
 func TestCoordinatorMultipleTxns(t *testing.T) {
 	db, _, clock, _ := createTestDB(t)
+	coord := getCoord(db)
 	defer db.Close()
 
-	txn1 := beginTxn(db, clock, proto.Key("a"))
-	txn2 := beginTxn(db, clock, proto.Key("b"))
-	db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn1), &proto.PutResponse{})
-	db.Call(proto.Put, createPutRequest(proto.Key("b"), []byte("value"), txn2), &proto.PutResponse{})
+	txn1 := newTxn(db, clock, proto.Key("a"))
+	txn2 := newTxn(db, clock, proto.Key("b"))
+	if err := db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn1), &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Call(proto.Put, createPutRequest(proto.Key("b"), []byte("value"), txn2), &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
+	}
 
-	if len(db.Sender.(*Coordinator).txns) != 2 {
-		t.Errorf("expected length of transactions map to be 2; got %d", len(db.Sender.(*Coordinator).txns))
+	if len(coord.txns) != 2 {
+		t.Errorf("expected length of transactions map to be 2; got %d", len(coord.txns))
 	}
 }
 
@@ -207,13 +226,16 @@ func TestCoordinatorMultipleTxns(t *testing.T) {
 // transaction record.
 func TestCoordinatorHeartbeat(t *testing.T) {
 	db, _, clock, manual := createTestDB(t)
+	coord := getCoord(db)
 	defer db.Close()
 
 	// Set heartbeat interval to 1ms for testing.
-	db.Sender.(*Coordinator).heartbeatInterval = 1 * time.Millisecond
+	coord.heartbeatInterval = 1 * time.Millisecond
 
-	txn := beginTxn(db, clock, proto.Key("a"))
-	db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn), &proto.PutResponse{})
+	txn := newTxn(db, clock, proto.Key("a"))
+	if err := db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn), &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify 3 heartbeats.
 	var heartbeatTS proto.Timestamp
@@ -225,9 +247,9 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 			}
 			// Advance clock by 1ns.
 			// Locking the Coordinator to prevent a data race.
-			db.Sender.(*Coordinator).Lock()
+			coord.Lock()
 			*manual = hlc.ManualClock(*manual + 1)
-			db.Sender.(*Coordinator).Unlock()
+			coord.Unlock()
 			if heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
 				return true
@@ -253,8 +275,9 @@ func getTxn(db *client.KV, key proto.Key) (bool, *proto.Transaction, error) {
 }
 
 func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T) {
-	if len(db.Sender.(*Coordinator).txns) != 0 {
-		t.Errorf("expected empty transactions map; got %d", len(db.Sender.(*Coordinator).txns))
+	coord := getCoord(db)
+	if len(coord.txns) != 0 {
+		t.Errorf("expected empty transactions map; got %d", len(coord.txns))
 	}
 
 	if err := util.IsTrueWithin(func() bool {
@@ -276,15 +299,17 @@ func TestCoordinatorEndTxn(t *testing.T) {
 	db, eng, clock, _ := createTestDB(t)
 	defer db.Close()
 
-	txn := beginTxn(db, clock, proto.Key("a"))
+	txn := newTxn(db, clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	db.Call(proto.Put, createPutRequest(key, []byte("value"), txn), pReply)
+	if err := db.Call(proto.Put, createPutRequest(key, []byte("value"), txn), pReply); err != nil {
+		t.Fatal(err)
+	}
 	if pReply.GoError() != nil {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	db.Sender.Send(&client.Call{
+	db.Sender().Send(&client.Call{
 		Method: proto.EndTransaction,
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
@@ -310,15 +335,14 @@ func TestCoordinatorCleanupOnAborted(t *testing.T) {
 
 	// Create a transaction with intent at "a".
 	key := proto.Key("a")
-	txn := beginTxn(db, clock, key)
+	txn := newTxn(db, clock, key)
 	txn.Priority = 1
-	pReply := &proto.PutResponse{}
-	if err := db.Call(proto.Put, createPutRequest(key, []byte("value"), txn), pReply); err != nil {
-		t.Fatal(pReply.GoError())
+	if err := db.Call(proto.Put, createPutRequest(key, []byte("value"), txn), &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Push the transaction to abort it.
-	txn2 := beginTxn(db, clock, key)
+	txn2 := newTxn(db, clock, key)
 	txn2.Priority = 2
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -358,25 +382,28 @@ func TestCoordinatorCleanupOnAborted(t *testing.T) {
 // transactions after the lastUpdateTS exceeds the timeout.
 func TestCoordinatorGC(t *testing.T) {
 	db, _, clock, manual := createTestDB(t)
+	coord := getCoord(db)
 	defer db.Close()
 
 	// Set heartbeat interval to 1ms for testing.
-	db.Sender.(*Coordinator).heartbeatInterval = 1 * time.Millisecond
+	coord.heartbeatInterval = 1 * time.Millisecond
 
-	txn := beginTxn(db, clock, proto.Key("a"))
-	db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn), &proto.PutResponse{})
+	txn := newTxn(db, clock, proto.Key("a"))
+	if err := db.Call(proto.Put, createPutRequest(proto.Key("a"), []byte("value"), txn), &proto.PutResponse{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Now, advance clock past the default client timeout.
 	// Locking the Coordinator to prevent a data race.
-	db.Sender.(*Coordinator).Lock()
+	coord.Lock()
 	*manual = hlc.ManualClock(defaultClientTimeout.Nanoseconds() + 1)
-	db.Sender.(*Coordinator).Unlock()
+	coord.Unlock()
 
 	if err := util.IsTrueWithin(func() bool {
 		// Locking the Coordinator to prevent a data race.
-		db.Sender.(*Coordinator).Lock()
-		_, ok := db.Sender.(*Coordinator).txns[string(txn.ID)]
-		db.Sender.(*Coordinator).Unlock()
+		coord.Lock()
+		_, ok := coord.txns[string(txn.ID)]
+		coord.Unlock()
 		return !ok
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")

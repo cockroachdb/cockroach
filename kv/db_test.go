@@ -20,7 +20,6 @@ package kv_test
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"testing"
 
@@ -30,15 +29,22 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
+
+func createTestClient(addr string) *client.KV {
+	transport := &http.Transport{TLSClientConfig: rpc.LoadInsecureTLSConfig().Config()}
+	return client.NewKV(client.NewHTTPSender(addr, transport), nil)
+}
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
 
-	kvClient := client.NewKV(serverAddr, rpc.LoadInsecureTLSConfig().Config())
+	kvClient := createTestClient(addr)
 	key := proto.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -150,50 +156,11 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 }
 
-// TestKVDBCanonicalMethod verifies that the method path is translated
-// into canonical form when received by the server.
-func TestKVDBCanonicalMethod(t *testing.T) {
-	once.Do(func() { startServer(t) })
-
-	putReq := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: proto.Key("a"),
-		},
-		Value: proto.Value{Bytes: []byte("value")},
-	}
-	body, err := gogoproto.Marshal(putReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Send a Put request but with non-canonical capitalization.
-	httpReq, err := http.NewRequest("POST", "http://"+serverAddr+kv.DBPrefix+"pUt", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	httpReq.Header.Add("Content-Type", "application/x-protobuf")
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != 200 {
-		t.Fatalf("HTTP response status code != 200; got %d", resp.StatusCode)
-	}
-	defer resp.Body.Close()
-	body, err = ioutil.ReadAll(resp.Body)
-
-	putResp := &proto.PutResponse{}
-	if err := gogoproto.Unmarshal(body, putResp); err != nil {
-		t.Fatal(err)
-	}
-	if putResp.Error != nil {
-		t.Errorf("error on put: %s", putResp.GoError())
-	}
-}
-
 // TestKVDBInternalMethods verifies no internal methods are available
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
 
 	testCases := []struct {
 		method string
@@ -208,7 +175,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{proto.InternalSnapshotCopy, &proto.InternalSnapshotCopyRequest{}, &proto.InternalSnapshotCopyResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
-	kvClient := client.NewKV(serverAddr, rpc.LoadInsecureTLSConfig().Config())
+	kvClient := createTestClient(addr)
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
 		err := kvClient.Call(test.method, test.args, test.reply)
@@ -223,7 +190,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 // TestKVDBContentTypes verifies all combinations of request /
 // response content encodings are supported.
 func TestKVDBContentType(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
 
 	putReq := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
@@ -233,48 +201,59 @@ func TestKVDBContentType(t *testing.T) {
 	}
 
 	testCases := []struct {
-		cType, accept string
+		cType, accept, expCType string
+		expErr                  bool
 	}{
-		{"application/json", "application/json"},
-		{"application/x-protobuf", "application/json"},
-		{"text/yaml", "application/json"},
-		{"application/json", "application/x-protobuf"},
-		{"application/x-protobuf", "application/x-protobuf"},
-		{"text/yaml", "application/x-protobuf"},
-		{"application/json", "text/yaml"},
-		{"application/x-protobuf", "text/yaml"},
-		{"text/yaml", "text/yaml"},
+		{util.JSONContentType, util.JSONContentType, util.JSONContentType, false},
+		{util.ProtoContentType, util.JSONContentType, util.JSONContentType, false},
+		{util.YAMLContentType, util.JSONContentType, "", true},
+		{util.JSONContentType, util.ProtoContentType, util.ProtoContentType, false},
+		{util.ProtoContentType, util.ProtoContentType, util.ProtoContentType, false},
+		{util.YAMLContentType, util.ProtoContentType, "", true},
+		{util.JSONContentType, util.YAMLContentType, util.JSONContentType, false},
+		{util.ProtoContentType, util.YAMLContentType, util.ProtoContentType, false},
+		{util.YAMLContentType, util.YAMLContentType, "", true},
+		{util.JSONContentType, "", util.JSONContentType, false},
+		{util.ProtoContentType, "", util.ProtoContentType, false},
+		{util.YAMLContentType, "", "", true},
 	}
 	for i, test := range testCases {
 		var body []byte
 		var err error
 		switch test.cType {
-		case "application/json":
+		case util.JSONContentType:
 			body, err = json.Marshal(putReq)
-		case "application/x-protobuf":
+		case util.ProtoContentType:
 			body, err = gogoproto.Marshal(putReq)
-		case "text/yaml":
+		case util.YAMLContentType:
 			body, err = yaml.Marshal(putReq)
 		}
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
 		// Send a Put request but with non-canonical capitalization.
-		httpReq, err := http.NewRequest("POST", "http://"+serverAddr+kv.DBPrefix+"Put", bytes.NewReader(body))
+		httpReq, err := http.NewRequest("POST", "http://"+addr+kv.DBPrefix+"Put", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
-		httpReq.Header.Add("Content-Type", test.cType)
-		httpReq.Header.Add("Accept", test.accept)
+		httpReq.Header.Add(util.ContentTypeHeader, test.cType)
+		if test.accept != "" {
+			httpReq.Header.Add(util.AcceptHeader, test.accept)
+		}
 		resp, err := http.DefaultClient.Do(httpReq)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
-		if resp.StatusCode != 200 {
+		if !test.expErr && resp.StatusCode != 200 {
 			t.Fatalf("%d: HTTP response status code != 200; got %d", i, resp.StatusCode)
+		} else if test.expErr {
+			if resp.StatusCode != 400 {
+				t.Fatalf("%d: expected client request error; got %d", i, resp.StatusCode)
+			}
+			continue
 		}
-		if cType := resp.Header.Get("Content-Type"); cType != test.accept {
-			t.Errorf("%d: expected content type %s; got %s", i, test.accept, cType)
+		if cType := resp.Header.Get(util.ContentTypeHeader); cType != test.expCType {
+			t.Errorf("%d: expected content type %s; got %s", i, test.expCType, cType)
 		}
 	}
 }
@@ -282,8 +261,10 @@ func TestKVDBContentType(t *testing.T) {
 // TestKVDBTransaction verifies that transactions work properly over
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
-	once.Do(func() { startServer(t) })
-	kvClient := client.NewKV(serverAddr, rpc.LoadInsecureTLSConfig().Config())
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
+	kvClient := createTestClient(addr)
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")
@@ -322,7 +303,7 @@ func TestKVDBTransaction(t *testing.T) {
 		t.Errorf("expected success on commit; got %s", err)
 	}
 
-	// Verify the value is now visible on commit == true, and not visible otherwise.
+	// Verify the value is now visible after commit.
 	gr := &proto.GetResponse{}
 	if err = kvClient.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
 		t.Errorf("expected success reading value; got %s", err)

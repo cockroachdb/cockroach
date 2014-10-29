@@ -37,10 +37,16 @@ var (
 	testPutResp = &proto.PutResponse{ResponseHeader: proto.ResponseHeader{Timestamp: testTS}}
 )
 
-func startTestHTTPServer(handler http.Handler, t *testing.T) (*httptest.Server, string) {
+func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
 	server := httptest.NewServer(handler)
 	addr := server.Listener.Addr().String()
 	return server, addr
+}
+
+func createTestHTTPSender(addr string) *HTTPSender {
+	return NewHTTPSender(addr, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
 }
 
 // TestHTTPSenderSend verifies sending posts.
@@ -54,27 +60,26 @@ func TestHTTPSenderSend(t *testing.T) {
 		}
 		// Unmarshal the request.
 		reqBody, err := ioutil.ReadAll(r.Body)
-		defer r.Body.Close()
 		if err != nil {
 			t.Errorf("unexpected error reading body: %s", err)
 		}
 		args := &proto.PutRequest{}
-		if err := util.UnmarshalRequest(r, reqBody, args); err != nil {
+		if err := util.UnmarshalRequest(r, reqBody, args, util.AllEncodings); err != nil {
 			t.Errorf("unexpected error unmarshalling request: %s", err)
 		}
 		if !args.Key.Equal(testPutReq.Key) || !args.Timestamp.Equal(testPutReq.Timestamp) {
 			t.Errorf("expected parsed %+v to equal %+v", args, testPutReq)
 		}
-		body, contentType, err := util.MarshalResponse(r, testPutResp)
+		body, contentType, err := util.MarshalResponse(r, testPutResp, util.AllEncodings)
 		if err != nil {
 			t.Errorf("failed to marshal response: %s", err)
 		}
 		w.Header().Set("Content-Type", contentType)
-		fmt.Fprintf(w, "%s", string(body))
-	}), t)
+		w.Write(body)
+	}))
 	defer server.Close()
 
-	sender := newHTTPSender(addr, rpc.LoadInsecureTLSConfig().Config())
+	sender := createTestHTTPSender(addr)
 	reply := &proto.PutResponse{}
 	call := &Call{
 		Method: proto.Put,
@@ -100,7 +105,9 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 		retry bool
 	}{
 		{http.StatusServiceUnavailable, true},
-		{http.StatusRequestTimeout, true},
+		{http.StatusGatewayTimeout, true},
+		{StatusTooManyRequests, true},
+		{http.StatusRequestTimeout, false},
 		{http.StatusBadRequest, false},
 		{http.StatusNotFound, false},
 		{http.StatusUnauthorized, false},
@@ -121,15 +128,15 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			if !test.retry {
 				t.Errorf("%d: didn't expect retry on code %d", i, test.code)
 			}
-			body, contentType, err := util.MarshalResponse(r, testPutResp)
+			body, contentType, err := util.MarshalResponse(r, testPutResp, util.AllEncodings)
 			if err != nil {
 				t.Errorf("%d: failed to marshal response: %s", i, err)
 			}
 			w.Header().Set("Content-Type", contentType)
-			fmt.Fprintf(w, "%s", string(body))
-		}), t)
+			w.Write(body)
+		}))
 
-		sender := newHTTPSender(addr, rpc.LoadInsecureTLSConfig().Config())
+		sender := createTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
 		call := &Call{
 			Method: proto.Put,
@@ -183,16 +190,16 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 				return
 			}
 			// Success on second try.
-			body, contentType, err := util.MarshalResponse(r, testPutResp)
+			body, contentType, err := util.MarshalResponse(r, testPutResp, util.AllEncodings)
 			if err != nil {
 				t.Errorf("%d: failed to marshal response: %s", i, err)
 			}
 			w.Header().Set("Content-Type", contentType)
-			fmt.Fprintf(w, "%s", string(body))
-		}), t)
+			w.Write(body)
+		}))
 
 		s = server
-		sender := newHTTPSender(addr, rpc.LoadInsecureTLSConfig().Config())
+		sender := createTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
 		call := &Call{Method: proto.Put, Args: testPutReq, Reply: reply}
 		sender.Send(call)
