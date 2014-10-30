@@ -46,6 +46,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	lSender := NewLocalSender()
 	sender := NewCoordinator(lSender, clock)
 	db := client.NewKV(sender, nil)
+	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
 	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)

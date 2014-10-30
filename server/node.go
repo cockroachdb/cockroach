@@ -187,7 +187,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 		return err
 	}
 	go n.startGossip()
-
+	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs)
 	return nil
 }
 
@@ -384,7 +384,7 @@ func (n *Node) executeCmd(method string, args proto.Request, reply proto.Respons
 		Reply:  reply,
 	}
 	n.lSender.Send(call)
-	return call.Reply.Header().GoError()
+	return nil
 }
 
 // TODO(spencer): fill in method comments below.

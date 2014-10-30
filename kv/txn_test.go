@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -35,7 +34,7 @@ import (
 // uncommitted writes cannot be read outside of the txn but can be
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
-	db, _, clock, _ := createTestDB(t)
+	db, _, _, _ := createTestDB(t)
 	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
@@ -43,29 +42,18 @@ func TestTxnDBBasics(t *testing.T) {
 
 		// Use snapshot isolation so non-transactional read can always push.
 		txnOpts := &client.TransactionOptions{
-			Name:         "test",
-			User:         storage.UserRoot,
-			UserPriority: 1,
-			Isolation:    proto.SNAPSHOT,
+			Name:      "test",
+			Isolation: proto.SNAPSHOT,
 		}
 		err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
 			// Put transactional value.
-			pr := &proto.PutResponse{}
-			if err := txn.Call(proto.Put, &proto.PutRequest{
-				RequestHeader: proto.RequestHeader{Key: key},
-				Value:         proto.Value{Bytes: value},
-			}, pr); err != nil {
+			if err := txn.Call(proto.Put, proto.PutArgs(key, value), &proto.PutResponse{}); err != nil {
 				return err
 			}
 
 			// Attempt to read outside of txn.
 			gr := &proto.GetResponse{}
-			if err := db.Call(proto.Get, &proto.GetRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:       key,
-					Timestamp: clock.Now(),
-				},
-			}, gr); err != nil {
+			if err := db.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
 				return err
 			}
 			if gr.Value != nil {
@@ -73,9 +61,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Read within the transaction.
-			if err := txn.Call(proto.Get, &proto.GetRequest{
-				RequestHeader: proto.RequestHeader{Key: key},
-			}, gr); err != nil {
+			if err := txn.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
 				return err
 			}
 			if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
@@ -96,12 +82,7 @@ func TestTxnDBBasics(t *testing.T) {
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
 		gr := &proto.GetResponse{}
-		err = db.Call(proto.Get, &proto.GetRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:       key,
-				Timestamp: clock.Now(),
-			},
-		}, gr)
+		err = db.Call(proto.Get, proto.GetArgs(key), gr)
 		if commit {
 			if err != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
 				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)

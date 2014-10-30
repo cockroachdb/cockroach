@@ -1326,11 +1326,11 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		proto.Key(r.Desc.StartKey), proto.Key(r.Desc.EndKey), splitKey)
 
 	txnOpts := &client.TransactionOptions{
-		Name:         fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
-		User:         UserRoot,
-		UserPriority: 100000, // High user priority prevents aborts
+		Name: fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
 	}
 	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+		txn.UserPriority = 100000 // High user priority prevents aborts
+
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.

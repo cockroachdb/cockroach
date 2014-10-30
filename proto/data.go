@@ -288,8 +288,11 @@ func MakePriority(userPriority int32) int32 {
 	// be set by specifying priority < 1. The explicit priority is
 	// simply -userPriority in this case. This is hacky, but currently
 	// used for unittesting. Perhaps this should be documented and allowed.
-	if userPriority < 1 {
+	if userPriority < 0 {
 		return -userPriority
+	}
+	if userPriority == 0 {
+		userPriority = 1
 	}
 	// The idea here is to bias selection of a random priority from the
 	// range [1, 2^31-1) such that if userPriority=100, it's 100x more
@@ -314,19 +317,12 @@ func MD5Equal(a, b [md5.Size]byte) bool {
 	return true
 }
 
-// Restart reconfigures a transaction for restart. If the abort flag
-// is true, a new transaction ID is allocated; otherwise, the epoch is
-// incremented for an in-place retry. The timestamp of the transaction
-// on restart is set to the maximum of the transaction's timestamp and
-// the specified timestamp.
-func (t *Transaction) Restart(abort bool, userPriority, upgradePriority int32, timestamp Timestamp) {
-	if abort {
-		uu := uuid.New()
-		t.ID = append(append([]byte(nil), t.ID[:len(t.ID)-len(uu)]...), []byte(uu)...)
-		t.Epoch = 0
-	} else {
-		t.Epoch++
-	}
+// Restart reconfigures a transaction for restart. The epoch is
+// incremented for an in-place restart. The timestamp of the
+// transaction on restart is set to the maximum of the transaction's
+// timestamp and the specified timestamp.
+func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Timestamp) {
+	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}

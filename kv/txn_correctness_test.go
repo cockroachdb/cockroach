@@ -31,7 +31,6 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -556,12 +555,12 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	txnOpts := &client.TransactionOptions{
-		Name:         txnName,
-		User:         storage.UserRoot,
-		UserPriority: -priority,
-		Isolation:    isolation,
+		Name:      txnName,
+		Isolation: isolation,
 	}
 	err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
+		txn.UserPriority = -priority
+
 		env := map[string]int64{}
 		// TODO(spencer): restarts must create additional histories. They
 		// look like: given the current partial history and a restart on

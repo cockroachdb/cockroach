@@ -202,7 +202,7 @@ type server struct {
 // cluster via the gossip network.
 func runStart(cmd *commander.Command, args []string) {
 	log.Info("Starting cockroach cluster")
-	s, err := newServer()
+	s, err := newServer(*rpcAddr, *certDir, *maxOffset)
 	if err != nil {
 		log.Errorf("Failed to start Cockroach server: %v", err)
 		return
@@ -219,7 +219,7 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	err = s.start(engines, false)
+	err = s.start(engines, *attrs, *httpAddr, false)
 	defer s.stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)
@@ -269,6 +269,7 @@ func initEngines(stores string) ([]engine.Engine, error) {
 		}
 		engines = append(engines, engine)
 	}
+	log.Infof("Initialized %d storage engine(s)", len(engines))
 
 	return engines, nil
 }
@@ -290,7 +291,7 @@ func initEngine(attrsStr, path string) (engine.Engine, error) {
 	return engine.NewRocksDB(attrs, path), nil
 }
 
-func newServer() (*server, error) {
+func newServer(rpcAddr, certDir string, maxOffset time.Duration) (*server, error) {
 	// Determine hostname in case it hasn't been specified in -rpc or -http.
 	host, err := os.Hostname()
 	if err != nil {
@@ -298,20 +299,20 @@ func newServer() (*server, error) {
 	}
 
 	// If the specified rpc address includes no host component, use the hostname.
-	if strings.HasPrefix(*rpcAddr, ":") {
-		*rpcAddr = host + *rpcAddr
+	if strings.HasPrefix(rpcAddr, ":") {
+		rpcAddr = host + rpcAddr
 	}
-	_, err = net.ResolveTCPAddr("tcp", *rpcAddr)
+	_, err = net.ResolveTCPAddr("tcp", rpcAddr)
 	if err != nil {
-		return nil, util.Errorf("unable to resolve RPC address %q: %v", *rpcAddr, err)
+		return nil, util.Errorf("unable to resolve RPC address %q: %v", rpcAddr, err)
 	}
 
 	var tlsConfig *rpc.TLSConfig
-	if *certDir == "" {
+	if certDir == "" {
 		tlsConfig = rpc.LoadInsecureTLSConfig()
 	} else {
 		var err error
-		if tlsConfig, err = rpc.LoadTLSConfig(*certDir); err != nil {
+		if tlsConfig, err = rpc.LoadTLSConfig(certDir); err != nil {
 			return nil, util.Errorf("unable to load TLS config: %v", err)
 		}
 	}
@@ -321,19 +322,20 @@ func newServer() (*server, error) {
 		mux:   http.NewServeMux(),
 		clock: hlc.NewClock(hlc.UnixNano),
 	}
-	s.clock.SetMaxOffset(*maxOffset)
+	s.clock.SetMaxOffset(maxOffset)
 
 	rpcContext := rpc.NewContext(s.clock, tlsConfig)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", rpcAddr), rpcContext)
+	s.gossip = gossip.New(rpcContext)
+
 	// Create a client.KVSender instance for use with this node's
 	// client to the key value database as well as
 	sender := kv.NewCoordinator(kv.NewDistSender(s.gossip), s.clock)
-
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", *rpcAddr), rpcContext)
-	s.gossip = gossip.New(rpcContext)
 	s.kv = client.NewKV(sender, nil)
 	s.kv.User = storage.UserRoot
+
 	s.kvDB = kv.NewDBServer(sender)
 	s.kvREST = kv.NewRESTServer(s.kv)
 	s.node = NewNode(s.kv, s.gossip)
@@ -348,7 +350,7 @@ func newServer() (*server, error) {
 // start runs the RPC and HTTP servers, starts the gossip instance (if
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
-func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
+func (s *server) start(engines []engine.Engine, attrs, httpAddr string, selfBootstrap bool) error {
 	// Bind RPC socket and launch goroutine.
 	if err := s.rpc.Start(); err != nil {
 		return err
@@ -362,31 +364,20 @@ func (s *server) start(engines []engine.Engine, selfBootstrap bool) error {
 	s.gossip.Start(s.rpc)
 	log.Infoln("Started gossip instance")
 
-	// Init the engines specified via command line flags if not supplied.
-	if engines == nil {
-		var err error
-		engines, err = initEngines(*stores)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Init the node attributes from the -attrs command line flag.
-	nodeAttrs := parseAttributes(*attrs)
-
+	// Init the node attributes from the -attrs command line flag and start node.
+	nodeAttrs := parseAttributes(attrs)
 	if err := s.node.start(s.rpc, s.clock, engines, nodeAttrs); err != nil {
 		return err
 	}
-	log.Infof("Initialized %d storage engine(s)", len(engines))
 
 	// TODO(spencer): add tls to the HTTP server.
 	s.initHTTP()
-	if strings.HasPrefix(*httpAddr, ":") {
-		*httpAddr = s.host + *httpAddr
+	if strings.HasPrefix(httpAddr, ":") {
+		httpAddr = s.host + httpAddr
 	}
-	ln, err := net.Listen("tcp", *httpAddr)
+	ln, err := net.Listen("tcp", httpAddr)
 	if err != nil {
-		return util.Errorf("could not listen on %s: %s", *httpAddr, err)
+		return util.Errorf("could not listen on %s: %s", httpAddr, err)
 	}
 	// Obtaining the http end point listener is difficult using
 	// http.ListenAndServe(), so we are storing it with the server.

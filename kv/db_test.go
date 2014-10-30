@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	yaml "gopkg.in/yaml.v1"
 )
@@ -270,10 +269,8 @@ func TestKVDBTransaction(t *testing.T) {
 	value := []byte("value")
 	// Use snapshot isolation so non-transactional read can always push.
 	txnOpts := &client.TransactionOptions{
-		Name:         "test",
-		User:         storage.UserRoot,
-		UserPriority: 1,
-		Isolation:    proto.SNAPSHOT,
+		Name:      "test",
+		Isolation: proto.SNAPSHOT,
 	}
 	err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
 		pr := &proto.PutResponse{}

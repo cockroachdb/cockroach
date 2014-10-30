@@ -20,7 +20,6 @@ package client
 import (
 	"sync"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,9 +40,10 @@ type txnSender struct {
 	*TransactionOptions
 	txnEnd bool // True if EndTransaction was invoked internally
 
-	sync.Mutex // Protects variables below.
-	timestamp  proto.Timestamp
-	txn        *proto.Transaction
+	sync.Mutex  // Protects variables below.
+	timestamp   proto.Timestamp
+	txn         *proto.Transaction
+	minPriority int32 // set on abort
 }
 
 // newTxnSender returns a new instance of txnSender which wraps a
@@ -80,13 +80,9 @@ func (ts *txnSender) Send(call *Call) {
 		btCall := &Call{
 			Method: proto.BeginTransaction,
 			Args: &proto.BeginTransactionRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:          call.Args.Header().Key,
-					User:         ts.User,
-					UserPriority: gogoproto.Int32(ts.UserPriority),
-				},
-				Name:      ts.Name,
-				Isolation: ts.Isolation,
+				RequestHeader: *call.Args.Header(),
+				Name:          ts.Name,
+				Isolation:     ts.Isolation,
 			},
 			Reply: btReply,
 		}
@@ -101,6 +97,9 @@ func (ts *txnSender) Send(call *Call) {
 		}
 		ts.txn = btReply.Txn
 		ts.timestamp = ts.txn.Timestamp
+		if ts.txn.Priority < ts.minPriority {
+			ts.txn.Priority = ts.minPriority
+		}
 	}
 	if call.Method == proto.EndTransaction || call.Method == proto.InternalEndTxn {
 		// For EndTransaction, make sure key is set to txn ID.
@@ -111,8 +110,8 @@ func (ts *txnSender) Send(call *Call) {
 		return
 	}
 	// Set Args.Timestamp & Args.Txn to reflect current values.
+	userPriority := call.Args.Header().GetUserPriority()
 	txnCopy := *ts.txn
-	call.Args.Header().User = ts.User
 	call.Args.Header().Timestamp = ts.timestamp
 	call.Args.Header().Txn = &txnCopy
 	ts.Unlock()
@@ -135,8 +134,8 @@ func (ts *txnSender) Send(call *Call) {
 		if ts.timestamp.Less(call.Reply.Header().Timestamp) {
 			ts.timestamp = call.Reply.Header().Timestamp
 		}
-		if log.V(1) && call.Reply.Header().GoError() != nil {
-			log.Infof("command %s %+v failed: %s", call.Method, call.Args, call.Reply.Header().GoError())
+		if call.Reply.Header().GoError() != nil {
+			log.Infof("failed %s: %s", call.Method, call.Reply.Header().GoError())
 		}
 		// Take action on various errors.
 		switch t := call.Reply.Header().GoError().(type) {
@@ -155,26 +154,27 @@ func (ts *txnSender) Send(call *Call) {
 			if ts.timestamp.Less(candidateTS) {
 				ts.timestamp = candidateTS
 			}
-			ts.txn.Restart(false /* !Abort */, ts.UserPriority, ts.txn.Priority, ts.timestamp)
+			ts.txn.Restart(userPriority, ts.txn.Priority, ts.timestamp)
 		case *proto.TransactionAbortedError:
 			// Increase timestamp if applicable.
 			if ts.timestamp.Less(t.Txn.Timestamp) {
 				ts.timestamp = t.Txn.Timestamp
 			}
-			ts.txn.Restart(true /* Abort */, ts.UserPriority, t.Txn.Priority, ts.timestamp)
+			ts.txn = nil // Abort.
+			ts.minPriority = t.Txn.Priority
 		case *proto.TransactionPushError:
 			// Increase timestamp if applicable.
 			if ts.timestamp.Less(t.PusheeTxn.Timestamp) {
 				ts.timestamp = t.PusheeTxn.Timestamp
 				ts.timestamp.Logical++ // ensure this txn's timestamp > other txn
 			}
-			ts.txn.Restart(false /* !Abort */, ts.UserPriority, t.PusheeTxn.Priority-1, ts.timestamp)
+			ts.txn.Restart(userPriority, t.PusheeTxn.Priority-1, ts.timestamp)
 		case *proto.TransactionRetryError:
 			// Increase timestamp if applicable.
 			if ts.timestamp.Less(t.Txn.Timestamp) {
 				ts.timestamp = t.Txn.Timestamp
 			}
-			ts.txn.Restart(false /* !Abort */, ts.UserPriority, t.Txn.Priority, ts.timestamp)
+			ts.txn.Restart(userPriority, t.Txn.Priority, ts.timestamp)
 		case *proto.WriteTooOldError:
 			// If write is too old, update the timestamp and immediately retry.
 			if ts.timestamp.Less(t.ExistingTimestamp) {
@@ -213,7 +213,7 @@ func (ts *txnSender) Send(call *Call) {
 	})
 
 	if _, ok := err.(*util.RetryMaxAttemptsError); ok {
-		ts.txn.Restart(false /* !Abort */, ts.UserPriority, ts.txn.Priority, ts.timestamp)
+		ts.txn.Restart(userPriority, ts.txn.Priority, ts.timestamp)
 		call.Reply.Header().SetGoError(proto.NewTransactionRetryError(ts.txn))
 	}
 }

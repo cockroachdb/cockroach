@@ -15,27 +15,21 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package client_test
+package client
 
 import "testing"
 
-// TestKVRetryOnWrite verifies that the client will retry as
-// appropriate on write/write conflicts.
-func TestKVRetryOnWrite(t *testing.T) {
-	// Start a transaction
-}
-
-// TestKVRetryOnRead verifies that the client will retry on
-// read/write conflicts.
-func TestKVRetryOnRead(t *testing.T) {
-}
-
-// TestKVRunTransaction verifies some simple transaction isolation
-// semantics.
-func TestKVRunTransaction(t *testing.T) {
-}
+// TODO(spencer): Verify all error paths in KV.RunTransaction()
+// using intermediary senders, as in txn_sender_test.go.
 
 // TestKVNestedTransactions verifies that trying to create nested
 // transactions returns an error.
 func TestKVNestedTransactions(t *testing.T) {
+	client := NewKV(newTestSender(func(call *Call) {}), nil)
+	client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+		if err := txn.RunTransaction(&TransactionOptions{}, func(txn *KV) error { return nil }); err == nil {
+			t.Errorf("expected error starting a nested transaction")
+		}
+		return nil
+	})
 }

@@ -72,7 +72,8 @@ func (s *singleCallSender) Send(call *Call) {
 			// Retry immediately on write-too-old.
 			return util.RetryReset, nil
 		case *proto.WriteIntentError:
-			// Backoff if necessary; otherwise reset for immediate retry (intent was pushed)
+			// Backoff if necessary; otherwise reset for immediate retry
+			// (intent was pushed).
 			if t.Resolved {
 				return util.RetryReset, nil
 			}

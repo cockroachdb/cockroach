@@ -141,12 +141,12 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 		header.Key, end, func(start, end proto.Key, config interface{}) error {
 			perm := config.(*proto.PermConfig)
 			if proto.NeedReadPerm(method) && !perm.CanRead(header.User) {
-				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
-					header.User, method, string(start), string(end), perm)
+				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
+					header.User, method, string(start), perm)
 			}
 			if proto.NeedWritePerm(method) && !perm.CanWrite(header.User) {
-				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
-					header.User, method, string(start), string(end), perm)
+				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
+					header.User, method, string(start), perm)
 			}
 			return nil
 		})

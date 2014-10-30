@@ -49,6 +49,7 @@ func newTestSender(handler func(*Call)) *testSender {
 }
 
 func (ts *testSender) Send(call *Call) {
+	call.Args.Header().UserPriority = gogoproto.Int32(-1)
 	call.Reply.Reset()
 	switch call.Method {
 	case proto.Put:
@@ -242,11 +243,11 @@ func TestTxnSenderTransactionAbortedError(t *testing.T) {
 	if _, ok := reply.GoError().(*proto.TransactionAbortedError); !ok {
 		t.Fatalf("expected txn aborted error; got %s", reply.GoError())
 	}
-	if bytes.Equal(ts.txn.ID, txnID) {
-		t.Errorf("expected txn abort/retry with different ID from %s: %s", txnID, ts.txn)
+	if ts.txn != nil {
+		t.Errorf("expected txn abort/retry to clear transaction")
 	}
-	if ts.txn.Priority != abortPri {
-		t.Errorf("expected priority to be upgraded to abort priority %d; got %d", abortPri, ts.txn.Priority)
+	if ts.minPriority != abortPri {
+		t.Errorf("expected txn sender minPriority to be upgraded to abort priority %d; got %d", abortPri, ts.minPriority)
 	}
 	if !ts.timestamp.Equal(abortTS) {
 		t.Errorf("expected timestamp to be %s; got %s", abortTS, ts.timestamp)

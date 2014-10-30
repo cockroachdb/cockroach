@@ -87,12 +87,16 @@ func (e *TransactionAbortedError) Error() string {
 // NewTransactionPushError initializes a new TransactionPushError.
 // Txn is the transaction which will be retried.
 func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
-	return &TransactionPushError{Txn: *txn, PusheeTxn: *pusheeTxn}
+	return &TransactionPushError{Txn: txn, PusheeTxn: *pusheeTxn}
 }
 
 // Error formats error.
 func (e *TransactionPushError) Error() string {
-	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
+	if e.Txn == nil {
+		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
+	} else {
+		return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
+	}
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.

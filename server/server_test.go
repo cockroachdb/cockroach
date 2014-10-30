@@ -37,16 +37,11 @@ var (
 	serverTestOnce sync.Once
 )
 
-func init() {
-	// We update these with the actual port once the servers
-	// have been launched for the purpose of this test.
-	*httpAddr = "127.0.0.1:0"
-	*rpcAddr = "127.0.0.1:0"
-}
-
 func startServer() *server {
 	serverTestOnce.Do(func() {
-		s, err := newServer()
+		// We update these with the actual port once the servers
+		// have been launched for the purpose of this test.
+		s, err := newServer("127.0.0.1:0", "", *maxOffset)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -54,13 +49,12 @@ func startServer() *server {
 		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
 			log.Fatal(err)
 		}
-		err = s.start(engines, true) // TODO(spencer): should shutdown server.
+		err = s.start(engines, "", "127.0.0.1:0", true) // TODO(spencer): should shutdown server.
 		if err != nil {
 			log.Fatalf("Could not start server: %s", err)
 		}
-
 		// Update the configuration variables to reflect the actual
-		// sockets bound during this test.
+		// ports bound.
 		*httpAddr = (*s.httpListener).Addr().String()
 		*rpcAddr = s.rpc.Addr().String()
 		log.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)

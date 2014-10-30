@@ -38,10 +38,8 @@ var TxnRetryOptions = util.RetryOptions{
 
 // TransactionOptions are parameters for use with KV.RunTransaction.
 type TransactionOptions struct {
-	Name         string // Concise desc of txn for debugging
-	User         string
-	UserPriority int32
-	Isolation    proto.IsolationType
+	Name      string // Concise desc of txn for debugging
+	Isolation proto.IsolationType
 }
 
 // KVSender is an interface for sending a request to a Key-Value
@@ -63,7 +61,14 @@ type Clock interface {
 // KV provides access to a KV store via Call() and Prepare() /
 // Flush().
 type KV struct {
-	User   string
+	// User is the default user to set on API calls. If User is set to
+	// non-empty in call arguments, this value is ignored.
+	User string
+	// UserPriority is the default user priority to set on API calls. If
+	// UserPriority is set non-zero in call arguments, this value is
+	// ignored.
+	UserPriority int32
+
 	sender KVSender
 	clock  Clock
 }
@@ -98,6 +103,12 @@ func (kv *KV) Sender() KVSender {
 // Call invokes the KV command synchronously and returns the response
 // and error, if applicable.
 func (kv *KV) Call(method string, args proto.Request, reply proto.Response) error {
+	if args.Header().User == "" {
+		args.Header().User = kv.User
+	}
+	if args.Header().UserPriority == nil && kv.UserPriority != 0 {
+		args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
+	}
 	call := &Call{
 		Method: method,
 		Args:   args,
@@ -127,8 +138,9 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	// Create a new KV for the transaction using a transactional KV sender.
 	txnSender := newTxnSender(kv.Sender(), kv.clock, opts)
 	txnKV := &KV{
-		User:   kv.User,
-		sender: txnSender,
+		User:         kv.User,
+		UserPriority: kv.UserPriority,
+		sender:       txnSender,
 	}
 	defer txnKV.Close()
 
@@ -221,10 +233,7 @@ func (kv *KV) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timest
 func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
 	reply := &proto.GetResponse{}
 	if err := kv.Call(proto.Get, &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: kv.User,
-		},
+		RequestHeader: proto.RequestHeader{Key: key},
 	}, reply); err != nil {
 		return nil, err
 	}
@@ -257,11 +266,8 @@ func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
 func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 	value.InitChecksum(key)
 	return kv.Call(proto.Put, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: kv.User,
-		},
-		Value: value,
+		RequestHeader: proto.RequestHeader{Key: key},
+		Value:         value,
 	}, &proto.PutResponse{})
 }
 
