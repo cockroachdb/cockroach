@@ -40,7 +40,7 @@ non-ascii bytes or spaces.
 
 // runGetZone invokes the REST API with GET action and key prefix as path.
 func runGetZone(cmd *commander.Command, args []string) {
-	runGetConfig(zoneKeyPrefix, cmd, args)
+	runGetConfig(zonePathPrefix, cmd, args)
 }
 
 // A CmdLsZones command displays a list of zone configs by prefix.
@@ -62,7 +62,7 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsZones(cmd *commander.Command, args []string) {
-	runLsConfigs(zoneKeyPrefix, cmd, args)
+	runLsConfigs(zonePathPrefix, cmd, args)
 }
 
 // A CmdRmZone command removes a zone config by prefix.
@@ -83,7 +83,7 @@ contains non-ascii bytes or spaces.
 // runRmZone invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmZone(cmd *commander.Command, args []string) {
-	runRmConfig(zoneKeyPrefix, cmd, args)
+	runRmConfig(zonePathPrefix, cmd, args)
 }
 
 // A CmdSetZone command creates a new or updates an existing zone
@@ -127,5 +127,5 @@ This feature can be taken advantage of to pre-split ranges.
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetZone(cmd *commander.Command, args []string) {
-	runSetConfig(zoneKeyPrefix, cmd, args)
+	runSetConfig(zonePathPrefix, cmd, args)
 }

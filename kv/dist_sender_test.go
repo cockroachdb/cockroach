@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Kathy Spradlin (kathyspradlin@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package kv
 
@@ -30,21 +31,22 @@ import (
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	n := gossip.NewSimulationNetwork(3, "unix", gossip.DefaultTestGossipInterval)
-	kv := NewDistKV(n.Nodes[0].Gossip)
-	if _, err := kv.getFirstRangeDescriptor(); err == nil {
+	ds := NewDistSender(n.Nodes[0].Gossip)
+	if _, err := ds.getFirstRangeDescriptor(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
 	}
 	expectedDesc := &proto.RangeDescriptor{}
 	expectedDesc.StartKey = proto.Key("a")
 	expectedDesc.EndKey = proto.Key("c")
 
-	// Add first RangeDescriptor to a node different from the node for this kv
-	// and ensure that this kv has the information within a given time.
+	// Add first RangeDescriptor to a node different from the node for
+	// this dist sender and ensure that this dist sender has the
+	// information within a given time.
 	n.Nodes[1].Gossip.AddInfo(
 		gossip.KeyFirstRangeDescriptor, *expectedDesc, time.Hour)
 	maxCycles := 10
 	n.SimulateNetwork(func(cycle int, network *gossip.SimulationNetwork) bool {
-		desc, err := kv.getFirstRangeDescriptor()
+		desc, err := ds.getFirstRangeDescriptor()
 		if err != nil {
 			if cycle >= maxCycles {
 				t.Errorf("could not get range descriptor after %d cycles", cycle)
@@ -64,7 +66,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 
 func TestVerifyPermissions(t *testing.T) {
 	n := gossip.NewSimulationNetwork(1, "unix", gossip.DefaultTestGossipInterval)
-	kv := NewDistKV(n.Nodes[0].Gossip)
+	ds := NewDistSender(n.Nodes[0].Gossip)
 	config1 := &proto.PermConfig{
 		Read:  []string{"read1", "readAll", "rw", "rwAll"},
 		Write: []string{"write1", "writeAll", "rw", "rwAll"}}
@@ -79,22 +81,20 @@ func TestVerifyPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
 	}
-	kv.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
+	ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
 
-	readMethods := storage.ReadMethods
-	writeMethods := storage.WriteMethods
-	readOnlyMethods := make([]string, 0, len(readMethods))
-	writeOnlyMethods := make([]string, 0, len(writeMethods))
-	readWriteMethods := make([]string, 0, len(readMethods)+len(writeMethods))
-	for _, readM := range readMethods {
-		if storage.IsReadOnly(readM) {
+	readOnlyMethods := make([]string, 0, len(proto.ReadMethods))
+	writeOnlyMethods := make([]string, 0, len(proto.WriteMethods))
+	readWriteMethods := make([]string, 0, len(proto.ReadMethods)+len(proto.WriteMethods))
+	for readM := range proto.ReadMethods {
+		if proto.IsReadOnly(readM) {
 			readOnlyMethods = append(readOnlyMethods, readM)
 		} else {
 			readWriteMethods = append(readWriteMethods, readM)
 		}
 	}
-	for _, writeM := range writeMethods {
-		if !storage.NeedReadPerm(writeM) {
+	for writeM := range proto.WriteMethods {
+		if !proto.NeedReadPerm(writeM) {
 			writeOnlyMethods = append(writeOnlyMethods, writeM)
 		}
 	}
@@ -143,7 +143,7 @@ func TestVerifyPermissions(t *testing.T) {
 
 	for _, test := range testData {
 		for _, method := range test.methods {
-			err := kv.verifyPermissions(
+			err := ds.verifyPermissions(
 				method,
 				&proto.RequestHeader{
 					User: test.user, Key: test.startKey, EndKey: test.endKey})

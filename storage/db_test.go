@@ -24,66 +24,95 @@ import (
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// testDB is an implementation of the DB interface which
-// passes all requests through to a single store.
-type testDB struct {
-	*BaseDB
-	store *Store
-	clock *hlc.Clock
+// testSender is an implementation of the client.KVSender interface
+// which passes all requests through to a single store. A map keeps
+// track of keys with intents for each transaction. Intents are
+// resolved on invocation of EndTransaction or InternalEndTxn. NOTE:
+// this does not properly handle resolving intents from DeleteRange
+// commands.
+type testSender struct {
+	store   *Store
+	intents map[string][]proto.Key
 }
 
-func newTestDB(store *Store) (*testDB, *hlc.ManualClock) {
-	manual := hlc.ManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	db := &testDB{store: store, clock: clock}
-	db.BaseDB = NewBaseDB(db.executeCmd)
-	return db, &manual
-}
-
-func (db *testDB) executeCmd(method string, args proto.Request, replyChan interface{}) {
-	reply := reflect.New(reflect.TypeOf(replyChan).Elem().Elem()).Interface().(proto.Response)
-	if rng := db.store.LookupRange(args.Header().Key, args.Header().EndKey); rng != nil {
-		args.Header().Replica = *rng.GetReplica()
-		db.store.ExecuteCmd(method, args, reply)
-	} else {
-		reply.Header().SetGoError(proto.NewRangeKeyMismatchError(args.Header().Key, args.Header().EndKey, nil))
-	}
-	reflect.ValueOf(replyChan).Send(reflect.ValueOf(reply))
-}
-
-// InternalEndTxn is a noop as the testDB implementation of DB doesn't
-// support transactions. However, in order to enable testing of range
-// splitting, it must execute the split trigger if one is specified.
-func (db *testDB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *proto.InternalEndTxnResponse {
-	replyChan := make(chan *proto.InternalEndTxnResponse, 1)
-	reply := &proto.InternalEndTxnResponse{}
-
-	// Lookup range.
-	if rng := db.store.LookupRange(args.Key, args.EndKey); rng != nil {
-		if args.Commit == true && args.SplitTrigger != nil {
-			batch := rng.rm.Engine().NewBatch()
-			if err := rng.splitTrigger(batch, args.SplitTrigger); err != nil {
-				reply.SetGoError(err)
-			} else {
-				reply.SetGoError(batch.Commit())
-			}
+// Send forwards the call to the single store. If the call is part of
+// a txn and is read-write, keep track of keys as intent. On txn end,
+// resolve all intents. This is a poor man's version of kv/coordinator,
+// but it serves the purposes of supporting tests in this package.
+// Since kv/ depends on storage/, we can't get access to a coordinator
+// sender from here.
+func (db *testSender) Send(call *client.Call) {
+	// Keep track of all intents.
+	// NOTE: this doesn't keep track of range intents.
+	txn := call.Args.Header().Txn
+	if proto.IsReadWrite(call.Method) && txn != nil && proto.IsTransactional(call.Method) {
+		if db.intents == nil {
+			db.intents = map[string][]proto.Key{}
 		}
-	} else {
-		reply.Header().SetGoError(proto.NewRangeKeyMismatchError(args.Header().Key, args.Header().EndKey, nil))
+		id := string(txn.ID)
+		db.intents[id] = append(db.intents[id], call.Args.Header().Key)
 	}
-	replyChan <- reply
-	return replyChan
+
+	// Handle BeginTransaction separately.
+	if call.Method == proto.BeginTransaction {
+		btArgs := call.Args.(*proto.BeginTransactionRequest)
+		txn = proto.NewTransaction(btArgs.Name, engine.KeyAddress(btArgs.Key),
+			btArgs.GetUserPriority(), btArgs.Isolation,
+			db.store.Clock().Now(), db.store.Clock().MaxOffset().Nanoseconds())
+		call.Reply.(*proto.BeginTransactionResponse).Txn = txn
+		return
+	}
+
+	// Forward call to range as command.
+	if rng := db.store.LookupRange(call.Args.Header().Key, call.Args.Header().EndKey); rng != nil {
+		call.Args.Header().Replica = *rng.GetReplica()
+		db.store.ExecuteCmd(call.Method, call.Args, call.Reply)
+	} else {
+		call.Reply.Header().SetGoError(proto.NewRangeKeyMismatchError(call.Args.Header().Key, call.Args.Header().EndKey, nil))
+	}
+
+	// Cleanup intents on end transaction.
+	if call.Reply.Header().GoError() == nil {
+		txn = nil
+		if call.Method == proto.EndTransaction {
+			txn = call.Reply.(*proto.EndTransactionResponse).Txn
+		} else if call.Method == proto.InternalEndTxn {
+			txn = call.Reply.(*proto.InternalEndTxnResponse).Txn
+		}
+		if txn != nil && txn.Status != proto.PENDING {
+			id := string(txn.ID)
+			for _, key := range db.intents[id] {
+				log.V(1).Infof("cleaning up intent %q for txn %s", key, txn)
+				reply := &proto.InternalResolveIntentResponse{}
+				db.Send(&client.Call{
+					Method: proto.InternalResolveIntent,
+					Args: &proto.InternalResolveIntentRequest{
+						RequestHeader: proto.RequestHeader{
+							Replica:   call.Args.Header().Replica,
+							Timestamp: txn.Timestamp,
+							Key:       key,
+							Txn:       txn,
+						},
+					},
+					Reply: reply,
+				})
+				if err := reply.GoError(); err != nil {
+					log.Warningf("failed to cleanup intent at %q: %s", key, err)
+				}
+			}
+			delete(db.intents, id)
+		}
+	}
 }
 
-// RunTransaction is a simple pass through to support testing of range splitting.
-func (db *testDB) RunTransaction(opts *TransactionOptions, retryable func(db DB) error) error {
-	return retryable(db)
-}
+// Close implements the client.KVSender interface.
+func (db *testSender) Close() {}
 
 type metaRecord struct {
 	key  proto.Key

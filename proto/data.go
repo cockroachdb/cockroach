@@ -50,6 +50,16 @@ type Key []byte
 // an encoded version.
 type EncodedKey []byte
 
+// MakeKey makes a new key which is the concatenation of the
+// given inputs, in order.
+func MakeKey(keys ...Key) Key {
+	byteSlices := make([][]byte, len(keys))
+	for i, k := range keys {
+		byteSlices[i] = []byte(k)
+	}
+	return Key(bytes.Join(byteSlices, nil))
+}
+
 func bytesNext(b []byte) []byte {
 	return bytes.Join([][]byte{b, []byte{0}}, nil)
 }
@@ -115,28 +125,23 @@ func (k Key) Compare(b interval.Comparable) int {
 // String returns a string-formatted version, with a maximum
 // key formatted for brevity as "\xff...".
 func (k Key) String() string {
-	if len(k) != KeyMaxLength {
-		return string(k)
+	if idx := bytes.Index(k, KeyMax); idx != -1 {
+		return string(MakeKey(k[:idx], Key("\xff..."), k[idx+KeyMaxLength:]))
 	}
-	for _, b := range k {
-		if b != byte(0xff) {
-			return string(k)
-		}
-	}
-	return "\xff..."
+	return string(k)
 }
 
 // The following methods implement the custom marshalling and
 // unmarshalling necessary to define gogoproto custom types.
 
 // Marshal implements the gogoproto Marshaler interface.
-func (k *Key) Marshal() ([]byte, error) {
-	return []byte(*k), nil
+func (k Key) Marshal() ([]byte, error) {
+	return []byte(k), nil
 }
 
 // Marshal implements the gogoproto Marshaler interface.
-func (k *EncodedKey) Marshal() ([]byte, error) {
-	return []byte(*k), nil
+func (k EncodedKey) Marshal() ([]byte, error) {
+	return []byte(k), nil
 }
 
 // Unmarshal implements the gogoproto Unmarshaler interface.
@@ -249,6 +254,31 @@ func (kv RawKeyValue) Compare(b llrb.Comparable) int {
 	return bytes.Compare(kv.Key, b.(KeyGetter).KeyGet())
 }
 
+// NewTransaction creates a new transaction. The transaction key is
+// composed using the specified baseKey (for locality with data
+// affected by the transaction) and a random UUID to guarantee
+// uniqueness. The specified user-level priority is combined with
+// a randomly chosen value to yield a final priority, used to settle
+// write conflicts in a way that avoids starvation of long-running
+// transactions (see Range.InternalPushTxn).
+func NewTransaction(name string, baseKey Key, userPriority int32,
+	isolation IsolationType, now Timestamp, maxOffset int64) *Transaction {
+	// Compute priority by adjusting based on userPriority factor.
+	priority := MakePriority(userPriority)
+	// Compute timestamp and max timestamp.
+	max := now
+	max.WallTime += maxOffset
+
+	return &Transaction{
+		Name:         name,
+		ID:           append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
+		Priority:     priority,
+		Isolation:    isolation,
+		Timestamp:    now,
+		MaxTimestamp: max,
+	}
+}
+
 // MakePriority generates a random priority value, biased by the
 // specified userPriority. If userPriority=100, the resulting
 // priority is 100x more likely to be probabilistically greater
@@ -258,8 +288,11 @@ func MakePriority(userPriority int32) int32 {
 	// be set by specifying priority < 1. The explicit priority is
 	// simply -userPriority in this case. This is hacky, but currently
 	// used for unittesting. Perhaps this should be documented and allowed.
-	if userPriority < 1 {
+	if userPriority < 0 {
 		return -userPriority
+	}
+	if userPriority == 0 {
+		userPriority = 1
 	}
 	// The idea here is to bias selection of a random priority from the
 	// range [1, 2^31-1) such that if userPriority=100, it's 100x more
@@ -284,19 +317,12 @@ func MD5Equal(a, b [md5.Size]byte) bool {
 	return true
 }
 
-// Restart reconfigures a transaction for restart. If the abort flag
-// is true, a new transaction ID is allocated; otherwise, the epoch is
-// incremented for an in-place retry. The timestamp of the transaction
-// on restart is set to the maximum of the transaction's timestamp and
-// the specified timestamp.
-func (t *Transaction) Restart(abort bool, userPriority, upgradePriority int32, timestamp Timestamp) {
-	if abort {
-		uu := uuid.New()
-		t.ID = append(append([]byte(nil), t.ID[:len(t.ID)-len(uu)]...), []byte(uu)...)
-		t.Epoch = 0
-	} else {
-		t.Epoch++
-	}
+// Restart reconfigures a transaction for restart. The epoch is
+// incremented for an in-place restart. The timestamp of the
+// transaction on restart is set to the maximum of the transaction's
+// timestamp and the specified timestamp.
+func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Timestamp) {
+	t.Epoch++
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}

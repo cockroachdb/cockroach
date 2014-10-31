@@ -48,19 +48,36 @@ message RangeKeyMismatchError {
   optional RangeDescriptor range = 3;
 }
 
+// A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
+// encountered a versioned value at existing_timestamp within the uncertainty
+// interval of the reader.
+// The read should be retried at existing_timestamp+1.
+message ReadWithinUncertaintyIntervalError {
+  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+}
+
 // A TransactionAbortedError indicates that the transaction was
 // aborted by another concurrent transaction.
 message TransactionAbortedError {
   optional Transaction txn = 1 [(gogoproto.nullable) = false];
 }
 
+// A TransactionPushError indicates that the transaction could not
+// continu because it encountered a write intent from another
+// transaction which it was unable to push.
+message TransactionPushError {
+  // txn can be null in the event the push error happened to a
+  // non-transactional method.
+  optional Transaction txn = 1;
+  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+}
+
 // A TransactionRetryError indicates that the transaction must be
 // retried, usually with an increased transaction timestamp. The
-// transaction struct to use is returned with the error. Backoff
-// indicates whether the retry should backoff or proceed immediately.
+// transaction struct to use is returned with the error.
 message TransactionRetryError {
   optional Transaction txn = 1 [(gogoproto.nullable) = false];
-  optional bool backoff = 2 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -95,15 +112,6 @@ message WriteTooOldError {
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
-// A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
-// encountered a versioned value at existing_timestamp within the uncertainty
-// interval of the reader.
-// The read should be retried at existing_timestamp+1.
-message ReadWithinUncertaintyIntervalError {
-  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
-}
-
 // Error is a union type containing all available errors.
 // NOTE: new error types must be added here.
 message Error {
@@ -111,10 +119,12 @@ message Error {
   optional NotLeaderError not_leader = 2;
   optional RangeNotFoundError range_not_found = 3;
   optional RangeKeyMismatchError range_key_mismatch = 4;
-  optional TransactionAbortedError transaction_aborted = 5;
-  optional TransactionRetryError transaction_retry = 6;
-  optional TransactionStatusError transaction_status = 7;
-  optional WriteIntentError write_intent = 8;
-  optional WriteTooOldError write_too_old = 9;
+  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 5;
+  optional TransactionAbortedError transaction_aborted = 6;
+  optional TransactionPushError transaction_push = 7;
+  optional TransactionRetryError transaction_retry = 8;
+  optional TransactionStatusError transaction_status = 9;
+  optional WriteIntentError write_intent = 10;
+  optional WriteTooOldError write_too_old = 11;
 }
 

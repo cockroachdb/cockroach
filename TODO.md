@@ -8,25 +8,20 @@
     further intents after a txn has already been aborted or its
     timestamp moved forward.
 
-* Reorganize the db interface to use a style more like Go's RPC
-  interface, where the client can either call methods synchronously
-  via DB.Call() error, or asynchronously via DB.Go() *Call. This
-  should make it much simpler to handle various error conditions at
-  intermediate steps.
+* Redirect clients if HTTP server is busy compared to others in the
+  cluster. Report node's load via gossip as part of a max
+  group. Measure node's load using a decaying stat. Verify redirect
+  behavior with http client.
 
-  - Use this new format to handle TransactionAbortedError at the
-    kv.DB and invoke db.coordinator.EndTxn(false) to clean up
-    intents.
+* Write a test for transaction starvation.
+
+* Write tests for client/kv_test.go, client/txn_sender_test.go.
+
+* Implement client batching and use it for range splitting.
 
 * In find mvcc split key, avoid illegal split keys such as meta1
   records and configuration keys. Probably ought to move to a single
   pass through the data instead of the weighted reservoir sample.
-
-* Eliminate use of binary-encoded keys
-
-* Store all values as MVCC
-
-* Inline proto.Value for latest MVCC version in the MVCCMetadata
 
 * Propagate errors from storage/id_alloc.go
 

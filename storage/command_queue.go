@@ -82,8 +82,10 @@ func (cq *CommandQueue) onEvicted(key, value interface{}) {
 // failed. readOnly is true if the requester is a read-only command;
 // false for read-write.
 func (cq *CommandQueue) GetWait(start, end proto.Key, readOnly bool, wg *sync.WaitGroup) {
+	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
+		start = end[:len(start)]
 	}
 	for _, c := range cq.cache.GetOverlaps(start, end) {
 		c := c.Value.(*cmd)

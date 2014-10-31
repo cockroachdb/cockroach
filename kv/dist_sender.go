@@ -23,6 +23,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -46,6 +47,13 @@ const (
 	// TODO(mrtracy): This value should be configurable.
 	rangeLookupMaxRanges = 8
 )
+
+var rpcRetryOpts = util.RetryOptions{
+	Backoff:     retryBackoff,
+	MaxBackoff:  maxRetryBackoff,
+	Constant:    2,
+	MaxAttempts: 0, // retry indefinitely
+}
 
 // A firstRangeMissingError indicates that the first range has not yet
 // been gossipped. This will be the case for a node which hasn't yet
@@ -72,12 +80,12 @@ func (n noNodeAddrsAvailError) Error() string {
 // CanRetry implements the Retryable interface.
 func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 
-// A DistKV provides methods to access Cockroach's monolithic,
+// A DistSender provides methods to access Cockroach's monolithic,
 // distributed key value store. Each method invocation triggers a
 // lookup or lookups to find replica metadata for implicated key
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
-type DistKV struct {
+type DistSender struct {
 	// gossip provides up-to-date information about the start of the
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
@@ -86,14 +94,14 @@ type DistKV struct {
 	rangeCache *RangeDescriptorCache
 }
 
-// NewDistKV returns a key-value datastore client which connects to the
+// NewDistSender returns a client.KVSender instance which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDistKV(gossip *gossip.Gossip) *DistKV {
-	kv := &DistKV{
+func NewDistSender(gossip *gossip.Gossip) *DistSender {
+	ds := &DistSender{
 		gossip: gossip,
 	}
-	kv.rangeCache = NewRangeDescriptorCache(kv)
-	return kv
+	ds.rangeCache = NewRangeDescriptorCache(ds)
+	return ds
 }
 
 // verifyPermissions verifies that the requesting user (header.User)
@@ -103,15 +111,22 @@ func NewDistKV(gossip *gossip.Gossip) *DistKV {
 // for permission. For example, if a scan crosses two permission
 // configs, both configs must allow read permissions or the entire
 // scan will fail.
-func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) error {
+func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHeader) error {
+	// The root user can always proceed.
+	if header.User == storage.UserRoot {
+		return nil
+	}
 	// Check for admin methods.
-	if storage.NeedAdminPerm(method) && header.User != storage.UserRoot {
-		return util.Errorf("user %q cannot invoke admin command %s", header.User, method)
+	if proto.NeedAdminPerm(method) {
+		if header.User != storage.UserRoot {
+			return util.Errorf("user %q cannot invoke admin command %s", header.User, method)
+		}
+		return nil
 	}
 	// Get permissions map from gossip.
-	permMap, err := kv.gossip.GetInfo(gossip.KeyConfigPermission)
+	permMap, err := ds.gossip.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
-		return err
+		return util.Errorf("permissions not available via gossip")
 	}
 	if permMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", method)
@@ -125,13 +140,13 @@ func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) 
 	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
 		header.Key, end, func(start, end proto.Key, config interface{}) error {
 			perm := config.(*proto.PermConfig)
-			if storage.NeedReadPerm(method) && !perm.CanRead(header.User) {
-				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
-					header.User, method, string(start), string(end), perm)
+			if proto.NeedReadPerm(method) && !perm.CanRead(header.User) {
+				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
+					header.User, method, string(start), perm)
 			}
-			if storage.NeedWritePerm(method) && !perm.CanWrite(header.User) {
-				return util.Errorf("user %q cannot invoke %s on range %q-%q; permissions: %+v",
-					header.User, method, string(start), string(end), perm)
+			if proto.NeedWritePerm(method) && !perm.CanWrite(header.User) {
+				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
+					header.User, method, string(start), perm)
 			}
 			return nil
 		})
@@ -139,19 +154,18 @@ func (kv *DistKV) verifyPermissions(method string, header *proto.RequestHeader) 
 
 // nodeIDToAddr uses the gossip network to translate from node ID
 // to a host:port address pair.
-func (kv *DistKV) nodeIDToAddr(nodeID int32) (net.Addr, error) {
+func (ds *DistSender) nodeIDToAddr(nodeID int32) (net.Addr, error) {
 	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
-	info, err := kv.gossip.GetInfo(nodeIDKey)
+	info, err := ds.gossip.GetInfo(nodeIDKey)
 	if info == nil || err != nil {
-		return nil, util.Errorf("Unable to lookup address for node: %v. Error: %v", nodeID, err)
+		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
 	}
 	return info.(net.Addr), nil
 }
 
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range.
-func (kv *DistKV) internalRangeLookup(key proto.Key,
-	info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
+func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
@@ -159,11 +173,10 @@ func (kv *DistKV) internalRangeLookup(key proto.Key,
 		},
 		MaxRanges: rangeLookupMaxRanges,
 	}
-	replyChan := make(chan *proto.InternalRangeLookupResponse, len(info.Replicas))
-	if err := kv.sendRPC(info, "Node.InternalRangeLookup", args, replyChan); err != nil {
+	reply := &proto.InternalRangeLookupResponse{}
+	if err := ds.sendRPC(info, "InternalRangeLookup", args, reply); err != nil {
 		return nil, err
 	}
-	reply := <-replyChan
 	if reply.Error != nil {
 		return nil, reply.GoError()
 	}
@@ -173,8 +186,8 @@ func (kv *DistKV) internalRangeLookup(key proto.Key,
 // getFirstRangeDescriptor returns the RangeDescriptor for the first range on
 // the cluster, which is retrieved from the gossip protocol instead of the
 // datastore.
-func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
-	infoI, err := kv.gossip.GetInfo(gossip.KeyFirstRangeDescriptor)
+func (ds *DistSender) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
+	infoI, err := ds.gossip.GetInfo(gossip.KeyFirstRangeDescriptor)
 	if err != nil {
 		return nil, firstRangeMissingError{}
 	}
@@ -189,7 +202,7 @@ func (kv *DistKV) getFirstRangeDescriptor() (*proto.RangeDescriptor, error) {
 // RangeDescriptors are returned with the intent of pre-caching
 // subsequent ranges which are likely to be requested soon by the
 // current workload.
-func (kv *DistKV) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
+func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, error) {
 	var (
 		// metadataKey is sent to InternalRangeLookup to find the
 		// RangeDescriptor which contains key.
@@ -203,7 +216,7 @@ func (kv *DistKV) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, er
 		// In this case, the requested key is stored in the cluster's first
 		// range. Return the first range, which is always gossiped and not
 		// queried from the datastore.
-		rd, err := kv.getFirstRangeDescriptor()
+		rd, err := ds.getFirstRangeDescriptor()
 		if err != nil {
 			return nil, err
 		}
@@ -211,83 +224,101 @@ func (kv *DistKV) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor, er
 	}
 	if bytes.HasPrefix(metadataKey, engine.KeyMeta1Prefix) {
 		// In this case, desc is the cluster's first range.
-		if desc, err = kv.getFirstRangeDescriptor(); err != nil {
+		if desc, err = ds.getFirstRangeDescriptor(); err != nil {
 			return nil, err
 		}
 	} else {
 		// Look up desc from the cache, which will recursively call into
-		// kv.getRangeDescriptor if it is not cached.
-		desc, err = kv.rangeCache.LookupRangeDescriptor(metadataKey)
+		// ds.getRangeDescriptor if it is not cached.
+		desc, err = ds.rangeCache.LookupRangeDescriptor(metadataKey)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return kv.internalRangeLookup(metadataKey, desc)
+	return ds.internalRangeLookup(metadataKey, desc)
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied
 // proto.Replica slice. First, replicas which have gossipped
 // addresses are corraled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
-func (kv *DistKV) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, replyChan interface{}) error {
+func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
 	}
-	// Build a map from replica address (if gossipped) to args struct
-	// with replica set in header.
-	argsMap := map[net.Addr]interface{}{}
-	for _, replica := range desc.Replicas {
-		addr, err := kv.nodeIDToAddr(replica.NodeID)
+
+	// Build a slice of replica addresses (if gossipped).
+	var addrs []net.Addr
+	replicaMap := map[string]*proto.Replica{}
+	for i := range desc.Replicas {
+		addr, err := ds.nodeIDToAddr(desc.Replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossipped", replica.NodeID)
+			log.V(1).Infof("node %d address is not gossipped", desc.Replicas[i].NodeID)
 			continue
 		}
-		// Copy the args value and set the replica in the header.
-		argsCopy := gogoproto.Clone(args).(proto.Request)
-		argsCopy.Header().Replica = replica
-		argsMap[addr] = argsCopy
+		addrs = append(addrs, addr)
+		replicaMap[addr.String()] = &desc.Replicas[i]
 	}
-	if len(argsMap) == 0 {
+	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}
 	}
+
+	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
 		N:               1,
+		Ordering:        rpc.OrderRandom, // TODO(spencer): change this to order stable if we know leader
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
 	}
-	return rpc.Send(argsMap, method, replyChan, rpcOpts, kv.gossip.RPCContext)
+	// getArgs clones the arguments on demand for all but the first replica.
+	firstArgs := true
+	getArgs := func(addr net.Addr) interface{} {
+		var a proto.Request
+		// Use the supplied args proto if this is our first address.
+		if firstArgs {
+			firstArgs = false
+			a = args
+		} else {
+			// Otherwise, copy the args value and set the replica in the header.
+			a = gogoproto.Clone(args).(proto.Request)
+		}
+		a.Header().Replica = *replicaMap[addr.String()]
+		return a
+	}
+	firstReply := true
+	getReply := func() interface{} {
+		if firstReply {
+			firstReply = false
+			return reply
+		}
+		return gogoproto.Clone(reply)
+	}
+	_, err := rpc.Send(rpcOpts, "Node."+method, addrs, getArgs, getReply, ds.gossip.RPCContext)
+	return err
 }
 
-// ExecuteCmd verifies permissions and looks up the appropriate range
-// based on the supplied key and sends the RPC according to the
-// specified options. executeRPC sends asynchronously and returns a
-// response value on the replyChan channel when the call is complete.
-func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
-	// Augment method with "Node." prefix.
-	method = "Node." + method
-
+// Send implements the clent.KVSender interface. It verifies
+// permissions and looks up the appropriate range based on the
+// supplied key and sends the RPC according to the specified
+// options.
+func (ds *DistSender) Send(call *client.Call) {
 	// Verify permissions.
-	if err := kv.verifyPermissions(method, args.Header()); err != nil {
-		sendError(err, replyChan)
+	if err := ds.verifyPermissions(call.Method, call.Args.Header()); err != nil {
+		call.Reply.Header().SetGoError(err)
 		return
 	}
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
-	retryOpts := util.RetryOptions{
-		Tag:         fmt.Sprintf("routing %s rpc", method),
-		Backoff:     retryBackoff,
-		MaxBackoff:  maxRetryBackoff,
-		Constant:    2,
-		MaxAttempts: 0, // retry indefinitely
-	}
+	retryOpts := rpcRetryOpts
+	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method)
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		desc, err := kv.rangeCache.LookupRangeDescriptor(args.Header().Key)
+		desc, err := ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key)
 		if err == nil {
-			err = kv.sendRPC(desc, method, args, replyChan)
+			err = ds.sendRPC(desc, call.Method, call.Args, call.Reply)
 		}
 		if err != nil {
-			log.Warningf("failed to invoke %s: %v", method, err)
+			log.Warningf("failed to invoke %s: %s", call.Method, err)
 			// If retryable, allow outer loop to retry. We treat a range not found
 			// or range key mismatch errors special. In these cases, we don't want
 			// to backoff on the retry, but reset the backoff loop so we can retry
@@ -295,7 +326,7 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 			switch err.(type) {
 			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it.
-				kv.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
+				ds.rangeCache.EvictCachedRangeDescriptor(call.Args.Header().Key)
 				// On addressing errors, don't backoff and retry immediately.
 				return util.RetryReset, nil
 			default:
@@ -307,9 +338,10 @@ func (kv *DistKV) ExecuteCmd(method string, args proto.Request, replyChan interf
 		return util.RetryBreak, err
 	})
 	if err != nil {
-		sendError(err, replyChan)
+		call.Reply.Header().SetGoError(err)
 	}
 }
 
-// Close is a noop for the distributed KV implementation.
-func (kv *DistKV) Close() {}
+// Close implements the client.KVSender interface. It's a noop for the
+// distributed sender.
+func (ds *DistSender) Close() {}

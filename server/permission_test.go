@@ -19,14 +19,15 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	yaml "gopkg.in/yaml.v1"
 )
 
 const testPermConfig = `
@@ -193,7 +194,8 @@ func ExamplePermContentTypes() {
 	httpServer := startAdminServer()
 	defer httpServer.Close()
 
-	config, err := proto.PermConfigFromYAML([]byte(testPermConfig))
+	config := &proto.PermConfig{}
+	err := yaml.Unmarshal([]byte(testPermConfig), config)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -210,21 +212,21 @@ func ExamplePermContentTypes() {
 
 		var body []byte
 		if test.contentType == "application/json" {
-			if body, err = config.ToJSON(); err != nil {
+			if body, err = json.MarshalIndent(config, "", "  "); err != nil {
 				fmt.Println(err)
 			}
 		} else {
-			if body, err = config.ToYAML(); err != nil {
+			if body, err = yaml.Marshal(config); err != nil {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", kv.HTTPAddr()+permKeyPrefix+key, bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, permPathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", kv.HTTPAddr()+permKeyPrefix+key, nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, permPathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)

@@ -30,12 +30,26 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// OrderingPolicy is an enum for ordering strategies when there
+// are multiple endpoints available.
+type OrderingPolicy int
+
+const (
+	// OrderStable uses endpoints in the order provided.
+	OrderStable = iota
+	// OrderRandom randomly orders available endpoints.
+	OrderRandom
+)
+
 // An Options structure describes the algorithm for sending RPCs to
 // one or more replicas, depending on error conditions and how many
 // successful responses are required.
 type Options struct {
 	// N is the number of successful responses required.
 	N int
+	// Ordering indicates how the available endpoints are ordered when
+	// deciding which to send to (if there are more than one).
+	Ordering OrderingPolicy
 	// SendNextTimeout is the duration after which RPCs are sent to
 	// other replicas in a set.
 	SendNextTimeout time.Duration
@@ -72,66 +86,70 @@ func (s SendError) Error() string {
 // CanRetry implements the Retryable interface.
 func (s SendError) CanRetry() bool { return s.canRetry }
 
-// Send sends one or more RPCs to clients specified by the keys of
-// argsMap (with corresponding values of the map as arguments)
-// according to availability and the number of required responses
-// specified by opts.N. One or more replies are sent on the replyChan
-// channel if successful; otherwise an error is returned on
-// failure. Note that on error, some replies may have been sent on the
-// channel. Send returns an error if the number of errors exceeds the
-// possibility of attaining the required successful responses.
-func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{},
-	opts Options, context *Context) error {
-	if opts.N < len(argsMap) {
-		return SendError{
-			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(argsMap), opts.N),
+// Send sends one or more method RPCs to clients specified by the
+// slice of endpoint addrs. Arguments for methods are obtained using
+// the supplied getArgs function. The number of required replies is
+// given by opts.N. Reply structs are obtained through the getReply()
+// function. On success, Send returns a slice of replies of length
+// opts.N. Otherwise, Send returns an error if and as soon as the
+// number of failed RPCs exceeds the available endpoints less the
+// number of required replies.
+func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
+	getReply func() interface{}, context *Context) ([]interface{}, error) {
+	if opts.N < len(addrs) {
+		return nil, SendError{
+			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
 			canRetry: false,
 		}
 	}
 
-	// Build the slice of clients.
-	var healthy, unhealthy []*Client
-	for addr, args := range argsMap {
-		client := NewClient(addr, nil, context)
-		delete(argsMap, addr)
-		argsMap[client.Addr()] = args
-		if client.IsHealthy() {
-			healthy = append(healthy, client)
-		} else {
-			unhealthy = append(unhealthy, client)
+	var clients []*Client
+	switch opts.Ordering {
+	case OrderStable:
+		for _, addr := range addrs {
+			clients = append(clients, NewClient(addr, nil, context))
+		}
+	case OrderRandom:
+		// Randomly permute order, but keep known-unhealthy clients last.
+		var healthy, unhealthy []*Client
+		for _, addr := range addrs {
+			client := NewClient(addr, nil, context)
+			if client.IsHealthy() {
+				healthy = append(healthy, client)
+			} else {
+				unhealthy = append(unhealthy, client)
+			}
+		}
+		for _, idx := range rand.Perm(len(healthy)) {
+			clients = append(clients, healthy[idx])
+		}
+		for _, idx := range rand.Perm(len(unhealthy)) {
+			clients = append(clients, unhealthy[idx])
 		}
 	}
-
-	// Randomly permute order, but keep known-unhealthy clients
-	// separate.
 	// TODO(spencer): going to need to also sort by affinity; closest
 	// ping time should win. Makes sense to have the rpc client/server
 	// heartbeat measure ping times. With a bit of seasoning, each
 	// node will be able to order the healthy replicas based on latency.
-	var clients []*Client
-	for _, idx := range rand.Perm(len(healthy)) {
-		clients = append(clients, healthy[idx])
-	}
-	for _, idx := range rand.Perm(len(unhealthy)) {
-		clients = append(clients, unhealthy[idx])
-	}
 
-	// Send RPCs to replicas as necessary to achieve opts.N successes.
+	replies := []interface{}(nil)
 	helperChan := make(chan interface{}, len(clients))
 	N := opts.N
 	errors := 0
 	retryableErrors := 0
 	successes := 0
 	index := 0
+
+	// Send RPCs to replicas as necessary to achieve opts.N successes.
 	for {
 		// Start clients up to N.
 		for ; index < N; index++ {
-			args := argsMap[clients[index].Addr()]
+			args := getArgs(clients[index].Addr())
 			if args == nil {
-				helperChan <- util.Errorf("no arguments in map (len %d) for client %s", len(argsMap), clients[index].Addr())
+				helperChan <- util.Errorf("nil arguments returned for client %s", clients[index].Addr())
 				continue
 			}
-			reply := proto.NewReply(replyChanI)
+			reply := getReply()
 			if log.V(1) {
 				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
@@ -151,7 +169,7 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				}
 				remainingRPCs := len(clients) - errors
 				if remainingRPCs < opts.N {
-					return SendError{
+					return nil, SendError{
 						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), t),
 						canRetry: retryableErrors+remainingRPCs > len(clients),
 					}
@@ -165,9 +183,9 @@ func Send(argsMap map[net.Addr]interface{}, method string, replyChanI interface{
 				if log.V(1) {
 					log.Infof("%s: successful reply: %+v", method, t)
 				}
-				proto.SendReply(replyChanI, t.(proto.Response))
+				replies = append(replies, t)
 				if successes == opts.N {
-					return nil
+					return replies, nil
 				}
 			}
 		case <-time.After(opts.SendNextTimeout):

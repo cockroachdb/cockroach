@@ -33,10 +33,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/client"
 	. "github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
@@ -44,22 +44,22 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-var (
-	testDB     *DB
-	serverAddr string
-	once       sync.Once
-)
-
-func startServer(t *testing.T) {
+// startServer returns the server, server address and a KV client for
+// access to the underlying database. The server should be closed by
+// the caller.
+func startServer(t *testing.T) (string, *httptest.Server, *client.KV) {
 	// Initialize engine, store, and localDB.
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	db, err := server.BootstrapCluster("test-cluster", e)
 	if err != nil {
-		t.Fatalf("could not bootstrap test cluster: %v", err)
+		t.Fatalf("could not bootstrap test cluster: %s", err)
 	}
-	server := httptest.NewServer(NewRESTServer(db))
-	serverAddr = server.Listener.Addr().String()
-	testDB = db
+	mux := http.NewServeMux()
+	mux.Handle(RESTPrefix, NewRESTServer(db))
+	mux.Handle(DBPrefix, NewDBServer(db.Sender()))
+	server := httptest.NewServer(mux)
+	addr := server.Listener.Addr().String()
+	return addr, server, db
 }
 
 // HTTP methods, defined in RFC 2616.
@@ -78,7 +78,9 @@ type protoResp struct {
 }
 
 func TestMethods(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
 	testKey, testVal := "Hello, 世界", "世界 is cool"
 	testCases := []struct {
 		method, key string
@@ -114,9 +116,9 @@ func TestMethods(t *testing.T) {
 		{methodGet, testKey, nil, http.StatusNotFound, nil},
 	}
 	for _, tc := range testCases {
-		resp, err := httpDo(tc.method, EntryPrefix+tc.key, tc.body)
+		resp, err := httpDo(addr, tc.method, EntryPrefix+tc.key, tc.body)
 		if err != nil {
-			t.Errorf("[%s] %s: error making request: %v", tc.method, tc.key, err)
+			t.Errorf("[%s] %s: error making request: %s", tc.method, tc.key, err)
 			continue
 		}
 		defer resp.Body.Close()
@@ -131,7 +133,7 @@ func TestMethods(t *testing.T) {
 		}
 		var pr protoResp
 		if err := json.NewDecoder(resp.Body).Decode(&pr); err != nil {
-			t.Errorf("[%s] %s: could not json decode response body: %v", tc.method, tc.key, err)
+			t.Errorf("[%s] %s: could not json decode response body: %s", tc.method, tc.key, err)
 			continue
 		}
 		if !bytes.Equal(pr.Value.Bytes, tc.resp) {
@@ -149,9 +151,11 @@ func TestMethods(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
 	// Create range of keys (with counters interspersed).
-	baseURL := "http://" + serverAddr
+	baseURL := "http://" + addr
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("key_%.2d", i)
 		val := fmt.Sprintf("value_%.2d", i)
@@ -168,7 +172,7 @@ func TestRange(t *testing.T) {
 	url := fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, RangePrefix, start, end)
 	var scan proto.ScanResponse
 	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
-		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %s", err)
 	}
 	for i, row := range scan.Rows {
 		n := i + start
@@ -182,7 +186,7 @@ func TestRange(t *testing.T) {
 	url = fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d&limit=%d", baseURL, RangePrefix, start, end, limit)
 	scan = proto.ScanResponse{}
 	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
-		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %s", err)
 	}
 	if len(scan.Rows) != limit {
 		t.Errorf("expected number of rows returned to be %d; got %d", limit, len(scan.Rows))
@@ -195,9 +199,9 @@ func TestRange(t *testing.T) {
 	}
 	// Delete limit of that range. Start: 5, end: 99, limit: 25 –> keys 5-30 deleted.
 	path := fmt.Sprintf("%s?start=key_%.2d&end=key_%.2d&limit=%d", RangePrefix, start, end, limit)
-	resp, err := httpDo(methodDelete, path, nil)
+	resp, err := httpDo(addr, methodDelete, path, nil)
 	if err != nil {
-		t.Errorf("error attempting to delete range: %v", err)
+		t.Errorf("error attempting to delete range: %s", err)
 	}
 	defer resp.Body.Close()
 	checkStatus(resp, t)
@@ -206,7 +210,7 @@ func TestRange(t *testing.T) {
 	url = fmt.Sprintf("%s%s?start=key_%.2d&end=key_%.2d", baseURL, RangePrefix, start, end)
 	scan = proto.ScanResponse{}
 	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
-		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %s", err)
 	}
 	numRows := end - limit
 	if len(scan.Rows) != numRows {
@@ -225,9 +229,9 @@ func TestRange(t *testing.T) {
 	// Delete remaining range.
 	start, end = 0, 99
 	path = fmt.Sprintf("%s?start=key_%.2d&end=key_%.2d", RangePrefix, start, end)
-	resp, err = httpDo(methodDelete, path, nil)
+	resp, err = httpDo(addr, methodDelete, path, nil)
 	if err != nil {
-		t.Errorf("error attempting to delete range: %v", err)
+		t.Errorf("error attempting to delete range: %s", err)
 	}
 	defer resp.Body.Close()
 	checkStatus(resp, t)
@@ -235,7 +239,7 @@ func TestRange(t *testing.T) {
 	// Query key range.
 	scan = proto.ScanResponse{}
 	if err := json.NewDecoder(strings.NewReader(getURL(url, t))).Decode(&scan); err != nil {
-		t.Errorf("unable to decode JSON into proto.ScanResponse: %v", err)
+		t.Errorf("unable to decode JSON into proto.ScanResponse: %s", err)
 	}
 	if len(scan.Rows) != 0 {
 		t.Errorf("expected zero rows in response, got %d:", len(scan.Rows))
@@ -275,13 +279,15 @@ func checkStatus(resp *http.Response, t *testing.T) {
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		t.Errorf("could not read response body: %v", err)
+		t.Errorf("could not read response body: %s", err)
 	}
 	t.Errorf("expected 200 OK; got %d: %s", resp.StatusCode, string(b))
 }
 
 func TestIncrement(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
 	testKey := "Hello, 世界"
 	testCases := []struct {
 		method, key     string
@@ -306,9 +312,9 @@ func TestIncrement(t *testing.T) {
 		if tc.statusCode == http.StatusOK && tc.method == methodPost {
 			body = strings.NewReader(strconv.Itoa(tc.val))
 		}
-		resp, err := httpDo(tc.method, CounterPrefix+tc.key, body)
+		resp, err := httpDo(addr, tc.method, CounterPrefix+tc.key, body)
 		if err != nil {
-			t.Errorf("[%s] %s: error making request: %v", tc.method, tc.key, err)
+			t.Errorf("[%s] %s: error making request: %s", tc.method, tc.key, err)
 			continue
 		}
 		defer resp.Body.Close()
@@ -325,7 +331,7 @@ func TestIncrement(t *testing.T) {
 		}
 		var incResp proto.IncrementResponse
 		if err := json.NewDecoder(resp.Body).Decode(&incResp); err != nil {
-			t.Errorf("[%s] %s: could not decode response body: %v", tc.method, tc.key, err)
+			t.Errorf("[%s] %s: could not decode response body: %s", tc.method, tc.key, err)
 			continue
 		}
 		if incResp.NewValue != tc.resp {
@@ -340,6 +346,9 @@ func TestIncrement(t *testing.T) {
 // TODO(spencer): we need to ensure proper permissions through the
 // HTTP API.
 func TestSystemKeys(t *testing.T) {
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
 	// Compute expected system key.
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
@@ -361,11 +370,11 @@ func TestSystemKeys(t *testing.T) {
 	// Manipulate the meta1 key.
 	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
 	encMeta1Key := url.QueryEscape(string(metaKey))
-	url := "http://" + serverAddr + EntryPrefix + encMeta1Key
+	url := "http://" + addr + EntryPrefix + encMeta1Key
 	resp := getURL(url, t)
 	var pr protoResp
 	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
-		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+		t.Fatalf("could not unmarshal response %q: %s", resp, err)
 	}
 	if !bytes.Equal(pr.Value.Bytes, protoBytes) {
 		t.Fatalf("expected %q; got %q", string(protoBytes), pr.Value.Bytes)
@@ -375,7 +384,7 @@ func TestSystemKeys(t *testing.T) {
 	resp = getURL(url, t)
 	pr = protoResp{}
 	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
-		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+		t.Fatalf("could not unmarshal response %q: %s", resp, err)
 	}
 	if string(pr.Value.Bytes) != val {
 		t.Fatalf("expected %q; got %q", val, string(pr.Value.Bytes))
@@ -383,27 +392,29 @@ func TestSystemKeys(t *testing.T) {
 }
 
 func TestKeysAndBodyArePreserved(t *testing.T) {
-	once.Do(func() { startServer(t) })
+	addr, server, db := startServer(t)
+	defer server.Close()
+
 	encKey := "%00some%2Fkey%20that%20encodes%E4%B8%96%E7%95%8C"
 	encBody := "%00some%2FBODY%20that%20encodes"
-	url := "http://" + serverAddr + EntryPrefix + encKey
+	url := "http://" + addr + EntryPrefix + encKey
 	postURL(url, strings.NewReader(encBody), t)
 	resp := getURL(url, t)
 	var pr protoResp
 	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
-		t.Fatalf("could not unmarshal response %q: %v", resp, err)
+		t.Fatalf("could not unmarshal response %q: %s", resp, err)
 	}
 	if !bytes.Equal([]byte(encBody), pr.Value.Bytes) {
 		t.Fatalf("expected body to be %q; got %q", encBody, string(pr.Value.Bytes))
 	}
-	gr := <-testDB.Get(&proto.GetRequest{
+	gr := &proto.GetResponse{}
+	if err := db.Call(proto.Get, &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  proto.Key("\x00some/key that encodes世界"),
 			User: storage.UserRoot,
 		},
-	})
-	if gr.Error != nil {
-		t.Errorf("unable to fetch values from local db: %v", gr.Error)
+	}, gr); err != nil {
+		t.Errorf("unable to fetch values from local db: %s", err)
 	}
 	if !bytes.Equal(gr.Value.Bytes, []byte(encBody)) {
 		t.Errorf("expected %q; got %q", encBody, gr.Value.Bytes)
@@ -422,7 +433,6 @@ func postURL(url string, body io.Reader, t *testing.T) {
 }
 
 func getURL(url string, t *testing.T) string {
-	once.Do(func() { startServer(t) })
 	resp, err := http.Get(url)
 	defer resp.Body.Close()
 	if err != nil {
@@ -439,8 +449,8 @@ func getURL(url string, t *testing.T) string {
 	return string(b)
 }
 
-func httpDo(method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, "http://"+serverAddr+path, body)
+func httpDo(addr, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, "http://"+addr+path, body)
 	if err != nil {
 		return nil, err
 	}

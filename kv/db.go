@@ -18,122 +18,85 @@
 package kv
 
 import (
+	"io/ioutil"
+	"net/http"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util"
 )
 
-// KV is an interface for routing key-value DB commands. This
-// package includes both local and distributed KV implementations.
-type KV interface {
-	// ExecuteCmd executes the specified command (method + args) and
-	// sends a reply on the provided channel.
-	ExecuteCmd(method string, args proto.Request, replyChan interface{})
-	// Close provides implementation-specific cleanup.
-	Close()
+const (
+	// DBPrefix is the prefix for the key-value database endpoint used
+	// to interact with the key-value datastore via HTTP RPC.
+	DBPrefix = client.KVDBEndpoint
+)
+
+var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
+
+// A DBServer provides an HTTP server endpoint serving the key-value API.
+// It accepts either JSON or serialized protobuf content types.
+type DBServer struct {
+	sender client.KVSender
 }
 
-// A DB is the kv package implementation of the storage.DB
-// interface. Each of its methods creates a channel for the response
-// then invokes executeCmd on the underlying KV interface. KV
-// implementations include local (DB) and distributed (DistKV). A
-// kv.DB incorporates transaction management.
-type DB struct {
-	*storage.BaseDB
-	kv          KV           // Local or distributed KV implementation
-	clock       *hlc.Clock   // Time signal
-	coordinator *coordinator // Coordinates transaction states for clients
+// NewDBServer allocates and returns a new DBServer.
+func NewDBServer(sender client.KVSender) *DBServer {
+	return &DBServer{sender: sender}
 }
 
-// NewDB returns a key-value implementation of storage.DB which
-// connects to the Cockroach cluster via the supplied kv.KV instance.
-func NewDB(kv KV, clock *hlc.Clock) *DB {
-	db := &DB{
-		kv:    kv,
-		clock: clock,
+// ServeHTTP serves the key-value API by treating the request URL path
+// as the method, the request body as the arguments, and sets the
+// response body as the method reply. The request body is unmarshalled
+// into arguments based on the Content-Type request header. Protobuf
+// and JSON-encoded requests are supported. The response body is
+// encoded according the the request's Accept header, or if not
+// present, in the same format as the request's incoming Content-Type
+// header.
+func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	method := r.URL.Path
+	if !strings.HasPrefix(method, DBPrefix) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
 	}
-	db.BaseDB = storage.NewBaseDB(db.executeCmd)
-	db.coordinator = newCoordinator(db, db.clock)
-	return db
-}
-
-// Close calls coordinator.Close(), stopping any ongoing transaction
-// heartbeats.
-func (db *DB) Close() {
-	db.coordinator.Close()
-	db.kv.Close()
-}
-
-// executeCmd adds the request to the transaction coordinator and
-// passes the command to the underlying KV implementation.
-func (db *DB) executeCmd(method string, args proto.Request, replyChan interface{}) {
-	db.coordinator.AddRequest(method, args.Header())
-	db.kv.ExecuteCmd(method, args, replyChan)
-}
-
-// BeginTransaction starts a transaction by initializing a new
-// Transaction proto using the contents of the request. Note that this
-// method does not call through to the key value interface but instead
-// services it directly, as creating a new transaction requires only
-// access to the node's clock. Nothing must be read or written.
-func (db *DB) BeginTransaction(args *proto.BeginTransactionRequest) <-chan *proto.BeginTransactionResponse {
-	txn := storage.NewTransaction(args.Name, args.Key, args.GetUserPriority(), args.Isolation, db.clock)
-	reply := &proto.BeginTransactionResponse{
-		ResponseHeader: proto.ResponseHeader{
-			Timestamp: txn.Timestamp,
-		},
-		Txn: txn,
+	method = strings.TrimPrefix(method, DBPrefix)
+	if !proto.IsPublic(method) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
 	}
-	replyChan := make(chan *proto.BeginTransactionResponse, 1)
-	replyChan <- reply
-	return replyChan
-}
 
-// EndTransaction either commits or aborts an ongoing transaction by
-// executing an EndTransaction command on the KV. The reply is
-// intercepted here in order to inform the transaction coordinator of
-// the final state of the transaction.
-func (db *DB) EndTransaction(args *proto.EndTransactionRequest) <-chan *proto.EndTransactionResponse {
-	interceptChan := make(chan *proto.EndTransactionResponse, 1)
-	replyChan := make(chan *proto.EndTransactionResponse, 1)
-	go func() {
-		db.Executor(storage.EndTransaction, args, interceptChan)
-		// Intercept the reply and end transaction on coordinator
-		// depending on final state.
-		reply := <-interceptChan
-		if reply.Error == nil && reply.Txn.Status != proto.PENDING {
-			db.coordinator.EndTxn(reply.Txn)
-		}
-		// Go ahead and return the result to the client.
-		replyChan <- reply
-	}()
-	return replyChan
-}
+	// Unmarshal the request.
+	reqBody, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	args, reply, err := proto.CreateArgsAndReply(method)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-// InternalEndTxn intercepts the normal reply to inform the
-// transaction coordinator of the final state of the transaction so it
-// can resolve intents.
-func (db *DB) InternalEndTxn(args *proto.InternalEndTxnRequest) <-chan *proto.InternalEndTxnResponse {
-	interceptChan := make(chan *proto.InternalEndTxnResponse, 1)
-	replyChan := make(chan *proto.InternalEndTxnResponse, 1)
-	go func() {
-		db.Executor(storage.InternalEndTxn, args, interceptChan)
-		// Intercept the reply and end transaction on coordinator
-		// depending on final state.
-		reply := <-interceptChan
-		if reply.Error == nil && reply.Txn.Status != proto.PENDING {
-			db.coordinator.EndTxn(reply.Txn)
-		}
-		// Go ahead and return the result to the client.
-		replyChan <- reply
-	}()
-	return replyChan
-}
+	// Create a call and invoke through sender.
+	call := &client.Call{
+		Method: method,
+		Args:   args,
+		Reply:  reply,
+	}
+	s.sender.Send(call)
 
-// RunTransaction executes retryable in the context of a distributed
-// transaction.
-// TODO(Spencer): write or copy a more descriptive comment here as various
-// references to this comment exist.
-func (db *DB) RunTransaction(opts *storage.TransactionOptions, retryable func(db storage.DB) error) error {
-	return runTransaction(db, opts, retryable)
+	// Marshal the response.
+	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(body)
 }

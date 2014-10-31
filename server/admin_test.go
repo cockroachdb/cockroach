@@ -26,7 +26,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -46,9 +45,9 @@ func startAdminServer() *httptest.Server {
 	admin.RegisterHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	if strings.HasPrefix(httpServer.URL, "http://") {
-		*kv.Addr = strings.TrimPrefix(httpServer.URL, "http://")
+		*addr = strings.TrimPrefix(httpServer.URL, "http://")
 	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		*kv.Addr = strings.TrimPrefix(httpServer.URL, "https://")
+		*addr = strings.TrimPrefix(httpServer.URL, "https://")
 	}
 	return httpServer
 }
@@ -83,7 +82,7 @@ func getJSON(url string) (interface{}, error) {
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
 	s := startAdminServer()
-	jI, err := getJSON(s.URL + debugKeyPrefix + "vars")
+	jI, err := getJSON(s.URL + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -100,7 +99,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
 	s := startAdminServer()
-	body, err := getText(s.URL + debugKeyPrefix + "pprof/block")
+	body, err := getText(s.URL + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}

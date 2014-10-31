@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -34,7 +35,7 @@ import (
 const (
 	// RESTPrefix is the prefix for RESTful endpoints used to
 	// interact directly with the key-value datastore.
-	RESTPrefix = "/kv/"
+	RESTPrefix = "/kv/rest/"
 	// EntryPrefix is the prefix for endpoints that interact with individual key-value pairs directly.
 	EntryPrefix = RESTPrefix + "entry/"
 	// RangePrefix is the prefix for endpoints that interact with a range of key-value pairs.
@@ -44,10 +45,10 @@ const (
 )
 
 // Function signture for an HTTP handler that only takes a writer and a request
-type actionHandler func(*Server, http.ResponseWriter, *http.Request)
+type actionHandler func(*RESTServer, http.ResponseWriter, *http.Request)
 
 // Function signture for an HTTP handler that takes a writer and a request and a storage key
-type actionKeyHandler func(*Server, http.ResponseWriter, *http.Request, proto.Key)
+type actionKeyHandler func(*RESTServer, http.ResponseWriter, *http.Request, proto.Key)
 
 // HTTP methods, defined in RFC 2616.
 const (
@@ -64,39 +65,39 @@ var routingTable = map[string]map[string]actionHandler{
 	// TODO(andybons): For Entry and Counter prefixes, return JSON-ified
 	// response with option for “raw” value by passing ?raw=true.
 	EntryPrefix: {
-		methodGet:    keyedAction(EntryPrefix, (*Server).handleGetAction),
-		methodPut:    keyedAction(EntryPrefix, (*Server).handlePutAction),
-		methodPost:   keyedAction(EntryPrefix, (*Server).handlePutAction),
-		methodDelete: keyedAction(EntryPrefix, (*Server).handleDeleteAction),
-		methodHead:   keyedAction(EntryPrefix, (*Server).handleHeadAction),
+		methodGet:    keyedAction(EntryPrefix, (*RESTServer).handleGetAction),
+		methodPut:    keyedAction(EntryPrefix, (*RESTServer).handlePutAction),
+		methodPost:   keyedAction(EntryPrefix, (*RESTServer).handlePutAction),
+		methodDelete: keyedAction(EntryPrefix, (*RESTServer).handleDeleteAction),
+		methodHead:   keyedAction(EntryPrefix, (*RESTServer).handleHeadAction),
 	},
 	RangePrefix: {
 		// TODO(andybons): HEAD action handler.
-		methodGet:    (*Server).handleRangeAction,
-		methodDelete: (*Server).handleRangeAction,
+		methodGet:    (*RESTServer).handleRangeAction,
+		methodDelete: (*RESTServer).handleRangeAction,
 	},
 	CounterPrefix: {
-		methodHead:   keyedAction(CounterPrefix, (*Server).handleHeadAction),
-		methodGet:    keyedAction(CounterPrefix, (*Server).handleCounterAction),
-		methodPost:   keyedAction(CounterPrefix, (*Server).handleCounterAction),
-		methodDelete: keyedAction(CounterPrefix, (*Server).handleDeleteAction),
+		methodHead:   keyedAction(CounterPrefix, (*RESTServer).handleHeadAction),
+		methodGet:    keyedAction(CounterPrefix, (*RESTServer).handleCounterAction),
+		methodPost:   keyedAction(CounterPrefix, (*RESTServer).handleCounterAction),
+		methodDelete: keyedAction(CounterPrefix, (*RESTServer).handleDeleteAction),
 	},
 }
 
-// A Server provides a RESTful HTTP API to interact with
+// A RESTServer provides a RESTful HTTP API to interact with
 // an underlying key-value store.
-type Server struct {
-	db storage.DB // Key-value database client
+type RESTServer struct {
+	db *client.KV // Key-value database client
 }
 
 // NewRESTServer allocates and returns a new server.
-func NewRESTServer(db storage.DB) *Server {
-	return &Server{db: db}
+func NewRESTServer(db *client.KV) *RESTServer {
+	return &RESTServer{db: db}
 }
 
 // ServeHTTP satisfies the http.Handler interface and arbitrates requests
 // to the appropriate function based on the request’s HTTP method.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *RESTServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for endPoint, epRoutes := range routingTable {
 		if strings.HasPrefix(r.URL.Path, endPoint) {
 			epHandler := epRoutes[r.Method]
@@ -125,7 +126,7 @@ func writeJSON(w http.ResponseWriter, statusCode int, v interface{}) {
 // extracts the key from the request and passes it on to the handler.
 // The closure is then returned for later execution.
 func keyedAction(pathPrefix string, act actionKeyHandler) actionHandler {
-	return func(s *Server, w http.ResponseWriter, r *http.Request) {
+	return func(s *RESTServer, w http.ResponseWriter, r *http.Request) {
 		key, err := dbKey(r.URL.Path, pathPrefix)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -153,7 +154,7 @@ const (
 	rangeParamLimit = "limit"
 )
 
-func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
+func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 	// TODO(andybons): Allow the client to specify range parameters via
 	// request headers as well, allowing query parameters to override the
 	// range headers if necessary.
@@ -186,27 +187,30 @@ func (s *Server) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 		EndKey: endKey,
 		User:   storage.UserRoot,
 	}
-	var results interface{}
+	var results proto.Response
 	if r.Method == methodGet {
 		scanReq := &proto.ScanRequest{RequestHeader: reqHeader}
 		if limit > 0 {
 			scanReq.MaxResults = limit
 		}
-		results = <-s.db.Scan(scanReq)
+		results = &proto.ScanResponse{}
+		err = s.db.Call(proto.Scan, scanReq, results)
 	} else if r.Method == methodDelete {
 		deleteReq := &proto.DeleteRangeRequest{RequestHeader: reqHeader}
 		if limit > 0 {
 			deleteReq.MaxEntriesToDelete = limit
 		}
-		results = <-s.db.DeleteRange(deleteReq)
+		results = &proto.DeleteRangeResponse{}
+		err = s.db.Call(proto.DeleteRange, deleteReq, results)
 	}
-	if results == nil {
-		panic("results from range operation cannot be nil")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	writeJSON(w, http.StatusOK, results)
 }
 
-func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	// GET Requests are just an increment with 0 value.
 	var inputVal int64
 
@@ -224,86 +228,88 @@ func (s *Server) handleCounterAction(w http.ResponseWriter, r *http.Request, key
 		}
 	}
 
-	gr := <-s.db.Increment(&proto.IncrementRequest{
+	ir := &proto.IncrementResponse{}
+	if err := s.db.Call(proto.Increment, &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 		Increment: inputVal,
-	})
-	status := http.StatusOK
-	if gr.Error != nil {
-		status = http.StatusInternalServerError
+	}, ir); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	writeJSON(w, status, gr)
+	writeJSON(w, http.StatusOK, ir)
 }
 
-func (s *Server) handlePutAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
-	pr := <-s.db.Put(&proto.PutRequest{
+	pr := &proto.PutResponse{}
+	if err := s.db.Call(proto.Put, &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
 		Value: proto.Value{Bytes: b},
-	})
-	status := http.StatusOK
-	if pr.Error != nil {
-		status = http.StatusInternalServerError
+	}, pr); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	writeJSON(w, status, pr)
+	writeJSON(w, http.StatusOK, pr)
 }
 
-func (s *Server) handleGetAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
-	gr := <-s.db.Get(&proto.GetRequest{
+func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+	gr := &proto.GetResponse{}
+	if err := s.db.Call(proto.Get, &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
-	})
-	status := http.StatusOK
-	if gr.Error != nil {
-		status = http.StatusInternalServerError
+	}, gr); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	// An empty key will not be nil, but have zero length.
+	status := http.StatusOK
 	if gr.Value == nil {
 		status = http.StatusNotFound
 	}
 	writeJSON(w, status, gr)
 }
 
-func (s *Server) handleHeadAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
-	cr := <-s.db.Contains(&proto.ContainsRequest{
+func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+	cr := &proto.ContainsResponse{}
+	if err := s.db.Call(proto.Contains, &proto.ContainsRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
-	})
-	status := http.StatusOK
-	if cr.Error != nil {
-		status = http.StatusInternalServerError
+	}, cr); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	status := http.StatusOK
 	if !cr.Exists {
 		status = http.StatusNotFound
 	}
 	writeJSON(w, status, cr)
 }
 
-func (s *Server) handleDeleteAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
-	dr := <-s.db.Delete(&proto.DeleteRequest{
+func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
+	dr := &proto.DeleteResponse{}
+	if err := s.db.Call(proto.Delete, &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  key,
 			User: storage.UserRoot,
 		},
-	})
-	status := http.StatusOK
-	if dr.Error != nil {
-		status = http.StatusInternalServerError
+	}, dr); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	writeJSON(w, status, dr)
+	writeJSON(w, http.StatusOK, dr)
 }

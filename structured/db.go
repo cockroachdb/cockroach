@@ -19,8 +19,8 @@
 package structured
 
 import (
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -36,12 +36,12 @@ type DB interface {
 // Cockroach kv client API.
 type structuredDB struct {
 	// kvDB is a client to the monolithic key-value map.
-	kvDB storage.DB
+	kvDB *client.KV
 }
 
 // NewDB returns a key-value datastore client which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDB(kvDB storage.DB) DB {
+func NewDB(kvDB *client.KV) DB {
 	return &structuredDB{kvDB: kvDB}
 }
 
@@ -52,16 +52,16 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 		return err
 	}
 	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key))
-	return storage.PutI(db.kvDB, k, s)
+	return db.kvDB.PutI(k, s)
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	return (<-db.kvDB.Delete(&proto.DeleteRequest{
+	return db.kvDB.Call(proto.Delete, &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
 		},
-	})).GoError()
+	}, &proto.DeleteResponse{})
 }
 
 // GetSchema returns the Schema with the given key, or nil if
@@ -70,7 +70,7 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	s := &Schema{}
 	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(key))
-	found, _, err := storage.GetI(db.kvDB, k, s)
+	found, _, err := db.kvDB.GetI(k, s)
 	if err != nil || !found {
 		s = nil
 	}

@@ -25,21 +25,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// startTestWriter creates a writer which intiates a sequence of
+// setTestRetryOptions sets client retry options for speedier testing.
+func setTestRetryOptions() {
+	client.TxnRetryOptions = util.RetryOptions{
+		Backoff:    1 * time.Millisecond,
+		MaxBackoff: 10 * time.Millisecond,
+		Constant:   2,
+	}
+}
+
+// startTestWriter creates a writer which initiates a sequence of
 // transactions, each which writes up to 10 times to random keys with
 // random values. If not nil, txnChannel is written to every time a
 // new transaction starts.
-func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
+func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup, retries *int32,
 	txnChannel chan struct{}, done <-chan struct{}, t *testing.T) {
 	src := rand.New(rand.NewSource(i))
-	for {
+	for j := 0; ; j++ {
+		txnOpts := &client.TransactionOptions{Name: fmt.Sprintf("concurrent test %d:%d", i, j)}
 		select {
 		case <-done:
 			if wg != nil {
@@ -47,16 +57,8 @@ func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 			}
 			return
 		default:
-			txnOpts := &storage.TransactionOptions{
-				Name: fmt.Sprintf("concurrent test %d", i),
-				Retry: &util.RetryOptions{
-					Backoff:    1 * time.Millisecond,
-					MaxBackoff: 10 * time.Millisecond,
-					Constant:   2,
-				},
-			}
 			first := true
-			err := db.RunTransaction(txnOpts, func(txn storage.DB) error {
+			err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {
@@ -66,10 +68,11 @@ func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := []byte(util.RandString(src, 10))
 					val := []byte(util.RandString(src, int(src.Int31n(valBytes))))
-					putR := <-txn.Put(&proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}})
-					if putR.GoError() != nil {
-						log.Infof("experienced an error in routine %d: %s", i, putR.GoError())
-						return putR.GoError()
+					req := &proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}}
+					resp := &proto.PutResponse{}
+					if err := txn.Call(proto.Put, req, resp); err != nil {
+						log.Infof("experienced an error in routine %d: %s", i, err)
+						return err
 					}
 				}
 				return nil
@@ -84,10 +87,10 @@ func startTestWriter(db storage.DB, i int64, valBytes int32, wg *sync.WaitGroup,
 }
 
 // TestRangeSplitsWithConcurrentTxns does 5 consecutive splits while
-// 10 concurrent goroutines, each running successive transactions
+// 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
-	db, _, _ := createTestDB(t)
+	db, _, _, _ := createTestDB(t)
 	defer db.Close()
 
 	// This channel shuts the whole apparatus down.
@@ -112,10 +115,11 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		for i := 0; i < concurrency; i++ {
 			<-txnChannel
 		}
-		log.Infof("starting split at key %q..", splitKey)
-		splitR := <-db.AdminSplit(&proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey})
-		if splitR.GoError() != nil {
-			t.Fatal(splitR.GoError())
+		log.Infof("starting split at key %q...", splitKey)
+		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
+		resp := &proto.AdminSplitResponse{}
+		if err := db.Call(proto.AdminSplit, req, resp); err != nil {
+			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
 	}
@@ -132,16 +136,9 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
-	db, _, _ := createTestDB(t)
+	db, eng, _, _ := createTestDB(t)
 	defer db.Close()
-	txnOpts := &storage.TransactionOptions{
-		Name: "scan meta2 records",
-		Retry: &util.RetryOptions{
-			Backoff:    1 * time.Millisecond,
-			MaxBackoff: 10 * time.Millisecond,
-			Constant:   2,
-		},
-	}
+	setTestRetryOptions()
 
 	// Rewrite a zone config with low max bytes.
 	zoneConfig := &proto.ZoneConfig{
@@ -153,7 +150,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	if err := storage.PutProto(db, engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	if err := db.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,19 +162,20 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
-		// Scan the txn records (in a txn due to possible retries) to see number of ranges.
+		// Scan the txn records.
 		var kvs []proto.KeyValue
-		if err := db.RunTransaction(txnOpts, func(txn storage.DB) error {
-			scanR := <-txn.Scan(&proto.ScanRequest{
+		if err := db.RunTransaction(&client.TransactionOptions{Name: "scan meta2 records"}, func(txn *client.KV) error {
+			req := &proto.ScanRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:    engine.KeyMeta2Prefix,
 					EndKey: engine.KeyMetaMax,
 				},
-			})
-			if scanR.GoError() != nil {
-				return scanR.GoError()
 			}
-			kvs = scanR.Rows
+			resp := &proto.ScanResponse{}
+			if err := txn.Call(proto.Scan, req, resp); err != nil {
+				return err
+			}
+			kvs = resp.Rows
 			return nil
 		}); err != nil {
 			t.Fatalf("failed to scan meta1 keys: %s", err)
@@ -188,4 +186,13 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	}
 	close(done)
 	wg.Wait()
+
+	// This write pressure test often causes splits while resolve intents
+	// are in flight, causing them to fail with range key mismatch errors.
+	// However, LocalSender should retry in these cases. Check here via
+	// MVCC scan that there are no dangling write intents.
+	mvcc := engine.NewMVCC(eng)
+	if _, err := mvcc.Scan(engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, nil); err != nil {
+		t.Errorf("mvcc scan should be clean: %s", err)
+	}
 }

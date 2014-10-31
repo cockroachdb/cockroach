@@ -21,43 +21,45 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// A LocalKV provides methods to access a collection of local stores.
-type LocalKV struct {
+// A LocalSender provides methods to access a collection of local stores.
+type LocalSender struct {
 	mu       sync.RWMutex             // Protects storeMap and addrs
 	storeMap map[int32]*storage.Store // Map from StoreID to Store
 }
 
-// NewLocalKV returns a local-only KV DB for direct access to a store.
-func NewLocalKV() *LocalKV {
-	return &LocalKV{storeMap: map[int32]*storage.Store{}}
+// NewLocalSender returns a local-only sender which directly accesses
+// a collection of stores.
+func NewLocalSender() *LocalSender {
+	return &LocalSender{storeMap: map[int32]*storage.Store{}}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
-func (kv *LocalKV) GetStoreCount() int {
-	kv.mu.RLock()
-	defer kv.mu.RUnlock()
-	return len(kv.storeMap)
+func (ls *LocalSender) GetStoreCount() int {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	return len(ls.storeMap)
 }
 
-// HasStore returns true if the specified store is owned by this LocalKV.
-func (kv *LocalKV) HasStore(storeID int32) bool {
-	kv.mu.RLock()
-	defer kv.mu.RUnlock()
-	_, ok := kv.storeMap[storeID]
+// HasStore returns true if the specified store is owned by this LocalSender.
+func (ls *LocalSender) HasStore(storeID int32) bool {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	_, ok := ls.storeMap[storeID]
 	return ok
 }
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (kv *LocalKV) GetStore(storeID int32) (*storage.Store, error) {
-	kv.mu.RLock()
-	store, ok := kv.storeMap[storeID]
-	kv.mu.RUnlock()
+func (ls *LocalSender) GetStore(storeID int32) (*storage.Store, error) {
+	ls.mu.RLock()
+	store, ok := ls.storeMap[storeID]
+	ls.mu.RUnlock()
 	if !ok {
 		return nil, util.Errorf("store %d not found", storeID)
 	}
@@ -65,22 +67,22 @@ func (kv *LocalKV) GetStore(storeID int32) (*storage.Store, error) {
 }
 
 // AddStore adds the specified store to the store map.
-func (kv *LocalKV) AddStore(s *storage.Store) {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	if _, ok := kv.storeMap[s.Ident.StoreID]; ok {
+func (ls *LocalSender) AddStore(s *storage.Store) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if _, ok := ls.storeMap[s.Ident.StoreID]; ok {
 		panic(fmt.Sprintf("cannot add store twice to local db: %+v", s.Ident))
 	}
-	kv.storeMap[s.Ident.StoreID] = s
+	ls.storeMap[s.Ident.StoreID] = s
 }
 
 // VisitStores implements a visitor pattern over stores in the storeMap.
 // The specified function is invoked with each store in turn. Stores are
 // visited in a random order.
-func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
-	for _, s := range kv.storeMap {
+func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	for _, s := range ls.storeMap {
 		if err := visitor(s); err != nil {
 			return err
 		}
@@ -88,12 +90,20 @@ func (kv *LocalKV) VisitStores(visitor func(s *storage.Store) error) error {
 	return nil
 }
 
-// ExecuteCmd synchronously runs Store.ExecuteCmd. The store is looked
+// Send implements the client.KVSender interface. The store is looked
 // up from the store map if specified by header.Replica; otherwise,
 // the command is being executed locally, and the replica is
-// determined via lookup through each of the stores.
-func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan interface{}) {
-	for {
+// determined via lookup through each store's LookupRange method.
+func (ls *LocalSender) Send(call *client.Call) {
+	// Instant retry with max two attempts to handle the case of a
+	// range split, which is exposed here as a RangeKeyMismatchError.
+	// If we fail with two in a row, pass the error up to caller and
+	// let the remote client requery range metadata.
+	retryOpts := util.RetryOptions{
+		Tag:         fmt.Sprintf("routing %s locally", call.Method),
+		MaxAttempts: 2,
+	}
+	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		var err error
 		var store *storage.Store
 
@@ -102,56 +112,56 @@ func (kv *LocalKV) ExecuteCmd(method string, args proto.Request, replyChan inter
 		// Key. So find its Range locally. This lets us use the same
 		// codepath below (store.ExecuteCmd) for both locally and remotely
 		// originated commands.
-		header := args.Header()
+		header := call.Args.Header()
 		if header.Replica.StoreID == 0 {
 			var repl *proto.Replica
-			repl, err = kv.lookupReplica(header.Key, header.EndKey)
+			repl, err = ls.lookupReplica(header.Key, header.EndKey)
 			if err == nil {
 				header.Replica = *repl
 			}
 		}
 		if err == nil {
-			store, err = kv.GetStore(header.Replica.StoreID)
+			store, err = ls.GetStore(header.Replica.StoreID)
 		}
-		reply := proto.NewReply(replyChan)
 		if err != nil {
-			reply.Header().SetGoError(err)
+			call.Reply.Header().SetGoError(err)
 		} else {
-			if err = store.ExecuteCmd(method, args, reply); err != nil {
-				reply.Header().SetGoError(err)
-				// Check for case of range splitting to continue and retry the
-				// local replica lookup.
+			if err = store.ExecuteCmd(call.Method, call.Args, call.Reply); err != nil {
+				// Check for range key mismatch error (this could happen if
+				// range was split between lookup and execution). In this case,
+				// reset header.Replica and engage retry loop.
 				switch err.(type) {
 				case *proto.RangeKeyMismatchError:
 					header.Replica = proto.Replica{}
-					continue
+					return util.RetryContinue, nil
 				}
+				call.Reply.Header().SetGoError(err)
 			} else {
-				if err = reply.Verify(args); err != nil {
-					reply.Header().SetGoError(err)
+				if err = call.Reply.Verify(call.Args); err != nil {
+					call.Reply.Header().SetGoError(err)
 				}
 			}
 		}
-		proto.SendReply(replyChan, reply)
-		return
-	}
+		return util.RetryBreak, nil
+	})
 }
 
-// Close closes all stores.
-func (kv *LocalKV) Close() {
-	kv.mu.RLock()
-	defer kv.mu.RUnlock()
-	for _, store := range kv.storeMap {
+// Close implements the client.KVSender interface. Close closes all
+// stores.
+func (ls *LocalSender) Close() {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	for _, store := range ls.storeMap {
 		store.Close()
 	}
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done
 // by consulting each store in turn via Store.LookupRange(key).
-func (kv *LocalKV) lookupReplica(start, end proto.Key) (*proto.Replica, error) {
-	kv.mu.RLock()
-	defer kv.mu.RUnlock()
-	for _, store := range kv.storeMap {
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (*proto.Replica, error) {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	for _, store := range ls.storeMap {
 		if rng := store.LookupRange(start, end); rng != nil {
 			return rng.GetReplica(), nil
 		}

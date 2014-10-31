@@ -167,6 +167,9 @@ func (mvcc *MVCC) PutProto(key proto.Key, timestamp proto.Timestamp, txn *proto.
 // keyB : MVCCMetadata of keyB
 // ...
 func (mvcc *MVCC) Get(key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) (*proto.Value, error) {
+	if len(key) == 0 {
+		return nil, emptyKeyError()
+	}
 	metaKey := MVCCEncodeKey(key)
 	meta := &proto.MVCCMetadata{}
 	ok, _, _, err := GetProto(mvcc.engine, metaKey, meta)
@@ -304,6 +307,9 @@ func (mvcc *MVCC) Delete(key proto.Key, timestamp proto.Timestamp, txn *proto.Tr
 // putInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
 func (mvcc *MVCC) putInternal(key proto.Key, timestamp proto.Timestamp, value proto.MVCCValue, txn *proto.Transaction) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	metaKey := MVCCEncodeKey(key)
 	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
@@ -374,7 +380,7 @@ func (mvcc *MVCC) putInternal(key proto.Key, timestamp proto.Timestamp, value pr
 	}
 
 	// Update MVCC stats.
-	mvcc.updateStatsOnPut(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
+	mvcc.updateStatsOnPut(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
 
 	return nil
 }
@@ -472,6 +478,9 @@ func (mvcc *MVCC) DeleteRange(key, endKey proto.Key, max int64, timestamp proto.
 // up to some maximum number of results. Specify max=0 for unbounded
 // scans.
 func (mvcc *MVCC) Scan(key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) ([]proto.KeyValue, error) {
+	if len(endKey) == 0 {
+		return nil, emptyKeyError()
+	}
 	encKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
 	nextKey := encKey
@@ -611,6 +620,9 @@ func (mvcc *MVCC) IterateCommitted(key, endKey proto.Key, f func(proto.KeyValue)
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
 func (mvcc *MVCC) ResolveWriteIntent(key proto.Key, txn *proto.Transaction) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
 	if txn == nil {
 		return util.Error("no txn specified")
 	}
@@ -649,7 +661,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key proto.Key, txn *proto.Transaction) erro
 		}
 
 		// Update stat counters related to resolving the intent.
-		mvcc.updateStatsOnResolve(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit)
+		mvcc.updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit)
 
 		// If timestamp of value changed, need to rewrite versioned value.
 		// TODO(spencer,tobias): think about a new merge operator for
@@ -695,7 +707,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key proto.Key, txn *proto.Transaction) erro
 	if len(kvs) == 0 {
 		mvcc.engine.Clear(metaKey)
 		// Clear stat counters attributable to the intent we're aborting.
-		mvcc.updateStatsOnAbort(origMetaKeySize, origMetaValSize, 0, 0, meta, nil)
+		mvcc.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil)
 	} else {
 		_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
 		if !isValue {
@@ -720,7 +732,7 @@ func (mvcc *MVCC) ResolveWriteIntent(key proto.Key, txn *proto.Transaction) erro
 		}
 
 		// Update stat counters with older version.
-		mvcc.updateStatsOnAbort(origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
+		mvcc.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
 	}
 
 	return nil
@@ -896,13 +908,22 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key) (MVCCStats, error) {
 	return ms, err
 }
 
+// updateStatsForKey returns whether or not the bytes and counts for
+// the specified key should be tracked. Local keys are excluded.
+func updateStatsForKey(key proto.Key) bool {
+	return !key.Less(KeyLocalMax)
+}
+
 // updateStatsOnPut updates stat counters for a newly put value,
 // including both the metadata key & value bytes and the mvcc
 // versioned value's key & value bytes. If the value is not a
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
-func (mvcc *MVCC) updateStatsOnPut(origMetaKeySize, origMetaValSize,
+func (mvcc *MVCC) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata) {
+	if !updateStatsForKey(key) {
+		return
+	}
 	// Remove current live counts for this key.
 	if orig != nil {
 		// If original version value for this key wasn't deleted, subtract
@@ -946,8 +967,11 @@ func (mvcc *MVCC) updateStatsOnPut(origMetaKeySize, origMetaValSize,
 // between the original and new metadata sizes. The size of the
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
-func (mvcc *MVCC) updateStatsOnResolve(origMetaKeySize, origMetaValSize,
+func (mvcc *MVCC) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool) {
+	if !updateStatsForKey(key) {
+		return
+	}
 	// We're pushing or committing an intent; update counts with
 	// difference in bytes between old metadata and new.
 	keyDiff := metaKeySize - origMetaKeySize
@@ -968,8 +992,11 @@ func (mvcc *MVCC) updateStatsOnResolve(origMetaKeySize, origMetaValSize,
 // aborted value's key and value byte sizes. If an earlier version
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
-func (mvcc *MVCC) updateStatsOnAbort(origMetaKeySize, origMetaValSize,
+func (mvcc *MVCC) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMetaValSize,
 	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata) {
+	if !updateStatsForKey(key) {
+		return
+	}
 	if !orig.Deleted {
 		mvcc.LiveBytes -= (orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize)
 		mvcc.LiveCount--

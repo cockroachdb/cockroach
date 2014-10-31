@@ -21,48 +21,49 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-func TestLocalKVAddStore(t *testing.T) {
-	kv := NewLocalKV()
+func TestLocalSenderAddStore(t *testing.T) {
+	ls := NewLocalSender()
 	store := storage.Store{}
-	kv.AddStore(&store)
-	if !kv.HasStore(store.Ident.StoreID) {
-		t.Errorf("expected kv to contain storeID=%d", store.Ident.StoreID)
+	ls.AddStore(&store)
+	if !ls.HasStore(store.Ident.StoreID) {
+		t.Errorf("expected local sender to contain storeID=%d", store.Ident.StoreID)
 	}
-	if kv.HasStore(store.Ident.StoreID + 1) {
-		t.Errorf("expected kv to not contain storeID=%d", store.Ident.StoreID+1)
+	if ls.HasStore(store.Ident.StoreID + 1) {
+		t.Errorf("expected local sender to not contain storeID=%d", store.Ident.StoreID+1)
 	}
 }
 
-func TesLocalKVtGetStoreCount(t *testing.T) {
-	kv := NewLocalKV()
-	if kv.GetStoreCount() != 0 {
-		t.Errorf("expected 0 stores in new kv")
+func TesLocalSendertGetStoreCount(t *testing.T) {
+	ls := NewLocalSender()
+	if ls.GetStoreCount() != 0 {
+		t.Errorf("expected 0 stores in new local sender")
 	}
 
 	expectedCount := 10
 	for i := 0; i < expectedCount; i++ {
-		kv.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
+		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
 	}
-	if count := kv.GetStoreCount(); count != expectedCount {
+	if count := ls.GetStoreCount(); count != expectedCount {
 		t.Errorf("expected store count to be %d but was %d", expectedCount, count)
 	}
 }
 
-func TestLocalKVVisitStores(t *testing.T) {
-	kv := NewLocalKV()
+func TestLocalSenderVisitStores(t *testing.T) {
+	ls := NewLocalSender()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
-		kv.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
+		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
 	}
 
 	visit := make([]bool, numStores)
-	err := kv.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
+	err := ls.VisitStores(func(s *storage.Store) error { visit[s.Ident.StoreID] = true; return nil })
 	if err != nil {
 		t.Errorf("unexpected error on visit: %s", err.Error())
 	}
@@ -73,23 +74,23 @@ func TestLocalKVVisitStores(t *testing.T) {
 		}
 	}
 
-	err = kv.VisitStores(func(s *storage.Store) error { return errors.New("") })
+	err = ls.VisitStores(func(s *storage.Store) error { return errors.New("") })
 	if err == nil {
 		t.Errorf("expected visit error")
 	}
 }
 
-func TestLocalKVGetStore(t *testing.T) {
-	kv := NewLocalKV()
+func TestLocalSenderGetStore(t *testing.T) {
+	ls := NewLocalSender()
 	store := storage.Store{}
 	replica := proto.Replica{StoreID: store.Ident.StoreID}
-	s, err := kv.GetStore(replica.StoreID)
+	s, err := ls.GetStore(replica.StoreID)
 	if s != nil || err == nil {
-		t.Errorf("expected no stores in new local kv.")
+		t.Errorf("expected no stores in new local sender")
 	}
 
-	kv.AddStore(&store)
-	s, err = kv.GetStore(replica.StoreID)
+	ls.AddStore(&store)
+	s, err = ls.GetStore(replica.StoreID)
 	if s == nil {
 		t.Errorf("expected store")
 	} else if s.Ident.StoreID != store.Ident.StoreID {
@@ -116,17 +117,17 @@ func splitTestRange(store *storage.Store, key, splitKey proto.Key, t *testing.T)
 	return newRng
 }
 
-func TestLocalKVLookupReplica(t *testing.T) {
+func TestLocalSenderLookupReplica(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	kv := NewLocalKV()
-	db := NewDB(kv, clock)
+	ls := NewLocalSender()
+	db := client.NewKV(NewCoordinator(ls, clock), nil)
 	store := storage.NewStore(clock, eng, db, nil)
 	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	kv.AddStore(store)
+	ls.AddStore(store)
 	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
@@ -156,22 +157,22 @@ func TestLocalKVLookupReplica(t *testing.T) {
 		}
 		newRng := storage.NewRange(desc.FindReplica(rng.storeID).RangeID, desc, s[i])
 		s[i].AddRange(newRng)
-		kv.AddStore(s[i])
+		ls.AddStore(s[i])
 	}
 
-	if r, err := kv.lookupReplica(proto.Key("a"), proto.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if r, err := ls.lookupReplica(proto.Key("a"), proto.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := kv.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := kv.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
+	if r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if r, err := kv.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
+	if r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := kv.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if r, err := ls.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 }

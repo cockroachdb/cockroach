@@ -19,7 +19,6 @@ package proto
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 )
 
@@ -127,65 +126,6 @@ func TestRangeDescriptorContains(t *testing.T) {
 				t.Errorf("expected key range %q-%q within range", test.start, test.end)
 			}
 		}
-	}
-}
-
-var testConfig = ZoneConfig{
-	ReplicaAttrs: []Attributes{
-		Attributes{Attrs: []string{"a", "ssd"}},
-		Attributes{Attrs: []string{"a", "hdd"}},
-		Attributes{Attrs: []string{"b", "ssd"}},
-		Attributes{Attrs: []string{"b", "hdd"}},
-	},
-	RangeMinBytes: 1 << 20,
-	RangeMaxBytes: 64 << 20,
-}
-
-var yamlConfig = `
-replicas:
-  - attrs: [a, ssd]
-  - attrs: [a, hdd]
-  - attrs: [b, ssd]
-  - attrs: [b, hdd]
-range_min_bytes: 1048576
-range_max_bytes: 67108864
-`
-
-func TestZoneConfigJSONRoundTrip(t *testing.T) {
-	json, err := testConfig.ToJSON()
-	if err != nil {
-		t.Fatalf("failed converting to json: %v", err)
-	}
-	parsedZoneConfig, err := ZoneConfigFromJSON(json)
-	if err != nil {
-		t.Errorf("failed parsing config: %v", err)
-	}
-	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		t.Errorf("json round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
-	}
-}
-
-func TestZoneConfigYAMLRoundTrip(t *testing.T) {
-	yaml, err := testConfig.ToYAML()
-	if err != nil {
-		t.Fatalf("failed converting to yaml: %v", err)
-	}
-	parsedZoneConfig, err := ZoneConfigFromYAML(yaml)
-	if err != nil {
-		t.Errorf("failed parsing config: %v", err)
-	}
-	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		t.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
-	}
-}
-
-func TestZoneConfigYAMLParsing(t *testing.T) {
-	parsedZoneConfig, err := ZoneConfigFromYAML([]byte(yamlConfig))
-	if err != nil {
-		t.Fatalf("failed parsing config: %v", err)
-	}
-	if !reflect.DeepEqual(testConfig, *parsedZoneConfig) {
-		t.Errorf("yaml round trip configs differ.\nOriginal: %+v\nParse: %+v\n", testConfig, parsedZoneConfig)
 	}
 }
 

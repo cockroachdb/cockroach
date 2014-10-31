@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -30,7 +31,7 @@ const allocationTrigger = 0
 // of arbitrary size starting at a minimum ID.
 type IDAllocator struct {
 	idKey     proto.Key
-	db        DB
+	db        *client.KV
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
@@ -40,7 +41,7 @@ type IDAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey proto.Key, db DB, minID int64, blockSize int64) *IDAllocator {
+func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) *IDAllocator {
 	if minID <= allocationTrigger {
 		log.Fatalf("minID must be > %d", allocationTrigger)
 	}
@@ -75,20 +76,20 @@ func (ia *IDAllocator) Allocate() int64 {
 // special allocationTrigger ID is inserted which causes allocation
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
-	ir := <-ia.db.Increment(&proto.IncrementRequest{
+	ir := &proto.IncrementResponse{}
+	if err := ia.db.Call(proto.Increment, &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  ia.idKey,
 			User: UserRoot,
 		},
-		Increment: ia.blockSize,
-	})
-	if ir.Error != nil {
-		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, ir.Error)
+		Increment: incr,
+	}, ir); err != nil {
+		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, err)
 	}
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
 			ir.NewValue, ia.minID, ia.minID-ir.NewValue)
-		ia.allocateBlock(ia.minID - ir.NewValue + ia.blockSize)
+		ia.allocateBlock(ia.minID - ir.NewValue + ia.blockSize - 1)
 		return
 	}
 
