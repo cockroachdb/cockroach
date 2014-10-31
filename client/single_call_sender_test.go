@@ -58,9 +58,9 @@ func TestSingleCallSenderZeroTimestamp(t *testing.T) {
 	}
 }
 
-// TestSingleCallSenderErrorsw verifies retry on some errors and
-// immediately propagation on others.
-func TestSingleCallSenderTransactionPushError(t *testing.T) {
+// TestSingleCallSenderErrors verifies retry on some errors and
+// immediate propagation on others.
+func TestSingleCallSenderErrors(t *testing.T) {
 	TxnRetryOptions.Backoff = 1 * time.Millisecond
 
 	testCases := []struct {

@@ -89,10 +89,7 @@ func createTestClient(addr string) *client.KV {
 func TestKVRetryOnSingleCall(t *testing.T) {
 	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
-	s := &server.TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -127,23 +124,47 @@ func TestKVRetryOnSingleCall(t *testing.T) {
 		} else {
 			txnPri = -2
 		}
-		doneCall := make(chan struct{})
 		kvClient.UserPriority = clientPri
-		count := 0
+
+		// doneCall signals when the non-txn read or write has completed.
+		doneCall := make(chan struct{})
+		count := 0 // keeps track of retries
 		if err := kvClient.RunTransaction(&client.TransactionOptions{Isolation: test.isolation}, func(txn *client.KV) error {
 			txn.UserPriority = txnPri
 			count++
+			// Lay down the intent.
 			if err := txn.Call(proto.Put, proto.PutArgs(key, []byte("txn-value")), &proto.PutResponse{}); err != nil {
 				return err
 			}
+			// The wait group lets us pause txn until after the non-txn method has run once.
 			wg := sync.WaitGroup{}
+			// On the first true, send the non-txn put or get.
 			if count == 1 {
+				// We use a "notifying" sender here, which allows us to know exactly when the
+				// call has been processed; otherwise, we'd be dependent on timing.
 				kvClient.Sender().(*notifyingSender).reset(&wg)
+				// We must try the non-txn put or get in a goroutine because
+				// it might have to retry and will only succeed immediately in
+				// the event we can push.
 				go func() {
-					if err := kvClient.Call(test.method, proto.PutArgs(key, []byte("value")), &proto.PutResponse{}); err != nil {
+					args, reply, err := proto.CreateArgsAndReply(test.method)
+					if err != nil {
+						t.Errorf("error creating args and reply for method %s: %s", test.method, err)
+					}
+					args.Header().Key = key
+					if test.method == proto.Put {
+						args.(*proto.PutRequest).Value.Bytes = []byte("value")
+					}
+					err = kvClient.Call(test.method, args, reply)
+					// Since we've finished the call here, close the channel to signal completion.
+					// We can't just rely on the notifying sender wait because that only signals
+					// on the first call through the sender. The non-txn put or get may require
+					// multiple retries. Closing the channel here signals the non-txn put or get
+					// has definitively completed.
+					close(doneCall)
+					if err != nil {
 						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, test.method)
 					}
-					close(doneCall)
 				}()
 				kvClient.Sender().(*notifyingSender).wait()
 			}
@@ -152,7 +173,10 @@ func TestKVRetryOnSingleCall(t *testing.T) {
 			t.Fatalf("%d: expected success writing transactionally; got %s", i, err)
 		}
 
+		// Make sure non-txn put or get has finished.
 		<-doneCall
+
+		// Get the current value to verify whether the txn happened first.
 		getReply := &proto.GetResponse{}
 		if err := kvClient.Call(proto.Get, proto.GetArgs(key), getReply); err != nil {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
@@ -177,10 +201,7 @@ func TestKVRetryOnSingleCall(t *testing.T) {
 func TestKVRunTransaction(t *testing.T) {
 	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
-	s := &server.TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -240,10 +261,7 @@ func TestKVRunTransaction(t *testing.T) {
 // TestKVGetAndPutProto verifies gets and puts of protobufs using the
 // KV client's convenience methods.
 func TestKVGetAndPutProto(t *testing.T) {
-	s := &server.TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -278,10 +296,7 @@ func TestKVGetAndPutProto(t *testing.T) {
 // TestKVGetAndPutGob verifies gets and puts of Go objects using the
 // KV client's convenience methods.
 func TestKVGetAndPutGob(t *testing.T) {
-	s := &server.TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot

@@ -18,6 +18,7 @@
 package server
 
 import (
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -53,6 +54,16 @@ type TestServer struct {
 	HTTPAddr, RPCAddr string
 	// server is the embedded Cockroach server struct.
 	*server
+}
+
+// StartTestServer creates a TestServer instance; on failure, causes
+// a fatal testing error. The new TestServer is returned on success.
+func StartTestServer(t *testing.T) *TestServer {
+	s := &TestServer{}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 // Start starts the TestServer by bootstrapping an in-memory store
