@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -39,7 +40,7 @@ import (
 // uncommitted writes cannot be read outside of the txn but can be
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
-	db, _, _, _ := createTestDB(t)
+	db, _, _, _, _ := createTestDB(t)
 	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
@@ -105,20 +106,11 @@ func TestTxnDBBasics(t *testing.T) {
 // the maximumOffset given, verifying in the process that the correct values
 // are read (usually after one transaction restart).
 func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
-	db, clock, manualClock := createTestDB(t)
+	db, _, clock, manualClock, lSender := createTestDB(t)
 	*manualClock = 0
 
-	txnOpts := &storage.TransactionOptions{
-		Name:         "test",
-		User:         storage.UserRoot,
-		UserPriority: 1,
-		Retry: &util.RetryOptions{
-			// Nothing should backoff here.
-			Backoff:     10 * time.Second,
-			MaxBackoff:  10 * time.Second,
-			Constant:    2,
-			MaxAttempts: 10,
-		},
+	txnOpts := &client.TransactionOptions{
+		Name: "test",
 	}
 
 	key := []byte("key-test")
@@ -134,27 +126,31 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 		value := []byte(fmt.Sprintf("value-%d", i))
 		// Values will be written with 5ns spacing.
 		futureTS := clock.Now().Add(5, 0)
+		clock.Update(futureTS)
 		// Expected number of versions skipped.
 		skipCount := int(maxOffset) / 5
 		if i+skipCount >= concurrency {
 			skipCount = concurrency - i - 1
 		}
 		readValue := []byte(fmt.Sprintf("value-%d", i+skipCount))
-		if err := (<-db.Put(&proto.PutRequest{
+		pr := proto.PutResponse{}
+		db.Call(proto.Put, &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       key,
-				Timestamp: futureTS,
+				Key: key,
 			},
 			Value: proto.Value{Bytes: value},
-		})).GoError(); err != nil {
+		}, &pr)
+		if err := pr.GoError(); err != nil {
 			t.Errorf("%d: got write error: %v", i, err)
 		}
-		if gr := <-db.Get(&proto.GetRequest{
+		gr := proto.GetResponse{}
+		db.Call(proto.Get, &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       key,
-				Timestamp: futureTS,
+				Timestamp: clock.Now(),
 			},
-		}); gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
+		}, &gr)
+		if gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
 			t.Fatalf("%d: expected success reading value %+v: %v", i, gr.Value, gr.GoError())
 		}
 
@@ -163,6 +159,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			wgStart.Done()
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
+
 			txnManual := hlc.ManualClock(futureTS.WallTime)
 			txnClock := hlc.NewClock(txnManual.UnixNano)
 			// Make sure to incorporate the logical component if the wall time
@@ -175,14 +172,19 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			if err := runTransaction(NewDB(db.kv, txnClock), txnOpts, func(txn storage.DB) error {
+			sender := NewCoordinator(lSender, txnClock)
+			txnDB := client.NewKV(sender, nil)
+			txnDB.User = storage.UserRoot
+
+			if err := txnDB.RunTransaction(txnOpts, func(txn *client.KV) error {
 				// Read within the transaction.
-				gr := <-txn.Get(&proto.GetRequest{
+				gr := proto.GetResponse{}
+				txn.Call(proto.Get, &proto.GetRequest{
 					RequestHeader: proto.RequestHeader{
 						Key:       key,
 						Timestamp: futureTS,
 					},
-				})
+				}, &gr)
 				if err := gr.GoError(); err != nil {
 					if _, ok := gr.GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
 						return err
@@ -210,6 +212,16 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 // TestTxnDBUncertainty verifies that transactions restart correctly and
 // finally read the correct value when encountering writes in the near future.
 func TestTxnDBUncertainty(t *testing.T) {
+	// Make sure that we notice immediately if any kind of backing off is
+	// happening. Restore the previous options after this test is done to avoid
+	// interfering with other tests.
+	defaultRetryOptions := client.TxnRetryOptions
+	defer func() {
+		client.TxnRetryOptions = defaultRetryOptions
+	}()
+	client.TxnRetryOptions.Backoff = 100 * time.Second
+	client.TxnRetryOptions.MaxBackoff = 100 * time.Second
+
 	// < 5ns means no uncertainty & no restarts.
 	verifyUncertainty(1, 3*time.Nanosecond, t)
 	verifyUncertainty(8, 4*time.Nanosecond, t)
@@ -222,6 +234,7 @@ func TestTxnDBUncertainty(t *testing.T) {
 	// They all need to read the latest value for this test to pass, requiring
 	// a restart for the first two.
 	verifyUncertainty(3, 10*time.Nanosecond, t)
+	verifyUncertainty(4, 9*time.Nanosecond, t)
 
 	// Some more, just for kicks.
 	verifyUncertainty(7, 12*time.Nanosecond, t)

@@ -429,8 +429,6 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = &Error{WriteIntent: t}
 	case *WriteTooOldError:
 		rh.Error = &Error{WriteTooOld: t}
-	case *ReadWithinUncertaintyIntervalError:
-		rh.Error = &Error{ReadWithinUncertaintyInterval: t}
 	default:
 		var canRetry bool
 		if r, ok := err.(util.Retryable); ok {
