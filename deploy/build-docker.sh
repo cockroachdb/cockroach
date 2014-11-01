@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Verify docker installation.
-source ./verify-docker.sh
+source "$(dirname $0)/verify-docker.sh"
 
 # Create the docker cockroach image.
 echo "Building Docker Cockroach image..."
-docker build -t="cockroachdb/cockroach" ../
+docker build -t="cockroachdb/cockroach" "$(dirname $0)/../"

@@ -2,14 +2,14 @@ FROM golang:latest
 
 MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 
-# Setup the toolchain.
-RUN apt-get update -y -qq
-RUN apt-get dist-upgrade -y -qq
+# Setup the toolchain. Make a lame attempt to reduce image size
+# by cleaning up right away.
 # TODO(pmattis): Use the vendored snappy and gflags.
-RUN apt-get install --auto-remove -y -qq git mercurial build-essential pkg-config bzr zlib1g-dev libbz2-dev libsnappy-dev libgflags-dev libprotobuf-dev protobuf-compiler gcc-4.9 g++-4.9
+RUN apt-get update -y && \
+ apt-get dist-upgrade -y && \
+ apt-get install --auto-remove -y git mercurial build-essential pkg-config bzr zlib1g-dev libbz2-dev libsnappy-dev libgflags-dev libprotobuf-dev protobuf-compiler && \
+ apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}
 
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 50
-RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 50
 
 ENV GOPATH /go
 ENV ROACHPATH $GOPATH/src/github.com/cockroachdb
@@ -18,9 +18,9 @@ ENV ROCKSDBPATH $VENDORPATH
 ENV VENDORGOPATH $VENDORPATH/src
 ENV COREOSPATH $VENDORGOPATH/github.com/coreos
 
-RUN mkdir -p $ROACHPATH
-RUN mkdir -p $ROCKSDBPATH
-RUN mkdir -p $COREOSPATH
+RUN mkdir -p $ROACHPATH && \
+ mkdir -p $ROCKSDBPATH && \
+ mkdir -p $COREOSPATH
 
 # TODO(pmattis): Switch to using bootstrap.sh for retrieving go
 # dependencies and building rocksdb. The current road block is that
@@ -28,14 +28,14 @@ RUN mkdir -p $COREOSPATH
 # change to the cockroach directory.
 
 # Get Cockroach Go dependencies.
-RUN go get code.google.com/p/biogo.store/llrb
-RUN go get code.google.com/p/go-commander
-RUN go get code.google.com/p/go-uuid/uuid
-RUN go get code.google.com/p/gogoprotobuf/proto
-RUN go get code.google.com/p/gogoprotobuf/protoc-gen-gogo
-RUN go get code.google.com/p/gogoprotobuf/gogoproto
-RUN go get github.com/golang/glog
-RUN go get gopkg.in/yaml.v1
+RUN go get code.google.com/p/biogo.store/llrb && \
+ go get code.google.com/p/go-commander && \
+ go get code.google.com/p/go-uuid/uuid && \
+ go get code.google.com/p/gogoprotobuf/proto && \
+ go get code.google.com/p/gogoprotobuf/protoc-gen-gogo && \
+ go get code.google.com/p/gogoprotobuf/gogoproto && \
+ go get github.com/golang/glog && \
+ go get gopkg.in/yaml.v1
 
 # Get RocksDB, Etcd sources from github.
 # We will run 'git submodule update' below which will ensure we have the correct
@@ -44,14 +44,13 @@ RUN go get gopkg.in/yaml.v1
 # See the NOTE below if hacking directly on the _vendor/
 # submodules. In that case, uncomment the "_vendor" exclude from
 # .dockerignore and comment out the following lines.
-RUN cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git
-RUN cd $COREOSPATH && git clone https://github.com/cockroachdb/etcd.git
-
 # Build rocksdb before adding the current directory. If there are
 # changes made by 'git submodule update' it will get rebuilt below but
 # this lets us reuse most of the results of an earlier build of the
 # image.
-RUN cd $ROCKSDBPATH/rocksdb && make static_lib
+RUN cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git && \
+ cd $COREOSPATH && git clone https://github.com/cockroachdb/etcd.git && \
+ cd $ROCKSDBPATH/rocksdb && make static_lib
 
 # Copy the contents of the cockroach source directory to the image.
 # Any changes which have been made to the source directory will cause
@@ -66,17 +65,16 @@ ADD . $ROACHPATH/cockroach
 # Update to the correct version of our submodules and rebuild any changes
 # in rocksdb (in case the submodule revision is different from the current
 # master)
-RUN cd $ROACHPATH/cockroach && git submodule update
-RUN cd $ROCKSDBPATH/rocksdb && make static_lib
-
-# Now build the cockroach executable and run the tests.
-RUN cd $ROACHPATH/cockroach && make
+# Build the cockroach executable and run the tests.
+RUN cd $ROACHPATH/cockroach && git submodule update --init && \
+ cd $ROCKSDBPATH/rocksdb && make static_lib && \
+ cd $ROACHPATH/cockroach && make
 
 # Expose the http status port.
 EXPOSE 8080
 
 # This is the command to run when this image is launched as a container.
-ENTRYPOINT ["/go/src/github.com/cockroachdb/cockroach/cockroach"]
+ENTRYPOINT ["/go/src/github.com/cockroachdb/cockroach/deploy/wrapper.sh"]
 
 # These are default arguments to the cockroach binary.
 CMD ["--help"]
