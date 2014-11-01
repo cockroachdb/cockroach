@@ -37,7 +37,7 @@ import (
 // with a store using an in-memory engine. Returns the created kv
 // client and associated clock's manual time.
 // TODO(spencer): return a struct.
-func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.ManualClock) {
+func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.ManualClock, *LocalSender) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
 	manual := hlc.ManualClock(0)
@@ -58,7 +58,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
-	return db, eng, clock, &manual
+	return db, eng, clock, &manual, lSender
 }
 
 // getCoord type casts the db's sender to a coordinator and returns it.
@@ -88,7 +88,7 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
 func TestCoordinatorAddRequest(t *testing.T) {
-	db, _, clock, manual := createTestDB(t)
+	db, _, clock, manual, _ := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
 
@@ -126,7 +126,7 @@ func TestCoordinatorAddRequest(t *testing.T) {
 }
 
 func TestCoordinatorBeginTransaction(t *testing.T) {
-	db, _, _, _ := createTestDB(t)
+	db, _, _, _, _ := createTestDB(t)
 	defer db.Close()
 
 	reply := &proto.BeginTransactionResponse{}
@@ -176,7 +176,7 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 		{proto.Key("b"), proto.Key("c")},
 	}
 
-	db, _, clock, _ := createTestDB(t)
+	db, _, clock, _, _ := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
 	txn := newTxn(db, clock, proto.Key("a"))
@@ -205,7 +205,7 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 // TestCoordinatorMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestCoordinatorMultipleTxns(t *testing.T) {
-	db, _, clock, _ := createTestDB(t)
+	db, _, clock, _, _ := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
 
@@ -226,7 +226,7 @@ func TestCoordinatorMultipleTxns(t *testing.T) {
 // TestCoordinatorHeartbeat verifies periodic heartbeat of the
 // transaction record.
 func TestCoordinatorHeartbeat(t *testing.T) {
-	db, _, clock, manual := createTestDB(t)
+	db, _, clock, manual, _ := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
 
@@ -297,7 +297,7 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
 func TestCoordinatorEndTxn(t *testing.T) {
-	db, eng, clock, _ := createTestDB(t)
+	db, eng, clock, _, _ := createTestDB(t)
 	defer db.Close()
 
 	txn := newTxn(db, clock, proto.Key("a"))
@@ -331,7 +331,7 @@ func TestCoordinatorEndTxn(t *testing.T) {
 // TestCoordinatorCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestCoordinatorCleanupOnAborted(t *testing.T) {
-	db, eng, clock, _ := createTestDB(t)
+	db, eng, clock, _, _ := createTestDB(t)
 	defer db.Close()
 
 	// Create a transaction with intent at "a".
@@ -382,7 +382,7 @@ func TestCoordinatorCleanupOnAborted(t *testing.T) {
 // TestCoordinatorGC verifies that the coordinator cleans up extant
 // transactions after the lastUpdateTS exceeds the timeout.
 func TestCoordinatorGC(t *testing.T) {
-	db, _, clock, manual := createTestDB(t)
+	db, _, clock, manual, _ := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
 

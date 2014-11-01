@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 
 	"code.google.com/p/biogo.store/interval"
@@ -196,6 +197,14 @@ func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }
 
+// Add returns a timestamp with the WallTime and Logical components increased.
+func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
+	return Timestamp{
+		WallTime: t.WallTime + wallTime,
+		Logical:  t.Logical + logical,
+	}
+}
+
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly; if the value contains an integer,
@@ -304,7 +313,7 @@ func MakePriority(userPriority int32) int32 {
 	//   100           |  top 99/100ths of positive int32s
 	//   1000          |  top 999/1000ths of positive int32s
 	//   ...etc
-	return math.MaxInt32 - util.CachedRand.Int31n(math.MaxInt32/userPriority)
+	return math.MaxInt32 - rand.Int31n(math.MaxInt32/userPriority)
 }
 
 // MD5Equal returns whether the specified md5.Size byte arrays are equal.
@@ -351,6 +360,6 @@ func (t *Transaction) MD5() [md5.Size]byte {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
-	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s}",
-		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp)
+	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s maxts=%s}",
+		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.MaxTimestamp)
 }

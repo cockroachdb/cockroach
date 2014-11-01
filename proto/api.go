@@ -394,6 +394,8 @@ func (rh *ResponseHeader) GoError() error {
 		return rh.Error.WriteIntent
 	case rh.Error.WriteTooOld != nil:
 		return rh.Error.WriteTooOld
+	case rh.Error.ReadWithinUncertaintyInterval != nil:
+		return rh.Error.ReadWithinUncertaintyInterval
 	default:
 		return nil
 	}

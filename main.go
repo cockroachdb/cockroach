@@ -19,11 +19,13 @@ package main
 
 import (
 	"flag"
+	"math/rand"
 	"os"
 	"runtime"
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -50,6 +52,7 @@ func main() {
 	// production workloads.
 	numCPU := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCPU)
+	rand.Seed(util.NewPseudoSeed())
 	log.V(1).Infof("running using %d processor cores", numCPU)
 
 	c := commander.Commander{

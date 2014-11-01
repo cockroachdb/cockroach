@@ -23,15 +23,21 @@ import (
 	"math/rand"
 )
 
-// NewPseudoRand returns an instance of math/rand.Rand seeded from crypto/rand
-// so we can easily and cheaply generate unique streams of numbers.
-func NewPseudoRand() *rand.Rand {
+// NewPseudoSeed generates a seed from crypto/rand.
+func NewPseudoSeed() int64 {
 	var seed int64
 	err := binary.Read(crypto_rand.Reader, binary.LittleEndian, &seed)
 	if err != nil {
 		panic(Errorf("could not read from crypto/rand: %s", err))
 	}
-	return rand.New(rand.NewSource(seed))
+	return seed
+}
+
+// NewPseudoRand returns an instance of math/rand.Rand seeded from crypto/rand
+// so we can easily and cheaply generate unique streams of numbers.
+// The created object is not safe for concurrent access.
+func NewPseudoRand() *rand.Rand {
+	return rand.New(rand.NewSource(NewPseudoSeed()))
 }
 
 // RandIntInRange returns a value in [min, max)
@@ -53,7 +59,3 @@ func RandString(r *rand.Rand, size int) string {
 	}
 	return string(arr)
 }
-
-// CachedRand is a global singleton rand.Rand object cached for
-// one-off purposes to generate random numbers.
-var CachedRand = NewPseudoRand()

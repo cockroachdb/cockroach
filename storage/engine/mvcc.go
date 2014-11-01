@@ -153,7 +153,7 @@ func (mvcc *MVCC) PutProto(key proto.Key, timestamp proto.Timestamp, txn *proto.
 
 // Get returns the value for the key specified in the request, while
 // satisfying the given timestamp condition. The key may contain
-// arbitrary bytes. If no value for the key exists, or has been
+// arbitrary bytes. If no value for the key exists, or it has been
 // deleted, returns nil for value.
 //
 // The values of multiple versions for the given key should
