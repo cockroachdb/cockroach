@@ -6,12 +6,17 @@ dependencies:
   cache_directories:
     - "~/docker"
   override:
-    - if [[ -e ~/docker/image.tar ]]; then docker load -i ~/docker/image.tar; fi
+    # If there's a base image cached, load it. A click on CircleCI's "Clear
+    # Cache" will make sure we start with a clean slate.
+    - mkdir -p ~/docker
+    - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
     - ./deploy/build-docker.sh
-    - if [[ ! -e ~/docker/image.tar ]]; then mkdir -p ~/docker; docker save "cockroachdb/cockroach" > ~/docker/image.tar; fi
+    # Otherwise, we built one above, and save it.
+    - if [[ ! -e ~/docker/base.tar ]]; then docker save "cockroachdb/docker_base" > ~/docker/base.tar; fi
+    # Print the history so that we can investigate potential steps which fatten
+    # the image needlessly.
     - docker history "cockroachdb/cockroach"
 
 test:
   override:
     - docker run "cockroachdb/cockroach" test
-    - make acceptance
