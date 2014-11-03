@@ -117,25 +117,18 @@ func TestTxnSenderNewClientCmdID(t *testing.T) {
 // TestTxnSenderEndTxn verifies that request key is set to the txn ID
 // on a call to EndTransaction.
 func TestTxnSenderEndTxn(t *testing.T) {
-	testCases := []struct {
-		method string
-		args   proto.Request
-		reply  proto.Response
-	}{
-		{proto.EndTransaction, &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}},
-		{proto.InternalEndTxn, &proto.InternalEndTxnRequest{}, &proto.InternalEndTxnResponse{}},
-	}
-
-	for i, test := range testCases {
-		ts := newTxnSender(newTestSender(func(call *Call) {
-			if !call.Args.Header().Key.Equal(txnID) {
-				t.Errorf("%d: expected request key to be %q; got %q", i, txnID, call.Args.Header().Key)
-			}
-		}), nil, &TransactionOptions{})
-		ts.Send(&Call{Method: test.method, Args: test.args, Reply: test.reply})
-		if !ts.txnEnd {
-			t.Errorf("%d: expected txnEnd to be true", i)
+	ts := newTxnSender(newTestSender(func(call *Call) {
+		if !call.Args.Header().Key.Equal(txnID) {
+			t.Errorf("expected request key to be %q; got %q", txnID, call.Args.Header().Key)
 		}
+	}), nil, &TransactionOptions{})
+	ts.Send(&Call{
+		Method: proto.EndTransaction,
+		Args:   &proto.EndTransactionRequest{Commit: true},
+		Reply:  &proto.EndTransactionResponse{},
+	})
+	if !ts.txnEnd {
+		t.Errorf("expected txnEnd to be true")
 	}
 }
 
@@ -145,7 +138,7 @@ func TestTxnSenderEndTxn(t *testing.T) {
 // txn set as expected.
 func TestTxnSenderNonTransactional(t *testing.T) {
 	for method := range proto.AllMethods {
-		isTransactional := proto.IsTransactional(method) || method == proto.EndTransaction || method == proto.InternalEndTxn
+		isTransactional := proto.IsTransactional(method) || method == proto.EndTransaction
 		ts := newTxnSender(newTestSender(func(call *Call) {
 			if !isTransactional {
 				t.Errorf("%s: should not have received this method type in txn", method)

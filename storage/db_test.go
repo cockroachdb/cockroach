@@ -33,9 +33,8 @@ import (
 // testSender is an implementation of the client.KVSender interface
 // which passes all requests through to a single store. A map keeps
 // track of keys with intents for each transaction. Intents are
-// resolved on invocation of EndTransaction or InternalEndTxn. NOTE:
-// this does not properly handle resolving intents from DeleteRange
-// commands.
+// resolved on invocation of EndTransaction. NOTE: this does not
+// properly handle resolving intents from DeleteRange commands.
 type testSender struct {
 	store   *Store
 	intents map[string][]proto.Key
@@ -82,8 +81,6 @@ func (db *testSender) Send(call *client.Call) {
 		txn = nil
 		if call.Method == proto.EndTransaction {
 			txn = call.Reply.(*proto.EndTransactionResponse).Txn
-		} else if call.Method == proto.InternalEndTxn {
-			txn = call.Reply.(*proto.InternalEndTxnResponse).Txn
 		}
 		if txn != nil && txn.Status != proto.PENDING {
 			id := string(txn.ID)

@@ -75,6 +75,8 @@ const (
 	EnqueueUpdate = "EnqueueUpdate"
 	// EnqueueMessage enqueues a message for delivery to an inbox.
 	EnqueueMessage = "EnqueueMessage"
+	// Batch executes a set of commands in parallel.
+	Batch = "Batch"
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit = "AdminSplit"
 )
@@ -109,7 +111,7 @@ var AllMethods = stringSet{
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
 	AdminSplit:            struct{}{},
-	InternalEndTxn:        struct{}{},
+	Batch:                 struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
@@ -133,13 +135,13 @@ var PublicMethods = stringSet{
 	ReapQueue:        struct{}{},
 	EnqueueUpdate:    struct{}{},
 	EnqueueMessage:   struct{}{},
+	Batch:            struct{}{},
 	AdminSplit:       struct{}{},
 }
 
 // InternalMethods specifies the set of methods accessible only
 // via the internal node RPC API.
 var InternalMethods = stringSet{
-	InternalEndTxn:        struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
@@ -170,7 +172,6 @@ var WriteMethods = stringSet{
 	ReapQueue:             struct{}{},
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
-	InternalEndTxn:        struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
@@ -312,10 +313,10 @@ func CreateArgsAndReply(method string) (Request, Response, error) {
 		return &EnqueueUpdateRequest{}, &EnqueueUpdateResponse{}, nil
 	case EnqueueMessage:
 		return &EnqueueMessageRequest{}, &EnqueueMessageResponse{}, nil
+	case Batch:
+		return &BatchRequest{}, &BatchResponse{}, nil
 	case AdminSplit:
 		return &AdminSplitRequest{}, &AdminSplitResponse{}, nil
-	case InternalEndTxn:
-		return &InternalEndTxnRequest{}, &InternalEndTxnResponse{}, nil
 	case InternalHeartbeatTxn:
 		return &InternalHeartbeatTxnRequest{}, &InternalHeartbeatTxnResponse{}, nil
 	case InternalPushTxn:

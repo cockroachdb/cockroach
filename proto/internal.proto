@@ -43,27 +43,6 @@ message InternalRangeLookupResponse {
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
 }
 
-// An InternalEndTxnRequest is arguments to the InternalEndTxn()
-// method. It is sent internally to commit transactions which have
-// accompanying system-specific triggers.  In all other ways the
-// method behaves exactly as EndTransaction.
-message InternalEndTxnRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // False to abort and rollback.
-  optional bool commit = 2 [(gogoproto.nullable) = false];
-  // Optional commit triggers.
-  optional SplitTrigger split_trigger = 3;
-}
-
-// An InternalEndTxnResponse is the return value from the
-// InternalEndTxn() method. See EndTransactionRequest for
-// additional details.
-message InternalEndTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction txn = 2;
-  optional int64 commit_wait = 3 [(gogoproto.nullable) = false];
-}
-
 // An InternalHeartbeatTxnRequest is arguments to the
 // InternalHeartbeatTxn() method. It's sent by transaction
 // coordinators to let the system know that the transaction is still
@@ -171,8 +150,7 @@ message ReadWriteCmdResponse {
   optional ReapQueueResponse reap_queue = 8;
   optional EnqueueUpdateResponse enqueue_update = 9;
   optional EnqueueMessageResponse enqueue_message = 10;
-  optional InternalEndTxnResponse internal_end_txn = 11;
-  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 12;
-  optional InternalPushTxnResponse internal_push_txn = 13;
-  optional InternalResolveIntentResponse internal_resolve_intent = 14;
+  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 11;
+  optional InternalPushTxnResponse internal_push_txn = 12;
+  optional InternalResolveIntentResponse internal_resolve_intent = 13;
 }

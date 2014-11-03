@@ -668,8 +668,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.EnqueueMessage(mvcc, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
 	case proto.InternalRangeLookup:
 		r.InternalRangeLookup(mvcc, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
-	case proto.InternalEndTxn:
-		r.InternalEndTxn(batch, args.(*proto.InternalEndTxnRequest), reply.(*proto.InternalEndTxnResponse))
 	case proto.InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case proto.InternalPushTxn:
@@ -865,6 +863,14 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.SetGoError(err)
 		return
 	}
+
+	// Run triggers if successfully committed. Any failures running
+	// triggers will set an error and prevent the batch from committing.
+	if reply.Txn.Status == proto.COMMITTED {
+		if args.SplitTrigger != nil {
+			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
+		}
+	}
 }
 
 // AccumulateTS is used internally to aggregate statistics over key
@@ -967,29 +973,6 @@ func (r *Range) InternalRangeLookup(mvcc *engine.MVCC, args *proto.InternalRange
 
 	reply.Ranges = rds
 	return
-}
-
-// InternalEndTxn invokes EndTransaction. On success, it executes any
-// triggers specified in args.
-func (r *Range) InternalEndTxn(batch engine.Engine, args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) {
-	etArgs := &proto.EndTransactionRequest{}
-	etReply := &proto.EndTransactionResponse{}
-	etArgs.RequestHeader = args.RequestHeader
-	etArgs.Commit = args.Commit
-
-	r.EndTransaction(batch, etArgs, etReply)
-
-	reply.ResponseHeader = etReply.ResponseHeader
-	reply.Txn = etReply.Txn
-	reply.CommitWait = etReply.CommitWait
-
-	// Run triggers if successfully committed. Any failures running
-	// triggers will set an error and prevent the batch from committing.
-	if reply.Txn.Status == proto.COMMITTED {
-		if args.SplitTrigger != nil {
-			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
-		}
-	}
 }
 
 // InternalHeartbeatTxn updates the transaction status and heartbeat
@@ -1348,17 +1331,16 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		if err := UpdateRangeAddressing(txn, &updatedDesc); err != nil {
 			return err
 		}
-		// End the transaction manually (instead of letting RunTransaction
-		// loop do it) using the InternalEndTxn API call in order to
-		// provide a split trigger.
-		return txn.Call(proto.InternalEndTxn, &proto.InternalEndTxnRequest{
+		// End the transaction manually, instead of letting RunTransaction
+		// loop do it, in order to provide a split trigger.
+		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			SplitTrigger: &proto.SplitTrigger{
 				UpdatedDesc: updatedDesc,
 				NewDesc:     *newDesc,
 			},
-		}, &proto.InternalEndTxnResponse{})
+		}, &proto.EndTransactionResponse{})
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
 	}

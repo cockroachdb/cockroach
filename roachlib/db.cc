@@ -115,8 +115,6 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.enqueue_update().header();
   } else if (rwResp.has_enqueue_message()) {
     return &rwResp.enqueue_message().header();
-  } else if (rwResp.has_internal_end_txn()) {
-    return &rwResp.internal_end_txn().header();
   } else if (rwResp.has_internal_heartbeat_txn()) {
     return &rwResp.internal_heartbeat_txn().header();
   } else if (rwResp.has_internal_push_txn()) {

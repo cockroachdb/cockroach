@@ -243,6 +243,11 @@ message EndTransactionRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
+
+  // Optional commit triggers. Note that commit triggers are for
+  // internal use only and will be ignored if requested through the
+  // public-facing KV API.
+  optional SplitTrigger split_trigger = 3;
 }
 
 // An EndTransactionResponse is the return value from the
@@ -321,6 +326,61 @@ message EnqueueMessageRequest {
 // EnqueueMessage() method.
 message EnqueueMessageResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// A RequestUnion contains exactly one of the optional requests.
+message RequestUnion {
+  option (gogoproto.onlyone) = true;
+  optional ContainsRequest contains = 1;
+  optional GetRequest get = 2;
+  optional PutRequest put = 3;
+  optional ConditionalPutRequest conditional_put = 4;
+  optional IncrementRequest increment = 5;
+  optional DeleteRequest delete = 6;
+  optional DeleteRangeRequest delete_range = 7;
+  optional ScanRequest scan = 8;
+  optional BeginTransactionRequest begin_transaction = 9;
+  optional EndTransactionRequest end_transaction = 10;
+  optional AccumulateTSRequest accumulate_ts = 11;
+  optional ReapQueueRequest reap_queue = 12;
+  optional EnqueueUpdateRequest enqueue_update = 13;
+  optional EnqueueMessageRequest enqueue_message = 14;
+}
+
+// A ResponseUnion contains exactly one of the optional responses.
+message ResponseUnion {
+  option (gogoproto.onlyone) = true;
+  optional ContainsResponse contains = 1;
+  optional GetResponse get = 2;
+  optional PutResponse put = 3;
+  optional ConditionalPutResponse conditional_put = 4;
+  optional IncrementResponse increment = 5;
+  optional DeleteResponse delete = 6;
+  optional DeleteRangeResponse delete_range = 7;
+  optional ScanResponse scan = 8;
+  optional BeginTransactionResponse begin_transaction = 9;
+  optional EndTransactionResponse end_transaction = 10;
+  optional AccumulateTSResponse accumulate_ts = 11;
+  optional ReapQueueResponse reap_queue = 12;
+  optional EnqueueUpdateResponse enqueue_update = 13;
+  optional EnqueueMessageResponse enqueue_message = 14;
+}
+
+// A BatchRequest contains one or more requests to be executed in
+// parallel, or if applicable (based on write-only commands and
+// range-locality), as a single update.
+message BatchRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
+}
+
+// A BatchResponse contains one or more responses, one per request
+// corresponding to the requests in the matching BatchRequest. The
+// error in the response header is set to the first error from the
+// slice of responses, if applicable.
+message BatchResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is arguments to the AdminSplit() method. The

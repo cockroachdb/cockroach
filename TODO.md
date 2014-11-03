@@ -15,9 +15,22 @@
 
 * Write a test for transaction starvation.
 
-* Write tests for client/kv_test.go, client/txn_sender_test.go.
-
 * Implement client batching and use it for range splitting.
+
+* Change key / end key in request to a more flexible list of key
+  intervals to properly account for batch requests. This data is
+  used for command queue, timestamp cache and response cache.
+  Currently, key/end key is the union interval of all sub requests
+  in a batch request, meaning there's less allowable concurrency
+  in cases where keys affected by the batch are widely separated.
+
+* Allow atomic update batches to replace transactions where possible.
+  This means batching up BeginTransaction request with first batch via
+  TxnSender. In the event BeginTransaction is the first request in the
+  batch and EndTransaction is the last, we want to let the DistSender
+  determine whether all are on the same range and if so, execute
+  entire batch as a single batch command to the range. In all other
+  cases, we split batch request at DistSender into individual requests.
 
 * In find mvcc split key, avoid illegal split keys such as meta1
   records and configuration keys. Probably ought to move to a single
@@ -72,7 +85,6 @@
 
 * Cleanup proto files to adhere to proto capitalization instead of go's.
 
-* Replace the usage of the rocksdb C interface with the C++
-  interface. This will both avoid some overhead present in the C
-  interface (various memory allocations) as well as allow us to use
-  more convenient C++ notation for various bits of functionality.
+* Rewrite storage/engine/batch.go functionality to C++, using Viewfinder
+  client C++ code as a starting point. Snapshots and batches should just
+  be new engine types.

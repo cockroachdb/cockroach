@@ -233,8 +233,6 @@ func (tc *Coordinator) Send(call *client.Call) {
 		var txn *proto.Transaction
 		if call.Method == proto.EndTransaction {
 			txn = call.Reply.(*proto.EndTransactionResponse).Txn
-		} else if call.Method == proto.InternalEndTxn {
-			txn = call.Reply.(*proto.InternalEndTxnResponse).Txn
 		}
 		if txn != nil && txn.Status != proto.PENDING {
 			tc.cleanupTxn(txn)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -34,6 +35,18 @@ const (
 )
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
+
+// sanitizeRequest clears elements of requests which are for
+// internal use only.
+func sanitizeRequest(args proto.Request) {
+	switch t := args.(type) {
+	case *proto.EndTransactionRequest:
+		if t.SplitTrigger != nil {
+			log.Warningf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
+			t.SplitTrigger = nil
+		}
+	}
+}
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
 // It accepts either JSON or serialized protobuf content types.
@@ -82,6 +95,9 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Sanitize the request for public API.
+	sanitizeRequest(args)
 
 	// Create a call and invoke through sender.
 	call := &client.Call{

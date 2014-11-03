@@ -69,8 +69,9 @@ type KV struct {
 	// ignored.
 	UserPriority int32
 
-	sender KVSender
-	clock  Clock
+	sender   KVSender
+	clock    Clock
+	prepared []*Call
 }
 
 // NewKV creates a new instance of KV using the specified sender. By
@@ -118,8 +119,55 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 	return call.Reply.Header().GoError()
 }
 
-// TODO(spencer): implement Prepare.
-// TODO(spencer): implement Flush.
+// Prepare accepts a KV API call, specified by method name, arguments
+// and a reply struct. The call will be buffered locally until the
+// first call to Flush(), at which time it will be sent for execution
+// as part of a batch call. Using Prepare/Flush parallelizes queries
+// and updates and should be used where possible for efficiency.
+//
+// For clients using an HTTP sender, Prepare/Flush allows multiple
+// commands to be sent over the same connection. For transactional
+// clients, Prepare/Flush can dramatically improve efficiency by
+// compressing multiple writes into a single atomic update in the
+// event that the writes are to keys within a single range. However,
+// using Prepare/Flush alone will not guarantee atomicity. Clients
+// must use a transaction for that purpose.
+//
+// The supplied reply struct will not be valid until after a call
+// to Flush().
+func (kv *KV) Prepare(method string, args proto.Request, reply proto.Response) {
+	call := &Call{
+		Method: method,
+		Args:   args,
+		Reply:  reply,
+	}
+	kv.prepared = append(kv.prepared, call)
+}
+
+// Flush sends all previously prepared calls, buffered by invocations
+// of Prepare(). The calls are organized into a single batch command
+// and sent together. Flush returns nil if all prepared calls are
+// executed successfully. Otherwise, flush returns the first error,
+// where calls are executed in the order in which they were prepared.
+// After Flush returns, all prepared reply structs will be valid.
+func (kv *KV) Flush() error {
+	if len(kv.prepared) == 0 {
+		return nil
+	}
+	args, reply := &proto.BatchRequest{}, &proto.BatchResponse{}
+	for _, call := range kv.prepared {
+		reqUnion := &proto.RequestUnion{}
+		reqUnion.SetValue(call.Args)
+		resUnion := &proto.ResponseUnion{}
+		resUnion.SetValue(call.Reply)
+
+		args.Requests = append(args.Requests, *reqUnion)
+		reply.Responses = append(reply.Responses, *resUnion)
+	}
+
+	return util.Errorf("flush is unimplemented")
+	//return kv.Call(proto.Batch, args, reply)
+}
 
 // RunTransaction executes retryable in the context of a distributed
 // transaction. The transaction is automatically aborted if retryable

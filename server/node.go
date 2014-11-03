@@ -469,11 +469,6 @@ func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply
 	return n.executeCmd(proto.InternalRangeLookup, args, reply)
 }
 
-// InternalEndTxn .
-func (n *Node) InternalEndTxn(args *proto.InternalEndTxnRequest, reply *proto.InternalEndTxnResponse) error {
-	return n.executeCmd(proto.InternalEndTxn, args, reply)
-}
-
 // InternalHeartbeatTxn .
 func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
 	return n.executeCmd(proto.InternalHeartbeatTxn, args, reply)
