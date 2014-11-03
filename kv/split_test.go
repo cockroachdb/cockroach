@@ -187,12 +187,21 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	close(done)
 	wg.Wait()
 
-	// This write pressure test often causes splits while resolve intents
-	// are in flight, causing them to fail with range key mismatch errors.
-	// However, LocalSender should retry in these cases. Check here via
-	// MVCC scan that there are no dangling write intents.
+	// This write pressure test often causes splits while resolve
+	// intents are in flight, causing them to fail with range key
+	// mismatch errors. However, LocalSender should retry in these
+	// cases. Check here via MVCC scan that there are no dangling write
+	// intents. We do this using an IsTrueWithin construct to account
+	// for timing of finishing the test writer and a possibly-ongoing
+	// asynchronous split.
 	mvcc := engine.NewMVCC(eng)
-	if _, err := mvcc.Scan(engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, nil); err != nil {
-		t.Errorf("mvcc scan should be clean: %s", err)
+	if err := util.IsTrueWithin(func() bool {
+		if _, err := mvcc.Scan(engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, nil); err != nil {
+			log.Infof("mvcc scan should be clean: %s", err)
+			return false
+		}
+		return true
+	}, 500*time.Millisecond); err != nil {
+		t.Error("failed to verify no dangling intents within 500ms")
 	}
 }
