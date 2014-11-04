@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -36,16 +35,16 @@ const (
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 
-// sanitizeRequest clears elements of requests which are for
-// internal use only.
-func sanitizeRequest(args proto.Request) {
+// verifyRequest checks for illegal inputs in request proto and
+// returns an error indicating which, if any, were found.
+func verifyRequest(args proto.Request) error {
 	switch t := args.(type) {
 	case *proto.EndTransactionRequest:
 		if t.SplitTrigger != nil {
-			log.Warningf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
-			t.SplitTrigger = nil
+			return util.Errorf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
 		}
 	}
+	return nil
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
@@ -96,8 +95,11 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sanitize the request for public API.
-	sanitizeRequest(args)
+	// Verify the request for public API.
+	if err := verifyRequest(args); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Create a call and invoke through sender.
 	call := &client.Call{

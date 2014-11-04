@@ -205,8 +205,8 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 			},
 		}, &proto.EndTransactionResponse{})
 	})
-	if err != nil {
-		t.Errorf("expected success on commit; got %s", err)
+	if err == nil {
+		t.Errorf("expected error on commit")
 	}
 }
 
