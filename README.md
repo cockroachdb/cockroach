@@ -1,4 +1,4 @@
-# Cockroach [![Build Status](https://travis-ci.org/cockroachdb/cockroach.svg?branch=master)](http://travis-ci.org/cockroachdb/cockroach)  [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg)
+# Cockroach [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach/tree/master.png?style=badge)](https://circleci.com/gh/cockroachdb/cockroach/tree/master) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg)
 
 ## A Scalable, Geo-Replicated, Transactional Datastore
 
