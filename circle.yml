@@ -1,22 +1,22 @@
-## Customize checkout
-checkout:
-  post:
-    - sudo apt-get update -qq
-    - sudo apt-get install -qy python-software-properties
-    - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-    - sudo apt-get update -qq
-    - sudo apt-get install -y -qq gcc-4.8 g++-4.8 libprotobuf-dev protobuf-compiler
-    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.8 50
-    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 50
+machine:
+    services:
+          - docker
 
 dependencies:
+  cache_directories:
+    - "~/docker"
   override:
-    - ./bootstrap.sh
-    - make build GOFLAGS=-x
+    # If there's a base image cached, load it. A click on CircleCI's "Clear
+    # Cache" will make sure we start with a clean slate.
+    - mkdir -p ~/docker
+    - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
+    - ./deploy/build-docker.sh
+    # Otherwise, we built one above, and save it.
+    - if [[ ! -e ~/docker/base.tar ]]; then docker save "cockroachdb/docker_base" > ~/docker/base.tar; fi
+    # Print the history so that we can investigate potential steps which fatten
+    # the image needlessly.
+    - docker history "cockroachdb/cockroach"
 
 test:
   override:
-    # Note that testrace runs with some tests excluded for performance
-    # This means that we should always run both test and testrace.
-    - make test TESTFLAGS="-logtostderr -timeout 30s"
-    - make testrace
+    - docker run "cockroachdb/cockroach" test
