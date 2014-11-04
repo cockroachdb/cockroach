@@ -2,8 +2,17 @@
 
 ### Getting and building
 
-A working [Go environment](http://golang.org/doc/code.html) and [prerequisites for building
-RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md) are both presumed.
+### Assumed
+ * A working GCC (on mac os x something like `xcode-select --install` will get you started)
+ * [Go environment](http://golang.org/doc/code.html)
+ * [prerequisites for building
+RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md)
+ * [protoc](https://github.com/google/protobuf/releases)
+ * pkgconfig
+ * curl
+
+If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
+
 ```bash
 mkdir -p $GOPATH/src/github.com/cockroachdb/
 cd $GOPATH/src/github.com/cockroachdb/

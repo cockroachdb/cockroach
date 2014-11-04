@@ -78,3 +78,5 @@ cd snappy-1.1.1
 
 cd ${ROCKSDB}
 make static_lib
+
+echo "Bootstrapped successfully!"
