@@ -35,6 +35,18 @@ const (
 
 var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding}
 
+// verifyRequest checks for illegal inputs in request proto and
+// returns an error indicating which, if any, were found.
+func verifyRequest(args proto.Request) error {
+	switch t := args.(type) {
+	case *proto.EndTransactionRequest:
+		if t.SplitTrigger != nil {
+			return util.Errorf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
+		}
+	}
+	return nil
+}
+
 // A DBServer provides an HTTP server endpoint serving the key-value API.
 // It accepts either JSON or serialized protobuf content types.
 type DBServer struct {
@@ -79,6 +91,12 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Verify the request for public API.
+	if err := verifyRequest(args); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

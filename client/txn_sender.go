@@ -101,7 +101,7 @@ func (ts *txnSender) Send(call *Call) {
 			ts.txn.Priority = ts.minPriority
 		}
 	}
-	if call.Method == proto.EndTransaction || call.Method == proto.InternalEndTxn {
+	if call.Method == proto.EndTransaction {
 		// For EndTransaction, make sure key is set to txn ID.
 		call.Args.Header().Key = ts.txn.ID
 	} else if !proto.IsTransactional(call.Method) {
@@ -205,7 +205,7 @@ func (ts *txnSender) Send(call *Call) {
 			// Make sure to upgrade our priority to the conflicting txn's - 1.
 			return util.RetryContinue, nil
 		case nil:
-			if call.Method == proto.EndTransaction || call.Method == proto.InternalEndTxn {
+			if call.Method == proto.EndTransaction {
 				ts.txnEnd = true // set this txn as having been ended
 			}
 		}

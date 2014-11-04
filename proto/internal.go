@@ -21,9 +21,6 @@ const (
 	// InternalRangeLookup looks up range descriptors, containing the
 	// locations of replicas for the range containing the specified key.
 	InternalRangeLookup = "InternalRangeLookup"
-	// InternalEndTxn is similar to EndTransaction, except additionally
-	// provides support for system-specific triggers on successful commit.
-	InternalEndTxn = "InternalEndTxn"
 	// InternalHeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.

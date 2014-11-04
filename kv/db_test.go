@@ -167,7 +167,6 @@ func TestKVDBInternalMethods(t *testing.T) {
 		reply  proto.Response
 	}{
 		{proto.InternalRangeLookup, &proto.InternalRangeLookupRequest{}, &proto.InternalRangeLookupResponse{}},
-		{proto.InternalEndTxn, &proto.InternalEndTxnRequest{}, &proto.InternalEndTxnResponse{}},
 		{proto.InternalHeartbeatTxn, &proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}},
 		{proto.InternalPushTxn, &proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
 		{proto.InternalResolveIntent, &proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},
@@ -183,6 +182,31 @@ func TestKVDBInternalMethods(t *testing.T) {
 		} else if err.Error() != "404 Not Found" {
 			t.Errorf("%d: expected 404; got %s", i, err)
 		}
+	}
+}
+
+// TestKVDBEndTransactionWithTriggers verifies that triggers are
+// stripped on call to EndTransaction.
+func TestKVDBEndTransactionWithTriggers(t *testing.T) {
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
+	kvClient := createTestClient(addr)
+	txnOpts := &client.TransactionOptions{Name: "test"}
+	err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
+		// Make an EndTransaction request which would fail if not
+		// stripped. In this case, we set the start key to "bar" for a
+		// split of the default range; start key must be "" in this case.
+		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
+			Commit:        true,
+			SplitTrigger: &proto.SplitTrigger{
+				UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
+			},
+		}, &proto.EndTransactionResponse{})
+	})
+	if err == nil {
+		t.Errorf("expected 400 bad request error on commit")
 	}
 }
 
