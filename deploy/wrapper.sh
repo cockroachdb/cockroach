@@ -10,5 +10,9 @@ if [ $# -eq 1 ] && [ "$1" = "test" ]; then
   make test && make testrace
   exit $?
 fi
+if [ $# -eq 1 ] && [ "$1" = "shell" ]; then
+  /bin/bash
+  exit $?
+fi
 
 ./cockroach "$@"

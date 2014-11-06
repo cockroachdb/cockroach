@@ -68,7 +68,7 @@ goget:
 	$(GO) get ./...
 
 test: auxiliary
-	$(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace: auxiliary
 	$(GO) test -race -run $(TESTS) $(PKG) $(RACEFLAGS)
