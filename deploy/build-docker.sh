@@ -1,16 +1,10 @@
 #!/bin/bash
-
-REQUIRED_IMAGES="cockroachdb/docker_base"
+cd "$(dirname $0)/.."
 
 # Verify docker installation.
-source "$(dirname $0)/verify-docker.sh"
+source "./deploy/verify-docker.sh"
 
 # Create the docker cockroach image.
 echo "Building Docker Cockroach image..."
-for IMG in ${REQUIRED_IMAGES}; do
-  if [ $(docker images | awk '{ print $1 }' | grep -c "${IMG}") -eq 0 ]; then
-    docker build -t "${IMG}" "github.com/${IMG}.git"
-  fi
-done
-
-docker build -t "cockroachdb/cockroach" "$(dirname $0)/.."
+docker build -t "cockroachdb/cockroach_base" ./build
+docker build -t "cockroachdb/cockroach" .

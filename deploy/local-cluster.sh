@@ -3,7 +3,7 @@
 source ./verify-docker.sh
 
 # Image names.
-DNSMASQ_IMAGE="spencerkimball/dnsmasq"
+DNSMASQ_IMAGE="cockroachdb/dnsmasq"
 COCKROACH_IMAGE="cockroachdb/cockroach"
 
 # Container names.
