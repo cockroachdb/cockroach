@@ -77,8 +77,10 @@ coverage: build
 	$(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 acceptance:
+# The first stop is to clean up.
 	(cd $(DEPLOY); \
 	  ./build-docker.sh && \
+	  ./local-cluster.sh stop && \
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 

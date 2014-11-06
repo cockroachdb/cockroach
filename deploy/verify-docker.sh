@@ -9,7 +9,6 @@ if [[ ! $(type -P "$DOCKER") ]]; then
 fi
 
 # Verify docker is reachable.
-echo "Verifying Docker is reachable..."
 OUT=$(($DOCKER images > /dev/null) 2>&1)
 if [[ ! $? == 0 ]]; then
   echo "Docker is not reachable. Did you follow installation instructions?"

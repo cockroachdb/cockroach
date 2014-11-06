@@ -19,3 +19,4 @@ dependencies:
 test:
   override:
     - docker run "cockroachdb/cockroach" test
+    - make acceptance
