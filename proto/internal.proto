@@ -154,3 +154,43 @@ message ReadWriteCmdResponse {
   optional InternalPushTxnResponse internal_push_txn = 12;
   optional InternalResolveIntentResponse internal_resolve_intent = 13;
 }
+
+// An InternalRaftCommandUnion is the union of all commands which can be
+// sent via raft.
+message InternalRaftCommandUnion {
+  option (gogoproto.onlyone) = true;
+  // Non-batched external requests. This section is the same as RequestUnion.
+  optional ContainsRequest contains = 1;
+  optional GetRequest get = 2;
+  optional PutRequest put = 3;
+  optional ConditionalPutRequest conditional_put = 4;
+  optional IncrementRequest increment = 5;
+  optional DeleteRequest delete = 6;
+  optional DeleteRangeRequest delete_range = 7;
+  optional ScanRequest scan = 8;
+  optional BeginTransactionRequest begin_transaction = 9;
+  optional EndTransactionRequest end_transaction = 10;
+  optional AccumulateTSRequest accumulate_ts = 11;
+  optional ReapQueueRequest reap_queue = 12;
+  optional EnqueueUpdateRequest enqueue_update = 13;
+  optional EnqueueMessageRequest enqueue_message = 14;
+
+  // Other requests. Allow a gap in tag numbers so the previous list can
+  // be copy/pasted from RequestUnion.
+  optional BatchRequest batch = 30;
+  optional InternalRangeLookupRequest internal_range_lookup = 31;
+  optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 32;
+  optional InternalPushTxnRequest internal_push_txn = 33;
+  optional InternalResolveIntentRequest internal_resolve_intent = 34;
+  optional InternalSnapshotCopyRequest internal_snapshot_copy = 35;
+}
+
+// An InternalRaftCommand is a command which can be serialized and
+// sent via raft.
+message InternalRaftCommand {
+  // CmdID is used to identify a command when it has been
+  // committed. If the client specified a CmdID in its RequestHeader,
+  // that is used; otherwise the server generates an ID.
+  optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"] ;
+  optional InternalRaftCommandUnion cmd = 2 [(gogoproto.nullable) = false];
+}
