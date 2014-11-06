@@ -12,7 +12,7 @@ dependencies:
     - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
     - ./deploy/build-docker.sh
     # Otherwise, we built one above, and save it.
-    - if [[ ! -e ~/docker/base.tar ]]; then docker save "cockroachdb/cockroach" > ~/docker/base.tar; fi
+    - if [[ ! -e ~/docker/base.tar ]]; then docker save "cockroachdb/cockroach_base" > ~/docker/base.tar; fi
     # Print the history so that we can investigate potential steps which fatten
     # the image needlessly.
     - docker history "cockroachdb/cockroach"
