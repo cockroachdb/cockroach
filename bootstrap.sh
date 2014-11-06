@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bootstrap sets up all needed dependencies.
-# Its idempotent so if you don't hack often, your best bet is to just run this.
+# It's idempotent so if you don't hack often, your best bet is to just run this.
 # Assumes you are running from the top of the project.
 #
 # 1) Update all source code and submodules
@@ -33,7 +33,7 @@ go_get code.google.com/p/go.tools/cmd/goimports
 go vet 2>/dev/null || go_get code.google.com/p/go.tools/cmd/vet
 
 # Grab the go dependencies required for building.
-./setup/godeps.sh
+./build/godeps.sh
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
@@ -42,6 +42,6 @@ for f in $(ls -d githooks/*); do
 done && ls -al .git/hooks | grep githooks
 
 # Build the required libraries.
-./setup/vendor.sh
+./build/vendor.sh
 
 echo "Bootstrapped successfully!"
