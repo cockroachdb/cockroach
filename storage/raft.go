@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Autor: Ben Darnell
+// Author: Ben Darnell
 
 package storage
 

@@ -104,10 +104,10 @@ func UsesTimestampCache(method string) bool {
 	return ok
 }
 
-// A Cmd holds method, args, reply and a done channel for a command
+// A pendingCmd holds method, args, reply and a done channel for a command
 // sent to Raft. Once committed to the Raft log, the command is
 // executed and the result returned via the done channel.
-type Cmd struct {
+type pendingCmd struct {
 	Method string
 	Args   proto.Request
 	Reply  proto.Response
@@ -138,7 +138,7 @@ type Range struct {
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	respCache    *ResponseCache  // Provides idempotence for retries
-	pendingCmds  map[cmdIDKey]*Cmd
+	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
 // NewRange initializes the range using the given metadata.
@@ -152,7 +152,7 @@ func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Rang
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(rangeID, rm.Engine()),
-		pendingCmds: map[cmdIDKey]*Cmd{},
+		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	return r
 }
@@ -395,7 +395,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	}
 
 	// Create command and enqueue for Raft.
-	cmd := &Cmd{
+	pendingCmd := &pendingCmd{
 		Method: method,
 		Args:   args,
 		Reply:  reply,
@@ -411,7 +411,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		}
 	}
 	r.Lock()
-	r.pendingCmds[makeCmdIDKey(raftCmd.CmdID)] = cmd
+	r.pendingCmds[makeCmdIDKey(raftCmd.CmdID)] = pendingCmd
 	r.Unlock()
 	// TODO(bdarnell): In certain raft failover scenarios, proposed
 	// commands may be abandoned. We need to re-propose the command
@@ -421,7 +421,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
-		err := <-cmd.done
+		err := <-pendingCmd.done
 
 		// As for reads, update timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher
@@ -436,7 +436,8 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %s", cmd.Method, cmd.Args, err)
+			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
+				pendingCmd.Method, pendingCmd.Args, err)
 		}
 		return err
 	}
@@ -476,9 +477,8 @@ func (r *Range) processRaft() {
 		select {
 		case raftCmd := <-r.raft.committed():
 			idKey := makeCmdIDKey(raftCmd.CmdID)
-			var cmd *Cmd
 			r.Lock()
-			cmd = r.pendingCmds[idKey]
+			cmd := r.pendingCmds[idKey]
 			delete(r.pendingCmds, idKey)
 			r.Unlock()
 			var method string
@@ -506,7 +506,7 @@ func (r *Range) processRaft() {
 			err = r.executeCmd(method, args, reply)
 			if cmd != nil {
 				cmd.done <- err
-			} else {
+			} else if err != nil {
 				log.Errorf("error executing raft command: %s", err)
 			}
 		case <-r.closer:
