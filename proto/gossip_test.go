@@ -15,22 +15,27 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package gossip
+package proto
 
-import "net"
+import (
+	"net"
+	"testing"
+)
 
-// Request is passed to the Gossip.Gossip RPC.
-type Request struct {
-	Addr   net.Addr // Address of requesting node's server
-	LAddr  net.Addr // Local address of client on requesting node
-	MaxSeq int64    // Maximum sequence number of gossip from this peer
-
-	Delta *infoStore // Reciprocal delta of new info since last gossip
-}
-
-// Response is returned from the Gossip.Gossip RPC.
-// Delta will be nil in the event that Alternate is set.
-type Response struct {
-	Delta     *infoStore // Requested delta of server's infostore
-	Alternate net.Addr   // Non-nil means client should retry with this address
+func TestAddrToFrom(t *testing.T) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := FromNetAddr(tcpAddr)
+	tcpAddr2, err := addr.NetAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tcpAddr2.Network() != tcpAddr.Network() {
+		t.Errorf("networks differ: %s != %s", tcpAddr2.Network(), tcpAddr.Network())
+	}
+	if tcpAddr2.String() != tcpAddr.String() {
+		t.Errorf("strings differ: %s != %s", tcpAddr2.String(), tcpAddr.String())
+	}
 }

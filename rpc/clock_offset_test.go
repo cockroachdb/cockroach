@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -31,52 +32,52 @@ func TestUpdateOffset(t *testing.T) {
 	monitor := newRemoteClockMonitor(hlc.NewClock(hlc.UnixNano))
 
 	// Case 1: There is no prior offset for the address.
-	offset1 := RemoteOffset{}
+	offset1 := proto.RemoteOffset{}
 	monitor.UpdateOffset("addr", offset1)
-	if o := monitor.offsets["addr"]; o != offset1 {
+	if o := monitor.offsets["addr"]; !o.Equal(offset1) {
 		t.Errorf("expected offset %v, instead %v", offset1, o)
 	}
 
 	// Case 2: The old offset for addr was measured before lastMonitoredAt.
 	monitor.lastMonitoredAt = 5
-	offset2 := RemoteOffset{
+	offset2 := proto.RemoteOffset{
 		Offset:     0,
 		Error:      20,
 		MeasuredAt: 6,
 	}
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; o != offset2 {
+	if o := monitor.offsets["addr"]; !o.Equal(offset2) {
 		t.Errorf("expected offset %v, instead %v", offset2, o)
 	}
 
 	// Case 3: The new offset's error is smaller.
-	offset3 := RemoteOffset{
+	offset3 := proto.RemoteOffset{
 		Offset:     0,
 		Error:      10,
 		MeasuredAt: 8,
 	}
 	monitor.UpdateOffset("addr", offset3)
-	if o := monitor.offsets["addr"]; o != offset3 {
+	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
 	// Larger error and offset3.MeasuredAt > lastMonitoredAt, so no update.
 	monitor.UpdateOffset("addr", offset2)
-	if o := monitor.offsets["addr"]; o != offset3 {
+	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
 	// InfiniteOffset, shouldn't update because it has larger error.
-	monitor.UpdateOffset("addr", InfiniteOffset)
-	if o := monitor.offsets["addr"]; o != offset3 {
+	monitor.UpdateOffset("addr", proto.InfiniteOffset)
+	if o := monitor.offsets["addr"]; !o.Equal(offset3) {
 		t.Errorf("expected offset %v, instead %v", offset3, o)
 	}
 
 	// LastMonitoredAt moved up, so InfiniteOffset can be added now.
 	monitor.lastMonitoredAt = 10
-	monitor.UpdateOffset("addr", InfiniteOffset)
-	if o := monitor.offsets["addr"]; o != InfiniteOffset {
-		t.Errorf("expected offset %v, instead %v", InfiniteOffset, o)
+	monitor.UpdateOffset("addr", proto.InfiniteOffset)
+	if o := monitor.offsets["addr"]; !o.Equal(proto.InfiniteOffset) {
+		t.Errorf("expected offset %v, instead %v", proto.InfiniteOffset, o)
 	}
 }
 
@@ -116,11 +117,11 @@ func TestEndpointListSort(t *testing.T) {
 // manipulated into a list of endpoints used in Marzullo's algorithm.
 func TestBuildEndpointList(t *testing.T) {
 	// Build the offsets we will turn into an endpoint list.
-	offsets := map[string]RemoteOffset{
-		"0": RemoteOffset{Offset: 0, Error: 10},
-		"1": RemoteOffset{Offset: 1, Error: 10},
-		"2": RemoteOffset{Offset: 2, Error: 10},
-		"3": RemoteOffset{Offset: 3, Error: 10},
+	offsets := map[string]proto.RemoteOffset{
+		"0": proto.RemoteOffset{Offset: 0, Error: 10},
+		"1": proto.RemoteOffset{Offset: 1, Error: 10},
+		"2": proto.RemoteOffset{Offset: 2, Error: 10},
+		"3": proto.RemoteOffset{Offset: 3, Error: 10},
 	}
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -160,11 +161,11 @@ func TestBuildEndpointList(t *testing.T) {
 // TestBuildEndpointListRemoveStagnantClocks tests the side effect of removing
 // older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
-	offsets := map[string]RemoteOffset{
-		"0":         RemoteOffset{Offset: 0, Error: 10, MeasuredAt: 11},
-		"stagnant0": RemoteOffset{Offset: 1, Error: 10, MeasuredAt: 0},
-		"1":         RemoteOffset{Offset: 2, Error: 10, MeasuredAt: 20},
-		"stagnant1": RemoteOffset{Offset: 3, Error: 10, MeasuredAt: 9},
+	offsets := map[string]proto.RemoteOffset{
+		"0":         proto.RemoteOffset{Offset: 0, Error: 10, MeasuredAt: 11},
+		"stagnant0": proto.RemoteOffset{Offset: 1, Error: 10, MeasuredAt: 0},
+		"1":         proto.RemoteOffset{Offset: 2, Error: 10, MeasuredAt: 20},
+		"stagnant1": proto.RemoteOffset{Offset: 3, Error: 10, MeasuredAt: 9},
 	}
 
 	// The stagnant offsets older than 10ns ago will be removed.
@@ -194,11 +195,11 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 func TestFindOffsetInterval(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := map[string]RemoteOffset{
-		"0": RemoteOffset{Offset: 20, Error: 10},
-		"1": RemoteOffset{Offset: 58, Error: 20},
-		"2": RemoteOffset{Offset: 71, Error: 25},
-		"3": RemoteOffset{Offset: 91, Error: 31},
+	offsets := map[string]proto.RemoteOffset{
+		"0": proto.RemoteOffset{Offset: 20, Error: 10},
+		"1": proto.RemoteOffset{Offset: 58, Error: 20},
+		"2": proto.RemoteOffset{Offset: 71, Error: 25},
+		"3": proto.RemoteOffset{Offset: 91, Error: 31},
 	}
 
 	manual := hlc.ManualClock(0)
@@ -217,11 +218,11 @@ func TestFindOffsetInterval(t *testing.T) {
 func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
-	offsets := map[string]RemoteOffset{
-		"0": RemoteOffset{Offset: 0, Error: 1},
-		"1": RemoteOffset{Offset: 1, Error: 1},
-		"2": RemoteOffset{Offset: 3, Error: 1},
-		"3": RemoteOffset{Offset: 4, Error: 1},
+	offsets := map[string]proto.RemoteOffset{
+		"0": proto.RemoteOffset{Offset: 0, Error: 1},
+		"1": proto.RemoteOffset{Offset: 1, Error: 1},
+		"2": proto.RemoteOffset{Offset: 3, Error: 1},
+		"3": proto.RemoteOffset{Offset: 4, Error: 1},
 	}
 
 	manual := hlc.ManualClock(0)
@@ -238,11 +239,11 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 // an InfiniteOffset (they missed their last heartbeat), then we get an
 // interval for an infinite offset.
 func TestFindOffsetIntervalWithInfinites(t *testing.T) {
-	offsets := map[string]RemoteOffset{
-		"0": RemoteOffset{Offset: 0, Error: 1},
-		"1": InfiniteOffset,
-		"2": InfiniteOffset,
-		"3": InfiniteOffset,
+	offsets := map[string]proto.RemoteOffset{
+		"0": proto.RemoteOffset{Offset: 0, Error: 1},
+		"1": proto.InfiniteOffset,
+		"2": proto.InfiniteOffset,
+		"3": proto.InfiniteOffset,
 	}
 
 	manual := hlc.ManualClock(0)
@@ -253,8 +254,8 @@ func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 		lClock:  clock,
 	}
 	expectedInterval := ClusterOffsetInterval{
-		Lowerbound: InfiniteOffset.Offset,
-		Upperbound: InfiniteOffset.Offset,
+		Lowerbound: proto.InfiniteOffset.Offset,
+		Upperbound: proto.InfiniteOffset.Offset,
 	}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 }
@@ -262,7 +263,7 @@ func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 // TestFindOffsetIntervalNoRemotes tests that we measure 0 offset if there are
 // no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
-	offsets := map[string]RemoteOffset{}
+	offsets := map[string]proto.RemoteOffset{}
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(10 * time.Nanosecond)
@@ -277,8 +278,8 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // TestFindOffsetIntervalOneClock tests that we return the entire remote offset
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
-	offsets := map[string]RemoteOffset{
-		"0": RemoteOffset{Offset: 0, Error: 10},
+	offsets := map[string]proto.RemoteOffset{
+		"0": proto.RemoteOffset{Offset: 0, Error: 10},
 	}
 
 	manual := hlc.ManualClock(0)
@@ -296,7 +297,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 
 // TestFindOffsetIntervalTwoClocks tests the edge case of two remote clocks.
 func TestFindOffsetIntervalTwoClocks(t *testing.T) {
-	offsets := map[string]RemoteOffset{}
+	offsets := map[string]proto.RemoteOffset{}
 
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -307,14 +308,14 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	}
 
 	// Two intervals overlap.
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 10}
-	offsets["1"] = RemoteOffset{Offset: 20, Error: 10}
+	offsets["0"] = proto.RemoteOffset{Offset: 0, Error: 10}
+	offsets["1"] = proto.RemoteOffset{Offset: 20, Error: 10}
 	expectedInterval := ClusterOffsetInterval{Lowerbound: 10, Upperbound: 10}
 	assertClusterOffset(remoteClocks, expectedInterval, t)
 
 	// Two intervals don't overlap.
-	offsets["0"] = RemoteOffset{Offset: 0, Error: 10}
-	offsets["1"] = RemoteOffset{Offset: 30, Error: 10}
+	offsets["0"] = proto.RemoteOffset{Offset: 0, Error: 10}
+	offsets["1"] = proto.RemoteOffset{Offset: 30, Error: 10}
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
@@ -349,8 +350,8 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 	assertIntervalHealth(false, interval, maxOffset, t)
 
 	interval = ClusterOffsetInterval{
-		Lowerbound: InfiniteOffset.Offset,
-		Upperbound: InfiniteOffset.Offset,
+		Lowerbound: proto.InfiniteOffset.Offset,
+		Upperbound: proto.InfiniteOffset.Offset,
 	}
 	assertIntervalHealth(false, interval, maxOffset, t)
 }

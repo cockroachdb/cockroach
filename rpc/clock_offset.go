@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -39,8 +40,8 @@ func init() {
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets from this node to connected nodes.
 type RemoteClockMonitor struct {
-	offsets map[string]RemoteOffset // Maps remote string addr to offset.
-	lClock  *hlc.Clock              // The server clock.
+	offsets map[string]proto.RemoteOffset // Maps remote string addr to offset.
+	lClock  *hlc.Clock                    // The server clock.
 	mu      sync.Mutex
 	// Wall time in nanoseconds when we last monitored cluster offset.
 	lastMonitoredAt int64
@@ -96,7 +97,7 @@ func (l endpointList) Less(i, j int) bool {
 // should be the maximum offset of all nodes in the server's cluster.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 	return &RemoteClockMonitor{
-		offsets: map[string]RemoteOffset{},
+		offsets: map[string]proto.RemoteOffset{},
 		lClock:  clock,
 	}
 }
@@ -118,7 +119,7 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 // several chances to accurately read the remote clock. Note that we don't want
 // monitorInterval to be too large, else we might end up relying on old
 // information.
-func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
+func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	oldOffset, ok := r.offsets[addr]
@@ -130,7 +131,7 @@ func (r *RemoteClockMonitor) UpdateOffset(addr string, offset RemoteOffset) {
 		// because it was measured before the last cluster offset calculation.
 		r.offsets[addr] = offset
 	} else if oldOffset.MeasuredAt >= r.lastMonitoredAt &&
-		offset != InfiniteOffset &&
+		!offset.Equal(proto.InfiniteOffset) &&
 		offset.Error < oldOffset.Error {
 		r.offsets[addr] = offset
 	}

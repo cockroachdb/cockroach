@@ -1,0 +1,55 @@
+// Copyright 2014 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Kathy Spradlin (kathyspradlin@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
+
+package proto;
+
+import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+
+// RemoteOffset keeps track of this client's estimate of its offset from a
+// remote server. Error is the maximum error in the reading of this offset, so
+// that the real offset should be in the interval [Offset - Error, Offset
+// + Error]. If the last heartbeat timed out, Offset = InfiniteOffset.
+//
+// Offset and error are measured using the remote clock reading technique
+// described in http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+message RemoteOffset {
+  // The estimated offset from the remote server, in nanoseconds.
+  optional int64 offset = 1 [(gogoproto.nullable) = false];
+  // The maximum error of the measured offset, in nanoseconds.
+  optional int64 error = 2 [(gogoproto.nullable) = false];
+  // Measurement time, in nanoseconds from unix epoch.
+  optional int64 measured_at = 3 [(gogoproto.nullable) = false];
+}
+
+// A PingRequest specifies the string to echo in response.
+// Fields are exported so that they will be serialized in the rpc call.
+message PingRequest {
+  // Echo this string with PingResponse.
+  optional string ping = 1 [(gogoproto.nullable) = false];
+  // The last offset the client measured with the server.
+  optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
+  // The address of the client.
+  optional string addr = 3 [(gogoproto.nullable) = false];
+}
+
+// A PingResponse contains the echoed ping request string.
+message PingResponse {
+  // An echo of value sent with PingRequest.
+  optional string pong = 1 [(gogoproto.nullable) = false];
+  optional int64 server_time = 2 [(gogoproto.nullable) = false];
+}

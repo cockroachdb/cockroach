@@ -12,4 +12,3 @@ go_get code.google.com/p/go-uuid/uuid
 go_get code.google.com/p/gogoprotobuf/{proto,protoc-gen-gogo,gogoproto}
 go_get github.com/golang/glog
 go_get gopkg.in/yaml.v1
-

@@ -17,21 +17,10 @@
 
 package rpc
 
-import "github.com/cockroachdb/cockroach/util/hlc"
-
-// A PingRequest specifies the string to echo in response.
-// Fields are exported so that they will be serialized in the rpc call.
-type PingRequest struct {
-	Ping   string       // Echo this string with PingResponse.
-	Offset RemoteOffset // The last offset the client measured with the server.
-	Addr   string       // The address of the client.
-}
-
-// A PingResponse contains the echoed ping request string.
-type PingResponse struct {
-	Pong       string // An echo of value sent with PingRequest.
-	ServerTime int64
-}
+import (
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/hlc"
+)
 
 // A HeartbeatService exposes a method to echo its request params. It doubles
 // as a way to measure the offset of the server from other nodes. It uses the
@@ -49,7 +38,7 @@ type HeartbeatService struct {
 // server's current clock value, allowing the requester to measure its clock.
 // The reqeuster should also an estimate of their offset from this server along
 // with their address.
-func (hs *HeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
+func (hs *HeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
@@ -69,7 +58,7 @@ type ManualHeartbeatService struct {
 }
 
 // Ping waits until the heartbeat service is ready to respond to a Heartbeat.
-func (mhs *ManualHeartbeatService) Ping(args *PingRequest, reply *PingResponse) error {
+func (mhs *ManualHeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
 	<-mhs.ready
 	hs := HeartbeatService{
 		clock:              mhs.clock,

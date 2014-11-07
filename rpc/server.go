@@ -55,7 +55,9 @@ func NewServer(addr net.Addr, context *Context) *Server {
 		clock:              context.localClock,
 		remoteClockMonitor: context.RemoteClocks,
 	}
-	s.RegisterName("Heartbeat", heartbeat)
+	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+		log.Fatalf("unable to register heartbeat service with RPC server: %s", err)
+	}
 	return s
 }
 

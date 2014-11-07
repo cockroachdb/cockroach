@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -95,14 +96,14 @@ func TestOffsetMeasurement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedOffset := RemoteOffset{Offset: 5, Error: 5, MeasuredAt: 10}
-	if o := c.RemoteOffset(); o != expectedOffset {
+	expectedOffset := proto.RemoteOffset{Offset: 5, Error: 5, MeasuredAt: 10}
+	if o := c.RemoteOffset(); !o.Equal(expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 
 	// Ensure the offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.addr.String()]; o != expectedOffset {
+	if o := context.RemoteClocks.offsets[c.addr.String()]; !o.Equal(expectedOffset) {
 		t.Errorf("expected offset %v, actual %v", expectedOffset, o)
 	}
 	context.RemoteClocks.mu.Unlock()
@@ -142,14 +143,14 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 	// Since the reply took too long, we should have an InfiniteOffset, even
 	// though the client is still healthy because it received a heartbeat
 	// reply.
-	if o := c.RemoteOffset(); o != InfiniteOffset {
-		t.Errorf("expected offset %v, actual %v", InfiniteOffset, o)
+	if o := c.RemoteOffset(); !o.Equal(proto.InfiniteOffset) {
+		t.Errorf("expected offset %v, actual %v", proto.InfiniteOffset, o)
 	}
 
 	// Ensure the general offsets map was updated properly too.
 	context.RemoteClocks.mu.Lock()
-	if o := context.RemoteClocks.offsets[c.addr.String()]; o != InfiniteOffset {
-		t.Errorf("expected offset %v, actual %v", InfiniteOffset, o)
+	if o := context.RemoteClocks.offsets[c.addr.String()]; !o.Equal(proto.InfiniteOffset) {
+		t.Errorf("expected offset %v, actual %v", proto.InfiniteOffset, o)
 	}
 	context.RemoteClocks.mu.Unlock()
 }
@@ -181,9 +182,9 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.RemoteOffset() != InfiniteOffset {
+	if !c.RemoteOffset().Equal(proto.InfiniteOffset) {
 		t.Errorf("expected offset %v, actual %v",
-			InfiniteOffset, c.RemoteOffset())
+			proto.InfiniteOffset, c.RemoteOffset())
 	}
 }
 

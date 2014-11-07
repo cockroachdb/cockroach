@@ -18,10 +18,12 @@
 package gossip
 
 import (
+	"bytes"
 	"encoding/gob"
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -107,19 +109,25 @@ func (c *client) gossip(g *Gossip) error {
 		// Compute the delta of local node's infostore to send with request.
 		g.mu.Lock()
 		delta := g.is.delta(c.addr, localMaxSeq)
+		var deltaBytes []byte
 		if delta != nil {
 			localMaxSeq = delta.MaxSeq
+			var buf bytes.Buffer
+			if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
+				return util.Errorf("infostore could not be encoded: %s", err)
+			}
+			deltaBytes = buf.Bytes()
 		}
 		g.mu.Unlock()
 
 		// Send gossip with timeout.
-		args := &Request{
-			Addr:   g.is.NodeAddr,
-			LAddr:  c.rpcClient.LocalAddr(),
+		args := &proto.GossipRequest{
+			Addr:   *proto.FromNetAddr(g.is.NodeAddr),
+			LAddr:  *proto.FromNetAddr(c.rpcClient.LocalAddr()),
 			MaxSeq: remoteMaxSeq,
-			Delta:  delta,
+			Delta:  deltaBytes,
 		}
-		reply := new(Response)
+		reply := &proto.GossipResponse{}
 		gossipCall := c.rpcClient.Go("Gossip.Gossip", args, reply, nil)
 		select {
 		case <-gossipCall.Done:
@@ -132,26 +140,33 @@ func (c *client) gossip(g *Gossip) error {
 		case <-c.closer:
 			return nil
 		case <-time.After(*GossipInterval * 10):
-			return util.Errorf("timeout after: %v", *GossipInterval*10)
+			return util.Errorf("timeout after: %s", *GossipInterval*10)
 		}
 
 		// Handle remote forwarding.
 		if reply.Alternate != nil {
-			log.Infof("received forward from %+v to %+v", c.addr, reply.Alternate)
-			c.forwardAddr = reply.Alternate
+			log.Infof("received forward from %s to %s", c.addr, reply.Alternate)
+			var err error
+			if c.forwardAddr, err = reply.Alternate.NetAddr(); err != nil {
+				return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
+			}
 			return nil
 		}
 
 		// Combine remote node's infostore delta with ours.
 		now := time.Now().UnixNano()
 		if reply.Delta != nil {
-			log.V(1).Infof("received gossip reply delta from %s: %s", c.addr, reply.Delta)
+			delta := &infoStore{}
+			if err := gob.NewDecoder(bytes.NewBuffer(reply.Delta)).Decode(delta); err != nil {
+				return util.Errorf("infostore could not be decoded: %s", err)
+			}
+			log.V(1).Infof("received gossip reply delta from %s: %s", c.addr, delta)
 			g.mu.Lock()
-			freshCount := g.is.combine(reply.Delta)
+			freshCount := g.is.combine(delta)
 			if freshCount > 0 {
 				c.lastFresh = now
 			}
-			remoteMaxSeq = reply.Delta.MaxSeq
+			remoteMaxSeq = delta.MaxSeq
 
 			// If we have the sentinel gossip, we're considered connected.
 			g.checkHasConnected()
