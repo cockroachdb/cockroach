@@ -313,15 +313,13 @@ func (tc *Coordinator) sendBatch(batchArgs *proto.BatchRequest, batchReply *prot
 	// as needed.
 	calls := []*client.Call{}
 	for i := range batchArgs.Requests {
-		// Method from args.
-		method, err := batchArgs.Requests[i].Method()
+		// Initialize args header values where appropriate.
+		args := batchArgs.Requests[i].GetValue().(proto.Request)
+		method, err := proto.MethodForRequest(args)
 		if err != nil {
 			batchReply.SetGoError(err)
 			return
 		}
-
-		// Initialize args header values where appropriate.
-		args := batchArgs.Requests[i].GetValue().(proto.Request)
 		if args.Header().User == "" {
 			args.Header().User = batchArgs.User
 		}

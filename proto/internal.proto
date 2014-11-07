@@ -165,12 +165,11 @@ message InternalRaftCommandUnion {
   optional DeleteRequest delete = 6;
   optional DeleteRangeRequest delete_range = 7;
   optional ScanRequest scan = 8;
-  optional BeginTransactionRequest begin_transaction = 9;
-  optional EndTransactionRequest end_transaction = 10;
-  optional AccumulateTSRequest accumulate_ts = 11;
-  optional ReapQueueRequest reap_queue = 12;
-  optional EnqueueUpdateRequest enqueue_update = 13;
-  optional EnqueueMessageRequest enqueue_message = 14;
+  optional EndTransactionRequest end_transaction = 9;
+  optional AccumulateTSRequest accumulate_ts = 10;
+  optional ReapQueueRequest reap_queue = 11;
+  optional EnqueueUpdateRequest enqueue_update = 12;
+  optional EnqueueMessageRequest enqueue_message = 13;
 
   // Other requests. Allow a gap in tag numbers so the previous list can
   // be copy/pasted from RequestUnion.

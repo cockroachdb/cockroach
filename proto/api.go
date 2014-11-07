@@ -312,8 +312,6 @@ func MethodForRequest(req Request) (string, error) {
 		return DeleteRange, nil
 	case *ScanRequest:
 		return Scan, nil
-	case *BeginTransactionRequest:
-		return BeginTransaction, nil
 	case *EndTransactionRequest:
 		return EndTransaction, nil
 	case *AccumulateTSRequest:
