@@ -68,7 +68,7 @@ goget:
 	$(GO) get ./...
 
 test: auxiliary
-	$(GO) test -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace: auxiliary
 	$(GO) test -race -run $(TESTS) $(PKG) $(RACEFLAGS)
@@ -77,8 +77,10 @@ coverage: build
 	$(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 acceptance:
+# The first stop is to clean up.
 	(cd $(DEPLOY); \
 	  ./build-docker.sh && \
+	  ./local-cluster.sh stop && \
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 

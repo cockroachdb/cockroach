@@ -1,6 +1,7 @@
-FROM cockroachdb/docker_base:latest
+FROM cockroachdb/cockroach_base:latest
 
-MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
+MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
+
 
 # Copy the contents of the cockroach source directory to the image.
 # Any changes which have been made to the source directory will cause
@@ -13,18 +14,18 @@ MAINTAINER Spencer Kimball <spencer.kimball@gmail.com>
 ADD . /cockroach/
 
 # Update to the correct version of our submodules and rebuild any changes
-# in rocksdb (in case the submodule revision is different from the current
+# in RocksDB (in case the submodule revision is different from the current
 # master)
-# Build the cockroach executable and run the tests.
+# Build the cockroach executable.
 RUN cd -P /cockroach && git submodule update --init && \
- cd -P /cockroach/_vendor/rocksdb && make static_lib && \
- cd -P /cockroach && make build
+ cd -P /cockroach/_vendor/rocksdb && make static_lib
+RUN cd -P /cockroach && make build
 
 # Expose the http status port.
 EXPOSE 8080
 
 # This is the command to run when this image is launched as a container.
-ENTRYPOINT ["/cockroach/deploy/wrapper.sh"]
+ENTRYPOINT ["/cockroach/cockroach.sh"]
 
 # These are default arguments to the cockroach binary.
 CMD ["--help"]
