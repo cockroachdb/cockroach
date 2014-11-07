@@ -1,11 +1,18 @@
 #!/bin/bash
+# Start a local cluster and verify the gossip network connects.
+# You can override the Cockroach image by supplying COCKROACH_IMAGE.
+# The default choice is cockroachdb/cockroach-dev; to run deployment
+# image acceptance tests, use cockroachdb/cockroachdb instead.
+#
+# Author: Spencer Kimball (spencerkimball@gmail.com)
+
 cd "$(dirname $0)"
 
-source ./verify-docker.sh
+source ../build/verify-docker.sh
 
 # Image names.
 DNSMASQ_IMAGE="cockroachdb/dnsmasq"
-COCKROACH_IMAGE="cockroachdb/cockroach"
+COCKROACH_IMAGE="${COCKROACH_IMAGE:-cockroachdb/cockroach-dev}"
 
 # Container names.
 DNSMASQ_NAME="${HOSTNAME:-local}-cockroach-dns"

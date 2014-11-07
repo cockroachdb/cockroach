@@ -12,6 +12,7 @@ MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 # are only made to cockroach. If rocksdb is being hacked, remove the
 # "_vendor" exclude from .dockerignore.
 ADD . /cockroach/
+RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 
 # Update to the correct version of our submodules and rebuild any changes
 # in RocksDB (in case the submodule revision is different from the current
@@ -23,6 +24,8 @@ RUN cd -P /cockroach && make build
 
 # Expose the http status port.
 EXPOSE 8080
+
+WORKDIR /cockroach/
 
 # This is the command to run when this image is launched as a container.
 ENTRYPOINT ["/cockroach/cockroach.sh"]

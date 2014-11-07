@@ -20,15 +20,14 @@ dependencies:
     # Cache" will make sure we start with a clean slate.
     - mkdir -p ~/docker
     - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
-    - if [[ -e ~/docker/dnsmasq.tar ]]; then docker load -i ~/docker/dnsmasq.tar; fi
-    - ./deploy/build-docker.sh
+    - ./build/build-docker-dev.sh
     - docker save "cockroachdb/cockroach_base" > ~/docker/base.tar
-    - if [[ ! -e ~/docker/dnsmasq.tar ]]; then docker pull cockroachdb/dnsmasq && docker save "cockroachdb/dnsmasq" > ~/docker/dnsmasq.tar; fi
+    - if [[ ! -e ~/docker/dnsmasq.tar ]]; then docker pull "cockroachdb/dnsmasq" && docker save "cockroachdb/dnsmasq" > ~/docker/dnsmasq.tar; else docker load -i ~/docker/dnsmasq.tar; fi
     # Print the history so that we can investigate potential steps which fatten
     # the image needlessly.
-    - docker history "cockroachdb/cockroach"
+    - docker history "cockroachdb/cockroach-dev"
 
 test:
   override:
-    - docker run "cockroachdb/cockroach" test
+    - docker run "cockroachdb/cockroach-dev" test
     - make acceptance
