@@ -33,7 +33,9 @@ func TestKVEmptyFlush(t *testing.T) {
 	client := NewKV(newTestSender(func(call *Call) {
 		count++
 	}), nil)
-	client.Flush()
+	if err := client.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	if count != 0 {
 		t.Errorf("expected 0 count; got %d", count)
 	}
@@ -42,19 +44,26 @@ func TestKVEmptyFlush(t *testing.T) {
 // TestKVClientCommandID verifies that client command ID is set
 // on call.
 func TestKVClientCommandID(t *testing.T) {
+	count := 0
 	client := NewKV(newTestSender(func(call *Call) {
+		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
 		}
 	}), nil)
 	client.Call(proto.Put, testPutReq, &proto.PutResponse{})
+	if count != 1 {
+		t.Errorf("expected test sender to be invoked once; got %d", count)
+	}
 }
 
 // TestKVPrepareAndFlush verifies that Flush sends single prepared
 // call without a batch and more than one prepared calls with a batch.
 func TestKVPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
+		count := 0
 		client := NewKV(newTestSender(func(call *Call) {
+			count++
 			if i == 1 && call.Method == proto.Batch {
 				t.Error("expected non-batch for a single buffered call")
 			} else if i > 1 {
@@ -73,6 +82,9 @@ func TestKVPrepareAndFlush(t *testing.T) {
 		if err := client.Flush(); err != nil {
 			t.Fatal(err)
 		}
+		if count != 1 {
+			t.Errorf("expected test sender to be invoked once; got %d", count)
+		}
 	}
 }
 
@@ -81,11 +93,18 @@ func TestKVPrepareAndFlush(t *testing.T) {
 // and unflushed calls buffered.
 func TestKVPrepareAndCall(t *testing.T) {
 	for i := 0; i < 3; i++ {
+		count := 0
 		client := NewKV(newTestSender(func(call *Call) {
+			count++
 			if i == 0 && call.Method == proto.Batch {
 				t.Error("expected non-batch for a single call")
-			} else if i > 0 && call.Method != proto.Batch {
-				t.Errorf("expected batch for %d prepared call(s)", i)
+			} else if i > 0 {
+				if call.Method != proto.Batch {
+					t.Errorf("expected batch for %d prepared call(s)", i)
+				}
+				if l := len(call.Args.(*proto.BatchRequest).Requests); l != i+1 {
+					t.Errorf("expected batch to contain %d requests; got %d", i+1, l)
+				}
 			}
 		}), nil)
 
@@ -94,6 +113,9 @@ func TestKVPrepareAndCall(t *testing.T) {
 		}
 		if err := client.Call(proto.Put, testPutReq, &proto.PutResponse{}); err != nil {
 			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("expected test sender to be invoked once; got %d", count)
 		}
 	}
 }

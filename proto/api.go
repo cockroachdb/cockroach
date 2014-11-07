@@ -588,18 +588,18 @@ func (sr *ScanResponse) Verify(req Request) error {
 // TODO(spencer): batches should include a list of key ranges
 //   representing the constituent requests.
 func (br *BatchRequest) Add(args Request) {
-	union := &RequestUnion{}
+	union := RequestUnion{}
 	union.SetValue(args)
 	if br.Key == nil {
 		br.Key = args.Header().Key
 		br.EndKey = args.Header().EndKey
 	}
-	br.Requests = append(br.Requests, *union)
+	br.Requests = append(br.Requests, union)
 }
 
 // Add adds a response to the batch response.
 func (br *BatchResponse) Add(reply Response) {
-	union := &ResponseUnion{}
+	union := ResponseUnion{}
 	union.SetValue(reply)
-	br.Responses = append(br.Responses, *union)
+	br.Responses = append(br.Responses, union)
 }

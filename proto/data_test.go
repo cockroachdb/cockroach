@@ -213,6 +213,12 @@ func TestValueBothBytesAndIntegerSet(t *testing.T) {
 
 // TestValueZeroIntegerSerialization verifies that a value with
 // integer=0 set can be marshalled and unmarshalled successfully.
+// This tests exists because gob serialization treats integers
+// and pointers to integers as the same and so loses a proto.Value
+// which encodes integer=0.
+//
+// TODO(spencer): change Value type to switch between integer and
+//   []byte value types using a mechanism other than nil pointers.
 func TestValueZeroIntegerSerialization(t *testing.T) {
 	k := Key("key 00")
 	v := Value{Integer: gogoproto.Int64(0)}

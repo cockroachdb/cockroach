@@ -159,13 +159,11 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 					}
 					for i := 0; ; i++ {
 						err = kvClient.Call(test.method, args, reply)
-						if i == 0 {
-							close(doneCall)
-						}
 						if _, ok := err.(*proto.WriteIntentError); !ok {
 							break
 						}
 					}
+					close(doneCall)
 					if err != nil {
 						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, test.method)
 					}
