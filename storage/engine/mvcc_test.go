@@ -190,6 +190,34 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 	}
 }
 
+// TestMVCCIncrement verifies increment behavior. In particular,
+// incrementing a non-existent key by 0 will create the value.
+func TestMVCCIncrement(t *testing.T) {
+	mvcc, _ := createTestMVCC()
+	newVal, err := mvcc.Increment(testKey1, makeTS(0, 0), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newVal != 0 {
+		t.Errorf("expected new value of 0; got %d", newVal)
+	}
+	val, err := mvcc.Get(testKey1, makeTS(0, 1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val == nil {
+		t.Errorf("expected increment of 0 to create key/value")
+	}
+
+	newVal, err = mvcc.Increment(testKey1, makeTS(0, 2), nil, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newVal != 2 {
+		t.Errorf("expected new value of 2; got %d", newVal)
+	}
+}
+
 func TestMVCCUpdateExistingKey(t *testing.T) {
 	mvcc, _ := createTestMVCC()
 	err := mvcc.Put(testKey1, makeTS(0, 0), value1, nil)

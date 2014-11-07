@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type cmdIDKey struct {
@@ -95,7 +96,7 @@ func (rc *ResponseCache) ClearData() error {
 // false. If a command is pending already for the cmdID, then this
 // method will block until the the command is completed or the
 // response cache is cleared.
-func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{}) (bool, error) {
+func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Response) (bool, error) {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return false, nil
@@ -104,6 +105,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply interface{})
 	rc.Lock()
 	for {
 		if cond, ok := rc.inflight[makeCmdIDKey(cmdID)]; ok {
+			log.Infof("waiting on cmdID: %s", &cmdID)
 			cond.Wait()
 		} else {
 			break
@@ -161,16 +163,19 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRangeID int64) error {
 // inflight map. Any requests waiting on the outcome of the inflight
 // command will be signaled to wakeup and read the command response
 // from the cache.
-func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{}) error {
+func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Response) error {
 	// Do nothing if command ID is empty.
 	if cmdID.IsEmpty() {
 		return nil
 	}
 	// Write the response value to the engine.
-	encKey := engine.MVCCEncodeKey(responseCacheKey(rc.rangeID, cmdID))
-	rwResp := &proto.ReadWriteCmdResponse{}
-	rwResp.SetValue(reply)
-	_, _, err := engine.PutProto(rc.engine, encKey, rwResp)
+	var err error
+	if rc.shouldCacheResponse(reply) {
+		encKey := engine.MVCCEncodeKey(responseCacheKey(rc.rangeID, cmdID))
+		rwResp := &proto.ReadWriteCmdResponse{}
+		rwResp.SetValue(reply)
+		_, _, err = engine.PutProto(rc.engine, encKey, rwResp)
+	}
 
 	// Take lock after writing response to cache!
 	rc.Lock()
@@ -179,6 +184,18 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply interface{})
 	rc.removeInflightLocked(cmdID)
 
 	return err
+}
+
+// shouldCacheResponse returns whether the response should be cached.
+// Responses with write-too-old and write-intent errors are are
+// retried on the server, and so are not recorded in the response
+// cache in the hopes of retrying to a successful outcome.
+func (rc *ResponseCache) shouldCacheResponse(reply proto.Response) bool {
+	switch reply.Header().GoError().(type) {
+	case *proto.WriteTooOldError, *proto.WriteIntentError:
+		return false
+	}
+	return true
 }
 
 // addInflightLocked adds the supplied ClientCmdID to the inflight

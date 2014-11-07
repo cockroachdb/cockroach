@@ -15,7 +15,11 @@
 
 * Write a test for transaction starvation.
 
-* Implement client batching and use it for range splitting.
+* Move RPC server and clients to use protobuf codec. Change test
+  in client/client_test.go to be zero-indexed (which exacerbates
+  a bug in the gob codec) and also add a test which puts a 0
+  integer and then gets it in client/client_test.go for extra
+  clarity.
 
 * Change key / end key in request to a more flexible list of key
   intervals to properly account for batch requests. This data is

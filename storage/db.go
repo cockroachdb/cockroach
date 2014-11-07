@@ -28,31 +28,29 @@ import (
 
 // UpdateRangeAddressing updates the range addressing metadata for the
 // range specified by desc.
-//
-// TODO(spencer): rewrite this to do all writes in parallel.
 func UpdateRangeAddressing(db *client.KV, desc *proto.RangeDescriptor) error {
 	// First, the case of the range ending with a meta2 prefix. This
 	// means the range is full of meta2. We must update the relevant
 	// meta1 entry pointing to the end of this range.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
-		if err := db.PutProto(engine.RangeMetaKey(desc.EndKey), desc); err != nil {
+		if err := db.PreparePutProto(engine.RangeMetaKey(desc.EndKey), desc); err != nil {
 			return err
 		}
 	} else {
 		// In this case, the range ends with a normal user key, so we must
 		// update the relevant meta2 entry pointing to the end of this range.
-		if err := db.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
+		if err := db.PreparePutProto(engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
 			return err
 		}
 		// If the range starts with KeyMin, we update the appropriate
 		// meta1 entry.
 		if bytes.Equal(desc.StartKey, engine.KeyMin) {
 			if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
-				if err := db.PutProto(engine.RangeMetaKey(desc.EndKey), desc); err != nil {
+				if err := db.PreparePutProto(engine.RangeMetaKey(desc.EndKey), desc); err != nil {
 					return err
 				}
 			} else if !bytes.HasPrefix(desc.EndKey, engine.KeyMetaPrefix) {
-				if err := db.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
+				if err := db.PreparePutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
 					return err
 				}
 			} else {
@@ -61,7 +59,7 @@ func UpdateRangeAddressing(db *client.KV, desc *proto.RangeDescriptor) error {
 		} else if bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
 			// If the range contains the final set of meta2 addressing
 			// records, we update the meta1 entry pointing to KeyMax.
-			if err := db.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
+			if err := db.PreparePutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
 				return err
 			}
 		} else if bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {

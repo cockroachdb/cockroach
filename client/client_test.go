@@ -82,11 +82,13 @@ func createTestClient(addr string) *client.KV {
 	return client.NewKV(sender, nil)
 }
 
-// TestKVRetryOnSingleCall verifies that the client will retry as
-// appropriate on write/write and read/write conflicts. In the case
+// TestKVClientRetryNonTxn verifies that non-transactional client will
+// succeed despite write/write and read/write conflicts. In the case
 // where the non-transactional put can push the txn, we expect the
 // transaction's value to be written after all retries are complete.
-func TestKVRetryOnSingleCall(t *testing.T) {
+func TestKVClientRetryNonTxn(t *testing.T) {
+	storage.RangeRetryOptions.Backoff = 1 * time.Millisecond
+	storage.RangeRetryOptions.MaxAttempts = 2
 	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
 	s := server.StartTestServer(t)
@@ -155,13 +157,15 @@ func TestKVRetryOnSingleCall(t *testing.T) {
 					if test.method == proto.Put {
 						args.(*proto.PutRequest).Value.Bytes = []byte("value")
 					}
-					err = kvClient.Call(test.method, args, reply)
-					// Since we've finished the call here, close the channel to signal completion.
-					// We can't just rely on the notifying sender wait because that only signals
-					// on the first call through the sender. The non-txn put or get may require
-					// multiple retries. Closing the channel here signals the non-txn put or get
-					// has definitively completed.
-					close(doneCall)
+					for i := 0; ; i++ {
+						err = kvClient.Call(test.method, args, reply)
+						if i == 0 {
+							close(doneCall)
+						}
+						if _, ok := err.(*proto.WriteIntentError); !ok {
+							break
+						}
+					}
 					if err != nil {
 						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, test.method)
 					}
@@ -196,9 +200,9 @@ func TestKVRetryOnSingleCall(t *testing.T) {
 	}
 }
 
-// TestKVRunTransaction verifies some simple transaction isolation
+// TestKVClientRunTransaction verifies some simple transaction isolation
 // semantics.
-func TestKVRunTransaction(t *testing.T) {
+func TestKVClientRunTransaction(t *testing.T) {
 	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
 	s := server.StartTestServer(t)
@@ -258,9 +262,9 @@ func TestKVRunTransaction(t *testing.T) {
 	}
 }
 
-// TestKVGetAndPutProto verifies gets and puts of protobufs using the
+// TestKVClientGetAndPutProto verifies gets and puts of protobufs using the
 // KV client's convenience methods.
-func TestKVGetAndPutProto(t *testing.T) {
+func TestKVClientGetAndPutProto(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
@@ -293,9 +297,9 @@ func TestKVGetAndPutProto(t *testing.T) {
 	}
 }
 
-// TestKVGetAndPutGob verifies gets and puts of Go objects using the
+// TestKVClientGetAndPutGob verifies gets and puts of Go objects using the
 // KV client's convenience methods.
-func TestKVGetAndPutGob(t *testing.T) {
+func TestKVClientGetAndPutGob(t *testing.T) {
 	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
@@ -327,5 +331,64 @@ func TestKVGetAndPutGob(t *testing.T) {
 	}
 	if !reflect.DeepEqual(obj, readObj) {
 		t.Errorf("expected objects equal; %+v != %+v", obj, readObj)
+	}
+}
+
+// TestKVClientPrepareAndFlush prepares a sequence of increment
+// calls and then flushes them and verifies the results.
+func TestKVClientPrepareAndFlush(t *testing.T) {
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	kvClient := createTestClient(s.HTTPAddr)
+	kvClient.User = storage.UserRoot
+
+	replies := []*proto.IncrementResponse{}
+	keys := []proto.Key{}
+	for i := 0; i < 10; i++ {
+		key := proto.Key(fmt.Sprintf("key %02d", i))
+		keys = append(keys, key)
+		reply := &proto.IncrementResponse{}
+		replies = append(replies, reply)
+		kvClient.Prepare(proto.Increment, proto.IncrementArgs(key, int64(i+1)), reply)
+	}
+
+	if err := kvClient.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, reply := range replies {
+		if reply.NewValue != int64(i+1) {
+			t.Errorf("%d: expected %d; got %d", i, i, reply.NewValue)
+		}
+	}
+
+	// Now try 2 scans.
+	scan1 := &proto.ScanResponse{}
+	scan2 := &proto.ScanResponse{}
+	kvClient.Prepare(proto.Scan, proto.ScanArgs(proto.Key("key 00"), proto.Key("key 05"), 0), scan1)
+	kvClient.Prepare(proto.Scan, proto.ScanArgs(proto.Key("key 05"), proto.Key("key 10"), 0), scan2)
+
+	if err := kvClient.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(scan1.Rows) != 5 || len(scan2.Rows) != 5 {
+		t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
+			len(scan1.Rows), len(scan2.Rows))
+	}
+	for i := 0; i < 5; i++ {
+		if key := scan1.Rows[i].Key; !key.Equal(keys[i]) {
+			t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
+		}
+		if val := scan1.Rows[i].Value.GetInteger(); val != int64(i+1) {
+			t.Errorf("expected scan1 result %d to be %d; got %d", i, i+1, val)
+		}
+
+		if key := scan2.Rows[i].Key; !key.Equal(keys[i+5]) {
+			t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
+		}
+		if val := scan2.Rows[i].Value.GetInteger(); val != int64(i+6) {
+			t.Errorf("expected scan2 result %d to be %d; got %d", i, i+6, val)
+		}
 	}
 }

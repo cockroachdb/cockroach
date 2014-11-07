@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -104,7 +105,7 @@ func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 // metadata heartbeat.
 func (tm *txnMetadata) close(txn *proto.Transaction, sender client.KVSender) {
 	if tm.keys.Len() > 0 {
-		log.V(1).Infof("cleaning up intents for transaction %s", txn)
+		log.V(1).Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 	}
 	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
 		call := &client.Call{
@@ -172,28 +173,101 @@ func NewCoordinator(wrapped client.KVSender, clock *hlc.Clock) *Coordinator {
 }
 
 // Send implements the client.KVSender interface. If the call is part
-// of a transaction, the Coordinator adds the transaction to a map of
-// active transactions and begins heartbeating it. Every subsequent
-// call for the same transaction updates the lastUpdateTS to prevent
-// live transactions from being considered abandoned and garbage
-// collected. Read/write mutating requests have their key or key range
-// added to the transaction's interval tree of key ranges for eventual
-// cleanup via resolved write intents.
+// of a transaction, the coordinator will initialize the transaction
+// if it's not nil but has an empty ID.
 func (tc *Coordinator) Send(call *client.Call) {
-	// Handle BeginTransaction call separately.
-	if call.Method == proto.BeginTransaction {
-		tc.beginTxn(call.Args.(*proto.BeginTransactionRequest),
-			call.Reply.(*proto.BeginTransactionResponse))
-		return
+	header := call.Args.Header()
+	tc.maybeBeginTxn(header)
+
+	// Process batch specially; otherwise, send via wrapped sender.
+	if call.Method == proto.Batch {
+		tc.sendBatch(call.Args.(*proto.BatchRequest), call.Reply.(*proto.BatchResponse))
+	} else {
+		tc.sendOne(call)
+	}
+}
+
+// Close implements the client.KVSender interface by stopping ongoing
+// heartbeats for extant transactions. Close does not attempt to
+// resolve existing write intents for transactions which this
+// Coordinator has been managing.
+func (tc *Coordinator) Close() {
+	tc.Lock()
+	defer tc.Unlock()
+	for _, txn := range tc.txns {
+		close(txn.closer)
+	}
+	tc.txns = map[string]*txnMetadata{}
+}
+
+// maybeBeginTxn begins a new transaction if a txn has been specified
+// in the request but has a nil ID. The new transaction is intialized
+// using the name and isolation in the otherwise uninitialized txn.
+// The Priority, if non-zero is used as a minimum.
+func (tc *Coordinator) maybeBeginTxn(header *proto.RequestHeader) {
+	if header.Txn != nil {
+		if len(header.Txn.ID) == 0 {
+			newTxn := proto.NewTransaction(header.Txn.Name, engine.KeyAddress(header.Key), header.GetUserPriority(),
+				header.Txn.Isolation, tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
+			// Use existing priority as a minimum. This is used on transaction
+			// aborts to ratchet priority when creating successor transaction.
+			if newTxn.Priority < header.Txn.Priority {
+				newTxn.Priority = header.Txn.Priority
+			}
+			header.Txn = newTxn
+		}
+	}
+}
+
+// sendOne sends a single call via the wrapped sender. If the call is
+// part of a transaction, the Coordinator adds the transaction to a
+// map of active transactions and begins heartbeating it. Every
+// subsequent call for the same transaction updates the lastUpdateTS
+// to prevent live transactions from being considered abandoned and
+// garbage collected. Read/write mutating requests have their key or
+// key range added to the transaction's interval tree of key ranges
+// for eventual cleanup via resolved write intents.
+//
+// On success, and if the call is part of a transaction, the affected
+// key range is recorded as live intents for eventual cleanup upon
+// transaction commit. Upon successful txn commit, initiates cleanup
+// of intents.
+func (tc *Coordinator) sendOne(call *client.Call) {
+	header := call.Args.Header()
+	// If this call is part of a transaction...
+	if header.Txn != nil {
+		// Set the timestamp to the original timestamp for read-only
+		// commands and to the transaction timestamp for read/write
+		// commands.
+		if proto.IsReadOnly(call.Method) {
+			header.Timestamp = header.Txn.OrigTimestamp
+		} else {
+			header.Timestamp = header.Txn.Timestamp
+		}
+		// End transaction must have its key set to the txn ID.
+		if call.Method == proto.EndTransaction {
+			header.Key = header.Txn.ID
+		}
 	}
 
-	header := call.Args.Header()
-	// Coordinate transactional requests.
-	var txnMeta *txnMetadata
-	if header.Txn != nil && proto.IsTransactional(call.Method) {
+	// Send the command through wrapped sender.
+	tc.wrapped.Send(call)
+
+	if header.Txn != nil {
+		// If not already set, copy the request txn.
+		if call.Reply.Header().Txn == nil {
+			call.Reply.Header().Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
+		}
+		tc.updateResponseTxn(header, call.Reply.Header())
+	}
+
+	// If successful, we're in a transaction, and the command leaves
+	// transactional intents, add the key or key range to the intents map.
+	// If the transaction metadata doesn't yet exist, create it.
+	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactional(call.Method) {
 		tc.Lock()
-		defer tc.Unlock()
 		var ok bool
+		var txnMeta *txnMetadata
 		if txnMeta, ok = tc.txns[string(header.Txn.ID)]; !ok {
 			txnMeta = &txnMetadata{
 				txn:             *header.Txn,
@@ -211,17 +285,8 @@ func (tc *Coordinator) Send(call *client.Call) {
 			go tc.heartbeat(header.Txn, txnMeta.closer)
 		}
 		txnMeta.lastUpdateTS = tc.clock.Now()
-	}
-
-	// Send the call on to the wrapped sender.
-	tc.wrapped.Send(call)
-
-	// If in a transaction and this is a read-write command, add the
-	// key or key range to the intents map on success.
-	if header.Txn != nil && proto.IsTransactional(call.Method) &&
-		proto.IsReadWrite(call.Method) && call.Reply.Header().GoError() == nil {
-		// On success, append a new key range to the set of affected keys.
 		txnMeta.addKeyRange(header.Key, header.EndKey)
+		tc.Unlock()
 	}
 
 	// Cleanup intents and transaction map if end of transaction.
@@ -232,7 +297,7 @@ func (tc *Coordinator) Send(call *client.Call) {
 	case nil:
 		var txn *proto.Transaction
 		if call.Method == proto.EndTransaction {
-			txn = call.Reply.(*proto.EndTransactionResponse).Txn
+			txn = call.Reply.Header().Txn
 		}
 		if txn != nil && txn.Status != proto.PENDING {
 			tc.cleanupTxn(txn)
@@ -240,28 +305,111 @@ func (tc *Coordinator) Send(call *client.Call) {
 	}
 }
 
-// Close implements the client.KVSender interface by stopping ongoing
-// heartbeats for extant transactions. Close does not attempt to
-// resolve existing write intents for transactions which this
-// Coordinator has been managing.
-func (tc *Coordinator) Close() {
-	tc.Lock()
-	defer tc.Unlock()
-	for _, txn := range tc.txns {
-		close(txn.closer)
+// sendBatch unrolls a batched command and sends each constituent
+// command in parallel.
+func (tc *Coordinator) sendBatch(batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
+	// Prepare the calls by unrolling the batch. If the batchReply is
+	// pre-initialized with replies, use those; otherwise create replies
+	// as needed.
+	calls := []*client.Call{}
+	for i := range batchArgs.Requests {
+		// Method from args.
+		method, err := batchArgs.Requests[i].Method()
+		if err != nil {
+			batchReply.SetGoError(err)
+			return
+		}
+
+		// Initialize args header values where appropriate.
+		args := batchArgs.Requests[i].GetValue().(proto.Request)
+		if args.Header().User == "" {
+			args.Header().User = batchArgs.User
+		}
+		if args.Header().UserPriority == nil {
+			args.Header().UserPriority = batchArgs.UserPriority
+		}
+		args.Header().Txn = batchArgs.Txn
+
+		// Create a reply from the method type and add to batch response.
+		reply, err := proto.CreateReply(method)
+		if err != nil {
+			batchReply.SetGoError(util.Errorf("unsupported method in batch: %s", method))
+			return
+		}
+		batchReply.Add(reply)
+		calls = append(calls, &client.Call{Method: method, Args: args, Reply: reply})
 	}
-	tc.txns = map[string]*txnMetadata{}
+
+	// Send calls in parallel and wait for all to complete.
+	wg := sync.WaitGroup{}
+	wg.Add(len(calls))
+	for _, call := range calls {
+		go func(call *client.Call) {
+			tc.sendOne(call)
+			wg.Done()
+		}(call)
+	}
+	wg.Wait()
+
+	// Propagate first error and amalgamate transaction updates.
+	for _, call := range calls {
+		if batchReply.Error == nil {
+			batchReply.Error = call.Reply.Header().Error
+		}
+		if batchReply.Txn != nil {
+			batchReply.Txn.Update(call.Reply.Header().Txn)
+		}
+	}
 }
 
-// beginTxn initializes a new transaction instance using the supplied
-// args and the node's clock. This method doesn't need to call through
-// to any particular range as it only accesses the node's clock. It
-// doesn't read or write any data.
-func (tc *Coordinator) beginTxn(args *proto.BeginTransactionRequest, reply *proto.BeginTransactionResponse) {
-	txn := proto.NewTransaction(args.Name, engine.KeyAddress(args.Key), args.GetUserPriority(), args.Isolation,
-		tc.clock.Now(), tc.clock.MaxOffset().Nanoseconds())
-	reply.Timestamp = txn.Timestamp
-	reply.Txn = txn
+// updateResponseTxn updates the response txn based on the response
+// timestamp and error. The timestamp may have changed upon
+// encountering a newer write or read. Both the timestamp and the
+// priority may change depending on error conditions.
+func (tc *Coordinator) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
+	// Move txn timestamp forward to response timestamp if applicable.
+	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
+		replyHeader.Txn.Timestamp = replyHeader.Timestamp
+	}
+
+	// Take action on various errors.
+	switch t := replyHeader.GoError().(type) {
+	case *proto.ReadWithinUncertaintyIntervalError:
+		// If the reader encountered a newer write within the uncertainty
+		// interval, move the timestamp forward, just past that write or
+		// up to MaxTimestamp, whichever comes first.
+		var candidateTS proto.Timestamp
+		if t.ExistingTimestamp.Less(replyHeader.Txn.MaxTimestamp) {
+			candidateTS = t.ExistingTimestamp
+			candidateTS.Logical++
+		} else {
+			candidateTS = replyHeader.Txn.MaxTimestamp
+		}
+		// Only change the timestamp if we're moving it forward.
+		if replyHeader.Txn.Timestamp.Less(candidateTS) {
+			replyHeader.Txn.Timestamp = candidateTS
+		}
+		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), replyHeader.Txn.Priority, replyHeader.Txn.Timestamp)
+	case *proto.TransactionAbortedError:
+		// Increase timestamp if applicable.
+		if replyHeader.Txn.Timestamp.Less(t.Txn.Timestamp) {
+			replyHeader.Txn.Timestamp = t.Txn.Timestamp
+		}
+		replyHeader.Txn.Priority = t.Txn.Priority
+	case *proto.TransactionPushError:
+		// Increase timestamp if applicable.
+		if replyHeader.Txn.Timestamp.Less(t.PusheeTxn.Timestamp) {
+			replyHeader.Txn.Timestamp = t.PusheeTxn.Timestamp
+			replyHeader.Txn.Timestamp.Logical++ // ensure this txn's timestamp > other txn
+		}
+		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), t.PusheeTxn.Priority-1, replyHeader.Txn.Timestamp)
+	case *proto.TransactionRetryError:
+		// Increase timestamp if applicable.
+		if replyHeader.Txn.Timestamp.Less(t.Txn.Timestamp) {
+			replyHeader.Txn.Timestamp = t.Txn.Timestamp
+		}
+		replyHeader.Txn.Restart(argsHeader.GetUserPriority(), t.Txn.Priority, replyHeader.Txn.Timestamp)
+	}
 }
 
 // cleanupTxn is called to resolve write intents which were set down over

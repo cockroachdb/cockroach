@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -118,6 +119,27 @@ type pendingCmd struct {
 // with specified start key.
 func makeRangeKey(startKey proto.Key) proto.Key {
 	return engine.MakeLocalKey(engine.KeyLocalRangeDescriptorPrefix, startKey)
+}
+
+// A RangeManager is an interface satisfied by Store through which ranges
+// contained in the store can access the methods required for splitting.
+type RangeManager interface {
+	// Accessors for shared state.
+	ClusterID() string
+	StoreID() int32
+	Clock() *hlc.Clock
+	Engine() engine.Engine
+	DB() *client.KV
+	Allocator() *allocator
+	Gossip() *gossip.Gossip
+
+	// Range manipulation methods.
+	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
+	CreateRaftGroup(id int64) raft
+	SplitRange(origRng, newRng *Range) error
+	AddRange(rng *Range)
+	RemoveRange(rng *Range) error
+	CreateSnapshot() (string, error)
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -614,9 +636,9 @@ func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
 	}
 }
 
-// shouldSplit returns whether the current size of the range exceeds
+// ShouldSplit returns whether the current size of the range exceeds
 // the max size specified in the zone config.
-func (r *Range) shouldSplit() bool {
+func (r *Range) ShouldSplit() bool {
 	// If not the leader or gossip is not enabled, ignore.
 	if !r.IsLeader() || r.rm.Gossip() == nil {
 		return false
@@ -647,7 +669,7 @@ func (r *Range) shouldSplit() bool {
 }
 
 // maybeSplit initiates an asynchronous split via AdminSplit request
-// if shouldSplit is true. This operation is invoked after each
+// if ShouldSplit is true. This operation is invoked after each
 // successful execution of a read/write command.
 func (r *Range) maybeSplit() {
 	// If we're already splitting, ignore.
@@ -657,7 +679,7 @@ func (r *Range) maybeSplit() {
 	// If this zone's total bytes are in excess, split the range. We omit
 	// the split key in order to have AdminSplit determine it via scan
 	// of range data.
-	if r.shouldSplit() {
+	if r.ShouldSplit() {
 		// Admin commands run synchronously, so run this in a goroutine.
 		go r.AddCmd(proto.AdminSplit, &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{Key: r.Desc.StartKey},
@@ -900,7 +922,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		// If the isolation level is SERIALIZABLE, return a transaction
 		// retry error if the commit timestamp isn't equal to the txn
 		// timestamp.
-		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.Timestamp) {
+		if args.Txn.Isolation == proto.SERIALIZABLE && !reply.Txn.Timestamp.Equal(args.Txn.OrigTimestamp) {
 			reply.SetGoError(proto.NewTransactionRetryError(reply.Txn))
 			return
 		}
@@ -1363,16 +1385,14 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		Name: fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
 	}
 	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
-		txn.UserPriority = 100000 // High user priority prevents aborts
-
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
-		if err := txn.PutProto(makeRangeKey(newDesc.StartKey), newDesc); err != nil {
+		if err := txn.PreparePutProto(makeRangeKey(newDesc.StartKey), newDesc); err != nil {
 			return err
 		}
 		// Update existing range descriptor for first half of split.
-		if err := txn.PutProto(makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		if err := txn.PreparePutProto(makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).

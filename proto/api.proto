@@ -73,8 +73,11 @@ message RequestHeader {
   // specified. If neither this value nor Txn is specified, the value
   // defaults to 1.
   optional int32 user_priority = 7 [default = 1];
-  // Txn is set non-nil if a transaction is underway. If set, the value
-  // of UserPriority is ignored.
+  // Txn is set non-nil if a transaction is underway. To start a txn,
+  // the first request should set this field to non-nil with name and
+  // isolation level set as desired. The response will contain the
+  // fully-initialized transaction with txn ID, priority, initial
+  // timestamp, and maximum timestamp.
   optional Transaction txn = 8;
 }
 
@@ -88,11 +91,12 @@ message ResponseHeader {
   // servicing the request will be set here. Additionally, in the case
   // of writes, this value may be increased from the timestamp passed
   // with the RequestHeader if the key being written was either read
-  // or written more recently. If multiple requests are sent in
-  // parallel as part of the same transaction, then the timestamp
-  // supplied with subsequent requests should use the maximum of all
-  // returned timestamp values.
+  // or written more recently.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // Transaction is non-nil if the request specified a non-nil
+  // transaction. The transaction timestamp and/or priority may have
+  // been updated, depending on the outcome of the request.
+  optional Transaction txn = 3;
 }
 
 // A ContainsRequest is arguments to the Contains() method.
@@ -155,11 +159,12 @@ message ConditionalPutResponse {
   optional Value actual_value = 2;
 }
 
-// An IncrementRequest is arguments to the Increment() method.  It
-// increments the value for key, and returns the new value.
-// IncrementRequest cannot be called on a key set by Put() or
-// ConditionalPut(). Similarly, Get(), Put() and ConditionalPut()
-// cannot be invoked on an incremented key.
+// An IncrementRequest is arguments to the Increment() method. It
+// increments the value for key, and returns the new value. If no
+// value exists for a key, incrementing by 0 is not a noop, but will
+// create a zero value. IncrementRequest cannot be called on a key set
+// by Put() or ConditionalPut(). Similarly, Get(), Put() and
+// ConditionalPut() cannot be invoked on an incremented key.
 message IncrementRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 increment = 2 [(gogoproto.nullable) = false];
@@ -215,28 +220,6 @@ message ScanResponse {
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
 }
 
-// A BeginTransactionRequest is arguments to the BeginTransaction()
-// method. It specifies the user priority (done via
-// RequestHeader.UserPriority) and isolation level.
-message BeginTransactionRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Name is a pithy string describing the purpose of the txn.
-  // Very useful for debugging.
-  optional string name = 2 [(gogoproto.nullable) = false];
-  // Isolation is one of SERIALIZABLE or SNAPSHOT, indicating the
-  // isolation guarantees provided to concurrent transactions.
-  optional IsolationType isolation = 3 [(gogoproto.nullable) = false];
-}
-
-// A BeginTransactionResponse is the return value from the
-// BeginTransaction() method.
-message BeginTransactionResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Txn is non-nil if the transaction was started. Use the returned
-  // value with subsequent requests which are part of this transaction.
-  optional Transaction txn = 2;
-}
-
 // An EndTransactionRequest is arguments to the EndTransaction() method.
 // It specifies whether to commit or roll back an extant transaction.
 message EndTransactionRequest {
@@ -251,20 +234,19 @@ message EndTransactionRequest {
 }
 
 // An EndTransactionResponse is the return value from the
-// EndTransaction() method. If successful, the final transaction
-// record is returned. In particular, transaction status and timestamp
-// will be updated to reflect final committed values. Clients may
-// propagate Txn.Timestamp as the final txn commit timestamp in order
-// to preserve causal ordering between subsequent
-// transactions. CommitWait specifies the commit wait, which is the
-// remaining time the client MUST wait before signalling completion of
-// the transaction to another distributed node to maintain
-// consistency.
+// EndTransaction() method. The final transaction record is returned
+// as part of the response header. In particular, transaction status
+// and timestamp will be updated to reflect final committed
+// values. Clients may propagate the transaction timestamp as the
+// final txn commit timestamp in order to preserve causal ordering
+// between subsequent transactions. CommitWait specifies the commit
+// wait, which is the remaining time the client MUST wait before
+// signalling completion of the transaction to another distributed
+// node to maintain consistency.
 message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Transaction txn = 2;
   // Remaining time (ns).
-  optional int64 commit_wait = 3 [(gogoproto.nullable) = false];
+  optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
 }
 
 // An AccumulateTSRequest is arguments to the AccumulateTS() method.
@@ -339,12 +321,11 @@ message RequestUnion {
   optional DeleteRequest delete = 6;
   optional DeleteRangeRequest delete_range = 7;
   optional ScanRequest scan = 8;
-  optional BeginTransactionRequest begin_transaction = 9;
-  optional EndTransactionRequest end_transaction = 10;
-  optional AccumulateTSRequest accumulate_ts = 11;
-  optional ReapQueueRequest reap_queue = 12;
-  optional EnqueueUpdateRequest enqueue_update = 13;
-  optional EnqueueMessageRequest enqueue_message = 14;
+  optional EndTransactionRequest end_transaction = 9;
+  optional AccumulateTSRequest accumulate_ts = 10;
+  optional ReapQueueRequest reap_queue = 11;
+  optional EnqueueUpdateRequest enqueue_update = 12;
+  optional EnqueueMessageRequest enqueue_message = 13;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -358,12 +339,11 @@ message ResponseUnion {
   optional DeleteResponse delete = 6;
   optional DeleteRangeResponse delete_range = 7;
   optional ScanResponse scan = 8;
-  optional BeginTransactionResponse begin_transaction = 9;
-  optional EndTransactionResponse end_transaction = 10;
-  optional AccumulateTSResponse accumulate_ts = 11;
-  optional ReapQueueResponse reap_queue = 12;
-  optional EnqueueUpdateResponse enqueue_update = 13;
-  optional EnqueueMessageResponse enqueue_message = 14;
+  optional EndTransactionResponse end_transaction = 9;
+  optional AccumulateTSResponse accumulate_ts = 10;
+  optional ReapQueueResponse reap_queue = 11;
+  optional EnqueueUpdateResponse enqueue_update = 12;
+  optional EnqueueMessageResponse enqueue_message = 13;
 }
 
 // A BatchRequest contains one or more requests to be executed in

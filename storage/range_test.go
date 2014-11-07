@@ -1445,7 +1445,7 @@ func TestRangeStats(t *testing.T) {
 	if err := rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 118, KeyBytes: 40, ValBytes: 78, IntentBytes: 28, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 124, KeyBytes: 40, ValBytes: 84, IntentBytes: 28, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
 	verifyRangeStats(eng, rng.RangeID, expMS, t)
 
 	// Resolve the 2nd value.

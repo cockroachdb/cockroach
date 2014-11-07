@@ -279,12 +279,13 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 	max.WallTime += maxOffset
 
 	return &Transaction{
-		Name:         name,
-		ID:           append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
-		Priority:     priority,
-		Isolation:    isolation,
-		Timestamp:    now,
-		MaxTimestamp: max,
+		Name:          name,
+		ID:            append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
+		Priority:      priority,
+		Isolation:     isolation,
+		Timestamp:     now,
+		OrigTimestamp: now,
+		MaxTimestamp:  max,
 	}
 }
 
@@ -335,10 +336,38 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}
+	// Set original timestamp to current timestamp on restart.
+	t.OrigTimestamp = t.Timestamp
 	// Potentially upgrade priority both by creating a new random
 	// priority using userPriority and considering upgradePriority.
 	t.UpgradePriority(MakePriority(userPriority))
 	t.UpgradePriority(upgradePriority)
+}
+
+// Update ratchets priority, timestamp and original timestamp values
+// for the transaction. If t.ID is empty, then the transaction is
+// copied from o.
+func (t *Transaction) Update(o *Transaction) {
+	if o == nil {
+		return
+	}
+	if len(t.ID) == 0 {
+		*t = *gogoproto.Clone(o).(*Transaction)
+		return
+	}
+	if o.Status != PENDING {
+		t.Status = o.Status
+	}
+	if t.Epoch < o.Epoch {
+		t.Epoch = o.Epoch
+	}
+	if t.Timestamp.Less(o.Timestamp) {
+		t.Timestamp = o.Timestamp
+	}
+	if t.OrigTimestamp.Less(o.OrigTimestamp) {
+		t.OrigTimestamp = o.OrigTimestamp
+	}
+	t.UpgradePriority(o.Priority)
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
@@ -360,6 +389,6 @@ func (t *Transaction) MD5() [md5.Size]byte {
 
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
-	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s maxts=%s}",
-		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.MaxTimestamp)
+	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s orig=%s max=%s}",
+		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }

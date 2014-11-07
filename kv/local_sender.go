@@ -132,14 +132,12 @@ func (ls *LocalSender) Send(call *client.Call) {
 				// reset header.Replica and engage retry loop.
 				switch err.(type) {
 				case *proto.RangeKeyMismatchError:
+					// Clear request replica & response error.
 					header.Replica = proto.Replica{}
+					call.Reply.Header().Error = nil
 					return util.RetryContinue, nil
 				}
 				call.Reply.Header().SetGoError(err)
-			} else {
-				if err = call.Reply.Verify(call.Args); err != nil {
-					call.Reply.Header().SetGoError(err)
-				}
 			}
 		}
 		return util.RetryBreak, nil

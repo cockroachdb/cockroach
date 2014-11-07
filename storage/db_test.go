@@ -15,7 +15,12 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package storage
+/* Package storage_test provides a means of testing store
+functionality which depends on a fully-functional KV client. This
+cannot be done within the storage package because of circular
+dependencies.
+*/
+package storage_test
 
 import (
 	"fmt"
@@ -25,91 +30,84 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-// testSender is an implementation of the client.KVSender interface
-// which passes all requests through to a single store. A map keeps
-// track of keys with intents for each transaction. Intents are
-// resolved on invocation of EndTransaction. NOTE: this does not
-// properly handle resolving intents from DeleteRange commands.
-type testSender struct {
-	store   *Store
-	intents map[string][]proto.Key
+// createTestStore creates a test store using an in-memory
+// engine. Returns the store clock's manual unix nanos time and the
+// store. The caller is responsible for closing the store on exit.
+func createTestStore(t *testing.T) *storage.Store {
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
+	g := gossip.New(rpcContext)
+	manual := hlc.ManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	lSender := kv.NewLocalSender()
+	sender := kv.NewCoordinator(lSender, clock)
+	db := client.NewKV(sender, nil)
+	db.User = storage.UserRoot
+	store := storage.NewStore(clock, eng, db, g)
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	lSender.AddStore(store)
+	if _, err := store.BootstrapRange(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	return store
 }
 
-// Send forwards the call to the single store. If the call is part of
-// a txn and is read-write, keep track of keys as intent. On txn end,
-// resolve all intents. This is a poor man's version of kv/coordinator,
-// but it serves the purposes of supporting tests in this package.
-// Since kv/ depends on storage/, we can't get access to a coordinator
-// sender from here.
-func (db *testSender) Send(call *client.Call) {
-	// Keep track of all intents.
-	// NOTE: this doesn't keep track of range intents.
-	txn := call.Args.Header().Txn
-	if proto.IsReadWrite(call.Method) && txn != nil && proto.IsTransactional(call.Method) {
-		if db.intents == nil {
-			db.intents = map[string][]proto.Key{}
-		}
-		id := string(txn.ID)
-		db.intents[id] = append(db.intents[id], call.Args.Header().Key)
+// getArgs returns a GetRequest and GetResponse pair addressed to
+// the default replica for the specified key.
+func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) {
+	args := &proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
 	}
-
-	// Handle BeginTransaction separately.
-	if call.Method == proto.BeginTransaction {
-		btArgs := call.Args.(*proto.BeginTransactionRequest)
-		txn = proto.NewTransaction(btArgs.Name, engine.KeyAddress(btArgs.Key),
-			btArgs.GetUserPriority(), btArgs.Isolation,
-			db.store.Clock().Now(), db.store.Clock().MaxOffset().Nanoseconds())
-		call.Reply.(*proto.BeginTransactionResponse).Txn = txn
-		return
-	}
-
-	// Forward call to range as command.
-	if rng := db.store.LookupRange(call.Args.Header().Key, call.Args.Header().EndKey); rng != nil {
-		call.Args.Header().Replica = *rng.GetReplica()
-		db.store.ExecuteCmd(call.Method, call.Args, call.Reply)
-	} else {
-		call.Reply.Header().SetGoError(proto.NewRangeKeyMismatchError(call.Args.Header().Key, call.Args.Header().EndKey, nil))
-	}
-
-	// Cleanup intents on end transaction.
-	if call.Reply.Header().GoError() == nil {
-		txn = nil
-		if call.Method == proto.EndTransaction {
-			txn = call.Reply.(*proto.EndTransactionResponse).Txn
-		}
-		if txn != nil && txn.Status != proto.PENDING {
-			id := string(txn.ID)
-			for _, key := range db.intents[id] {
-				log.V(1).Infof("cleaning up intent %q for txn %s", key, txn)
-				reply := &proto.InternalResolveIntentResponse{}
-				db.Send(&client.Call{
-					Method: proto.InternalResolveIntent,
-					Args: &proto.InternalResolveIntentRequest{
-						RequestHeader: proto.RequestHeader{
-							Replica:   call.Args.Header().Replica,
-							Timestamp: txn.Timestamp,
-							Key:       key,
-							Txn:       txn,
-						},
-					},
-					Reply: reply,
-				})
-				if err := reply.GoError(); err != nil {
-					log.Warningf("failed to cleanup intent at %q: %s", key, err)
-				}
-			}
-			delete(db.intents, id)
-		}
-	}
+	reply := &proto.GetResponse{}
+	return args, reply
 }
 
-// Close implements the client.KVSender interface.
-func (db *testSender) Close() {}
+// putArgs returns a PutRequest and PutResponse pair addressed to
+// the default replica for the specified key / value.
+func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
+	args := &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		Value: proto.Value{
+			Bytes: value,
+		},
+	}
+	reply := &proto.PutResponse{}
+	return args, reply
+}
+
+// incrementArgs returns an IncrementRequest and IncrementResponse pair
+// addressed to the default replica for the specified key / value.
+func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
+	args := &proto.IncrementRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		Increment: inc,
+	}
+	reply := &proto.IncrementResponse{}
+	return args, reply
+}
 
 type metaRecord struct {
 	key  proto.Key
@@ -133,7 +131,7 @@ func meta2Key(key proto.Key) proto.Key {
 // TestUpdateRangeAddressing verifies range addressing records are
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
-	store, _ := createTestStore(t)
+	store := createTestStore(t)
 	testCases := []struct {
 		start, end proto.Key
 		expNew     []proto.Key
@@ -182,9 +180,10 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 	for i, test := range testCases {
 		desc := &proto.RangeDescriptor{RaftID: int64(i), StartKey: test.start, EndKey: test.end}
-		if err := UpdateRangeAddressing(store.DB(), desc); err != nil {
+		if err := storage.UpdateRangeAddressing(store.DB(), desc); err != nil {
 			t.Fatal(err)
 		}
+		store.DB().Flush()
 		// Scan meta keys directly from engine.
 		mvcc := engine.NewMVCC(store.Engine())
 		kvs, err := mvcc.Scan(engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, nil)
@@ -229,13 +228,13 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // attempt to update range addressing records that would allow a split
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
-	store, _ := createTestStore(t)
+	store := createTestStore(t)
 	desc := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
-	if err := UpdateRangeAddressing(store.DB(), desc); err == nil {
+	if err := storage.UpdateRangeAddressing(store.DB(), desc); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 	desc = &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
-	if err := UpdateRangeAddressing(store.DB(), desc); err == nil {
+	if err := storage.UpdateRangeAddressing(store.DB(), desc); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 }

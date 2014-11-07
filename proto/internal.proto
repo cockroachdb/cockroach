@@ -59,9 +59,6 @@ message InternalHeartbeatTxnRequest {
 // pending).
 message InternalHeartbeatTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Txn is non-nil if the transaction could be heartbeat and contains
-  // the current value of the transaction.
-  optional Transaction txn = 2;
 }
 
 // An InternalPushTxnRequest is arguments to the InternalPushTxn()
