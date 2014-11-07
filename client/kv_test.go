@@ -26,6 +26,100 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+// TestKVEmptyFlush verifies that flushing without preparing any
+// calls is a noop.
+func TestKVEmptyFlush(t *testing.T) {
+	count := 0
+	client := NewKV(newTestSender(func(call *Call) {
+		count++
+	}), nil)
+	if err := client.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 count; got %d", count)
+	}
+}
+
+// TestKVClientCommandID verifies that client command ID is set
+// on call.
+func TestKVClientCommandID(t *testing.T) {
+	count := 0
+	client := NewKV(newTestSender(func(call *Call) {
+		count++
+		if call.Args.Header().CmdID.WallTime == 0 {
+			t.Errorf("expected client command ID to be initialized")
+		}
+	}), nil)
+	client.Call(proto.Put, testPutReq, &proto.PutResponse{})
+	if count != 1 {
+		t.Errorf("expected test sender to be invoked once; got %d", count)
+	}
+}
+
+// TestKVPrepareAndFlush verifies that Flush sends single prepared
+// call without a batch and more than one prepared calls with a batch.
+func TestKVPrepareAndFlush(t *testing.T) {
+	for i := 1; i < 3; i++ {
+		count := 0
+		client := NewKV(newTestSender(func(call *Call) {
+			count++
+			if i == 1 && call.Method == proto.Batch {
+				t.Error("expected non-batch for a single buffered call")
+			} else if i > 1 {
+				if call.Method != proto.Batch {
+					t.Error("expected batch for > 1 buffered calls")
+				}
+				if call.Args.Header().CmdID.WallTime == 0 {
+					t.Errorf("expected batch client command ID to be initialized: %s", call.Args.Header().CmdID)
+				}
+			}
+		}), nil)
+
+		for j := 0; j < i; j++ {
+			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
+		}
+		if err := client.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("expected test sender to be invoked once; got %d", count)
+		}
+	}
+}
+
+// TestKVPrepareAndCall verifies that Call will act as a Prepare
+// followed by a Flush in the event there are already-prepared
+// and unflushed calls buffered.
+func TestKVPrepareAndCall(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		count := 0
+		client := NewKV(newTestSender(func(call *Call) {
+			count++
+			if i == 0 && call.Method == proto.Batch {
+				t.Error("expected non-batch for a single call")
+			} else if i > 0 {
+				if call.Method != proto.Batch {
+					t.Errorf("expected batch for %d prepared call(s)", i)
+				}
+				if l := len(call.Args.(*proto.BatchRequest).Requests); l != i+1 {
+					t.Errorf("expected batch to contain %d requests; got %d", i+1, l)
+				}
+			}
+		}), nil)
+
+		for j := 0; j < i; j++ {
+			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
+		}
+		if err := client.Call(proto.Put, testPutReq, &proto.PutResponse{}); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Errorf("expected test sender to be invoked once; got %d", count)
+		}
+	}
+}
+
 // TestKVTransactionSender verifies the proper unwrapping and
 // re-wrapping of the client's sender when starting a transaction.
 // Also verifies that User and UserPriority are propagated to the

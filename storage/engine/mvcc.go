@@ -412,7 +412,8 @@ func (mvcc *MVCC) Increment(key proto.Key, timestamp proto.Timestamp, txn *proto
 		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
 	}
 
-	if inc == 0 {
+	// Skip writing the value in the event the value already exists.
+	if inc == 0 && value != nil {
 		return int64Val, nil
 	}
 

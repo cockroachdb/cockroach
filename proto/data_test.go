@@ -211,6 +211,36 @@ func TestValueBothBytesAndIntegerSet(t *testing.T) {
 	}
 }
 
+// TestValueZeroIntegerSerialization verifies that a value with
+// integer=0 set can be marshalled and unmarshalled successfully.
+// This tests exists because gob serialization treats integers
+// and pointers to integers as the same and so loses a proto.Value
+// which encodes integer=0.
+//
+// TODO(spencer): change Value type to switch between integer and
+//   []byte value types using a mechanism other than nil pointers.
+func TestValueZeroIntegerSerialization(t *testing.T) {
+	k := Key("key 00")
+	v := Value{Integer: gogoproto.Int64(0)}
+	v.InitChecksum(k)
+
+	data, err := gogoproto.Marshal(&v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2 := &Value{}
+	if err = gogoproto.Unmarshal(data, v2); err != nil {
+		t.Fatal(err)
+	}
+	if v2.Integer == nil {
+		t.Errorf("expected non-nil integer value; got %s", v2)
+	} else if v2.GetInteger() != 0 {
+		t.Errorf("expected zero integer value; got %d", v2.GetInteger())
+	} else if err = v2.Verify(k); err != nil {
+		t.Errorf("failed value verification: %s", err)
+	}
+}
+
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}

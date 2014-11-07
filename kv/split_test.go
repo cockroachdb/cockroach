@@ -163,24 +163,11 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
-		var kvs []proto.KeyValue
-		if err := db.RunTransaction(&client.TransactionOptions{Name: "scan meta2 records"}, func(txn *client.KV) error {
-			req := &proto.ScanRequest{
-				RequestHeader: proto.RequestHeader{
-					Key:    engine.KeyMeta2Prefix,
-					EndKey: engine.KeyMetaMax,
-				},
-			}
-			resp := &proto.ScanResponse{}
-			if err := txn.Call(proto.Scan, req, resp); err != nil {
-				return err
-			}
-			kvs = resp.Rows
-			return nil
-		}); err != nil {
+		resp := &proto.ScanResponse{}
+		if err := db.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
 			t.Fatalf("failed to scan meta1 keys: %s", err)
 		}
-		return len(kvs) >= 5
+		return len(resp.Rows) >= 5
 	}, 2*time.Second); err != nil {
 		t.Errorf("failed to split 5 times: %s", err)
 	}

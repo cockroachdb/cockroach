@@ -18,8 +18,6 @@
 package proto
 
 import (
-	"reflect"
-
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -52,12 +50,6 @@ const (
 	// Scan fetches the values for all keys which fall between
 	// args.RequestHeader.Key and args.RequestHeader.EndKey.
 	Scan = "Scan"
-	// BeginTransaction starts a transaction by initializing a new
-	// Transaction proto using the contents of the request. Note that this
-	// method does not call through to the key value interface but instead
-	// services it directly, as creating a new transaction requires only
-	// access to the node's clock. Nothing must be read or written.
-	BeginTransaction = "BeginTransaction"
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction = "EndTransaction"
 	// AccumulateTS is used to efficiently accumulate a time series of
@@ -104,7 +96,6 @@ var AllMethods = stringSet{
 	Delete:                struct{}{},
 	DeleteRange:           struct{}{},
 	Scan:                  struct{}{},
-	BeginTransaction:      struct{}{},
 	EndTransaction:        struct{}{},
 	AccumulateTS:          struct{}{},
 	ReapQueue:             struct{}{},
@@ -121,22 +112,21 @@ var AllMethods = stringSet{
 // PublicMethods specifies the set of methods accessible via the
 // public key-value API.
 var PublicMethods = stringSet{
-	Contains:         struct{}{},
-	Get:              struct{}{},
-	Put:              struct{}{},
-	ConditionalPut:   struct{}{},
-	Increment:        struct{}{},
-	Delete:           struct{}{},
-	DeleteRange:      struct{}{},
-	Scan:             struct{}{},
-	BeginTransaction: struct{}{},
-	EndTransaction:   struct{}{},
-	AccumulateTS:     struct{}{},
-	ReapQueue:        struct{}{},
-	EnqueueUpdate:    struct{}{},
-	EnqueueMessage:   struct{}{},
-	Batch:            struct{}{},
-	AdminSplit:       struct{}{},
+	Contains:       struct{}{},
+	Get:            struct{}{},
+	Put:            struct{}{},
+	ConditionalPut: struct{}{},
+	Increment:      struct{}{},
+	Delete:         struct{}{},
+	DeleteRange:    struct{}{},
+	Scan:           struct{}{},
+	EndTransaction: struct{}{},
+	AccumulateTS:   struct{}{},
+	ReapQueue:      struct{}{},
+	EnqueueUpdate:  struct{}{},
+	EnqueueMessage: struct{}{},
+	Batch:          struct{}{},
+	AdminSplit:     struct{}{},
 }
 
 // InternalMethods specifies the set of methods accessible only
@@ -172,22 +162,20 @@ var WriteMethods = stringSet{
 	ReapQueue:             struct{}{},
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
+	Batch:                 struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 }
 
-// TxnMethods specifies the set of methods which may be part of a
-// transaction.
+// TxnMethods specifies the set of methods which leave key intents
+// during transactions.
 var TxnMethods = stringSet{
-	Contains:       struct{}{},
-	Get:            struct{}{},
 	Put:            struct{}{},
 	ConditionalPut: struct{}{},
 	Increment:      struct{}{},
 	Delete:         struct{}{},
 	DeleteRange:    struct{}{},
-	Scan:           struct{}{},
 	AccumulateTS:   struct{}{},
 	ReapQueue:      struct{}{},
 	EnqueueUpdate:  struct{}{},
@@ -268,6 +256,17 @@ func GetArgs(key Key) *GetRequest {
 	}
 }
 
+// IncrementArgs returns an IncrementRequest object initialized to
+// increment the value at key by increment.
+func IncrementArgs(key Key, increment int64) *IncrementRequest {
+	return &IncrementRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
+		},
+		Increment: increment,
+	}
+}
+
 // PutArgs returns a PutRequest object initialized to put value
 // as a byte slice at key.
 func PutArgs(key Key, valueBytes []byte) *PutRequest {
@@ -278,6 +277,18 @@ func PutArgs(key Key, valueBytes []byte) *PutRequest {
 			Key: key,
 		},
 		Value: value,
+	}
+}
+
+// ScanArgs returns a ScanRequest object initialized to scan
+// from start to end keys with max results.
+func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {
+	return &ScanRequest{
+		RequestHeader: RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+		MaxResults: maxResults,
 	}
 }
 
@@ -301,8 +312,6 @@ func MethodForRequest(req Request) (string, error) {
 		return DeleteRange, nil
 	case *ScanRequest:
 		return Scan, nil
-	case *BeginTransactionRequest:
-		return BeginTransaction, nil
 	case *EndTransactionRequest:
 		return EndTransaction, nil
 	case *AccumulateTSRequest:
@@ -331,50 +340,102 @@ func MethodForRequest(req Request) (string, error) {
 
 // CreateArgsAndReply returns allocated request and response pairs
 // according to the specified method.
-func CreateArgsAndReply(method string) (Request, Response, error) {
+func CreateArgsAndReply(method string) (args Request, reply Response, err error) {
+	if args, err = CreateArgs(method); err != nil {
+		return
+	}
+	reply, err = CreateReply(method)
+	return
+}
+
+// CreateArgs returns an allocated request according to the specified method.
+func CreateArgs(method string) (Request, error) {
 	switch method {
 	case Contains:
-		return &ContainsRequest{}, &ContainsResponse{}, nil
+		return &ContainsRequest{}, nil
 	case Get:
-		return &GetRequest{}, &GetResponse{}, nil
+		return &GetRequest{}, nil
 	case Put:
-		return &PutRequest{}, &PutResponse{}, nil
+		return &PutRequest{}, nil
 	case ConditionalPut:
-		return &ConditionalPutRequest{}, &ConditionalPutResponse{}, nil
+		return &ConditionalPutRequest{}, nil
 	case Increment:
-		return &IncrementRequest{}, &IncrementResponse{}, nil
+		return &IncrementRequest{}, nil
 	case Delete:
-		return &DeleteRequest{}, &DeleteResponse{}, nil
+		return &DeleteRequest{}, nil
 	case DeleteRange:
-		return &DeleteRangeRequest{}, &DeleteRangeResponse{}, nil
+		return &DeleteRangeRequest{}, nil
 	case Scan:
-		return &ScanRequest{}, &ScanResponse{}, nil
-	case BeginTransaction:
-		return &BeginTransactionRequest{}, &BeginTransactionResponse{}, nil
+		return &ScanRequest{}, nil
 	case EndTransaction:
-		return &EndTransactionRequest{}, &EndTransactionResponse{}, nil
+		return &EndTransactionRequest{}, nil
 	case AccumulateTS:
-		return &AccumulateTSRequest{}, &AccumulateTSResponse{}, nil
+		return &AccumulateTSRequest{}, nil
 	case ReapQueue:
-		return &ReapQueueRequest{}, &ReapQueueResponse{}, nil
+		return &ReapQueueRequest{}, nil
 	case EnqueueUpdate:
-		return &EnqueueUpdateRequest{}, &EnqueueUpdateResponse{}, nil
+		return &EnqueueUpdateRequest{}, nil
 	case EnqueueMessage:
-		return &EnqueueMessageRequest{}, &EnqueueMessageResponse{}, nil
+		return &EnqueueMessageRequest{}, nil
 	case Batch:
-		return &BatchRequest{}, &BatchResponse{}, nil
+		return &BatchRequest{}, nil
 	case AdminSplit:
-		return &AdminSplitRequest{}, &AdminSplitResponse{}, nil
+		return &AdminSplitRequest{}, nil
 	case InternalHeartbeatTxn:
-		return &InternalHeartbeatTxnRequest{}, &InternalHeartbeatTxnResponse{}, nil
+		return &InternalHeartbeatTxnRequest{}, nil
 	case InternalPushTxn:
-		return &InternalPushTxnRequest{}, &InternalPushTxnResponse{}, nil
+		return &InternalPushTxnRequest{}, nil
 	case InternalResolveIntent:
-		return &InternalResolveIntentRequest{}, &InternalResolveIntentResponse{}, nil
+		return &InternalResolveIntentRequest{}, nil
 	case InternalSnapshotCopy:
-		return &InternalSnapshotCopyRequest{}, &InternalSnapshotCopyResponse{}, nil
+		return &InternalSnapshotCopyRequest{}, nil
 	}
-	return nil, nil, util.Errorf("unhandled method %s", method)
+	return nil, util.Errorf("unhandled method %s", method)
+}
+
+// CreateReply returns an allocated response according to the specified method.
+func CreateReply(method string) (Response, error) {
+	switch method {
+	case Contains:
+		return &ContainsResponse{}, nil
+	case Get:
+		return &GetResponse{}, nil
+	case Put:
+		return &PutResponse{}, nil
+	case ConditionalPut:
+		return &ConditionalPutResponse{}, nil
+	case Increment:
+		return &IncrementResponse{}, nil
+	case Delete:
+		return &DeleteResponse{}, nil
+	case DeleteRange:
+		return &DeleteRangeResponse{}, nil
+	case Scan:
+		return &ScanResponse{}, nil
+	case EndTransaction:
+		return &EndTransactionResponse{}, nil
+	case AccumulateTS:
+		return &AccumulateTSResponse{}, nil
+	case ReapQueue:
+		return &ReapQueueResponse{}, nil
+	case EnqueueUpdate:
+		return &EnqueueUpdateResponse{}, nil
+	case EnqueueMessage:
+		return &EnqueueMessageResponse{}, nil
+	case Batch:
+		return &BatchResponse{}, nil
+	case AdminSplit:
+		return &AdminSplitResponse{}, nil
+	case InternalHeartbeatTxn:
+		return &InternalHeartbeatTxnResponse{}, nil
+	case InternalPushTxn:
+		return &InternalPushTxnResponse{}, nil
+	case InternalResolveIntent:
+		return &InternalResolveIntentResponse{}, nil
+	case InternalSnapshotCopy:
+		return &InternalSnapshotCopyResponse{}, nil
+	}
+	return nil, util.Errorf("unhandled method %s", method)
 }
 
 // IsEmpty returns true if the client command ID has zero values.
@@ -519,15 +580,24 @@ func (sr *ScanResponse) Verify(req Request) error {
 	return nil
 }
 
-// NewReply constructs a new reply element that is compatible with the
-// supplied channel.
-func NewReply(replyChanI interface{}) Response {
-	// TODO(pmattis): The reflection sort of sucks, but at least it is
-	// localized to this one file.
-	return reflect.New(reflect.TypeOf(replyChanI).Elem().Elem()).Interface().(Response)
+// Add adds a request to the batch request. The batch inherits
+// the key range of the first request added to it.
+//
+// TODO(spencer): batches should include a list of key ranges
+//   representing the constituent requests.
+func (br *BatchRequest) Add(args Request) {
+	union := RequestUnion{}
+	union.SetValue(args)
+	if br.Key == nil {
+		br.Key = args.Header().Key
+		br.EndKey = args.Header().EndKey
+	}
+	br.Requests = append(br.Requests, union)
 }
 
-// SendReply sends the supplied reply to the reply channel.
-func SendReply(replyChanI interface{}, reply Response) {
-	reflect.ValueOf(replyChanI).Send(reflect.ValueOf(reply))
+// Add adds a response to the batch response.
+func (br *BatchResponse) Add(reply Response) {
+	union := ResponseUnion{}
+	union.SetValue(reply)
+	br.Responses = append(br.Responses, union)
 }

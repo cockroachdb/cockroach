@@ -31,6 +31,7 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -40,7 +41,7 @@ import (
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
 func setCorrectnessRetryOptions() {
-	client.TxnRetryOptions = util.RetryOptions{
+	storage.RangeRetryOptions = util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  10 * time.Millisecond,
 		Constant:    2,

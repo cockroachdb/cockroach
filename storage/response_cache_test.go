@@ -201,6 +201,36 @@ func TestResponseCacheClear(t *testing.T) {
 	}
 }
 
+// TestResponseCacheShouldCache verifies conditions for caching responses.
+func TestResponseCacheShouldCache(t *testing.T) {
+	rc := createTestResponseCache(t, 1)
+
+	testCases := []struct {
+		err         error
+		shouldCache bool
+	}{
+		{nil, true},
+		{&proto.ReadWithinUncertaintyIntervalError{}, true},
+		{&proto.TransactionAbortedError{}, true},
+		{&proto.TransactionPushError{}, true},
+		{&proto.TransactionRetryError{}, true},
+		{&proto.GenericError{}, true},
+		{&proto.RangeNotFoundError{}, true},
+		{&proto.RangeKeyMismatchError{}, true},
+		{&proto.TransactionStatusError{}, true},
+		{&proto.WriteIntentError{}, false},
+		{&proto.WriteTooOldError{}, false},
+	}
+
+	for i, test := range testCases {
+		reply := &proto.PutResponse{}
+		reply.SetGoError(test.err)
+		if shouldCache := rc.shouldCacheResponse(reply); shouldCache != test.shouldCache {
+			t.Errorf("%d: expected cache? %t; got %t", i, test.shouldCache, shouldCache)
+		}
+	}
+}
+
 // TestResponseCacheGC verifies that response cache entries are
 // garbage collected periodically.
 func TestResponseCacheGC(t *testing.T) {

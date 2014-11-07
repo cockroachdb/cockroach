@@ -58,8 +58,8 @@ type Clock interface {
 	Now() int64
 }
 
-// KV provides access to a KV store via Call() and Prepare() /
-// Flush().
+// KV provides serial access to a KV store via Call and parallel
+// access via Prepare and Flush. A KV instance is not thread safe.
 type KV struct {
 	// User is the default user to set on API calls. If User is set to
 	// non-empty in call arguments, this value is ignored.
@@ -74,36 +74,40 @@ type KV struct {
 	prepared []*Call
 }
 
-// NewKV creates a new instance of KV using the specified sender. By
-// default, the sender is wrapped in a singleCallSender for retries in
-// a non-transactional context. To create a transactional client, the
-// KV struct should be manually initialized in order to utilize a
-// txnSender. Clock is used to formulate client command IDs, which
-// provide idempotency on API calls. If clock is nil, uses
-// time.UnixNanos as default implementation.
+// NewKV creates a new instance of KV using the specified sender. To
+// create a transactional client, the KV struct should be manually
+// initialized in order to utilize a txnSender. Clock is used to
+// formulate client command IDs, which provide idempotency on API
+// calls. If clock is nil, uses time.UnixNanos as default
+// implementation.
 func NewKV(sender KVSender, clock Clock) *KV {
 	return &KV{
-		sender: newSingleCallSender(sender, clock),
+		sender: sender,
 		clock:  clock,
 	}
 }
 
-// Sender returns the sender supplied to NewKV.
+// Sender returns the sender supplied to NewKV, unless wrapped by a
+// transactional sender, in which case returns the unwrapped sender.
 func (kv *KV) Sender() KVSender {
 	switch t := kv.sender.(type) {
-	case *singleCallSender:
-		return t.wrapped
 	case *txnSender:
 		return t.wrapped
 	default:
-		log.Fatalf("unexpected sender type in KV client: %t", kv.sender)
+		return t
 	}
 	return nil
 }
 
 // Call invokes the KV command synchronously and returns the response
-// and error, if applicable.
+// and error, if applicable. If preceeding calls have been made to
+// Prepare() without a call to Flush(), this call is prepared and
+// then all prepared calls are flushed.
 func (kv *KV) Call(method string, args proto.Request, reply proto.Response) error {
+	if len(kv.prepared) > 0 {
+		kv.Prepare(method, args, reply)
+		return kv.Flush()
+	}
 	if args.Header().User == "" {
 		args.Header().User = kv.User
 	}
@@ -115,8 +119,13 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 		Args:   args,
 		Reply:  reply,
 	}
+	call.resetClientCmdID(kv.clock)
 	kv.sender.Send(call)
-	return call.Reply.Header().GoError()
+	err := call.Reply.Header().GoError()
+	if err != nil {
+		log.Infof("failed %s: %s", call.Method, err)
+	}
+	return err
 }
 
 // Prepare accepts a KV API call, specified by method name, arguments
@@ -141,32 +150,53 @@ func (kv *KV) Prepare(method string, args proto.Request, reply proto.Response) {
 		Args:   args,
 		Reply:  reply,
 	}
+	call.resetClientCmdID(kv.clock)
 	kv.prepared = append(kv.prepared, call)
 }
 
 // Flush sends all previously prepared calls, buffered by invocations
 // of Prepare(). The calls are organized into a single batch command
 // and sent together. Flush returns nil if all prepared calls are
-// executed successfully. Otherwise, flush returns the first error,
+// executed successfully. Otherwise, Flush returns the first error,
 // where calls are executed in the order in which they were prepared.
 // After Flush returns, all prepared reply structs will be valid.
-func (kv *KV) Flush() error {
+func (kv *KV) Flush() (err error) {
 	if len(kv.prepared) == 0 {
-		return nil
+		return
+	} else if len(kv.prepared) == 1 {
+		call := kv.prepared[0]
+		kv.prepared = []*Call{}
+		err = kv.Call(call.Method, call.Args, call.Reply)
+		return
 	}
-	args, reply := &proto.BatchRequest{}, &proto.BatchResponse{}
+	replies := make([]proto.Response, 0, len(kv.prepared))
+	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
 	for _, call := range kv.prepared {
-		reqUnion := &proto.RequestUnion{}
-		reqUnion.SetValue(call.Args)
-		resUnion := &proto.ResponseUnion{}
-		resUnion.SetValue(call.Reply)
-
-		args.Requests = append(args.Requests, *reqUnion)
-		reply.Responses = append(reply.Responses, *resUnion)
+		bArgs.Add(call.Args)
+		replies = append(replies, call.Reply)
 	}
+	kv.prepared = []*Call{}
+	err = kv.Call(proto.Batch, bArgs, bReply)
 
-	return util.Errorf("flush is unimplemented")
-	//return kv.Call(proto.Batch, args, reply)
+	// Recover from protobuf merge panics.
+	defer func() {
+		if r := recover(); r != nil {
+			// Take care to log merge error and to return it if no error has
+			// already been set.
+			mergeErr := util.Errorf("unable to merge response: %s", r)
+			log.Error(mergeErr)
+			if err == nil {
+				err = mergeErr
+			}
+		}
+	}()
+
+	// Transfer individual responses from batch response to prepared replies.
+	for i, reply := range bReply.Responses {
+		replies[i].Reset()
+		gogoproto.Merge(replies[i], reply.GetValue().(gogoproto.Message))
+	}
+	return
 }
 
 // RunTransaction executes retryable in the context of a distributed
@@ -184,12 +214,10 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	}
 
 	// Create a new KV for the transaction using a transactional KV sender.
-	txnSender := newTxnSender(kv.Sender(), kv.clock, opts)
-	txnKV := &KV{
-		User:         kv.User,
-		UserPriority: kv.UserPriority,
-		sender:       txnSender,
-	}
+	txnSender := newTxnSender(kv.Sender(), opts)
+	txnKV := NewKV(txnSender, kv.clock)
+	txnKV.User = kv.User
+	txnKV.UserPriority = kv.UserPriority
 	defer txnKV.Close()
 
 	// Run retryable in a retry loop until we encounter a success or
@@ -206,8 +234,10 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			// timestamps in order to commit.
 			etArgs := &proto.EndTransactionRequest{Commit: true}
 			etReply := &proto.EndTransactionResponse{}
-			txnKV.Call(proto.EndTransaction, etArgs, etReply)
-			err = etReply.Header().GoError()
+			// Prepare and flush for end txn in order to execute entire txn in
+			// a single round trip if possible.
+			txnKV.Prepare(proto.EndTransaction, etArgs, etReply)
+			err = txnKV.Flush()
 		}
 		switch t := err.(type) {
 		case *proto.ReadWithinUncertaintyIntervalError:
@@ -317,6 +347,24 @@ func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
 	}, &proto.PutResponse{})
+}
+
+// PreparePutProto sets the given key to the protobuf-serialized byte
+// string of msg. The resulting Put call is buffered and will not be
+// sent until a subsequent call to Flush. Returns marshalling errors
+// if encountered.
+func (kv *KV) PreparePutProto(key proto.Key, msg gogoproto.Message) error {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	value := proto.Value{Bytes: data}
+	value.InitChecksum(key)
+	kv.Prepare(proto.Put, &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: key},
+		Value:         value,
+	}, &proto.PutResponse{})
+	return nil
 }
 
 // Close closes the KV client and its sender.

@@ -19,6 +19,7 @@ package kv
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"time"
 
@@ -59,6 +60,14 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 		t.Fatal(err)
 	}
 	return db, eng, clock, &manual, lSender
+}
+
+// makeTS creates a new timestamp.
+func makeTS(walltime int64, logical int32) proto.Timestamp {
+	return proto.Timestamp{
+		WallTime: walltime,
+		Logical:  logical,
+	}
 }
 
 // getCoord type casts the db's sender to a coordinator and returns it.
@@ -125,22 +134,26 @@ func TestCoordinatorAddRequest(t *testing.T) {
 	}
 }
 
+// TestCoordinatorBeginTransaction verifies that a command sent with a
+// not-nil Txn with empty ID gets a new transaction initialized.
 func TestCoordinatorBeginTransaction(t *testing.T) {
 	db, _, _, _, _ := createTestDB(t)
 	defer db.Close()
 
-	reply := &proto.BeginTransactionResponse{}
-	key := proto.Key("base-key")
+	reply := &proto.PutResponse{}
+	key := proto.Key("key")
 	db.Sender().Send(&client.Call{
-		Method: proto.BeginTransaction,
-		Args: &proto.BeginTransactionRequest{
+		Method: proto.Put,
+		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
 				User:         storage.UserRoot,
 				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+				Txn: &proto.Transaction{
+					Name:      "test txn",
+					Isolation: proto.SNAPSHOT,
+				},
 			},
-			Name:      "test txn",
-			Isolation: proto.SNAPSHOT,
 		},
 		Reply: reply,
 	})
@@ -158,6 +171,37 @@ func TestCoordinatorBeginTransaction(t *testing.T) {
 	}
 	if reply.Txn.Isolation != proto.SNAPSHOT {
 		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", reply.Txn.Isolation)
+	}
+}
+
+// TestCoordinatorBeginTransactionMinPriority verifies that when starting
+// a new transaction, a non-zero priority is treated as a minimum value.
+func TestCoordinatorBeginTransactionMinPriority(t *testing.T) {
+	db, _, _, _, _ := createTestDB(t)
+	defer db.Close()
+
+	reply := &proto.PutResponse{}
+	db.Sender().Send(&client.Call{
+		Method: proto.Put,
+		Args: &proto.PutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:          proto.Key("key"),
+				User:         storage.UserRoot,
+				UserPriority: gogoproto.Int32(-10), // negative user priority is translated into positive priority
+				Txn: &proto.Transaction{
+					Name:      "test txn",
+					Isolation: proto.SNAPSHOT,
+					Priority:  11,
+				},
+			},
+		},
+		Reply: reply,
+	})
+	if reply.Error != nil {
+		t.Fatal(reply.GoError())
+	}
+	if reply.Txn.Priority != 11 {
+		t.Errorf("expected txn priority 11; got %d", reply.Txn.Priority)
 	}
 }
 
@@ -408,5 +452,78 @@ func TestCoordinatorGC(t *testing.T) {
 		return !ok
 	}, 50*time.Millisecond); err != nil {
 		t.Error("expected garbage collection")
+	}
+}
+
+type testSender struct {
+	handler func(call *client.Call)
+}
+
+func newTestSender(handler func(*client.Call)) *testSender {
+	return &testSender{
+		handler: handler,
+	}
+}
+
+func (ts *testSender) Send(call *client.Call) {
+	ts.handler(call)
+}
+
+func (ts *testSender) Close() {
+}
+
+var testPutReq = &proto.PutRequest{
+	RequestHeader: proto.RequestHeader{
+		Key:          proto.Key("test-key"),
+		User:         storage.UserRoot,
+		UserPriority: gogoproto.Int32(-1),
+		Txn: &proto.Transaction{
+			Name: "test txn",
+		},
+	},
+}
+
+// TestCoordinatorTxnUpdatedOnError verifies that errors adjust the
+// response transaction's timestamp and priority as appropriate.
+func TestCoordinatorTxnUpdatedOnError(t *testing.T) {
+	manual := hlc.ManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(20)
+
+	testCases := []struct {
+		err       error
+		expEpoch  int32
+		expPri    int32
+		expTS     proto.Timestamp
+		expOrigTS proto.Timestamp
+	}{
+		{&proto.ReadWithinUncertaintyIntervalError{ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11), makeTS(10, 11)},
+		{&proto.TransactionAbortedError{Txn: proto.Transaction{Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10), makeTS(0, 1)},
+		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9, makeTS(10, 11), makeTS(10, 11)},
+		{&proto.TransactionRetryError{Txn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10, makeTS(10, 10), makeTS(10, 10)},
+	}
+
+	for i, test := range testCases {
+		ts := NewCoordinator(newTestSender(func(call *client.Call) {
+			call.Reply.Header().SetGoError(test.err)
+		}), clock)
+		reply := &proto.PutResponse{}
+		ts.Send(&client.Call{Method: proto.Put, Args: testPutReq, Reply: reply})
+
+		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
+			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
+		}
+		if reply.Txn.Epoch != test.expEpoch {
+			t.Errorf("%d: expected epoch = %d; got %d", i, test.expEpoch, reply.Txn.Epoch)
+		}
+		if reply.Txn.Priority != test.expPri {
+			t.Errorf("%d: expected priority = %d; got %d", i, test.expPri, reply.Txn.Priority)
+		}
+		if !reply.Txn.Timestamp.Equal(test.expTS) {
+			t.Errorf("%d: expected timestamp to be %s; got %s", i, test.expTS, reply.Txn.Timestamp)
+		}
+		if !reply.Txn.OrigTimestamp.Equal(test.expOrigTS) {
+			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s", i, test.expOrigTS, reply.Txn.OrigTimestamp)
+		}
 	}
 }

@@ -52,6 +52,14 @@ const (
 	uuidLength = 36
 )
 
+// RangeRetryOptions sets the retry options for retrying commands.
+var RangeRetryOptions = util.RetryOptions{
+	Backoff:     50 * time.Millisecond,
+	MaxBackoff:  5 * time.Second,
+	Constant:    2,
+	MaxAttempts: 0, // retry indefinitely
+}
+
 // verifyKeyLength verifies key length. Extra key length is allowed for
 // the local key prefix (for example, a transaction record), and also for
 // keys prefixed with the meta1 or meta2 addressing prefixes. There is a
@@ -536,10 +544,9 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
 		return err
 	}
-	if header.Timestamp.WallTime == 0 && header.Timestamp.Logical == 0 {
-		// Update the incoming timestamp.
-		now := s.clock.Now()
-		args.Header().Timestamp = now
+	if header.Timestamp.Equal(proto.MinTimestamp) {
+		// Update the incoming timestamp if unset.
+		header.Timestamp = s.clock.Now()
 	} else {
 		// Otherwise, update our clock with the incoming request. This
 		// advances the local node's clock to a high water mark from
@@ -556,14 +563,54 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if err != nil {
 		return err
 	}
-	if err := rng.AddCmd(method, args, reply, true); err == nil {
-		return nil
+
+	// Backoff and retry loop for handling errors.
+	var retryOpts util.RetryOptions = RangeRetryOptions
+	retryOpts.Tag = method
+	err = util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		// Add the command to the range for execution; exit retry loop on success.
+		reply.Reset()
+		err := rng.AddCmd(method, args, reply, true)
+		if err == nil {
+			return util.RetryBreak, nil
+		}
+
+		// Maybe resolve a potential write intent error. We do this here
+		// because this is the code path with the requesting client
+		// waiting. We don't want every replica to attempt to resolve the
+		// intent independently, so we can't do it in Range.executeCmd.
+		err = s.maybeResolveWriteIntentError(rng, method, args, reply)
+
+		switch t := err.(type) {
+		case *proto.WriteTooOldError:
+			// Update request timestamp and retry immediately.
+			header.Timestamp = t.ExistingTimestamp
+			header.Timestamp.Logical++
+			return util.RetryReset, nil
+		case *proto.WriteIntentError:
+			// If write intent error is resolved, exit retry/backoff loop to
+			// immediately retry.
+			if t.Resolved {
+				return util.RetryReset, nil
+			}
+			// Otherwise, update timestamp on read/write and backoff / retry.
+			if proto.IsReadWrite(method) && header.Timestamp.Less(t.Txn.Timestamp) {
+				header.Timestamp = t.Txn.Timestamp
+				header.Timestamp.Logical++
+			}
+			return util.RetryContinue, nil
+		}
+		return util.RetryBreak, nil
+	})
+
+	// By default, retries are indefinite. However, some unittests set a
+	// maximum retry count; return txn retry error for transactional cases
+	// and the original error otherwise.
+	if _, ok := err.(*util.RetryMaxAttemptsError); ok && header.Txn != nil {
+		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
 	}
-	// Maybe resolve a potential write intent error. We do this here
-	// because this is the code path with the requesting client
-	// waiting. We don't want every replica to attempt to resolve the
-	// intent independently, so we can't do it in Range.executeCmd.
-	return s.maybeResolveWriteIntentError(rng, method, args, reply)
+
+	return reply.Header().GoError()
 }
 
 // maybeResolveWriteIntentError checks the reply's error. If the error
@@ -596,36 +643,26 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		Abort:     proto.IsReadWrite(method), // abort if cmd is read/write
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
-	// Note that we go direct through the client's sender instead of
-	// using the client's Call() to avoid buffering and retries.
-	s.db.Sender().Send(&client.Call{Method: proto.InternalPushTxn, Args: pushArgs, Reply: pushReply})
+	s.db.Call(proto.InternalPushTxn, pushArgs, pushReply)
 	if pushErr := pushReply.GoError(); pushErr != nil {
 		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushErr)
 
-		// For write/write conflicts, propagate the push failure, not the
-		// original write intent error. The push failure will instruct the
-		// client to restart the transaction with a backoff.
-		if proto.IsReadWrite(method) {
+		// For write/write conflicts within a transaction, propagate the
+		// push failure, not the original write intent error. The push
+		// failure will instruct the client to restart the transaction
+		// with a backoff.
+		if args.Header().Txn != nil && proto.IsReadWrite(method) {
 			reply.Header().SetGoError(pushErr)
 			return pushErr
 		}
 		// For read/write conflicts, return the write intent error which
-		// engages client's backoff/retry (with !Resolved). We don't need
-		// to restart the txn, only resend the read with a backoff.
+		// engages backoff/retry (with !Resolved). We don't need to
+		// restart the txn, only resend the read with a backoff.
 		return err
 	}
+	wiErr.Resolved = true // success!
 
-	// Note that even though we're setting Resolved = true here, it'll
-	// never be set in the response cache (the response containing this
-	// write intent error was cached right after the command was
-	// executed in Range.executeCmd). This means that a client which
-	// retries the request will always backoff, even if backoff isn't
-	// necessary. This doesn't affect correctness, only possibly adds
-	// minor latency for an unusual case.
-	wiErr.Resolved = true
-	// Also, update the transaction record with result of push.
-	wiErr.Txn = *pushReply.PusheeTxn
-
+	// We pushed the transaction successfully, so resolve the intent.
 	resolveArgs := &proto.InternalResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
 			// Use the pushee's timestamp, which might be lower than the
@@ -643,33 +680,5 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		log.Warningf("resolve %+v failed: +v", resolveArgs, resolveErr)
 	}
 
-	// If the command is read-write, we must return the error to the
-	// client so it can resubmit the command with a new ClientCmdID. For
-	// read-only commands, we can resubmit immediately instead.
-	if proto.IsReadOnly(method) {
-		return rng.AddCmd(method, args, reply, true)
-	}
 	return wiErr
-}
-
-// RangeManager is an interface satisfied by Store through which ranges
-// contained in the store can access the methods required for rebalancing
-// (i.e. splitting and merging) operations.
-type RangeManager interface {
-	// Accessors for shared state.
-	ClusterID() string
-	StoreID() int32
-	Clock() *hlc.Clock
-	Engine() engine.Engine
-	DB() *client.KV
-	Allocator() *allocator
-	Gossip() *gossip.Gossip
-
-	// Range manipulation methods.
-	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
-	CreateRaftGroup(id int64) raft
-	SplitRange(origRng, newRng *Range) error
-	AddRange(rng *Range)
-	RemoveRange(rng *Range) error
-	CreateSnapshot() (string, error)
 }
