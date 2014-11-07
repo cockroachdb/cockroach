@@ -21,6 +21,7 @@ import (
 	"net/rpc"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -33,10 +34,10 @@ func TestHeartbeatReply(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
-	request := &PingRequest{
+	request := &proto.PingRequest{
 		Ping: "testPing",
 	}
-	response := &PingResponse{}
+	response := &proto.PingResponse{}
 	heartbeat.Ping(request, response)
 
 	if response.Pong != request.Ping {
@@ -61,12 +62,12 @@ func TestManualHeartbeat(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock),
 	}
 
-	request := &PingRequest{
+	request := &proto.PingRequest{
 		Ping: "testManual",
 	}
 	manualHeartbeat.ready <- struct{}{}
-	manualResponse := &PingResponse{}
-	regularResponse := &PingResponse{}
+	manualResponse := &proto.PingResponse{}
+	regularResponse := &proto.PingResponse{}
 	regularHeartbeat.Ping(request, regularResponse)
 	manualHeartbeat.Ping(request, manualResponse)
 
@@ -99,20 +100,20 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	}
 	client := rpc.NewClient(conn)
 
-	clientOffset := RemoteOffset{Offset: 10, Error: 5, MeasuredAt: 20}
-	serverOffset := RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
-	heartbeatRequest := &PingRequest{
+	clientOffset := proto.RemoteOffset{Offset: 10, Error: 5, MeasuredAt: 20}
+	serverOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
+	heartbeatRequest := &proto.PingRequest{
 		Offset: clientOffset,
 		Addr:   conn.LocalAddr().String(),
 	}
-	response := &PingResponse{}
+	response := &proto.PingResponse{}
 	call := client.Go("Heartbeat.Ping", heartbeatRequest, response, nil)
 	<-call.Done
 	if call.Error != nil {
 		t.Fatal(call.Error)
 	}
 	o := sContext.RemoteClocks.offsets[conn.LocalAddr().String()]
-	if o != serverOffset {
+	if !o.Equal(serverOffset) {
 		t.Errorf("expected updated offset %v, instead %v", serverOffset, o)
 	}
 	s.Close()

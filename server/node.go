@@ -180,7 +180,9 @@ func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	engines []engine.Engine, attrs proto.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
-	rpcServer.RegisterName("Node", n)
+	if err := rpcServer.RegisterName("Node", n); err != nil {
+		log.Fatalf("unable to register node service with RPC server: %s", err)
+	}
 
 	// Initialize stores, including bootstrapping new ones.
 	if err := n.initStores(clock, engines); err != nil {
