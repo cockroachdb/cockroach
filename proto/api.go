@@ -281,6 +281,54 @@ func PutArgs(key Key, valueBytes []byte) *PutRequest {
 	}
 }
 
+// MethodForRequest returns the method name corresponding to the type
+// of the request.
+func MethodForRequest(req Request) (string, error) {
+	switch req.(type) {
+	case *ContainsRequest:
+		return Contains, nil
+	case *GetRequest:
+		return Get, nil
+	case *PutRequest:
+		return Put, nil
+	case *ConditionalPutRequest:
+		return ConditionalPut, nil
+	case *IncrementRequest:
+		return Increment, nil
+	case *DeleteRequest:
+		return Delete, nil
+	case *DeleteRangeRequest:
+		return DeleteRange, nil
+	case *ScanRequest:
+		return Scan, nil
+	case *BeginTransactionRequest:
+		return BeginTransaction, nil
+	case *EndTransactionRequest:
+		return EndTransaction, nil
+	case *AccumulateTSRequest:
+		return AccumulateTS, nil
+	case *ReapQueueRequest:
+		return ReapQueue, nil
+	case *EnqueueUpdateRequest:
+		return EnqueueUpdate, nil
+	case *EnqueueMessageRequest:
+		return EnqueueMessage, nil
+	case *BatchRequest:
+		return Batch, nil
+	case *AdminSplitRequest:
+		return AdminSplit, nil
+	case *InternalHeartbeatTxnRequest:
+		return InternalHeartbeatTxn, nil
+	case *InternalPushTxnRequest:
+		return InternalPushTxn, nil
+	case *InternalResolveIntentRequest:
+		return InternalResolveIntent, nil
+	case *InternalSnapshotCopyRequest:
+		return InternalSnapshotCopy, nil
+	}
+	return "", util.Errorf("unhandled request %T", req)
+}
+
 // CreateArgsAndReply returns allocated request and response pairs
 // according to the specified method.
 func CreateArgsAndReply(method string) (Request, Response, error) {

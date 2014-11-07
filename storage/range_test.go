@@ -1474,3 +1474,33 @@ func TestRangeStats(t *testing.T) {
 	expMS = engine.MVCCStats{LiveBytes: 44, KeyBytes: 56, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
 	verifyRangeStats(eng, rng.RangeID, expMS, t)
 }
+
+// TestRemoteRaftCommand ensures that commands entering the raft
+// subsystem from other nodes are applied correctly.
+func TestRemoteRaftCommand(t *testing.T) {
+	e := createTestEngine(t)
+	r, _ := createTestRange(e, t)
+	defer r.Stop()
+
+	// Send an increment direct to raft.
+	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1)
+	raftCmd := proto.InternalRaftCommand{
+		CmdID: proto.ClientCmdID{WallTime: 1, Random: 1},
+	}
+	raftCmd.Cmd.SetValue(remoteIncArgs)
+	r.raft.propose(raftCmd)
+
+	// Send an increment through the normal flow, since this is our
+	// simplest way of waiting until this command (and all earlier ones)
+	// have been applied.
+	localIncArgs, localIncReply := incrementArgs([]byte("a"), 3, 1)
+	err := r.AddCmd(proto.Increment, localIncArgs, localIncReply, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The reply should have the result of both commands
+	if localIncReply.NewValue != 5 {
+		t.Errorf("expected 5, got %d", localIncReply.NewValue)
+	}
+}

@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -103,10 +104,10 @@ func UsesTimestampCache(method string) bool {
 	return ok
 }
 
-// A Cmd holds method, args, reply and a done channel for a command
+// A pendingCmd holds method, args, reply and a done channel for a command
 // sent to Raft. Once committed to the Raft log, the command is
 // executed and the result returned via the done channel.
-type Cmd struct {
+type pendingCmd struct {
 	Method string
 	Args   proto.Request
 	Reply  proto.Response
@@ -128,28 +129,30 @@ func makeRangeKey(startKey proto.Key) proto.Key {
 type Range struct {
 	RangeID   int64
 	Desc      *proto.RangeDescriptor
-	rm        RangeManager  // Makes some store methods available
-	raft      chan *Cmd     // Raft commands
+	rm        RangeManager // Makes some store methods available
+	raft      raft
 	splitting int32         // 1 if a split is underway
 	closer    chan struct{} // Channel for closing the range
 
-	sync.RWMutex                 // Protects cmdQ, tsCache & respCache (and Desc)
+	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	respCache    *ResponseCache  // Provides idempotence for retries
+	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
 // NewRange initializes the range using the given metadata.
 func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Range {
 	r := &Range{
-		RangeID:   rangeID,
-		Desc:      desc,
-		rm:        rm,
-		raft:      make(chan *Cmd, 10), // TODO(spencer): remove
-		closer:    make(chan struct{}),
-		cmdQ:      NewCommandQueue(),
-		tsCache:   NewTimestampCache(rm.Clock()),
-		respCache: NewResponseCache(rangeID, rm.Engine()),
+		RangeID:     rangeID,
+		Desc:        desc,
+		rm:          rm,
+		raft:        rm.CreateRaftGroup(rangeID),
+		closer:      make(chan struct{}),
+		cmdQ:        NewCommandQueue(),
+		tsCache:     NewTimestampCache(rm.Clock()),
+		respCache:   NewResponseCache(rangeID, rm.Engine()),
+		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	return r
 }
@@ -392,18 +395,33 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	}
 
 	// Create command and enqueue for Raft.
-	cmd := &Cmd{
+	pendingCmd := &pendingCmd{
 		Method: method,
 		Args:   args,
 		Reply:  reply,
 		done:   make(chan error, 1),
 	}
-	r.raft <- cmd
+	raftCmd := proto.InternalRaftCommand{}
+	if !args.Header().CmdID.IsEmpty() {
+		raftCmd.CmdID = args.Header().CmdID
+	} else {
+		raftCmd.CmdID = proto.ClientCmdID{
+			WallTime: r.rm.Clock().PhysicalNow(),
+			Random:   rand.Int63(),
+		}
+	}
+	r.Lock()
+	r.pendingCmds[makeCmdIDKey(raftCmd.CmdID)] = pendingCmd
+	r.Unlock()
+	// TODO(bdarnell): In certain raft failover scenarios, proposed
+	// commands may be abandoned. We need to re-propose the command
+	// if too much time passes with no response on the done channel.
+	r.raft.propose(raftCmd)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
-		err := <-cmd.done
+		err := <-pendingCmd.done
 
 		// As for reads, update timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher
@@ -418,7 +436,8 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// If the original client didn't wait (e.g. resolve write intent),
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
-			log.Warningf("non-synchronous execution of %s with %+v failed: %s", cmd.Method, cmd.Args, err)
+			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
+				pendingCmd.Method, pendingCmd.Args, err)
 		}
 		return err
 	}
@@ -456,8 +475,40 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 func (r *Range) processRaft() {
 	for {
 		select {
-		case cmd := <-r.raft:
-			cmd.done <- r.executeCmd(cmd.Method, cmd.Args, cmd.Reply)
+		case raftCmd := <-r.raft.committed():
+			idKey := makeCmdIDKey(raftCmd.CmdID)
+			r.Lock()
+			cmd := r.pendingCmds[idKey]
+			delete(r.pendingCmds, idKey)
+			r.Unlock()
+			var method string
+			var args proto.Request
+			var reply proto.Response
+			var err error
+			if cmd != nil {
+				// We initiated this command, so use the caller-supplied reply.
+				method = cmd.Method
+				args = cmd.Args
+				reply = cmd.Reply
+			} else {
+				// This command originated elsewhere so we must create a new
+				// reply buffer and reconstruct the method name.
+				args = raftCmd.Cmd.GetValue().(proto.Request)
+				method, err = proto.MethodForRequest(args)
+				if err != nil {
+					log.Fatal(err)
+				}
+				_, reply, err = proto.CreateArgsAndReply(method)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			err = r.executeCmd(method, args, reply)
+			if cmd != nil {
+				cmd.done <- err
+			} else if err != nil {
+				log.Errorf("error executing raft command: %s", err)
+			}
 		case <-r.closer:
 			return
 		}

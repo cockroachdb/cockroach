@@ -428,6 +428,10 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 	return desc, nil
 }
 
+func (s *Store) CreateRaftGroup(id int64) raft {
+	return newNoopRaft()
+}
+
 // SplitRange shortens the original range to accommodate the new
 // range. The new range is added to the ranges map and the rangesByKey
 // sorted slice.
@@ -663,6 +667,7 @@ type RangeManager interface {
 
 	// Range manipulation methods.
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
+	CreateRaftGroup(id int64) raft
 	SplitRange(origRng, newRng *Range) error
 	AddRange(rng *Range)
 	RemoveRange(rng *Range) error
