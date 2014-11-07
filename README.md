@@ -27,11 +27,11 @@ See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
 * Follow the [instructions for installing Docker on your host
 system](http://docs.docker.com/installation/).
-*        (cd deploy ; ./build-docker.sh)
+*        (cd build ; ./build-docker-dev.sh)
 
 ## Local Cluster Setup
 
-*        (cd deploy; ./local-cluster.sh [start|stop])
+*        (cd run; ./local-cluster.sh [start|stop])
 
 ## Get in touch
 
