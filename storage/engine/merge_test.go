@@ -58,6 +58,29 @@ func appender(s string) []byte {
 	return mustMarshal(v)
 }
 
+// timeSeries generates a simple TimeSeriesData object which starts at the given
+// timestamp and lasts for the given duration.  The generated TimeSeriesData has
+// second-level precision, with one data point at each supplied offset.  Each
+// data point has a constant integer value of 5, which was chosen arbitrarily.
+func timeSeries(start int64, duration int64, offsets ...int32) []byte {
+	ts := &proto.TimeSeriesData{
+		StartTimestamp:    start,
+		DurationInSeconds: duration,
+		SamplePrecision:   proto.SECONDS,
+	}
+	for _, offset := range offsets {
+		ts.Data = append(ts.Data, &proto.TimeSeriesDataPoint{
+			Offset:   offset,
+			ValueInt: gogoproto.Int64(5),
+		})
+	}
+	v, err := ts.ToValue()
+	if err != nil {
+		panic(err)
+	}
+	return mustMarshal(v)
+}
+
 // TestGoMerge tests the function goMerge but not the integration with
 // the storage engines. For that, see the engine tests.
 func TestGoMerge(t *testing.T) {
@@ -69,6 +92,9 @@ func TestGoMerge(t *testing.T) {
 		{appender(""), counter(0)},
 		{counter(0), nil},
 		{appender(""), nil},
+		{timeSeries(5000, 3600, 100), nil},
+		{timeSeries(5000, 3600, 100), appender("a")},
+		{appender("a"), timeSeries(5000, 3600, 100)},
 	}
 	for i, c := range badCombinations {
 		_, err := goMerge(c.existing, c.update)
@@ -134,6 +160,48 @@ func TestGoMerge(t *testing.T) {
 		}
 		if !bytes.Equal(result, c.expected) {
 			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
+		}
+	}
+
+	testCasesTimeSeries := []struct {
+		existing, update, expected []byte
+	}{
+		{
+			nil,
+			timeSeries(-446061360, 3600, 30, 250, 460),
+			timeSeries(-446061360, 3600, 30, 250, 460),
+		},
+		{
+			nil,
+			nil,
+			nil,
+		},
+		{
+			timeSeries(-446061360, 3600, 30, 250, 460),
+			timeSeries(-446061360, 3600, 1000, 1900, 3000),
+			timeSeries(-446061360, 3600, 30, 250, 460, 1000, 1900, 3000),
+		},
+		{
+			timeSeries(-446061360, 3600, 30, 250, 460),
+			timeSeries(-446061360, 3600),
+			timeSeries(-446061360, 3600, 30, 250, 460),
+		},
+	}
+
+	for i, c := range testCasesTimeSeries {
+		result, err := goMerge(c.existing, c.update)
+		if err != nil {
+			t.Errorf("goMerge error: %d: %v", i, err)
+			continue
+		}
+		if !bytes.Equal(result, c.expected) {
+			// Extract the time series so we can actually read the error.
+			var resultV, expectedV proto.Value
+			gogoproto.Unmarshal(result, &resultV)
+			gogoproto.Unmarshal(c.expected, &expectedV)
+			resultTS, _ := proto.TimeSeriesFromValue(&resultV)
+			expectedTS, _ := proto.TimeSeriesFromValue(&expectedV)
+			t.Errorf("goMerge error: %d: want %v, get %v", i, expectedTS, resultTS)
 		}
 	}
 }
