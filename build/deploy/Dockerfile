@@ -9,4 +9,3 @@ ADD test.sh /test/
 
 EXPOSE 8080
 ENTRYPOINT ["/cockroach/cockroach.sh"]
-CMD ["--help"]
