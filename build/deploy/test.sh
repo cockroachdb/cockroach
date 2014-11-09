@@ -1,4 +1,5 @@
 #!/bin/sh
+mkdir -p .out
 for f in $(find .out -name '*.test' -type f); do
   ldd "$f" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
