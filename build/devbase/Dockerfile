@@ -44,7 +44,7 @@ WORKDIR /cockroach
 RUN cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git && \
  cd $COREOSPATH && git clone https://github.com/cockroachdb/etcd.git
 
-ADD *.sh /cockroach/build/devbase/
+ADD . /cockroach/build/devbase/
 RUN ["./build/devbase/godeps.sh"]
 RUN ["./build/devbase/vendor.sh"]
 
