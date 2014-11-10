@@ -332,6 +332,38 @@ func TestKVClientGetAndPutGob(t *testing.T) {
 	}
 }
 
+// TestKVClientEmptyValues verifies that empty values are preserved
+// for both empty []byte and integer=0. This used to fail when we
+// allowed the protobufs to be gob-encoded using the default go rpc
+// gob codec because gob treats pointer values and non-pointer values
+// as equivalent and elides zero-valued defaults on decode.
+func TestKVClientEmptyValues(t *testing.T) {
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	kvClient := createTestClient(s.HTTPAddr)
+	kvClient.User = storage.UserRoot
+
+	kvClient.Call(proto.Put, proto.PutArgs(proto.Key("a"), []byte{}), &proto.PutResponse{})
+	kvClient.Call(proto.Put, &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: proto.Key("b"),
+		},
+		Value: proto.Value{
+			Integer: gogoproto.Int64(0),
+		},
+	}, &proto.PutResponse{})
+
+	getResp := &proto.GetResponse{}
+	kvClient.Call(proto.Get, proto.GetArgs(proto.Key("a")), getResp)
+	if bytes := getResp.Value.Bytes; bytes == nil || len(bytes) != 0 {
+		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
+	}
+	kvClient.Call(proto.Get, proto.GetArgs(proto.Key("b")), getResp)
+	if intVal := getResp.Value.Integer; intVal == nil || *intVal != 0 {
+		t.Errorf("expected non-nil 0-valued integer; got %p, %d", getResp.Value.Integer, getResp.Value.GetInteger())
+	}
+}
+
 // TestKVClientPrepareAndFlush prepares a sequence of increment
 // calls and then flushes them and verifies the results.
 func TestKVClientPrepareAndFlush(t *testing.T) {
@@ -347,7 +379,7 @@ func TestKVClientPrepareAndFlush(t *testing.T) {
 		keys = append(keys, key)
 		reply := &proto.IncrementResponse{}
 		replies = append(replies, reply)
-		kvClient.Prepare(proto.Increment, proto.IncrementArgs(key, int64(i+1)), reply)
+		kvClient.Prepare(proto.Increment, proto.IncrementArgs(key, int64(i)), reply)
 	}
 
 	if err := kvClient.Flush(); err != nil {
@@ -355,7 +387,7 @@ func TestKVClientPrepareAndFlush(t *testing.T) {
 	}
 
 	for i, reply := range replies {
-		if reply.NewValue != int64(i+1) {
+		if reply.NewValue != int64(i) {
 			t.Errorf("%d: expected %d; got %d", i, i, reply.NewValue)
 		}
 	}
@@ -378,15 +410,15 @@ func TestKVClientPrepareAndFlush(t *testing.T) {
 		if key := scan1.Rows[i].Key; !key.Equal(keys[i]) {
 			t.Errorf("expected scan1 key %d to be %q; got %q", i, keys[i], key)
 		}
-		if val := scan1.Rows[i].Value.GetInteger(); val != int64(i+1) {
-			t.Errorf("expected scan1 result %d to be %d; got %d", i, i+1, val)
+		if val := scan1.Rows[i].Value.GetInteger(); val != int64(i) {
+			t.Errorf("expected scan1 result %d to be %d; got %d", i, i, val)
 		}
 
 		if key := scan2.Rows[i].Key; !key.Equal(keys[i+5]) {
 			t.Errorf("expected scan2 key %d to be %q; got %q", i, keys[i+5], key)
 		}
-		if val := scan2.Rows[i].Value.GetInteger(); val != int64(i+6) {
-			t.Errorf("expected scan2 result %d to be %d; got %d", i, i+6, val)
+		if val := scan2.Rows[i].Value.GetInteger(); val != int64(i+5) {
+			t.Errorf("expected scan2 result %d to be %d; got %d", i, i+5, val)
 		}
 	}
 }
