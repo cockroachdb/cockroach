@@ -1,0 +1,16 @@
+// Copyright 2013 <chaishushan{AT}gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package message;
+
+import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+
+message ArithRequest {
+	optional int32 a = 1 [(gogoproto.nullable) = false];
+	optional int32 b = 2 [(gogoproto.nullable) = false];
+}
+
+message ArithResponse {
+	optional int32 c = 1 [(gogoproto.nullable) = false];
+}

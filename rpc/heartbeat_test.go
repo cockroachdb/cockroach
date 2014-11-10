@@ -18,7 +18,6 @@
 package rpc
 
 import (
-	"net/rpc"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -94,27 +93,16 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	conn, err := tlsDial(s.Addr().Network(), s.Addr().String(), tlsConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := rpc.NewClient(conn)
+	// Create a client and set its remote offset. On first heartbeat,
+	// it will update the server's remote clocks map.
+	client := NewClient(s.Addr(), nil, sContext)
+	client.offset = proto.RemoteOffset{Offset: 10, Error: 5, MeasuredAt: 20}
+	<-client.Ready
 
-	clientOffset := proto.RemoteOffset{Offset: 10, Error: 5, MeasuredAt: 20}
-	serverOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
-	heartbeatRequest := &proto.PingRequest{
-		Offset: clientOffset,
-		Addr:   conn.LocalAddr().String(),
-	}
-	response := &proto.PingResponse{}
-	call := client.Go("Heartbeat.Ping", heartbeatRequest, response, nil)
-	<-call.Done
-	if call.Error != nil {
-		t.Fatal(call.Error)
-	}
-	o := sContext.RemoteClocks.offsets[conn.LocalAddr().String()]
-	if !o.Equal(serverOffset) {
-		t.Errorf("expected updated offset %v, instead %v", serverOffset, o)
+	o := sContext.RemoteClocks.offsets[client.LocalAddr().String()]
+	expServerOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
+	if !o.Equal(expServerOffset) {
+		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)
 	}
 	s.Close()
 }

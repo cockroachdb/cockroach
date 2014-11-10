@@ -23,6 +23,7 @@ import (
 	"net/rpc"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -169,7 +170,7 @@ func (s *Server) Close() {
 // serveConn synchronously serves a single connection. When the
 // connection is closed, close callbacks are invoked.
 func (s *Server) serveConn(conn net.Conn) {
-	s.ServeConn(conn)
+	s.ServeCodec(codec.NewServerCodec(conn))
 	s.mu.Lock()
 	if s.closeCallbacks != nil {
 		for _, cb := range s.closeCallbacks {

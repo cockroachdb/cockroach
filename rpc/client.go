@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -121,7 +122,7 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client
 			}
 
 			c.mu.Lock()
-			c.Client = rpc.NewClient(conn)
+			c.Client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
 			c.lAddr = conn.LocalAddr()
 			c.mu.Unlock()
 
