@@ -40,12 +40,12 @@ message Timestamp {
 // basic types: a "bag o' bytes" generic byte slice and an incrementable
 // int64, for use with the Increment API call.
 message Value {
-  // Bytes is the byte slice value. If this value is present,
-  // "integer" should not be.
+  // Bytes is the byte slice value. If this field is set, the integer field
+  // should not be.
   optional bytes bytes = 1;
-  // Integer is an integer value type. If this value is present,
-  // "bytes" should not be. Only Integer values may exist at a key
-  // when making the Increment API call.
+  // Integer is an integer value type. If this field is set, the bytes field
+  // should not be. Only Integer values may exist at a key when making the
+  // Increment API call.
   optional int64 integer = 2;
   // Checksum is a CRC-32-IEEE checksum of the key + value, in that order.
   // If this is an integer value, then the value is interpreted as an 8
@@ -56,6 +56,10 @@ message Value {
   optional fixed32 checksum = 3;
   // Timestamp of value.
   optional Timestamp timestamp = 4;
+  // Tag is an optional string value which can be used to add additional
+  // metadata to this value. For example, Tag might provide information on how
+  // the bytes in the "bytes" field should be interpreted.
+  optional string tag = 5;
 }
 
 // MVCCValue differentiates between normal versioned values and
