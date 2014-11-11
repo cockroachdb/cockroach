@@ -187,8 +187,9 @@ message InternalRaftCommand {
   // CmdID is used to identify a command when it has been
   // committed. If the client specified a CmdID in its RequestHeader,
   // that is used; otherwise the server generates an ID.
-  optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"] ;
-  optional InternalRaftCommandUnion cmd = 2 [(gogoproto.nullable) = false];
+  optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
+  optional int64 raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }
 
 // InternalValueType defines a set of string constants placed in the "tag" field
@@ -223,7 +224,7 @@ enum TimeSeriesPrecision {
 message TimeSeriesData {
     // Holds a wall time, expressed as a unix epoch time in seconds. This
     // represents the start of the interval.
-    optional int64 start_timestamp = 1 [(gogoproto.nullable) = false]; 
+    optional int64 start_timestamp = 1 [(gogoproto.nullable) = false];
     // The duration of the interval in seconds.
     optional int64 duration_in_seconds = 2 [(gogoproto.nullable) = false];
     // The precision of the samples within this data set.
