@@ -60,7 +60,7 @@ func createTestStore(t *testing.T) *storage.Store {
 	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Init(); err != nil {
+	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
 	return store

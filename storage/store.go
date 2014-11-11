@@ -190,12 +190,12 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	}
 }
 
-// Close calls Range.Stop() on all active ranges.
-func (s *Store) Close() {
+// Stop calls Range.Stop() on all active ranges.
+func (s *Store) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, rng := range s.ranges {
-		rng.Stop()
+		rng.stop()
 	}
 	s.ranges = map[int64]*Range{}
 	s.rangesByKey = nil
@@ -206,10 +206,10 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
-// Init starts the engine, sets the GC and reads the StoreIdent.
-func (s *Store) Init() error {
-	// Close store for idempotency.
-	s.Close()
+// Start the engine, set the GC and read the StoreIdent.
+func (s *Store) Start() error {
+	// Stop store for idempotency.
+	s.Stop()
 
 	// Start engine and set garbage collector.
 	if err := s.engine.Start(); err != nil {
@@ -256,7 +256,7 @@ func (s *Store) Init() error {
 		}
 		rangeID := desc.FindReplica(s.Ident.StoreID).RangeID
 		rng := NewRange(rangeID, &desc, s)
-		rng.Start()
+		rng.start()
 		s.ranges[rangeID] = rng
 		s.rangesByKey = append(s.rangesByKey, rng)
 		return false, nil
@@ -390,7 +390,7 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rng := NewRange(1, desc, s)
-	rng.Start()
+	rng.start()
 	s.ranges[rng.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	return rng, nil
@@ -457,7 +457,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
-	newRng.Start()
+	newRng.start()
 	s.ranges[newRng.RangeID] = newRng
 	s.rangesByKey = append(s.rangesByKey, newRng)
 	sort.Sort(s.rangesByKey)
@@ -469,7 +469,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 func (s *Store) AddRange(rng *Range) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rng.Start()
+	rng.start()
 	s.ranges[rng.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	sort.Sort(s.rangesByKey)
@@ -480,7 +480,7 @@ func (s *Store) AddRange(rng *Range) {
 func (s *Store) RemoveRange(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rng.Stop()
+	rng.stop()
 	delete(s.ranges, rng.RangeID)
 	// Find the range in rangesByKey slice and swap it to end of slice
 	// and truncate.
