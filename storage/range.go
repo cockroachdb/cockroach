@@ -181,7 +181,7 @@ func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Rang
 
 // Start begins gossiping and starts the raft command processing
 // loop in a goroutine.
-func (r *Range) Start() {
+func (r *Range) start() {
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs()
@@ -193,7 +193,7 @@ func (r *Range) Start() {
 }
 
 // Stop ends the log processing loop.
-func (r *Range) Stop() {
+func (r *Range) stop() {
 	close(r.closer)
 }
 

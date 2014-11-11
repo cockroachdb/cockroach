@@ -59,7 +59,7 @@ func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, 
 // a meta1 key.
 func TestStoreRangeSplitAtMeta1(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	args, reply := adminSplitArgs(engine.KeyMin, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), 1)
 	err := store.ExecuteCmd(proto.AdminSplit, args, reply)
@@ -75,7 +75,7 @@ func TestStoreRangeSplitAtMeta1(t *testing.T) {
 // split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1)
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
@@ -96,7 +96,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // of the same range are disallowed.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	concurrentCount := int32(10)
 	wg := sync.WaitGroup{}
@@ -127,7 +127,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // and response caches have been properly accounted for.
 func TestStoreRangeSplit(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	rangeID := int64(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
@@ -254,7 +254,7 @@ func TestStoreRangeSplit(t *testing.T) {
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	// Split the range at the first user key.
 	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1)
@@ -346,7 +346,7 @@ func fillRange(store *storage.Store, rangeID int64, prefix proto.Key, bytes int6
 // zone's RangeMaxBytes.
 func TestStoreShouldSplit(t *testing.T) {
 	store := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	// Rewrite zone config with range max bytes set to 256K.
 	zoneConfig := &proto.ZoneConfig{

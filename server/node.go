@@ -211,7 +211,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 		s := storage.NewStore(clock, e, n.db, n.gossip)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
-		if err := s.Init(); err != nil {
+		if err := s.Start(); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
 				bootstraps.PushBack(s)
 				continue

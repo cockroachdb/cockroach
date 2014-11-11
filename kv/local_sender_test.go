@@ -131,9 +131,10 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Init(); err != nil {
+	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer store.Stop()
 	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)

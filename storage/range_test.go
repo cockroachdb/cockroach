@@ -94,13 +94,14 @@ func createTestEngine(t *testing.T) engine.Engine {
 
 // createTestRange creates a new range initialized to the full extent
 // of the keyspace. The gossip instance is also returned for testing.
-func createTestRange(engine engine.Engine, t *testing.T) (*Range, *gossip.Gossip) {
+func createTestRange(engine engine.Engine, t *testing.T) (*Store, *Range, *gossip.Gossip) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(1, &testRangeDescriptor, NewStore(clock, engine, nil, g))
-	r.Start()
-	return r, g
+	store := NewStore(clock, engine, nil, g)
+	r := NewRange(1, &testRangeDescriptor, store)
+	store.AddRange(r)
+	return store, r, g
 }
 
 func newTransaction(name string, baseKey proto.Key, userPriority int32,
@@ -137,8 +138,8 @@ func TestRangeContains(t *testing.T) {
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
 func TestRangeGossipFirstRange(t *testing.T) {
-	r, g := createTestRange(createTestEngine(t), t)
-	defer r.Stop()
+	s, _, g := createTestRange(createTestEngine(t), t)
+	defer s.Stop()
 	info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
 	if err != nil {
 		t.Fatal(err)
@@ -151,8 +152,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossipped.
 func TestRangeGossipAllConfigs(t *testing.T) {
-	r, g := createTestRange(createTestEngine(t), t)
-	defer r.Stop()
+	s, _, g := createTestRange(createTestEngine(t), t)
+	defer s.Stop()
 	testData := []struct {
 		gossipKey string
 		configs   []*PrefixConfig
@@ -188,8 +189,8 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
 		t.Fatal(err)
 	}
-	r, g := createTestRange(e, t)
-	defer r.Stop()
+	s, _, g := createTestRange(e, t)
+	defer s.Stop()
 
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
@@ -210,8 +211,8 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 // permissions cause the updated configs to be re-gossipped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
 	e := createTestEngine(t)
-	r, g := createTestRange(e, t)
-	defer r.Stop()
+	s, r, g := createTestRange(e, t)
+	defer s.Stop()
 	// Add a permission for a new key prefix.
 	db1Perm := &proto.PermConfig{
 		Read:  []string{"spencer"},
@@ -312,13 +313,14 @@ func (be *blockingEngine) NewBatch() engine.Engine {
 
 // createTestRangeWithClock creates a range using a blocking engine. Returns
 // the range clock's manual unix nanos time and the range.
-func createTestRangeWithClock(t *testing.T) (*Range, *hlc.ManualClock, *hlc.Clock, *blockingEngine) {
+func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *hlc.Clock, *blockingEngine) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
-	rng := NewRange(1, &testRangeDescriptor, NewStore(clock, engine, nil, nil))
-	rng.Start()
-	return rng, &manual, clock, engine
+	store := NewStore(clock, engine, nil, nil)
+	rng := NewRange(1, &testRangeDescriptor, store)
+	store.AddRange(rng)
+	return store, rng, &manual, clock, engine
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
@@ -498,8 +500,8 @@ func verifyErrorMatches(err error, regexpStr string, t *testing.T) {
 // TestRangeUpdateTSCache verifies that reads and writes update the
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
-	rng, mc, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
@@ -539,8 +541,8 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // pending commands to complete through Raft before being executed on
 // range.
 func TestRangeCommandQueue(t *testing.T) {
-	rng, _, _, be := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, _, be := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	// Test all four combinations of reads & writes waiting.
 	testCases := []struct {
@@ -629,8 +631,8 @@ func TestRangeCommandQueue(t *testing.T) {
 // TestRangeUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestRangeUseTSCache(t *testing.T) {
-	rng, mc, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
@@ -654,8 +656,8 @@ func TestRangeUseTSCache(t *testing.T) {
 // commands do not update the timestamp cache if they result in
 // failure.
 func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	// Test for both read & write attempts.
 	for i, read := range []bool{true, false} {
@@ -690,8 +692,8 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 // read the write commands within the same transaction do not cause
 // the write to receive an incremented timestamp.
 func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	// Test for both read & write attempts.
 	key := proto.Key("a")
@@ -731,8 +733,8 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 // TestRangeIdempotence verifies that a retry increment with
 // same client command ID receives same reply.
 func TestRangeIdempotence(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	// Run the same increment 100 times, 50 with identical command ID,
 	// interleaved with 50 using a sequence of different command IDs.
@@ -782,8 +784,8 @@ func TestRangeIdempotence(t *testing.T) {
 
 // TestRangeSnapshot.
 func TestRangeSnapshot(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	key1 := []byte("a")
 	key2 := []byte("b")
@@ -890,8 +892,8 @@ func TestRangeSnapshot(t *testing.T) {
 // TestEndTransactionBeforeHeartbeat verifies that a transaction
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
@@ -924,8 +926,8 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 // TestEndTransactionAfterHeartbeat verifies that a transaction
 // can be committed/aborted after being heartbeat.
 func TestEndTransactionAfterHeartbeat(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
@@ -965,8 +967,8 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 // greater than the transaction timestamp, depending on the isolation
 // level.
 func TestEndTransactionWithPushedTimestamp(t *testing.T) {
-	rng, mc, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	testCases := []struct {
 		commit    bool
@@ -1011,8 +1013,8 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 // TestEndTransactionWithIncrementedEpoch verifies that txn ended with
 // a higher epoch (and priority) correctly assumes the higher epoch.
 func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	key := []byte("a")
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
@@ -1047,8 +1049,8 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 // are checked such as transaction already being committed or
 // aborted, or timestamp or epoch regression.
 func TestEndTransactionWithErrors(t *testing.T) {
-	rng, mc, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	regressTS := clock.Now()
 	*mc = hlc.ManualClock(1)
@@ -1089,8 +1091,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 // TestInternalPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestInternalPushTxnBadKey(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
@@ -1103,8 +1105,8 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 // TestInternalPushTxnAlreadyCommittedOrAborted verifies success
 // (noop) in event that pushee is already committed or aborted.
 func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	for i, status := range []proto.TransactionStatus{proto.COMMITTED, proto.ABORTED} {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
@@ -1136,8 +1138,8 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 // epoch and timestamp if greater. In all test cases, the
 // priorities are set such that the push will succeed.
 func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	ts1 := proto.Timestamp{WallTime: 1}
 	ts2 := proto.Timestamp{WallTime: 2}
@@ -1198,8 +1200,8 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 // hasn't been heartbeat within 2x the heartbeat interval can be
 // pushed/aborted.
 func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
-	rng, mc, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, mc, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	ts := proto.Timestamp{WallTime: 1}
 	ns := DefaultHeartbeatInterval.Nanoseconds()
@@ -1250,8 +1252,8 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 // TestInternalPushTxnOldEpoch verifies that a txn intent from an
 // older epoch may be pushed.
 func TestInternalPushTxnOldEpoch(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	testCases := []struct {
 		curEpoch, intentEpoch int32
@@ -1300,8 +1302,8 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 // are ordered by txn timestamp, with the more recent timestamp
 // being pushable.
 func TestInternalPushTxnPriorities(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	ts1 := proto.Timestamp{WallTime: 1}
 	ts2 := proto.Timestamp{WallTime: 2}
@@ -1358,8 +1360,8 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 // PENDING, but has its txn Timestamp moved forward to the pusher's
 // txn Timestamp + 1.
 func TestInternalPushTxnPushTimestamp(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
@@ -1388,8 +1390,8 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 // noop. We do this by ensuring that priorities would otherwise make
 // pushing impossible.
 func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
-	rng, _, clock, _ := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, _ := createTestRangeWithClock(t)
+	defer s.Stop()
 
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
@@ -1427,8 +1429,8 @@ func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, 
 // ways, not the exact amounts. If the encodings change, will need to
 // update this test.
 func TestRangeStats(t *testing.T) {
-	rng, _, clock, eng := createTestRangeWithClock(t)
-	defer rng.Stop()
+	s, rng, _, clock, eng := createTestRangeWithClock(t)
+	defer s.Stop()
 	// Put a value.
 	pArgs, pReply := putArgs([]byte("a"), []byte("value1"), 1)
 	pArgs.Timestamp = clock.Now()
@@ -1479,8 +1481,8 @@ func TestRangeStats(t *testing.T) {
 // subsystem from other nodes are applied correctly.
 func TestRemoteRaftCommand(t *testing.T) {
 	e := createTestEngine(t)
-	r, _ := createTestRange(e, t)
-	defer r.Stop()
+	s, r, _ := createTestRange(e, t)
+	defer s.Stop()
 
 	// Send an increment direct to raft.
 	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1)
