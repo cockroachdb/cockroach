@@ -94,9 +94,22 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a client and set its remote offset. On first heartbeat,
-	// it will update the server's remote clocks map.
-	client := NewClient(s.Addr(), nil, sContext)
-	client.offset = proto.RemoteOffset{Offset: 10, Error: 5, MeasuredAt: 20}
+	// it will update the server's remote clocks map. We create the
+	// client manually here to allow us to set the remote offset
+	// before the first heartbeat.
+	client := &Client{
+		addr:         s.Addr(),
+		Ready:        make(chan struct{}),
+		Closed:       make(chan struct{}),
+		clock:        sContext.localClock,
+		remoteClocks: sContext.RemoteClocks,
+		offset: proto.RemoteOffset{
+			Offset:     10,
+			Error:      5,
+			MeasuredAt: 20,
+		},
+	}
+	go client.connect(nil, sContext)
 	<-client.Ready
 
 	o := sContext.RemoteClocks.offsets[client.LocalAddr().String()]

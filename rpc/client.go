@@ -106,49 +106,51 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client
 	clients[c.Addr().String()] = c
 	clientMu.Unlock()
 
+	go c.connect(opts, context)
+	return c
+}
+
+// connect dials the connection in a backoff/retry loop.
+func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 	// Attempt to dial connection.
 	retryOpts := clientRetryOptions
 	if opts != nil {
 		retryOpts = *opts
 	}
-	retryOpts.Tag = fmt.Sprintf("client %s connection", addr)
+	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 
-	go func() {
-		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-			conn, err := tlsDial(addr.Network(), addr.String(), context.tlsConfig)
-			if err != nil {
-				log.Info(err)
-				return util.RetryContinue, nil
-			}
-
-			c.mu.Lock()
-			c.Client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
-			c.lAddr = conn.LocalAddr()
-			c.mu.Unlock()
-
-			// Ensure at least one heartbeat succeeds before exiting the
-			// retry loop.
-			if err = c.heartbeat(); err != nil {
-				c.Close()
-				return util.RetryContinue, err
-			}
-
-			// Signal client is ready by closing Ready channel.
-			log.Infof("client %s connected", addr)
-			close(c.Ready)
-
-			// Launch periodic heartbeat.
-			go c.startHeartbeat()
-
-			return util.RetryBreak, nil
-		})
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		conn, err := tlsDial(c.addr.Network(), c.addr.String(), context.tlsConfig)
 		if err != nil {
-			log.Errorf("client %s failed to connect: %v", addr, err)
-			c.Close()
+			log.Info(err)
+			return util.RetryContinue, nil
 		}
-	}()
 
-	return c
+		c.mu.Lock()
+		c.Client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
+		c.lAddr = conn.LocalAddr()
+		c.mu.Unlock()
+
+		// Ensure at least one heartbeat succeeds before exiting the
+		// retry loop.
+		if err = c.heartbeat(); err != nil {
+			c.Close()
+			return util.RetryContinue, err
+		}
+
+		// Signal client is ready by closing Ready channel.
+		log.Infof("client %s connected", c.addr)
+		close(c.Ready)
+
+		// Launch periodic heartbeat.
+		go c.startHeartbeat()
+
+		return util.RetryBreak, nil
+	})
+	if err != nil {
+		log.Errorf("client %s failed to connect: %v", c.addr, err)
+		c.Close()
+	}
 }
 
 // IsConnected returns whether the client is connected.
