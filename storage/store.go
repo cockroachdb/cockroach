@@ -276,7 +276,7 @@ func (s *Store) Start() error {
 
 	sort.Sort(s.rangesByKey)
 
-	go s.processRaft()
+	go s.processRaft(s.closer)
 
 	return nil
 }
@@ -694,6 +694,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	return wiErr
 }
 
+// ProposeRaftCommand submits a command to raft.
 func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
 	s.raft.propose(cmd)
 }
@@ -717,7 +718,10 @@ func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
 //   the underlying state machine, might transit to the new leader
 //   and be able to access the new leader's state machine BEFORE
 //   the overlapping writes are applied.
-func (s *Store) processRaft() {
+//
+// TODO(bdarnell): remove the closer argument and access s.closer directly
+// when we no longer reassign s.closer in s.Stop.
+func (s *Store) processRaft(closer chan struct{}) {
 	for {
 		select {
 		case raftCmd := <-s.raft.committed():
@@ -731,7 +735,7 @@ func (s *Store) processRaft() {
 				r.processRaftCommand(raftCmd)
 			}
 
-		case <-s.closer:
+		case <-closer:
 			return
 		}
 	}
