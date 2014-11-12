@@ -1421,6 +1421,14 @@ func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, 
 	if !reflect.DeepEqual(expMS, *ms) {
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
+	// Also verify the GetRangeSize method.
+	rangeSize, err := engine.GetRangeSize(eng, rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expSize := expMS.KeyBytes + expMS.ValBytes; expSize != rangeSize {
+		t.Errorf("expected range size %d; got %d", expSize, rangeSize)
+	}
 }
 
 // TestRangeStats verifies that commands executed against a range

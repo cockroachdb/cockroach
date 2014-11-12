@@ -113,8 +113,18 @@ func (k Key) Less(l Key) bool {
 	return bytes.Compare(k, l) < 0
 }
 
+// Less implements the util.Ordered interface.
+func (k EncodedKey) Less(l EncodedKey) bool {
+	return bytes.Compare(k, l) < 0
+}
+
 // Equal returns whether two keys are identical.
 func (k Key) Equal(l Key) bool {
+	return bytes.Equal(k, l)
+}
+
+// Equal returns whether two keys are identical.
+func (k EncodedKey) Equal(l EncodedKey) bool {
 	return bytes.Equal(k, l)
 }
 

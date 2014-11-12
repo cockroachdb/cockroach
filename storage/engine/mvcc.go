@@ -21,6 +21,7 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
@@ -791,11 +792,50 @@ func (mvcc *MVCC) MergeStats(rangeID int64, storeID int32) {
 	mvcc.MVCCStats.MergeStats(mvcc.engine, rangeID, storeID)
 }
 
-// a splitSampleItem wraps a key along with an aggregate over key range
-// preceding it.
-type splitSampleItem struct {
-	Key        proto.EncodedKey
-	sizeBefore int
+// IsValidSplitKey returns whether the key is a valid split key.
+// Certain key ranges cannot be split; split keys chosen within
+// any of these ranges are considered invalid.
+//
+//   - \x00\x00meta1 < SplitKey < \x00\x00meta2
+//   - \x00acct < SplitKey < \x00accu
+//   - \x00perm < SplitKey < \x00pern
+//   - \x00zone < SplitKey < \x00zonf
+func IsValidSplitKey(key proto.Key) bool {
+	return isValidEncodedSplitKey(MVCCEncodeKey(key))
+}
+
+// illegalSplitKeyRanges detail illegal ranges for split keys,
+// exclusive of start and end.
+var illegalSplitKeyRanges = []struct {
+	start, end proto.EncodedKey
+}{
+	{
+		start: MVCCEncodeKey(KeyMin),
+		end:   MVCCEncodeKey(KeyMeta2Prefix),
+	},
+	{
+		start: MVCCEncodeKey(KeyConfigAccountingPrefix),
+		end:   MVCCEncodeKey(KeyConfigAccountingPrefix.PrefixEnd()),
+	},
+	{
+		start: MVCCEncodeKey(KeyConfigPermissionPrefix),
+		end:   MVCCEncodeKey(KeyConfigPermissionPrefix.PrefixEnd()),
+	},
+	{
+		start: MVCCEncodeKey(KeyConfigZonePrefix),
+		end:   MVCCEncodeKey(KeyConfigZonePrefix.PrefixEnd()),
+	},
+}
+
+// isValidEncodedSplitKey iterates through the illegal ranges and
+// returns true if the specified key falls within any; false otherwise.
+func isValidEncodedSplitKey(key proto.EncodedKey) bool {
+	for _, rng := range illegalSplitKeyRanges {
+		if rng.start.Less(key) && key.Less(rng.end) {
+			return false
+		}
+	}
+	return true
 }
 
 // MVCCFindSplitKey suggests a split key from the given user-space key
@@ -803,53 +843,58 @@ type splitSampleItem struct {
 // used (in raw key and value byte strings) in both subranges. It will
 // operate on a snapshot of the underlying engine if a snapshotID is
 // given, and in that case may safely be invoked in a goroutine.
-// TODO(Tobias): leverage the work done here anyways to gather stats.
-func MVCCFindSplitKey(engine Engine, key, endKey proto.Key, snapshotID string) (proto.Key, error) {
+//
+// The split key will never be chosen from the key ranges listed in
+// illegalSplitKeyRanges.
+func MVCCFindSplitKey(engine Engine, rangeID int64, key, endKey proto.Key, snapshotID string) (proto.Key, error) {
 	if key.Less(KeyLocalMax) {
 		key = KeyLocalMax
 	}
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
 
-	rs := util.NewWeightedReservoirSample(splitReservoirSize, nil)
-	h := rs.Heap.(*util.WeightedValueHeap)
-
-	// We expect most keys to contain anywhere between 2^4 to 2^14 bytes, so we
-	// normalize to obtain typical weights that are numerically unproblematic.
-	// The relevant expression is rand(0,1)**(1/weight).
-	normalize := float64(1 << 6)
-	totalSize := 0
-	err := engine.IterateSnapshot(encStartKey, encEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
-		byteCount := len(kv.Key) + len(kv.Value)
-		rs.ConsiderWeighted(splitSampleItem{kv.Key, totalSize}, float64(byteCount)/normalize)
-		totalSize += byteCount
-		return false, nil
-	})
+	// Get range size from stats.
+	rangeSize, err := GetRangeSize(engine, rangeID)
 	if err != nil {
 		return nil, err
 	}
 
-	if totalSize == 0 {
-		return nil, util.Errorf("the range cannot be split; considered range %q-%q is empty", key, endKey)
+	targetSize := rangeSize / 2
+	sizeSoFar := int64(0)
+	bestSplitKey := encStartKey
+	bestSplitDiff := int64(math.MaxInt64)
+
+	if err := engine.IterateSnapshot(encStartKey, encEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
+		sizeSoFar += int64(len(kv.Key) + len(kv.Value))
+
+		// Skip this key if it's within an illegal key range.
+		valid := isValidEncodedSplitKey(kv.Key)
+
+		// Determine if this key would make a better split than last "best" key.
+		diff := targetSize - sizeSoFar
+		if diff < 0 {
+			diff = -diff
+		}
+		if valid && diff < bestSplitDiff {
+			bestSplitKey = kv.Key
+			bestSplitDiff = diff
+		}
+
+		// Determine whether we've found best key and can exit iteration.
+		done := !bestSplitKey.Equal(encStartKey) && diff > bestSplitDiff
+
+		return done, nil
+	}); err != nil {
+		return nil, err
 	}
 
-	// Inspect the sample to get the closest candidate that has sizeBefore >= totalSize/2.
-	candidate := (*h)[0].Value.(splitSampleItem)
-	cb := candidate.sizeBefore
-	halfSize := totalSize / 2
-	for i := 1; i < len(*h); i++ {
-		if sb := (*h)[i].Value.(splitSampleItem).sizeBefore; (cb < halfSize && cb < sb) ||
-			(cb > halfSize && cb > sb && sb > halfSize) {
-			// The current candidate hasn't yet cracked 50% and the this value
-			// is closer to doing so or we're already above but now we can
-			// decrease the gap.
-			candidate = (*h)[i].Value.(splitSampleItem)
-			cb = candidate.sizeBefore
-		}
+	if bestSplitKey.Equal(encStartKey) {
+		return nil, util.Errorf("the range cannot be split; considered range %q-%q has no valid splits", key, endKey)
 	}
+
 	// The key is an MVCC key, so to avoid corrupting MVCC we get the
 	// associated mvcc metadata key, which is fine to split in front of.
-	humanKey, _, _ := MVCCDecodeKey(candidate.Key)
+	humanKey, _, _ := MVCCDecodeKey(bestSplitKey)
 	return humanKey, nil
 }
 
