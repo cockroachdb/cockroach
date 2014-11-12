@@ -31,6 +31,7 @@ $(ROACH_LIB): $(OBJECTS)
 	ar -rsv $(ROACH_LIB) $(OBJECTS)
 
 .cc.o:
+	echo path is $(CPLUS_INCLUDE_PATH)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

@@ -40,7 +40,7 @@ will build and run a development container. Inside of that container,
 the statically linked binary will be built along with the (statically linked)
 individual tests. These created files will be streamed out of the image
 and saved in ./deploy/.out.
-The deployment image is then build using ./deploy/.out/cockroach.
+The deployment image is then built using ./deploy/.out/cockroach.
 After the build is complete, the script will fire up the container, supplying
-to it the statically linked test files in ./deploy/.out; running them
+the statically linked test files via mounting ./deploy/.out, running them
 one by one and propagating failure.
