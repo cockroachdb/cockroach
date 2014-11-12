@@ -22,9 +22,16 @@ GO ?= go
 # Allow setting of go build flags from the command line (see
 # .travis.yml).
 GOFLAGS := 
+# Set to 1 to use static linking for all builds (including tests).
+STATIC := $(STATIC)
 
-DEPLOY  := deploy
+RUN  := run
 GOPATH  := $(CURDIR)/_vendor:$(GOPATH)
+# Exposes protoc.
+PATH := $(CURDIR)/_vendor/usr/bin:$(PATH)
+# Expose protobuf.
+export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
+export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
 
 ROACH_PROTO := proto
 ROACH_LIB   := roachlib
@@ -43,6 +50,10 @@ endif
 
 ifeq ($(OS),Linux)
 LDEXTRA += -lrt
+endif
+
+ifeq ($(STATIC),1)
+GOFLAGS += -a -tags netgo -ldflags "-extldflags \"-lm -lpthread -lstdc++ -static-libstdc++ -static\""
 endif
 
 all: build test
@@ -71,21 +82,50 @@ test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 testrace: auxiliary
-	$(GO) test -race -run $(TESTS) $(PKG) $(RACEFLAGS)
+	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
+
+# Build, but do not run the tests. This is used to verify the deployable
+# Docker image, which is statically linked and has no build tools in its
+# environment. See ./build/deploy for details.
+# The test files are moved to the corresponding package. For example,
+# PKG=./storage/engine will generate ./storage/engine/engine.test.
+#
+# TODO(Tobias): This section needs improvement. Some packages don't end up
+# statically linked even when STATIC=1 is supplied; libpthread seems to play
+# a role. Currently able to work around this by linking these packages
+# without CGO in that case.
+testbuild: TESTS := $(shell $(GO) list $(PKG))
+testbuild: GOFLAGS += -c
+testbuild: auxiliary
+	for p in $(TESTS); do \
+	  NAME=$$(basename "$$p"); \
+	  OUT="$$NAME.test"; \
+	  DIR=$$($(GO) list -f {{.Dir}} ./...$$NAME); \
+	  $(GO) test $(GOFLAGS) "$$p" $(TESTFLAGS) || break; \
+	  if [ -f "$$OUT" ]; then \
+		if [ ! -z "$(STATIC)" ] && ldd "$$OUT" > /dev/null; then \
+		2>&1 echo "$$NAME: rebuilding with CGO_ENABLED=0 to get static binary..."; \
+		  CGO_ENABLED=0 $(GO) test $(GOFLAGS) "$$p" $(TESTFLAGS) || break; \
+		fi; \
+		mv "$$OUT" "$$DIR" || break; \
+	  fi \
+	done
+
 
 coverage: build
-	$(GO) test -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 acceptance:
-# The first stop is to clean up.
-	(cd $(DEPLOY); \
-	  ./build-docker.sh && \
+# The first `stop` stops and cleans up any containers from previous runs.
+	(cd $(RUN); \
+	  ../build/build-docker-dev.sh && \
 	  ./local-cluster.sh stop && \
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 
 clean:
 	$(GO) clean
+	find . -name '*.test' -type f -exec rm {} \;
 	rm -f storage/engine/engine.pc
 	make -C $(ROACH_PROTO) clean
 	make -C $(ROACH_LIB) clean

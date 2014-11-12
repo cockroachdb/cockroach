@@ -1,4 +1,4 @@
-FROM cockroachdb/cockroach_base:latest
+FROM cockroachdb/cockroach-devbase:latest
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
@@ -12,6 +12,7 @@ MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 # are only made to cockroach. If rocksdb is being hacked, remove the
 # "_vendor" exclude from .dockerignore.
 ADD . /cockroach/
+RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 
 # Update to the correct version of our submodules and rebuild any changes
 # in RocksDB (in case the submodule revision is different from the current

@@ -30,10 +30,10 @@ go_get code.google.com/p/go.tools/cmd/goimports
 # write access to) instead of $GOPATH. It is usually but not always
 # installed along with the rest of the go toolchain. Don't try to
 # install it if it's already there.
-go vet 2>/dev/null || go_get code.google.com/p/go.tools/cmd/vet
+go vet -n 2>/dev/null || go_get code.google.com/p/go.tools/cmd/vet
 
 # Grab the go dependencies required for building.
-./build/godeps.sh
+./build/devbase/godeps.sh
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
@@ -42,6 +42,22 @@ for f in $(ls -d githooks/*); do
 done && ls -al .git/hooks | grep githooks
 
 # Build the required libraries.
-./build/vendor.sh
+./build/devbase/vendor.sh
 
-echo "Bootstrapped successfully!"
+cat <<%%%
+****************************************
+Bootstrapped successfully! You don't need to do anything else.
+
+If you want to invoke `go build` directly, you will however
+need to
+* add ./_vendor/usr/bin to your PATH
+* add ./_vendor/usr/include to your CPLUS_INCLUDE_PATH
+* add ./_vendor/usr/lib to your LIBRARY_PATH
+
+In that case, you may want to run the following snippet for your shells:
+
+export PATH="$(cd $(dirname $0)/_vendor/usr/bin; pwd -P):\$PATH"
+export CPLUS_INCLUDE_PATH="$(cd $(dirname $0)/_vendor/usr/include; pwd -P):\$CPLUS_INCLUDE_PATH"
+export LIBRARY_PATH="$(cd $(dirname $0)/_vendor/usr/lib; pwd -P):\$LIBRARY_PATH"
+****************************************
+%%%
