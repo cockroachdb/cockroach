@@ -25,8 +25,6 @@ RUN cd -P /cockroach && make build
 # Expose the http status port.
 EXPOSE 8080
 
-WORKDIR /cockroach/
-
 # This is the command to run when this image is launched as a container.
 ENTRYPOINT ["/cockroach/cockroach.sh"]
 

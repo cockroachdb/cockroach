@@ -27,6 +27,11 @@ STATIC := $(STATIC)
 
 RUN  := run
 GOPATH  := $(CURDIR)/_vendor:$(GOPATH)
+# Exposes protoc.
+PATH := $(CURDIR)/_vendor/usr/bin:$(PATH)
+# Expose protobuf.
+export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
+export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
 
 ROACH_PROTO := proto
 ROACH_LIB   := roachlib
@@ -79,12 +84,16 @@ test: auxiliary
 testrace: auxiliary
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
-# Build, but do not run the tests. This can be used to run the
-# tests in environments where the build site is not available.
-# This section needs improvement. Some packages don't end up
-# statically linked even when STATIC=1 is supplied; libpthread
-# seems to play a role. Currently being able to work around
-# this by linking these packages without CGO in that case.
+# Build, but do not run the tests. This is used to verify the deployable
+# Docker image, which is statically linked and has no build tools in its
+# environment. See ./build/deploy for details.
+# The test files are moved to the corresponding package. For example,
+# PKG=./storage/engine will generate ./storage/engine/engine.test.
+#
+# TODO(Tobias): This section needs improvement. Some packages don't end up
+# statically linked even when STATIC=1 is supplied; libpthread seems to play
+# a role. Currently able to work around this by linking these packages
+# without CGO in that case.
 testbuild: TESTS := $(shell $(GO) list $(PKG))
 testbuild: GOFLAGS += -c
 testbuild: auxiliary
