@@ -86,7 +86,7 @@ func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
 // through with the same client command ID and be given the cached
 // response.
 func (s *HTTPSender) Send(call *Call) {
-	var retryOpts util.RetryOptions = HTTPRetryOptions
+	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("http %s", call.Method)
 
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
