@@ -253,20 +253,40 @@ func TestEnginePutGetDelete(t *testing.T) {
 // exhaustively in the merge tests themselves.
 func TestEngineMerge(t *testing.T) {
 	runWithAllEngines(func(engine Engine, t *testing.T) {
-		testKey := proto.EncodedKey("haste not in life")
-		merges := [][]byte{
-			appender("x"),
-			appender("y"),
-			appender("z"),
+		testcases := []struct {
+			testKey  proto.EncodedKey
+			merges   [][]byte
+			expected []byte
+		}{
+			{
+				proto.EncodedKey("haste not in life"),
+				[][]byte{
+					appender("x"),
+					appender("y"),
+					appender("z"),
+				},
+				appender("xyz"),
+			},
+			{
+				proto.EncodedKey("timeseriesmerged"),
+				[][]byte{
+					timeSeries(1415398729, 3600, 100),
+					timeSeries(1415398729, 3600, 200),
+					timeSeries(1415398729, 3600, 300),
+				},
+				timeSeries(1415398729, 3600, 100, 200, 300),
+			},
 		}
-		for i, update := range merges {
-			if err := engine.Merge(testKey, update); err != nil {
-				t.Fatalf("%d: %v", i, err)
+		for _, tc := range testcases {
+			for i, update := range tc.merges {
+				if err := engine.Merge(tc.testKey, update); err != nil {
+					t.Fatalf("%d: %v", i, err)
+				}
 			}
-		}
-		result, _ := engine.Get(testKey)
-		if !bytes.Equal(result, appender("xyz")) {
-			t.Errorf("unexpected append-merge result")
+			result, _ := engine.Get(tc.testKey)
+			if !bytes.Equal(result, tc.expected) {
+				t.Errorf("unexpected append-merge result: %v != %v", result, tc.expected)
+			}
 		}
 	}, t)
 }

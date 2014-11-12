@@ -98,10 +98,13 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 		t.Fatal(err)
 	}
 	store.db = client.NewKV(&testSender{store: store}, nil)
-	if err := store.Init(); err != nil {
+	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.BootstrapRange(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
 	return store, &manual
@@ -114,17 +117,17 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, nil)
-	defer store.Close()
 
-	// Can't init as haven't bootstrapped.
-	if err := store.Init(); err == nil {
-		t.Error("expected failure init'ing un-bootstrapped store")
+	// Can't start as haven't bootstrapped.
+	if err := store.Start(); err == nil {
+		t.Error("expected failure start'ing un-bootstrapped store")
 	}
 
 	// Bootstrap with a fake ident.
 	if err := store.Bootstrap(testIdent); err != nil {
 		t.Errorf("error bootstrapping store: %s", err)
 	}
+	defer store.Stop()
 
 	// Try to get 1st range--non-existent.
 	if _, err := store.GetRange(1); err == nil {
@@ -135,17 +138,16 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	if rng, err := store.BootstrapRange(); rng == nil || err != nil {
 		t.Errorf("failure to create first range: %s", err)
 	}
-	if rng, err := store.GetRange(1); err != nil {
+	if _, err := store.GetRange(1); err != nil {
 		t.Errorf("failure fetching 1st range: %s", err)
-	} else {
-		rng.Start()
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped engine.
 	store = NewStore(clock, eng, nil, nil)
-	if err := store.Init(); err != nil {
+	if err := store.Start(); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
+	defer store.Stop()
 	// 1st range should be available.
 	if _, err := store.GetRange(1); err != nil {
 		t.Errorf("failure fetching 1st range: %s", err)
@@ -164,10 +166,9 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	store := NewStore(clock, eng, nil, nil)
-	defer store.Close()
 
 	// Can't init as haven't bootstrapped.
-	if err := store.Init(); err == nil {
+	if err := store.Start(); err == nil {
 		t.Error("expected failure init'ing un-bootstrapped store")
 	}
 
@@ -199,7 +200,7 @@ func TestRangeSliceSort(t *testing.T) {
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	gArgs, gReply := getArgs([]byte("a"), 1)
 
 	// Try a successful get request.
@@ -216,7 +217,7 @@ func TestStoreExecuteCmd(t *testing.T) {
 // that end keys must sort >= start.
 func TestStoreVerifyKeys(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	tooLongKey := engine.MakeKey(engine.KeyMax, []byte{0})
 
 	// Start with a too-long key on a get.
@@ -257,7 +258,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
 func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1)
 	args.Timestamp = store.clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
@@ -275,7 +276,7 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 // the command to assume the node's wall time.
 func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	store, mc := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1)
 
 	// Set clock to time 1.
@@ -297,7 +298,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 // maximum allowed clock offset, the cmd fails with an error.
 func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	store, mc := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1)
 
 	// Set clock to time 1.
@@ -317,7 +318,7 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 // TestStoreExecuteCmdBadRange passes a bad range.
 func TestStoreExecuteCmdBadRange(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	args, reply := getArgs([]byte("0"), 2) // no range ID 2
 	err := store.ExecuteCmd(proto.Get, args, reply)
 	if err == nil {
@@ -345,7 +346,7 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range 
 // within the range's key range.
 func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	// Split the range and then remove the second half to clear up some space.
 	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
 	if err := store.RemoveRange(rng); err != nil {
@@ -364,7 +365,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 // allocated in successive blocks.
 func TestStoreRaftIDAllocation(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	// Raft IDs should be allocated from ID 2 (first alloc'd range)
 	// to raftIDAllocCount * 3 + 1.
@@ -384,7 +385,7 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 // the sorted rangesByKey slice.
 func TestStoreRangesByKey(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	r0 := store.LookupRange(engine.KeyMin, engine.KeyMin)
 	r1 := splitTestRange(store, engine.KeyMin, proto.Key("A"), t)
@@ -427,7 +428,7 @@ func TestStoreRangesByKey(t *testing.T) {
 // TransactionPushError is returned.
 func TestStoreResolveWriteIntent(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	for i, resolvable := range []bool{true, false} {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
@@ -486,7 +487,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 // intent by aborting it yields the previous value.
 func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	key := proto.Key("a")
 	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
@@ -519,7 +520,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // push, verify a write intent error is returned with !Resolvable.
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 	setTestRetryOptions()
 
 	testCases := []struct {
@@ -623,7 +624,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 // timestamp can always be pushed if txn has snapshot isolation.
 func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	key := proto.Key("a")
 	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
@@ -676,7 +677,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 // which are not part of a transaction can push intents.
 func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	store, _ := createTestStore(t)
-	defer store.Close()
+	defer store.Stop()
 
 	key := proto.Key("a")
 	pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)

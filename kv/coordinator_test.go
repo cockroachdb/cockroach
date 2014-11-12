@@ -52,11 +52,14 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.Start(); err != nil {
+		t.Fatal(err)
+	}
 	lSender.AddStore(store)
 	if _, err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Init(); err != nil {
+	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
 	return db, eng, clock, &manual, lSender
@@ -97,9 +100,10 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
 func TestCoordinatorAddRequest(t *testing.T) {
-	db, _, clock, manual, _ := createTestDB(t)
+	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
+	defer ls.Close()
 
 	txn := newTxn(db, clock, proto.Key("a"))
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
@@ -137,8 +141,9 @@ func TestCoordinatorAddRequest(t *testing.T) {
 // TestCoordinatorBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestCoordinatorBeginTransaction(t *testing.T) {
-	db, _, _, _, _ := createTestDB(t)
+	db, _, _, _, ls := createTestDB(t)
 	defer db.Close()
+	defer ls.Close()
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
@@ -177,8 +182,9 @@ func TestCoordinatorBeginTransaction(t *testing.T) {
 // TestCoordinatorBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestCoordinatorBeginTransactionMinPriority(t *testing.T) {
-	db, _, _, _, _ := createTestDB(t)
+	db, _, _, _, ls := createTestDB(t)
 	defer db.Close()
+	defer ls.Close()
 
 	reply := &proto.PutResponse{}
 	db.Sender().Send(&client.Call{
@@ -220,9 +226,10 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 		{proto.Key("b"), proto.Key("c")},
 	}
 
-	db, _, clock, _, _ := createTestDB(t)
+	db, _, clock, _, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
+	defer ls.Close()
 	txn := newTxn(db, clock, proto.Key("a"))
 
 	for _, rng := range ranges {
@@ -249,9 +256,10 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 // TestCoordinatorMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestCoordinatorMultipleTxns(t *testing.T) {
-	db, _, clock, _, _ := createTestDB(t)
+	db, _, clock, _, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
+	defer ls.Close()
 
 	txn1 := newTxn(db, clock, proto.Key("a"))
 	txn2 := newTxn(db, clock, proto.Key("b"))
@@ -270,9 +278,10 @@ func TestCoordinatorMultipleTxns(t *testing.T) {
 // TestCoordinatorHeartbeat verifies periodic heartbeat of the
 // transaction record.
 func TestCoordinatorHeartbeat(t *testing.T) {
-	db, _, clock, manual, _ := createTestDB(t)
+	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
+	defer ls.Close()
 
 	// Set heartbeat interval to 1ms for testing.
 	coord.heartbeatInterval = 1 * time.Millisecond
@@ -341,8 +350,9 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
 func TestCoordinatorEndTxn(t *testing.T) {
-	db, eng, clock, _, _ := createTestDB(t)
+	db, eng, clock, _, ls := createTestDB(t)
 	defer db.Close()
+	defer ls.Close()
 
 	txn := newTxn(db, clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
@@ -375,8 +385,9 @@ func TestCoordinatorEndTxn(t *testing.T) {
 // TestCoordinatorCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestCoordinatorCleanupOnAborted(t *testing.T) {
-	db, eng, clock, _, _ := createTestDB(t)
+	db, eng, clock, _, ls := createTestDB(t)
 	defer db.Close()
+	defer ls.Close()
 
 	// Create a transaction with intent at "a".
 	key := proto.Key("a")
@@ -426,9 +437,10 @@ func TestCoordinatorCleanupOnAborted(t *testing.T) {
 // TestCoordinatorGC verifies that the coordinator cleans up extant
 // transactions after the lastUpdateTS exceeds the timeout.
 func TestCoordinatorGC(t *testing.T) {
-	db, _, clock, manual, _ := createTestDB(t)
+	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
+	defer ls.Close()
 
 	// Set heartbeat interval to 1ms for testing.
 	coord.heartbeatInterval = 1 * time.Millisecond

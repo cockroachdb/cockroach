@@ -248,26 +248,98 @@ bool WillOverflow(int64_t a, int64_t b) {
   return (std::numeric_limits<int64_t>::min() - b) > a;
 }
 
-bool MergeValues(proto::Value *left, const proto::Value &right) {
-  if (left->has_bytes()) {
-    if (right.has_bytes()) {
-      *left->mutable_bytes() += right.bytes();
-      return true;
-    }
-  } else if (left->has_integer()) {
-    if (right.has_integer()) {
-      if (WillOverflow(left->integer(), right.integer())) {
-        return false;
-      }
-      left->set_integer(left->integer() + right.integer());
-      return true;
-    }
-  } else {
-    *left = right;
-    return true;
-  }
-  return false;
+// IsTimeSeriesData returns true if the given protobuffer Value contains a
+// TimeSeriesData message.
+bool IsTimeSeriesData(const proto::Value *val) {
+    return val->has_tag() 
+        && val->tag() == proto::InternalValueType_Name(proto::_CR_TS);
 }
+
+// MergeTimeSeriesValues attempts to merge two Values which contain
+// TimeSeriesData messages. The messages cannot be merged if they have different
+// start timestamps or durations. Returns true if the merge is successful.
+bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, rocksdb::Logger* logger) {
+    // Attempt to parse TimeSeriesData from both Values.
+    proto::TimeSeriesData left_ts;
+    proto::TimeSeriesData right_ts;
+    if (!left_ts.ParseFromString(left->bytes())) {
+        rocksdb::Warn(logger, 
+                "left TimeSeriesData could not be parsed from bytes.");
+        return false;
+    }
+    if (!right_ts.ParseFromString(right.bytes())) {
+        rocksdb::Warn(logger, 
+                "right TimeSeriesData could not be parsed from bytes.");
+        return false;
+    }
+
+    // Ensure that both TimeSeriesData have the same timestamp and duration.
+    if (left_ts.start_timestamp() != right_ts.start_timestamp()) {
+        rocksdb::Warn(logger, 
+                "TimeSeries merge failed due to mismatched start timestamps");
+        return false;
+    }
+    if (left_ts.duration_in_seconds() != right_ts.duration_in_seconds()) {
+        rocksdb::Warn(logger, 
+                "TimeSeries merge failed due to mismatched durations.");
+        return false;
+    }
+    if (left_ts.sample_precision() != right_ts.sample_precision()) {
+        rocksdb::Warn(logger, 
+                "TimeSeries merge failed due to mismatched sample precision.");
+        return false;
+    }
+
+    // A protobuffer merge is used to combine the TimeSeriesData.
+    left_ts.MergeFrom(right_ts);
+
+    // Serialize the merged TimeSeriesData into the left value.
+    left_ts.SerializeToString(left->mutable_bytes());
+    return true;
+}
+
+bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger* logger) {
+    if (left->has_bytes()) {
+        if (!right.has_bytes()) {
+            rocksdb::Warn(logger, 
+                    "inconsistent value types for merge (left = bytes, right = ?)");
+            return false;
+        }
+        if (IsTimeSeriesData(left)) {
+            // The right operand must also be a time series.
+            if (!IsTimeSeriesData(&right)) {
+                rocksdb::Warn(logger, 
+                        "inconsistent value types for merge (left = TimeSeriesData, right = bytes)");
+                return false;
+            }
+            return MergeTimeSeriesValues(left, right, logger);
+        } else if (IsTimeSeriesData(&right)) {
+            // The right operand was a time series, but the left was not.
+            rocksdb::Warn(logger, 
+                    "inconsistent value types for merge (left = bytes, right = TimeSeriesData");
+            return false;
+        } else {
+            *left->mutable_bytes() += right.bytes();
+        }
+        return true;
+    } else if (left->has_integer()) {
+        if (!right.has_integer()) {
+            rocksdb::Warn(logger, 
+                    "inconsistent value types for merge (left = integer, right = ?)");
+            return false;
+        }
+        if (WillOverflow(left->integer(), right.integer())) {
+            rocksdb::Warn(logger, "merge would result in integer overflow.");
+            return false;
+        }
+        left->set_integer(left->integer() + right.integer());
+        return true;
+    } else {
+        *left = right;
+        return true;
+    }
+}
+
 
 // MergeResult serializes the result Value into a byte slice.
 DBStatus MergeResult(proto::Value* value, DBString* result) {
@@ -362,7 +434,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(value, operand_value);
+    return MergeValues(value, operand_value, logger);
   }
 };
 
@@ -572,7 +644,7 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(&value, update_value)) {
+  if (!MergeValues(&value, update_value, NULL)) {
     return ToDBString("incompatible merge values");
   }
   return MergeResult(&value, new_value);

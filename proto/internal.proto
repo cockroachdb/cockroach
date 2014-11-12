@@ -190,3 +190,62 @@ message InternalRaftCommand {
   optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"] ;
   optional InternalRaftCommandUnion cmd = 2 [(gogoproto.nullable) = false];
 }
+
+// InternalValueType defines a set of string constants placed in the "tag" field
+// of Value messages which are created internally. These are defined as a
+// protocol buffer enumeration so that they can be used portably between our Go
+// and C code.
+enum InternalValueType {
+    option (gogoproto.goproto_enum_prefix) = false;
+    // _CR_TS is applied to values which contain TimeSeriesData.  This tag is
+    // used by the RocksDB Merge Operator to perform a specialized merge for
+    // this data.
+    _CR_TS = 1;
+}
+
+// TimeSeriesPrecision is an enumeration which can describe the precision of the
+// time at which data points are taken.  Currently, millisecond or second
+// precision is available.
+enum TimeSeriesPrecision {
+    option (gogoproto.goproto_enum_prefix) = false;
+    MILLISECONDS = 0;
+    SECONDS = 1;
+}
+
+// TimeSeriesData contains time series data collected over a given interval of
+// time. The data is represented as a variable number of distinct data points
+// falling within the interval; each data point is a numeric value paired an
+// offset from the start of the interval.
+//
+// Data points within a TimeSeriesData should correspond to samples of the same
+// statistic at different point in times. Information about the statistic which
+// is being sampled is encoded in the Key at which the TimeSeriesData is stored.
+message TimeSeriesData {
+    // Holds a wall time, expressed as a unix epoch time in seconds. This
+    // represents the start of the interval.
+    optional int64 start_timestamp = 1 [(gogoproto.nullable) = false]; 
+    // The duration of the interval in seconds.
+    optional int64 duration_in_seconds = 2 [(gogoproto.nullable) = false];
+    // The precision of the samples within this data set.
+    optional TimeSeriesPrecision sample_precision = 3 [(gogoproto.nullable) = false];
+    // A set of data points which fall within the interval.
+    repeated TimeSeriesDataPoint data = 4;
+}
+
+
+// A TimeSeriesDataPoint is a single point of numeric data sampled at particular
+// time. Multiple TimeSeriesDataPoints are grouped into a single TimeSeriesData
+// collection.
+message TimeSeriesDataPoint {
+    // Temporal offset from the "start_timestamp" of the TimeSeriesData
+    // collection this data point is stored in. The units of this value are
+    // determined by the value of the "sample_precision" field of the
+    // TimeSeriesData collection.
+    optional int32 offset = 2 [(gogoproto.nullable) = false];
+    // Value field for integer samples. If this value is present, then
+    // "value_float" must not be present.
+    optional int64 value_int = 4;
+    // Value field for floating point samples. If this value is present, then
+    // "value_int" must not be set.
+    optional float value_float = 5;
+}

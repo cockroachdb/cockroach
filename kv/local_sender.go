@@ -150,7 +150,7 @@ func (ls *LocalSender) Close() {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	for _, store := range ls.storeMap {
-		store.Close()
+		store.Stop()
 	}
 }
 
