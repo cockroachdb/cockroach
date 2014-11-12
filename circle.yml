@@ -34,7 +34,7 @@ test:
 
 deployment:
   docker:
-    branch: master
+    branch: [master, staticbinary]
     commands:
       # Build static binary container only on master.
       - ./build/build-docker-deploy.sh:
