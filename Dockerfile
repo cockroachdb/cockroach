@@ -1,4 +1,4 @@
-FROM cockroachdb/cockroach_base:latest
+FROM cockroachdb/cockroach-devbase:latest
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
