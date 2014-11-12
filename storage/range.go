@@ -135,11 +135,11 @@ type RangeManager interface {
 
 	// Range manipulation methods.
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
-	CreateRaftGroup(id int64) raft
 	SplitRange(origRng, newRng *Range) error
 	AddRange(rng *Range)
 	RemoveRange(rng *Range) error
 	CreateSnapshot() (string, error)
+	ProposeRaftCommand(proto.InternalRaftCommand)
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -151,8 +151,7 @@ type RangeManager interface {
 type Range struct {
 	RangeID   int64
 	Desc      *proto.RangeDescriptor
-	rm        RangeManager // Makes some store methods available
-	raft      raft
+	rm        RangeManager  // Makes some store methods available
 	splitting int32         // 1 if a split is underway
 	closer    chan struct{} // Channel for closing the range
 
@@ -169,7 +168,6 @@ func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Rang
 		RangeID:     rangeID,
 		Desc:        desc,
 		rm:          rm,
-		raft:        rm.CreateRaftGroup(rangeID),
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
@@ -185,7 +183,6 @@ func (r *Range) start() {
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs()
-	go r.processRaft() // TODO(spencer): remove
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
 		go r.startGossip()
@@ -423,7 +420,9 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		Reply:  reply,
 		done:   make(chan error, 1),
 	}
-	raftCmd := proto.InternalRaftCommand{}
+	raftCmd := proto.InternalRaftCommand{
+		RaftID: r.Desc.RaftID,
+	}
 	if !args.Header().CmdID.IsEmpty() {
 		raftCmd.CmdID = args.Header().CmdID
 	} else {
@@ -438,7 +437,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// TODO(bdarnell): In certain raft failover scenarios, proposed
 	// commands may be abandoned. We need to re-propose the command
 	// if too much time passes with no response on the done channel.
-	r.raft.propose(raftCmd)
+	r.rm.ProposeRaftCommand(raftCmd)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
@@ -471,69 +470,39 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	return nil
 }
 
-// processRaft processes read/write commands, sending them to the Raft
-// consensus algorithm. This method processes indefinitely or until
-// Range.Stop() is invoked.
-//
-// TODO(spencer): this is pretty temporary. Just executing commands
-//   immediately until Raft is in place.
-//
-// TODO(bdarnell): when Raft elects this range replica as the leader,
-//   we need to be careful to do the following before the range is
-//   allowed to believe it's the leader and begin to accept writes and
-//   reads:
-//     - Push noop command to raft followers in order to verify the
-//       committed entries in the log.
-//     - Apply all committed log entries to the state machine.
-//     - Signal the range to clear its read timestamp, response caches
-//       and pending read queue.
-//     - Signal the range that it's now the leader with the duration
-//       of its leader lease.
-//   If we don't do this, then a read which was previously gated on
-//   the former leader waiting for overlapping writes to commit to
-//   the underlying state machine, might transit to the new leader
-//   and be able to access the new leader's state machine BEFORE
-//   the overlapping writes are applied.
-func (r *Range) processRaft() {
-	for {
-		select {
-		case raftCmd := <-r.raft.committed():
-			idKey := makeCmdIDKey(raftCmd.CmdID)
-			r.Lock()
-			cmd := r.pendingCmds[idKey]
-			delete(r.pendingCmds, idKey)
-			r.Unlock()
-			var method string
-			var args proto.Request
-			var reply proto.Response
-			var err error
-			if cmd != nil {
-				// We initiated this command, so use the caller-supplied reply.
-				method = cmd.Method
-				args = cmd.Args
-				reply = cmd.Reply
-			} else {
-				// This command originated elsewhere so we must create a new
-				// reply buffer and reconstruct the method name.
-				args = raftCmd.Cmd.GetValue().(proto.Request)
-				method, err = proto.MethodForRequest(args)
-				if err != nil {
-					log.Fatal(err)
-				}
-				_, reply, err = proto.CreateArgsAndReply(method)
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-			err = r.executeCmd(method, args, reply)
-			if cmd != nil {
-				cmd.done <- err
-			} else if err != nil {
-				log.Errorf("error executing raft command: %s", err)
-			}
-		case <-r.closer:
-			return
+func (r *Range) processRaftCommand(raftCmd proto.InternalRaftCommand) {
+	idKey := makeCmdIDKey(raftCmd.CmdID)
+	r.Lock()
+	cmd := r.pendingCmds[idKey]
+	delete(r.pendingCmds, idKey)
+	r.Unlock()
+	var method string
+	var args proto.Request
+	var reply proto.Response
+	var err error
+	if cmd != nil {
+		// We initiated this command, so use the caller-supplied reply.
+		method = cmd.Method
+		args = cmd.Args
+		reply = cmd.Reply
+	} else {
+		// This command originated elsewhere so we must create a new
+		// reply buffer and reconstruct the method name.
+		args = raftCmd.Cmd.GetValue().(proto.Request)
+		method, err = proto.MethodForRequest(args)
+		if err != nil {
+			log.Fatal(err)
 		}
+		_, reply, err = proto.CreateArgsAndReply(method)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	err = r.executeCmd(method, args, reply)
+	if cmd != nil {
+		cmd.done <- err
+	} else if err != nil {
+		log.Errorf("error executing raft command: %s", err)
 	}
 }
 

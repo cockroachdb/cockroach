@@ -84,24 +84,24 @@ func initConfigs(e engine.Engine, t *testing.T) {
 	}
 }
 
-// createTestEngine creates an in-memory engine and initializes some
-// default configuration settings.
-func createTestEngine(t *testing.T) engine.Engine {
-	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
-	initConfigs(e, t)
-	return e
-}
-
 // createTestRange creates a new range initialized to the full extent
 // of the keyspace. The gossip instance is also returned for testing.
-func createTestRange(engine engine.Engine, t *testing.T) (*Store, *Range, *gossip.Gossip) {
+func createTestRange(t *testing.T) (*Store, *Range, *gossip.Gossip, engine.Engine) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
 	clock := hlc.NewClock(hlc.UnixNano)
+	engine := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	store := NewStore(clock, engine, nil, g)
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Start(); err != nil {
+		t.Fatal(err)
+	}
+	initConfigs(engine, t)
 	r := NewRange(1, &testRangeDescriptor, store)
 	store.AddRange(r)
-	return store, r, g
+	return store, r, g, engine
 }
 
 func newTransaction(name string, baseKey proto.Key, userPriority int32,
@@ -138,7 +138,7 @@ func TestRangeContains(t *testing.T) {
 
 // TestRangeGossipFirstRange verifies that the first range gossips its location.
 func TestRangeGossipFirstRange(t *testing.T) {
-	s, _, g := createTestRange(createTestEngine(t), t)
+	s, _, g, _ := createTestRange(t)
 	defer s.Stop()
 	info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
 	if err != nil {
@@ -152,7 +152,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossipped.
 func TestRangeGossipAllConfigs(t *testing.T) {
-	s, _, g := createTestRange(createTestEngine(t), t)
+	s, _, g, _ := createTestRange(t)
 	defer s.Stop()
 	testData := []struct {
 		gossipKey string
@@ -178,19 +178,27 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
 // key prefixes for a config are gossipped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
-	e := createTestEngine(t)
-	mvcc := engine.NewMVCC(e)
+	s, r, g, _ := createTestRange(t)
+	defer s.Stop()
 	// Add a permission for a new key prefix.
-	db1Perm := proto.PermConfig{
+	db1Perm := &proto.PermConfig{
 		Read:  []string{"spencer", "foo", "bar", "baz"},
 		Write: []string{"spencer"},
 	}
 	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
-	if err := mvcc.PutProto(key, proto.MinTimestamp, nil, &db1Perm); err != nil {
+	data, err := gogoproto.Marshal(db1Perm)
+	if err != nil {
 		t.Fatal(err)
 	}
-	s, _, g := createTestRange(e, t)
-	defer s.Stop()
+	req := &proto.PutRequest{
+		RequestHeader: proto.RequestHeader{Key: key},
+		Value:         proto.Value{Bytes: data},
+	}
+	reply := &proto.PutResponse{}
+
+	if err := r.executeCmd(proto.Put, req, reply); err != nil {
+		t.Fatal(err)
+	}
 
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
@@ -199,7 +207,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
 		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{proto.Key("/db1"), nil, &db1Perm},
+		&PrefixConfig{proto.Key("/db1"), nil, db1Perm},
 		&PrefixConfig{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
@@ -210,8 +218,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 // TestRangeGossipConfigUpdates verifies that writes to the
 // permissions cause the updated configs to be re-gossipped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
-	e := createTestEngine(t)
-	s, r, g := createTestRange(e, t)
+	s, r, g, _ := createTestRange(t)
 	defer s.Stop()
 	// Add a permission for a new key prefix.
 	db1Perm := &proto.PermConfig{
@@ -232,6 +239,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if err := r.executeCmd(proto.Put, req, reply); err != nil {
 		t.Fatal(err)
 	}
+
 	info, err := g.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
 		t.Fatal(err)
@@ -318,6 +326,12 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
 	store := NewStore(clock, engine, nil, nil)
+	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Start(); err != nil {
+		t.Fatal(err)
+	}
 	rng := NewRange(1, &testRangeDescriptor, store)
 	store.AddRange(rng)
 	return store, rng, &manual, clock, engine
@@ -1480,17 +1494,17 @@ func TestRangeStats(t *testing.T) {
 // TestRemoteRaftCommand ensures that commands entering the raft
 // subsystem from other nodes are applied correctly.
 func TestRemoteRaftCommand(t *testing.T) {
-	e := createTestEngine(t)
-	s, r, _ := createTestRange(e, t)
+	s, r, _, _ := createTestRange(t)
 	defer s.Stop()
 
 	// Send an increment direct to raft.
 	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1)
 	raftCmd := proto.InternalRaftCommand{
-		CmdID: proto.ClientCmdID{WallTime: 1, Random: 1},
+		CmdID:  proto.ClientCmdID{WallTime: 1, Random: 1},
+		RaftID: r.Desc.RaftID,
 	}
 	raftCmd.Cmd.SetValue(remoteIncArgs)
-	r.raft.propose(raftCmd)
+	r.rm.ProposeRaftCommand(raftCmd)
 
 	// Send an increment through the normal flow, since this is our
 	// simplest way of waiting until this command (and all earlier ones)

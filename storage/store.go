@@ -172,21 +172,27 @@ type Store struct {
 	gossip       *gossip.Gossip // Passed to new ranges
 	raftIDAlloc  *IDAllocator   // Raft ID allocator
 	rangeIDAlloc *IDAllocator   // Range ID allocator
+	raft         raft
+	closer       chan struct{}
 
-	mu          sync.RWMutex     // Protects variables below...
-	ranges      map[int64]*Range // Map of ranges by range ID
-	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
+	mu             sync.RWMutex     // Protects variables below...
+	ranges         map[int64]*Range // Map of ranges by range ID
+	rangesByKey    RangeSlice       // Sorted slice of ranges by StartKey
+	rangesByRaftID map[int64]*Range // Map of ranges by raft ID
 }
 
 // NewStore returns a new instance of a store.
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
 	return &Store{
-		clock:     clock,
-		engine:    eng,
-		db:        db,
-		allocator: &allocator{},
-		gossip:    gossip,
-		ranges:    map[int64]*Range{},
+		clock:          clock,
+		engine:         eng,
+		db:             db,
+		allocator:      &allocator{},
+		gossip:         gossip,
+		raft:           newNoopRaft(),
+		closer:         make(chan struct{}),
+		ranges:         map[int64]*Range{},
+		rangesByRaftID: map[int64]*Range{},
 	}
 }
 
@@ -199,6 +205,9 @@ func (s *Store) Stop() {
 	}
 	s.ranges = map[int64]*Range{}
 	s.rangesByKey = nil
+	s.rangesByRaftID = map[int64]*Range{}
+	close(s.closer)
+	s.closer = make(chan struct{})
 }
 
 // String formats a store for debug output.
@@ -259,12 +268,15 @@ func (s *Store) Start() error {
 		rng.start()
 		s.ranges[rangeID] = rng
 		s.rangesByKey = append(s.rangesByKey, rng)
+		s.rangesByRaftID[desc.RaftID] = rng
 		return false, nil
 	}); err != nil {
 		return err
 	}
 
 	sort.Sort(s.rangesByKey)
+
+	go s.processRaft(s.closer)
 
 	return nil
 }
@@ -393,6 +405,7 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	rng.start()
 	s.ranges[rng.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
+	s.rangesByRaftID[desc.RaftID] = rng
 	return rng, nil
 }
 
@@ -436,13 +449,6 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 	return desc, nil
 }
 
-// CreateRaftGroup instantiates a Raft consensus group for the
-// specified Raft ID. The returned raft interface is used by the range
-// to propose commands and process committed commands.
-func (s *Store) CreateRaftGroup(id int64) raft {
-	return newNoopRaft()
-}
-
 // SplitRange shortens the original range to accommodate the new
 // range. The new range is added to the ranges map and the rangesByKey
 // sorted slice.
@@ -463,6 +469,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	newRng.start()
 	s.ranges[newRng.RangeID] = newRng
 	s.rangesByKey = append(s.rangesByKey, newRng)
+	s.rangesByRaftID[newRng.Desc.RaftID] = newRng
 	sort.Sort(s.rangesByKey)
 	return nil
 }
@@ -475,6 +482,7 @@ func (s *Store) AddRange(rng *Range) {
 	rng.start()
 	s.ranges[rng.RangeID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
+	s.rangesByRaftID[rng.RangeID] = rng
 	sort.Sort(s.rangesByKey)
 }
 
@@ -496,6 +504,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	lastIdx := len(s.rangesByKey) - 1
 	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
 	s.rangesByKey = s.rangesByKey[:lastIdx]
+	delete(s.rangesByRaftID, rng.Desc.RaftID)
 	return nil
 }
 
@@ -683,4 +692,51 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	}
 
 	return wiErr
+}
+
+// ProposeRaftCommand submits a command to raft.
+func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
+	s.raft.propose(cmd)
+}
+
+// processRaft processes read/write commands that have been committed
+// by the raft consensus algorithm, dispatching them to the
+// appropriate range. This method processes indefinitely or until
+// Store.Stop() is invoked.
+//
+// TODO(bdarnell): when Raft elects this node as the leader for any
+//   of its ranges, we need to be careful to do the following before
+//   the range is allowed to believe it's the leader and begin to accept
+//   writes and reads:
+//     - Apply all committed log entries to the state machine.
+//     - Signal the range to clear its read timestamp, response caches
+//       and pending read queue.
+//     - Signal the range that it's now the leader with the duration
+//       of its leader lease.
+//   If we don't do this, then a read which was previously gated on
+//   the former leader waiting for overlapping writes to commit to
+//   the underlying state machine, might transit to the new leader
+//   and be able to access the new leader's state machine BEFORE
+//   the overlapping writes are applied.
+//
+// TODO(bdarnell): remove the closer argument and access s.closer directly
+// when we no longer reassign s.closer in s.Stop.
+func (s *Store) processRaft(closer chan struct{}) {
+	for {
+		select {
+		case raftCmd := <-s.raft.committed():
+			s.mu.Lock()
+			r, ok := s.rangesByRaftID[raftCmd.RaftID]
+			s.mu.Unlock()
+			if !ok {
+				log.Errorf("got committed raft command for %d but have no range with that ID",
+					raftCmd.RaftID)
+			} else {
+				r.processRaftCommand(raftCmd)
+			}
+
+		case <-closer:
+			return
+		}
+	}
 }
