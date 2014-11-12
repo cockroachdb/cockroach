@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"regexp"
 	"sync"
 	"time"
 
@@ -39,11 +40,12 @@ import (
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos    infoMap  `json:"infos,omitempty"`  // Map from key to info
-	Groups   groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
-	NodeAddr net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
-	MaxSeq   int64    `json:"-"`                // Maximum sequence number inserted
-	seqGen   int64    // Sequence generator incremented each time info is added
+	Infos     infoMap  `json:"infos,omitempty"`  // Map from key to info
+	Groups    groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
+	NodeAddr  net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
+	MaxSeq    int64    `json:"-"`                // Maximum sequence number inserted
+	seqGen    int64    // Sequence generator incremented each time info is added
+	callbacks map[*regexp.Regexp]func(string)
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -107,9 +109,10 @@ var (
 // in "host:port" format.
 func newInfoStore(nodeAddr net.Addr) *infoStore {
 	return &infoStore{
-		Infos:    infoMap{},
-		Groups:   groupMap{},
-		NodeAddr: nodeAddr,
+		Infos:     infoMap{},
+		Groups:    groupMap{},
+		NodeAddr:  nodeAddr,
+		callbacks: map[*regexp.Regexp]func(string){},
 	}
 }
 
@@ -191,6 +194,7 @@ func (is *infoStore) addInfo(i *info) error {
 		if i.seq > is.MaxSeq {
 			is.MaxSeq = i.seq
 		}
+		is.processCallbacks(i.Key)
 		return nil
 	}
 	// Only replace an existing info if new timestamp is greater, or if
@@ -206,6 +210,7 @@ func (is *infoStore) addInfo(i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
+	is.processCallbacks(i.Key)
 	return nil
 }
 
@@ -232,6 +237,24 @@ func (is *infoStore) maxHops() uint32 {
 		return nil
 	})
 	return maxHops
+}
+
+// registerCallback compiles a regexp for pattern and adds it to
+// the callbacks map.
+func (is *infoStore) registerCallback(pattern string, callback func(key string)) {
+	re := regexp.MustCompile(pattern)
+	is.callbacks[re] = callback
+}
+
+// processCallbacks processes callbacks for the specified key by
+// matching callback regular expression against the key and invoking
+// the corresponding callback on a match.
+func (is *infoStore) processCallbacks(key string) {
+	for kRE, cb := range is.callbacks {
+		if kRE.MatchString(key) {
+			cb(key)
+		}
+	}
 }
 
 // visitInfos implements a visitor pattern to run two methods in the

@@ -204,9 +204,18 @@ func (g *Gossip) GetGroupInfos(prefix string) ([]interface{}, error) {
 // RegisterGroup registers a new group with info store. Returns an
 // error if the group was already registered.
 func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error {
-	g.mu.Lock() // Copyright 2014 The Cockroach Authors.
+	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
+}
+
+// RegisterCallback registers a callback for a key pattern to be
+// invoked whenever new info for an gossip key matching pattern is
+// received.
+func (g *Gossip) RegisterCallback(pattern string, callback func(string)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.is.registerCallback(pattern, callback)
 }
 
 // MaxHops returns the maximum number of hops to reach the furthest
