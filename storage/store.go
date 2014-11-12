@@ -436,6 +436,9 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 	return desc, nil
 }
 
+// CreateRaftGroup instantiates a Raft consensus group for the
+// specified Raft ID. The returned raft interface is used by the range
+// to propose commands and process committed commands.
 func (s *Store) CreateRaftGroup(id int64) raft {
 	return newNoopRaft()
 }
@@ -565,7 +568,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Backoff and retry loop for handling errors.
-	var retryOpts util.RetryOptions = RangeRetryOptions
+	retryOpts := RangeRetryOptions
 	retryOpts.Tag = method
 	err = util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// Add the command to the range for execution; exit retry loop on success.
@@ -609,7 +612,6 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if _, ok := err.(*util.RetryMaxAttemptsError); ok && header.Txn != nil {
 		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
 	}
-
 	return reply.Header().GoError()
 }
 
