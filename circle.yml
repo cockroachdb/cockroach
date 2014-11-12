@@ -31,5 +31,15 @@ test:
   override:
     - docker run "cockroachdb/cockroach-dev" test
     - make acceptance
-    - ./build/build-docker-deploy.sh:
-        timeout: 600
+
+deployment:
+  docker:
+    branch: master
+    commands:
+      # Build static binary container only on master.
+      - ./build/build-docker-deploy.sh:
+         timeout: 600
+      # To be added later:
+      #- sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" \
+      #   < .dockercfg.template > ~/.dockercfg
+      # docker push cockroachdb/cockroach
