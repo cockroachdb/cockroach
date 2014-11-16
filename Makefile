@@ -53,7 +53,7 @@ LDEXTRA += -lrt
 endif
 
 ifeq ($(STATIC),1)
-GOFLAGS += -a -tags netgo -ldflags "-extldflags \"-lm -lpthread -lstdc++ -static-libstdc++ -static\""
+GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
 endif
 
 all: build test

@@ -294,6 +294,9 @@ func (g *Gossip) parseBootstrapAddresses() {
 	addresses := strings.Split(*GossipBootstrap, ",")
 	for _, addr := range addresses {
 		addr = strings.TrimSpace(addr)
+		if len(addr) == 0 {
+			continue
+		}
 		_, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
 			log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
