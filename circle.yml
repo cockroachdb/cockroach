@@ -34,7 +34,7 @@ test:
 
 deployment:
   docker:
-    branch: [master, staticbinary]
+    branch: master
     commands:
       # Build static binary container only on master.
       - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
