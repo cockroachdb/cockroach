@@ -865,9 +865,7 @@ func MVCCFindSplitKey(engine Engine, rangeID int64, key, endKey proto.Key, snaps
 	bestSplitDiff := int64(math.MaxInt64)
 
 	if err := engine.IterateSnapshot(encStartKey, encEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
-		sizeSoFar += int64(len(kv.Key) + len(kv.Value))
-
-		// Skip this key if it's within an illegal key range.
+		// Is key within a legal key range?
 		valid := isValidEncodedSplitKey(kv.Key)
 
 		// Determine if this key would make a better split than last "best" key.
@@ -882,6 +880,9 @@ func MVCCFindSplitKey(engine Engine, rangeID int64, key, endKey proto.Key, snaps
 
 		// Determine whether we've found best key and can exit iteration.
 		done := !bestSplitKey.Equal(encStartKey) && diff > bestSplitDiff
+
+		// Add this key/value to the size scanned so far.
+		sizeSoFar += int64(len(kv.Key) + len(kv.Value))
 
 		return done, nil
 	}); err != nil {

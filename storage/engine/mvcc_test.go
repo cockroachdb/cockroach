@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package engine
 
@@ -1352,6 +1353,87 @@ func TestFindValidSplitKeys(t *testing.T) {
 		}
 		if !splitKey.Equal(test.expSplit) {
 			t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
+		}
+		if err := engine.ReleaseSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestFindBalancedSplitKeys verifies split keys are located such that
+// the left and right halves are equally balanced.
+func TestFindBalancedSplitKeys(t *testing.T) {
+	rangeID := int64(1)
+	testCases := []struct {
+		keySizes []int
+		valSizes []int
+		expSplit int
+	}{
+		// Bigger keys on right side.
+		{
+			keySizes: []int{10, 100, 10, 10, 500},
+			valSizes: []int{1, 1, 1, 1, 1},
+			expSplit: 4,
+		},
+		// Bigger keys on left side.
+		{
+			keySizes: []int{1000, 100, 500, 10, 10},
+			valSizes: []int{1, 1, 1, 1, 1},
+			expSplit: 1,
+		},
+		// Bigger values on right side.
+		{
+			keySizes: []int{1, 1, 1, 1, 1},
+			valSizes: []int{10, 100, 10, 10, 500},
+			expSplit: 4,
+		},
+		// Bigger values on left side.
+		{
+			keySizes: []int{1, 1, 1, 1, 1},
+			valSizes: []int{1000, 100, 500, 10, 10},
+			expSplit: 1,
+		},
+		// Bigger key/values on right side.
+		{
+			keySizes: []int{10, 100, 10, 10, 250},
+			valSizes: []int{10, 100, 10, 10, 250},
+			expSplit: 4,
+		},
+		// Bigger key/values on left side.
+		{
+			keySizes: []int{500, 50, 250, 10, 10},
+			valSizes: []int{500, 50, 250, 10, 10},
+			expSplit: 1,
+		},
+	}
+
+	for i, test := range testCases {
+		mvcc, engine := createTestMVCC()
+		var expKey proto.Key
+		for j, keySize := range test.keySizes {
+			key := proto.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
+			if test.expSplit == j {
+				expKey = key
+			}
+			val := proto.Value{Bytes: []byte(strings.Repeat("X", test.valSizes[j]))}
+			if err := mvcc.Put(key, makeTS(0, 0), val, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mvcc.MergeStats(rangeID, 0) // write stats
+		if err := mvcc.engine.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.CreateSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
+		splitKey, err := MVCCFindSplitKey(engine, rangeID, proto.Key("\x01"), proto.KeyMax, "snap1")
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+			continue
+		}
+		if !splitKey.Equal(expKey) {
+			t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
 		}
 		if err := engine.ReleaseSnapshot("snap1"); err != nil {
 			t.Fatal(err)
