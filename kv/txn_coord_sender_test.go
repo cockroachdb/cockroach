@@ -45,7 +45,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
 	lSender := NewLocalSender()
-	sender := NewCoordinator(lSender, clock)
+	sender := NewTxnCoordSender(lSender, clock)
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
@@ -74,8 +74,8 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 // getCoord type casts the db's sender to a coordinator and returns it.
-func getCoord(db *client.KV) *Coordinator {
-	return db.Sender().(*Coordinator)
+func getCoord(db *client.KV) *TxnCoordSender {
+	return db.Sender().(*TxnCoordSender)
 }
 
 // newTxn begins a transaction.
@@ -96,10 +96,10 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 	}
 }
 
-// TestCoordinatorAddRequest verifies adding a request creates a
+// TestTxnCoordSenderAddRequest verifies adding a request creates a
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
-func TestCoordinatorAddRequest(t *testing.T) {
+func TestTxnCoordSenderAddRequest(t *testing.T) {
 	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
@@ -138,9 +138,9 @@ func TestCoordinatorAddRequest(t *testing.T) {
 	}
 }
 
-// TestCoordinatorBeginTransaction verifies that a command sent with a
+// TestTxnCoordSenderBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
-func TestCoordinatorBeginTransaction(t *testing.T) {
+func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	db, _, _, _, ls := createTestDB(t)
 	defer db.Close()
 	defer ls.Close()
@@ -179,9 +179,9 @@ func TestCoordinatorBeginTransaction(t *testing.T) {
 	}
 }
 
-// TestCoordinatorBeginTransactionMinPriority verifies that when starting
+// TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
-func TestCoordinatorBeginTransactionMinPriority(t *testing.T) {
+func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	db, _, _, _, ls := createTestDB(t)
 	defer db.Close()
 	defer ls.Close()
@@ -211,10 +211,10 @@ func TestCoordinatorBeginTransactionMinPriority(t *testing.T) {
 	}
 }
 
-// TestCoordinatorKeyRanges verifies that multiple requests to same or
+// TestTxnCoordSenderKeyRanges verifies that multiple requests to same or
 // overlapping key ranges causes the coordinator to keep track only of
 // the minimum number of ranges.
-func TestCoordinatorKeyRanges(t *testing.T) {
+func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	ranges := []struct {
 		start, end proto.Key
 	}{
@@ -253,9 +253,9 @@ func TestCoordinatorKeyRanges(t *testing.T) {
 	}
 }
 
-// TestCoordinatorMultipleTxns verifies correct operation with
+// TestTxnCoordSenderMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
-func TestCoordinatorMultipleTxns(t *testing.T) {
+func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 	db, _, clock, _, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
@@ -275,9 +275,9 @@ func TestCoordinatorMultipleTxns(t *testing.T) {
 	}
 }
 
-// TestCoordinatorHeartbeat verifies periodic heartbeat of the
+// TestTxnCoordSenderHeartbeat verifies periodic heartbeat of the
 // transaction record.
-func TestCoordinatorHeartbeat(t *testing.T) {
+func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
@@ -300,7 +300,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 				return false
 			}
 			// Advance clock by 1ns.
-			// Locking the Coordinator to prevent a data race.
+			// Locking the TxnCoordSender to prevent a data race.
 			coord.Lock()
 			*manual = hlc.ManualClock(*manual + 1)
 			coord.Unlock()
@@ -346,10 +346,10 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 	}
 }
 
-// TestCoordinatorEndTxn verifies that ending a transaction
+// TestTxnCoordSenderEndTxn verifies that ending a transaction
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
-func TestCoordinatorEndTxn(t *testing.T) {
+func TestTxnCoordSenderEndTxn(t *testing.T) {
 	db, eng, clock, _, ls := createTestDB(t)
 	defer db.Close()
 	defer ls.Close()
@@ -382,9 +382,9 @@ func TestCoordinatorEndTxn(t *testing.T) {
 	verifyCleanup(key, db, eng, t)
 }
 
-// TestCoordinatorCleanupOnAborted verifies that if a txn receives a
+// TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
-func TestCoordinatorCleanupOnAborted(t *testing.T) {
+func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	db, eng, clock, _, ls := createTestDB(t)
 	defer db.Close()
 	defer ls.Close()
@@ -434,9 +434,9 @@ func TestCoordinatorCleanupOnAborted(t *testing.T) {
 	verifyCleanup(key, db, eng, t)
 }
 
-// TestCoordinatorGC verifies that the coordinator cleans up extant
+// TestTxnCoordSenderGC verifies that the coordinator cleans up extant
 // transactions after the lastUpdateTS exceeds the timeout.
-func TestCoordinatorGC(t *testing.T) {
+func TestTxnCoordSenderGC(t *testing.T) {
 	db, _, clock, manual, ls := createTestDB(t)
 	coord := getCoord(db)
 	defer db.Close()
@@ -451,13 +451,13 @@ func TestCoordinatorGC(t *testing.T) {
 	}
 
 	// Now, advance clock past the default client timeout.
-	// Locking the Coordinator to prevent a data race.
+	// Locking the TxnCoordSender to prevent a data race.
 	coord.Lock()
 	*manual = hlc.ManualClock(defaultClientTimeout.Nanoseconds() + 1)
 	coord.Unlock()
 
 	if err := util.IsTrueWithin(func() bool {
-		// Locking the Coordinator to prevent a data race.
+		// Locking the TxnCoordSender to prevent a data race.
 		coord.Lock()
 		_, ok := coord.txns[string(txn.ID)]
 		coord.Unlock()
@@ -495,9 +495,9 @@ var testPutReq = &proto.PutRequest{
 	},
 }
 
-// TestCoordinatorTxnUpdatedOnError verifies that errors adjust the
+// TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
-func TestCoordinatorTxnUpdatedOnError(t *testing.T) {
+func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	manual := hlc.ManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
@@ -516,7 +516,7 @@ func TestCoordinatorTxnUpdatedOnError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		ts := NewCoordinator(newTestSender(func(call *client.Call) {
+		ts := NewTxnCoordSender(newTestSender(func(call *client.Call) {
 			call.Reply.Header().SetGoError(test.err)
 		}), clock)
 		reply := &proto.PutResponse{}

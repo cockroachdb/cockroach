@@ -332,7 +332,7 @@ func newServer(rpcAddr, certDir string, maxOffset time.Duration) (*server, error
 
 	// Create a client.KVSender instance for use with this node's
 	// client to the key value database as well as
-	sender := kv.NewCoordinator(kv.NewDistSender(s.gossip), s.clock)
+	sender := kv.NewTxnCoordSender(kv.NewDistSender(s.gossip), s.clock)
 	s.kv = client.NewKV(sender, nil)
 	s.kv.User = storage.UserRoot
 
