@@ -623,18 +623,13 @@ func (r *Range) ShouldSplit() bool {
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
-	keyBytes, err := engine.GetRangeStat(r.rm.Engine(), r.RangeID, engine.StatKeyBytes)
+	rangeSize, err := engine.GetRangeSize(r.rm.Engine(), r.RangeID)
 	if err != nil {
-		log.Errorf("unable to fetch key bytes for range %d: %s", r.RangeID, err)
-		return false
-	}
-	valBytes, err := engine.GetRangeStat(r.rm.Engine(), r.RangeID, engine.StatValBytes)
-	if err != nil {
-		log.Errorf("unable to fetch value bytes for range %d: %s", r.RangeID, err)
+		log.Errorf("unable to compute size from stats for range %d: %s", r.RangeID, err)
 		return false
 	}
 
-	return keyBytes+valBytes > zone.RangeMaxBytes
+	return rangeSize > zone.RangeMaxBytes
 }
 
 // maybeSplit initiates an asynchronous split via AdminSplit request
@@ -1302,9 +1297,9 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	}
 	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
 
-	// Determine split key if not provided with args. This scan can be
-	// relatively slow because admin commands do not prevent any other
-	// concurrent commands from executing.
+	// Determine split key if not provided with args. This scan is
+	// allowed to be relatively slow because admin commands don't block
+	// other commands.
 	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
 		snapshotID, err := r.rm.CreateSnapshot()
@@ -1312,7 +1307,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			reply.SetGoError(util.Errorf("unable to create snapshot: %s", err))
 			return
 		}
-		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.Desc.StartKey, r.Desc.EndKey, snapshotID)
+		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.RangeID, r.Desc.StartKey, r.Desc.EndKey, snapshotID)
 		if releaseErr := r.rm.Engine().ReleaseSnapshot(snapshotID); releaseErr != nil {
 			log.Errorf("unable to release snapshot: %s", releaseErr)
 		}
@@ -1327,8 +1322,8 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, r.Desc))
 		return
 	}
-	if splitKey.Less(engine.KeyMeta2Prefix) {
-		reply.SetGoError(util.Errorf("cannot split meta1 addressing keys: %q", splitKey))
+	if !engine.IsValidSplitKey(splitKey) {
+		reply.SetGoError(util.Errorf("cannot split range at key %q", splitKey))
 		return
 	}
 	if splitKey.Equal(r.Desc.StartKey) || splitKey.Equal(r.Desc.EndKey) {

@@ -30,10 +30,6 @@
   entire batch as a single batch command to the range. In all other
   cases, we split batch request at DistSender into individual requests.
 
-* In find mvcc split key, avoid illegal split keys such as meta1
-  records and configuration keys. Probably ought to move to a single
-  pass through the data instead of the weighted reservoir sample.
-
 * Propagate errors from storage/id_alloc.go
 
 * Accept a list of acknowledged client command ids in RequestHeader,

@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
+// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package engine
 
@@ -1166,13 +1167,56 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	}
 }
 
+func TestValidSplitKeys(t *testing.T) {
+	testCases := []struct {
+		key   proto.Key
+		valid bool
+	}{
+		{proto.Key("\x00"), false},
+		{proto.Key("\x00\x00"), false},
+		{proto.Key("\x00\x00meta1"), false},
+		{proto.Key("\x00\x00meta1\x00"), false},
+		{proto.Key("\x00\x00meta1\xff"), false},
+		{proto.Key("\x00\x00meta2"), true},
+		{proto.Key("\x00\x00meta2\x00"), true},
+		{proto.Key("\x00\x00meta2\xff"), true},
+		{proto.Key("\x00\x00meta3"), true},
+		{proto.Key("\x00\x01"), true},
+		{proto.Key("\x00accs\xff"), true},
+		{proto.Key("\x00acct"), true},
+		{proto.Key("\x00acct\x00"), false},
+		{proto.Key("\x00acct\xff"), false},
+		{proto.Key("\x00accu"), true},
+		{proto.Key("\x00perl"), true},
+		{proto.Key("\x00perm"), true},
+		{proto.Key("\x00perm\x00"), false},
+		{proto.Key("\x00perm\xff"), false},
+		{proto.Key("\x00pern"), true},
+		{proto.Key("\x00zond"), true},
+		{proto.Key("\x00zone"), true},
+		{proto.Key("\x00zone\x00"), false},
+		{proto.Key("\x00zone\xff"), false},
+		{proto.Key("\x00zonf"), true},
+		{proto.Key("\x01"), true},
+		{proto.Key("a"), true},
+		{proto.Key("\xff"), true},
+	}
+
+	for i, test := range testCases {
+		if valid := IsValidSplitKey(test.key); valid != test.valid {
+			t.Errorf("%d: expected %q valid %t; got %t", i, test.key, test.valid, valid)
+		}
+	}
+}
+
 func TestFindSplitKey(t *testing.T) {
+	rangeID := int64(1)
 	mvcc, engine := createTestMVCC()
-	// Generate a reservoir worth of KeyValues, each containing targetLength
-	// bytes, writing key #i to (encoded) key #i through the MVCC facility.
-	// Assuming that this translates roughly into same-length values after MVCC
-	// encoding, the split key should hence be chosen as the middle key of the
-	// interval.
+	// Generate a series of KeyValues, each containing targetLength
+	// bytes, writing key #i to (encoded) key #i through the MVCC
+	// facility. Assuming that this translates roughly into same-length
+	// values after MVCC encoding, the split key should hence be chosen
+	// as the middle key of the interval.
 	for i := 0; i < splitReservoirSize; i++ {
 		k := fmt.Sprintf("%09d", i)
 		v := strings.Repeat("X", 10-len(k))
@@ -1182,13 +1226,14 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	mvcc.MergeStats(rangeID, 0) // write stats
 	if err := mvcc.engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	if err := engine.CreateSnapshot("snap1"); err != nil {
 		t.Fatal(err)
 	}
-	humanSplitKey, err := MVCCFindSplitKey(engine, KeyMin, KeyMax, "snap1")
+	humanSplitKey, err := MVCCFindSplitKey(engine, rangeID, KeyMin, KeyMax, "snap1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1198,6 +1243,201 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	if err := engine.ReleaseSnapshot("snap1"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestFindValidSplitKeys verifies split keys are located such that
+// they avoid splits through invalid key ranges.
+func TestFindValidSplitKeys(t *testing.T) {
+	rangeID := int64(1)
+	testCases := []struct {
+		keys     []proto.Key
+		expSplit proto.Key
+		expError bool
+	}{
+		// All meta1 cannot be split.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00\x00meta1"),
+				proto.Key("\x00\x00meta1\x00"),
+				proto.Key("\x00\x00meta1\xff"),
+			},
+			expSplit: nil,
+			expError: true,
+		},
+		// All zone cannot be split.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00zone"),
+				proto.Key("\x00zone\x00"),
+				proto.Key("\x00zone\xff"),
+			},
+			expSplit: nil,
+			expError: true,
+		},
+		// Between meta1 and meta2, splits at meta2.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00\x00meta1"),
+				proto.Key("\x00\x00meta1\x00"),
+				proto.Key("\x00\x00meta1\xff"),
+				proto.Key("\x00\x00meta2"),
+				proto.Key("\x00\x00meta2\x00"),
+				proto.Key("\x00\x00meta2\xff"),
+			},
+			expSplit: proto.Key("\x00\x00meta2"),
+			expError: false,
+		},
+		// Even lopsided, always split at meta2.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00\x00meta1"),
+				proto.Key("\x00\x00meta1\x00"),
+				proto.Key("\x00\x00meta1\xff"),
+				proto.Key("\x00\x00meta2"),
+			},
+			expSplit: proto.Key("\x00\x00meta2"),
+			expError: false,
+		},
+		// Lopsided, truncate non-zone prefix.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00zond"),
+				proto.Key("\x00zone"),
+				proto.Key("\x00zone\x00"),
+				proto.Key("\x00zone\xff"),
+			},
+			expSplit: proto.Key("\x00zone"),
+			expError: false,
+		},
+		// Lopsided, truncate non-zone suffix.
+		{
+			keys: []proto.Key{
+				proto.Key("\x00zone"),
+				proto.Key("\x00zone\x00"),
+				proto.Key("\x00zone\xff"),
+				proto.Key("\x00zonf"),
+			},
+			expSplit: proto.Key("\x00zonf"),
+			expError: false,
+		},
+	}
+
+	for i, test := range testCases {
+		mvcc, engine := createTestMVCC()
+		val := proto.Value{Bytes: []byte(strings.Repeat("X", 10))}
+		for _, k := range test.keys {
+			if err := mvcc.Put([]byte(k), makeTS(0, 0), val, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mvcc.MergeStats(rangeID, 0) // write stats
+		if err := mvcc.engine.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.CreateSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
+		rangeStart := test.keys[0]
+		rangeEnd := test.keys[len(test.keys)-1].Next()
+		splitKey, err := MVCCFindSplitKey(engine, rangeID, rangeStart, rangeEnd, "snap1")
+		if test.expError {
+			if err == nil {
+				t.Errorf("%d: expected error", i)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%d; unexpected error: %s", i, err)
+			continue
+		}
+		if !splitKey.Equal(test.expSplit) {
+			t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
+		}
+		if err := engine.ReleaseSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestFindBalancedSplitKeys verifies split keys are located such that
+// the left and right halves are equally balanced.
+func TestFindBalancedSplitKeys(t *testing.T) {
+	rangeID := int64(1)
+	testCases := []struct {
+		keySizes []int
+		valSizes []int
+		expSplit int
+	}{
+		// Bigger keys on right side.
+		{
+			keySizes: []int{10, 100, 10, 10, 500},
+			valSizes: []int{1, 1, 1, 1, 1},
+			expSplit: 4,
+		},
+		// Bigger keys on left side.
+		{
+			keySizes: []int{1000, 100, 500, 10, 10},
+			valSizes: []int{1, 1, 1, 1, 1},
+			expSplit: 1,
+		},
+		// Bigger values on right side.
+		{
+			keySizes: []int{1, 1, 1, 1, 1},
+			valSizes: []int{10, 100, 10, 10, 500},
+			expSplit: 4,
+		},
+		// Bigger values on left side.
+		{
+			keySizes: []int{1, 1, 1, 1, 1},
+			valSizes: []int{1000, 100, 500, 10, 10},
+			expSplit: 1,
+		},
+		// Bigger key/values on right side.
+		{
+			keySizes: []int{10, 100, 10, 10, 250},
+			valSizes: []int{10, 100, 10, 10, 250},
+			expSplit: 4,
+		},
+		// Bigger key/values on left side.
+		{
+			keySizes: []int{500, 50, 250, 10, 10},
+			valSizes: []int{500, 50, 250, 10, 10},
+			expSplit: 1,
+		},
+	}
+
+	for i, test := range testCases {
+		mvcc, engine := createTestMVCC()
+		var expKey proto.Key
+		for j, keySize := range test.keySizes {
+			key := proto.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
+			if test.expSplit == j {
+				expKey = key
+			}
+			val := proto.Value{Bytes: []byte(strings.Repeat("X", test.valSizes[j]))}
+			if err := mvcc.Put(key, makeTS(0, 0), val, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mvcc.MergeStats(rangeID, 0) // write stats
+		if err := mvcc.engine.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if err := engine.CreateSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
+		splitKey, err := MVCCFindSplitKey(engine, rangeID, proto.Key("\x01"), proto.KeyMax, "snap1")
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+			continue
+		}
+		if !splitKey.Equal(expKey) {
+			t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
+		}
+		if err := engine.ReleaseSnapshot("snap1"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

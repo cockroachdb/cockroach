@@ -124,6 +124,20 @@ func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVa
 	}
 }
 
+// GetRangeSize returns the range size as the sum of the key and value
+// bytes. This includes all non-live keys and all versioned values.
+func GetRangeSize(engine Engine, rangeID int64) (int64, error) {
+	keyBytes, err := GetRangeStat(engine, rangeID, StatKeyBytes)
+	if err != nil {
+		return 0, err
+	}
+	valBytes, err := GetRangeStat(engine, rangeID, StatValBytes)
+	if err != nil {
+		return 0, err
+	}
+	return keyBytes + valBytes, nil
+}
+
 // ClearRangeStats clears stats for the specified range.
 func ClearRangeStats(engine Engine, rangeID int64) error {
 	statStartKey := MakeKey(KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, rangeID))

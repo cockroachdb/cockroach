@@ -55,16 +55,25 @@ func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, 
 	}
 }
 
-// TestStoreRangeSplitAtMeta1 verifies a range cannot be split at
-// a meta1 key.
-func TestStoreRangeSplitAtMeta1(t *testing.T) {
+// TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
+// at illegal keys.
+func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
-	args, reply := adminSplitArgs(engine.KeyMin, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), 1)
-	err := store.ExecuteCmd(proto.AdminSplit, args, reply)
-	if err == nil {
-		t.Fatalf("split succeeded unexpectedly")
+	for _, key := range []proto.Key{
+		engine.KeyMeta1Prefix,
+		engine.MakeKey(engine.KeyMeta1Prefix, []byte("a")),
+		engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax),
+		engine.MakeKey(engine.KeyConfigAccountingPrefix, []byte("a")),
+		engine.MakeKey(engine.KeyConfigPermissionPrefix, []byte("a")),
+		engine.MakeKey(engine.KeyConfigZonePrefix, []byte("a")),
+	} {
+		args, reply := adminSplitArgs(engine.KeyMin, key, 1)
+		err := store.ExecuteCmd(proto.AdminSplit, args, reply)
+		if err == nil {
+			t.Fatalf("%q: split succeeded unexpectedly", key)
+		}
 	}
 }
 
