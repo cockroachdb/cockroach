@@ -34,12 +34,9 @@ test:
 
 deployment:
   docker:
-    branch: [master, staticbinary]
+    branch: master
     commands:
       # Build static binary container only on master.
-      - ./build/build-docker-deploy.sh:
-         timeout: 600
-      # To be added later:
-      #- sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" \
-      #   < .dockercfg.template > ~/.dockercfg
-      # docker push cockroachdb/cockroach
+      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
+      - if [ -n "$DOCKER_EMAIL" ]; then ./build/build-docker-deploy.sh && docker push cockroachdb/cockroach; fi:
+          timeout: 600
