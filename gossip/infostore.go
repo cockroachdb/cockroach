@@ -22,11 +22,18 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 )
+
+// callback holds regexp pattern match and callback method.
+type callback struct {
+	pattern *regexp.Regexp
+	method  func(string)
+}
 
 // infoStore objects manage maps of Info and maps of Info Group
 // objects. They maintain a sequence number generator which they use
@@ -39,11 +46,12 @@ import (
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos    infoMap  `json:"infos,omitempty"`  // Map from key to info
-	Groups   groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
-	NodeAddr net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
-	MaxSeq   int64    `json:"-"`                // Maximum sequence number inserted
-	seqGen   int64    // Sequence generator incremented each time info is added
+	Infos     infoMap  `json:"infos,omitempty"`  // Map from key to info
+	Groups    groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
+	NodeAddr  net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
+	MaxSeq    int64    `json:"-"`                // Maximum sequence number inserted
+	seqGen    int64    // Sequence generator incremented each time info is added
+	callbacks []callback
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -191,6 +199,7 @@ func (is *infoStore) addInfo(i *info) error {
 		if i.seq > is.MaxSeq {
 			is.MaxSeq = i.seq
 		}
+		is.processCallbacks(i.Key)
 		return nil
 	}
 	// Only replace an existing info if new timestamp is greater, or if
@@ -206,6 +215,7 @@ func (is *infoStore) addInfo(i *info) error {
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
+	is.processCallbacks(i.Key)
 	return nil
 }
 
@@ -232,6 +242,24 @@ func (is *infoStore) maxHops() uint32 {
 		return nil
 	})
 	return maxHops
+}
+
+// registerCallback compiles a regexp for pattern and adds it to
+// the callbacks slice.
+func (is *infoStore) registerCallback(pattern string, method func(key string)) {
+	re := regexp.MustCompile(pattern)
+	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
+}
+
+// processCallbacks processes callbacks for the specified key by
+// matching callback regular expression against the key and invoking
+// the corresponding callback method on a match.
+func (is *infoStore) processCallbacks(key string) {
+	for _, cb := range is.callbacks {
+		if cb.pattern.MatchString(key) {
+			cb.method(key)
+		}
+	}
 }
 
 // visitInfos implements a visitor pattern to run two methods in the

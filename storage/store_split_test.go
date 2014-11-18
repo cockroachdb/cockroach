@@ -80,8 +80,8 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // TestStoreRangeSplitAtRangeBounds verifies a range cannot be split
 // at its start or end keys (would create zero-length range!). This
 // sort of thing might happen in the wild if two split requests
-// arrived for same key.  first one succeeds and second would try to
-// split at the start of the newly split range.
+// arrived for same key. The first one succeeds and second would try
+// to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
