@@ -49,7 +49,7 @@ func createTestStore(t *testing.T) *storage.Store {
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	lSender := kv.NewLocalSender()
-	sender := kv.NewCoordinator(lSender, clock)
+	sender := kv.NewTxnCoordSender(lSender, clock)
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)

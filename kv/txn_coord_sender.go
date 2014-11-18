@@ -140,16 +140,16 @@ func (tm *txnMetadata) close(txn *proto.Transaction, sender client.KVSender) {
 	close(tm.closer)
 }
 
-// A Coordinator is an implementation of client.KVSender which wraps a
-// lower-level KVSender (either a LocalSender or a DistSender) to
-// which it sends commands. It acts as a man-in-the-middle,
+// A TxnCoordSender is an implementation of client.KVSender which
+// wraps a lower-level KVSender (either a LocalSender or a DistSender)
+// to which it sends commands. It acts as a man-in-the-middle,
 // coordinating transaction state for clients.  After a transaction is
-// started, the Coordinator starts asynchronously sending heartbeat
+// started, the TxnCoordSender starts asynchronously sending heartbeat
 // messages to that transaction's txn record, to keep it live. It also
 // keeps track of each written key or key range over the course of the
-// transaction. When the transaction is committed or aborted, it clears
-// accumulated write intents for the transaction.
-type Coordinator struct {
+// transaction. When the transaction is committed or aborted, it
+// clears accumulated write intents for the transaction.
+type TxnCoordSender struct {
 	wrapped           client.KVSender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
@@ -158,11 +158,11 @@ type Coordinator struct {
 	txns              map[string]*txnMetadata // txn key to metadata
 }
 
-// NewCoordinator creates a new Coordinator for use from a KV
-// distributed DB instance. Coordinators should be closed when no
+// NewTxnCoordSender creates a new TxnCoordSender for use from a KV
+// distributed DB instance. TxnCoordSenders should be closed when no
 // longer in use via Close().
-func NewCoordinator(wrapped client.KVSender, clock *hlc.Clock) *Coordinator {
-	tc := &Coordinator{
+func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock) *TxnCoordSender {
+	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
 		heartbeatInterval: storage.DefaultHeartbeatInterval,
@@ -175,7 +175,7 @@ func NewCoordinator(wrapped client.KVSender, clock *hlc.Clock) *Coordinator {
 // Send implements the client.KVSender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-func (tc *Coordinator) Send(call *client.Call) {
+func (tc *TxnCoordSender) Send(call *client.Call) {
 	header := call.Args.Header()
 	tc.maybeBeginTxn(header)
 
@@ -190,8 +190,8 @@ func (tc *Coordinator) Send(call *client.Call) {
 // Close implements the client.KVSender interface by stopping ongoing
 // heartbeats for extant transactions. Close does not attempt to
 // resolve existing write intents for transactions which this
-// Coordinator has been managing.
-func (tc *Coordinator) Close() {
+// TxnCoordSender has been managing.
+func (tc *TxnCoordSender) Close() {
 	tc.Lock()
 	defer tc.Unlock()
 	for _, txn := range tc.txns {
@@ -204,7 +204,7 @@ func (tc *Coordinator) Close() {
 // in the request but has a nil ID. The new transaction is intialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
-func (tc *Coordinator) maybeBeginTxn(header *proto.RequestHeader) {
+func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 	if header.Txn != nil {
 		if len(header.Txn.ID) == 0 {
 			newTxn := proto.NewTransaction(header.Txn.Name, engine.KeyAddress(header.Key), header.GetUserPriority(),
@@ -220,7 +220,7 @@ func (tc *Coordinator) maybeBeginTxn(header *proto.RequestHeader) {
 }
 
 // sendOne sends a single call via the wrapped sender. If the call is
-// part of a transaction, the Coordinator adds the transaction to a
+// part of a transaction, the TxnCoordSender adds the transaction to a
 // map of active transactions and begins heartbeating it. Every
 // subsequent call for the same transaction updates the lastUpdateTS
 // to prevent live transactions from being considered abandoned and
@@ -232,7 +232,7 @@ func (tc *Coordinator) maybeBeginTxn(header *proto.RequestHeader) {
 // key range is recorded as live intents for eventual cleanup upon
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
-func (tc *Coordinator) sendOne(call *client.Call) {
+func (tc *TxnCoordSender) sendOne(call *client.Call) {
 	header := call.Args.Header()
 	// If this call is part of a transaction...
 	if header.Txn != nil {
@@ -292,7 +292,7 @@ func (tc *Coordinator) sendOne(call *client.Call) {
 	// Cleanup intents and transaction map if end of transaction.
 	switch t := call.Reply.Header().GoError().(type) {
 	case *proto.TransactionAbortedError:
-		// If already aborted, cleanup the txn on this Coordinator.
+		// If already aborted, cleanup the txn on this TxnCoordSender.
 		tc.cleanupTxn(&t.Txn)
 	case nil:
 		var txn *proto.Transaction
@@ -307,7 +307,7 @@ func (tc *Coordinator) sendOne(call *client.Call) {
 
 // sendBatch unrolls a batched command and sends each constituent
 // command in parallel.
-func (tc *Coordinator) sendBatch(batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
+func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *proto.BatchResponse) {
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.
@@ -364,7 +364,7 @@ func (tc *Coordinator) sendBatch(batchArgs *proto.BatchRequest, batchReply *prot
 // timestamp and error. The timestamp may have changed upon
 // encountering a newer write or read. Both the timestamp and the
 // priority may change depending on error conditions.
-func (tc *Coordinator) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
+func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, replyHeader *proto.ResponseHeader) {
 	// Move txn timestamp forward to response timestamp if applicable.
 	if replyHeader.Txn.Timestamp.Less(replyHeader.Timestamp) {
 		replyHeader.Txn.Timestamp = replyHeader.Timestamp
@@ -413,7 +413,7 @@ func (tc *Coordinator) updateResponseTxn(argsHeader *proto.RequestHeader, replyH
 // cleanupTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
 // the txns map.
-func (tc *Coordinator) cleanupTxn(txn *proto.Transaction) {
+func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
@@ -428,7 +428,7 @@ func (tc *Coordinator) cleanupTxn(txn *proto.Transaction) {
 // txnID has not been updated by the client adding a request within
 // the allowed timeout. If abandoned, the transaction is removed from
 // the txns map.
-func (tc *Coordinator) hasClientAbandonedCoord(txnID proto.Key) bool {
+func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID proto.Key) bool {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txnID)]
@@ -446,8 +446,8 @@ func (tc *Coordinator) hasClientAbandonedCoord(txnID proto.Key) bool {
 
 // heartbeat periodically sends an InternalHeartbeatTxn RPC to an
 // extant transaction, stopping in the event the transaction is
-// aborted or committed or if the Coordinator is closed.
-func (tc *Coordinator) heartbeat(txn *proto.Transaction, closer chan struct{}) {
+// aborted or committed or if the TxnCoordSender is closed.
+func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}) {
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
