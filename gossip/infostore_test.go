@@ -532,4 +532,13 @@ func TestCallbacks(t *testing.T) {
 	if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3", "key1"}) {
 		t.Errorf("expected {key1, key2, key3, key1}, got %v", cbAllKeys)
 	}
+
+	// Register another callback with same pattern and verify both the
+	// original and the new are invoked.
+	is.registerCallback("key.*", cbAll)
+	i3 = is.newInfo("key3", float64(2), time.Second)
+	is.addInfo(i3)
+	if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3", "key1", "key3", "key3"}) {
+		t.Errorf("expected {key1, key2, key3, key1, key3, key3}, got %v", cbAllKeys)
+	}
 }

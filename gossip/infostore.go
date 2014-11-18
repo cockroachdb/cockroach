@@ -29,6 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+// callback holds regexp pattern match and callback method.
+type callback struct {
+	pattern *regexp.Regexp
+	method  func(string)
+}
+
 // infoStore objects manage maps of Info and maps of Info Group
 // objects. They maintain a sequence number generator which they use
 // to allocate new info objects.
@@ -45,7 +51,7 @@ type infoStore struct {
 	NodeAddr  net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
 	MaxSeq    int64    `json:"-"`                // Maximum sequence number inserted
 	seqGen    int64    // Sequence generator incremented each time info is added
-	callbacks map[*regexp.Regexp]func(string)
+	callbacks []callback
 }
 
 // monotonicUnixNano returns a monotonically increasing value for
@@ -109,10 +115,9 @@ var (
 // in "host:port" format.
 func newInfoStore(nodeAddr net.Addr) *infoStore {
 	return &infoStore{
-		Infos:     infoMap{},
-		Groups:    groupMap{},
-		NodeAddr:  nodeAddr,
-		callbacks: map[*regexp.Regexp]func(string){},
+		Infos:    infoMap{},
+		Groups:   groupMap{},
+		NodeAddr: nodeAddr,
 	}
 }
 
@@ -240,19 +245,19 @@ func (is *infoStore) maxHops() uint32 {
 }
 
 // registerCallback compiles a regexp for pattern and adds it to
-// the callbacks map.
-func (is *infoStore) registerCallback(pattern string, callback func(key string)) {
+// the callbacks slice.
+func (is *infoStore) registerCallback(pattern string, method func(key string)) {
 	re := regexp.MustCompile(pattern)
-	is.callbacks[re] = callback
+	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 }
 
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
-// the corresponding callback on a match.
+// the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string) {
-	for kRE, cb := range is.callbacks {
-		if kRE.MatchString(key) {
-			cb(key)
+	for _, cb := range is.callbacks {
+		if cb.pattern.MatchString(key) {
+			cb.method(key)
 		}
 	}
 }
