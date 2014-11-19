@@ -114,9 +114,68 @@ communication between distributed system components.
 
 ![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
 
+## Datastore Goal Articulation
+
+There are other important axes involved in data-stores which are less
+well understood and/or explained. There is lots of cross-dependency,
+but it's safe to segregate two more of them as (a) scan efficiency,
+and (b) read vs write optimization.
+
+Scan efficiency refers to the number of IO ops required to scan a set
+of sorted adjacent rows matching a criteria. However, it's a
+complicated topic, because of the options (or lack of options) for
+controlling physical order in different systems.
+
+* Some designs either default to or only support "heap organized"
+  physical records (Oracle, MySQL, Postgres, SQLite, MongoDB). In this
+  design, a naive sorted-scan of an index involves one IO op per
+  record.
+* In these systems it's possible to "fully cover" a sorted-query in an
+  index with some write-amplification.
+* In some systems it's possible to put the primary record data in a
+  sorted btree instead of a heap-table (default in MySQL/Innodb,
+  option in Oracle).
+* Sorted-order LSM NoSQL could be considered index-organized-tables,
+  with efficient scans by the row-key. (HBase).
+* Some NoSQL is not optimized for sorted-order retrieval, because of
+  hash-bucketing, primarily based on the Dynamo design. (Cassandra,
+  Riak)
+
 #### Datastore Scan Efficiency Spectrum
 
 ![Datastore Scan Efficiency Spectrum](/resources/doc/scan-efficiency.png?raw=true)
+
+Read vs write optimization is a product of the underlying sorted-order
+data-structure used. Btrees are read-optimized. Hybrid write-deferred
+trees are a balance of read-and-write optimizations (shuttle-trees,
+fractal-trees, stratified-trees). LSM separates write-incorporation
+into a separate step, offering a tunable amount of read-to-write
+optimization. An "ideal" LSM at 0%-write-incorporation is a log, and
+at 100%-write-incorporation is a btree.
+
+The topic of LSM is confused by the fact that LSM is not an algorithm,
+but a design pattern, and usage of LSM is hindered by the lack of a
+de-facto optimal LSM design. LevelDB/RocksDB is one of the more
+practical LSM implementations, but it is far from optimal. Popular
+text-indicies like Lucene are non-general purpose instances of
+write-optimized LSM.
+
+Further, there is a dependency between access pattern
+(read-modify-write vs blind-write and write-fraction), cache-hitrate,
+and ideal sorted-order algorithm selection. At a certain
+write-fraction and read-cache-hitrate, systems achieve higher total
+throughput with write-optimized designs, at the cost of increased
+worst-case read latency. As either write-fraction or
+read-cache-hitrate approaches 1.0, write-optimized designs provide
+dramatically better sustained system throughput when record-sizes are
+small relative to IO sizes.
+
+Given this information, data-stores can be sliced by their
+sorted-order storage algorithm selection. Btree stores are
+read-optimized (Oracle, SQLServer, Postgres, SQLite2, MySQL, MongoDB,
+CouchDB), hybrid stores are read-optimized with better
+write-throughput (Tokutek MySQL/MongoDB), while LSM-variants are
+write-optimized (HBase, Cassandra, SQLite3/LSM, Cockroach).
 
 #### Read vs. Write Optimization Spectrum
 
@@ -147,6 +206,42 @@ three ways using raft. The color coding shows associated range
 replicas.
 
 ![Range Architecture Blowup](/resources/doc/architecture-blowup.png?raw=true)
+
+## Client Architecture
+
+Cockroach nodes serve client traffic on two primary HTTP endpoints: a
+RESTful endpoint which treats key/value pairs and sequences of
+key/value pairs as resources; and a fully-featured key/value DB API
+which accepts requests as either application/x-protobuf or
+application/json. Client implementations consist of an HTTP sender
+(transport) and a transactional sender which implements a simple
+exponential backoff / retry protocol, depending on Cockroach error
+codes.
+
+The REST and DB client gateways accept incoming requests and send them
+through a transaction coordinator, which handles transaction
+heartbeats on behalf of clients, provides optimization pathways, and
+resolves write intents on transaction commit or abort. The transaction
+coordinator passes requests onto a distributed sender, which looks up
+index metadata, caches the results, and routes internode RPC traffic
+based on where the index metadata indicates keys are located in the
+distributed cluster.
+
+In addition to the gateways for external REST and DB client traffic,
+each Cockroach node provides the full key/value API (including all
+internal methods) via a Go RPC server endpoint. The RPC server
+endpoint forwards requests to one or more local stores depending
+on the specified key range.
+
+Internally, each Cockroach node uses the Go implementation of the
+Cockroach client in order to transactionally update system key/value
+data; for example during split and merge operations to update index
+metadata records. Unlike an external application, the internal client
+eschews the HTTP sender and instead directly shares the transaction
+coordinator and distributed sender used by the REST and DB client
+gateways.
+
+![Client Architecture](/resources/doc/client-architecture.png?raw=true)
 
 [0]: http://rocksdb.org/
 [1]: https://code.google.com/p/leveldb/
