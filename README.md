@@ -121,6 +121,8 @@ well understood and/or explained. There is lots of cross-dependency,
 but it's safe to segregate two more of them as (a) scan efficiency,
 and (b) read vs write optimization.
 
+#### Datastore Scan Efficiency Spectrum
+
 Scan efficiency refers to the number of IO ops required to scan a set
 of sorted adjacent rows matching a criteria. However, it's a
 complicated topic, because of the options (or lack of options) for
@@ -141,9 +143,9 @@ controlling physical order in different systems.
   hash-bucketing, primarily based on the Dynamo design. (Cassandra,
   Riak)
 
-#### Datastore Scan Efficiency Spectrum
-
 ![Datastore Scan Efficiency Spectrum](/resources/doc/scan-efficiency.png?raw=true)
+
+#### Read vs. Write Optimization Spectrum
 
 Read vs write optimization is a product of the underlying sorted-order
 data-structure used. Btrees are read-optimized. Hybrid write-deferred
@@ -176,8 +178,6 @@ read-optimized (Oracle, SQLServer, Postgres, SQLite2, MySQL, MongoDB,
 CouchDB), hybrid stores are read-optimized with better
 write-throughput (Tokutek MySQL/MongoDB), while LSM-variants are
 write-optimized (HBase, Cassandra, SQLite3/LSM, Cockroach).
-
-#### Read vs. Write Optimization Spectrum
 
 ![Read vs. Write Optimization Spectrum](/resources/doc/read-vs-write.png?raw=true)
 
