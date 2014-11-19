@@ -51,9 +51,8 @@ var multiDCConfig = proto.ZoneConfig{
 func filterStores(a proto.Attributes, stores []*StoreDescriptor) ([]*StoreDescriptor, error) {
 	var filtered []*StoreDescriptor
 	for _, s := range stores {
-		b := s.Attrs.Attrs
-		b = append(b, s.Node.Attrs.Attrs...)
-		if a.IsSubset(proto.Attributes{Attrs: b}) {
+		sAttrs := s.CombinedAttrs()
+		if a.IsSubset(*sAttrs) {
 			filtered = append(filtered, s)
 		}
 	}

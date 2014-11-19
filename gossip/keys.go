@@ -36,7 +36,7 @@ const (
 
 	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
 	// store capacity. The suffix is composed of:
-	// <datacenter>-<hex node ID>-<hex store ID>. The value is a
+	// <store attributes>-<hex node ID>-<hex store ID>. The value is a
 	// storage.StoreDescriptor struct.
 	KeyMaxAvailCapacityPrefix = "max-avail-capacity-"
 

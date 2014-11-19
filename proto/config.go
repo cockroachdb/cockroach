@@ -25,8 +25,8 @@ import (
 	"strings"
 )
 
-// IsSubset returns whether attributes list b is a subset of
-// attributes list a.
+// IsSubset returns whether attributes list a is a subset of
+// attributes list b.
 func (a Attributes) IsSubset(b Attributes) bool {
 	m := map[string]struct{}{}
 	for _, s := range b.Attrs {
