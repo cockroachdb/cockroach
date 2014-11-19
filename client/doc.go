@@ -29,15 +29,23 @@ The simplest way to use the client is through the Call method. Call
 synchronously invokes the method and returns the reply and an
 error. The example below shows a get and a put.
 
-  kv := client.NewKV("localhost:8080", tlsConfig)
+	host := "localhost:8080"
+	sender := client.NewHTTPSender(host, &http.Transport{
+		        TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+				    })
+	kv := client.NewKV(sender, nil)
+	kv.User = storage.UserRoot
 
-  getResp := &proto.GetResponse{}
-  if err := kv.Call(proto.Get, proto.GetArgs(proto.Key("a")), getResp); err != nil {
-    log.Fatal(err)
-  }
-  if _, err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), getResp.Value.Bytes)) err != nil {
-    log.Fatal(err)
-  }
+	getResp := &proto.GetResponse{}
+	if err := kv.Call(proto.Get, proto.GetArgs(proto.Key("a")), getResp); err != nil {
+		log.Fatal(err)
+	}
+
+	value := getResp.Value.Bytes
+	putResp := &proto.PutResponse{}
+	if err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), value), putResp); err != nil {
+		log.Fatal(err)
+	}
 
 The API is synchronous, but accommodates efficient parallel updates
 and queries using the Prepare method. An arbitrary number of Prepare
@@ -50,33 +58,38 @@ transaction must be used to guarantee atomicity. A simple example of
 using the API which does two scans in parallel and then sends a
 sequence of puts in parallel:
 
-  kv := client.NewKV("localhost:8080", tlsConfig)
+	host := "localhost:8080"
+	sender := client.NewHTTPSender(host, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
+	kv := client.NewKV(sender, nil)
+	kv.User = storage.UserRoot
 
-  acResp, xzResp := &proto.ScanResponse{}, &proto.ScanResponse{}
-  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c")), acResp)
-  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("x"), proto.Key("z")), xzResp)
+	acResp, xzResp := &proto.ScanResponse{}, &proto.ScanResponse{}
+	kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c").Next(), 3), acResp)
+	kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("x"), proto.Key("z").Next(), 3), xzResp)
 
-  // Flush sends both scans in parallel and returns first error or nil.
-  if err := kv.Flush(); err != nil {
-    log.Fatal(err)
-  }
+	// Flush sends both scans in parallel and returns first error or nil.
+	if err := kv.Flush(); err != nil {
+		log.Fatal(err)
+	}
 
-  // Append maximum value from "a"-"c" to all values from "x"-"z".
-  max := []byte(nil)
-  for _, keyVal := range acResp.Rows {
-    if bytes.Compare(max, keyVal.Value.Bytes) < 0 {
-      max = keyVal.Value.Bytes
-    }
-  }
-  for keyVal := range xzResp.Rows {
-    putReq := proto.PutArgs(keyVal.Key, bytes.Join([][]byte{keyVal.Value.Bytes, max}, []byte(nil)))
-    kv.Prepare(proto.Put, putReq, &proto.PutReponse{})
-  }
+	// Append maximum value from "a"-"c" to all values from "x"-"z".
+	max := []byte(nil)
+	for _, keyVal := range acResp.Rows {
+		if bytes.Compare(max, keyVal.Value.Bytes) < 0 {
+			max = keyVal.Value.Bytes
+		}
+	}
+	for _, keyVal := range xzResp.Rows {
+		putReq := proto.PutArgs(keyVal.Key, bytes.Join([][]byte{keyVal.Value.Bytes, max}, []byte(nil)))
+		kv.Prepare(proto.Put, putReq, &proto.PutResponse{})
+	}
 
-  // Flush all puts for parallel execution.
-  if _, err := kv.Flush(); err != nil {
-    log.Fatal(err)
-  }
+	// Flush all puts for parallel execution.
+	if err := kv.Flush(); err != nil {
+		log.Fatal(err)
+	}
 
 Transactions are supported through the RunTransaction() method, which
 takes a retryable function, itself composed of the same simple mix of
