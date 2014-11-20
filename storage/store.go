@@ -169,9 +169,10 @@ type Store struct {
 	engine       engine.Engine  // The underlying key-value store
 	db           *client.KV     // Cockroach KV DB
 	allocator    *allocator     // Makes allocation decisions
-	gossip       *gossip.Gossip // Passed to new ranges
+	gossip       *gossip.Gossip // Configs and store capacities
 	raftIDAlloc  *IDAllocator   // Raft ID allocator
 	rangeIDAlloc *IDAllocator   // Range ID allocator
+	configMu     sync.Mutex     // Limit config update processing
 	raft         raft
 	closer       chan struct{}
 
@@ -220,7 +221,7 @@ func (s *Store) Start() error {
 	// Stop store for idempotency.
 	s.Stop()
 
-	// Start engine and set garbage collector.
+	// Start engine (i.e. open and initialize RocksDB database).
 	if err := s.engine.Start(); err != nil {
 		return err
 	}
@@ -273,12 +274,95 @@ func (s *Store) Start() error {
 	}); err != nil {
 		return err
 	}
-
+	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
+	// Start Raft processing goroutine.
 	go s.processRaft(s.closer)
 
+	// Register callbacks for any changes to accounting and zone
+	// configurations; we split ranges along prefix boundaries.
+	s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
+	s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+
 	return nil
+}
+
+// configGossipUpdate is a callback for gossip updates to
+// configuration maps which affect range split boundaries.
+func (s *Store) configGossipUpdate(key string) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	switch key {
+	case gossip.KeyConfigAccounting, gossip.KeyConfigZone:
+		for {
+			info, err := s.gossip.GetInfo(key)
+			if err != nil {
+				log.Errorf("unable to fetch %s config from gossip: %s", key, err)
+				return
+			}
+			configMap, ok := info.(PrefixConfigMap)
+			if !ok {
+				log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+				return
+			}
+			// Exit loop if all splits are done.
+			if s.maybeSplitRangesByConfigs(configMap) {
+				return
+			}
+		}
+	default:
+		log.Warningf("unhandled gossip update to key %s", key)
+		return
+	}
+}
+
+// maybeSplitRangesByConfigs determines ranges which should be
+// split by the boundaries of the prefix config map, if any, and
+// issues AdminSplit commands. Returns true if this method should
+// be re-invoked after a split has been attempted on a range.
+func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) bool {
+	for _, config := range configMap {
+		// While locked, find the range which contains this config prefix, if any.
+		s.mu.Lock()
+		n := sort.Search(len(s.rangesByKey), func(i int) bool {
+			return config.Prefix.Less(s.rangesByKey[i].Desc.EndKey)
+		})
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKey(config.Prefix) {
+			s.mu.Unlock()
+			continue
+		}
+		desc := s.rangesByKey[n].Desc
+		s.mu.Unlock()
+
+		// Now split the range by the config map; we might have multiple
+		// split points, but we only split once and return from this function.
+		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
+		if err != nil {
+			log.Errorf("unable to split range %q-%q by prefix map %s", desc.StartKey, desc.EndKey, configMap)
+			continue
+		}
+
+		// Split range along proposed boundaries.
+		for _, split := range splits {
+			if split.end.Less(desc.EndKey) {
+				log.Infof("splitting range %q-%q at %q for %T",
+					desc.StartKey, desc.EndKey, split.end, split.config)
+				req := &proto.AdminSplitRequest{
+					RequestHeader: proto.RequestHeader{Key: split.end},
+					SplitKey:      split.end,
+				}
+				resp := &proto.AdminSplitResponse{}
+				if err := s.db.Call(proto.AdminSplit, req, resp); err != nil {
+					log.Errorf("unable to split at key %q: %s", split.end, err)
+					continue
+				}
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To

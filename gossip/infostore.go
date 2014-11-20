@@ -255,11 +255,18 @@ func (is *infoStore) registerCallback(pattern string, method func(key string)) {
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
 func (is *infoStore) processCallbacks(key string) {
+	var matches []callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
-			cb.method(key)
+			matches = append(matches, cb)
 		}
 	}
+	// Run callbacks in a goroutine to avoid mutex reentry.
+	go func() {
+		for _, cb := range matches {
+			cb.method(key)
+		}
+	}()
 }
 
 // visitInfos implements a visitor pattern to run two methods in the

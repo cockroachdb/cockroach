@@ -32,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -140,12 +142,18 @@ func TestRangeContains(t *testing.T) {
 func TestRangeGossipFirstRange(t *testing.T) {
 	s, _, g, _ := createTestRange(t)
 	defer s.Stop()
-	info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-		t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+	if err := util.IsTrueWithin(func() bool {
+		info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
+		if err != nil {
+			log.Warningf("still waiting for first range gosssip...")
+			return false
+		}
+		if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
+			t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+		}
+		return true
+	}, 500*time.Millisecond); err != nil {
+		t.Error(err)
 	}
 }
 

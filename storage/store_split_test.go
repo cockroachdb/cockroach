@@ -27,10 +27,12 @@ import (
 	"testing"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 func adminSplitArgs(key, splitKey []byte, rangeID int64) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
@@ -389,5 +391,54 @@ func TestStoreShouldSplit(t *testing.T) {
 		return newRng != rng
 	}, time.Second); err != nil {
 		t.Errorf("expected range to split in 1s")
+	}
+}
+
+// TestStoreRangeSplitOnConfigs verifies that config changes to both
+// accounting and zone configs cause ranges to be split along prefix
+// boundaries.
+func TestStoreRangeSplitOnConfigs(t *testing.T) {
+	store := createTestStore(t)
+	defer store.Stop()
+
+	acctConfig := &proto.AcctConfig{}
+	zoneConfig := &proto.ZoneConfig{}
+
+	// Write two accounting configs for db1 & db2 and two zone configs for db3 & db4.
+	for i, k := range []string{"db4", "db3", "db2", "db1"} {
+		prefix := engine.KeyConfigAccountingPrefix
+		var config gogoproto.Message = acctConfig
+		if i >= 2 {
+			prefix = engine.KeyConfigZonePrefix
+			config = zoneConfig
+		}
+		store.DB().PreparePutProto(engine.MakeKey(prefix, proto.Key(k)), config)
+	}
+	if err := store.DB().Flush(); err != nil {
+		t.Fatal(err)
+	}
+	log.Infof("wrote updated configs")
+
+	// Check that we split into expected ranges in allotted time.
+	expKeys := []proto.Key{
+		proto.Key("\x00\x00meta2db1"),
+		proto.Key("\x00\x00meta2db2"),
+		proto.Key("\x00\x00meta2db3"),
+		proto.Key("\x00\x00meta2db4"),
+		proto.Key("\x00\x00meta2db5"),
+		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
+	}
+	if err := util.IsTrueWithin(func() bool {
+		resp := &proto.ScanResponse{}
+		if err := store.DB().Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+			t.Fatalf("failed to scan meta2 keys: %s", err)
+		}
+		var keys []proto.Key
+		for _, r := range resp.Rows {
+			keys = append(keys, r.Key)
+		}
+		return reflect.DeepEqual(keys, expKeys)
+	}, 500*time.Millisecond); err != nil {
+		t.Errorf("expected splits not found: %s", err)
 	}
 }

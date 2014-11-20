@@ -152,7 +152,7 @@ type Range struct {
 	RangeID   int64
 	Desc      *proto.RangeDescriptor
 	rm        RangeManager  // Makes some store methods available
-	splitting int32         // 1 if a split is underway
+	splitting int32         // 1 if a split is underway; updated atomically
 	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
@@ -177,11 +177,10 @@ func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Rang
 	return r
 }
 
-// Start begins gossiping and starts the raft command processing
-// loop in a goroutine.
+// Start begins gossiping loop in the event this is the first
+// range in the map and gossips config information if the range
+// contains any of the configuration maps.
 func (r *Range) start() {
-	r.maybeGossipClusterID()
-	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs()
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
@@ -511,10 +510,11 @@ func (r *Range) processRaftCommand(raftCmd proto.InternalRaftCommand) {
 func (r *Range) startGossip() {
 	ticker := time.NewTicker(ttlClusterIDGossip / 2)
 	for {
+		r.maybeGossipClusterID()
+		r.maybeGossipFirstRange()
 		select {
 		case <-ticker.C:
-			r.maybeGossipClusterID()
-			r.maybeGossipFirstRange()
+			break
 		case <-r.closer:
 			return
 		}
