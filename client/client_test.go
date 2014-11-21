@@ -582,7 +582,7 @@ func ExampleKV_RunTransaction() {
 
 	// Read back KV pairs inside a transaction.
 	getResponses := make([]proto.GetResponse, numKVPairs)
-	getOpts := client.TransactionOptions{Name: "example get", Isolation: proto.SERIALIZABLE}
+	getOpts := client.TransactionOptions{Name: "example get"}
 	err = kvClient.RunTransaction(&getOpts, func(txn *client.KV) error {
 		for i := 0; i < numKVPairs; i++ {
 			txn.Prepare(proto.Get, proto.GetArgs(proto.Key(keys[i])), &getResponses[i])
