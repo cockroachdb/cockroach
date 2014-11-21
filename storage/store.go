@@ -635,7 +635,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
 		return err
 	}
-	if header.Timestamp.Equal(proto.MinTimestamp) {
+	if header.Timestamp.Equal(proto.ZeroTimestamp) {
 		// Update the incoming timestamp if unset.
 		header.Timestamp = s.clock.Now()
 	} else {
