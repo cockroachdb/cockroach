@@ -287,7 +287,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 	if !ok || err != nil {
 		t.Fatalf("unable to get proto ok? %t: %s", ok, err)
 	}
-	if ts.Equal(proto.MinTimestamp) {
+	if ts.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
 	if !gogoproto.Equal(zoneConfig, readZoneConfig) {
@@ -324,7 +324,7 @@ func TestKVClientGetAndPutGob(t *testing.T) {
 	if !ok || err != nil {
 		t.Fatalf("unable to get object ok? %t: %s", ok, err)
 	}
-	if ts.Equal(proto.MinTimestamp) {
+	if ts.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
 	if !reflect.DeepEqual(obj, readObj) {

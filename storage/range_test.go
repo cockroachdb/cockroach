@@ -206,7 +206,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
+		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
 		Value:         proto.Value{Bytes: data},
 	}
 	reply := &proto.PutResponse{}
@@ -246,7 +246,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
+		RequestHeader: proto.RequestHeader{Key: key, Timestamp: proto.MinTimestamp},
 		Value:         proto.Value{Bytes: data},
 	}
 	reply := &proto.PutResponse{}
@@ -366,8 +366,9 @@ func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) 
 func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			Key:       key,
+			Timestamp: proto.MinTimestamp,
+			Replica:   proto.Replica{RangeID: rangeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -1518,6 +1519,7 @@ func TestRemoteRaftCommand(t *testing.T) {
 
 	// Send an increment direct to raft.
 	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1)
+	remoteIncArgs.Timestamp = proto.MinTimestamp
 	raftCmd := proto.InternalRaftCommand{
 		CmdID:  proto.ClientCmdID{WallTime: 1, Random: 1},
 		RaftID: r.Desc.RaftID,
