@@ -404,11 +404,11 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	acctConfig := &proto.AcctConfig{}
 	zoneConfig := &proto.ZoneConfig{}
 
-	// Write two accounting configs for db1 & db2 and two zone configs for db3 & db4.
-	for i, k := range []string{"db4", "db3", "db2", "db1"} {
+	// Write accounting configs for db1 & db2 and zone configs for db3 & db4.
+	for _, k := range []string{"db4", "db3", "db2", "db1"} {
 		prefix := engine.KeyConfigAccountingPrefix
 		var config gogoproto.Message = acctConfig
-		if i >= 2 {
+		if k == "db3" || k == "db4" {
 			prefix = engine.KeyConfigZonePrefix
 			config = zoneConfig
 		}

@@ -282,8 +282,11 @@ func (s *Store) Start() error {
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
-	s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
-	s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+	// Gossip is only ever nil for unittests.
+	if s.gossip != nil {
+		s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
+		s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+	}
 
 	return nil
 }
@@ -296,22 +299,17 @@ func (s *Store) configGossipUpdate(key string) {
 
 	switch key {
 	case gossip.KeyConfigAccounting, gossip.KeyConfigZone:
-		for {
-			info, err := s.gossip.GetInfo(key)
-			if err != nil {
-				log.Errorf("unable to fetch %s config from gossip: %s", key, err)
-				return
-			}
-			configMap, ok := info.(PrefixConfigMap)
-			if !ok {
-				log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
-				return
-			}
-			// Exit loop if all splits are done.
-			if s.maybeSplitRangesByConfigs(configMap) {
-				return
-			}
+		info, err := s.gossip.GetInfo(key)
+		if err != nil {
+			log.Errorf("unable to fetch %s config from gossip: %s", key, err)
+			return
 		}
+		configMap, ok := info.(PrefixConfigMap)
+		if !ok {
+			log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+			return
+		}
+		s.maybeSplitRangesByConfigs(configMap)
 	default:
 		log.Warningf("unhandled gossip update to key %s", key)
 		return
@@ -320,9 +318,8 @@ func (s *Store) configGossipUpdate(key string) {
 
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
-// issues AdminSplit commands. Returns true if this method should
-// be re-invoked after a split has been attempted on a range.
-func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) bool {
+// issues AdminSplit commands.
+func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 	for _, config := range configMap {
 		// While locked, find the range which contains this config prefix, if any.
 		s.mu.Lock()
@@ -345,24 +342,26 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) bool {
 		}
 
 		// Split range along proposed boundaries.
+		var splitKeys []proto.Key
 		for _, split := range splits {
 			if split.end.Less(desc.EndKey) {
-				log.Infof("splitting range %q-%q at %q for %T",
-					desc.StartKey, desc.EndKey, split.end, split.config)
-				req := &proto.AdminSplitRequest{
-					RequestHeader: proto.RequestHeader{Key: split.end},
-					SplitKey:      split.end,
-				}
-				resp := &proto.AdminSplitResponse{}
-				if err := s.db.Call(proto.AdminSplit, req, resp); err != nil {
-					log.Errorf("unable to split at key %q: %s", split.end, err)
-					continue
-				}
-				return false
+				splitKeys = append(splitKeys, split.end)
+			}
+		}
+		if len(splitKeys) == 0 {
+			return
+		}
+		log.Infof("splitting range %q-%q at keys %v", desc.StartKey, desc.EndKey, splitKeys)
+		for _, splitKey := range splitKeys {
+			req := &proto.AdminSplitRequest{
+				RequestHeader: proto.RequestHeader{Key: splitKey},
+				SplitKey:      splitKey,
+			}
+			if err := s.db.Call(proto.AdminSplit, req, &proto.AdminSplitResponse{}); err != nil {
+				log.Errorf("unable to split at key %q: %s", splitKey, err)
 			}
 		}
 	}
-	return true
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -422,7 +421,7 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 // the empty key prefix, meaning they apply to the entire
 // database. Permissions are granted to all users and the zone
 // requires three replicas with no other specifications.
-func (s *Store) BootstrapRange() (*Range, error) {
+func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
 		StartKey: engine.KeyMin,
@@ -439,21 +438,21 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	mvcc := engine.NewMVCC(batch)
 	now := s.clock.Now()
 	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Write meta1.
 	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Write meta2.
 	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, acctConfig); err != nil {
-		return nil, err
+		return err
 	}
 	// Permission config.
 	permConfig := &proto.PermConfig{
@@ -462,11 +461,9 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	}
 	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, permConfig); err != nil {
-		return nil, err
+		return err
 	}
 	// Zone config.
-	// TODO(spencer): change this when zone specifications change to elect for three
-	// replicas with no specific features set.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			proto.Attributes{},
@@ -478,19 +475,21 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, zoneConfig); err != nil {
-		return nil, err
+		return err
 	}
 	if err := batch.Commit(); err != nil {
-		return nil, err
+		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rng := NewRange(1, desc, s)
-	rng.start()
-	s.ranges[rng.RangeID] = rng
-	s.rangesByKey = append(s.rangesByKey, rng)
-	s.rangesByRaftID[desc.RaftID] = rng
-	return rng, nil
+	/*
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		rng := NewRange(1, desc, s)
+		rng.start()
+		s.ranges[rng.RangeID] = rng
+		s.rangesByKey = append(s.rangesByKey, rng)
+		s.rangesByRaftID[desc.RaftID] = rng
+	*/
+	return nil
 }
 
 // The following methods are accessors implementation the RangeManager interface.

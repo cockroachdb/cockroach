@@ -127,16 +127,14 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	if err := s.Bootstrap(sIdent); err != nil {
 		return nil, err
 	}
+	// Create first range.
+	if err := s.BootstrapRange(); err != nil {
+		return nil, err
+	}
 	if err := s.Start(); err != nil {
 		return nil, err
 	}
 	lSender.AddStore(s)
-
-	// Create first range.
-	_, err := s.BootstrapRange()
-	if err != nil {
-		return nil, err
-	}
 
 	// Initialize node and store ids after the fact to account
 	// for use of node ID = 1 and store ID = 1.

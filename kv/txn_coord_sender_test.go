@@ -56,7 +56,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 		t.Fatal(err)
 	}
 	lSender.AddStore(store)
-	if _, err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Start(); err != nil {

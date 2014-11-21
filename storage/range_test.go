@@ -157,6 +157,31 @@ func TestRangeGossipFirstRange(t *testing.T) {
 	}
 }
 
+// TestRangeGossipClusterID verifies that the cluster ID is routinely
+// gossiped every ttlClusterIDGossip / 2 seconds.
+func TestRangeGossipClusterID(t *testing.T) {
+	origTTTLClusterIDGossip := ttlClusterIDGossip
+	ttlClusterIDGossip = 1 * time.Millisecond
+	defer func() { ttlClusterIDGossip = origTTTLClusterIDGossip }()
+
+	s, _, g, _ := createTestRange(t)
+	defer s.Stop()
+
+	// Verify we get at least two updates to the cluster ID.
+	count := 0
+	cb := func(key string) {
+		if key == gossip.KeyClusterID {
+			count++
+		}
+	}
+	g.RegisterCallback(gossip.KeyClusterID, cb)
+	if err := util.IsTrueWithin(func() bool {
+		return count >= 2
+	}, 500*time.Millisecond); err != nil {
+		t.Error(err)
+	}
+}
+
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossipped.
 func TestRangeGossipAllConfigs(t *testing.T) {
@@ -261,10 +286,6 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
-}
-
-func TestInternalRangeLookup(t *testing.T) {
-	// TODO(Spencer): test, esp. for correct key range scanned
 }
 
 // A blockingEngine allows us to delay get/put (but not other ops!).

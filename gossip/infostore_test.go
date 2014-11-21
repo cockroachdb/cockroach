@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -483,17 +484,21 @@ func TestLeastUseful(t *testing.T) {
 
 func TestCallbacks(t *testing.T) {
 	is := newInfoStore(emptyAddr)
+	wg := sync.WaitGroup{}
 	cb1Keys := []string{}
 	cb1 := func(key string) {
 		cb1Keys = append(cb1Keys, key)
+		wg.Done()
 	}
 	cb2Keys := []string{}
 	cb2 := func(key string) {
 		cb2Keys = append(cb2Keys, key)
+		wg.Done()
 	}
 	cbAllKeys := []string{}
 	cbAll := func(key string) {
 		cbAllKeys = append(cbAllKeys, key)
+		wg.Done()
 	}
 	is.registerCallback("key1", cb1)
 	is.registerCallback("key2", cb2)
@@ -504,10 +509,12 @@ func TestCallbacks(t *testing.T) {
 	i3 := is.newInfo("key3", float64(1), time.Second)
 
 	// Add infos twice and verify callbacks aren't called for same timestamps.
+	wg.Add(5)
 	for i := 0; i < 2; i++ {
 		is.addInfo(i1)
 		is.addInfo(i2)
 		is.addInfo(i3)
+		wg.Wait()
 
 		if !reflect.DeepEqual(cb1Keys, []string{"key1"}) {
 			t.Errorf("expected key1, got %v", cb1Keys)
@@ -522,7 +529,10 @@ func TestCallbacks(t *testing.T) {
 
 	// Update an info.
 	i1 = is.newInfo("key1", float64(2), time.Second)
+	wg.Add(2)
 	is.addInfo(i1)
+	wg.Wait()
+
 	if !reflect.DeepEqual(cb1Keys, []string{"key1", "key1"}) {
 		t.Errorf("expected {key1, key1}, got %v", cb1Keys)
 	}
@@ -537,7 +547,10 @@ func TestCallbacks(t *testing.T) {
 	// original and the new are invoked.
 	is.registerCallback("key.*", cbAll)
 	i3 = is.newInfo("key3", float64(2), time.Second)
+	wg.Add(2)
 	is.addInfo(i3)
+	wg.Wait()
+
 	if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3", "key1", "key3", "key3"}) {
 		t.Errorf("expected {key1, key2, key3, key1, key3, key3}, got %v", cbAllKeys)
 	}

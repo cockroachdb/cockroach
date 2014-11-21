@@ -48,6 +48,22 @@ func buildTestPrefixConfigMap() PrefixConfigMap {
 	return pcc
 }
 
+func verifyPrefixConfigMap(pcc PrefixConfigMap, expPrefixConfigs []PrefixConfig, t *testing.T) {
+	if len(pcc) != len(expPrefixConfigs) {
+		t.Fatalf("incorrect number of built prefix configs; expected %d, got %d",
+			len(expPrefixConfigs), len(pcc))
+	}
+	for i, pc := range pcc {
+		exp := expPrefixConfigs[i]
+		if bytes.Compare(pc.Prefix, exp.Prefix) != 0 {
+			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.Prefix, pc.Prefix)
+		}
+		if pc.Config != exp.Config {
+			t.Errorf("config for index %d incorrect: expected %v, got %v", i, exp.Config, pc.Config)
+		}
+	}
+}
+
 // TestPrefixEndKey verifies the end keys on prefixes.
 func TestPrefixEndKey(t *testing.T) {
 	testData := []struct {
@@ -104,6 +120,7 @@ func TestPrefixConfigSort(t *testing.T) {
 // TestPrefixConfigBuild adds prefixes and verifies they're
 // sorted and proper end keys are generated.
 func TestPrefixConfigBuild(t *testing.T) {
+	pcc := buildTestPrefixConfigMap()
 	expPrefixConfigs := []PrefixConfig{
 		{engine.KeyMin, nil, config1},
 		{proto.Key("/db1"), nil, config2},
@@ -113,20 +130,40 @@ func TestPrefixConfigBuild(t *testing.T) {
 		{proto.Key("/db3"), nil, config4},
 		{proto.Key("/db4"), nil, config1},
 	}
-	pcc := buildTestPrefixConfigMap()
-	if len(pcc) != len(expPrefixConfigs) {
-		t.Fatalf("incorrect number of built prefix configs; expected %d, got %d",
-			len(expPrefixConfigs), len(pcc))
+	verifyPrefixConfigMap(pcc, expPrefixConfigs, t)
+}
+
+func TestPrefixConfigMapDuplicates(t *testing.T) {
+	configs := []*PrefixConfig{
+		{engine.KeyMin, nil, config1},
+		{proto.Key("/db2"), nil, config2},
+		{proto.Key("/db2"), nil, config3},
 	}
-	for i, pc := range pcc {
-		exp := expPrefixConfigs[i]
-		if bytes.Compare(pc.Prefix, exp.Prefix) != 0 {
-			t.Errorf("prefix for index %d incorrect; expected %q, got %q", i, exp.Prefix, pc.Prefix)
-		}
-		if pc.Config != exp.Config {
-			t.Errorf("config for index %d incorrect: expected %v, got %v", i, exp.Config, pc.Config)
-		}
+	if _, err := NewPrefixConfigMap(configs); err == nil {
+		log.Fatalf("expected an error building config map")
 	}
+}
+
+func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
+	configs := []*PrefixConfig{
+		{engine.KeyMin, nil, config1},
+		{proto.Key("/db2"), nil, config2},
+		{proto.Key("/db2/table"), nil, config3},
+		{proto.Key("/db3"), nil, config4},
+	}
+	pcc, err := NewPrefixConfigMap(configs)
+	if err != nil {
+		log.Fatalf("unexpected error building config map: %v", err)
+	}
+	expPrefixConfigs := []PrefixConfig{
+		{engine.KeyMin, nil, config1},
+		{proto.Key("/db2"), nil, config2},
+		{proto.Key("/db2/table"), nil, config3},
+		{proto.Key("/db2/tablf"), nil, config2},
+		{proto.Key("/db3"), nil, config4},
+		{proto.Key("/db4"), nil, config1},
+	}
+	verifyPrefixConfigMap(pcc, expPrefixConfigs, t)
 }
 
 // TestMatchByPrefix verifies matching on longest prefix.

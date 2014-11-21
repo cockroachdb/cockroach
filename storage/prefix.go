@@ -65,7 +65,9 @@ func (p PrefixConfigMap) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
 func (p PrefixConfigMap) Less(i, j int) bool {
-	return p[i].Prefix.Less(p[j].Prefix)
+	// Sort by prefix; if prefixes are equal, sort by whether canonical == prefix.
+	return p[i].Prefix.Less(p[j].Prefix) ||
+		(p[i].Prefix.Equal(p[j].Prefix) && p[i].Prefix.Equal(p[i].Canonical))
 }
 
 // NewPrefixConfigMap creates a new prefix config map and sorts
@@ -88,6 +90,18 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 // provide a way to split a range by prefixes which affect it. This
 // last is necessary for accounting and zone configs; ranges must not
 // span accounting or zone config boundaries.
+//
+// Similarly, if the map contains successive prefix entries:
+//
+//   "/":          config1
+//   "/db1":       config2
+//   "/db1/table": config3
+//   "/db2":       config4
+//
+// ...then entries will be added for:
+//
+//   "/db1/tablf": config2
+//   "/db3":       config1
 func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
@@ -99,7 +113,11 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	var newConfigs []*PrefixConfig
 	stack := list.New()
 
-	for _, entry := range p {
+	for i, entry := range p {
+		// Check for duplicates in the original set of prefix configs.
+		if i > 0 && entry.Prefix.Equal(p[i-1].Prefix) {
+			return nil, util.Errorf("duplicate prefix found while building map: %q", entry.Prefix)
+		}
 		// Pop entries from the stack which aren't prefixes.
 		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(*PrefixConfig).Prefix) {
 			stack.Remove(stack.Back())
@@ -120,7 +138,19 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	}
 	sort.Sort(p)
 
-	return p, nil
+	// Remove duplicates.
+	newConfigs = []*PrefixConfig(nil)
+	for _, config := range p {
+		// Skip if this is a duplicate entry. Duplicates are created by
+		// successive prefixes, such as "/db1" and "/db2". We always keep
+		// the first of the duplicates, which is the canonical one.
+		if l := len(newConfigs); l > 0 && config.Prefix.Equal(newConfigs[l-1].Prefix) {
+			continue
+		}
+		newConfigs = append(newConfigs, config)
+	}
+
+	return newConfigs, nil
 }
 
 // MatchByPrefix returns the longest matching PrefixConfig. If the key

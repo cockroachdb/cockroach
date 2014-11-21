@@ -57,7 +57,7 @@ func createTestStore(t *testing.T) *storage.Store {
 		t.Fatal(err)
 	}
 	lSender.AddStore(store)
-	if _, err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Start(); err != nil {
