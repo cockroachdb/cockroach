@@ -86,25 +86,50 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 //
 // These additional entries allow for simple lookups by prefix and
 // provide a way to split a range by prefixes which affect it. This
-// last is necessary for zone configs; ranges must not span zone
-// config boundaries.
+// last is necessary for accounting and zone configs; ranges must not
+// span accounting or zone config boundaries.
+//
+// Similarly, if the map contains successive prefix entries:
+//
+//   "/":           config1
+//   "/db1":        config2
+//   "/db1/table1": config3
+//   "/db1/table2": config4
+//   "/db2":        config5
+//
+// ...then entries will be added for (note that we don't add a
+// redundant entry for /db2 or /db1/table2).:
+//
+//   "/db1/table3": config2
+//   "/db3":        config1
 func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
-	if len(p) == 0 || p[0].Prefix.Compare(engine.KeyMin) != 0 {
+	if len(p) == 0 || !p[0].Prefix.Equal(engine.KeyMin) {
 		return nil, util.Errorf("no default prefix specified")
+	}
+
+	prefixSet := map[string]struct{}{}
+	for _, entry := range p {
+		prefixSet[string(entry.Prefix)] = struct{}{}
 	}
 
 	var newConfigs []*PrefixConfig
 	stack := list.New()
 
-	for _, entry := range p {
+	for i, entry := range p {
+		// Check for duplicates in the original set of prefix configs.
+		if i > 0 && entry.Prefix.Equal(p[i-1].Prefix) {
+			return nil, util.Errorf("duplicate prefix found while building map: %q", entry.Prefix)
+		}
 		// Pop entries from the stack which aren't prefixes.
 		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(*PrefixConfig).Prefix) {
 			stack.Remove(stack.Back())
 		}
-		if stack.Len() != 0 {
+		// Add additional entry to mark the end of key prefix range as
+		// long as there's not an existing range that starts there.
+		if _, ok := prefixSet[string(entry.Prefix.PrefixEnd())]; !ok && stack.Len() != 0 {
 			newConfigs = append(newConfigs, &PrefixConfig{
 				Prefix:    entry.Prefix.PrefixEnd(),
 				Canonical: stack.Back().Value.(*PrefixConfig).Prefix,

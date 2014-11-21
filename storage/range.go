@@ -50,7 +50,7 @@ func init() {
 	gob.Register(proto.Transaction{})
 }
 
-const (
+var (
 	// DefaultHeartbeatInterval is how often heartbeats are sent from the
 	// transaction coordinator to a live transaction. These keep it from
 	// being preempted by other transactions writing the same keys. If a
@@ -67,17 +67,20 @@ const (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
-// configPrefixes describes administrative configuration maps
+// configDescriptor describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
-var configPrefixes = []struct {
+type configDescriptor struct {
 	keyPrefix proto.Key   // Range key prefix
 	gossipKey string      // Gossip key
 	configI   interface{} // Config struct interface
-	dirty     bool        // Info in this config has changed; need to re-init and gossip
-}{
-	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}, true},
-	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}, true},
-	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}, true},
+}
+
+// configDescriptors is a slice containing the accounting, permissions
+// and zone configuration descriptors.
+var configDescriptors = []*configDescriptor{
+	{engine.KeyConfigAccountingPrefix, gossip.KeyConfigAccounting, proto.AcctConfig{}},
+	{engine.KeyConfigPermissionPrefix, gossip.KeyConfigPermission, proto.PermConfig{}},
+	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 
 // tsCacheMethods specifies the set of methods which affect the
@@ -152,7 +155,7 @@ type Range struct {
 	RangeID   int64
 	Desc      *proto.RangeDescriptor
 	rm        RangeManager  // Makes some store methods available
-	splitting int32         // 1 if a split is underway
+	splitting int32         // 1 if a split is underway; updated atomically
 	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
@@ -177,12 +180,13 @@ func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Rang
 	return r
 }
 
-// Start begins gossiping and starts the raft command processing
-// loop in a goroutine.
+// Start begins gossiping loop in the event this is the first
+// range in the map and gossips config information if the range
+// contains any of the configuration maps.
 func (r *Range) start() {
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
-	r.maybeGossipConfigs()
+	r.maybeGossipConfigs(configDescriptors...)
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
 		go r.startGossip()
@@ -545,25 +549,25 @@ func (r *Range) maybeGossipFirstRange() {
 // within the range, this replica is the raft leader, and their
 // contents are marked dirty. Configuration maps include accounting,
 // permissions, and zones.
-func (r *Range) maybeGossipConfigs() {
+func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
 	if r.rm.Gossip() != nil && r.IsLeader() {
-		for _, cp := range configPrefixes {
-			if cp.dirty && r.ContainsKey(cp.keyPrefix) {
-				// Check for a bad range split.
-				if !r.ContainsKey(cp.keyPrefix.PrefixEnd()) {
-					log.Fatalf("range splits configuration values for %q", cp.keyPrefix)
+		for _, cd := range dirtyConfigs {
+			if r.ContainsKey(cd.keyPrefix) {
+				// Check for a bad range split. This should never happen as ranges
+				// cannot be split mid-config.
+				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
+					log.Fatalf("range splits configuration values for %q", cd.keyPrefix)
 				}
-				configMap, err := r.loadConfigMap(cp.keyPrefix, cp.configI)
+				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
 				if err != nil {
-					log.Errorf("failed loading %s config map: %s", cp.gossipKey, err)
+					log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 					continue
 				} else {
-					if err := r.rm.Gossip().AddInfo(cp.gossipKey, configMap, 0*time.Second); err != nil {
-						log.Errorf("failed to gossip %s configMap: %s", cp.gossipKey, err)
+					if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+						log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
 						continue
 					}
 				}
-				cp.dirty = false
 			}
 		}
 	}
@@ -596,10 +600,9 @@ func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixC
 // maybeUpdateGossipConfigs is used to update gossip configs.
 func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
 	// Check whether this put has modified a configuration map.
-	for _, cp := range configPrefixes {
-		if bytes.HasPrefix(key, cp.keyPrefix) {
-			cp.dirty = true
-			r.maybeGossipConfigs()
+	for _, cd := range configDescriptors {
+		if bytes.HasPrefix(key, cd.keyPrefix) {
+			r.maybeGossipConfigs(cd)
 			break
 		}
 	}
@@ -729,7 +732,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
-	if (method == proto.Put || method == proto.ConditionalPut) && reply.Header().Error == nil {
+	if (method == proto.Put || method == proto.ConditionalPut) &&
+		header.Key.Less(engine.KeySystemMax) && reply.Header().Error == nil {
 		r.maybeUpdateGossipConfigs(args.Header().Key)
 	}
 

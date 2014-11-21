@@ -169,9 +169,10 @@ type Store struct {
 	engine       engine.Engine  // The underlying key-value store
 	db           *client.KV     // Cockroach KV DB
 	allocator    *allocator     // Makes allocation decisions
-	gossip       *gossip.Gossip // Passed to new ranges
+	gossip       *gossip.Gossip // Configs and store capacities
 	raftIDAlloc  *IDAllocator   // Raft ID allocator
 	rangeIDAlloc *IDAllocator   // Range ID allocator
+	configMu     sync.Mutex     // Limit config update processing
 	raft         raft
 	closer       chan struct{}
 
@@ -220,7 +221,7 @@ func (s *Store) Start() error {
 	// Stop store for idempotency.
 	s.Stop()
 
-	// Start engine and set garbage collector.
+	// Start engine (i.e. open and initialize RocksDB database).
 	if err := s.engine.Start(); err != nil {
 		return err
 	}
@@ -273,12 +274,99 @@ func (s *Store) Start() error {
 	}); err != nil {
 		return err
 	}
-
+	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
+	// Start Raft processing goroutine.
 	go s.processRaft(s.closer)
 
+	// Register callbacks for any changes to accounting and zone
+	// configurations; we split ranges along prefix boundaries.
+	// Gossip is only ever nil for unittests.
+	if s.gossip != nil {
+		s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
+		s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+	}
+
 	return nil
+}
+
+// configGossipUpdate is a callback for gossip updates to
+// configuration maps which affect range split boundaries.
+func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	switch key {
+	case gossip.KeyConfigAccounting, gossip.KeyConfigZone:
+		if !contentsChanged {
+			return // Skip update if it's just a newer timestamp or fewer hops to info
+		}
+		info, err := s.gossip.GetInfo(key)
+		if err != nil {
+			log.Errorf("unable to fetch %s config from gossip: %s", key, err)
+			return
+		}
+		configMap, ok := info.(PrefixConfigMap)
+		if !ok {
+			log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+			return
+		}
+		s.maybeSplitRangesByConfigs(configMap)
+	default:
+		log.Warningf("unhandled gossip update to key %s", key)
+		return
+	}
+}
+
+// maybeSplitRangesByConfigs determines ranges which should be
+// split by the boundaries of the prefix config map, if any, and
+// issues AdminSplit commands.
+func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
+	for _, config := range configMap {
+		// While locked, find the range which contains this config prefix, if any.
+		s.mu.Lock()
+		n := sort.Search(len(s.rangesByKey), func(i int) bool {
+			return config.Prefix.Less(s.rangesByKey[i].Desc.EndKey)
+		})
+		// If the config doesn't split the range or the range isn't the
+		// leader of its consensus group, continue.
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
+			s.mu.Unlock()
+			continue
+		}
+		desc := *s.rangesByKey[n].Desc
+		s.mu.Unlock()
+
+		// Now split the range into pieces by intersecting it with the
+		// boundaries of the config map.
+		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
+		if err != nil {
+			log.Errorf("unable to split range %q-%q by prefix map %s", desc.StartKey, desc.EndKey, configMap)
+			continue
+		}
+		// Gather new splits.
+		var splitKeys []proto.Key
+		for _, split := range splits {
+			if split.end.Less(desc.EndKey) {
+				splitKeys = append(splitKeys, split.end)
+			}
+		}
+		if len(splitKeys) == 0 {
+			continue
+		}
+		// Invoke admin split for each proposed split key.
+		log.Infof("splitting range %q-%q at keys %v", desc.StartKey, desc.EndKey, splitKeys)
+		for _, splitKey := range splitKeys {
+			req := &proto.AdminSplitRequest{
+				RequestHeader: proto.RequestHeader{Key: splitKey},
+				SplitKey:      splitKey,
+			}
+			if err := s.db.Call(proto.AdminSplit, req, &proto.AdminSplitResponse{}); err != nil {
+				log.Errorf("unable to split at key %q: %s", splitKey, err)
+			}
+		}
+	}
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
@@ -338,7 +426,7 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 // the empty key prefix, meaning they apply to the entire
 // database. Permissions are granted to all users and the zone
 // requires three replicas with no other specifications.
-func (s *Store) BootstrapRange() (*Range, error) {
+func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
 		StartKey: engine.KeyMin,
@@ -355,21 +443,21 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	mvcc := engine.NewMVCC(batch)
 	now := s.clock.Now()
 	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Write meta1.
 	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Write meta2.
 	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
-		return nil, err
+		return err
 	}
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, acctConfig); err != nil {
-		return nil, err
+		return err
 	}
 	// Permission config.
 	permConfig := &proto.PermConfig{
@@ -378,11 +466,9 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	}
 	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, permConfig); err != nil {
-		return nil, err
+		return err
 	}
 	// Zone config.
-	// TODO(spencer): change this when zone specifications change to elect for three
-	// replicas with no specific features set.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			proto.Attributes{},
@@ -394,19 +480,12 @@ func (s *Store) BootstrapRange() (*Range, error) {
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := mvcc.PutProto(key, now, nil, zoneConfig); err != nil {
-		return nil, err
+		return err
 	}
 	if err := batch.Commit(); err != nil {
-		return nil, err
+		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rng := NewRange(1, desc, s)
-	rng.start()
-	s.ranges[rng.RangeID] = rng
-	s.rangesByKey = append(s.rangesByKey, rng)
-	s.rangesByRaftID[desc.RaftID] = rng
-	return rng, nil
+	return nil
 }
 
 // The following methods are accessors implementation the RangeManager interface.

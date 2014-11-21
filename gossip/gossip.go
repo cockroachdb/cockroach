@@ -209,11 +209,17 @@ func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error
 	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
 }
 
+// GossipCallback is a callback method to be invoked on gossip update
+// of info denoted by key. The contentsChanged bool indicates whether
+// the info contents were updated. False indicates the info timestamp
+// was refreshed, but its contents remained unchanged.
+type GossipCallback func(key string, contentsChanged bool)
+
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
 // matched pattern.
-func (g *Gossip) RegisterCallback(pattern string, method func(string)) {
+func (g *Gossip) RegisterCallback(pattern string, method GossipCallback) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.is.registerCallback(pattern, method)

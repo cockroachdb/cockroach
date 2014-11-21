@@ -101,7 +101,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Start(); err != nil {
@@ -134,15 +134,12 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		t.Error("expected error fetching non-existent range")
 	}
 
-	// Create range and fetch.
-	if rng, err := store.BootstrapRange(); rng == nil || err != nil {
+	// Bootstrap first range.
+	if err := store.BootstrapRange(); err != nil {
 		t.Errorf("failure to create first range: %s", err)
 	}
-	if _, err := store.GetRange(1); err != nil {
-		t.Errorf("failure fetching 1st range: %s", err)
-	}
 
-	// Now, attempt to initialize a store with a now-bootstrapped engine.
+	// Now, attempt to initialize a store with a now-bootstrapped range.
 	store = NewStore(clock, eng, nil, nil)
 	if err := store.Start(); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)

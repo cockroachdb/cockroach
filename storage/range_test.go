@@ -32,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 var (
@@ -136,16 +138,29 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
-// TestRangeGossipFirstRange verifies that the first range gossips its location.
+// TestRangeGossipFirstRange verifies that the first range gossips its
+// location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
 	s, _, g, _ := createTestRange(t)
 	defer s.Stop()
-	info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-		t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+	if err := util.IsTrueWithin(func() bool {
+		for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
+			info, err := g.GetInfo(key)
+			if err != nil {
+				log.Warningf("still waiting for first range gossip of key %s...", key)
+				return false
+			}
+			if key == gossip.KeyFirstRangeDescriptor &&
+				!reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
+				t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+			}
+			if key == gossip.KeyClusterID && info.(string) != s.Ident.ClusterID {
+				t.Errorf("expected gossipped cluster ID %s; got %s", s.Ident.ClusterID, info.(string))
+			}
+		}
+		return true
+	}, 500*time.Millisecond); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -253,10 +268,6 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
-}
-
-func TestInternalRangeLookup(t *testing.T) {
-	// TODO(Spencer): test, esp. for correct key range scanned
 }
 
 // A blockingEngine allows us to delay get/put (but not other ops!).

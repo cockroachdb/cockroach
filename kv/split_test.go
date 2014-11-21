@@ -165,7 +165,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		// Scan the txn records.
 		resp := &proto.ScanResponse{}
 		if err := db.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
-			t.Fatalf("failed to scan meta1 keys: %s", err)
+			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		return len(resp.Rows) >= 5
 	}, 2*time.Second); err != nil {

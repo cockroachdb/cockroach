@@ -128,7 +128,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	ls.AddStore(store)
-	if _, err := store.BootstrapRange(); err != nil {
+	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Start(); err != nil {
