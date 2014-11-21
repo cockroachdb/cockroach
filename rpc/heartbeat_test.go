@@ -112,7 +112,9 @@ func TestUpdateOffsetOnHeartbeat(t *testing.T) {
 	go client.connect(nil, sContext)
 	<-client.Ready
 
+	sContext.RemoteClocks.mu.Lock()
 	o := sContext.RemoteClocks.offsets[client.LocalAddr().String()]
+	sContext.RemoteClocks.mu.Unlock()
 	expServerOffset := proto.RemoteOffset{Offset: -10, Error: 5, MeasuredAt: 20}
 	if !o.Equal(expServerOffset) {
 		t.Errorf("expected updated offset %v, instead %v", expServerOffset, o)

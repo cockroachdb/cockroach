@@ -151,6 +151,8 @@ func (r *RemoteClockMonitor) MonitorRemoteOffsets() {
 		// propagate the information to a status node.
 		// TODO(embark): once there is a framework for collecting timeseries
 		// data about the db, propagate the offset status to that.
+		// Don't forget to protect r.offsets through the Mutex if those
+		// Fatalf's below ever turn into something less destructive.
 		if r.lClock.MaxOffset() != 0 {
 			if err != nil {
 				log.Fatalf("clock offset from the cluster time "+
