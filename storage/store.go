@@ -333,6 +333,10 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 			s.mu.Unlock()
 			continue
 		}
+		// If this range isn't the leader of its consensus group, continue.
+		if !s.rangesByKey[n].IsLeader() {
+			continue
+		}
 		desc := *s.rangesByKey[n].Desc
 		s.mu.Unlock()
 
