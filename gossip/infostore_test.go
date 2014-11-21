@@ -482,27 +482,35 @@ func TestLeastUseful(t *testing.T) {
 	}
 }
 
+type callbackRecord struct {
+	keys []string
+	wg   *sync.WaitGroup
+	sync.Mutex
+}
+
+func (cr *callbackRecord) Add(key string) {
+	cr.Lock()
+	defer cr.Unlock()
+	cr.keys = append(cr.keys, key)
+	cr.wg.Done()
+}
+
+func (cr *callbackRecord) Keys() []string {
+	cr.Lock()
+	defer cr.Unlock()
+	return append([]string(nil), cr.keys...)
+}
+
 func TestCallbacks(t *testing.T) {
 	is := newInfoStore(emptyAddr)
-	wg := sync.WaitGroup{}
-	cb1Keys := []string{}
-	cb1 := func(key string) {
-		cb1Keys = append(cb1Keys, key)
-		wg.Done()
-	}
-	cb2Keys := []string{}
-	cb2 := func(key string) {
-		cb2Keys = append(cb2Keys, key)
-		wg.Done()
-	}
-	cbAllKeys := []string{}
-	cbAll := func(key string) {
-		cbAllKeys = append(cbAllKeys, key)
-		wg.Done()
-	}
-	is.registerCallback("key1", cb1)
-	is.registerCallback("key2", cb2)
-	is.registerCallback("key.*", cbAll)
+	wg := &sync.WaitGroup{}
+	cb1 := callbackRecord{wg: wg}
+	cb2 := callbackRecord{wg: wg}
+	cbAll := callbackRecord{wg: wg}
+
+	is.registerCallback("key1", cb1.Add)
+	is.registerCallback("key2", cb2.Add)
+	is.registerCallback("key.*", cbAll.Add)
 
 	i1 := is.newInfo("key1", float64(1), time.Second)
 	i2 := is.newInfo("key2", float64(1), time.Second)
@@ -516,14 +524,14 @@ func TestCallbacks(t *testing.T) {
 		is.addInfo(i3)
 		wg.Wait()
 
-		if !reflect.DeepEqual(cb1Keys, []string{"key1"}) {
-			t.Errorf("expected key1, got %v", cb1Keys)
+		if !reflect.DeepEqual(cb1.Keys(), []string{"key1"}) {
+			t.Errorf("expected key1, got %v", cb1.Keys())
 		}
-		if !reflect.DeepEqual(cb2Keys, []string{"key2"}) {
-			t.Errorf("expected key2, got %v", cb2Keys)
+		if !reflect.DeepEqual(cb2.Keys(), []string{"key2"}) {
+			t.Errorf("expected key2, got %v", cb2.Keys())
 		}
-		if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3"}) {
-			t.Errorf("expected {key1, key2, key3}, got %v", cbAllKeys)
+		if !reflect.DeepEqual(cbAll.Keys(), []string{"key1", "key2", "key3"}) {
+			t.Errorf("expected {key1, key2, key3}, got %v", cbAll.Keys())
 		}
 	}
 
@@ -533,25 +541,25 @@ func TestCallbacks(t *testing.T) {
 	is.addInfo(i1)
 	wg.Wait()
 
-	if !reflect.DeepEqual(cb1Keys, []string{"key1", "key1"}) {
-		t.Errorf("expected {key1, key1}, got %v", cb1Keys)
+	if !reflect.DeepEqual(cb1.Keys(), []string{"key1", "key1"}) {
+		t.Errorf("expected {key1, key1}, got %v", cb1.Keys())
 	}
-	if !reflect.DeepEqual(cb2Keys, []string{"key2"}) {
-		t.Errorf("expected key2, got %v", cb2Keys)
+	if !reflect.DeepEqual(cb2.Keys(), []string{"key2"}) {
+		t.Errorf("expected key2, got %v", cb2.Keys())
 	}
-	if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3", "key1"}) {
-		t.Errorf("expected {key1, key2, key3, key1}, got %v", cbAllKeys)
+	if !reflect.DeepEqual(cbAll.Keys(), []string{"key1", "key2", "key3", "key1"}) {
+		t.Errorf("expected {key1, key2, key3, key1}, got %v", cbAll.Keys())
 	}
 
 	// Register another callback with same pattern and verify both the
 	// original and the new are invoked.
-	is.registerCallback("key.*", cbAll)
+	is.registerCallback("key.*", cbAll.Add)
 	i3 = is.newInfo("key3", float64(2), time.Second)
 	wg.Add(2)
 	is.addInfo(i3)
 	wg.Wait()
 
-	if !reflect.DeepEqual(cbAllKeys, []string{"key1", "key2", "key3", "key1", "key3", "key3"}) {
-		t.Errorf("expected {key1, key2, key3, key1, key3, key3}, got %v", cbAllKeys)
+	if !reflect.DeepEqual(cbAll.Keys(), []string{"key1", "key2", "key3", "key1", "key3", "key3"}) {
+		t.Errorf("expected {key1, key2, key3, key1, key3, key3}, got %v", cbAll.Keys())
 	}
 }
