@@ -293,12 +293,15 @@ func (s *Store) Start() error {
 
 // configGossipUpdate is a callback for gossip updates to
 // configuration maps which affect range split boundaries.
-func (s *Store) configGossipUpdate(key string) {
+func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
 
 	switch key {
 	case gossip.KeyConfigAccounting, gossip.KeyConfigZone:
+		if !contentsChanged {
+			return // Skip update if it's just a newer timestamp or fewer hops to info
+		}
 		info, err := s.gossip.GetInfo(key)
 		if err != nil {
 			log.Errorf("unable to fetch %s config from gossip: %s", key, err)

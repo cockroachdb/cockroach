@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"reflect"
 	"regexp"
 	"sync"
 	"time"
@@ -29,10 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// callback holds regexp pattern match and callback method.
+// callback holds regexp pattern match and GossipCallback method.
 type callback struct {
 	pattern *regexp.Regexp
-	method  func(string)
+	method  GossipCallback
 }
 
 // infoStore objects manage maps of Info and maps of Info Group
@@ -193,29 +194,35 @@ func (is *infoStore) registerGroup(g *group) error {
 func (is *infoStore) addInfo(i *info) error {
 	// If the prefix matches a group, add to group.
 	if group := is.belongsToGroup(i.Key); group != nil {
-		if err := group.addInfo(i); err != nil {
+		contentsChanged, err := group.addInfo(i)
+		if err != nil {
 			return err
 		}
 		if i.seq > is.MaxSeq {
 			is.MaxSeq = i.seq
 		}
-		is.processCallbacks(i.Key)
+		is.processCallbacks(i.Key, contentsChanged)
 		return nil
 	}
 	// Only replace an existing info if new timestamp is greater, or if
 	// timestamps are equal, but new hops is smaller.
+	var contentsChanged bool
 	if existingInfo, ok := is.Infos[i.Key]; ok {
 		if i.Timestamp < existingInfo.Timestamp ||
 			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
 			return util.Errorf("info %+v older than current group info %+v", i, existingInfo)
 		}
+		contentsChanged = !reflect.DeepEqual(existingInfo.Val, i.Val)
+	} else {
+		// No preexisting info means contentsChanged is true.
+		contentsChanged = true
 	}
 	// Update info map.
 	is.Infos[i.Key] = i
 	if i.seq > is.MaxSeq {
 		is.MaxSeq = i.seq
 	}
-	is.processCallbacks(i.Key)
+	is.processCallbacks(i.Key, contentsChanged)
 	return nil
 }
 
@@ -246,7 +253,7 @@ func (is *infoStore) maxHops() uint32 {
 
 // registerCallback compiles a regexp for pattern and adds it to
 // the callbacks slice.
-func (is *infoStore) registerCallback(pattern string, method func(key string)) {
+func (is *infoStore) registerCallback(pattern string, method GossipCallback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 }
@@ -254,7 +261,7 @@ func (is *infoStore) registerCallback(pattern string, method func(key string)) {
 // processCallbacks processes callbacks for the specified key by
 // matching callback regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string) {
+func (is *infoStore) processCallbacks(key string, contentsChanged bool) {
 	var matches []callback
 	for _, cb := range is.callbacks {
 		if cb.pattern.MatchString(key) {
@@ -264,7 +271,7 @@ func (is *infoStore) processCallbacks(key string) {
 	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, cb := range matches {
-			cb.method(key)
+			cb.method(key, contentsChanged)
 		}
 	}()
 }

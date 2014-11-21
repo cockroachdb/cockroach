@@ -189,10 +189,11 @@ func (g *group) infosAsSlice() infoSlice {
 // or if the info has a value which guarantees it a spot within the
 // group according to the group type.
 //
-// Returns nil if the info was added; an error if the info types don't
-// match an existing group or the info was older than what we
-// currently have.
-func (g *group) addInfo(i *info) error {
+// Returns contentsChanged bool and an error. contentsChanged is true
+// if this info updates the contents of a preexisting info with the
+// same key. An error is returned if the info types don't match an
+// existing group or the info was older than what we currently have.
+func (g *group) addInfo(i *info) (contentsChanged bool, err error) {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info. If the
 	// timestamps are equal (i.e. this is the same info), but hops
@@ -201,10 +202,15 @@ func (g *group) addInfo(i *info) error {
 	if existingInfo, ok := g.Infos[i.Key]; ok {
 		if existingInfo.Timestamp < i.Timestamp ||
 			(existingInfo.Timestamp == i.Timestamp && existingInfo.Hops > i.Hops) {
-			g.removeInternal(i)
+			g.removeInternal(existingInfo)
 		} else {
-			return util.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
+			err = util.Errorf("current group info %+v newer than proposed info %+v", existingInfo, i)
+			return
 		}
+		contentsChanged = !reflect.DeepEqual(existingInfo.Val, i.Val)
+	} else {
+		// No preexisting info means contentsChanged is true.
+		contentsChanged = true
 	}
 
 	// If the group is not empty, verify types match by comparing to
@@ -213,14 +219,15 @@ func (g *group) addInfo(i *info) error {
 		t1 := reflect.TypeOf(i.Val).Kind()
 		t2 := reflect.TypeOf(g.gatekeeper.Val).Kind()
 		if t1 != t2 {
-			return util.Errorf("info %+v has type %s whereas group has type %s", i, t1, t2)
+			err = util.Errorf("info %+v has type %s whereas group has type %s", i, t1, t2)
+			return
 		}
 	}
 
 	// If there's free space or we successfully compacted, add info.
 	if len(g.Infos) < g.Limit || g.compact() {
 		g.addInternal(i)
-		return nil // Successfully appended to group
+		return
 	}
 
 	// Group limit is reached. Check gatekeeper; if we should include,
@@ -228,8 +235,9 @@ func (g *group) addInfo(i *info) error {
 	if g.shouldInclude(i) {
 		g.removeInternal(g.gatekeeper)
 		g.addInternal(i)
-		return nil
+		return
 	}
 
-	return util.Errorf("info %+v not added to group", i)
+	err = util.Errorf("info %+v not added to group", i)
+	return
 }
