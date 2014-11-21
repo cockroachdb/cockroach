@@ -138,45 +138,27 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
-// TestRangeGossipFirstRange verifies that the first range gossips its location.
+// TestRangeGossipFirstRange verifies that the first range gossips its
+// location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
 	s, _, g, _ := createTestRange(t)
 	defer s.Stop()
 	if err := util.IsTrueWithin(func() bool {
-		info, err := g.GetInfo(gossip.KeyFirstRangeDescriptor)
-		if err != nil {
-			log.Warningf("still waiting for first range gosssip...")
-			return false
-		}
-		if !reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-			t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+		for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
+			info, err := g.GetInfo(key)
+			if err != nil {
+				log.Warningf("still waiting for first range gosssip of key %s...", key)
+				return false
+			}
+			if key == gossip.KeyFirstRangeDescriptor &&
+				!reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
+				t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+			}
+			if key == gossip.KeyClusterID && info.(string) != s.Ident.ClusterID {
+				t.Errorf("expected gossipped cluster ID %s; got %s", s.Ident.ClusterID, info.(string))
+			}
 		}
 		return true
-	}, 500*time.Millisecond); err != nil {
-		t.Error(err)
-	}
-}
-
-// TestRangeGossipClusterID verifies that the cluster ID is routinely
-// gossiped every ttlClusterIDGossip / 2 seconds.
-func TestRangeGossipClusterID(t *testing.T) {
-	origTTTLClusterIDGossip := ttlClusterIDGossip
-	ttlClusterIDGossip = 1 * time.Millisecond
-	defer func() { ttlClusterIDGossip = origTTTLClusterIDGossip }()
-
-	s, _, g, _ := createTestRange(t)
-	defer s.Stop()
-
-	// Verify we get at least two updates to the cluster ID.
-	count := 0
-	cb := func(key string) {
-		if key == gossip.KeyClusterID {
-			count++
-		}
-	}
-	g.RegisterCallback(gossip.KeyClusterID, cb)
-	if err := util.IsTrueWithin(func() bool {
-		return count >= 2
 	}, 500*time.Millisecond); err != nil {
 		t.Error(err)
 	}

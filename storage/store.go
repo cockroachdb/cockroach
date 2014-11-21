@@ -330,7 +330,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 			s.mu.Unlock()
 			continue
 		}
-		desc := s.rangesByKey[n].Desc
+		desc := *s.rangesByKey[n].Desc
 		s.mu.Unlock()
 
 		// Now split the range by the config map; we might have multiple
