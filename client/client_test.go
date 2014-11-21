@@ -422,3 +422,188 @@ func TestKVClientPrepareAndFlush(t *testing.T) {
 		}
 	}
 }
+
+// This is an example for using the Call() method to Put and then Get
+// a value for a given key.
+func ExampleKV_Call() {
+	// Using built-in test server for this example code.
+	serv := server.StartTestServer(nil)
+	defer serv.Stop()
+
+	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
+	serverAddress := serv.HTTPAddr
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serverAddress, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
+	kvClient := client.NewKV(sender, nil)
+	kvClient.User = storage.UserRoot
+
+	key := proto.Key("a")
+	value := []byte{1, 2, 3, 4}
+
+	// Store test value.
+	putResp := &proto.PutResponse{}
+	if err := kvClient.Call(proto.Put, proto.PutArgs(key, value), putResp); err != nil {
+		log.Fatal(err)
+	}
+
+	// Retrieve test value using same key.
+	getResp := &proto.GetResponse{}
+	if err := kvClient.Call(proto.Get, proto.GetArgs(key), getResp); err != nil {
+		log.Fatal(err)
+	}
+
+	// Data validation.
+	if getResp.Value == nil {
+		log.Fatal("No value returned.")
+	}
+	if !bytes.Equal(value, getResp.Value.Bytes) {
+		log.Fatal("Data mismatch on retrieved value.")
+	}
+
+	fmt.Println("Client example done.")
+	// Output: Client example done.
+}
+
+// This is an example for using the Prepare() method to submit
+// multiple Key Value API operations to be run in parallel. Flush() is
+// then used to begin execution of all the prepared operations.
+func ExampleKV_Prepare() {
+	// Using built-in test server for this example code.
+	serv := server.StartTestServer(nil)
+	defer serv.Stop()
+
+	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
+	serverAddress := serv.HTTPAddr
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serverAddress, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
+	kvClient := client.NewKV(sender, nil)
+	kvClient.User = storage.UserRoot
+
+	// Insert test data.
+	batchSize := 12
+	keys := make([]string, batchSize)
+	values := make([][]byte, batchSize)
+	for i := 0; i < batchSize; i++ {
+		keys[i] = fmt.Sprintf("key-%03d", i)
+		values[i] = []byte(fmt.Sprintf("value-%03d", i))
+
+		putReq := proto.PutArgs(proto.Key(keys[i]), values[i])
+		putResp := &proto.PutResponse{}
+		kvClient.Prepare(proto.Put, putReq, putResp)
+	}
+
+	// Flush all puts for parallel execution.
+	if err := kvClient.Flush(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Scan for the newly inserted rows in parallel.
+	numScans := 3
+	rowsPerScan := batchSize / numScans
+	scanResponses := make([]proto.ScanResponse, numScans)
+	for i := 0; i < numScans; i++ {
+		firstKey := proto.Key(keys[i*rowsPerScan])
+		lastKey := proto.Key(keys[((i+1)*rowsPerScan)-1])
+		kvClient.Prepare(proto.Scan, proto.ScanArgs(firstKey, lastKey.Next(), int64(rowsPerScan)), &scanResponses[i])
+	}
+	// Flush all scans for parallel execution.
+	if err := kvClient.Flush(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Check results which may be returned out-of-order from creation.
+	var matchCount int
+	for i := 0; i < numScans; i++ {
+		for _, keyVal := range scanResponses[i].Rows {
+			currKey := keyVal.Key
+			currValue := keyVal.Value.Bytes
+			for j, origKey := range keys {
+				if bytes.Equal(currKey, proto.Key(origKey)) && bytes.Equal(currValue, values[j]) {
+					matchCount++
+				}
+			}
+		}
+	}
+	if matchCount != batchSize {
+		log.Fatal("Data mismatch.")
+	}
+
+	fmt.Println("Prepare Flush example done.")
+	// Output: Prepare Flush example done.
+}
+
+// This is an example for using the RunTransaction() method to submit
+// multiple Key Value API operations inside a transaction.
+func ExampleKV_RunTransaction() {
+	// Using built-in test server for this example code.
+	serv := server.StartTestServer(nil)
+	defer serv.Stop()
+
+	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
+	serverAddress := serv.HTTPAddr
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serverAddress, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
+	kvClient := client.NewKV(sender, nil)
+	kvClient.User = storage.UserRoot
+
+	// Create test data.
+	numKVPairs := 10
+	keys := make([]string, numKVPairs)
+	values := make([][]byte, numKVPairs)
+	for i := 0; i < numKVPairs; i++ {
+		keys[i] = fmt.Sprintf("testkey-%03d", i)
+		values[i] = []byte(fmt.Sprintf("testvalue-%03d", i))
+	}
+
+	// Insert all KV pairs inside a transaction.
+	putOpts := client.TransactionOptions{Name: "example put", Isolation: proto.SERIALIZABLE}
+	err := kvClient.RunTransaction(&putOpts, func(txn *client.KV) error {
+		for i := 0; i < numKVPairs; i++ {
+			txn.Prepare(proto.Put, proto.PutArgs(proto.Key(keys[i]), values[i]), &proto.PutResponse{})
+		}
+		// Note that the KV client is flushed automatically on transaction
+		// commit. Invoking Flush after individual API methods is only
+		// required if the result needs to be received to take conditional
+		// action.
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Read back KV pairs inside a transaction.
+	getResponses := make([]proto.GetResponse, numKVPairs)
+	getOpts := client.TransactionOptions{Name: "example get"}
+	err = kvClient.RunTransaction(&getOpts, func(txn *client.KV) error {
+		for i := 0; i < numKVPairs; i++ {
+			txn.Prepare(proto.Get, proto.GetArgs(proto.Key(keys[i])), &getResponses[i])
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Check results.
+	for i, getResp := range getResponses {
+		if getResp.Value == nil {
+			log.Fatal("No value returned for ", keys[i])
+		} else {
+			if !bytes.Equal(values[i], getResp.Value.Bytes) {
+				log.Fatal("Data mismatch for ", keys[i], ", got: ", getResp.Value.Bytes)
+			}
+		}
+	}
+
+	fmt.Println("Transaction example done.")
+	// Output: Transaction example done.
+}
