@@ -468,7 +468,7 @@ func ExampleKV_Call() {
 }
 
 // This is an example for using the Prepare() method to submit
-// multiple Key Value API operations to be run in parallel.  Flush() is
+// multiple Key Value API operations to be run in parallel. Flush() is
 // then used to begin execution of all the prepared operations.
 func ExampleKV_Prepare() {
 	// Using built-in test server for this example code.
