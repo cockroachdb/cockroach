@@ -329,26 +329,23 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		n := sort.Search(len(s.rangesByKey), func(i int) bool {
 			return config.Prefix.Less(s.rangesByKey[i].Desc.EndKey)
 		})
-		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKey(config.Prefix) {
+		// If the config doesn't split the range or the range isn't the
+		// leader of its consensus group, continue.
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
 			s.mu.Unlock()
-			continue
-		}
-		// If this range isn't the leader of its consensus group, continue.
-		if !s.rangesByKey[n].IsLeader() {
 			continue
 		}
 		desc := *s.rangesByKey[n].Desc
 		s.mu.Unlock()
 
-		// Now split the range by the config map; we might have multiple
-		// split points, but we only split once and return from this function.
+		// Now split the range into pieces by intersecting it with the
+		// boundaries of the config map.
 		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
 		if err != nil {
 			log.Errorf("unable to split range %q-%q by prefix map %s", desc.StartKey, desc.EndKey, configMap)
 			continue
 		}
-
-		// Split range along proposed boundaries.
+		// Gather new splits.
 		var splitKeys []proto.Key
 		for _, split := range splits {
 			if split.end.Less(desc.EndKey) {
@@ -356,8 +353,9 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 			}
 		}
 		if len(splitKeys) == 0 {
-			return
+			continue
 		}
+		// Invoke admin split for each proposed split key.
 		log.Infof("splitting range %q-%q at keys %v", desc.StartKey, desc.EndKey, splitKeys)
 		for _, splitKey := range splitKeys {
 			req := &proto.AdminSplitRequest{
@@ -487,15 +485,6 @@ func (s *Store) BootstrapRange() error {
 	if err := batch.Commit(); err != nil {
 		return err
 	}
-	/*
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		rng := NewRange(1, desc, s)
-		rng.start()
-		s.ranges[rng.RangeID] = rng
-		s.rangesByKey = append(s.rangesByKey, rng)
-		s.rangesByRaftID[desc.RaftID] = rng
-	*/
 	return nil
 }
 

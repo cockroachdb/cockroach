@@ -65,9 +65,7 @@ func (p PrefixConfigMap) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
 func (p PrefixConfigMap) Less(i, j int) bool {
-	// Sort by prefix; if prefixes are equal, sort by whether canonical == prefix.
-	return p[i].Prefix.Less(p[j].Prefix) ||
-		(p[i].Prefix.Equal(p[j].Prefix) && p[i].Prefix.Equal(p[i].Canonical))
+	return p[i].Prefix.Less(p[j].Prefix)
 }
 
 // NewPrefixConfigMap creates a new prefix config map and sorts
@@ -93,21 +91,28 @@ func (p PrefixConfigMap) Less(i, j int) bool {
 //
 // Similarly, if the map contains successive prefix entries:
 //
-//   "/":          config1
-//   "/db1":       config2
-//   "/db1/table": config3
-//   "/db2":       config4
+//   "/":           config1
+//   "/db1":        config2
+//   "/db1/table1": config3
+//   "/db1/table2": config4
+//   "/db2":        config5
 //
-// ...then entries will be added for:
+// ...then entries will be added for (note that we don't add a
+// redundant entry for /db2 or /db1/table2).:
 //
-//   "/db1/tablf": config2
-//   "/db3":       config1
+//   "/db1/table3": config2
+//   "/db3":        config1
 func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	p := PrefixConfigMap(configs)
 	sort.Sort(p)
 
-	if len(p) == 0 || p[0].Prefix.Compare(engine.KeyMin) != 0 {
+	if len(p) == 0 || !p[0].Prefix.Equal(engine.KeyMin) {
 		return nil, util.Errorf("no default prefix specified")
+	}
+
+	prefixSet := map[string]struct{}{}
+	for _, entry := range p {
+		prefixSet[string(entry.Prefix)] = struct{}{}
 	}
 
 	var newConfigs []*PrefixConfig
@@ -122,7 +127,9 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 		for stack.Len() > 0 && !bytes.HasPrefix(entry.Prefix, stack.Back().Value.(*PrefixConfig).Prefix) {
 			stack.Remove(stack.Back())
 		}
-		if stack.Len() != 0 {
+		// Add additional entry to mark the end of key prefix range as
+		// long as there's not an existing range that starts there.
+		if _, ok := prefixSet[string(entry.Prefix.PrefixEnd())]; !ok && stack.Len() != 0 {
 			newConfigs = append(newConfigs, &PrefixConfig{
 				Prefix:    entry.Prefix.PrefixEnd(),
 				Canonical: stack.Back().Value.(*PrefixConfig).Prefix,
@@ -138,19 +145,7 @@ func NewPrefixConfigMap(configs []*PrefixConfig) (PrefixConfigMap, error) {
 	}
 	sort.Sort(p)
 
-	// Remove duplicates.
-	newConfigs = []*PrefixConfig(nil)
-	for _, config := range p {
-		// Skip if this is a duplicate entry. Duplicates are created by
-		// successive prefixes, such as "/db1" and "/db2". We always keep
-		// the first of the duplicates, which is the canonical one.
-		if l := len(newConfigs); l > 0 && config.Prefix.Equal(newConfigs[l-1].Prefix) {
-			continue
-		}
-		newConfigs = append(newConfigs, config)
-	}
-
-	return newConfigs, nil
+	return p, nil
 }
 
 // MatchByPrefix returns the longest matching PrefixConfig. If the key

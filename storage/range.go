@@ -553,7 +553,8 @@ func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
 	if r.rm.Gossip() != nil && r.IsLeader() {
 		for _, cd := range dirtyConfigs {
 			if r.ContainsKey(cd.keyPrefix) {
-				// Check for a bad range split.
+				// Check for a bad range split. This should never happen as ranges
+				// cannot be split mid-config.
 				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
 					log.Fatalf("range splits configuration values for %q", cd.keyPrefix)
 				}

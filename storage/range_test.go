@@ -147,7 +147,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 		for _, key := range []string{gossip.KeyClusterID, gossip.KeyFirstRangeDescriptor} {
 			info, err := g.GetInfo(key)
 			if err != nil {
-				log.Warningf("still waiting for first range gosssip of key %s...", key)
+				log.Warningf("still waiting for first range gossip of key %s...", key)
 				return false
 			}
 			if key == gossip.KeyFirstRangeDescriptor &&

@@ -190,9 +190,11 @@ func (g *group) infosAsSlice() infoSlice {
 // group according to the group type.
 //
 // Returns contentsChanged bool and an error. contentsChanged is true
-// if this info updates the contents of a preexisting info with the
-// same key. An error is returned if the info types don't match an
-// existing group or the info was older than what we currently have.
+// if this info is new or updates the contents of a preexisting info
+// with the same key; if just the timestamp or number of hops changes,
+// contentsChanged is false. An error is returned if the info types
+// don't match an existing group or the info was older than what we
+// currently have.
 func (g *group) addInfo(i *info) (contentsChanged bool, err error) {
 	// First, see if info is already in the group. If so, and this
 	// info timestamp is newer, remove existing info. If the

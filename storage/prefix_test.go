@@ -32,6 +32,7 @@ const (
 	config2 = 2
 	config3 = 3
 	config4 = 4
+	config5 = 5
 )
 
 func buildTestPrefixConfigMap() PrefixConfigMap {
@@ -148,8 +149,9 @@ func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 	configs := []*PrefixConfig{
 		{engine.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
-		{proto.Key("/db2/table"), nil, config3},
-		{proto.Key("/db3"), nil, config4},
+		{proto.Key("/db2/table1"), nil, config3},
+		{proto.Key("/db2/table2"), nil, config4},
+		{proto.Key("/db3"), nil, config5},
 	}
 	pcc, err := NewPrefixConfigMap(configs)
 	if err != nil {
@@ -158,9 +160,10 @@ func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 	expPrefixConfigs := []PrefixConfig{
 		{engine.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
-		{proto.Key("/db2/table"), nil, config3},
-		{proto.Key("/db2/tablf"), nil, config2},
-		{proto.Key("/db3"), nil, config4},
+		{proto.Key("/db2/table1"), nil, config3},
+		{proto.Key("/db2/table2"), nil, config4},
+		{proto.Key("/db2/table3"), nil, config2},
+		{proto.Key("/db3"), nil, config5},
 		{proto.Key("/db4"), nil, config1},
 	}
 	verifyPrefixConfigMap(pcc, expPrefixConfigs, t)
