@@ -45,10 +45,12 @@ const (
 	// Delete removes the value for the specified key.
 	Delete = "Delete"
 	// DeleteRange removes all values for keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey.
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
+	// the latter endpoint excluded.
 	DeleteRange = "DeleteRange"
 	// Scan fetches the values for all keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey.
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
+	// the latter endpoint excluded.
 	Scan = "Scan"
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction = "EndTransaction"
@@ -457,6 +459,49 @@ type Response interface {
 	Header() *ResponseHeader
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
+}
+
+// Combinable is implemented by responses types whose corresponding
+// requests may cross range boundaries, such as Scan or DeleteRange.
+// Combine() allows responses from individual ranges to be glued
+// together into a single one.
+// Combinable is also implemented by ResponseHeader to properly
+// propagate the timestamp and transaction when joining responses.
+// It is not expected that Combine() perform any error checking; this
+// should be done by the caller instead.
+type Combinable interface {
+	Combine(interface{})
+}
+
+// Combine implements the Combinable interface for ResponseHeader.
+func (rh *ResponseHeader) Combine(c interface{}) {
+	otherRH := c.(*ResponseHeader)
+	if rh != nil {
+		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
+			rh.Timestamp = ts
+		}
+		if rh.Txn != nil && otherRH.GetTxn() == nil {
+			rh.Txn = nil
+		}
+	}
+}
+
+// Combine implements the Combinable interface for ScanResponse.
+func (sr *ScanResponse) Combine(c interface{}) {
+	otherSR := c.(*ScanResponse)
+	if sr != nil {
+		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
+		sr.Header().Combine(otherSR.Header())
+	}
+}
+
+// Combine implements the Combinable interface for DeleteRangeResponse.
+func (dr *DeleteRangeResponse) Combine(c interface{}) {
+	otherDR := c.(*DeleteRangeResponse)
+	if dr != nil {
+		dr.NumDeleted += otherDR.GetNumDeleted()
+		dr.Header().Combine(otherDR.Header())
+	}
 }
 
 // Header implements the Request interface for RequestHeader.
