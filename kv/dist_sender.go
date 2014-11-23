@@ -354,10 +354,9 @@ func (ds *DistSender) Send(call *client.Call) {
 			}
 			if err != nil {
 				log.Warningf("failed to invoke %s: %s", call.Method, err)
-				// If retryable, allow outer loop to retry. We treat a range not found
-				// or range key mismatch errors special. In these cases, we don't want
-				// to backoff on the retry, but reset the backoff loop so we can retry
-				// immediately.
+				// If retryable, allow retry. For range not found or range
+				// key mismatch errors, we don't backoff on the retry,
+				// but reset the backoff loop so we can retry immediately.
 				switch err.(type) {
 				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 					// Range descriptor might be out of date - evict it.
@@ -394,9 +393,7 @@ func (ds *DistSender) Send(call *client.Call) {
 	if len(responses) > 0 {
 		firstReply, ok := responses[0].(proto.Combinable)
 		if !ok {
-			log.Errorf("illegal cross-range operation: %v", call)
-			call.Reply.Header().SetGoError(util.Error("operation not implemented across ranges"))
-			return
+			log.Fatalf("illegal cross-range operation: %v", call)
 		}
 		for _, r := range responses[1:] {
 			firstReply.Combine(r.(proto.Combinable))
