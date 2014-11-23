@@ -2,7 +2,16 @@
 
 ## A Scalable, Geo-Replicated, Transactional Datastore
 
-<img style="float: right" src="/resources/doc/color_cockroach.png?raw=true"/>
+<img align="right" src="/resources/doc/color_cockroach.png?raw=true"/>
+
+**Table of Contents**
+
+- [Status](#status)
+- [Running Cockroach](#running-cockroach)
+- [Get in touch](#get-in-touch)
+- [Contributing](#contributing)
+- [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
+- [Architecture](#architecture) and [Client Architecture](#client-architecture)
 
 [![WIRED on CockroachDB](/resources/doc/wired-preview.png?raw=true)](http://www.wired.com/2014/07/cockroachdb/)
 
@@ -14,24 +23,78 @@
 * Distributed transactions
 * Cluster initialization and joining
 * Basic Key-Value REST API
+* Range splitting
 
-## Next Steps
+**Next Steps**
 
 * Raft consensus
-* Range splitting
 * Rebalancing
 
 See [TODO](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
-## Instructions for building Cockroach Docker Container
+## Running Cockroach
 
-* Follow the [instructions for installing Docker on your host
-system](http://docs.docker.com/installation/).
-*        (cd build ; ./build-docker-dev.sh)
+Don't have (a recent version > 1.2 of) Docker? Follow the [instructions for installing Docker on your host system](http://docs.docker.com/installation/). If you run into trouble below, check first that you're not running an old version.
 
-## Local Cluster Setup
+Now, pick your `$IMAGE`:
+* `cockroachdb/cockroach` for the small, deploy-only image - ideal if you just
+  want to play around
+* `cockroachdb/cockroach-dev` if you want the development image - comes with
+  a complete build toolchain and support for running the tests but is large.
+
+We'll use `cockroachdb/cockroach` below for simplicity.
+If you don't want to use Docker,
+* set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
+* `make build`
+* replace `docker [...] [run|build] [...]` by `./cockroach` below.
+
+#### Bootstrap and talk to a single node
+
+```bash
+$ docker run -d -p 8080:8080 "cockroachdb/cockroach" \
+    init -rpc="localhost:0" \
+    -certs="resources/test_certs" \
+    -stores="ssd=/tmp/db"
+```
+This bootstraps and starts a single node with one temporary RocksDB instance at /tmp/db in the background (remove the `-d` flag if you want to see stdout).
+Now let's talk to this node:
+```bash
+$ curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
+```
+```json
+{"header":{"timestamp":{"wall_time":1416616834949813367,"logical":0}}}
+```
+```bash
+$ curl http://localhost:8080/kv/rest/entry/Cockroach
+```
+```json
+{"header":{"timestamp":{"wall_time":1416616886486257568,"logical":0}},"value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}
+```
+Note that `SGVsbG8=` equals `base64("Hello")`.
+
+Among other things, you can also scan a key range:
+```bash
+$ curl "http://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
+```
+```json
+{"header":{"timestamp":{"wall_time":1416617120031733436,"logical":0}},"rows":[{"key":"Q29ja3JvYWNo","value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}]}
+```
+Note that `Q29ja3JvYWNo` equals `base64("Cockroach")`.
+
+#### Local Cluster Setup
 
 *        (cd run; ./local-cluster.sh [start|stop])
+
+#### Building the Docker images yourself
+you can build both of the above images yourself:
+
+* `cockroachdb/cockroach-dev`: `(cd build ; ./build-docker-dev.sh)`
+* `cockroachdb/cockroach`: `(cd build ; ./build-docker-deploy.sh)`
+  (this will build the first image as well)
+
+Once you've built your image, you may want to run the tests:
+* `docker run "cockroachdb/cockroach-dev" test`
+* `make acceptance`
 
 ## Get in touch
 
