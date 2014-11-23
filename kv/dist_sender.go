@@ -241,7 +241,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 
 // sendRPC sends one or more RPCs to replicas from the supplied
 // proto.Replica slice. First, replicas which have gossipped
-// addresses are corraled and then sent via rpc.Send, with requirement
+// addresses are corralled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
 func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
@@ -302,6 +302,10 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 // permissions and looks up the appropriate range based on the
 // supplied key and sends the RPC according to the specified
 // options.
+// If the request spans multiple ranges (which is possible for
+// Scan or DeleteRange requests), Send sends requests to the
+// individual ranges sequentially and combines the results
+// transparently.
 func (ds *DistSender) Send(call *client.Call) {
 	// Verify permissions.
 	if err := ds.verifyPermissions(call.Method, call.Args.Header()); err != nil {
@@ -312,33 +316,92 @@ func (ds *DistSender) Send(call *client.Call) {
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	retryOpts := rpcRetryOpts
 	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method)
-	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		desc, err := ds.rangeCache.LookupRangeDescriptor(call.Args.Header().Key)
-		if err == nil {
-			err = ds.sendRPC(desc, call.Method, call.Args, call.Reply)
-		}
-		if err != nil {
-			log.Warningf("failed to invoke %s: %s", call.Method, err)
-			// If retryable, allow outer loop to retry. We treat a range not found
-			// or range key mismatch errors special. In these cases, we don't want
-			// to backoff on the retry, but reset the backoff loop so we can retry
-			// immediately.
-			switch err.(type) {
-			case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
-				// Range descriptor might be out of date - evict it.
-				ds.rangeCache.EvictCachedRangeDescriptor(call.Args.Header().Key)
-				// On addressing errors, don't backoff and retry immediately.
-				return util.RetryReset, nil
-			default:
-				if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
-					return util.RetryContinue, nil
+
+	// responses and descNext are only used when executing across ranges.
+	var responses []proto.Response
+	var descNext *proto.RangeDescriptor
+	// args will be changed to point to a copy of call.Args if the request
+	// spans ranges since in that case we need to alter its contents.
+	args := call.Args
+	for {
+		reply := call.Reply
+		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+			descNext = nil
+			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
+			if err == nil {
+				// If the request accesses keys beyond the end of this range,
+				// get the descriptor of the adjacent range to adress next.
+				if desc.EndKey.Less(call.Args.Header().EndKey) {
+					descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey)
+					// Make a new reply object for this call.
+					reply = gogoproto.Clone(call.Reply).(proto.Response)
+					// If this is the first step in a multi-range operation,
+					// additionally copy call.Args because we will have to
+					// mutate it as we talk to the involved ranges.
+					if len(responses) == 0 {
+						args = gogoproto.Clone(call.Args).(proto.Request)
+					}
+					// Truncate the request to our current range.
+					args.Header().EndKey = desc.EndKey
 				}
 			}
+			if err == nil {
+				err = ds.sendRPC(desc, call.Method, args, reply)
+			}
+			// If this request spans ranges, collect the replies.
+			if err == nil && (descNext != nil || len(responses) > 0) {
+				responses = append(responses, reply)
+			}
+			if err != nil {
+				log.Warningf("failed to invoke %s: %s", call.Method, err)
+				// If retryable, allow outer loop to retry. We treat a range not found
+				// or range key mismatch errors special. In these cases, we don't want
+				// to backoff on the retry, but reset the backoff loop so we can retry
+				// immediately.
+				switch err.(type) {
+				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
+					// Range descriptor might be out of date - evict it.
+					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
+					// On addressing errors, don't backoff and retry immediately.
+					return util.RetryReset, nil
+				default:
+					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
+						return util.RetryContinue, nil
+					}
+				}
+			}
+			return util.RetryBreak, err
+		})
+		// Immediately return if querying a range failed non-retryably.
+		// For multi-range requests, we return the failing range's reply.
+		if err != nil {
+			reply.Header().SetGoError(err)
+			call.Reply = reply // Only relevant in multi-range case.
+			return
 		}
-		return util.RetryBreak, err
-	})
-	if err != nil {
-		call.Reply.Header().SetGoError(err)
+		// If this was the last range accessed by this call, exit loop.
+		if descNext == nil {
+			break
+		}
+		// In next iteration, query next range.
+		args.Header().Key = descNext.StartKey
+		// "Untruncate" EndKey to original.
+		args.Header().EndKey = call.Args.Header().EndKey
+	}
+
+	// If this was a multi-range request, aggregate the individual range's
+	// responses into one reply.
+	if len(responses) > 0 {
+		firstReply, ok := responses[0].(proto.Combinable)
+		if !ok {
+			log.Errorf("illegal cross-range operation: %v", call)
+			call.Reply.Header().SetGoError(util.Error("operation not implemented across ranges"))
+			return
+		}
+		for _, r := range responses[1:] {
+			firstReply.Combine(r.(proto.Combinable))
+		}
+		call.Reply = responses[0]
 	}
 }
 

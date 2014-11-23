@@ -177,6 +177,8 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock) *TxnCoordSende
 // if it's not nil but has an empty ID.
 func (tc *TxnCoordSender) Send(call *client.Call) {
 	header := call.Args.Header()
+	// TODO(Tobias): for commands that may access multiple ranges,
+	// make sure to wrap in a txn for consistence.
 	tc.maybeBeginTxn(header)
 
 	// Process batch specially; otherwise, send via wrapped sender.
