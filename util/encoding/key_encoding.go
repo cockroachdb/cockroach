@@ -171,10 +171,13 @@ func DecodeBinary(buf []byte) ([]byte, []byte) {
 		} else {
 			out.WriteByte(t | ((buf[i] & 0x7f) >> s))
 		}
+
+		t = (buf[i] << (8 - s)) & 0xff
+		
 		if buf[i] == orderedEncodingTerminator {
 			break
 		}
-		t = (buf[i] << (8 - s)) & 0xff
+
 		if s == 1 {
 			s = 7
 		} else {
