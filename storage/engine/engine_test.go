@@ -24,11 +24,13 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
 
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -284,8 +286,11 @@ func TestEngineMerge(t *testing.T) {
 				}
 			}
 			result, _ := engine.Get(tc.testKey)
-			if !bytes.Equal(result, tc.expected) {
-				t.Errorf("unexpected append-merge result: %v != %v", result, tc.expected)
+			var resultV, expectedV proto.MVCCMetadata
+			gogoproto.Unmarshal(result, &resultV)
+			gogoproto.Unmarshal(tc.expected, &expectedV)
+			if !reflect.DeepEqual(resultV, expectedV) {
+				t.Errorf("unexpected append-merge result: %v != %v", resultV, expectedV)
 			}
 		}
 	}, t)

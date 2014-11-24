@@ -19,9 +19,9 @@
 package engine
 
 import (
-	"bytes"
 	"math"
 	"math/rand"
+	"reflect"
 	"testing"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
@@ -45,15 +45,19 @@ func mustMarshal(m gogoproto.Message) []byte {
 }
 
 func counter(n int64) []byte {
-	v := &proto.Value{
-		Integer: gogoproto.Int64(n),
+	v := &proto.MVCCMetadata{
+		Value: &proto.Value{
+			Integer: gogoproto.Int64(n),
+		},
 	}
 	return mustMarshal(v)
 }
 
 func appender(s string) []byte {
-	v := &proto.Value{
-		Bytes: []byte(s),
+	v := &proto.MVCCMetadata{
+		Value: &proto.Value{
+			Bytes: []byte(s),
+		},
 	}
 	return mustMarshal(v)
 }
@@ -78,7 +82,7 @@ func timeSeries(start int64, duration int64, offsets ...int32) []byte {
 	if err != nil {
 		panic(err)
 	}
-	return mustMarshal(v)
+	return mustMarshal(&proto.MVCCMetadata{Value: v})
 }
 
 // TestGoMerge tests the function goMerge but not the integration with
@@ -129,13 +133,13 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		var v proto.Value
+		var v proto.MVCCMetadata
 		if err := gogoproto.Unmarshal(result, &v); err != nil {
 			t.Errorf("goMerge error unmarshalling: %s", err)
 			continue
 		}
-		if *v.Integer != c.expected {
-			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, *v.Integer)
+		if v.Value.GetInteger() != c.expected {
+			t.Errorf("goMerge error: %d: want %v, got %v", i, c.expected, v.Value.GetInteger())
 		}
 	}
 
@@ -146,7 +150,7 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{appender(""), appender(""), appender("")},
 		{nil, appender(""), appender("")},
-		{nil, nil, nil},
+		{nil, nil, mustMarshal(&proto.MVCCMetadata{Value: &proto.Value{}})},
 		{appender("\n "), appender(" \t "), appender("\n  \t ")},
 		{appender("ქართული"), appender("\nKhartuli"), appender("ქართული\nKhartuli")},
 		{appender(gibber1), appender(gibber2), appender(gibber1 + gibber2)},
@@ -158,8 +162,11 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		if !bytes.Equal(result, c.expected) {
-			t.Errorf("goMerge error: %d: want %v, get %v", i, c.expected, result)
+		var resultV, expectedV proto.MVCCMetadata
+		gogoproto.Unmarshal(result, &resultV)
+		gogoproto.Unmarshal(c.expected, &expectedV)
+		if !reflect.DeepEqual(resultV, expectedV) {
+			t.Errorf("goMerge error: %d: want %+v, got %+v", i, expectedV, resultV)
 		}
 	}
 
@@ -194,14 +201,15 @@ func TestGoMerge(t *testing.T) {
 			t.Errorf("goMerge error: %d: %v", i, err)
 			continue
 		}
-		if !bytes.Equal(result, c.expected) {
-			// Extract the time series so we can actually read the error.
-			var resultV, expectedV proto.Value
-			gogoproto.Unmarshal(result, &resultV)
-			gogoproto.Unmarshal(c.expected, &expectedV)
-			resultTS, _ := proto.TimeSeriesFromValue(&resultV)
-			expectedTS, _ := proto.TimeSeriesFromValue(&expectedV)
-			t.Errorf("goMerge error: %d: want %v, get %v", i, expectedTS, resultTS)
+
+		// Extract the time series and compare.
+		var resultV, expectedV proto.MVCCMetadata
+		gogoproto.Unmarshal(result, &resultV)
+		gogoproto.Unmarshal(c.expected, &expectedV)
+		resultTS, _ := proto.TimeSeriesFromValue(resultV.Value)
+		expectedTS, _ := proto.TimeSeriesFromValue(expectedV.Value)
+		if !reflect.DeepEqual(resultTS, expectedTS) {
+			t.Errorf("goMerge error: %d: want %v, got %v", i, expectedTS, resultTS)
 		}
 	}
 }

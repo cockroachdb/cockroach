@@ -86,5 +86,17 @@ into its versioned key. Preliminary benchmarks have not shown enough
 performance improvement to justify this change, although we may
 revisit this decision if it turns out that multiple versions of the
 same key are rare in practice.
+
+However, we do allow inlining in order to use the MVCC interface to
+store non-versioned values. It turns out that not everything which
+Cockroach needs to store would be efficient or possible using MVCC.
+Examples include transaction records, response cache entries, stats
+counters, time series data, and system-local config values. However,
+supporting a mix of encodings is problematic in terms of resulting
+complexity. So Cockroach treats an MVCC timestamp of zero to mean an
+inlined, non-versioned value. These values are replaced if they exist
+on a Put operation and are cleared from the engine on a delete.
+Importantly, zero-timestamped MVCC values may be merged, as is
+necessary for stats counters and time series data.
 */
 package engine

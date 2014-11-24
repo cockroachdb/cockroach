@@ -241,8 +241,7 @@ func (s *Store) Start() error {
 	})
 
 	// Read store ident and return a not-bootstrapped error if necessary.
-	identKey := engine.MVCCEncodeKey(engine.KeyLocalIdent)
-	ok, _, _, err := engine.GetProto(s.engine, identKey, &s.Ident)
+	ok, err := engine.MVCCGetProto(s.engine, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
@@ -251,7 +250,6 @@ func (s *Store) Start() error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	mvcc := engine.NewMVCC(s.engine)
 	start := engine.KeyLocalRangeDescriptorPrefix
 	end := start.PrefixEnd()
 
@@ -259,7 +257,7 @@ func (s *Store) Start() error {
 	// versions. Uncommitted intents which have been abandoned due to a
 	// split crashing halfway will simply be resolved on the next split
 	// attempt. They can otherwise be ignored.
-	if err := mvcc.IterateCommitted(start, end, func(kv proto.KeyValue) (bool, error) {
+	if err := engine.MVCCIterateCommitted(s.engine, start, end, func(kv proto.KeyValue) (bool, error) {
 		var desc proto.RangeDescriptor
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 			return false, err
@@ -385,8 +383,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	} else if len(kvs) > 0 {
 		return util.Errorf("bootstrap failed; non-empty map with first key %q", kvs[0].Key)
 	}
-	identKey := engine.MVCCEncodeKey(engine.KeyLocalIdent)
-	_, _, err = engine.PutProto(s.engine, identKey, &s.Ident)
+	err = engine.MVCCPutProto(s.engine, nil, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)
 	return err
 }
 
@@ -440,23 +437,23 @@ func (s *Store) BootstrapRange() error {
 		},
 	}
 	batch := s.engine.NewBatch()
-	mvcc := engine.NewMVCC(batch)
+	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
-	if err := mvcc.PutProto(makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
 	// Write meta1.
-	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
 	// Write meta2.
-	if err := mvcc.PutProto(engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
 	// Accounting config.
 	acctConfig := &proto.AcctConfig{}
 	key := engine.MakeKey(engine.KeyConfigAccountingPrefix, engine.KeyMin)
-	if err := mvcc.PutProto(key, now, nil, acctConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, now, nil, acctConfig); err != nil {
 		return err
 	}
 	// Permission config.
@@ -465,7 +462,7 @@ func (s *Store) BootstrapRange() error {
 		Write: []string{UserRoot}, // root user
 	}
 	key = engine.MakeKey(engine.KeyConfigPermissionPrefix, engine.KeyMin)
-	if err := mvcc.PutProto(key, now, nil, permConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, now, nil, permConfig); err != nil {
 		return err
 	}
 	// Zone config.
@@ -479,9 +476,10 @@ func (s *Store) BootstrapRange() error {
 		RangeMaxBytes: 67108864,
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
-	if err := mvcc.PutProto(key, now, nil, zoneConfig); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}
+	ms.MergeStats(batch, 1, 1)
 	if err := batch.Commit(); err != nil {
 		return err
 	}
@@ -591,8 +589,8 @@ func (s *Store) RemoveRange(rng *Range) error {
 func (s *Store) CreateSnapshot() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := engine.MVCCEncodeKey(engine.KeyLocalSnapshotIDGenerator)
-	candidateID, err := engine.Increment(s.engine, key, 1)
+	key := engine.KeyLocalSnapshotIDGenerator
+	candidateID, err := engine.MVCCIncrement(s.engine, nil, key, proto.ZeroTimestamp, nil, 1)
 	if err != nil {
 		return "", err
 	}

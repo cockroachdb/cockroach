@@ -85,51 +85,43 @@ func TestRocksDBCompaction(t *testing.T) {
 
 	// Write two transaction values and two response cache values such
 	// that exactly one of each should be GC'd based on our GC timeouts.
-	batch := []interface{}{
-		// TODO(spencer): use Transaction and Response protobufs here.
-		BatchPut{
-			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("a"))),
-				Value: encodePutResponse(makeTS(2, 0), t),
-			},
+	kvs := []proto.KeyValue{
+		proto.KeyValue{
+			Key:   MakeLocalKey(rcPre, proto.Key("a")),
+			Value: proto.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
 		},
-		BatchPut{
-			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("b"))),
-				Value: encodePutResponse(makeTS(3, 0), t),
-			},
+		proto.KeyValue{
+			Key:   MakeLocalKey(rcPre, proto.Key("b")),
+			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
-
-		BatchPut{
-			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("a"))),
-				Value: encodeTransaction(makeTS(1, 0), t),
-			},
+		proto.KeyValue{
+			Key:   MakeLocalKey(txnPre, proto.Key("a")),
+			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
-		BatchPut{
-			proto.RawKeyValue{
-				Key:   MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("b"))),
-				Value: encodeTransaction(makeTS(2, 0), t),
-			},
+		proto.KeyValue{
+			Key:   MakeLocalKey(txnPre, proto.Key("b")),
+			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
-	if err := rocksdb.WriteBatch(batch); err != nil {
-		t.Fatal(err)
+	for _, kv := range kvs {
+		if err := MVCCPut(rocksdb, nil, kv.Key, proto.ZeroTimestamp, kv.Value, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Compact range and scan remaining values to compare.
 	rocksdb.CompactRange(nil, nil)
-	keyvals, err := Scan(rocksdb, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
+	actualKVs, err := MVCCScan(rocksdb, KeyMin, KeyMax, 0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		t.Fatalf("could not run scan: %v", err)
 	}
-	var keys []proto.EncodedKey
-	for _, kv := range keyvals {
+	var keys []proto.Key
+	for _, kv := range actualKVs {
 		keys = append(keys, kv.Key)
 	}
-	expKeys := []proto.EncodedKey{
-		MVCCEncodeKey(MakeLocalKey(rcPre, proto.Key("b"))),
-		MVCCEncodeKey(MakeLocalKey(txnPre, proto.Key("b"))),
+	expKeys := []proto.Key{
+		MakeLocalKey(rcPre, proto.Key("b")),
+		MakeLocalKey(txnPre, proto.Key("b")),
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)

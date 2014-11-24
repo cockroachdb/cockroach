@@ -404,3 +404,8 @@ func (t Transaction) String() string {
 	return fmt.Sprintf("%q {id=%s pri=%d, iso=%s, stat=%s, epo=%d, ts=%s orig=%s max=%s}",
 		t.Name, t.ID, t.Priority, t.Isolation, t.Status, t.Epoch, t.Timestamp, t.OrigTimestamp, t.MaxTimestamp)
 }
+
+// IsInline returns true if the value is inlined in the metadata.
+func (mvcc *MVCCMetadata) IsInline() bool {
+	return mvcc.Value != nil
+}
