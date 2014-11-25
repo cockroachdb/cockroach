@@ -19,6 +19,8 @@ package engine
 
 import (
 	"encoding/gob"
+	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -126,4 +128,73 @@ func TestRocksDBCompaction(t *testing.T) {
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)
 	}
+}
+
+// runMVCCMerge merges value numMerges times into numKeys separate keys.
+func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
+	loc := util.CreateTempDirectory()
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	if err := rocksdb.Start(); err != nil {
+		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+	}
+	defer func(b *testing.B) {
+		rocksdb.Stop()
+		if err := rocksdb.Destroy(); err != nil {
+			b.Errorf("could not delete rocksdb db at %s: %v", loc, err)
+		}
+	}(b)
+
+	// Precompute keys so we don't waste time formatting them at each iteration.
+	keys := make([]proto.Key, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = proto.Key(fmt.Sprintf("key-%d", i))
+	}
+	// Use parallelism if specified when test is run.
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ms := MVCCStats{}
+			for i := 0; i < numMerges; i++ {
+				if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], *value); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+
+	// Read values out to force merge.
+	for _, key := range keys {
+		val, err := MVCCGet(rocksdb, key, proto.ZeroTimestamp, nil)
+		if err != nil {
+			b.Fatal(err)
+		} else if val == nil {
+			continue
+		}
+		if val.Integer != nil {
+			fmt.Printf("%q: %d\n", key, val.GetInteger())
+		} else {
+			fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
+		}
+	}
+}
+
+// BenchmarkMVCCMergeInteger computes performance of merging integers.
+func BenchmarkMVCCMergeInteger(b *testing.B) {
+	runMVCCMerge(&proto.Value{Integer: gogoproto.Int64(1)}, 1024, 1024, b)
+}
+
+// BenchmarkMVCCMergeTimeSeries computes performance of merging time series data.
+func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
+	ts := &proto.TimeSeriesData{
+		StartTimestamp:    0,
+		DurationInSeconds: 3600,
+		SamplePrecision:   proto.SECONDS,
+		Data: []*proto.TimeSeriesDataPoint{
+			{Offset: 0, ValueInt: gogoproto.Int64(5)},
+		},
+	}
+	value, err := ts.ToValue()
+	if err != nil {
+		b.Fatal(err)
+	}
+	runMVCCMerge(value, 1024, 1024, b)
 }
