@@ -368,11 +368,10 @@ func (n *Node) gossipCapacities() {
 			log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
 			return nil
 		}
-		gossipPrefix := gossip.KeyMaxAvailCapacityPrefix + storeDesc.CombinedAttrs().SortedString()
-		keyMaxCapacity := gossipPrefix + strconv.FormatInt(int64(storeDesc.Node.NodeID), 10) + "-" +
-			strconv.FormatInt(int64(storeDesc.StoreID), 10)
-		// Register gossip group.
-		n.gossip.RegisterGroup(gossipPrefix, gossipGroupLimit, gossip.MaxGroup)
+		// Unique gossip key per store.
+		keyMaxCapacity := gossip.KeyMaxAvailCapacityPrefix +
+			strconv.FormatInt(int64(storeDesc.Node.NodeID), 16) + "-" +
+			strconv.FormatInt(int64(storeDesc.StoreID), 16)
 		// Gossip store descriptor.
 		n.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
 		return nil

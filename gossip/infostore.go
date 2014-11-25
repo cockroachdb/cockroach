@@ -210,7 +210,7 @@ func (is *infoStore) addInfo(i *info) error {
 	if existingInfo, ok := is.Infos[i.Key]; ok {
 		if i.Timestamp < existingInfo.Timestamp ||
 			(i.Timestamp == existingInfo.Timestamp && i.Hops >= existingInfo.Hops) {
-			return util.Errorf("info %+v older than current group info %+v", i, existingInfo)
+			return util.Errorf("info %+v older than current info %+v", i, existingInfo)
 		}
 		contentsChanged = !reflect.DeepEqual(existingInfo.Val, i.Val)
 	} else {
