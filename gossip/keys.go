@@ -35,7 +35,7 @@ const (
 	KeyConfigZone = "zones"
 
 	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
-	// store capacity. The suffix is composed of: <hex node ID>-<hex store ID>.
+	// store capacity. The suffix is composed of: <node ID>-<store ID>.
 	// The value is a storage.StoreDescriptor struct.
 	KeyMaxAvailCapacityPrefix = "max-avail-capacity-"
 

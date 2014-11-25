@@ -54,6 +54,10 @@ func (s *Store) capacityGossipUpdate(key string, contentsChanged bool) {
 //
 // If it cannot retrieve a StoreDescriptor from the Store's gossip, it garbage
 // collects the failed key.
+//
+// TODO(embark, spencer): consider using a reverse index map from Attr->stores,
+// for efficiency.  Ensure that entries in this map still have an opportunity
+// to be garbage collected.
 func (s *Store) findStores(required proto.Attributes) ([]*StoreDescriptor, error) {
 	s.finderContext.Lock()
 	defer s.finderContext.Unlock()
