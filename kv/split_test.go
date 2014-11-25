@@ -181,9 +181,8 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// intents. We do this using an IsTrueWithin construct to account
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
-	mvcc := engine.NewMVCC(eng)
 	if err := util.IsTrueWithin(func() bool {
-		if _, err := mvcc.Scan(engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, nil); err != nil {
+		if _, err := engine.MVCCScan(eng, engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}

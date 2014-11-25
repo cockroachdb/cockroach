@@ -178,4 +178,10 @@ message MVCCMetadata {
   optional int64 key_bytes = 4 [(gogoproto.nullable) = false];
   // The size in bytes of the most recent versioned value.
   optional int64 val_bytes = 5 [(gogoproto.nullable) = false];
+  // Inline value, used for values with zero timestamp. This provides
+  // an efficient short circuit of the normal MVCC metadata sentinel
+  // and subsequent version rows. If timestamp == (0, 0), then there
+  // is only a single MVCC metadata row with value inlined, and with
+  // empty timestamp, key_bytes, and val_bytes.
+  optional Value value = 6;
 }

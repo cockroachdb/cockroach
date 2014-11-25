@@ -157,11 +157,25 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
                       bool* value_changed) const {
     *value_changed = false;
 
+    // Only filter response cache entries and transaction rows.
+    if (!key.starts_with(rcache_prefix_) && !key.starts_with(txn_prefix_)) {
+      return false;
+    }
+    // Parse MVCC metadata for inlined value.
+    proto::MVCCMetadata meta;
+    if (!meta.ParseFromArray(existing_value.data(), existing_value.size())) {
+      // *error_msg = (char*)"failed to parse mvcc metadata entry";
+      return false;
+    }
+    if (!meta.has_value()) {
+      // *error_msg = (char*)"not an inlined mvcc value";
+      return false;
+    }
     // Response cache rows are GC'd if their timestamp is older than the
     // response cache GC timeout.
     if (key.starts_with(rcache_prefix_)) {
       proto::ReadWriteCmdResponse rwResp;
-      if (!rwResp.ParseFromArray(existing_value.data(), existing_value.size())) {
+      if (!rwResp.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
         return false;
       }
@@ -179,7 +193,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // system-wide minimum write intent is periodically computed via
       // map-reduce over all ranges and gossipped.
       proto::Transaction txn;
-      if (!txn.ParseFromArray(existing_value.data(), existing_value.size())) {
+      if (!txn.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse transaction entry";
         return false;
       }
@@ -251,7 +265,7 @@ bool WillOverflow(int64_t a, int64_t b) {
 // IsTimeSeriesData returns true if the given protobuffer Value contains a
 // TimeSeriesData message.
 bool IsTimeSeriesData(const proto::Value *val) {
-    return val->has_tag() 
+    return val->has_tag()
         && val->tag() == proto::InternalValueType_Name(proto::_CR_TS);
 }
 
@@ -263,29 +277,29 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, rocksd
     proto::TimeSeriesData left_ts;
     proto::TimeSeriesData right_ts;
     if (!left_ts.ParseFromString(left->bytes())) {
-        rocksdb::Warn(logger, 
+        rocksdb::Warn(logger,
                 "left TimeSeriesData could not be parsed from bytes.");
         return false;
     }
     if (!right_ts.ParseFromString(right.bytes())) {
-        rocksdb::Warn(logger, 
+        rocksdb::Warn(logger,
                 "right TimeSeriesData could not be parsed from bytes.");
         return false;
     }
 
     // Ensure that both TimeSeriesData have the same timestamp and duration.
     if (left_ts.start_timestamp() != right_ts.start_timestamp()) {
-        rocksdb::Warn(logger, 
+        rocksdb::Warn(logger,
                 "TimeSeries merge failed due to mismatched start timestamps");
         return false;
     }
     if (left_ts.duration_in_seconds() != right_ts.duration_in_seconds()) {
-        rocksdb::Warn(logger, 
+        rocksdb::Warn(logger,
                 "TimeSeries merge failed due to mismatched durations.");
         return false;
     }
     if (left_ts.sample_precision() != right_ts.sample_precision()) {
-        rocksdb::Warn(logger, 
+        rocksdb::Warn(logger,
                 "TimeSeries merge failed due to mismatched sample precision.");
         return false;
     }
@@ -301,21 +315,21 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, rocksd
 bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger* logger) {
     if (left->has_bytes()) {
         if (!right.has_bytes()) {
-            rocksdb::Warn(logger, 
+            rocksdb::Warn(logger,
                     "inconsistent value types for merge (left = bytes, right = ?)");
             return false;
         }
         if (IsTimeSeriesData(left)) {
             // The right operand must also be a time series.
             if (!IsTimeSeriesData(&right)) {
-                rocksdb::Warn(logger, 
+                rocksdb::Warn(logger,
                         "inconsistent value types for merge (left = TimeSeriesData, right = bytes)");
                 return false;
             }
             return MergeTimeSeriesValues(left, right, logger);
         } else if (IsTimeSeriesData(&right)) {
             // The right operand was a time series, but the left was not.
-            rocksdb::Warn(logger, 
+            rocksdb::Warn(logger,
                     "inconsistent value types for merge (left = bytes, right = TimeSeriesData");
             return false;
         } else {
@@ -324,7 +338,7 @@ bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger*
         return true;
     } else if (left->has_integer()) {
         if (!right.has_integer()) {
-            rocksdb::Warn(logger, 
+            rocksdb::Warn(logger,
                     "inconsistent value types for merge (left = integer, right = ?)");
             return false;
         }
@@ -341,15 +355,15 @@ bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger*
 }
 
 
-// MergeResult serializes the result Value into a byte slice.
-DBStatus MergeResult(proto::Value* value, DBString* result) {
+// MergeResult serializes the result MVCCMetadata value into a byte slice.
+DBStatus MergeResult(proto::MVCCMetadata* meta, DBString* result) {
   // TODO(pmattis): Should recompute checksum here. Need a crc32
   // implementation and need to verify the checksumming is identical
   // to what is being done in Go. Zlib's crc32 should be sufficient.
-  value->clear_checksum();
-  result->len = value->ByteSize();
+  meta->mutable_value()->clear_checksum();
+  result->len = meta->ByteSize();
   result->data = static_cast<char*>(malloc(result->len));
-  if (!value->SerializeToArray(result->data, result->len)) {
+  if (!meta->SerializeToArray(result->data, result->len)) {
     return ToDBString("serialization error");
   }
   return kSuccess;
@@ -383,9 +397,9 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     // read of the key). In effect, there is no propagation of error
     // information to the client.
 
-    proto::Value value;
+    proto::MVCCMetadata meta;
     if (existing_value != NULL) {
-      if (!value.ParseFromArray(existing_value->data(), existing_value->size())) {
+      if (!meta.ParseFromArray(existing_value->data(), existing_value->size())) {
         // Corrupted existing value.
         rocksdb::Warn(logger, "corrupted existing value");
         return false;
@@ -393,12 +407,12 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     }
 
     for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&value, operand_list[i], logger)) {
+      if (!MergeOne(&meta, operand_list[i], logger)) {
         return false;
       }
     }
 
-    if (!value.SerializeToString(new_value)) {
+    if (!meta.SerializeToString(new_value)) {
       rocksdb::Warn(logger, "serialization error");
       return false;
     }
@@ -410,15 +424,15 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       const std::deque<rocksdb::Slice>& operand_list,
       std::string* new_value,
       rocksdb::Logger* logger) const {
-    proto::Value value;
+    proto::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&value, operand_list[i], logger)) {
+      if (!MergeOne(&meta, operand_list[i], logger)) {
         return false;
       }
     }
 
-    if (!value.SerializeToString(new_value)) {
+    if (!meta.SerializeToString(new_value)) {
       rocksdb::Warn(logger, "serialization error");
       return false;
     }
@@ -426,15 +440,15 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   }
 
  private:
-  bool MergeOne(proto::Value* value,
+  bool MergeOne(proto::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
                 rocksdb::Logger* logger) const {
-    proto::Value operand_value;
-    if (!operand_value.ParseFromArray(operand.data(), operand.size())) {
+    proto::MVCCMetadata operand_meta;
+    if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(value, operand_value, logger);
+    return MergeValues(meta->mutable_value(), operand_meta.value(), logger);
   }
 };
 
@@ -634,18 +648,18 @@ void DBBatchDelete(DBBatch* batch, DBSlice key) {
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
   new_value->len = 0;
 
-  proto::Value value;
-  if (!value.ParseFromArray(existing.data, existing.len)) {
+  proto::MVCCMetadata meta;
+  if (!meta.ParseFromArray(existing.data, existing.len)) {
     return ToDBString("corrupted existing value");
   }
 
-  proto::Value update_value;
-  if (!update_value.ParseFromArray(update.data, update.len)) {
+  proto::MVCCMetadata update_meta;
+  if (!update_meta.ParseFromArray(update.data, update.len)) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(&value, update_value, NULL)) {
+  if (!MergeValues(meta.mutable_value(), update_meta.value(), NULL)) {
     return ToDBString("incompatible merge values");
   }
-  return MergeResult(&value, new_value);
+  return MergeResult(&meta, new_value);
 }

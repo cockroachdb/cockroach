@@ -455,9 +455,9 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
 			}
-			encTxnKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID))
+			txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID)
 			var txn proto.Transaction
-			ok, _, _, err := engine.GetProto(store.Engine(), encTxnKey, &txn)
+			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 			if !ok || err != nil {
 				t.Fatal("not found or err: %s", err)
 			}
@@ -708,9 +708,9 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	encTxnKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID))
+	txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID)
 	var txn proto.Transaction
-	ok, _, _, err := engine.GetProto(store.Engine(), encTxnKey, &txn)
+	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 	if !ok || err != nil {
 		t.Fatal("not found or err: %s", err)
 	}

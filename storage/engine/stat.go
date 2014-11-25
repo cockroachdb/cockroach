@@ -18,8 +18,6 @@
 package engine
 
 import (
-	"fmt"
-
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -55,21 +53,6 @@ var (
 	StatIntentCount = proto.Key("intent-count")
 )
 
-// encodeStatValue constructs a proto.Value using the supplied stat
-// increment and then encodes that into a byte slice. Encoding errors
-// cause panics (as they should never happen). Returns false if stat
-// is equal to 0 to avoid unnecessary merge.
-func encodeStatValue(stat int64) (ok bool, enc []byte) {
-	if stat == 0 {
-		return false, nil
-	}
-	data, err := gogoproto.Marshal(&proto.Value{Integer: gogoproto.Int64(stat)})
-	if err != nil {
-		panic(fmt.Sprintf("could not marshal proto.Value: %s", err))
-	}
-	return true, data
-}
-
 // MakeRangeStatKey returns the key for accessing the named stat
 // for the specified range ID.
 func MakeRangeStatKey(rangeID int64, stat proto.Key) proto.Key {
@@ -88,40 +71,50 @@ func MakeStoreStatKey(storeID int32, stat proto.Key) proto.Key {
 // If the stat could not be found, returns 0. An error is returned
 // on stat decode error.
 func GetRangeStat(engine Engine, rangeID int64, stat proto.Key) (int64, error) {
-	val := &proto.Value{}
-	ok, _, _, err := GetProto(engine, MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), val)
-	if err != nil || !ok {
+	val, err := MVCCGet(engine, MakeRangeStatKey(rangeID, stat), proto.ZeroTimestamp, nil)
+	if err != nil || val == nil {
 		return 0, err
 	}
 	return val.GetInteger(), nil
 }
 
 // MergeStat flushes the specified stat to merge counters via the
-// provided engine for both the affected range and store. Only
+// provided mvcc instance for both the affected range and store. Only
 // updates range or store stats if the corresponding ID is non-zero.
-func MergeStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) {
-	if ok, encStat := encodeStatValue(statVal); ok {
-		if rangeID != 0 {
-			engine.Merge(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)
-		}
-		if storeID != 0 {
-			engine.Merge(MVCCEncodeKey(MakeStoreStatKey(storeID, stat)), encStat)
+func MergeStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) error {
+	if statVal == 0 {
+		return nil
+	}
+	value := proto.Value{Integer: gogoproto.Int64(statVal)}
+	if rangeID != 0 {
+		if err := MVCCMerge(engine, nil, MakeRangeStatKey(rangeID, stat), value); err != nil {
+			return err
 		}
 	}
+	if storeID != 0 {
+		if err := MVCCMerge(engine, nil, MakeStoreStatKey(storeID, stat), value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// SetStat writes the specified stat to counters via the provided
-// engine for both the affected range and store. Only updates range or
-// store stats if the corresponding ID is non-zero.
-func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) {
-	if ok, encStat := encodeStatValue(statVal); ok {
-		if rangeID != 0 {
-			engine.Put(MVCCEncodeKey(MakeRangeStatKey(rangeID, stat)), encStat)
-		}
-		if storeID != 0 {
-			engine.Put(MVCCEncodeKey(MakeStoreStatKey(storeID, stat)), encStat)
+// SetStat writes the specified stat to counters via the provided mvcc
+// instance for both the affected range and store. Only updates range
+// or store stats if the corresponding ID is non-zero.
+func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) error {
+	value := proto.Value{Integer: gogoproto.Int64(statVal)}
+	if rangeID != 0 {
+		if err := MVCCPut(engine, nil, MakeRangeStatKey(rangeID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+			return err
 		}
 	}
+	if storeID != 0 {
+		if err := MVCCPut(engine, nil, MakeStoreStatKey(storeID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetRangeSize returns the range size as the sum of the key and value

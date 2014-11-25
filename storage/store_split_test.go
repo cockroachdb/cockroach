@@ -48,7 +48,7 @@ func adminSplitArgs(key, splitKey []byte, rangeID int64) (*proto.AdminSplitReque
 }
 
 func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.GetRangeMVCCStats(eng, rangeID)
+	ms, err := engine.MVCCGetRangeStats(eng, rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		}
 	}
 	// Get the range stats now that we have data.
-	ms, err := engine.GetRangeMVCCStats(store.Engine(), rng.RangeID)
+	ms, err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,12 +299,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msLeft, err := engine.GetRangeMVCCStats(store.Engine(), rng.RangeID)
+	msLeft, err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupRange(proto.Key("Z"), nil)
-	msRight, err := engine.GetRangeMVCCStats(store.Engine(), rngRight.RangeID)
+	msRight, err := engine.MVCCGetRangeStats(store.Engine(), rngRight.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}

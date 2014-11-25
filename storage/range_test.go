@@ -74,14 +74,13 @@ var (
 
 // initConfigs creates default configuration entries.
 func initConfigs(e engine.Engine, t *testing.T) {
-	mvcc := engine.NewMVCC(e)
-	if err := mvcc.PutProto(engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigAccountingPrefix, proto.MinTimestamp, nil, &testDefaultAcctConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := mvcc.PutProto(engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigPermissionPrefix, proto.MinTimestamp, nil, &testDefaultPermConfig); err != nil {
 		t.Fatal(err)
 	}
-	if err := mvcc.PutProto(engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
+	if err := engine.MVCCPutProto(e, nil, engine.KeyConfigZonePrefix, proto.MinTimestamp, nil, &testDefaultZoneConfig); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1102,8 +1101,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key))
-		if _, _, err := engine.PutProto(rng.rm.Engine(), txnKey, &existTxn); err != nil {
+		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key)
+		if err := engine.MVCCPutProto(rng.rm.Engine(), nil, txnKey, proto.ZeroTimestamp, nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1440,7 +1439,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 }
 
 func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.GetRangeMVCCStats(eng, rangeID)
+	ms, err := engine.MVCCGetRangeStats(eng, rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}

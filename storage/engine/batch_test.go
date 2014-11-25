@@ -127,6 +127,13 @@ func TestBatchGet(t *testing.T) {
 	}
 }
 
+func compareMergedValues(result, expected []byte) bool {
+	var resultV, expectedV proto.MVCCMetadata
+	gogoproto.Unmarshal(result, &resultV)
+	gogoproto.Unmarshal(expected, &expectedV)
+	return reflect.DeepEqual(resultV, expectedV)
+}
+
 func TestBatchMerge(t *testing.T) {
 	b := NewInMem(proto.Attributes{}, 1<<20).NewBatch()
 
@@ -157,7 +164,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, appender("a-valueappend")) {
+	if !compareMergedValues(val, appender("a-valueappend")) {
 		t.Error("mismatch of \"a\"")
 	}
 
@@ -165,7 +172,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, appender("append")) {
+	if !compareMergedValues(val, appender("append")) {
 		t.Error("mismatch of \"b\"")
 	}
 
@@ -173,7 +180,7 @@ func TestBatchMerge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, appender("c-valueappend")) {
+	if !compareMergedValues(val, appender("c-valueappend")) {
 		t.Error("mismatch of \"c\"")
 	}
 }
@@ -365,7 +372,7 @@ func TestBatchConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(val, appender("bar")) {
+	if !compareMergedValues(val, appender("bar")) {
 		t.Error("mismatch of \"a\"")
 	}
 	// Write an engine value.
