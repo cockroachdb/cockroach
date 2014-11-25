@@ -25,9 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// StoreFinder finds the disks in a datacenter with the most available capacity.
-type StoreFinder func(proto.Attributes) ([]*StoreDescriptor, error)
-
 // allocator makes allocation decisions based on a zone configuration,
 // existing range metadata and available stores. Configuration
 // settings and range metadata information is stored directly in the
