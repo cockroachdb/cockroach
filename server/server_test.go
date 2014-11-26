@@ -248,10 +248,20 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			},
 			SplitKey: proto.Key("m"),
 		}, &proto.AdminSplitResponse{}); err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
-	// TODO(Tobias): Bogus GET with a key range, want error.
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
+	get := &client.Call{
+		Method: proto.Get,
+		Args:   proto.GetArgs(writes[0]),
+		Reply:  &proto.GetResponse{},
+	}
+	get.Args.Header().User = storage.UserRoot
+	get.Args.Header().EndKey = writes[len(writes)-1]
+	ds.Send(get)
+	if err := get.Reply.Header().GoError(); err == nil {
+		t.Errorf("able to call Get with a key range: %v", get)
+	}
 	var call *client.Call
 	for i, k := range writes {
 		call = &client.Call{
@@ -270,11 +280,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			Reply:  &proto.ScanResponse{},
 		}
 		scan.Args.Header().User = storage.UserRoot
-		// TODO(Tobias): Why is this necessary? If I skip this,
-		// then the Scan() will end up reading with a timestamp
-		// that's slightly behind the one of the Puts above,
-		// and not see the inserts.
-		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 		ds.Send(scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -304,8 +309,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		Reply:  &proto.ScanResponse{},
 	}
 	scan.Args.Header().User = storage.UserRoot
-	// TODO(Tobias): ditto.
-	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	ds.Send(scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
