@@ -164,6 +164,8 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
+	*StoreFinder
+
 	Ident        proto.StoreIdent
 	clock        *hlc.Clock
 	engine       engine.Engine  // The underlying key-value store
@@ -184,7 +186,9 @@ type Store struct {
 
 // NewStore returns a new instance of a store.
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
-	return &Store{
+	s := &Store{
+		StoreFinder: &StoreFinder{gossip: gossip},
+
 		clock:          clock,
 		engine:         eng,
 		db:             db,
@@ -195,6 +199,8 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		ranges:         map[int64]*Range{},
 		rangesByRaftID: map[int64]*Range{},
 	}
+	s.allocator.storeFinder = s.findStores
+	return s
 }
 
 // Stop calls Range.Stop() on all active ranges.
@@ -284,6 +290,9 @@ func (s *Store) Start() error {
 	if s.gossip != nil {
 		s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
 		s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
+		// Callback triggers on capacity gossip from all stores.
+		capacityRegex := fmt.Sprintf("%s.*", gossip.KeyMaxAvailCapacityPrefix)
+		s.gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 	}
 
 	return nil

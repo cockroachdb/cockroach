@@ -35,9 +35,8 @@ const (
 	KeyConfigZone = "zones"
 
 	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
-	// store capacity. The suffix is composed of:
-	// <datacenter>-<hex node ID>-<hex store ID>. The value is a
-	// storage.StoreDescriptor struct.
+	// store capacity. The suffix is composed of: <node ID>-<store ID>.
+	// The value is a storage.StoreDescriptor struct.
 	KeyMaxAvailCapacityPrefix = "max-avail-capacity-"
 
 	// KeyNodeCount is the count of gossip nodes in the network. The
