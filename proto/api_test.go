@@ -67,9 +67,11 @@ func (i YY) Run() {
 // the Combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
 func TestCombinable(t *testing.T) {
-	if _, ok := interface{}(&ResponseHeader{}).(Combinable); !ok {
-		t.Fatalf("RequestHeader does not implement Combinable")
+	// Test that GetResponse doesn't have anything to do with Combinable.
+	if _, ok := interface{}(&GetResponse{}).(Combinable); ok {
+		t.Fatalf("GetResponse implements Combinable, so presumably all Response types will")
 	}
+	// Test that {Scan,DeleteRange}Response properly implement it.
 	sr1 := &ScanResponse{
 		ResponseHeader: ResponseHeader{Timestamp: MinTimestamp},
 		Rows: []KeyValue{

@@ -273,37 +273,25 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	for i, k := range writes {
 		call = &client.Call{
 			Method: proto.Put,
-			Args: &proto.PutRequest{
-				RequestHeader: proto.RequestHeader{
-					User: storage.UserRoot,
-					Key:  k,
-				},
-				Value: proto.Value{
-					Bytes: k,
-				},
-			},
-			Reply: &proto.PutResponse{},
+			Args:   proto.PutArgs(k, k),
+			Reply:  &proto.PutResponse{},
 		}
+		call.Args.Header().User = storage.UserRoot
 		ds.Send(call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
 		scan := &client.Call{
 			Method: proto.Scan,
-			Args: &proto.ScanRequest{
-				RequestHeader: proto.RequestHeader{
-					User:   storage.UserRoot,
-					Key:    writes[0],
-					EndKey: proto.Key(writes[len(writes)-1]).Next(),
-					// TODO(Tobias): Why is this necessary? If I skip this,
-					// then the Scan() will end up reading with a timestamp
-					// that's slightly behind the one of the Puts above,
-					// and not see the inserts.
-					Timestamp: call.Reply.Header().Timestamp,
-				},
-			},
-			Reply: &proto.ScanResponse{},
+			Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
+			Reply:  &proto.ScanResponse{},
 		}
+		scan.Args.Header().User = storage.UserRoot
+		// TODO(Tobias): Why is this necessary? If I skip this,
+		// then the Scan() will end up reading with a timestamp
+		// that's slightly behind the one of the Puts above,
+		// and not see the inserts.
+		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 		ds.Send(scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
@@ -329,17 +317,12 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	scan := &client.Call{
 		Method: proto.Scan,
-		Args: &proto.ScanRequest{
-			RequestHeader: proto.RequestHeader{
-				User:   storage.UserRoot,
-				Key:    writes[0],
-				EndKey: proto.Key(writes[len(writes)-1]).Next(),
-				// TODO(Tobias): ditto.
-				Timestamp: del.Reply.Header().Timestamp,
-			},
-		},
-		Reply: &proto.ScanResponse{},
+		Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
+		Reply:  &proto.ScanResponse{},
 	}
+	scan.Args.Header().User = storage.UserRoot
+	// TODO(Tobias): ditto.
+	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	ds.Send(scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)

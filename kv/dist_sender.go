@@ -330,11 +330,15 @@ func (ds *DistSender) Send(call *client.Call) {
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
 			if err == nil {
 				// If the request accesses keys beyond the end of this range,
-				// get the descriptor of the adjacent range to adress next.
+				// get the descriptor of the adjacent range to address next.
 				if desc.EndKey.Less(call.Args.Header().EndKey) {
+					if _, ok := call.Reply.(proto.Combinable); !ok {
+						return util.RetryBreak, util.Errorf("illegal cross-range operation: %v", call)
+					}
+					// This next lookup is likely for free since we've read the
+					// previous descriptor and range lookups use cache
+					// prefetching.
 					descNext, err = ds.rangeCache.LookupRangeDescriptor(desc.EndKey)
-					// Make a new reply object for this call.
-					reply = gogoproto.Clone(call.Reply).(proto.Response)
 					// If this is the first step in a multi-range operation,
 					// additionally copy call.Args because we will have to
 					// mutate it as we talk to the involved ranges.
@@ -345,13 +349,16 @@ func (ds *DistSender) Send(call *client.Call) {
 					args.Header().EndKey = desc.EndKey
 				}
 			}
+			// true if we're dealing with a range-spanning request.
+			isMulti := len(responses) > 0 || descNext != nil
 			if err == nil {
+				if isMulti {
+					// Make a new reply object for this call.
+					reply = gogoproto.Clone(call.Reply).(proto.Response)
+				}
 				err = ds.sendRPC(desc, call.Method, args, reply)
 			}
-			// If this request spans ranges, collect the replies.
-			if err == nil && (descNext != nil || len(responses) > 0) {
-				responses = append(responses, reply)
-			}
+
 			if err != nil {
 				log.Warningf("failed to invoke %s: %s", call.Method, err)
 				// If retryable, allow retry. For range not found or range
@@ -368,6 +375,9 @@ func (ds *DistSender) Send(call *client.Call) {
 						return util.RetryContinue, nil
 					}
 				}
+			} else if isMulti {
+				// If this request spans ranges, collect the replies.
+				responses = append(responses, reply)
 			}
 			return util.RetryBreak, err
 		})
@@ -375,7 +385,8 @@ func (ds *DistSender) Send(call *client.Call) {
 		// For multi-range requests, we return the failing range's reply.
 		if err != nil {
 			reply.Header().SetGoError(err)
-			call.Reply = reply // Only relevant in multi-range case.
+			// TODO(Tobias): Merge.
+			gogoproto.Merge(call.Reply, reply) // Only relevant in multi-range case.
 			return
 		}
 		// If this was the last range accessed by this call, exit loop.
@@ -388,17 +399,16 @@ func (ds *DistSender) Send(call *client.Call) {
 		args.Header().EndKey = call.Args.Header().EndKey
 	}
 
-	// If this was a multi-range request, aggregate the individual range's
+	// If this was a multi-range request, aggregate the individual range
 	// responses into one reply.
 	if len(responses) > 0 {
-		firstReply, ok := responses[0].(proto.Combinable)
-		if !ok {
-			log.Fatalf("illegal cross-range operation: %v", call)
-		}
+		// We've already ascertained earlier that we're dealing with a
+		// Combinable response type.
+		firstReply := responses[0].(proto.Combinable)
 		for _, r := range responses[1:] {
-			firstReply.Combine(r.(proto.Combinable))
+			firstReply.Combine(r)
 		}
-		call.Reply = responses[0]
+		gogoproto.Merge(call.Reply, responses[0])
 	}
 }
 

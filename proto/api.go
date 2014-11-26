@@ -461,21 +461,19 @@ type Response interface {
 	Verify(req Request) error
 }
 
-// Combinable is implemented by responses types whose corresponding
+// Combinable is implemented by response types whose corresponding
 // requests may cross range boundaries, such as Scan or DeleteRange.
-// Combine() allows responses from individual ranges to be glued
-// together into a single one.
-// Combinable is also implemented by ResponseHeader to properly
-// propagate the timestamp and transaction when joining responses.
+// Combine() allows responses from individual ranges to be aggregated
+// into a single one.
 // It is not expected that Combine() perform any error checking; this
 // should be done by the caller instead.
 type Combinable interface {
-	Combine(interface{})
+	Combine(Response)
 }
 
-// Combine implements the Combinable interface for ResponseHeader.
-func (rh *ResponseHeader) Combine(c interface{}) {
-	otherRH := c.(*ResponseHeader)
+// Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
+// to merge their headers.
+func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
 	if rh != nil {
 		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
 			rh.Timestamp = ts
@@ -487,7 +485,7 @@ func (rh *ResponseHeader) Combine(c interface{}) {
 }
 
 // Combine implements the Combinable interface for ScanResponse.
-func (sr *ScanResponse) Combine(c interface{}) {
+func (sr *ScanResponse) Combine(c Response) {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
@@ -496,7 +494,7 @@ func (sr *ScanResponse) Combine(c interface{}) {
 }
 
 // Combine implements the Combinable interface for DeleteRangeResponse.
-func (dr *DeleteRangeResponse) Combine(c interface{}) {
+func (dr *DeleteRangeResponse) Combine(c Response) {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.NumDeleted += otherDR.GetNumDeleted()
