@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -64,6 +65,11 @@ func StartTestServer(t *testing.T) *TestServer {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// Gossip returns the gossip instance used by the TestServer.
+func (ts *TestServer) Gossip() *gossip.Gossip {
+	return ts.gossip
 }
 
 // Start starts the TestServer by bootstrapping an in-memory store

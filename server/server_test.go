@@ -36,44 +36,17 @@ import (
 )
 
 var (
-	s              *server
+	s              *TestServer
 	serverTestOnce sync.Once
 )
 
 // Start a test server. The server will be initialized with an
 // in-memory engine and will execute a split at key "m" so that
 // it will end up having two logical ranges.
-func startServer() *server {
+func startServer(t *testing.T) *TestServer {
 	serverTestOnce.Do(func() {
-		// We update these with the actual port once the servers
-		// have been launched for the purpose of this test.
-		var err error
-		s, err = newServer("127.0.0.1:0", "", *maxOffset)
-		if err != nil {
-			log.Fatal(err)
-		}
-		engines := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
-		if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
-			log.Fatal(err)
-		}
-		err = s.start(engines, "", "127.0.0.1:0", true) // TODO(spencer): should shutdown server.
-		if err != nil {
-			log.Fatalf("Could not start server: %s", err)
-		}
-		// Update the configuration variables to reflect the actual
-		// ports bound.
-		*httpAddr = (*s.httpListener).Addr().String()
-		*rpcAddr = s.rpc.Addr().String()
-		log.Infof("Test server listening on http: %s, rpc: %s", *httpAddr, *rpcAddr)
-		if err := s.node.db.Call(proto.AdminSplit,
-			&proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{
-					Key: proto.Key("m"),
-				},
-				SplitKey: proto.Key("m"),
-			}, &proto.AdminSplitResponse{}); err != nil {
-			log.Fatal(err)
-		}
+		s = StartTestServer(t)
+		log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
 	})
 	return s
 }
@@ -199,8 +172,8 @@ func TestInitEngines(t *testing.T) {
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
-	startServer()
-	url := "http://" + *httpAddr + "/_admin/healthz"
+	startServer(t)
+	url := "http://" + s.HTTPAddr + "/_admin/healthz"
 	resp, err := http.Get(url)
 	if err != nil {
 		t.Fatalf("error requesting healthz at %s: %s", url, err)
@@ -220,14 +193,14 @@ func TestHealthz(t *testing.T) {
 // decompression on a custom client's Transport and setting it
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
-	startServer()
+	startServer(t)
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+*httpAddr+"/_admin/healthz", nil)
+	req, err := http.NewRequest("GET", "http://"+s.HTTPAddr+"/_admin/healthz", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %s", err)
 	}
@@ -265,10 +238,20 @@ func TestGzip(t *testing.T) {
 }
 
 func TestMultiRangeScanDeleteRange(t *testing.T) {
-	startServer()
-	ds := kv.NewDistSender(s.gossip)
+	ts := StartTestServer(t)
+	ds := kv.NewDistSender(ts.Gossip())
 
-	writes := [][]byte{[]byte("a"), []byte("z")}
+	if err := ts.node.db.Call(proto.AdminSplit,
+		&proto.AdminSplitRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: proto.Key("m"),
+			},
+			SplitKey: proto.Key("m"),
+		}, &proto.AdminSplitResponse{}); err != nil {
+		log.Fatal(err)
+	}
+	// TODO(Tobias): Bogus GET with a key range, want error.
+	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
 	var call *client.Call
 	for i, k := range writes {
 		call = &client.Call{
