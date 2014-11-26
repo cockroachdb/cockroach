@@ -45,10 +45,12 @@ const (
 	// Delete removes the value for the specified key.
 	Delete = "Delete"
 	// DeleteRange removes all values for keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey.
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
+	// the latter endpoint excluded.
 	DeleteRange = "DeleteRange"
 	// Scan fetches the values for all keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey.
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
+	// the latter endpoint excluded.
 	Scan = "Scan"
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction = "EndTransaction"
@@ -457,6 +459,47 @@ type Response interface {
 	Header() *ResponseHeader
 	// Verify verifies response integrity, as applicable.
 	Verify(req Request) error
+}
+
+// Combinable is implemented by response types whose corresponding
+// requests may cross range boundaries, such as Scan or DeleteRange.
+// Combine() allows responses from individual ranges to be aggregated
+// into a single one.
+// It is not expected that Combine() perform any error checking; this
+// should be done by the caller instead.
+type Combinable interface {
+	Combine(Response)
+}
+
+// Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
+// to merge their headers.
+func (rh *ResponseHeader) Combine(otherRH *ResponseHeader) {
+	if rh != nil {
+		if ts := otherRH.GetTimestamp(); rh.Timestamp.Less(ts) {
+			rh.Timestamp = ts
+		}
+		if rh.Txn != nil && otherRH.GetTxn() == nil {
+			rh.Txn = nil
+		}
+	}
+}
+
+// Combine implements the Combinable interface for ScanResponse.
+func (sr *ScanResponse) Combine(c Response) {
+	otherSR := c.(*ScanResponse)
+	if sr != nil {
+		sr.Rows = append(sr.Rows, otherSR.GetRows()...)
+		sr.Header().Combine(otherSR.Header())
+	}
+}
+
+// Combine implements the Combinable interface for DeleteRangeResponse.
+func (dr *DeleteRangeResponse) Combine(c Response) {
+	otherDR := c.(*DeleteRangeResponse)
+	if dr != nil {
+		dr.NumDeleted += otherDR.GetNumDeleted()
+		dr.Header().Combine(otherDR.Header())
+	}
 }
 
 // Header implements the Request interface for RequestHeader.
