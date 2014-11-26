@@ -164,18 +164,19 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident         proto.StoreIdent
-	clock         *hlc.Clock
-	engine        engine.Engine      // The underlying key-value store
-	db            *client.KV         // Cockroach KV DB
-	allocator     *allocator         // Makes allocation decisions
-	gossip        *gossip.Gossip     // Configs and store capacities
-	raftIDAlloc   *IDAllocator       // Raft ID allocator
-	rangeIDAlloc  *IDAllocator       // Range ID allocator
-	configMu      sync.Mutex         // Limit config update processing
-	finderContext storeFinderContext // Context to find stores for allocation
-	raft          raft
-	closer        chan struct{}
+	*StoreFinder
+
+	Ident        proto.StoreIdent
+	clock        *hlc.Clock
+	engine       engine.Engine  // The underlying key-value store
+	db           *client.KV     // Cockroach KV DB
+	allocator    *allocator     // Makes allocation decisions
+	gossip       *gossip.Gossip // Configs and store capacities
+	raftIDAlloc  *IDAllocator   // Raft ID allocator
+	rangeIDAlloc *IDAllocator   // Range ID allocator
+	configMu     sync.Mutex     // Limit config update processing
+	raft         raft
+	closer       chan struct{}
 
 	mu             sync.RWMutex     // Protects variables below...
 	ranges         map[int64]*Range // Map of ranges by range ID
@@ -186,6 +187,8 @@ type Store struct {
 // NewStore returns a new instance of a store.
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
 	s := &Store{
+		StoreFinder: &StoreFinder{gossip: gossip},
+
 		clock:          clock,
 		engine:         eng,
 		db:             db,

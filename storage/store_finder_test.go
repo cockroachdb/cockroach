@@ -27,18 +27,17 @@ import (
 )
 
 func TestCapacityGossipUpdate(t *testing.T) {
-	s, _ := createTestStore(t)
-	defer s.Stop()
+	sf := StoreFinder{}
 	key := "testkey"
 
 	// Order and value of contentsChanged shouldn't matter.
-	s.capacityGossipUpdate(key, true)
-	s.capacityGossipUpdate(key, false)
+	sf.capacityGossipUpdate(key, true)
+	sf.capacityGossipUpdate(key, false)
 
 	expectedKeys := stringSet{key: struct{}{}}
-	s.finderContext.Lock()
-	actualKeys := s.finderContext.capacityKeys
-	s.finderContext.Unlock()
+	sf.finderMu.Lock()
+	actualKeys := sf.capacityKeys
+	sf.finderMu.Unlock()
 
 	if !reflect.DeepEqual(expectedKeys, actualKeys) {
 		t.Errorf("expected to fetch %+v, instead %+v", expectedKeys, actualKeys)
@@ -67,7 +66,7 @@ func TestStoreFinder(t *testing.T) {
 
 	// Explicitly add keys rather than registering a gossip callback to avoid
 	// waiting for the goroutine callback to finish.
-	s.finderContext.capacityKeys = stringSet{
+	s.capacityKeys = stringSet{
 		"k1": struct{}{},
 		"k2": struct{}{},
 		"k3": struct{}{},
@@ -100,7 +99,7 @@ func TestStoreFinderGarbageCollection(t *testing.T) {
 	s, _ := createTestStore(t)
 	defer s.Stop()
 
-	s.finderContext.capacityKeys = stringSet{
+	s.capacityKeys = stringSet{
 		"key0": struct{}{},
 		"key1": struct{}{},
 	}
@@ -114,8 +113,8 @@ func TestStoreFinderGarbageCollection(t *testing.T) {
 		t.Errorf("expected no stores found, instead %+v", stores)
 	}
 
-	if len(s.finderContext.capacityKeys) != 0 {
+	if len(s.capacityKeys) != 0 {
 		t.Errorf("expected keys to be cleared, instead are %+v",
-			s.finderContext.capacityKeys)
+			s.capacityKeys)
 	}
 }

@@ -25,27 +25,30 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
-// StoreFinder finds the disks in a datacenter that have the requested
+// FindStoreFunc finds the disks in a datacenter that have the requested
 // attributes.
-type StoreFinder func(proto.Attributes) ([]*StoreDescriptor, error)
+type FindStoreFunc func(proto.Attributes) ([]*StoreDescriptor, error)
 
 type stringSet map[string]struct{}
 
-type storeFinderContext struct {
-	sync.Mutex
-	capacityKeys stringSet
+// StoreFinder provides the data necessary to find stores with particular
+// attributes.
+type StoreFinder struct {
+	finderMu     sync.Mutex
+	capacityKeys stringSet // Tracks gosisp keys used for capacity
+	gossip       *gossip.Gossip
 }
 
 // capacityGossipUpdate is a gossip callback triggered whenever capacity
 // information is gossiped. It just tracks keys used for capacity gossip.
-func (s *Store) capacityGossipUpdate(key string, contentsChanged bool) {
-	s.finderContext.Lock()
-	defer s.finderContext.Unlock()
+func (sf *StoreFinder) capacityGossipUpdate(key string, contentsChanged bool) {
+	sf.finderMu.Lock()
+	defer sf.finderMu.Unlock()
 
-	if s.finderContext.capacityKeys == nil {
-		s.finderContext.capacityKeys = stringSet{}
+	if sf.capacityKeys == nil {
+		sf.capacityKeys = stringSet{}
 	}
-	s.finderContext.capacityKeys[key] = struct{}{}
+	sf.capacityKeys[key] = struct{}{}
 }
 
 // findStores is the Store's implementation of a StoreFinder. It returns a list
@@ -58,16 +61,16 @@ func (s *Store) capacityGossipUpdate(key string, contentsChanged bool) {
 // TODO(embark, spencer): consider using a reverse index map from Attr->stores,
 // for efficiency.  Ensure that entries in this map still have an opportunity
 // to be garbage collected.
-func (s *Store) findStores(required proto.Attributes) ([]*StoreDescriptor, error) {
-	s.finderContext.Lock()
-	defer s.finderContext.Unlock()
+func (sf *StoreFinder) findStores(required proto.Attributes) ([]*StoreDescriptor, error) {
+	sf.finderMu.Lock()
+	defer sf.finderMu.Unlock()
 	var stores []*StoreDescriptor
-	for key := range s.finderContext.capacityKeys {
-		storeDesc, err := storeDescFromGossip(key, s.gossip)
+	for key := range sf.capacityKeys {
+		storeDesc, err := storeDescFromGossip(key, sf.gossip)
 		if err != nil {
 			// We can no longer retrieve this key from the gossip store,
 			// perhaps it expired.
-			delete(s.finderContext.capacityKeys, key)
+			delete(sf.capacityKeys, key)
 		} else if required.IsSubset(storeDesc.Attrs) {
 			stores = append(stores, storeDesc)
 		}

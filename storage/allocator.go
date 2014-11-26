@@ -31,7 +31,7 @@ import (
 // engine-backed range they describe. Information on suitability and
 // availability of servers is gleaned from the gossip network.
 type allocator struct {
-	storeFinder StoreFinder
+	storeFinder FindStoreFunc
 	rand        rand.Rand
 }
 
