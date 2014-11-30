@@ -177,8 +177,6 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock) *TxnCoordSende
 // if it's not nil but has an empty ID.
 func (tc *TxnCoordSender) Send(call *client.Call) {
 	header := call.Args.Header()
-	// TODO(Tobias): for commands that may access multiple ranges,
-	// make sure to wrap in a txn for consistency.
 	tc.maybeBeginTxn(header)
 
 	// Process batch specially; otherwise, send via wrapped sender.
@@ -296,6 +294,23 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
 		tc.cleanupTxn(&t.Txn)
+	case *proto.OpRequiresTxnError:
+		// Run a one-off transaction with that single command.
+		log.Infof("%s: auto-wrapping in txn and re-executing", call.Method)
+		txnOpts := &client.TransactionOptions{
+			Name: "auto-wrap",
+		}
+		// Must not call Close() on this KV - that would call
+		// tc.Close().
+		tmpKV := client.NewKV(tc, nil)
+		tmpKV.User = call.Args.Header().User
+		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
+		// This is nasty, really want a clean request for this- but
+		// the reply has already been used. We'd need a fresh one.
+		call.Reply.Header().SetGoError(nil)
+		tmpKV.RunTransaction(txnOpts, func(txn *client.KV) error {
+			return txn.Call(call.Method, call.Args, call.Reply)
+		})
 	case nil:
 		var txn *proto.Transaction
 		if call.Method == proto.EndTransaction {

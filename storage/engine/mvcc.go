@@ -464,8 +464,8 @@ func MVCCPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timest
 	return mvccPutInternal(engine, ms, key, timestamp, proto.MVCCValue{Value: &value}, txn)
 }
 
-// MVCCDelete marks the key deleted and will not return in the next
-// get response.
+// MVCCDelete marks the key deleted so that it will not be returned in
+// future get responses.
 func MVCCDelete(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	return mvccPutInternal(engine, ms, key, timestamp, proto.MVCCValue{Deleted: true}, txn)
 }
@@ -519,8 +519,12 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 		// and epoch of the new intent are greater than or equal to
 		// existing. If either of these conditions doesn't hold, it's
 		// likely the case that an older RPC is arriving out of order.
-		if !timestamp.Less(meta.Timestamp) && (meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
-			// If this is an intent and timestamps have changed, need to remove old version.
+		//
+		// Note that meta.Txn!=nil implies txn!=nil.
+		if !timestamp.Less(meta.Timestamp) &&
+			(meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
+			// If this is an intent and timestamps have changed,
+			// need to remove old version.
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
 				engine.Clear(MVCCEncodeVersionKey(key, meta.Timestamp))
 			}

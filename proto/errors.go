@@ -137,3 +137,8 @@ func (e *WriteTooOldError) Error() string {
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
 }
+
+// Error formats error.
+func (e *OpRequiresTxnError) Error() string {
+	return "the operation requires transactional context"
+}

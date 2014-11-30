@@ -333,7 +333,10 @@ func (ds *DistSender) Send(call *client.Call) {
 				// get the descriptor of the adjacent range to address next.
 				if desc.EndKey.Less(call.Args.Header().EndKey) {
 					if _, ok := call.Reply.(proto.Combinable); !ok {
-						return util.RetryBreak, util.Errorf("illegal cross-range operation", call)
+						return util.RetryBreak, util.Error("illegal cross-range operation", call)
+					}
+					if call.Args.Header().Txn == nil {
+						return util.RetryBreak, &proto.OpRequiresTxnError{}
 					}
 					// This next lookup is likely for free since we've read the
 					// previous descriptor and range lookups use cache

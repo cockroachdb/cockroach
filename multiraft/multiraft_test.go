@@ -138,7 +138,7 @@ func TestCommand(t *testing.T) {
 
 	// The command will be committed on each node.
 	for i, events := range cluster.events {
-		log.Infof("waiting for event to be commited on node %v", i)
+		log.Infof("waiting for event to be committed on node %v", i)
 		commit := <-events.CommandCommitted
 		if string(commit.Command) != "command" {
 			t.Errorf("unexpected value in committed command: %v", commit.Command)

@@ -496,6 +496,15 @@ func (dr *DeleteRangeResponse) Combine(c Response) {
 	}
 }
 
+// Combine implements the Combinable interface for
+// InternalResolveIntentResponse.
+func (rr *InternalResolveIntentResponse) Combine(c Response) {
+	otherRR := c.(*InternalResolveIntentResponse)
+	if rr != nil {
+		rr.Header().Combine(otherRR.Header())
+	}
+}
+
 // Header implements the Request interface for RequestHeader.
 func (rh *RequestHeader) Header() *RequestHeader {
 	return rh
@@ -543,6 +552,8 @@ func (rh *ResponseHeader) GoError() error {
 		return rh.Error.WriteTooOld
 	case rh.Error.ReadWithinUncertaintyInterval != nil:
 		return rh.Error.ReadWithinUncertaintyInterval
+	case rh.Error.OpRequiresTxn != nil:
+		return rh.Error.OpRequiresTxn
 	default:
 		return nil
 	}
@@ -576,6 +587,8 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = &Error{WriteIntent: t}
 	case *WriteTooOldError:
 		rh.Error = &Error{WriteTooOld: t}
+	case *OpRequiresTxnError:
+		rh.Error = &Error{OpRequiresTxn: t}
 	default:
 		var canRetry bool
 		if r, ok := err.(util.Retryable); ok {
