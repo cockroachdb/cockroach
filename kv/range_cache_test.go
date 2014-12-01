@@ -54,6 +54,10 @@ func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor
 			break
 		}
 		response = append(response, *(v.(testDescriptorNode).RangeDescriptor))
+		// Break to keep from skidding off the end of the available ranges.
+		if response[i].EndKey.Equal(proto.KeyMax) {
+			break
+		}
 		key = proto.Key(response[i].EndKey).Next()
 	}
 	return response
@@ -172,10 +176,10 @@ func TestRangeCache(t *testing.T) {
 	// TODO(Matt Tracy): This test started failing once I added a keymax check in Key.Next()
 	//     Can you take a look when you have a chance?
 	// Totally uncached ranges
-	// doLookup(t, rangeCache, "vu")
-	// db.assertHitCount(t, 2)
-	// doLookup(t, rangeCache, "xx")
-	// db.assertHitCount(t, 0)
+	doLookup(t, rangeCache, "vu")
+	db.assertHitCount(t, 2)
+	doLookup(t, rangeCache, "xx")
+	db.assertHitCount(t, 0)
 
 	// Evict clears one level 1 and one level 2 cache
 	rangeCache.EvictCachedRangeDescriptor(proto.Key("da"))
