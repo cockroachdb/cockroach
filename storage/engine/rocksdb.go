@@ -23,7 +23,6 @@ package engine
 // #cgo pkg-config: ./engine.pc
 // #include <stdlib.h>
 // #include "db.h"
-// #include "helper.h"
 import "C"
 import (
 	"bytes"
@@ -49,11 +48,9 @@ var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes 
 
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb *C.DBEngine
-
-	attrs      proto.Attributes // Attributes for this engine
-	dir        string           // The data directory
-	gcTimeouts func() (minTxnTS, minRCacheTS int64)
+	rdb   *C.DBEngine
+	attrs proto.Attributes // Attributes for this engine
+	dir   string           // The data directory
 
 	sync.Mutex                          // Protects the snapshots map.
 	snapshots  map[string]*C.DBSnapshot // Map of snapshot handles by snapshot ID
@@ -66,14 +63,6 @@ func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 		attrs:     attrs,
 		dir:       dir,
 	}
-}
-
-//export getGCTimeouts
-// getGCTimeouts returns timestamp values (in unix nanos) for garbage
-// collecting transaction rows and response cache rows respectively.
-func getGCTimeouts(rocksdbPtr unsafe.Pointer, minTxnTS, minRCacheTS *int64) {
-	rocksdb := (*RocksDB)(rocksdbPtr)
-	*minTxnTS, *minRCacheTS = rocksdb.gcTimeouts()
 }
 
 // String formatter.
@@ -99,12 +88,11 @@ func (r *RocksDB) Start() error {
 
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
-			cache_size:    C.int64_t(*cacheSize),
-			txn_prefix:    txnPrefix,
-			rcache_prefix: rcachePrefix,
-			logger:        C.DBLoggerFunc(nil),
-			gc_timeouts:   C.DBGCTimeoutsFunc(C.getGCTimeoutsHelper),
-			state:         unsafe.Pointer(r),
+			cache_size:      C.int64_t(*cacheSize),
+			allow_os_buffer: C.int(1),
+			txn_prefix:      txnPrefix,
+			rcache_prefix:   rcachePrefix,
+			logger:          C.DBLoggerFunc(nil),
 		})
 	err := statusToError(status)
 	if err != nil {
@@ -268,37 +256,21 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 	if bytes.Compare(start, end) >= 0 {
 		return nil
 	}
-	// In order to prevent content displacement, caching is disabled
-	// when performing scans. Any options set within the shared read
-	// options field that should be carried over needs to be set here
-	// as well.
-	it := C.DBNewIter(r.rdb, snapshotHandle)
-	defer C.DBIterDestroy(it)
+	it := newRocksDBIterator(r.rdb, snapshotHandle)
+	defer it.Close()
 
-	if len(start) == 0 {
-		// start=Key("") needs special treatment since we need
-		// to access start[0] in an explicit seek.
-		C.DBIterSeekToFirst(it)
-	} else {
-		C.DBIterSeek(it, goToCSlice(start))
-	}
-	for ; C.DBIterValid(it) == 1; C.DBIterNext(it) {
-		// The data returned by rocksdb_iter_{key,value} is not meant to be
-		// freed by the client. It is a direct reference to the data managed
-		// by the iterator, so it is copied instead of freed.
-		data := C.DBIterKey(it)
-		k := cSliceToGoBytes(data)
-		if bytes.Compare(k, end) >= 0 {
+	it.Seek(start)
+	for ; it.Valid(); it.Next() {
+		k := it.Key()
+		if bytes.Compare(it.Key(), end) >= 0 {
 			break
 		}
-		data = C.DBIterValue(it)
-		v := cSliceToGoBytes(data)
-		if done, err := f(proto.RawKeyValue{Key: k, Value: v}); done || err != nil {
+		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
 			return err
 		}
 	}
 	// Check for any errors during iteration.
-	return statusToError(C.DBIterError(it))
+	return it.Error()
 }
 
 // WriteBatch applies the puts, merges and deletes atomically via
@@ -345,9 +317,9 @@ func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	return capacity, nil
 }
 
-// SetGCTimeouts sets the garbage collector timeouts function.
-func (r *RocksDB) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {
-	r.gcTimeouts = gcTimeouts
+// SetGCTimeouts calls through to the DBEngine's SetGCTimeouts method.
+func (r *RocksDB) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
+	C.DBSetGCTimeouts(r.rdb, C.int64_t(minTxnTS), C.int64_t(minRCacheTS))
 }
 
 // CompactRange compacts the specified key range. Specifying nil for
@@ -451,6 +423,11 @@ func goMerge(existing, update []byte) ([]byte, error) {
 	return cStringToGoBytes(result), nil
 }
 
+// NewIterator returns an iterator over this rocksdb engine.
+func (r *RocksDB) NewIterator() Iterator {
+	return newRocksDBIterator(r.rdb, nil)
+}
+
 // Returns a new Batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Engine {
 	return &Batch{engine: r}
@@ -459,4 +436,62 @@ func (r *RocksDB) NewBatch() Engine {
 // Commit is a noop for RocksDB engine.
 func (r *RocksDB) Commit() error {
 	return nil
+}
+
+type rocksDBIterator struct {
+	iter *C.DBIterator
+}
+
+// newRocksDBIterator returns a new iterator over the supplied RocksDB
+// instance. If snapshotHandle is not nil, uses the indicated snapshot.
+// The caller must call rocksDBIterator.Close() when finished with the
+// iterator to free up resources.
+func newRocksDBIterator(rdb *C.DBEngine, snapshotHandle *C.DBSnapshot) *rocksDBIterator {
+	// In order to prevent content displacement, caching is disabled
+	// when performing scans. Any options set within the shared read
+	// options field that should be carried over needs to be set here
+	// as well.
+	return &rocksDBIterator{
+		iter: C.DBNewIter(rdb, snapshotHandle),
+	}
+}
+
+// The following methods implement the Iterator interface.
+func (r *rocksDBIterator) Close() {
+	C.DBIterDestroy(r.iter)
+}
+
+func (r *rocksDBIterator) Seek(key []byte) {
+	if len(key) == 0 {
+		// start=Key("") needs special treatment since we need
+		// to access start[0] in an explicit seek.
+		C.DBIterSeekToFirst(r.iter)
+	} else {
+		C.DBIterSeek(r.iter, goToCSlice(key))
+	}
+}
+
+func (r *rocksDBIterator) Valid() bool {
+	return C.DBIterValid(r.iter) == 1
+}
+
+func (r *rocksDBIterator) Next() {
+	C.DBIterNext(r.iter)
+}
+
+func (r *rocksDBIterator) Key() []byte {
+	// The data returned by rocksdb_iter_{key,value} is not meant to be
+	// freed by the client. It is a direct reference to the data managed
+	// by the iterator, so it is copied instead of freed.
+	data := C.DBIterKey(r.iter)
+	return cSliceToGoBytes(data)
+}
+
+func (r *rocksDBIterator) Value() []byte {
+	data := C.DBIterValue(r.iter)
+	return cSliceToGoBytes(data)
+}
+
+func (r *rocksDBIterator) Error() error {
+	return statusToError(C.DBIterError(r.iter))
 }

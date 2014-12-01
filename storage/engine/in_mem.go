@@ -317,7 +317,7 @@ func (in *InMem) Capacity() (StoreCapacity, error) {
 }
 
 // SetGCTimeouts is a noop for the InMem engine.
-func (in *InMem) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {}
+func (in *InMem) SetGCTimeouts(minTxnTS, minRCacheTS int64) {}
 
 // ApproximateSize computes the size of data used to store all keys in the given
 // key range.
@@ -332,6 +332,11 @@ func (in *InMem) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return size, nil
 }
 
+// NewIterator returns an iterator over this in-memory engine.
+func (in *InMem) NewIterator() Iterator {
+	return &inMemIterator{data: in.data}
+}
+
 // Returns a new Batch wrapping this in-memory engine.
 func (in *InMem) NewBatch() Engine {
 	return &Batch{engine: in}
@@ -340,4 +345,69 @@ func (in *InMem) NewBatch() Engine {
 // Commit is a noop for in-memory engine.
 func (in *InMem) Commit() error {
 	return nil
+}
+
+// This implementation is not very efficient because the biogo LLRB
+// API supports iterations, not iterators. Every call to Next() is
+// O(logN). But since the in-memory engine is really only good for
+// unittesting, this is not worth fixing.
+type inMemIterator struct {
+	data llrb.Tree
+	cur  *proto.RawKeyValue
+	err  error
+}
+
+// The following methods implement the Iterator interface.
+func (in *inMemIterator) Close() {
+}
+
+func (in *inMemIterator) Seek(key []byte) {
+	in.cur = nil
+	in.err = nil
+	if len(key) == 0 {
+		key = KeyMin
+	}
+	in.data.DoRange(func(c llrb.Comparable) (done bool) {
+		kv := c.(proto.RawKeyValue)
+		in.cur = &kv
+		return true
+	}, proto.RawKeyValue{Key: key}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
+}
+
+func (in *inMemIterator) Valid() bool {
+	return in.err == nil && in.cur != nil
+}
+
+func (in *inMemIterator) Next() {
+	if !in.Valid() {
+		in.err = util.Errorf("next called with invalid iterator")
+		return
+	}
+	start := in.cur.Key.Next()
+	in.cur = nil
+	in.data.DoRange(func(c llrb.Comparable) (done bool) {
+		kv := c.(proto.RawKeyValue)
+		in.cur = &kv
+		return true
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
+}
+
+func (in *inMemIterator) Key() []byte {
+	if !in.Valid() {
+		in.err = util.Errorf("access to invalid key")
+		return nil
+	}
+	return in.cur.Key
+}
+
+func (in *inMemIterator) Value() []byte {
+	if !in.Valid() {
+		in.err = util.Errorf("access to invalid key")
+		return nil
+	}
+	return in.cur.Value
+}
+
+func (in *inMemIterator) Error() error {
+	return in.err
 }
