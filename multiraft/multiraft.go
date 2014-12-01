@@ -226,6 +226,8 @@ type pendingCall struct {
 type group struct {
 	groupID uint64
 
+	raftStorage *raft.MemoryStorage
+
 	// a List of *pendingCall
 	pendingCalls list.List
 
@@ -413,9 +415,11 @@ func (s *state) createGroup(op *createGroupOp) {
 		}
 		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
 	}
-	s.multiNode.CreateGroup(op.groupID, peers)
+	storage := raft.NewMemoryStorage()
+	s.multiNode.CreateGroup(op.groupID, peers, storage)
 	s.groups[op.groupID] = &group{
-		groupID: op.groupID,
+		groupID:     op.groupID,
+		raftStorage: storage,
 	}
 	op.ch <- nil
 }
@@ -453,7 +457,9 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			}
 			g.softState = *ready.SoftState
 		}
+		g.raftStorage.Append(ready.Entries)
 	}
+	s.multiNode.Advance(readyGroups)
 }
 
 func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
