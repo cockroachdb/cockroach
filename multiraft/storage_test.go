@@ -3,7 +3,11 @@
 
 package multiraft
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/coreos/etcd/raft/raftpb"
+)
 
 // BlockableStorage is an implementation of Storage that can be blocked for testing
 // to simulate slow storage devices.
@@ -36,30 +40,51 @@ func (b *BlockableStorage) Unblock() {
 	return b.storage.LoadGroups()
 }*/
 
-func (b *BlockableStorage) SetGroupState(groupID uint64,
-	state *GroupPersistentState) error {
-	b.wait()
-	return b.storage.SetGroupState(groupID, state)
+func (b *BlockableStorage) GroupStorage(g uint64) WriteableGroupStorage {
+	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}
 }
 
-func (b *BlockableStorage) AppendLogEntries(groupID uint64, entries []*LogEntry) error {
-	b.wait()
-	return b.storage.AppendLogEntries(groupID, entries)
+type blockableGroupStorage struct {
+	b *BlockableStorage
+	s WriteableGroupStorage
 }
 
-/*func (b *BlockableStorage) TruncateLog(groupID uint64, lastIndex int) error {
-	b.wait()
-	return b.storage.TruncateLog(groupID, lastIndex)
+func (b *blockableGroupStorage) Append(entries []raftpb.Entry) {
+	b.b.wait()
+	b.s.Append(entries)
 }
 
-func (b *BlockableStorage) GetLogEntry(groupID uint64, index int) (*LogEntry, error) {
-	b.wait()
-	return b.storage.GetLogEntry(groupID, index)
+func (b *blockableGroupStorage) SetHardState(st raftpb.HardState) error {
+	b.b.wait()
+	return b.s.SetHardState(st)
 }
 
-func (b *BlockableStorage) GetLogEntries(groupID uint64, firstIndex, lastIndex int,
-	ch chan<- *LogEntryState) {
-	b.wait()
-	b.storage.GetLogEntries(groupID, firstIndex, lastIndex, ch)
+func (b *blockableGroupStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+	b.b.wait()
+	return b.s.InitialState()
 }
-*/
+
+func (b *blockableGroupStorage) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
+	b.b.wait()
+	return b.s.Entries(lo, hi)
+}
+
+func (b *blockableGroupStorage) Term(i uint64) (uint64, error) {
+	b.b.wait()
+	return b.s.Term(i)
+}
+
+func (b *blockableGroupStorage) LastIndex() (uint64, error) {
+	b.b.wait()
+	return b.s.LastIndex()
+}
+
+func (b *blockableGroupStorage) FirstIndex() (uint64, error) {
+	b.b.wait()
+	return b.s.FirstIndex()
+}
+
+func (b *blockableGroupStorage) Snapshot() (raftpb.Snapshot, error) {
+	b.b.wait()
+	return b.s.Snapshot()
+}
