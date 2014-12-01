@@ -22,6 +22,9 @@ cd cockroach
 make
 ```
 
+### Style guide
+We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
+
 ### Code review workflow
 
 + Create a local feature branch to do work on, ideally on one thing at a time.
