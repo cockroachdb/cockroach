@@ -37,10 +37,11 @@ ROACH_PROTO := proto
 ROACH_LIB   := roachlib
 SQL_PARSER  := sql/parser
 
-PKG       := "./..."
-TESTS     := ".*"
-TESTFLAGS := -logtostderr -timeout 10s
-RACEFLAGS := -logtostderr -timeout 1m
+PKG        := "./..."
+TESTS      := ".*"
+TESTFLAGS  := -logtostderr -timeout 10s
+RACEFLAGS  := -logtostderr -timeout 1m
+BENCHFLAGS := -logtostderr -timeout 5m
 
 OS := $(shell uname -s)
 
@@ -83,6 +84,9 @@ test: auxiliary
 
 testrace: auxiliary
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
+
+bench: auxiliary
+	$(GO) test $(GOFLAGS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image, which is statically linked and has no build tools in its
