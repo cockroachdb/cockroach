@@ -86,7 +86,7 @@ testrace: auxiliary
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
 bench: auxiliary
-	$(GO) test $(GOFLAGS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
+	$(GO) test $(GOFLAGS) -benchtime 1s -run '^$$' -bench . $(PKG) $(BENCHFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image, which is statically linked and has no build tools in its
