@@ -61,8 +61,45 @@ func MakeKey(keys ...Key) Key {
 	return Key(bytes.Join(byteSlices, nil))
 }
 
+// Returns the next possible byte by appending an \x00.
 func bytesNext(b []byte) []byte {
+	if len(b) == KeyMaxLength && bytes.Equal(b, KeyMax) {
+		panic(fmt.Sprint("cannot get the next bytes of KeyMax"))
+	}
+
 	return bytes.Join([][]byte{b, []byte{0}}, nil)
+}
+
+// Returns the previous byte bounded by the max key length.
+// If the last byte is 0, then truncate it. Otherwise decrease the
+// last byte by one and add in "\xff"s for the rest of the key length.
+// Examples:
+// 	 "" -> panic
+//   "\x00" -> ""
+//   "\xff00" -> "\xff"
+//   "\xff03" -> "\xff\x02\xff..."
+//   "\xff...\x01" -> "\xff...\x00"
+//   "\xff...\x00" -> "\xff..." (same except the \x00 is removed)
+//   "\xff..." -> "\xff...\xfe"
+func bytesPrev(b []byte) []byte {
+	length := len(b)
+
+	// When the byte array is empty.
+	if length == 0 {
+		panic(fmt.Sprint("cannot get the prev bytes of an empty byte array"))
+	}
+
+	// If the last byte is a 0, then drop it.
+	if b[length-1] == 0 {
+		return append([]byte(nil), b[0:length-1]...)
+	}
+
+	// If the last byte isn't 0, subtract one from it and
+	// append "\xff"s until the end of the key space.
+	prefix := b[0 : length-1]
+	reducedValue := []byte{b[length-1] - 1}
+	postfix := KeyMax[length:KeyMaxLength]
+	return bytes.Join([][]byte{prefix, reducedValue, postfix}, nil)
 }
 
 func bytesPrefixEnd(b []byte) []byte {
@@ -81,6 +118,11 @@ func bytesPrefixEnd(b []byte) []byte {
 // Next returns the next key in lexicographic sort order.
 func (k Key) Next() Key {
 	return Key(bytesNext(k))
+}
+
+// Prev returns the prev key in lexicographic sort order.
+func (k Key) Prev() Key {
+	return Key(bytesPrev(k))
 }
 
 // Next returns the next key in lexicographic sort order.
@@ -190,7 +232,7 @@ var (
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
 	// ZeroTimestamp is an empty timestamp.
 	ZeroTimestamp = Timestamp{WallTime: 0, Logical: 0}
-	// emptyMD5 is a zero-filled md5 byte array, used to indicate a nil transaction.
+	// NoTxnMD5 is a zero-filled md5 byte array, used to indicate a nil transaction.
 	NoTxnMD5 = [md5.Size]byte{}
 )
 
@@ -267,7 +309,7 @@ type KeyGetter interface {
 	KeyGet() []byte
 }
 
-// GetKey is an implementation for KeyGetter.
+// KeyGet is an implementation for KeyGetter.
 func (kv RawKeyValue) KeyGet() []byte { return kv.Key }
 
 // Compare implements the llrb.Comparable interface for tree nodes.
