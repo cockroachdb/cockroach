@@ -368,6 +368,7 @@ func (s *state) start() {
 
 		case resp := <-s.writeTask.out:
 			s.handleWriteResponse(resp, writingGroups)
+			s.multiNode.Advance(writingGroups)
 			writingGroups = nil
 
 		case <-s.Ticker.Chan():
@@ -376,7 +377,6 @@ func (s *state) start() {
 
 		case readyGroups = <-raftReady:
 			s.handleRaftReady(readyGroups)
-			s.multiNode.Advance()
 		}
 	}
 }
