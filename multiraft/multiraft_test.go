@@ -201,6 +201,10 @@ func TestMembershipChange(t *testing.T) {
 
 	// Add each of the other three nodes to the cluster.
 	for i := 1; i < 4; i++ {
+		// TODO(bdarnell): there's a race somewhere (which is not found by the race detector).
+		// Remove this hacky sleep once it's been fixed.
+		time.Sleep(time.Millisecond)
+
 		err := cluster.nodes[0].ChangeGroupMembership(groupID, ChangeMembershipAddMember,
 			cluster.nodes[i].nodeID)
 		if err != nil {

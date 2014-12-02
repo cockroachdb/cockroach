@@ -19,6 +19,7 @@ package multiraft
 
 import (
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -72,6 +73,16 @@ type LogEntryState struct {
 	Error error
 }
 
+// WriteableGroupStorage represents a single group within a Storage.
+// It is implemented by *raft.MemoryStorage.
+type WriteableGroupStorage interface {
+	raft.Storage
+	Append(entries []raftpb.Entry)
+	SetHardState(st raftpb.HardState) error
+}
+
+var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
+
 // The Storage interface is supplied by the application to manage persistent storage
 // of raft data.
 type Storage interface {
@@ -79,34 +90,12 @@ type Storage interface {
 	// The returned channel should be closed once all groups have been loaded.
 	//LoadGroups() <-chan *GroupPersistentState
 
-	// SetGroupState is called to update the persistent state for the given group.
-	SetGroupState(groupID uint64, state *GroupPersistentState) error
-
-	// AppendLogEntries is called to add entries to the log. The entries will always span
-	// a contiguous range of indices just after the current end of the log.
-	AppendLogEntries(groupID uint64, entries []*LogEntry) error
-
-	// TruncateLog is called to delete all log entries with index > lastIndex.
-	//TruncateLog(groupID uint64, lastIndex int) error
-
-	// GetLogEntry is called to synchronously retrieve an entry from the log.
-	//GetLogEntry(groupID uint64, index int) (*LogEntry, error)
-
-	// GetLogEntries is called to asynchronously retrieve entries from the log,
-	// from firstIndex to lastIndex inclusive. If there is an error the storage
-	// layer should send one LogEntryState with a non-nil error and then close the
-	// channel.
-	//GetLogEntries(groupID uint64, firstIndex, lastIndex int, ch chan<- *LogEntryState)
-}
-
-type memoryGroup struct {
-	state   GroupPersistentState
-	entries []*LogEntry
+	GroupStorage(groupID uint64) WriteableGroupStorage
 }
 
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
-	groups map[uint64]*memoryGroup
+	groups map[uint64]WriteableGroupStorage
 }
 
 // Verifying implementation of Storage interface.
@@ -114,7 +103,7 @@ var _ Storage = (*MemoryStorage)(nil)
 
 // NewMemoryStorage creates a MemoryStorage.
 func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{make(map[uint64]*memoryGroup)}
+	return &MemoryStorage{make(map[uint64]WriteableGroupStorage)}
 }
 
 // LoadGroups implements the Storage interface.
@@ -125,48 +114,11 @@ func NewMemoryStorage() *MemoryStorage {
 	return ch
 }*/
 
-// SetGroupState implements the Storage interface.
-func (m *MemoryStorage) SetGroupState(groupID uint64,
-	state *GroupPersistentState) error {
-	m.getGroup(groupID).state = *state
-	return nil
-}
-
-// AppendLogEntries implements the Storage interface.
-func (m *MemoryStorage) AppendLogEntries(groupID uint64, entries []*LogEntry) error {
-	g := m.getGroup(groupID)
-	g.entries = append(g.entries, entries...)
-	return nil
-}
-
-// TruncateLog implements the Storage interface.
-/*func (m *MemoryStorage) TruncateLog(groupID uint64, lastIndex int) error {
-	panic("unimplemented")
-}*/
-
-// GetLogEntry implements the Storage interface.
-/*func (m *MemoryStorage) GetLogEntry(groupID uint64, index int) (*LogEntry, error) {
-	panic("unimplemented")
-}*/
-
-// GetLogEntries implements the Storage interface.
-/*func (m *MemoryStorage) GetLogEntries(groupID uint64, firstIndex, lastIndex int,
-	ch chan<- *LogEntryState) {
-	g := m.getGroup(groupID)
-	for i := firstIndex; i <= lastIndex; i++ {
-		ch <- &LogEntryState{i, *g.entries[i], nil}
-	}
-	close(ch)
-}*/
-
-// getGroup returns a mutable memoryGroup object, creating if necessary.
-func (m *MemoryStorage) getGroup(groupID uint64) *memoryGroup {
+// GroupStorage implements the Storage interface.
+func (m *MemoryStorage) GroupStorage(groupID uint64) WriteableGroupStorage {
 	g, ok := m.groups[groupID]
 	if !ok {
-		g = &memoryGroup{
-			// Start with a dummy entry because the raft paper uses 1-based indexing.
-			entries: []*LogEntry{nil},
-		}
+		g = raft.NewMemoryStorage()
 		m.groups[groupID] = g
 	}
 	return g
@@ -174,8 +126,9 @@ func (m *MemoryStorage) getGroup(groupID uint64) *memoryGroup {
 
 // groupWriteRequest represents a set of changes to make to a group.
 type groupWriteRequest struct {
-	state   *GroupPersistentState
-	entries []*LogEntry
+	state    raftpb.HardState
+	entries  []raftpb.Entry
+	snapshot raftpb.Snapshot
 }
 
 // writeRequest is a collection of groupWriteRequests.
@@ -193,10 +146,10 @@ func newWriteRequest() *writeRequest {
 // state was not changed (which may be because there were no changes in the request
 // or due to an error)
 type groupWriteResponse struct {
-	state     *GroupPersistentState
+	state     raftpb.HardState
 	lastIndex int
 	lastTerm  int
-	entries   []*LogEntry
+	entries   []raftpb.Entry
 }
 
 // writeResponse is a collection of groupWriteResponses.
@@ -244,20 +197,18 @@ func (w *writeTask) start() {
 		response := &writeResponse{make(map[uint64]*groupWriteResponse)}
 
 		for groupID, groupReq := range request.groups {
-			groupResp := &groupWriteResponse{nil, -1, -1, groupReq.entries}
+			group := w.storage.GroupStorage(groupID)
+			groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
 			response.groups[groupID] = groupResp
-			if groupReq.state != nil {
-				err := w.storage.SetGroupState(groupID, groupReq.state)
+			if !raft.IsEmptyHardState(groupReq.state) {
+				err := group.SetHardState(groupReq.state)
 				if err != nil {
-					continue
+					panic(err) // TODO(bdarnell): mark this node dead on storage errors
 				}
 				groupResp.state = groupReq.state
 			}
 			if len(groupReq.entries) > 0 {
-				err := w.storage.AppendLogEntries(groupID, groupReq.entries)
-				if err != nil {
-					continue
-				}
+				group.Append(groupReq.entries)
 			}
 		}
 		w.out <- response

@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	"github.com/coreos/etcd/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -376,6 +376,7 @@ func (s *state) start() {
 
 		case readyGroups = <-raftReady:
 			s.handleRaftReady(readyGroups)
+			s.multiNode.Advance()
 		}
 	}
 }
@@ -413,7 +414,7 @@ func (s *state) createGroup(op *createGroupOp) {
 		}
 		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
 	}
-	s.multiNode.CreateGroup(op.groupID, peers)
+	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
 	s.groups[op.groupID] = &group{
 		groupID: op.groupID,
 	}
@@ -462,16 +463,10 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 	for groupID, ready := range readyGroups {
 		gwr := &groupWriteRequest{}
 		if !raft.IsEmptyHardState(ready.HardState) {
-			gwr.state = &GroupPersistentState{
-				GroupID:   groupID,
-				HardState: ready.HardState,
-			}
+			gwr.state = ready.HardState
 		}
 		if len(ready.Entries) > 0 {
-			gwr.entries = make([]*LogEntry, len(ready.Entries))
-			for i, ent := range ready.Entries {
-				gwr.entries[i] = &LogEntry{ent}
-			}
+			gwr.entries = ready.Entries
 		}
 		writeRequest.groups[groupID] = gwr
 	}
