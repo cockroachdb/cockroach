@@ -219,9 +219,15 @@ func runMVCCScan(numVersions, numKeys int, b *testing.B) {
 	}
 }
 
-func BenchmarkMVCCScan(b *testing.B) {
+func BenchmarkMVCCScan10Versions(b *testing.B) {
 	const numVersions = 10
 	const numKeys = 50 * 1024 // This amounts to ~250MB of data
+	runMVCCScan(numVersions, numKeys, b)
+}
+
+func BenchmarkMVCCScan1Version(b *testing.B) {
+	const numVersions = 1
+	const numKeys = 250 * 1024 // This amounts to ~250MB of data
 	runMVCCScan(numVersions, numKeys, b)
 }
 
