@@ -334,7 +334,12 @@ func (in *InMem) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 
 // NewIterator returns an iterator over this in-memory engine.
 func (in *InMem) NewIterator() Iterator {
-	return &inMemIterator{data: in.data}
+	in.RLock()
+	defer in.RUnlock()
+	return &inMemIterator{
+		data: in.data,
+		mu:   &in.RWMutex,
+	}
 }
 
 // Returns a new Batch wrapping this in-memory engine.
@@ -353,6 +358,7 @@ func (in *InMem) Commit() error {
 // unittesting, this is not worth fixing.
 type inMemIterator struct {
 	data llrb.Tree
+	mu   *sync.RWMutex
 	cur  *proto.RawKeyValue
 	err  error
 }
@@ -367,6 +373,8 @@ func (in *inMemIterator) Seek(key []byte) {
 	if len(key) == 0 {
 		key = KeyMin
 	}
+	in.mu.RLock()
+	defer in.mu.RUnlock()
 	in.data.DoRange(func(c llrb.Comparable) (done bool) {
 		kv := c.(proto.RawKeyValue)
 		in.cur = &kv
@@ -385,6 +393,8 @@ func (in *inMemIterator) Next() {
 	}
 	start := in.cur.Key.Next()
 	in.cur = nil
+	in.mu.RLock()
+	defer in.mu.RUnlock()
 	in.data.DoRange(func(c llrb.Comparable) (done bool) {
 		kv := c.(proto.RawKeyValue)
 		in.cur = &kv
