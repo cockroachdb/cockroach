@@ -31,6 +31,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	commander "code.google.com/p/go-commander"
@@ -85,6 +86,9 @@ var (
 
 	// Regular expression for capturing data directory specifications.
 	storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
+
+	// Allocation pool for gzip writers.
+	gzipWriterPool sync.Pool
 )
 
 var cmdStartLongDescription = `
@@ -414,12 +418,26 @@ type gzipResponseWriter struct {
 }
 
 func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	gz := gzip.NewWriter(w)
+	var gz *gzip.Writer
+	if gzI := gzipWriterPool.Get(); gzI == nil {
+		gz = gzip.NewWriter(w)
+	} else {
+		gz = gzI.(*gzip.Writer)
+		gz.Reset(w)
+	}
 	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
 }
 
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.WriteCloser.Write(b)
+}
+
+func (w *gzipResponseWriter) Close() {
+	if w.WriteCloser != nil {
+		w.WriteCloser.Close()
+		gzipWriterPool.Put(w.WriteCloser)
+		w.WriteCloser = nil
+	}
 }
 
 // ServeHTTP is necessary to implement the http.Handler interface. It
