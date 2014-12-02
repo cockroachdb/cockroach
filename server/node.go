@@ -436,11 +436,6 @@ func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.En
 	return n.executeCmd(proto.EndTransaction, args, reply)
 }
 
-// AccumulateTS .
-func (n *Node) AccumulateTS(args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) error {
-	return n.executeCmd(proto.AccumulateTS, args, reply)
-}
-
 // ReapQueue .
 func (n *Node) ReapQueue(args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) error {
 	return n.executeCmd(proto.ReapQueue, args, reply)
@@ -484,4 +479,9 @@ func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, r
 // InternalSnapshotCopy .
 func (n *Node) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) error {
 	return n.executeCmd(proto.InternalSnapshotCopy, args, reply)
+}
+
+// InternalMerge .
+func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
+	return n.executeCmd(proto.InternalMerge, args, reply)
 }

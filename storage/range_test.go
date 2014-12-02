@@ -493,6 +493,22 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 	return args, reply
 }
 
+// internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
+// pair addressed to the default replica for the specified key. The request will
+// contain the given proto.Value.
+func internalMergeArgs(key []byte, value proto.Value, rangeID int64) (
+	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
+	args := &proto.InternalMergeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     key,
+			Replica: proto.Replica{RangeID: rangeID},
+		},
+		Value: value,
+	}
+	reply := &proto.InternalMergeResponse{}
+	return args, reply
+}
+
 // getSerializedMVCCValue produces a byte slice of the serialized
 // mvcc value. If value is nil, MVCCValue.Deleted is set to true;
 // otherwise MVCCValue.Value is set to value.
@@ -1538,5 +1554,36 @@ func TestRemoteRaftCommand(t *testing.T) {
 	// The reply should have the result of both commands
 	if localIncReply.NewValue != 5 {
 		t.Errorf("expected 5, got %d", localIncReply.NewValue)
+	}
+}
+
+// TestInternalMerge verifies that the InternalMerge command is behaving as
+// expected. Merge semantics for different data types are tested more robustly
+// at the engine level; this test is intended only to show that values passed to
+// InternalMerge are being merged.
+func TestInternalMerge(t *testing.T) {
+	s, r, _, _ := createTestRange(t)
+	defer s.Stop()
+
+	key := []byte("mergedkey")
+	stringArgs := []string{"a", "b", "c", "d"}
+	stringExpected := "abcd"
+
+	for _, s := range stringArgs {
+		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(s)}, 1)
+		if err := r.AddCmd(proto.InternalMerge, mergeArgs, resp, true); err != nil {
+			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
+		}
+	}
+
+	getArgs, resp := getArgs(key, 1)
+	if err := r.AddCmd(proto.Get, getArgs, resp, true); err != nil {
+		t.Fatalf("unexpected error from Get: %s", err.Error())
+	}
+	if resp.Value == nil {
+		t.Fatal("GetResponse had nil value")
+	}
+	if a, e := resp.Value.Bytes, []byte(stringExpected); !bytes.Equal(a, e) {
+		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
 }

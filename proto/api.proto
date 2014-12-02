@@ -249,21 +249,6 @@ message EndTransactionResponse {
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
 }
 
-// An AccumulateTSRequest is arguments to the AccumulateTS() method.
-// It specifies the key at which to accumulate TS values, and the
-// time series counts for this discrete time interval.
-message AccumulateTSRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // One per discrete subtime period (e.g. one/minute or one/second)
-  repeated int64 counts = 2 [(gogoproto.nullable) = false];
-}
-
-// An AccumulateTSResponse is the return value from the AccumulateTS()
-// method.
-message AccumulateTSResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
 // A ReapQueueRequest is arguments to the ReapQueue() method. It
 // specifies the recipient inbox key to which messages are waiting
 // to be reapted and also the maximum number of results to return.
@@ -322,10 +307,9 @@ message RequestUnion {
   optional DeleteRangeRequest delete_range = 7;
   optional ScanRequest scan = 8;
   optional EndTransactionRequest end_transaction = 9;
-  optional AccumulateTSRequest accumulate_ts = 10;
-  optional ReapQueueRequest reap_queue = 11;
-  optional EnqueueUpdateRequest enqueue_update = 12;
-  optional EnqueueMessageRequest enqueue_message = 13;
+  optional ReapQueueRequest reap_queue = 10;
+  optional EnqueueUpdateRequest enqueue_update = 11;
+  optional EnqueueMessageRequest enqueue_message = 12;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -340,10 +324,9 @@ message ResponseUnion {
   optional DeleteRangeResponse delete_range = 7;
   optional ScanResponse scan = 8;
   optional EndTransactionResponse end_transaction = 9;
-  optional AccumulateTSResponse accumulate_ts = 10;
-  optional ReapQueueResponse reap_queue = 11;
-  optional EnqueueUpdateResponse enqueue_update = 12;
-  optional EnqueueMessageResponse enqueue_message = 13;
+  optional ReapQueueResponse reap_queue = 10;
+  optional EnqueueUpdateResponse enqueue_update = 11;
+  optional EnqueueMessageResponse enqueue_message = 12;
 }
 
 // A BatchRequest contains one or more requests to be executed in

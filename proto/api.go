@@ -54,11 +54,6 @@ const (
 	Scan = "Scan"
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction = "EndTransaction"
-	// AccumulateTS is used to efficiently accumulate a time series of
-	// int64 quantities representing discrete subtimes. For example, a
-	// key/value might represent a minute of data. Each would contain 60
-	// int64 counts, each representing a second.
-	AccumulateTS = "AccumulateTS"
 	// ReapQueue scans and deletes messages from a recipient message
 	// queue. ReapQueueRequest invocations must be part of an extant
 	// transaction or they fail. Returns the reaped queue messsages, up to
@@ -99,7 +94,6 @@ var AllMethods = stringSet{
 	DeleteRange:           struct{}{},
 	Scan:                  struct{}{},
 	EndTransaction:        struct{}{},
-	AccumulateTS:          struct{}{},
 	ReapQueue:             struct{}{},
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
@@ -109,6 +103,7 @@ var AllMethods = stringSet{
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalSnapshotCopy:  struct{}{},
+	InternalMerge:         struct{}{},
 }
 
 // PublicMethods specifies the set of methods accessible via the
@@ -123,7 +118,6 @@ var PublicMethods = stringSet{
 	DeleteRange:    struct{}{},
 	Scan:           struct{}{},
 	EndTransaction: struct{}{},
-	AccumulateTS:   struct{}{},
 	ReapQueue:      struct{}{},
 	EnqueueUpdate:  struct{}{},
 	EnqueueMessage: struct{}{},
@@ -138,6 +132,7 @@ var InternalMethods = stringSet{
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalSnapshotCopy:  struct{}{},
+	InternalMerge:         struct{}{},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
@@ -160,7 +155,6 @@ var WriteMethods = stringSet{
 	Delete:                struct{}{},
 	DeleteRange:           struct{}{},
 	EndTransaction:        struct{}{},
-	AccumulateTS:          struct{}{},
 	ReapQueue:             struct{}{},
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
@@ -168,6 +162,7 @@ var WriteMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
+	InternalMerge:         struct{}{},
 }
 
 // TxnMethods specifies the set of methods which leave key intents
@@ -178,7 +173,6 @@ var TxnMethods = stringSet{
 	Increment:      struct{}{},
 	Delete:         struct{}{},
 	DeleteRange:    struct{}{},
-	AccumulateTS:   struct{}{},
 	ReapQueue:      struct{}{},
 	EnqueueUpdate:  struct{}{},
 	EnqueueMessage: struct{}{},
@@ -316,8 +310,6 @@ func MethodForRequest(req Request) (string, error) {
 		return Scan, nil
 	case *EndTransactionRequest:
 		return EndTransaction, nil
-	case *AccumulateTSRequest:
-		return AccumulateTS, nil
 	case *ReapQueueRequest:
 		return ReapQueue, nil
 	case *EnqueueUpdateRequest:
@@ -336,6 +328,8 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalResolveIntent, nil
 	case *InternalSnapshotCopyRequest:
 		return InternalSnapshotCopy, nil
+	case *InternalMergeRequest:
+		return InternalMerge, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -371,8 +365,6 @@ func CreateArgs(method string) (Request, error) {
 		return &ScanRequest{}, nil
 	case EndTransaction:
 		return &EndTransactionRequest{}, nil
-	case AccumulateTS:
-		return &AccumulateTSRequest{}, nil
 	case ReapQueue:
 		return &ReapQueueRequest{}, nil
 	case EnqueueUpdate:
@@ -391,6 +383,8 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalResolveIntentRequest{}, nil
 	case InternalSnapshotCopy:
 		return &InternalSnapshotCopyRequest{}, nil
+	case InternalMerge:
+		return &InternalMergeRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -416,8 +410,6 @@ func CreateReply(method string) (Response, error) {
 		return &ScanResponse{}, nil
 	case EndTransaction:
 		return &EndTransactionResponse{}, nil
-	case AccumulateTS:
-		return &AccumulateTSResponse{}, nil
 	case ReapQueue:
 		return &ReapQueueResponse{}, nil
 	case EnqueueUpdate:
@@ -436,6 +428,8 @@ func CreateReply(method string) (Response, error) {
 		return &InternalResolveIntentResponse{}, nil
 	case InternalSnapshotCopy:
 		return &InternalSnapshotCopyResponse{}, nil
+	case InternalMerge:
+		return &InternalMergeResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }

@@ -171,6 +171,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{proto.InternalPushTxn, &proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
 		{proto.InternalResolveIntent, &proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},
 		{proto.InternalSnapshotCopy, &proto.InternalSnapshotCopyRequest{}, &proto.InternalSnapshotCopyResponse{}},
+		{proto.InternalMerge, &proto.InternalMergeRequest{}, &proto.InternalMergeResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
 	kvClient := createTestClient(addr)
