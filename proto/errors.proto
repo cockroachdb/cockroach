@@ -37,7 +37,7 @@ message NotLeaderError {
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 message RangeNotFoundError {
-  optional int64 range_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
 }
 
 // A RangeKeyMismatchError indicates that a command was sent to a

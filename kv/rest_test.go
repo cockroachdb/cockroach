@@ -358,7 +358,6 @@ func TestSystemKeys(t *testing.T) {
 			proto.Replica{
 				NodeID:  1,
 				StoreID: 1,
-				RangeID: 1,
 			},
 		},
 	}

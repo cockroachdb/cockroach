@@ -152,7 +152,6 @@ type RangeManager interface {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	RangeID   int64
 	Desc      *proto.RangeDescriptor
 	rm        RangeManager  // Makes some store methods available
 	splitting int32         // 1 if a split is underway; updated atomically
@@ -166,15 +165,14 @@ type Range struct {
 }
 
 // NewRange initializes the range using the given metadata.
-func NewRange(rangeID int64, desc *proto.RangeDescriptor, rm RangeManager) *Range {
+func NewRange(desc *proto.RangeDescriptor, rm RangeManager) *Range {
 	r := &Range{
-		RangeID:     rangeID,
 		Desc:        desc,
 		rm:          rm,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
-		respCache:   NewResponseCache(rangeID, rm.Engine()),
+		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 	return r
@@ -203,23 +201,23 @@ func (r *Range) Destroy() error {
 	start := engine.MVCCEncodeKey(proto.Key(r.Desc.StartKey))
 	end := engine.MVCCEncodeKey(proto.Key(r.Desc.EndKey))
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear key/value data for range %d: %s", r.RangeID, err)
+		return util.Errorf("unable to clear key/value data for range %d: %s", r.Desc.RaftID, err)
 	}
 	start = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.StartKey))
 	end = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.EndKey))
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear txn records for range %d: %s", r.RangeID, err)
+		return util.Errorf("unable to clear txn records for range %d: %s", r.Desc.RaftID, err)
 	}
 	if err := r.respCache.ClearData(); err != nil {
-		return util.Errorf("unable to clear response cache for range %d: %s", r.RangeID, err)
+		return util.Errorf("unable to clear response cache for range %d: %s", r.Desc.RaftID, err)
 	}
-	if err := engine.ClearRangeStats(r.rm.Engine(), r.RangeID); err != nil {
-		return util.Errorf("unable to clear range stats for range %d: %s", r.RangeID, err)
+	if err := engine.ClearRangeStats(r.rm.Engine(), r.Desc.RaftID); err != nil {
+		return util.Errorf("unable to clear range stats for range %d: %s", r.Desc.RaftID, err)
 	}
 	start = engine.MVCCEncodeKey(makeRangeKey(r.Desc.StartKey))
 	end = engine.MVCCEncodeKey(makeRangeKey(r.Desc.StartKey).Next())
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear metadata for range %d: %s", r.RangeID, err)
+		return util.Errorf("unable to clear metadata for range %d: %s", r.Desc.RaftID, err)
 	}
 	return nil
 }
@@ -579,8 +577,6 @@ func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
 // instantiates/returns a config map. Prefix configuration maps
 // include accounting, permissions, and zones.
 func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, error) {
-	// TODO(spencer): need to make sure range splitting never
-	// crosses a configuration map's key prefix.
 	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
 	if err != nil {
 		return nil, err
@@ -627,9 +623,9 @@ func (r *Range) ShouldSplit() bool {
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
-	rangeSize, err := engine.GetRangeSize(r.rm.Engine(), r.RangeID)
+	rangeSize, err := engine.GetRangeSize(r.rm.Engine(), r.Desc.RaftID)
 	if err != nil {
-		log.Errorf("unable to compute size from stats for range %d: %s", r.RangeID, err)
+		log.Errorf("unable to compute size from stats for range %d: %s", r.Desc.RaftID, err)
 		return false
 	}
 
@@ -723,7 +719,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 	// On success, flush the MVCC stats to the batch and commit.
 	if proto.IsReadWrite(method) && reply.Header().Error == nil {
-		ms.MergeStats(batch, r.RangeID, r.rm.StoreID())
+		ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
 		if err := batch.Commit(); err != nil {
 			reply.Header().SetGoError(err)
 		} else {
@@ -1254,31 +1250,29 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
 	}
-	// Find range ID for this replica.
-	newRangeID := split.NewDesc.FindReplica(r.rm.StoreID()).RangeID
 
 	// Compute stats for new range.
 	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey)
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	ms.SetStats(batch, newRangeID, 0)
+	ms.SetStats(batch, split.NewDesc.RaftID, 0)
 	// Compute stats for updated range.
 	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	ms.SetStats(batch, r.RangeID, 0)
+	ms.SetStats(batch, r.Desc.RaftID, 0)
 
 	// Initialize the new range's response cache by copying the original's.
-	if err = r.respCache.CopyInto(batch, newRangeID); err != nil {
+	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
 		return util.Errorf("unable to copy response cache to new split range: %s", err)
 	}
 
 	// Add the new split range to the store. This step atomically
 	// updates the EndKey of the updated range and also adds the
 	// new range to the store's range map.
-	newRng := NewRange(newRangeID, &split.NewDesc, r.rm)
+	newRng := NewRange(&split.NewDesc, r.rm)
 	// Write-lock the mutex to protect Desc, as SplitRange will modify
 	// Desc.EndKey.
 	r.Lock()
@@ -1296,7 +1290,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
 	// Only allow a single split per range at a time.
 	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("already splitting range %d", r.RangeID))
+		reply.SetGoError(util.Errorf("already splitting range %d", r.Desc.RaftID))
 		return
 	}
 	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
@@ -1311,7 +1305,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			reply.SetGoError(util.Errorf("unable to create snapshot: %s", err))
 			return
 		}
-		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.RangeID, r.Desc.StartKey, r.Desc.EndKey, snapshotID)
+		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey, snapshotID)
 		if releaseErr := r.rm.Engine().ReleaseSnapshot(snapshotID); releaseErr != nil {
 			log.Errorf("unable to release snapshot: %s", releaseErr)
 		}
@@ -1346,11 +1340,11 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	updatedDesc := *r.Desc
 	updatedDesc.EndKey = splitKey
 
-	log.Infof("initiating a split of range %d %q-%q at key %q", r.RangeID,
+	log.Infof("initiating a split of range %d %q-%q at key %q", r.Desc.RaftID,
 		proto.Key(r.Desc.StartKey), proto.Key(r.Desc.EndKey), splitKey)
 
 	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("split range %d at %q", r.RangeID, splitKey),
+		Name: fmt.Sprintf("split range %d at %q", r.Desc.RaftID, splitKey),
 	}
 	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Create range descriptor for second half of split.

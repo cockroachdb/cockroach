@@ -44,8 +44,6 @@ const (
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount = 10
-	// rangeIDAllocCount is the number of range IDs to allocate per allocation.
-	rangeIDAllocCount = 10
 	// uuidLength is the length of a UUID string, used to allot extra
 	// key length to transaction records, which have a UUID appended.
 	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
@@ -166,22 +164,20 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 type Store struct {
 	*StoreFinder
 
-	Ident        proto.StoreIdent
-	clock        *hlc.Clock
-	engine       engine.Engine  // The underlying key-value store
-	db           *client.KV     // Cockroach KV DB
-	allocator    *allocator     // Makes allocation decisions
-	gossip       *gossip.Gossip // Configs and store capacities
-	raftIDAlloc  *IDAllocator   // Raft ID allocator
-	rangeIDAlloc *IDAllocator   // Range ID allocator
-	configMu     sync.Mutex     // Limit config update processing
-	raft         raft
-	closer       chan struct{}
+	Ident       proto.StoreIdent
+	clock       *hlc.Clock
+	engine      engine.Engine  // The underlying key-value store
+	db          *client.KV     // Cockroach KV DB
+	allocator   *allocator     // Makes allocation decisions
+	gossip      *gossip.Gossip // Configs and store capacities
+	raftIDAlloc *IDAllocator   // Raft ID allocator
+	configMu    sync.Mutex     // Limit config update processing
+	raft        raft
+	closer      chan struct{}
 
-	mu             sync.RWMutex     // Protects variables below...
-	ranges         map[int64]*Range // Map of ranges by range ID
-	rangesByKey    RangeSlice       // Sorted slice of ranges by StartKey
-	rangesByRaftID map[int64]*Range // Map of ranges by raft ID
+	mu          sync.RWMutex     // Protects variables below...
+	ranges      map[int64]*Range // Map of ranges by Raft ID
+	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
 }
 
 // NewStore returns a new instance of a store.
@@ -189,15 +185,14 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	s := &Store{
 		StoreFinder: &StoreFinder{gossip: gossip},
 
-		clock:          clock,
-		engine:         eng,
-		db:             db,
-		allocator:      &allocator{},
-		gossip:         gossip,
-		raft:           newNoopRaft(),
-		closer:         make(chan struct{}),
-		ranges:         map[int64]*Range{},
-		rangesByRaftID: map[int64]*Range{},
+		clock:     clock,
+		engine:    eng,
+		db:        db,
+		allocator: &allocator{},
+		gossip:    gossip,
+		raft:      newNoopRaft(),
+		closer:    make(chan struct{}),
+		ranges:    map[int64]*Range{},
 	}
 	s.allocator.storeFinder = s.findStores
 	return s
@@ -212,7 +207,6 @@ func (s *Store) Stop() {
 	}
 	s.ranges = map[int64]*Range{}
 	s.rangesByKey = nil
-	s.rangesByRaftID = map[int64]*Range{}
 	close(s.closer)
 	s.closer = make(chan struct{})
 }
@@ -234,7 +228,6 @@ func (s *Store) Start() error {
 
 	// Create ID allocators.
 	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
-	s.rangeIDAlloc = NewIDAllocator(engine.KeyRangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount)
 
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
@@ -266,12 +259,10 @@ func (s *Store) Start() error {
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 			return false, err
 		}
-		rangeID := desc.FindReplica(s.Ident.StoreID).RangeID
-		rng := NewRange(rangeID, &desc, s)
+		rng := NewRange(&desc, s)
 		rng.start()
-		s.ranges[rangeID] = rng
+		s.ranges[desc.RaftID] = rng
 		s.rangesByKey = append(s.rangesByKey, rng)
-		s.rangesByRaftID[desc.RaftID] = rng
 		return false, nil
 	}); err != nil {
 		return err
@@ -394,14 +385,14 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	return err
 }
 
-// GetRange fetches a range by ID. Returns an error if no range is found.
-func (s *Store) GetRange(rangeID int64) (*Range, error) {
+// GetRange fetches a range by Raft ID. Returns an error if no range is found.
+func (s *Store) GetRange(raftID int64) (*Range, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if rng, ok := s.ranges[rangeID]; ok {
+	if rng, ok := s.ranges[raftID]; ok {
 		return rng, nil
 	}
-	return nil, proto.NewRangeNotFoundError(rangeID)
+	return nil, proto.NewRangeNotFoundError(raftID)
 }
 
 // LookupRange looks up a range via binary search over the sorted
@@ -439,7 +430,6 @@ func (s *Store) BootstrapRange() error {
 			proto.Replica{
 				NodeID:  1,
 				StoreID: 1,
-				RangeID: 1,
 			},
 		},
 	}
@@ -526,10 +516,6 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 		EndKey:   end,
 		Replicas: append([]proto.Replica(nil), replicas...),
 	}
-	// Allocate a range ID for each replica.
-	for i := range desc.Replicas {
-		desc.Replicas[i].RangeID = s.rangeIDAlloc.Allocate()
-	}
 	return desc, nil
 }
 
@@ -551,9 +537,8 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	defer s.mu.Unlock()
 	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
 	newRng.start()
-	s.ranges[newRng.RangeID] = newRng
+	s.ranges[newRng.Desc.RaftID] = newRng
 	s.rangesByKey = append(s.rangesByKey, newRng)
-	s.rangesByRaftID[newRng.Desc.RaftID] = newRng
 	sort.Sort(s.rangesByKey)
 	return nil
 }
@@ -564,9 +549,8 @@ func (s *Store) AddRange(rng *Range) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rng.start()
-	s.ranges[rng.RangeID] = rng
+	s.ranges[rng.Desc.RaftID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
-	s.rangesByRaftID[rng.RangeID] = rng
 	sort.Sort(s.rangesByKey)
 }
 
@@ -576,7 +560,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rng.stop()
-	delete(s.ranges, rng.RangeID)
+	delete(s.ranges, rng.Desc.RaftID)
 	// Find the range in rangesByKey slice and swap it to end of slice
 	// and truncate.
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
@@ -588,7 +572,6 @@ func (s *Store) RemoveRange(rng *Range) error {
 	lastIdx := len(s.rangesByKey) - 1
 	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
 	s.rangesByKey = s.rangesByKey[:lastIdx]
-	delete(s.rangesByRaftID, rng.Desc.RaftID)
 	return nil
 }
 
@@ -655,7 +638,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Get range and add command to the range for execution.
-	rng, err := s.GetRange(header.Replica.RangeID)
+	rng, err := s.GetRange(header.RaftID)
 	if err != nil {
 		return err
 	}
@@ -810,11 +793,10 @@ func (s *Store) processRaft(closer chan struct{}) {
 		select {
 		case raftCmd := <-s.raft.committed():
 			s.mu.Lock()
-			r, ok := s.rangesByRaftID[raftCmd.RaftID]
+			r, ok := s.ranges[raftCmd.RaftID]
 			s.mu.Unlock()
 			if !ok {
-				log.Errorf("got committed raft command for %d but have no range with that ID",
-					raftCmd.RaftID)
+				log.Errorf("got committed raft command for %d but have no range with that ID", raftCmd.RaftID)
 			} else {
 				r.processRaftCommand(raftCmd)
 			}
