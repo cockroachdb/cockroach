@@ -18,6 +18,8 @@
 package multiraft
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -96,6 +98,7 @@ type Storage interface {
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
 	groups map[uint64]WriteableGroupStorage
+	mu     sync.Mutex
 }
 
 // Verifying implementation of Storage interface.
@@ -103,7 +106,9 @@ var _ Storage = (*MemoryStorage)(nil)
 
 // NewMemoryStorage creates a MemoryStorage.
 func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{make(map[uint64]WriteableGroupStorage)}
+	return &MemoryStorage{
+		groups: make(map[uint64]WriteableGroupStorage),
+	}
 }
 
 // LoadGroups implements the Storage interface.
@@ -116,6 +121,8 @@ func NewMemoryStorage() *MemoryStorage {
 
 // GroupStorage implements the Storage interface.
 func (m *MemoryStorage) GroupStorage(groupID uint64) WriteableGroupStorage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	g, ok := m.groups[groupID]
 	if !ok {
 		g = raft.NewMemoryStorage()
