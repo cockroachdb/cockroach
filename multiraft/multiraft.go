@@ -435,6 +435,8 @@ func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
 
 func (s *state) sendMessageRequest(req *SendMessageRequest, resp *SendMessageResponse,
 	call *rpc.Call) {
+	log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
+		raft.DescribeMessage(req.Message))
 	err := s.multiNode.Step(context.Background(), req.GroupID, req.Message)
 	if err != nil {
 		log.Errorf("raft: %s", err)
@@ -446,8 +448,29 @@ func (s *state) sendMessageRequest(req *SendMessageRequest, resp *SendMessageRes
 func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 	// Soft state is updated immediately; everything else waits for handleWriteReady.
 	for groupID, ready := range readyGroups {
+		if log.V(5) {
+			log.Infof("node %v: group %v raft ready", s.nodeID, groupID)
+			if ready.SoftState != nil {
+				log.Infof("SoftState updated: %+v", *ready.SoftState)
+			}
+			if !raft.IsEmptyHardState(ready.HardState) {
+				log.Infof("HardState updated: %+v", ready.HardState)
+			}
+			for i, e := range ready.Entries {
+				log.Infof("New Entry[%d]: %s", i, raft.DescribeEntry(e))
+			}
+			for i, e := range ready.CommittedEntries {
+				log.Infof("Committed Entry[%d]: %s", i, raft.DescribeEntry(e))
+			}
+			if !raft.IsEmptySnap(ready.Snapshot) {
+				log.Infof("Snapshot updated: %s", ready.Snapshot)
+			}
+			for i, m := range ready.Messages {
+				log.Infof("Outgoing Message[%d]: %s", i, raft.DescribeMessage(m))
+			}
+		}
+
 		g := s.groups[groupID]
-		log.V(6).Infof("node %v: group %v: got %#v from raft", s.nodeID, groupID, ready)
 		if ready.SoftState != nil {
 			if ready.SoftState.Lead != g.softState.Lead {
 				s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
@@ -501,7 +524,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				log.Warningf("dropping message for node 0")
 				continue
 			}
-			log.V(6).Infof("node %v sending %s message to %v", s.nodeID, msg.Type, msg.To)
+			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
+				raft.DescribeMessage(msg), msg.To)
 			s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
 		}
 	}
