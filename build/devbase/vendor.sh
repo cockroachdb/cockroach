@@ -45,7 +45,7 @@ cd bzip2-1.0.6
 make && make install PREFIX="${VENDOR}/usr"
 
 cd ${TMP}
-curl -L https://github.com/google/protobuf/releases/download/2.6.1/protobuf-2.6.1.tar.bz2 | ${TAR} -xj
+curl -L https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.bz2 | ${TAR} -xj
 cd protobuf-2.6.1
 ./configure --prefix ${USR} --disable-shared --enable-static && make && make install
 
