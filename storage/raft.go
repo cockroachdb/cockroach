@@ -42,24 +42,6 @@ type raft interface {
 	stop()
 }
 
-// noopRaft is a trivial implementation of the raft interface for testing.
-type noopRaft chan proto.InternalRaftCommand
-
-func newNoopRaft() noopRaft {
-	return make(noopRaft, 10)
-}
-
-func (nr noopRaft) propose(req proto.InternalRaftCommand) {
-	nr <- req
-}
-
-func (nr noopRaft) committed() <-chan proto.InternalRaftCommand {
-	return nr
-}
-
-func (nr noopRaft) stop() {
-}
-
 type singleNodeRaft struct {
 	mr       *multiraft.MultiRaft
 	mu       sync.Mutex
@@ -102,10 +84,6 @@ func (snr *singleNodeRaft) propose(cmd proto.InternalRaftCommand) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		// Wait for the node to elect itself leader.
-		// TODO(bdarnell): remove this hack. Currently there is a panic if you
-		// propose a command when there is no leader.
-		time.Sleep(15 * time.Millisecond)
 	}
 	data, err := gogoproto.Marshal(&cmd)
 	if err != nil {

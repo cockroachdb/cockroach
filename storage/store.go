@@ -284,10 +284,7 @@ func (s *Store) Start() error {
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
-	// TODO(bdarnell): Replace noopRaft with singleNodeRaft when we fix the
-	// election timeout hack (which leads to failures in timing-sensitive tests).
-	//s.raft = newSingleNodeRaft()
-	s.raft = newNoopRaft()
+	s.raft = newSingleNodeRaft()
 
 	// Start Raft processing goroutine.
 	go s.processRaft(s.raft, s.closer)
