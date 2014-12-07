@@ -520,7 +520,8 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 		// existing. If either of these conditions doesn't hold, it's
 		// likely the case that an older RPC is arriving out of order.
 		//
-		// Note that meta.Txn!=nil implies txn!=nil.
+		// Note that if meta.Txn!=nil and txn==nil, a WriteIntentError was
+		// returned above.
 		if !timestamp.Less(meta.Timestamp) &&
 			(meta.Txn == nil || txn.Epoch >= meta.Txn.Epoch) {
 			// If this is an intent and timestamps have changed,

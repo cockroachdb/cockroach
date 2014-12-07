@@ -30,6 +30,18 @@
   entire batch as a single batch command to the range. In all other
   cases, we split batch request at DistSender into individual requests.
 
+  In this context, revisit the handling of (potentially) range-spanning
+  operations such as Scan, DeleteRange, InternalResolveIntent.
+  Currently, these are wrapped in a txn in txn_coord_sender and re-sent
+  using a one-off client.KV unless already in transactional context.
+  This could be more transparently implemented by
+
+  - auto-wrapping all such operations in a Txn which is (usually) optimized
+    away unless the cmd actually spans ranges
+  - carrying out InternalResolveIntent across ranges without a txn, which might
+    be okay since resolving intents is best-effort and does not require
+    transactional semantics (in fact, might be better off without)
+
 * Propagate errors from storage/id_alloc.go
 
 * Accept a list of acknowledged client command ids in RequestHeader,
@@ -70,12 +82,6 @@
     from the RangeDescriptor. The store which owns a removed replica
     is responsible for clearing the relevant portion of the key space
     as well as any other housekeeping details.
-
-* Implement all ops that operate on a range for the case in which
-  the given key range overlaps multiple logical ranges (Scan, DeleteRange etc).
-  Requires transactions. Split the operation addressed to a key range into
-  subranges that each hit a single range only, and run all of those as a
-  distributed transaction.
 
 * Cleanup proto files to adhere to proto capitalization instead of go's.
 

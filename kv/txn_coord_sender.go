@@ -305,9 +305,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		tmpKV := client.NewKV(tc, nil)
 		tmpKV.User = call.Args.Header().User
 		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
-		// This is nasty, really want a clean request for this- but
-		// the reply has already been used. We'd need a fresh one.
-		call.Reply.Header().SetGoError(nil)
+		call.Reply.Reset()
 		tmpKV.RunTransaction(txnOpts, func(txn *client.KV) error {
 			return txn.Call(call.Method, call.Args, call.Reply)
 		})
