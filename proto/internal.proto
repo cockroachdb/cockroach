@@ -132,6 +132,19 @@ message InternalSnapshotCopyResponse {
   repeated RawKeyValue rows = 3 [(gogoproto.nullable) = false];
 }
 
+// An InternalMergeRequest contains arguments to the InternalMerge() method. It
+// specifies a key and a value which should be merged into the existing value at
+// that key.
+message InternalMergeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Value value = 2 [(gogoproto.nullable) = false];
+}
+
+// InternalMergeResponse is the response to an InternalMerge() operation.
+message InternalMergeResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in roachlib/db.cc in GetResponseHeader().
@@ -143,13 +156,13 @@ message ReadWriteCmdResponse {
   optional DeleteResponse delete = 4;
   optional DeleteRangeResponse delete_range = 5;
   optional EndTransactionResponse end_transaction = 6;
-  optional AccumulateTSResponse accumulate_ts = 7 [(gogoproto.customname) = "AccumulateTS"];
-  optional ReapQueueResponse reap_queue = 8;
-  optional EnqueueUpdateResponse enqueue_update = 9;
-  optional EnqueueMessageResponse enqueue_message = 10;
-  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 11;
-  optional InternalPushTxnResponse internal_push_txn = 12;
-  optional InternalResolveIntentResponse internal_resolve_intent = 13;
+  optional ReapQueueResponse reap_queue = 7;
+  optional EnqueueUpdateResponse enqueue_update = 8;
+  optional EnqueueMessageResponse enqueue_message = 9;
+  optional InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
+  optional InternalPushTxnResponse internal_push_txn = 11;
+  optional InternalResolveIntentResponse internal_resolve_intent = 12;
+  optional InternalMergeResponse internal_merge = 13;
 }
 
 // An InternalRaftCommandUnion is the union of all commands which can be
@@ -166,10 +179,9 @@ message InternalRaftCommandUnion {
   optional DeleteRangeRequest delete_range = 7;
   optional ScanRequest scan = 8;
   optional EndTransactionRequest end_transaction = 9;
-  optional AccumulateTSRequest accumulate_ts = 10;
-  optional ReapQueueRequest reap_queue = 11;
-  optional EnqueueUpdateRequest enqueue_update = 12;
-  optional EnqueueMessageRequest enqueue_message = 13;
+  optional ReapQueueRequest reap_queue = 10;
+  optional EnqueueUpdateRequest enqueue_update = 11;
+  optional EnqueueMessageRequest enqueue_message = 12;
 
   // Other requests. Allow a gap in tag numbers so the previous list can
   // be copy/pasted from RequestUnion.
@@ -179,6 +191,7 @@ message InternalRaftCommandUnion {
   optional InternalPushTxnRequest internal_push_txn = 33;
   optional InternalResolveIntentRequest internal_resolve_intent = 34;
   optional InternalSnapshotCopyRequest internal_snapshot_copy = 35;
+  optional InternalMergeRequest internal_merge_response = 36;
 }
 
 // An InternalRaftCommand is a command which can be serialized and
@@ -232,7 +245,6 @@ message TimeSeriesData {
     // A set of data points which fall within the interval.
     repeated TimeSeriesDataPoint data = 4;
 }
-
 
 // A TimeSeriesDataPoint is a single point of numeric data sampled at particular
 // time. Multiple TimeSeriesDataPoints are grouped into a single TimeSeriesData

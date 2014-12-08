@@ -94,11 +94,11 @@ var tsCacheMethods = map[string]struct{}{
 	proto.Scan:                  struct{}{},
 	proto.Delete:                struct{}{},
 	proto.DeleteRange:           struct{}{},
-	proto.AccumulateTS:          struct{}{},
 	proto.ReapQueue:             struct{}{},
 	proto.EnqueueUpdate:         struct{}{},
 	proto.EnqueueMessage:        struct{}{},
 	proto.InternalResolveIntent: struct{}{},
+	proto.InternalMerge:         struct{}{},
 }
 
 // UsesTimestampCache returns true if the method affects or is
@@ -699,8 +699,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case proto.EndTransaction:
 		r.EndTransaction(batch, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
-	case proto.AccumulateTS:
-		r.AccumulateTS(batch, args.(*proto.AccumulateTSRequest), reply.(*proto.AccumulateTSResponse))
 	case proto.ReapQueue:
 		r.ReapQueue(batch, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
 	case proto.EnqueueUpdate:
@@ -717,6 +715,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case proto.InternalSnapshotCopy:
 		r.InternalSnapshotCopy(r.rm.Engine(), args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
+	case proto.InternalMerge:
+		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -911,12 +911,6 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
 		}
 	}
-}
-
-// AccumulateTS is used internally to aggregate statistics over key
-// ranges throughout the distributed cluster.
-func (r *Range) AccumulateTS(batch engine.Engine, args *proto.AccumulateTSRequest, reply *proto.AccumulateTSResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // ReapQueue destructively queries messages from a delivery inbox
@@ -1237,6 +1231,16 @@ func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapsh
 
 	reply.Rows = kvs
 	reply.SnapshotID = args.SnapshotID
+	reply.SetGoError(err)
+}
+
+// InternalMerge is used to merge a value into an existing key. Merge is an
+// efficient accumulation operation which is exposed by RocksDB, used by
+// Cockroach for the efficient accumulation of certain values. Due to the
+// difficulty of making these operations transactional, merges are not currently
+// exposed directly to clients. Merged values are explicitly not MVCC data.
+func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) {
+	err := engine.MVCCMerge(batch, ms, args.Key, args.Value)
 	reply.SetGoError(err)
 }
 

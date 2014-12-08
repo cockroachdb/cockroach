@@ -47,6 +47,14 @@ const (
 	// end key up to some maximum number of results from the given snapshot_id.
 	// It will create a snapshot if snapshot_id is empty.
 	InternalSnapshotCopy = "InternalSnapshotCopy"
+	// InternalMerge merges a given value into the specified key. Merge is a
+	// high-performance operation provided by underlying data storage for values
+	// which are accumulated over several writes. Because it is not
+	// transactional, Merge is currently not made available to external clients.
+	//
+	// The logic used to merge values of different types is described in more
+	// detail by the "Merge" method of engine.Engine.
+	InternalMerge = "InternalMerge"
 )
 
 // ToValue generates a Value message which contains an encoded copy of this

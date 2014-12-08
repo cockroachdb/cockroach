@@ -66,8 +66,20 @@ type Engine interface {
 	// merges. The list passed to WriteBatch must only contain elements
 	// of type Batch{Put,Merge,Delete}.
 	WriteBatch([]interface{}) error
-	// Merge implements a merge operation with counter semantics.
-	// See the docs for goMergeInit and goMerge for details.
+	// Merge is a high-performance write operation used for values which are
+	// accumulated over several writes. Multiple values can be merged
+	// sequentially into a single key; a subsequent read will return a "merged"
+	// value which is computed from the original merged values.
+	//
+	// Merge currently provides specialized behavior for three data types:
+	// integers, byte slices, and time series observations. Merged integers are
+	// summed, acting as a high-performance accumulator.  Byte slices are simply
+	// concatenated in the order they are merged. Time series observations
+	// (stored as byte slices with a special tag on the proto.Value) are
+	// combined with specialized logic beyond that of simple byte slices.
+	//
+	// The logic for merges is written in our C++ "roachlib" library in order to
+	// be compatible with RocksDB.
 	Merge(key proto.EncodedKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (StoreCapacity, error)

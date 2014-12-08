@@ -107,8 +107,6 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.delete_range().header();
   } else if (rwResp.has_end_transaction()) {
     return &rwResp.end_transaction().header();
-  } else if (rwResp.has_accumulate_ts()) {
-    return &rwResp.accumulate_ts().header();
   } else if (rwResp.has_reap_queue()) {
     return &rwResp.reap_queue().header();
   } else if (rwResp.has_enqueue_update()) {
@@ -121,6 +119,8 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.internal_push_txn().header();
   } else if (rwResp.has_internal_resolve_intent()) {
     return &rwResp.internal_resolve_intent().header();
+  } else if (rwResp.has_internal_merge()) {
+    return &rwResp.internal_merge().header();
   }
   return NULL;
 }
