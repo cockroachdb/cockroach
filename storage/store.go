@@ -787,7 +787,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 
 // ProposeRaftCommand submits a command to raft.
 func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
-	s.raft.propose(cmd)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.raft != nil {
+		s.raft.propose(cmd)
+	}
 }
 
 // processRaft processes read/write commands that have been committed
