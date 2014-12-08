@@ -13,14 +13,17 @@ RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md)
 
 If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
 
+You can `go get -d github.com/cockroachdb/cockroach` and then run `./bootstrap.sh` or, alternatively,
+
 ```bash
 mkdir -p $GOPATH/src/github.com/cockroachdb/
 cd $GOPATH/src/github.com/cockroachdb/
 git clone git@github.com:cockroachdb/cockroach.git
 cd cockroach
 ./bootstrap.sh
-make
 ```
+
+Now you should be all set for `make build`, `make test` and everything else our Makefile has to offer.
 
 ### Style guide
 We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.

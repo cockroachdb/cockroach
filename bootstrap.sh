@@ -48,7 +48,7 @@ cat <<%%%
 ****************************************
 Bootstrapped successfully! You don't need to do anything else.
 
-If you want to invoke `go build` directly, you will however
+If you want to invoke 'go build' directly, you will however
 need to
 * add ./_vendor/usr/bin to your PATH
 * add ./_vendor/usr/include to your CPLUS_INCLUDE_PATH
