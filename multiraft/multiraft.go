@@ -18,7 +18,6 @@
 package multiraft
 
 import (
-	"container/list"
 	"math/rand"
 	"net/rpc"
 	"time"
@@ -199,35 +198,21 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, command []byte) error {
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // TODO(bdarnell): same concerns as SubmitCommand
-// TODO(bdarnell): do we expose ChangeMembershipAdd{Member,Observer} to the application
-// level or does MultiRaft take care of the non-member -> observer -> full member
-// cycle?
-func (m *MultiRaft) ChangeGroupMembership(groupID uint64, changeOp ChangeMembershipOperation,
+func (m *MultiRaft) ChangeGroupMembership(groupID uint64, changeType raftpb.ConfChangeType,
 	nodeID uint64) error {
 	op := &changeGroupMembershipOp{
 		groupID,
-		ChangeMembershipPayload{changeOp, nodeID},
+		changeType,
+		nodeID,
 		make(chan error, 1),
 	}
 	m.ops <- op
 	return <-op.ch
 }
 
-// pendingCall represents an RPC that we should not respond to until we have persisted
-// up to the given point. term and logIndex may be -1 if the rpc didn't modify that
-// variable and therefore can be resolved regardless of its value.
-type pendingCall struct {
-	call     *rpc.Call
-	term     int
-	logIndex int
-}
-
 // group represents the state of a consensus group.
 type group struct {
 	groupID uint64
-
-	// a List of *pendingCall
-	pendingCalls list.List
 
 	// softState is the last value received from node.Ready() so we can compare
 	// old and new values.
@@ -249,9 +234,10 @@ type submitCommandOp struct {
 }
 
 type changeGroupMembershipOp struct {
-	groupID uint64
-	payload ChangeMembershipPayload
-	ch      chan error
+	groupID    uint64
+	changeType raftpb.ConfChangeType
+	nodeID     uint64
+	ch         chan error
 }
 
 // node represents a connection to a remote node.
@@ -436,7 +422,11 @@ func (s *state) submitCommand(op *submitCommandOp) {
 
 func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
 	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
-	err := s.multiNode.ProposeConfChange(context.Background(), op.groupID, raftpb.ConfChange{})
+	err := s.multiNode.ProposeConfChange(context.Background(), op.groupID,
+		raftpb.ConfChange{
+			Type:   op.changeType,
+			NodeID: op.nodeID,
+		})
 	op.ch <- err
 }
 
@@ -526,35 +516,9 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			}
 		}
 		for _, msg := range ready.Messages {
-			if msg.To == 0 {
-				// TODO(bdarnell): figure out why these are happening
-				log.Warningf("dropping message for node 0")
-				continue
-			}
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
 				raft.DescribeMessage(msg), msg.To)
 			s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
 		}
 	}
-}
-
-func (s *state) addPendingCall(g *group, call *pendingCall) {
-	if !s.resolvePendingCall(g, call) {
-		g.pendingCalls.PushBack(call)
-	}
-}
-
-func (s *state) resolvePendingCall(g *group, call *pendingCall) bool {
-	// TODO(bdarnell): rewrite resolvePendingCall for etcd raft
-	/*if g.persistedElectionState == nil || g.persistedLastIndex == -1 {
-		return false
-	}
-	if call.term != -1 && call.term > g.persistedElectionState.CurrentTerm {
-		return false
-	}
-	if call.logIndex != -1 && call.logIndex > g.persistedLastIndex {
-		return false
-	}*/
-	call.call.Done <- call.call
-	return true
 }

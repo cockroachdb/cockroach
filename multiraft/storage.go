@@ -25,56 +25,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-// ChangeMembershipOperation indicates the operation being performed by a ChangeMembershipPayload.
-type ChangeMembershipOperation int8
-
-// Values for ChangeMembershipOperation.
-const (
-	// ChangeMembershipAddObserver adds a non-voting node. The given node will
-	// retrieve a snapshot and catch up with logs.
-	ChangeMembershipAddObserver ChangeMembershipOperation = iota
-	// ChangeMembershipRemoveObserver removes a non-voting node.
-	ChangeMembershipRemoveObserver
-
-	// ChangeMembershipAddMember adds a full (voting) node. The given node must already be an
-	// observer; it will be removed from the Observers list when this
-	// operation is processed.
-	// TODO(bdarnell): enforce the requirement that a node be added as an observer first.
-	ChangeMembershipAddMember
-
-	// ChangeMembershipRemoveMember removes a voting node. It is not possible to remove the
-	// last node; the result of attempting to do so is undefined.
-	ChangeMembershipRemoveMember
-)
-
-// ChangeMembershipPayload is the Payload of an entry with Type LogEntryChangeMembership.
-// Nodes are added or removed one at a time to minimize the risk of quorum failures in
-// the new configuration.
-type ChangeMembershipPayload struct {
-	Operation ChangeMembershipOperation
-	Node      uint64
-}
-
-// LogEntry is the persistent form of a raft log entry.
-type LogEntry struct {
-	Entry raftpb.Entry
-}
-
-// GroupPersistentState is a unified view of the readable data (except for log entries)
-// about a group; used by Storage.LoadGroups.
-type GroupPersistentState struct {
-	GroupID   uint64
-	HardState raftpb.HardState
-}
-
-// LogEntryState is used by Storage.GetLogEntries to bundle a LogEntry with its index
-// and an optional error.
-type LogEntryState struct {
-	Index int
-	Entry LogEntry
-	Error error
-}
-
 // WriteableGroupStorage represents a single group within a Storage.
 // It is implemented by *raft.MemoryStorage.
 type WriteableGroupStorage interface {
@@ -89,8 +39,7 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // of raft data.
 type Storage interface {
 	// LoadGroups is called at startup to load all previously-existing groups.
-	// The returned channel should be closed once all groups have been loaded.
-	//LoadGroups() <-chan *GroupPersistentState
+	LoadGroups() map[uint64]raft.Storage
 
 	GroupStorage(groupID uint64) WriteableGroupStorage
 }
@@ -112,12 +61,10 @@ func NewMemoryStorage() *MemoryStorage {
 }
 
 // LoadGroups implements the Storage interface.
-/*func (m *MemoryStorage) LoadGroups() <-chan *GroupPersistentState {
-	// TODO(bdarnell): replay the group state.
-	ch := make(chan *GroupPersistentState)
-	close(ch)
-	return ch
-}*/
+func (m *MemoryStorage) LoadGroups() map[uint64]raft.Storage {
+	// MemoryStorage always starts empty.
+	return map[uint64]raft.Storage{}
+}
 
 // GroupStorage implements the Storage interface.
 func (m *MemoryStorage) GroupStorage(groupID uint64) WriteableGroupStorage {
