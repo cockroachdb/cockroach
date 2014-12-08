@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/rpc"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -100,6 +101,7 @@ func (a *asyncClient) sendMessage(req *SendMessageRequest) {
 }
 
 type localRPCTransport struct {
+	mu        sync.Mutex
 	listeners map[uint64]net.Listener
 }
 
@@ -109,7 +111,9 @@ type localRPCTransport struct {
 // localhost.
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
-	return &localRPCTransport{make(map[uint64]net.Listener)}
+	return &localRPCTransport{
+		listeners: make(map[uint64]net.Listener),
+	}
 }
 
 func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
@@ -124,7 +128,9 @@ func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
 		return err
 	}
 
+	lt.mu.Lock()
 	lt.listeners[id] = listener
+	lt.mu.Unlock()
 	go lt.accept(rpcServer, listener)
 	return nil
 }
@@ -136,7 +142,8 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 			if strings.HasSuffix(err.Error(), "use of closed network connection") {
 				return
 			}
-			log.Errorf("localRPCTransport.accept: %s", err.Error())
+			// TODO(bdarnell): are any transient errors possible here?
+			log.Fatalf("localRPCTransport.accept: %s", err.Error())
 			continue
 		}
 		go server.ServeConn(conn)
@@ -144,12 +151,16 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 }
 
 func (lt *localRPCTransport) Stop(id uint64) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
 }
 
 func (lt *localRPCTransport) Connect(id uint64) (ClientInterface, error) {
+	lt.mu.Lock()
 	address := lt.listeners[id].Addr().String()
+	lt.mu.Unlock()
 	client, err := rpc.Dial("tcp", address)
 	if err != nil {
 		return nil, err
