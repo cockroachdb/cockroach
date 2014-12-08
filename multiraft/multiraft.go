@@ -18,8 +18,6 @@
 package multiraft
 
 import (
-	"math/rand"
-	"net/rpc"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -73,12 +71,12 @@ func (c *Config) Validate() error {
 // the Events channel in a timely manner.
 type MultiRaft struct {
 	Config
-	multiNode raft.MultiNode
-	Events    chan interface{}
-	nodeID    uint64
-	ops       chan interface{}
-	requests  chan *rpc.Call
-	stopped   chan struct{}
+	multiNode       raft.MultiNode
+	Events          chan interface{}
+	nodeID          uint64
+	createGroupChan chan *createGroupOp
+	stopper         chan struct{}
+	stopped         chan struct{}
 }
 
 // NewMultiRaft creates a MultiRaft object.
@@ -99,11 +97,11 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		Config: *config,
 		multiNode: raft.StartMultiNode(nodeID, config.ElectionTimeoutTicks,
 			config.HeartbeatIntervalTicks),
-		nodeID:   nodeID,
-		Events:   make(chan interface{}, 1000),
-		ops:      make(chan interface{}, 100),
-		requests: make(chan *rpc.Call, 100),
-		stopped:  make(chan struct{}),
+		nodeID:          nodeID,
+		Events:          make(chan interface{}, 1000),
+		createGroupChan: make(chan *createGroupOp, 100),
+		stopper:         make(chan struct{}),
+		stopped:         make(chan struct{}),
 	}
 
 	err = m.Transport.Listen(nodeID, m)
@@ -123,29 +121,17 @@ func (m *MultiRaft) Start() {
 // Stop terminates the running raft instance and shuts down all network interfaces.
 func (m *MultiRaft) Stop() {
 	m.Transport.Stop(m.nodeID)
-	m.ops <- &stopOp{}
+	close(m.stopper)
 	<-m.stopped
 	m.multiNode.Stop()
 }
 
-// DoRPC implements ServerInterface
-func (m *MultiRaft) DoRPC(name string, req, resp interface{}) error {
-	call := &rpc.Call{
-		ServiceMethod: name,
-		Args:          req,
-		Reply:         resp,
-		Done:          make(chan *rpc.Call, 1),
-	}
-	select {
-	case m.requests <- call:
-	default:
-		m.strictErrorLog("RPC request channel blocked")
-		// In non-strict mode, try again with blocking.
-		m.requests <- call
-	}
-	<-call.Done
-	return call.Error
-
+// SendMessage implements ServerInterface
+func (m *MultiRaft) SendMessage(req *SendMessageRequest,
+	resp *SendMessageResponse) error {
+	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
+		raft.DescribeMessage(req.Message))
+	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
 }
 
 // strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
@@ -182,7 +168,7 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 		initialMembers,
 		make(chan error),
 	}
-	m.ops <- op
+	m.createGroupChan <- op
 	return <-op.ch
 }
 
@@ -191,23 +177,20 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
 func (m *MultiRaft) SubmitCommand(groupID uint64, command []byte) error {
-	op := &submitCommandOp{groupID, command, make(chan error, 1)}
-	m.ops <- op
-	return <-op.ch
+	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
+	return m.multiNode.Propose(context.Background(), groupID, command)
 }
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // TODO(bdarnell): same concerns as SubmitCommand
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, changeType raftpb.ConfChangeType,
 	nodeID uint64) error {
-	op := &changeGroupMembershipOp{
-		groupID,
-		changeType,
-		nodeID,
-		make(chan error, 1),
-	}
-	m.ops <- op
-	return <-op.ch
+	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
+	return m.multiNode.ProposeConfChange(context.Background(), groupID,
+		raftpb.ConfChange{
+			Type:   changeType,
+			NodeID: nodeID,
+		})
 }
 
 // group represents the state of a consensus group.
@@ -219,25 +202,10 @@ type group struct {
 	softState raft.SoftState
 }
 
-type stopOp struct{}
-
 type createGroupOp struct {
 	groupID        uint64
 	initialMembers []uint64
 	ch             chan error
-}
-
-type submitCommandOp struct {
-	groupID uint64
-	command []byte
-	ch      chan error
-}
-
-type changeGroupMembershipOp struct {
-	groupID    uint64
-	changeType raftpb.ConfChangeType
-	nodeID     uint64
-	ch         chan error
 }
 
 // node represents a connection to a remote node.
@@ -252,21 +220,17 @@ type node struct {
 // synchronization.
 type state struct {
 	*MultiRaft
-	rand          *rand.Rand
 	groups        map[uint64]*group
 	nodes         map[uint64]*node
 	electionTimer *time.Timer
-	responses     chan *rpc.Call
 	writeTask     *writeTask
 }
 
 func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
-		rand:      util.NewPseudoRand(),
 		groups:    make(map[uint64]*group),
 		nodes:     make(map[uint64]*node),
-		responses: make(chan *rpc.Call, 100),
 		writeTask: newWriteTask(m.Storage),
 	}
 }
@@ -277,9 +241,6 @@ func (s *state) start() {
 	// These maps form a kind of state machine: We don't want to read from the
 	// ready channel until the groups we got from the last read have made their
 	// way through the rest of the pipeline.
-	// TODO(bdarnell): Does it still make sense to structure this as a select loop?
-	// I think we can untangle some of the channels here now that the core raft
-	// implementation has been moved to etcd.
 	var readyGroups map[uint64]raft.Ready
 	var writingGroups map[uint64]raft.Ready
 	for {
@@ -307,45 +268,17 @@ func (s *state) start() {
 
 		log.V(8).Infof("node %v: selecting", s.nodeID)
 		select {
-		case op := <-s.ops:
+		case <-s.stopper:
+			log.V(6).Infof("node %v: stopping", s.nodeID)
+			s.stop()
+			return
+
+		case op := <-s.createGroupChan:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
-			switch op := op.(type) {
-			case *stopOp:
-				s.stop()
-				return
+			s.createGroup(op)
 
-			case *createGroupOp:
-				s.createGroup(op)
-
-			case *submitCommandOp:
-				s.submitCommand(op)
-
-			case *changeGroupMembershipOp:
-				s.changeGroupMembership(op)
-
-			default:
-				s.strictErrorLog("unknown op: %#v", op)
-			}
-
-		case call := <-s.requests:
-			log.V(6).Infof("node %v: got request %v", s.nodeID, call)
-			switch call.ServiceMethod {
-			case sendMessageName:
-				s.sendMessageRequest(call.Args.(*SendMessageRequest),
-					call.Reply.(*SendMessageResponse), call)
-
-			default:
-				s.strictErrorLog("unknown rpc request: %#v", call.Args)
-			}
-
-		case call := <-s.responses:
-			log.V(6).Infof("node %v: got response %v", s.nodeID, call)
-			switch call.ServiceMethod {
-			case sendMessageName:
-
-			default:
-				s.strictErrorLog("unknown rpc response: %#v", call.Reply)
-			}
+		case readyGroups = <-raftReady:
+			s.handleRaftReady(readyGroups)
 
 		case writeReady <- struct{}{}:
 			s.handleWriteReady(readyGroups)
@@ -360,9 +293,6 @@ func (s *state) start() {
 		case <-s.Ticker.Chan():
 			log.V(6).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
-
-		case readyGroups = <-raftReady:
-			s.handleRaftReady(readyGroups)
 		}
 	}
 }
@@ -398,7 +328,7 @@ func (s *state) createGroup(op *createGroupOp) {
 			op.ch <- err
 			return
 		}
-		s.nodes[member] = &node{member, 1, &asyncClient{member, conn, s.responses}}
+		s.nodes[member] = &node{member, 1, &asyncClient{member, conn}}
 	}
 	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
 	s.groups[op.groupID] = &group{
@@ -412,34 +342,6 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 
 	op.ch <- nil
-}
-
-func (s *state) submitCommand(op *submitCommandOp) {
-	log.V(6).Infof("node %v submitting command to group %v", s.nodeID, op.groupID)
-	err := s.multiNode.Propose(context.Background(), op.groupID, op.command)
-	op.ch <- err
-}
-
-func (s *state) changeGroupMembership(op *changeGroupMembershipOp) {
-	log.V(6).Infof("node %v proposing membership change to group %v", s.nodeID, op.groupID)
-	err := s.multiNode.ProposeConfChange(context.Background(), op.groupID,
-		raftpb.ConfChange{
-			Type:   op.changeType,
-			NodeID: op.nodeID,
-		})
-	op.ch <- err
-}
-
-func (s *state) sendMessageRequest(req *SendMessageRequest, resp *SendMessageResponse,
-	call *rpc.Call) {
-	log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
-		raft.DescribeMessage(req.Message))
-	err := s.multiNode.Step(context.Background(), req.GroupID, req.Message)
-	if err != nil {
-		log.Errorf("raft: %s", err)
-	}
-	call.Error = err
-	call.Done <- call
 }
 
 func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
