@@ -38,7 +38,8 @@ func (sc StoreCapacity) PercentAvail() float64 {
 }
 
 // Iterator is an interface for iterating over key/value pairs in an
-// engine.
+// engine. Iterator implementation are thread safe unless otherwise
+// noted.
 type Iterator interface {
 	// Close frees up resources held by the iterator.
 	Close()

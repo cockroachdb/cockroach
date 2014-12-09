@@ -234,7 +234,8 @@ func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return 0, util.Errorf("cannot get approximate size from a Batch")
 }
 
-// NewIterator returns an iterator over Batch.
+// NewIterator returns an iterator over Batch. Batch iterators are
+// not thread safe.
 func (b *Batch) NewIterator() Iterator {
 	return newBatchIterator(b.engine, &b.updates)
 }
@@ -312,7 +313,9 @@ func (bi *batchIterator) Error() error {
 
 // mergeUpdates combines the next key/value from the engine iterator
 // with all batch updates which preceed it. The final batch update
-// which might overlap the next key/value is merged.
+// which might overlap the next key/value is merged. The start
+// parameter indicates the first possible key to merge from either
+// iterator.
 func (bi *batchIterator) mergeUpdates(start proto.EncodedKey) {
 	// Use a for-loop because deleted entries might cause nothing
 	// to be added to bi.pending; in this case, we loop to next key.
