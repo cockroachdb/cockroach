@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 const (
@@ -69,7 +70,18 @@ func StartTestServer(t *testing.T) *TestServer {
 
 // Gossip returns the gossip instance used by the TestServer.
 func (ts *TestServer) Gossip() *gossip.Gossip {
-	return ts.gossip
+	if ts != nil {
+		return ts.gossip
+	}
+	return nil
+}
+
+// Clock returns the clock used by the TestServer.
+func (ts *TestServer) Clock() *hlc.Clock {
+	if ts != nil {
+		return ts.clock
+	}
+	return nil
 }
 
 // Start starts the TestServer by bootstrapping an in-memory store

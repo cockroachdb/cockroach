@@ -237,9 +237,11 @@ func TestGzip(t *testing.T) {
 	}
 }
 
+// TestMultiRangeScanDeleteRange tests that commands that commands which access
+// multiple ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := StartTestServer(t)
-	ds := kv.NewDistSender(ts.Gossip())
+	tds := kv.NewTxnCoordSender(kv.NewDistSender(ts.Gossip()), ts.Clock())
 
 	if err := ts.node.db.Call(proto.AdminSplit,
 		&proto.AdminSplitRequest{
@@ -258,7 +260,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	get.Args.Header().User = storage.UserRoot
 	get.Args.Header().EndKey = writes[len(writes)-1]
-	ds.Send(get)
+	tds.Send(get)
 	if err := get.Reply.Header().GoError(); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
@@ -270,7 +272,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			Reply:  &proto.PutResponse{},
 		}
 		call.Args.Header().User = storage.UserRoot
-		ds.Send(call)
+		tds.Send(call)
 		if err := call.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
 		}
@@ -279,10 +281,16 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
 			Reply:  &proto.ScanResponse{},
 		}
+		// The Put ts may have been pushed by tsCache,
+		// so make sure we see their values in our Scan.
+		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
 		scan.Args.Header().User = storage.UserRoot
-		ds.Send(scan)
+		tds.Send(scan)
 		if err := scan.Reply.Header().GoError(); err != nil {
 			t.Fatal(err)
+		}
+		if scan.Reply.Header().Txn == nil {
+			t.Errorf("expected Scan to be wrapped in a Transaction")
 		}
 		if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) != i+1 {
 			t.Fatalf("expected %d rows, but got %d", i+1, len(rows))
@@ -292,26 +300,41 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		Method: proto.DeleteRange,
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
-				User:   storage.UserRoot,
-				Key:    writes[0],
-				EndKey: proto.Key(writes[len(writes)-1]).Next(),
+				User:      storage.UserRoot,
+				Key:       writes[0],
+				EndKey:    proto.Key(writes[len(writes)-1]).Next(),
+				Timestamp: call.Reply.Header().Timestamp,
 			},
 		},
 		Reply: &proto.DeleteRangeResponse{},
 	}
-	ds.Send(del)
+	tds.Send(del)
 	if err := del.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
 	}
+	if del.Reply.Header().Txn == nil {
+		t.Errorf("expected DeleteRange to be wrapped in a Transaction")
+	}
+	if n := del.Reply.(*proto.DeleteRangeResponse).NumDeleted; n != int64(len(writes)) {
+		t.Errorf("expected %d keys to be deleted, but got %d instead",
+			len(writes), n)
+	}
+
 	scan := &client.Call{
 		Method: proto.Scan,
 		Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
 		Reply:  &proto.ScanResponse{},
 	}
+	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().User = storage.UserRoot
-	ds.Send(scan)
+	scan.Args.Header().Txn = &proto.Transaction{Name: "MyTxn"}
+	tds.Send(scan)
 	if err := scan.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
+	}
+	// TODO: end this txn
+	if txn := scan.Reply.Header().Txn; txn == nil || txn.Name != "MyTxn" {
+		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}
 	if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) > 0 {
 		t.Fatalf("scan after delete returned rows: %v", rows)

@@ -112,6 +112,14 @@ message WriteTooOldError {
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
+// An OpRequiresTxnError indicates that a command required to be
+// carried out in a transactional context but was not.
+// For example, a Scan which spans ranges requires a transaction.
+// The operation should be retried inside of a transaction.
+message OpRequiresTxnError {
+}
+
+
 // Error is a union type containing all available errors.
 // NOTE: new error types must be added here, and potentially in
 // the two locations (*ResponseHeader).{,Set}GoError().
@@ -127,5 +135,6 @@ message Error {
   optional TransactionStatusError transaction_status = 9;
   optional WriteIntentError write_intent = 10;
   optional WriteTooOldError write_too_old = 11;
+  optional OpRequiresTxnError op_requires_txn = 12;
 }
 
