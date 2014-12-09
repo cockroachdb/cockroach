@@ -507,12 +507,13 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 // internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, rangeID int64) (
+func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID int32) (
 	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
 	args := &proto.InternalMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: value,
 	}
@@ -1581,14 +1582,14 @@ func TestInternalMerge(t *testing.T) {
 	stringArgs := []string{"a", "b", "c", "d"}
 	stringExpected := "abcd"
 
-	for _, s := range stringArgs {
-		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(s)}, 1)
+	for _, str := range stringArgs {
+		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, s.StoreID())
 		if err := r.AddCmd(proto.InternalMerge, mergeArgs, resp, true); err != nil {
 			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
 		}
 	}
 
-	getArgs, resp := getArgs(key, 1)
+	getArgs, resp := getArgs(key, 1, s.StoreID())
 	if err := r.AddCmd(proto.Get, getArgs, resp, true); err != nil {
 		t.Fatalf("unexpected error from Get: %s", err.Error())
 	}
