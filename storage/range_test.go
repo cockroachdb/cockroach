@@ -99,7 +99,9 @@ func createTestRange(t *testing.T) (*Store, *Range, *gossip.Gossip, engine.Engin
 	}
 	initConfigs(engine, t)
 	r := NewRange(&testRangeDescriptor, store)
-	store.AddRange(r)
+	if err := store.AddRange(r); err != nil {
+		t.Fatal(err)
+	}
 	return store, r, g, engine
 }
 
@@ -341,7 +343,9 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 		t.Fatal(err)
 	}
 	rng := NewRange(&testRangeDescriptor, store)
-	store.AddRange(rng)
+	if err := store.AddRange(rng); err != nil {
+		t.Fatal(err)
+	}
 	return store, rng, &manual, clock, engine
 }
 

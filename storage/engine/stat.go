@@ -54,10 +54,10 @@ var (
 )
 
 // MakeRangeStatKey returns the key for accessing the named stat
-// for the specified range ID.
-func MakeRangeStatKey(rangeID int64, stat proto.Key) proto.Key {
-	encRangeID := encoding.EncodeInt(nil, rangeID)
-	return MakeKey(KeyLocalRangeStatPrefix, encRangeID, stat)
+// for the specified Raft ID.
+func MakeRangeStatKey(raftID int64, stat proto.Key) proto.Key {
+	encRaftID := encoding.EncodeInt(nil, raftID)
+	return MakeKey(KeyLocalRangeStatPrefix, encRaftID, stat)
 }
 
 // MakeStoreStatKey returns the key for accessing the named stat
@@ -70,8 +70,8 @@ func MakeStoreStatKey(storeID int32, stat proto.Key) proto.Key {
 // GetRangeStat fetches the specified stat from the provided engine.
 // If the stat could not be found, returns 0. An error is returned
 // on stat decode error.
-func GetRangeStat(engine Engine, rangeID int64, stat proto.Key) (int64, error) {
-	val, err := MVCCGet(engine, MakeRangeStatKey(rangeID, stat), proto.ZeroTimestamp, nil)
+func GetRangeStat(engine Engine, raftID int64, stat proto.Key) (int64, error) {
+	val, err := MVCCGet(engine, MakeRangeStatKey(raftID, stat), proto.ZeroTimestamp, nil)
 	if err != nil || val == nil {
 		return 0, err
 	}
@@ -81,13 +81,13 @@ func GetRangeStat(engine Engine, rangeID int64, stat proto.Key) (int64, error) {
 // MergeStat flushes the specified stat to merge counters via the
 // provided mvcc instance for both the affected range and store. Only
 // updates range or store stats if the corresponding ID is non-zero.
-func MergeStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) error {
+func MergeStat(engine Engine, raftID int64, storeID int32, stat proto.Key, statVal int64) error {
 	if statVal == 0 {
 		return nil
 	}
 	value := proto.Value{Integer: gogoproto.Int64(statVal)}
-	if rangeID != 0 {
-		if err := MVCCMerge(engine, nil, MakeRangeStatKey(rangeID, stat), value); err != nil {
+	if raftID != 0 {
+		if err := MVCCMerge(engine, nil, MakeRangeStatKey(raftID, stat), value); err != nil {
 			return err
 		}
 	}
@@ -102,10 +102,10 @@ func MergeStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, stat
 // SetStat writes the specified stat to counters via the provided mvcc
 // instance for both the affected range and store. Only updates range
 // or store stats if the corresponding ID is non-zero.
-func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVal int64) error {
+func SetStat(engine Engine, raftID int64, storeID int32, stat proto.Key, statVal int64) error {
 	value := proto.Value{Integer: gogoproto.Int64(statVal)}
-	if rangeID != 0 {
-		if err := MVCCPut(engine, nil, MakeRangeStatKey(rangeID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+	if raftID != 0 {
+		if err := MVCCPut(engine, nil, MakeRangeStatKey(raftID, stat), proto.ZeroTimestamp, value, nil); err != nil {
 			return err
 		}
 	}
@@ -119,12 +119,12 @@ func SetStat(engine Engine, rangeID int64, storeID int32, stat proto.Key, statVa
 
 // GetRangeSize returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values.
-func GetRangeSize(engine Engine, rangeID int64) (int64, error) {
-	keyBytes, err := GetRangeStat(engine, rangeID, StatKeyBytes)
+func GetRangeSize(engine Engine, raftID int64) (int64, error) {
+	keyBytes, err := GetRangeStat(engine, raftID, StatKeyBytes)
 	if err != nil {
 		return 0, err
 	}
-	valBytes, err := GetRangeStat(engine, rangeID, StatValBytes)
+	valBytes, err := GetRangeStat(engine, raftID, StatValBytes)
 	if err != nil {
 		return 0, err
 	}
@@ -132,8 +132,8 @@ func GetRangeSize(engine Engine, rangeID int64) (int64, error) {
 }
 
 // ClearRangeStats clears stats for the specified range.
-func ClearRangeStats(engine Engine, rangeID int64) error {
-	statStartKey := MakeKey(KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, rangeID))
+func ClearRangeStats(engine Engine, raftID int64) error {
+	statStartKey := MakeKey(KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, raftID))
 	_, err := ClearRange(engine, MVCCEncodeKey(statStartKey), MVCCEncodeKey(statStartKey.PrefixEnd()))
 	return err
 }

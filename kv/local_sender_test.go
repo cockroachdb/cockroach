@@ -157,7 +157,9 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 			t.Fatal(err)
 		}
 		newRng := storage.NewRange(desc, s[i])
-		s[i].AddRange(newRng)
+		if err := s[i].AddRange(newRng); err != nil {
+			t.Error(err)
+		}
 		ls.AddStore(s[i])
 	}
 

@@ -228,8 +228,6 @@ var (
 	KeyNodeIDGenerator = MakeKey(KeySystemPrefix, proto.Key("node-idgen"))
 	// KeyRaftIDGenerator is the global Raft consensus group ID generator sequence.
 	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, proto.Key("raft-idgen"))
-	// KeyRangeIDGenerator is the global range ID generator sequence.
-	KeyRangeIDGenerator = MakeKey(KeySystemPrefix, proto.Key("range-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.
 	KeySchemaPrefix = MakeKey(KeySystemPrefix, proto.Key("schema"))
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence

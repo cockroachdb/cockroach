@@ -194,6 +194,69 @@ func TestRangeSliceSort(t *testing.T) {
 	}
 }
 
+func createRange(s *Store, raftID int64, start, end proto.Key) *Range {
+	desc := &proto.RangeDescriptor{
+		RaftID:   raftID,
+		StartKey: start,
+		EndKey:   end,
+	}
+	return NewRange(desc, s)
+}
+
+func TestStoreAddRemoveRanges(t *testing.T) {
+	store, _ := createTestStore(t)
+	defer store.Stop()
+	if _, err := store.GetRange(0); err == nil {
+		t.Error("expected GetRange to fail on missing range")
+	}
+	// Range 1 already exists. Make sure we can fetch it.
+	rng1, err := store.GetRange(1)
+	if err != nil {
+		t.Error(err)
+	}
+	// Remove range 1.
+	if err := store.RemoveRange(rng1); err != nil {
+		t.Error(err)
+	}
+	// Create a new range (id=2).
+	rng2 := createRange(store, 2, proto.Key("a"), proto.Key("b"))
+	if err := store.AddRange(rng2); err != nil {
+		t.Fatal(err)
+	}
+	// Try to add a range with preexisting ID.
+	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
+	if err := store.AddRange(rng2Dup); err != nil {
+		t.Fatal(err)
+	}
+	// Add another range with different key range and then test lookup.
+	rng3 := createRange(store, 3, proto.Key("c"), proto.Key("d"))
+	if err := store.AddRange(rng3); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		start, end proto.Key
+		expRng     *Range
+	}{
+		{proto.Key("a"), proto.Key("a\x00"), rng2},
+		{proto.Key("a"), proto.Key("b"), rng2},
+		{proto.Key("b").Prev(), proto.Key("b"), rng2},
+		{proto.Key("c"), proto.Key("c\x00"), rng3},
+		{proto.Key("c"), proto.Key("d"), rng3},
+		{proto.Key("d").Prev(), proto.Key("d"), rng3},
+		{proto.Key("a").Prev(), proto.Key("a"), nil},
+		{proto.Key("a").Prev(), proto.Key("a\x00"), nil},
+		{proto.Key("d"), proto.Key("d"), nil},
+		{proto.Key("d").Prev(), proto.Key("d\x00"), nil},
+	}
+
+	for i, test := range testCases {
+		if r := store.LookupRange(test.start, test.end); r != test.expRng {
+			t.Error("%d: expected range %s; got %s", i, test.expRng, r)
+		}
+	}
+}
+
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {

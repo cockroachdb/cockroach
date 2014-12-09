@@ -1208,7 +1208,7 @@ func TestValidSplitKeys(t *testing.T) {
 }
 
 func TestFindSplitKey(t *testing.T) {
-	rangeID := int64(1)
+	raftID := int64(1)
 	engine := NewInMem(proto.Attributes{}, 1<<20)
 	ms := &MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
@@ -1225,11 +1225,11 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ms.MergeStats(engine, rangeID, 0) // write stats
+	ms.MergeStats(engine, raftID, 0) // write stats
 	if err := engine.CreateSnapshot("snap1"); err != nil {
 		t.Fatal(err)
 	}
-	humanSplitKey, err := MVCCFindSplitKey(engine, rangeID, KeyMin, KeyMax, "snap1")
+	humanSplitKey, err := MVCCFindSplitKey(engine, raftID, KeyMin, KeyMax, "snap1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1245,7 +1245,7 @@ func TestFindSplitKey(t *testing.T) {
 // TestFindValidSplitKeys verifies split keys are located such that
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
-	rangeID := int64(1)
+	raftID := int64(1)
 	testCases := []struct {
 		keys     []proto.Key
 		expSplit proto.Key
@@ -1328,13 +1328,13 @@ func TestFindValidSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, rangeID, 0) // write stats
+		ms.MergeStats(engine, raftID, 0) // write stats
 		if err := engine.CreateSnapshot("snap1"); err != nil {
 			t.Fatal(err)
 		}
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
-		splitKey, err := MVCCFindSplitKey(engine, rangeID, rangeStart, rangeEnd, "snap1")
+		splitKey, err := MVCCFindSplitKey(engine, raftID, rangeStart, rangeEnd, "snap1")
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: expected error", i)
@@ -1357,7 +1357,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 // TestFindBalancedSplitKeys verifies split keys are located such that
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
-	rangeID := int64(1)
+	raftID := int64(1)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -1415,11 +1415,11 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, rangeID, 0) // write stats
+		ms.MergeStats(engine, raftID, 0) // write stats
 		if err := engine.CreateSnapshot("snap1"); err != nil {
 			t.Fatal(err)
 		}
-		splitKey, err := MVCCFindSplitKey(engine, rangeID, proto.Key("\x01"), proto.KeyMax, "snap1")
+		splitKey, err := MVCCFindSplitKey(engine, raftID, proto.Key("\x01"), proto.KeyMax, "snap1")
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue

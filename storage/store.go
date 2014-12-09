@@ -104,6 +104,15 @@ func verifyKeys(start, end proto.Key) error {
 	return nil
 }
 
+type rangeAlreadyExists struct {
+	rng *Range
+}
+
+// Error implements the error interface.
+func (e *rangeAlreadyExists) Error() string {
+	return fmt.Sprintf("range for Raft ID %d already exists on store", e.rng.Desc.RaftID)
+}
+
 // A RangeSlice is a slice of Range pointers used for replica lookups
 // by key.
 type RangeSlice []*Range
@@ -260,9 +269,9 @@ func (s *Store) Start() error {
 			return false, err
 		}
 		rng := NewRange(&desc, s)
-		rng.start()
-		s.ranges[desc.RaftID] = rng
-		s.rangesByKey = append(s.rangesByKey, rng)
+		if err := s.addRangeInternal(rng, false /* don't sort on each addition */); err != nil {
+			return false, err
+		}
 		return false, nil
 	}); err != nil {
 		return err
@@ -536,22 +545,36 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
-	newRng.start()
-	s.ranges[newRng.Desc.RaftID] = newRng
-	s.rangesByKey = append(s.rangesByKey, newRng)
-	sort.Sort(s.rangesByKey)
-	return nil
+	return s.addRangeInternal(newRng, true)
 }
 
 // AddRange adds the range to the store's range map and to the sorted
 // rangesByKey slice.
-func (s *Store) AddRange(rng *Range) {
+func (s *Store) AddRange(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.addRangeInternal(rng, true)
+}
+
+// addRangeInternal starts the range and adds it to the ranges map and
+// the rangesByKey slice. If resort is true, the rangesByKey slice is
+// sorted; this is optional to allow many ranges to be added and the
+// sort only invoked once. This method presupposes the store's lock
+// is held. Returns a rangeAlreadyExists error if a range with the
+// same Raft ID has already been added to this store.
+func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 	rng.start()
+	// TODO(spencer); will need to determine which range is
+	// newer, and keep that one.
+	if exRng, ok := s.ranges[rng.Desc.RaftID]; ok {
+		return &rangeAlreadyExists{exRng}
+	}
 	s.ranges[rng.Desc.RaftID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
-	sort.Sort(s.rangesByKey)
+	if resort {
+		sort.Sort(s.rangesByKey)
+	}
+	return nil
 }
 
 // RemoveRange removes the range from the store's range map and from

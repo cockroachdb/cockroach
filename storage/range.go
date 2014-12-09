@@ -139,7 +139,7 @@ type RangeManager interface {
 	// Range manipulation methods.
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	SplitRange(origRng, newRng *Range) error
-	AddRange(rng *Range)
+	AddRange(rng *Range) error
 	RemoveRange(rng *Range) error
 	CreateSnapshot() (string, error)
 	ProposeRaftCommand(proto.InternalRaftCommand)
