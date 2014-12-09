@@ -63,6 +63,10 @@ message RequestHeader {
   // Replica specifies the destination for the request. This is a specific
   // instance of the available replicas belonging to RangeID.
   optional Replica replica = 6 [(gogoproto.nullable) = false];
+  // RaftID specifies the ID of the Raft consensus group which the key
+  // range belongs to. This is used by the receiving node to route the
+  // request to the correct range.
+  optional int64 raft_id = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
   // UserPriority specifies priority multiple for non-transactional
   // commands. This value should be a positive integer [1, 2^31-1).
   // It's properly viewed as a multiple for how likely this
@@ -72,13 +76,13 @@ message RequestHeader {
   // with UserPriority=1. This value is ignored if Txn is
   // specified. If neither this value nor Txn is specified, the value
   // defaults to 1.
-  optional int32 user_priority = 7 [default = 1];
+  optional int32 user_priority = 8 [default = 1];
   // Txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
-  optional Transaction txn = 8;
+  optional Transaction txn = 9;
 }
 
 // ResponseHeader is returned with every storage node response.

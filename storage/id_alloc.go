@@ -77,13 +77,7 @@ func (ia *IDAllocator) Allocate() int64 {
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
-	if err := ia.db.Call(proto.Increment, &proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  ia.idKey,
-			User: UserRoot,
-		},
-		Increment: incr,
-	}, ir); err != nil {
+	if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
 		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, err)
 	}
 	if ir.NewValue <= ia.minID {

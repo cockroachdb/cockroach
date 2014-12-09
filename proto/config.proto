@@ -26,16 +26,14 @@ message Attributes {
 }
 
 // Replica describes a replica location by node ID (corresponds to a
-// host:port via lookup on gossip network), store ID (corresponds to
-// a physical device, unique per node) and range ID. Datacenter and
-// DiskType are provided to optimize reads. Replicas are stored in
-// Range lookup records (meta1, meta2).
+// host:port via lookup on gossip network), store ID (identifies the
+// device) and associated attributes. Replicas are stored in Range
+// lookup records (meta1, meta2).
 message Replica {
   optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
   optional int32 store_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
-  optional int64 range_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RangeID"];
-  // combination of node & store attributes.
-  optional Attributes attrs = 4 [(gogoproto.nullable) = false];
+  // Combination of node & store attributes.
+  optional Attributes attrs = 3 [(gogoproto.nullable) = false];
 }
 
 // RangeDescriptor is the value stored in a range metadata key.

@@ -35,11 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminSplitArgs(key, splitKey []byte, rangeID int64) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
+func adminSplitArgs(key, splitKey []byte, raftID int64, storeID int32) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		SplitKey: splitKey,
 	}
@@ -47,8 +48,8 @@ func adminSplitArgs(key, splitKey []byte, rangeID int64) (*proto.AdminSplitReque
 	return args, reply
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.MVCCGetRangeStats(eng, rangeID)
+func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t *testing.T) {
+	ms, err := engine.MVCCGetRangeStats(eng, raftID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		engine.MakeKey(engine.KeyConfigPermissionPrefix, []byte("a")),
 		engine.MakeKey(engine.KeyConfigZonePrefix, []byte("a")),
 	} {
-		args, reply := adminSplitArgs(engine.KeyMin, key, 1)
+		args, reply := adminSplitArgs(engine.KeyMin, key, 1, store.StoreID())
 		err := store.ExecuteCmd(proto.AdminSplit, args, reply)
 		if err == nil {
 			t.Fatalf("%q: split succeeded unexpectedly", key)
@@ -88,7 +89,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
-	args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1)
+	args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("split succeeded unexpectedly")
 	}
 	// Now try to split at start of new range.
-	args, reply = adminSplitArgs(engine.KeyMin, []byte("a"), 2)
+	args, reply = adminSplitArgs(engine.KeyMin, []byte("a"), 2, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err == nil {
 		t.Fatalf("split succeeded unexpectedly")
 	}
@@ -115,7 +116,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	failureCount := int32(0)
 	for i := int32(0); i < concurrentCount; i++ {
 		go func() {
-			args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1)
+			args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(proto.AdminSplit, args, reply)
 			if err != nil {
 				if matched, regexpErr := regexp.MatchString(".*already splitting range 1", err.Error()); !matched || regexpErr != nil {
@@ -139,16 +140,16 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 func TestStoreRangeSplit(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
-	rangeID := int64(1)
+	raftID := int64(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
 
 	// First, write some values left and right of the proposed split key.
-	pArgs, pReply := putArgs([]byte("c"), content, rangeID)
+	pArgs, pReply := putArgs([]byte("c"), content, raftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply = putArgs([]byte("x"), content, rangeID)
+	pArgs, pReply = putArgs([]byte("x"), content, raftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
@@ -156,29 +157,29 @@ func TestStoreRangeSplit(t *testing.T) {
 	// Increments are a good way of testing the response cache. Up here, we
 	// address them to the original range, then later to the one that contains
 	// the key.
-	lIncArgs, lIncReply := incrementArgs([]byte("apoptosis"), 100, rangeID)
+	lIncArgs, lIncReply := incrementArgs([]byte("apoptosis"), 100, raftID, store.StoreID())
 	lIncArgs.CmdID = proto.ClientCmdID{WallTime: 123, Random: 423}
 	if err := store.ExecuteCmd(proto.Increment, lIncArgs, lIncReply); err != nil {
 		t.Fatal(err)
 	}
-	rIncArgs, rIncReply := incrementArgs([]byte("wobble"), 10, rangeID)
+	rIncArgs, rIncReply := incrementArgs([]byte("wobble"), 10, raftID, store.StoreID())
 	rIncArgs.CmdID = proto.ClientCmdID{WallTime: 12, Random: 42}
 	if err := store.ExecuteCmd(proto.Increment, rIncArgs, rIncReply); err != nil {
 		t.Fatal(err)
 	}
 
 	// Get the original stats for key and value bytes.
-	keyBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatKeyBytes)
+	keyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	valBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatValBytes)
+	valBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Split the range.
-	args, reply := adminSplitArgs(engine.KeyMin, splitKey, 1)
+	args, reply := adminSplitArgs(engine.KeyMin, splitKey, 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
@@ -193,12 +194,12 @@ func TestStoreRangeSplit(t *testing.T) {
 	}
 
 	// Try to get values from both left and right of where the split happened.
-	gArgs, gReply := getArgs([]byte("c"), rangeID)
+	gArgs, gReply := getArgs([]byte("c"), raftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
-	gArgs, gReply = getArgs([]byte("x"), newRng.RangeID)
+	gArgs, gReply = getArgs([]byte("x"), newRng.Desc.RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
@@ -216,7 +217,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	rIncArgs.RequestHeader.Replica.RangeID = newRng.RangeID
+	rIncArgs.RequestHeader.RaftID = newRng.Desc.RaftID
 	rIncReply = &proto.IncrementResponse{}
 	if err := store.ExecuteCmd(proto.Increment, rIncArgs, rIncReply); err != nil {
 		t.Fatal(err)
@@ -227,19 +228,19 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non ero and
 	// exceed the original range when summed.
-	lKeyBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatKeyBytes)
+	lKeyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lValBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatValBytes)
+	lValBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rKeyBytes, err := engine.GetRangeStat(store.Engine(), newRng.RangeID, engine.StatKeyBytes)
+	rKeyBytes, err := engine.GetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rValBytes, err := engine.GetRangeStat(store.Engine(), newRng.RangeID, engine.StatValBytes)
+	rValBytes, err := engine.GetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,43 +269,43 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	defer store.Stop()
 
 	// Split the range at the first user key.
-	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1)
+	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
 	// Verify empty range has empty stats.
 	rng := store.LookupRange(proto.Key("\x01"), nil)
-	verifyRangeStats(store.Engine(), rng.RangeID, engine.MVCCStats{}, t)
+	verifyRangeStats(store.Engine(), rng.Desc.RaftID, engine.MVCCStats{}, t)
 
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
 		key := []byte(util.RandString(src, int(src.Int31n(1<<7))))
 		val := []byte(util.RandString(src, int(src.Int31n(1<<8))))
-		pArgs, pReply := putArgs(key, val, rng.RangeID)
+		pArgs, pReply := putArgs(key, val, rng.Desc.RaftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Get the range stats now that we have data.
-	ms, err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID)
+	ms, err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.RangeID)
+	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc.RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
 
-	msLeft, err := engine.MVCCGetRangeStats(store.Engine(), rng.RangeID)
+	msLeft, err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupRange(proto.Key("Z"), nil)
-	msRight, err := engine.MVCCGetRangeStats(store.Engine(), rngRight.RangeID)
+	msRight, err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc.RaftID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,14 +328,14 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written.
-func fillRange(store *storage.Store, rangeID int64, prefix proto.Key, bytes int64, t *testing.T) {
+func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		keyBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatKeyBytes)
+		keyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 		if err != nil {
 			t.Fatal(err)
 		}
-		valBytes, err := engine.GetRangeStat(store.Engine(), rangeID, engine.StatValBytes)
+		valBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -343,7 +344,7 @@ func fillRange(store *storage.Store, rangeID int64, prefix proto.Key, bytes int6
 		}
 		key := append(append([]byte(nil), prefix...), []byte(util.RandString(src, 100))...)
 		val := []byte(util.RandString(src, int(src.Int31n(1<<8))))
-		pArgs, pReply := putArgs(key, val, rangeID)
+		pArgs, pReply := putArgs(key, val, raftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 			t.Fatal(err)
@@ -379,7 +380,7 @@ func TestStoreShouldSplit(t *testing.T) {
 	}
 
 	maxBytes := zoneConfig.RangeMaxBytes
-	fillRange(store, rng.RangeID, proto.Key("test"), maxBytes, t)
+	fillRange(store, rng.Desc.RaftID, proto.Key("test"), maxBytes, t)
 
 	if ok := rng.ShouldSplit(); !ok {
 		t.Errorf("range should split after writing %d bytes", maxBytes)

@@ -110,7 +110,7 @@ func splitTestRange(store *storage.Store, key, splitKey proto.Key, t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRng := storage.NewRange(desc.FindReplica(store.StoreID()).RangeID, desc, store)
+	newRng := storage.NewRange(desc, store)
 	if err := store.SplitRange(rng, newRng); err != nil {
 		t.Fatal(err)
 	}
@@ -156,24 +156,26 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		newRng := storage.NewRange(desc.FindReplica(rng.storeID).RangeID, desc, s[i])
-		s[i].AddRange(newRng)
+		newRng := storage.NewRange(desc, s[i])
+		if err := s[i].AddRange(newRng); err != nil {
+			t.Error(err)
+		}
 		ls.AddStore(s[i])
 	}
 
-	if r, err := ls.lookupReplica(proto.Key("a"), proto.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(proto.Key("a"), proto.Key("c")); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(proto.Key("b"), nil); r.StoreID != s[0].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[0].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
+	if _, r, err := ls.lookupReplica(proto.Key("b"), proto.Key("d")); r != nil || err == nil {
 		t.Errorf("expected store 0 and error got %d", r.StoreID)
 	}
-	if r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
+	if _, r, err := ls.lookupReplica(proto.Key("x"), proto.Key("z")); r.StoreID != s[1].Ident.StoreID {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
-	if r, err := ls.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
+	if _, r, err := ls.lookupReplica(proto.Key("y"), nil); r.StoreID != s[1].Ident.StoreID || err != nil {
 		t.Errorf("expected store %d; got %d: %v", s[1].Ident.StoreID, r.StoreID, err)
 	}
 }

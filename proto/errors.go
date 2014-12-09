@@ -35,15 +35,15 @@ func (e *NotLeaderError) Error() string {
 }
 
 // NewRangeNotFoundError initializes a new RangeNotFoundError.
-func NewRangeNotFoundError(rid int64) *RangeNotFoundError {
+func NewRangeNotFoundError(raftID int64) *RangeNotFoundError {
 	return &RangeNotFoundError{
-		RangeID: rid,
+		RaftID: raftID,
 	}
 }
 
 // Error formats error.
 func (e *RangeNotFoundError) Error() string {
-	return fmt.Sprintf("range %d was not found", e.RangeID)
+	return fmt.Sprintf("range %d was not found", e.RaftID)
 }
 
 // CanRetry indicates whether or not this RangeNotFoundError can be retried.

@@ -46,13 +46,11 @@ var (
 			{
 				NodeID:  1,
 				StoreID: 1,
-				RangeID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
 			{
 				NodeID:  2,
 				StoreID: 2,
-				RangeID: 2,
 				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
 			},
 		},
@@ -100,8 +98,10 @@ func createTestRange(t *testing.T) (*Store, *Range, *gossip.Gossip, engine.Engin
 		t.Fatal(err)
 	}
 	initConfigs(engine, t)
-	r := NewRange(1, &testRangeDescriptor, store)
-	store.AddRange(r)
+	r := NewRange(&testRangeDescriptor, store)
+	if err := store.AddRange(r); err != nil {
+		t.Fatal(err)
+	}
 	return store, r, g, engine
 }
 
@@ -121,7 +121,7 @@ func TestRangeContains(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(0, desc, NewStore(clock, nil, nil, nil))
+	r := NewRange(desc, NewStore(clock, nil, nil, nil))
 	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -342,18 +342,21 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	rng := NewRange(1, &testRangeDescriptor, store)
-	store.AddRange(rng)
+	rng := NewRange(&testRangeDescriptor, store)
+	if err := store.AddRange(rng); err != nil {
+		t.Fatal(err)
+	}
 	return store, rng, &manual, clock, engine
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, raftID int64, storeID int32) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
 	reply := &proto.GetResponse{}
@@ -362,12 +365,13 @@ func getArgs(key []byte, rangeID int64) (*proto.GetRequest, *proto.GetResponse) 
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, raftID int64, storeID int32) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
 			Timestamp: proto.MinTimestamp,
-			Replica:   proto.Replica{RangeID: rangeID},
+			RaftID:    raftID,
+			Replica:   proto.Replica{StoreID: storeID},
 		},
 		Value: proto.Value{
 			Bytes: value,
@@ -378,11 +382,12 @@ func putArgs(key, value []byte, rangeID int64) (*proto.PutRequest, *proto.PutRes
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key proto.Key, rangeID int64) (*proto.DeleteRequest, *proto.DeleteResponse) {
+func deleteArgs(key proto.Key, raftID int64, storeID int32) (*proto.DeleteRequest, *proto.DeleteResponse) {
 	args := &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
 	reply := &proto.DeleteResponse{}
@@ -392,22 +397,23 @@ func deleteArgs(key proto.Key, rangeID int64) (*proto.DeleteRequest, *proto.Dele
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key proto.Key, read bool) (string, proto.Request, proto.Response) {
+func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID int32) (string, proto.Request, proto.Response) {
 	if read {
-		gArgs, gReply := getArgs(key, 1)
+		gArgs, gReply := getArgs(key, raftID, storeID)
 		return proto.Get, gArgs, gReply
 	}
-	pArgs, pReply := putArgs(key, []byte("value"), 1)
+	pArgs, pReply := putArgs(key, []byte("value"), raftID, storeID)
 	return proto.Put, pArgs, pReply
 }
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, raftID int64, storeID int32) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		Increment: inc,
 	}
@@ -415,12 +421,13 @@ func incrementArgs(key []byte, inc int64, rangeID int64) (*proto.IncrementReques
 	return args, reply
 }
 
-func scanArgs(start, end []byte, rangeID int64) (*proto.ScanRequest, *proto.ScanResponse) {
+func scanArgs(start, end []byte, raftID int64, storeID int32) (*proto.ScanRequest, *proto.ScanResponse) {
 	args := &proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     start,
 			EndKey:  end,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 	}
 	reply := &proto.ScanResponse{}
@@ -429,12 +436,13 @@ func scanArgs(start, end []byte, rangeID int64) (*proto.ScanRequest, *proto.Scan
 
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
-func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
+func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID int32) (
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
 		Commit: commit,
@@ -445,13 +453,14 @@ func endTxnArgs(txn *proto.Transaction, commit bool, rangeID int64) (
 
 // pushTxnArgs returns request/response pair for InternalPushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, rangeID int64) (
+func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, storeID int32) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       pushee.ID,
 			Timestamp: pusher.Timestamp,
-			Replica:   proto.Replica{RangeID: rangeID},
+			RaftID:    raftID,
+			Replica:   proto.Replica{StoreID: storeID},
 			Txn:       pusher,
 		},
 		PusheeTxn: *pushee,
@@ -462,12 +471,13 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, rangeID int64) (
 }
 
 // heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
+func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID int32) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     txn.ID,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
 		},
 	}
@@ -478,13 +488,14 @@ func heartbeatArgs(txn *proto.Transaction, rangeID int64) (
 // internalSnapshotCopyArgs returns a InternalSnapshotCopyRequest and
 // InternalSnapshotCopyResponse pair addressed to the default replica
 // for the specified key and endKey.
-func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, rangeID int64) (
+func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, raftID int64, storeID int32) (
 	*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
 	args := &proto.InternalSnapshotCopyRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			EndKey:  endKey,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		SnapshotID: snapshotID,
 		MaxResults: maxResults,
@@ -496,12 +507,13 @@ func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snaps
 // internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, rangeID int64) (
+func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID int32) (
 	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
 	args := &proto.InternalMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
-			Replica: proto.Replica{RangeID: rangeID},
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
 		},
 		Value: value,
 	}
@@ -546,7 +558,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
-	gArgs, gReply := getArgs([]byte("a"), 1)
+	gArgs, gReply := getArgs([]byte("a"), 1, s.StoreID())
 	gArgs.Timestamp = clock.Now()
 	err := rng.AddCmd(proto.Get, gArgs, gReply, true)
 	if err != nil {
@@ -555,7 +567,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	// Set clock to time 2s for write.
 	t1 := 2 * time.Second
 	*mc = hlc.ManualClock(t1.Nanoseconds())
-	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 1)
+	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
 	if err != nil {
@@ -605,7 +617,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		be.block(key1)
 		cmd1Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd1Read)
+			method, args, reply := readOrWriteArgs(key1, test.cmd1Read, rng.Desc.RaftID, s.StoreID())
 			err := rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -616,7 +628,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd2Read)
+			method, args, reply := readOrWriteArgs(key1, test.cmd2Read, rng.Desc.RaftID, s.StoreID())
 			err := rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -627,7 +639,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		// Next, try read for a non-impacted key--should go through immediately.
 		cmd3Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key2, true)
+			method, args, reply := readOrWriteArgs(key2, true, rng.Desc.RaftID, s.StoreID())
 			err := rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -677,13 +689,13 @@ func TestRangeUseTSCache(t *testing.T) {
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
 	*mc = hlc.ManualClock(t0.Nanoseconds())
-	args, reply := getArgs([]byte("a"), 1)
+	args, reply := getArgs([]byte("a"), 1, s.StoreID())
 	args.Timestamp = clock.Now()
 	err := rng.AddCmd(proto.Get, args, reply, true)
 	if err != nil {
 		t.Error(err)
 	}
-	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1)
+	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1, s.StoreID())
 	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
 	if err != nil {
 		t.Fatal(err)
@@ -705,7 +717,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
 
 		// Start by laying down an intent to trip up future read or write to same key.
-		pArgs, pReply := putArgs(key, []byte("value"), 1)
+		pArgs, pReply := putArgs(key, []byte("value"), 1, s.StoreID())
 		pArgs.Txn = newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 		pArgs.Timestamp = pArgs.Txn.Timestamp
 		if err := rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
@@ -713,7 +725,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		}
 
 		// Now attempt read or write.
-		method, args, reply := readOrWriteArgs(key, read)
+		method, args, reply := readOrWriteArgs(key, read, rng.Desc.RaftID, s.StoreID())
 		args.Header().Timestamp = clock.Now() // later timestamp
 		if err := rng.AddCmd(method, args, reply, true); err == nil {
 			t.Errorf("test %d: expected failure", i)
@@ -741,7 +753,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 	// Start with a read to warm the timestamp cache.
-	gArgs, gReply := getArgs(key, 1)
+	gArgs, gReply := getArgs(key, 1, s.StoreID())
 	gArgs.Txn = txn
 	gArgs.Timestamp = txn.Timestamp
 	if err := rng.AddCmd(proto.Get, gArgs, gReply, true); err != nil {
@@ -749,7 +761,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 
 	// Now try a write and verify timestamp isn't incremented.
-	pArgs, pReply := putArgs(key, []byte("value"), 1)
+	pArgs, pReply := putArgs(key, []byte("value"), 1, s.StoreID())
 	pArgs.Txn = txn
 	pArgs.Timestamp = pArgs.Txn.Timestamp
 	if err := rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
@@ -779,7 +791,7 @@ func TestRangeIdempotence(t *testing.T) {
 
 	// Run the same increment 100 times, 50 with identical command ID,
 	// interleaved with 50 using a sequence of different command IDs.
-	goldenArgs, _ := incrementArgs([]byte("a"), 1, 1)
+	goldenArgs, _ := incrementArgs([]byte("a"), 1, 1, s.StoreID())
 	incDones := make([]chan struct{}, 100)
 	var count int64
 	for i := range incDones {
@@ -834,15 +846,15 @@ func TestRangeSnapshot(t *testing.T) {
 	val2 := []byte("2")
 	val3 := []byte("3")
 
-	pArgs, pReply := putArgs(key1, val1, 1)
+	pArgs, pReply := putArgs(key1, val1, 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	err := rng.AddCmd(proto.Put, pArgs, pReply, true)
 
-	pArgs, pReply = putArgs(key2, val2, 1)
+	pArgs, pReply = putArgs(key2, val2, 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
 
-	gArgs, gReply := getArgs(key1, 1)
+	gArgs, gReply := getArgs(key1, 1, s.StoreID())
 	gArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.Get, gArgs, gReply, true)
 
@@ -854,7 +866,7 @@ func TestRangeSnapshot(t *testing.T) {
 			gReply.Value.Bytes, val1)
 	}
 
-	iscArgs, iscReply := internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1)
+	iscArgs, iscReply := internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1, s.StoreID())
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -870,12 +882,12 @@ func TestRangeSnapshot(t *testing.T) {
 			iscReply.Rows[1].Value, iscReply.Rows[0].Key, expectedVal, expectedKey)
 	}
 
-	pArgs, pReply = putArgs(key2, val3, 1)
+	pArgs, pReply = putArgs(key2, val3, 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
 
 	// Scan with the previous snapshot will get the old value val2 of key2.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, snapshotID, 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, snapshotID, 1, s.StoreID())
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -892,7 +904,7 @@ func TestRangeSnapshot(t *testing.T) {
 	snapshotLastKey := proto.Key(iscReply.Rows[3].Key)
 
 	// Create a new snapshot to cover the latest value.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1, s.StoreID())
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -910,7 +922,7 @@ func TestRangeSnapshot(t *testing.T) {
 	}
 	snapshot2LastKey := proto.Key(iscReply.Rows[4].Key)
 
-	iscArgs, iscReply = internalSnapshotCopyArgs(snapshotLastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID, 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(snapshotLastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID, 1, s.StoreID())
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -919,7 +931,7 @@ func TestRangeSnapshot(t *testing.T) {
 	if len(iscReply.Rows) != 0 {
 		t.Fatalf("error : %d", len(iscReply.Rows))
 	}
-	iscArgs, iscReply = internalSnapshotCopyArgs(snapshot2LastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID2, 1)
+	iscArgs, iscReply = internalSnapshotCopyArgs(snapshot2LastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID2, 1, s.StoreID())
 	iscArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
 	if err != nil {
@@ -939,7 +951,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 	key := []byte("a")
 	for _, commit := range []bool{true, false} {
 		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
-		args, reply := endTxnArgs(txn, commit, 1)
+		args, reply := endTxnArgs(txn, commit, 1, s.StoreID())
 		args.Timestamp = txn.Timestamp
 		if err := rng.AddCmd(proto.EndTransaction, args, reply, true); err != nil {
 			t.Error(err)
@@ -954,7 +966,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
-		hbArgs, hbReply := heartbeatArgs(txn, 1)
+		hbArgs, hbReply := heartbeatArgs(txn, 1, s.StoreID())
 		if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Error(err)
 		}
@@ -975,7 +987,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 		txn := newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 		// Start out with a heartbeat to the transaction.
-		hbArgs, hbReply := heartbeatArgs(txn, 1)
+		hbArgs, hbReply := heartbeatArgs(txn, 1, s.StoreID())
 		hbArgs.Timestamp = txn.Timestamp
 		if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Error(err)
@@ -984,7 +996,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 			t.Errorf("unexpected heartbeat reply contents: %+v", hbReply)
 		}
 
-		args, reply := endTxnArgs(txn, commit, 1)
+		args, reply := endTxnArgs(txn, commit, 1, s.StoreID())
 		args.Timestamp = txn.Timestamp
 		if err := rng.AddCmd(proto.EndTransaction, args, reply, true); err != nil {
 			t.Error(err)
@@ -1025,7 +1037,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		txn := newTransaction("test", key, 1, test.isolation, clock)
 		// End the transaction with args timestamp moved forward in time.
-		args, reply := endTxnArgs(txn, test.commit, 1)
+		args, reply := endTxnArgs(txn, test.commit, 1, s.StoreID())
 		*mc = hlc.ManualClock(1)
 		args.Timestamp = clock.Now()
 		err := rng.AddCmd(proto.EndTransaction, args, reply, true)
@@ -1061,14 +1073,14 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 	txn := newTransaction("test", key, 1, proto.SERIALIZABLE, clock)
 
 	// Start out with a heartbeat to the transaction.
-	hbArgs, hbReply := heartbeatArgs(txn, 1)
+	hbArgs, hbReply := heartbeatArgs(txn, 1, s.StoreID())
 	hbArgs.Timestamp = txn.Timestamp
 	if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 		t.Error(err)
 	}
 
 	// Now end the txn with increased epoch and priority.
-	args, reply := endTxnArgs(txn, true, 1)
+	args, reply := endTxnArgs(txn, true, 1, s.StoreID())
 	args.Timestamp = txn.Timestamp
 	args.Txn.Epoch = txn.Epoch + 1
 	args.Txn.Priority = txn.Priority + 1
@@ -1124,7 +1136,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 		// End the transaction, verify expected error.
 		txn.ID = test.key
-		args, reply := endTxnArgs(txn, true, 1)
+		args, reply := endTxnArgs(txn, true, 1, s.StoreID())
 		args.Timestamp = txn.Timestamp
 		verifyErrorMatches(rng.AddCmd(proto.EndTransaction, args, reply, true), test.expErrRegexp, t)
 	}
@@ -1138,7 +1150,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
 
-	args, reply := pushTxnArgs(pusher, pushee, true, 1)
+	args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 	args.Key = pusher.ID
 	verifyErrorMatches(rng.AddCmd(proto.InternalPushTxn, args, reply, true), ".*should match pushee.*", t)
 }
@@ -1157,14 +1169,14 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 		pushee.Priority = 2 // pusher will lose, meaning we shouldn't push unless pushee is already ended.
 
 		// End the pushee's transaction.
-		etArgs, etReply := endTxnArgs(pushee, status == proto.COMMITTED, 1)
+		etArgs, etReply := endTxnArgs(pushee, status == proto.COMMITTED, 1, s.StoreID())
 		etArgs.Timestamp = pushee.Timestamp
 		if err := rng.AddCmd(proto.EndTransaction, etArgs, etReply, true); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now try to push what's already committed or aborted.
-		args, reply := pushTxnArgs(pusher, pushee, true, 1)
+		args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 		if err := rng.AddCmd(proto.InternalPushTxn, args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1212,7 +1224,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		pushee.Epoch = test.startEpoch
 		pushee.Timestamp = test.startTS
-		hbArgs, hbReply := heartbeatArgs(pushee, 1)
+		hbArgs, hbReply := heartbeatArgs(pushee, 1, s.StoreID())
 		hbArgs.Timestamp = pushee.Timestamp
 		if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Fatal(err)
@@ -1221,7 +1233,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 		// Now, attempt to push the transaction using updated values for epoch & timestamp.
 		pushee.Epoch = test.epoch
 		pushee.Timestamp = test.ts
-		args, reply := pushTxnArgs(pusher, pushee, true, 1)
+		args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 		if err := rng.AddCmd(proto.InternalPushTxn, args, reply, true); err != nil {
 			t.Fatal(err)
 		}
@@ -1268,7 +1280,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		if test.heartbeat != nil {
-			hbArgs, hbReply := heartbeatArgs(pushee, 1)
+			hbArgs, hbReply := heartbeatArgs(pushee, 1, s.StoreID())
 			hbArgs.Timestamp = *test.heartbeat
 			if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 				t.Fatal(err)
@@ -1277,7 +1289,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Now, attempt to push the transaction with clock set to "currentTime".
 		*mc = hlc.ManualClock(test.currentTime)
-		args, reply := pushTxnArgs(pusher, pushee, true, 1)
+		args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 		err := rng.AddCmd(proto.InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1317,7 +1329,7 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 		// First, establish "start" of existing pushee's txn via heartbeat.
 		pushee.Epoch = test.curEpoch
-		hbArgs, hbReply := heartbeatArgs(pushee, 1)
+		hbArgs, hbReply := heartbeatArgs(pushee, 1, s.StoreID())
 		hbArgs.Timestamp = pushee.Timestamp
 		if err := rng.AddCmd(proto.InternalHeartbeatTxn, hbArgs, hbReply, true); err != nil {
 			t.Fatal(err)
@@ -1325,7 +1337,7 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
 		pushee.Epoch = test.intentEpoch
-		args, reply := pushTxnArgs(pusher, pushee, true, 1)
+		args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 		err := rng.AddCmd(proto.InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1383,7 +1395,7 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 		pushee.Timestamp = test.pusheeTS
 
 		// Now, attempt to push the transaction with intent epoch set appropriately.
-		args, reply := pushTxnArgs(pusher, pushee, test.abort, 1)
+		args, reply := pushTxnArgs(pusher, pushee, test.abort, 1, s.StoreID())
 		err := rng.AddCmd(proto.InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {
 			t.Errorf("expected success on trial %d? %t; got err %s", i, test.expSuccess, err)
@@ -1412,7 +1424,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 5, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1)
+	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, s.StoreID())
 	if err := rng.AddCmd(proto.InternalPushTxn, args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -1442,7 +1454,7 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	pushee.Timestamp = proto.Timestamp{WallTime: 50, Logical: 1}
 
 	// Now, push the transaction with args.Abort=false.
-	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1)
+	args, reply := pushTxnArgs(pusher, pushee, false /* abort */, 1, s.StoreID())
 	if err := rng.AddCmd(proto.InternalPushTxn, args, reply, true); err != nil {
 		t.Errorf("unexpected error on push: %s", err)
 	}
@@ -1454,8 +1466,8 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 	}
 }
 
-func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.MVCCGetRangeStats(eng, rangeID)
+func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t *testing.T) {
+	ms, err := engine.MVCCGetRangeStats(eng, raftID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1463,7 +1475,7 @@ func verifyRangeStats(eng engine.Engine, rangeID int64, expMS engine.MVCCStats, 
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
 	// Also verify the GetRangeSize method.
-	rangeSize, err := engine.GetRangeSize(eng, rangeID)
+	rangeSize, err := engine.GetRangeSize(eng, raftID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1481,30 +1493,31 @@ func TestRangeStats(t *testing.T) {
 	s, rng, _, clock, eng := createTestRangeWithClock(t)
 	defer s.Stop()
 	// Put a value.
-	pArgs, pReply := putArgs([]byte("a"), []byte("value1"), 1)
+	pArgs, pReply := putArgs([]byte("a"), []byte("value1"), 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	if err := rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{LiveBytes: 44, KeyBytes: 20, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
-	verifyRangeStats(eng, rng.RangeID, expMS, t)
+	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
-	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1)
+	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	pArgs.Txn = &proto.Transaction{ID: []byte("txn1"), Timestamp: pArgs.Timestamp}
 	if err := rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 124, KeyBytes: 40, ValBytes: 84, IntentBytes: 28, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
-	verifyRangeStats(eng, rng.RangeID, expMS, t)
+	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
 
 	// Resolve the 2nd value.
 	rArgs := &proto.InternalResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: pArgs.Txn.Timestamp,
 			Key:       pArgs.Key,
-			Replica:   proto.Replica{RangeID: 0},
+			RaftID:    rng.Desc.RaftID,
+			Replica:   proto.Replica{StoreID: s.StoreID()},
 			Txn:       pArgs.Txn,
 		},
 	}
@@ -1514,16 +1527,16 @@ func TestRangeStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 88, KeyBytes: 40, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
-	verifyRangeStats(eng, rng.RangeID, expMS, t)
+	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
 
 	// Delete the 1st value.
-	dArgs, dReply := deleteArgs([]byte("a"), 1)
+	dArgs, dReply := deleteArgs([]byte("a"), 1, s.StoreID())
 	dArgs.Timestamp = clock.Now()
 	if err := rng.AddCmd(proto.Delete, dArgs, dReply, true); err != nil {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 44, KeyBytes: 56, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
-	verifyRangeStats(eng, rng.RangeID, expMS, t)
+	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
 }
 
 // TestRemoteRaftCommand ensures that commands entering the raft
@@ -1533,7 +1546,7 @@ func TestRemoteRaftCommand(t *testing.T) {
 	defer s.Stop()
 
 	// Send an increment direct to raft.
-	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1)
+	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1, s.StoreID())
 	remoteIncArgs.Timestamp = proto.MinTimestamp
 	raftCmd := proto.InternalRaftCommand{
 		CmdID:  proto.ClientCmdID{WallTime: 1, Random: 1},
@@ -1545,7 +1558,7 @@ func TestRemoteRaftCommand(t *testing.T) {
 	// Send an increment through the normal flow, since this is our
 	// simplest way of waiting until this command (and all earlier ones)
 	// have been applied.
-	localIncArgs, localIncReply := incrementArgs([]byte("a"), 3, 1)
+	localIncArgs, localIncReply := incrementArgs([]byte("a"), 3, 1, s.StoreID())
 	err := r.AddCmd(proto.Increment, localIncArgs, localIncReply, true)
 	if err != nil {
 		t.Fatal(err)
@@ -1569,14 +1582,14 @@ func TestInternalMerge(t *testing.T) {
 	stringArgs := []string{"a", "b", "c", "d"}
 	stringExpected := "abcd"
 
-	for _, s := range stringArgs {
-		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(s)}, 1)
+	for _, str := range stringArgs {
+		mergeArgs, resp := internalMergeArgs(key, proto.Value{Bytes: []byte(str)}, 1, s.StoreID())
 		if err := r.AddCmd(proto.InternalMerge, mergeArgs, resp, true); err != nil {
 			t.Fatalf("unexpected error from InternalMerge: %s", err.Error())
 		}
 	}
 
-	getArgs, resp := getArgs(key, 1)
+	getArgs, resp := getArgs(key, 1, s.StoreID())
 	if err := r.AddCmd(proto.Get, getArgs, resp, true); err != nil {
 		t.Fatalf("unexpected error from Get: %s", err.Error())
 	}

@@ -65,14 +65,14 @@ func TestAttributesSortedString(t *testing.T) {
 func TestRangeDescriptorFindReplica(t *testing.T) {
 	desc := RangeDescriptor{
 		Replicas: []Replica{
-			{StoreID: 1, RangeID: 1},
-			{StoreID: 2, RangeID: 2},
-			{StoreID: 3, RangeID: 3},
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
 		},
 	}
 	for i, r := range desc.Replicas {
-		if rID := desc.FindReplica(r.StoreID).RangeID; rID != r.RangeID {
-			t.Errorf("%d: expected to find range %d for store %d; got %d", i, r.RangeID, r.StoreID, rID)
+		if nID := desc.FindReplica(r.StoreID).NodeID; nID != r.NodeID {
+			t.Errorf("%d: expected to find node %d for store %d; got %d", i, r.NodeID, r.StoreID, nID)
 		}
 	}
 }

@@ -51,27 +51,27 @@ type MVCCStats struct {
 
 // MergeStats merges accumulated stats to stat counters for both the
 // affected range and store.
-func (ms *MVCCStats) MergeStats(engine Engine, rangeID int64, storeID int32) {
-	MergeStat(engine, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
-	MergeStat(engine, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
-	MergeStat(engine, rangeID, storeID, StatValBytes, ms.ValBytes)
-	MergeStat(engine, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
-	MergeStat(engine, rangeID, storeID, StatLiveCount, ms.LiveCount)
-	MergeStat(engine, rangeID, storeID, StatKeyCount, ms.KeyCount)
-	MergeStat(engine, rangeID, storeID, StatValCount, ms.ValCount)
-	MergeStat(engine, rangeID, storeID, StatIntentCount, ms.IntentCount)
+func (ms *MVCCStats) MergeStats(engine Engine, raftID int64, storeID int32) {
+	MergeStat(engine, raftID, storeID, StatLiveBytes, ms.LiveBytes)
+	MergeStat(engine, raftID, storeID, StatKeyBytes, ms.KeyBytes)
+	MergeStat(engine, raftID, storeID, StatValBytes, ms.ValBytes)
+	MergeStat(engine, raftID, storeID, StatIntentBytes, ms.IntentBytes)
+	MergeStat(engine, raftID, storeID, StatLiveCount, ms.LiveCount)
+	MergeStat(engine, raftID, storeID, StatKeyCount, ms.KeyCount)
+	MergeStat(engine, raftID, storeID, StatValCount, ms.ValCount)
+	MergeStat(engine, raftID, storeID, StatIntentCount, ms.IntentCount)
 }
 
 // SetStats sets stat counters for both the affected range and store.
-func (ms *MVCCStats) SetStats(engine Engine, rangeID int64, storeID int32) {
-	SetStat(engine, rangeID, storeID, StatLiveBytes, ms.LiveBytes)
-	SetStat(engine, rangeID, storeID, StatKeyBytes, ms.KeyBytes)
-	SetStat(engine, rangeID, storeID, StatValBytes, ms.ValBytes)
-	SetStat(engine, rangeID, storeID, StatIntentBytes, ms.IntentBytes)
-	SetStat(engine, rangeID, storeID, StatLiveCount, ms.LiveCount)
-	SetStat(engine, rangeID, storeID, StatKeyCount, ms.KeyCount)
-	SetStat(engine, rangeID, storeID, StatValCount, ms.ValCount)
-	SetStat(engine, rangeID, storeID, StatIntentCount, ms.IntentCount)
+func (ms *MVCCStats) SetStats(engine Engine, raftID int64, storeID int32) {
+	SetStat(engine, raftID, storeID, StatLiveBytes, ms.LiveBytes)
+	SetStat(engine, raftID, storeID, StatKeyBytes, ms.KeyBytes)
+	SetStat(engine, raftID, storeID, StatValBytes, ms.ValBytes)
+	SetStat(engine, raftID, storeID, StatIntentBytes, ms.IntentBytes)
+	SetStat(engine, raftID, storeID, StatLiveCount, ms.LiveCount)
+	SetStat(engine, raftID, storeID, StatKeyCount, ms.KeyCount)
+	SetStat(engine, raftID, storeID, StatValCount, ms.ValCount)
+	SetStat(engine, raftID, storeID, StatIntentCount, ms.IntentCount)
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
@@ -231,31 +231,31 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // returns an MVCCStats object on success.
-func MVCCGetRangeStats(engine Engine, rangeID int64) (*MVCCStats, error) {
+func MVCCGetRangeStats(engine Engine, raftID int64) (*MVCCStats, error) {
 	ms := &MVCCStats{}
 	var err error
-	if ms.LiveBytes, err = GetRangeStat(engine, rangeID, StatLiveBytes); err != nil {
+	if ms.LiveBytes, err = GetRangeStat(engine, raftID, StatLiveBytes); err != nil {
 		return nil, err
 	}
-	if ms.KeyBytes, err = GetRangeStat(engine, rangeID, StatKeyBytes); err != nil {
+	if ms.KeyBytes, err = GetRangeStat(engine, raftID, StatKeyBytes); err != nil {
 		return nil, err
 	}
-	if ms.ValBytes, err = GetRangeStat(engine, rangeID, StatValBytes); err != nil {
+	if ms.ValBytes, err = GetRangeStat(engine, raftID, StatValBytes); err != nil {
 		return nil, err
 	}
-	if ms.IntentBytes, err = GetRangeStat(engine, rangeID, StatIntentBytes); err != nil {
+	if ms.IntentBytes, err = GetRangeStat(engine, raftID, StatIntentBytes); err != nil {
 		return nil, err
 	}
-	if ms.LiveCount, err = GetRangeStat(engine, rangeID, StatLiveCount); err != nil {
+	if ms.LiveCount, err = GetRangeStat(engine, raftID, StatLiveCount); err != nil {
 		return nil, err
 	}
-	if ms.KeyCount, err = GetRangeStat(engine, rangeID, StatKeyCount); err != nil {
+	if ms.KeyCount, err = GetRangeStat(engine, raftID, StatKeyCount); err != nil {
 		return nil, err
 	}
-	if ms.ValCount, err = GetRangeStat(engine, rangeID, StatValCount); err != nil {
+	if ms.ValCount, err = GetRangeStat(engine, raftID, StatValCount); err != nil {
 		return nil, err
 	}
-	if ms.IntentCount, err = GetRangeStat(engine, rangeID, StatIntentCount); err != nil {
+	if ms.IntentCount, err = GetRangeStat(engine, raftID, StatIntentCount); err != nil {
 		return nil, err
 	}
 	return ms, nil
@@ -1033,7 +1033,7 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
-func MVCCFindSplitKey(engine Engine, rangeID int64, key, endKey proto.Key, snapshotID string) (proto.Key, error) {
+func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key, snapshotID string) (proto.Key, error) {
 	if key.Less(KeyLocalMax) {
 		key = KeyLocalMax
 	}
@@ -1041,7 +1041,7 @@ func MVCCFindSplitKey(engine Engine, rangeID int64, key, endKey proto.Key, snaps
 	encEndKey := MVCCEncodeKey(endKey)
 
 	// Get range size from stats.
-	rangeSize, err := GetRangeSize(engine, rangeID)
+	rangeSize, err := GetRangeSize(engine, raftID)
 	if err != nil {
 		return nil, err
 	}

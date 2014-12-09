@@ -108,15 +108,14 @@ func (ls *LocalSender) Send(call *client.Call) {
 		var store *storage.Store
 
 		// If we aren't given a Replica, then a little bending over
-		// backwards here. We need to find the Store, but all we have is the
-		// Key. So find its Range locally. This lets us use the same
-		// codepath below (store.ExecuteCmd) for both locally and remotely
-		// originated commands.
+		// backwards here. This case applies exclusively to unittests.
 		header := call.Args.Header()
-		if header.Replica.StoreID == 0 {
+		if header.RaftID == 0 || header.Replica.StoreID == 0 {
 			var repl *proto.Replica
-			repl, err = ls.lookupReplica(header.Key, header.EndKey)
+			var raftID int64
+			raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 			if err == nil {
+				header.RaftID = raftID
 				header.Replica = *repl
 			}
 		}
@@ -156,13 +155,15 @@ func (ls *LocalSender) Close() {
 
 // lookupReplica looks up replica by key [range]. Lookups are done
 // by consulting each store in turn via Store.LookupRange(key).
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (*proto.Replica, error) {
+// Returns RaftID and replica on success; RangeKeyMismatch error
+// if not found.
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (int64, *proto.Replica, error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	for _, store := range ls.storeMap {
 		if rng := store.LookupRange(start, end); rng != nil {
-			return rng.GetReplica(), nil
+			return rng.Desc.RaftID, rng.GetReplica(), nil
 		}
 	}
-	return nil, proto.NewRangeKeyMismatchError(start, end, nil)
+	return 0, nil, proto.NewRangeKeyMismatchError(start, end, nil)
 }

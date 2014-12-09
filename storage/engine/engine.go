@@ -56,7 +56,7 @@ type Iterator interface {
 	Next()
 	// Key returns the current key as a byte slice.
 	Key() []byte
-	// Key returns the current value as a byte slice.
+	// Value returns the current value as a byte slice.
 	Value() []byte
 	// Error returns the error, if any, which the iterator encountered.
 	Error() error
