@@ -252,7 +252,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 
 	for i, test := range testCases {
 		if r := store.LookupRange(test.start, test.end); r != test.expRng {
-			t.Error("%d: expected range %s; got %s", i, test.expRng, r)
+			t.Errorf("%d: expected range %s; got %s", i, test.expRng, r)
 		}
 	}
 }
@@ -523,7 +523,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			var txn proto.Transaction
 			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 			if !ok || err != nil {
-				t.Fatal("not found or err: %s", err)
+				t.Fatalf("not found or err: %s", err)
 			}
 			if txn.Status != proto.ABORTED {
 				t.Errorf("expected pushee to be aborted; got %s", txn.Status)
@@ -776,7 +776,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 	if !ok || err != nil {
-		t.Fatal("not found or err: %s", err)
+		t.Fatalf("not found or err: %s", err)
 	}
 	if txn.Status != proto.ABORTED {
 		t.Errorf("expected pushee to be aborted; got %s", txn.Status)
