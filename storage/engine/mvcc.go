@@ -311,21 +311,48 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
+
+	// Create a function which scans for the first key between next and end keys.
+	earlier := func(engine Engine, start, end proto.EncodedKey) (proto.RawKeyValue, error) {
+		iter := engine.NewIterator()
+		defer iter.Close()
+		iter.Seek(start)
+		if iter.Valid() && bytes.Compare(iter.Key(), end) < 0 {
+			return proto.RawKeyValue{Key: iter.Key(), Value: iter.Value()}, nil
+		}
+		return proto.RawKeyValue{}, iter.Error()
+	}
+
 	metaKey := MVCCEncodeKey(key)
+	data, err := engine.Get(metaKey)
+	if err != nil || data == nil {
+		return nil, err
+	}
+
+	return mvccGetInternal(engine, key, proto.RawKeyValue{Key: metaKey, Value: data}, timestamp, txn, earlier)
+}
+
+// getEarlierFunc fetches an earlier version of a key starting at
+// start and ending at end. Returns the value as a byte slice, the
+// timestamp of the earlier version, a boolean indicating whether a
+// version value or metadata was found, and error, if applicable.
+type getEarlierFunc func(engine Engine, start, end proto.EncodedKey) (proto.RawKeyValue, error)
+
+// mvccGetInternal parses the MVCCMetadata from the specified raw key
+// value, and reads the versioned value indicated by timestamp, taking
+// the transaction txn into account. earlier is a helper function to
+// get an earlier version of the value when doing historical reads.
+func mvccGetInternal(engine Engine, key proto.Key, kv proto.RawKeyValue, timestamp proto.Timestamp,
+	txn *proto.Transaction, earlier getEarlierFunc) (*proto.Value, error) {
 	meta := &proto.MVCCMetadata{}
-	ok, _, _, err := GetProto(engine, metaKey, meta)
-	if err != nil || !ok {
+	err := gogoproto.Unmarshal(kv.Value, meta)
+	if err != nil {
 		return nil, err
 	}
 	// If value is inline, return immediately; txn & timestamp are irrelevant.
 	if meta.IsInline() {
 		return meta.Value, nil
 	}
-	// If the read timestamp is greater than the latest one, we can just
-	// fetch the value without a scan.
-	ts := proto.Timestamp{}
-	var valBytes []byte
-	var isValue bool
 
 	// First case: Our read timestamp is ahead of the latest write, or the
 	// latest write and current read are within the same transaction.
@@ -343,11 +370,10 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto
 		// txn was restarted and an earlier iteration wrote the value
 		// we're now reading. In this case, we skip the intent.
 		if meta.Txn != nil && txn.Epoch != meta.Txn.Epoch {
-			valBytes, ts, isValue, err = mvccScanEarlierVersion(engine, latestKey.Next(), metaKey.PrefixEnd())
+			kv, err = earlier(engine, latestKey.Next(), MVCCEncodeKey(key.Next()))
 		} else {
-			valBytes, err = engine.Get(latestKey)
-			ts = meta.Timestamp
-			isValue = true
+			kv.Key = latestKey
+			kv.Value, err = engine.Get(latestKey)
 		}
 	} else if txn != nil && timestamp.Less(txn.MaxTimestamp) {
 		// In this branch, the latest timestamp is ahead, and so the read of an
@@ -368,19 +394,19 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto
 		// We want to know if anything has been written ahead of timestamp, but
 		// before MaxTimestamp.
 		nextKey := MVCCEncodeVersionKey(key, txn.MaxTimestamp)
-		valBytes, ts, isValue, err = mvccScanEarlierVersion(engine, nextKey, metaKey.PrefixEnd())
-		if err == nil && timestamp.Less(ts) {
-			// Third case: Our read timestamp is sufficiently behind the newest
-			// value, but there is another previous write with the same issues
-			// as in the second case, so the reader will have to come again
-			// with a higher read timestamp.
-			return nil, &proto.ReadWithinUncertaintyIntervalError{
-				Timestamp:         timestamp,
-				ExistingTimestamp: ts,
+		kv, err = earlier(engine, nextKey, MVCCEncodeKey(key.Next()))
+		if err == nil && kv.Value != nil {
+			_, ts, _ := MVCCDecodeKey(kv.Key)
+			if timestamp.Less(ts) {
+				// Third case: Our read timestamp is sufficiently behind the newest
+				// value, but there is another previous write with the same issues
+				// as in the second case, so the reader will have to come again
+				// with a higher read timestamp.
+				return nil, &proto.ReadWithinUncertaintyIntervalError{
+					Timestamp:         timestamp,
+					ExistingTimestamp: ts,
+				}
 			}
-		}
-		if valBytes == nil {
-			panic(fmt.Sprintf("%q, %v, %v", key, txn.MaxTimestamp, meta.Timestamp))
 		}
 		// Fourth case: There's no value in our future up to MaxTimestamp, and
 		// those are the only ones that we're not certain about. The correct
@@ -390,18 +416,20 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto
 		// a transaction, or in the absence of future versions that clock
 		// uncertainty would apply to.
 		nextKey := MVCCEncodeVersionKey(key, timestamp)
-		valBytes, ts, isValue, err = mvccScanEarlierVersion(engine, nextKey, metaKey.PrefixEnd())
+		kv, err = earlier(engine, nextKey, MVCCEncodeKey(key.Next()))
 	}
-	if valBytes == nil || err != nil {
+	if kv.Value == nil || err != nil {
 		return nil, err
 	}
+
+	_, ts, isValue := MVCCDecodeKey(kv.Key)
 	if !isValue {
-		return nil, util.Errorf("expected scan to versioned value reading key %q: %s", key, valBytes)
+		return nil, util.Errorf("expected scan to versioned value reading key %q; got %q", key, kv.Key)
 	}
 
 	// Unmarshal the mvcc value.
 	value := &proto.MVCCValue{}
-	if err := gogoproto.Unmarshal(valBytes, value); err != nil {
+	if err := gogoproto.Unmarshal(kv.Value, value); err != nil {
 		return nil, err
 	}
 	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
@@ -413,21 +441,6 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto
 	}
 
 	return value.Value, nil
-}
-
-// mvccScanEarlierVersion scans the value from engine starting at
-// nextKey, limited by endKey. Both values are binary-encoded. Returns
-// the bytes and timestamp if read, nil otherwise.
-func mvccScanEarlierVersion(engine Engine, nextKey, endKey proto.EncodedKey) ([]byte, proto.Timestamp, bool, error) {
-	// We use the PrefixEndKey(key) as the upper bound for scan.
-	// If there is no other version after nextKey, it won't return
-	// the value of the next key.
-	kvs, err := Scan(engine, nextKey, endKey, 1)
-	if len(kvs) == 0 || err != nil {
-		return nil, proto.Timestamp{}, false, err
-	}
-	_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
-	return kvs[0].Value, ts, isValue, nil
 }
 
 // MVCCPut sets the value for a specified key. It will save the value
@@ -676,60 +689,40 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 	}
 	encKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
-	nextKey := encKey
+
+	// Get a new iterator and define our getEarlierFunc using iter.Seek.
+	iter := engine.NewIterator()
+	defer iter.Close()
+	earlier := func(engine Engine, start, end proto.EncodedKey) (proto.RawKeyValue, error) {
+		iter.Seek(start)
+		if iter.Valid() && bytes.Compare(iter.Key(), end) < 0 {
+			return proto.RawKeyValue{Key: iter.Key(), Value: iter.Value()}, nil
+		}
+		return proto.RawKeyValue{}, iter.Error()
+	}
 
 	res := []proto.KeyValue{}
 	for {
-		kvs, err := Scan(engine, nextKey, encEndKey, 1)
+		kv, err := earlier(engine, encKey, encEndKey)
+		if err != nil || kv.Value == nil {
+			return res, err
+		}
+		key, _, isValue := MVCCDecodeKey(kv.Key)
+		if isValue {
+			return nil, util.Errorf("expected an MVCC metadata key: %q", kv.Key)
+		}
+		value, err := mvccGetInternal(engine, key, kv, timestamp, txn, earlier)
 		if err != nil {
 			return nil, err
 		}
-		// No more keys exists in the given range.
-		if len(kvs) == 0 {
-			break
-		}
-
-		// TODO(spencer): wow, this could stand some serious optimization.
-		//   Probably should copy some of Get() here to avoid the
-		//   duplicate encoding steps. Also, instead of always scanning
-		//   ahead below, we should experiment with just reading next few
-		//   values in iteration to see if the next metadata key is close.
-		currentKey, _, isValue := MVCCDecodeKey(kvs[0].Key)
-		if isValue {
-			return nil, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
-		}
-		value, err := MVCCGet(engine, currentKey, timestamp, txn)
-		if err != nil {
-			return res, err
-		}
-
 		if value != nil {
-			res = append(res, proto.KeyValue{Key: currentKey, Value: *value})
+			res = append(res, proto.KeyValue{Key: key, Value: *value})
+			if max != 0 && max == int64(len(res)) {
+				return res, nil
+			}
 		}
-
-		if max != 0 && max == int64(len(res)) {
-			break
-		}
-
-		// In order to efficiently skip the possibly long list of
-		// old versions for this key, we move instead to the next
-		// highest key and the for loop continues by scanning again
-		// with nextKey.
-		// Let's say you have:
-		// a
-		// a<T=2>
-		// a<T=1>
-		// aa
-		// aa<T=3>
-		// aa<T=2>
-		// b
-		// b<T=5>
-		// In this case, if we scan from "a"-"b", we wish to skip
-		// a<T=2> and a<T=1> and find "aa'.
-		nextKey = MVCCEncodeKey(currentKey.Next())
+		encKey = MVCCEncodeKey(key.Next())
 	}
-
-	return res, nil
 }
 
 // MVCCIterateCommitted iterates over the key range specified by start

@@ -203,7 +203,7 @@ func (tc *TxnCoordSender) Close() {
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified
-// in the request but has a nil ID. The new transaction is intialized
+// in the request but has a nil ID. The new transaction is initialized
 // using the name and isolation in the otherwise uninitialized txn.
 // The Priority, if non-zero is used as a minimum.
 func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {

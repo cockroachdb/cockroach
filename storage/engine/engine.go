@@ -37,6 +37,31 @@ func (sc StoreCapacity) PercentAvail() float64 {
 	return float64(sc.Available) / float64(sc.Capacity)
 }
 
+// Iterator is an interface for iterating over key/value pairs in an
+// engine. Iterator implementation are thread safe unless otherwise
+// noted.
+type Iterator interface {
+	// Close frees up resources held by the iterator.
+	Close()
+	// Seek advances the iterator to the first key in the engine which
+	// is >= the provided key.
+	Seek(key []byte)
+	// Valid returns true if the iterator is currently valid. An
+	// iterator which hasn't been seeked or has gone past the end of the
+	// key range is invalid.
+	Valid() bool
+	// Advances the iterator to the next key/value in the
+	// iteration. After this call, the Valid() will be true if the
+	// iterator was not positioned at the last key.
+	Next()
+	// Key returns the current key as a byte slice.
+	Key() []byte
+	// Key returns the current value as a byte slice.
+	Value() []byte
+	// Error returns the error, if any, which the iterator encountered.
+	Error() error
+}
+
 // Engine is the interface that wraps the core operations of a
 // key/value store.
 // TODO(Jiang-Ming,Spencer): Remove some of the *Snapshot methods and have
@@ -89,7 +114,7 @@ type Engine interface {
 	// timestamp and the minimum response cache row timestamp respectively.
 	// Rows with timestamps less than the associated value will be GC'd
 	// during compaction.
-	SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64))
+	SetGCTimeouts(minTxnTS, minRCacheTS int64)
 	// CreateSnapshot creates a snapshot handle from engine.
 	CreateSnapshot(snapshotID string) error
 	// ReleaseSnapshot releases the existing snapshot handle for the
@@ -104,6 +129,10 @@ type Engine interface {
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end proto.EncodedKey) (uint64, error)
+	// NewIterator returns a new instance of an Iterator over this
+	// engine. The caller must invoke Iterator.Close() when finished with
+	// the iterator to free resources.
+	NewIterator() Iterator
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().

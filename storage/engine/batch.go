@@ -18,6 +18,9 @@
 package engine
 
 import (
+	"bytes"
+	"runtime/debug"
+
 	"code.google.com/p/biogo.store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -80,70 +83,25 @@ func (b *Batch) Get(key proto.EncodedKey) ([]byte, error) {
 	return b.engine.Get(key)
 }
 
-// iterateUpdates scans the updates tree from start to end, invoking f
-// on each value until f returns false or an error.
-func (b *Batch) iterateUpdates(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) (bool, error) {
-	var done bool
-	var err error
-	// Scan the updates tree for the key range, merging as we go.
-	b.updates.DoRange(func(n llrb.Comparable) bool {
-		switch t := n.(type) {
-		case BatchDelete: // On delete, skip.
-		case BatchPut: // On put, override the corresponding engine entry.
-			done, err = f(t.RawKeyValue)
-		case BatchMerge: // On merge, merge with corresponding engine entry.
-			kv := proto.RawKeyValue{Key: t.Key}
-			kv.Value, err = goMerge([]byte(nil), t.Value)
-			if err == nil {
-				done, err = f(kv)
-			}
-		}
-		return done || err != nil
-	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
-	return done, err
-}
-
 // Iterate invokes f on key/value pairs merged from the underlying
 // engine and pending batch updates. If f returns done or an error,
 // the iteration ends and propagates the error.
-//
-// TODO(spencer): this implementation could benefit from an
-// iterator-style interface to the update map. If/when one is
-// provided by the llrb implementation it should be used here
-// to make this code more efficient.
 func (b *Batch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
-	last := start
-	if err := b.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
-		// Merge iteration from updates tree at each key/value.
-		done, err := b.iterateUpdates(last, kv.Key, f)
-		last = proto.EncodedKey(proto.Key(kv.Key).Next())
-		if !done && err == nil {
-			val := b.updates.Get(proto.RawKeyValue{Key: kv.Key})
-			if val != nil {
-				switch t := val.(type) {
-				case BatchDelete:
-				case BatchPut:
-					f(t.RawKeyValue)
-				case BatchMerge:
-					mergedKV := proto.RawKeyValue{Key: t.Key}
-					mergedKV.Value, err = goMerge(kv.Value, t.Value)
-					if err == nil {
-						done, err = f(mergedKV)
-					}
-				}
-			} else {
-				done, err = f(kv)
-			}
+	it := b.NewIterator()
+	defer it.Close()
+
+	it.Seek(start)
+	for ; it.Valid(); it.Next() {
+		k := it.Key()
+		if bytes.Compare(it.Key(), end) >= 0 {
+			break
 		}
-		return done, err
-	}); err != nil {
-		return err
+		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+			return err
+		}
 	}
-	// Final iteration from updates tree.
-	if _, err := b.iterateUpdates(last, end, f); err != nil {
-		return err
-	}
-	return nil
+	// Check for any errors during iteration.
+	return it.Error()
 }
 
 // Scan scans from both the updates tree and the underlying engine
@@ -248,8 +206,7 @@ func (b *Batch) Capacity() (StoreCapacity, error) {
 }
 
 // SetGCTimeouts is a noop for Batch.
-func (b *Batch) SetGCTimeouts(gcTimeouts func() (minTxnTS, minRCacheTS int64)) {
-	return
+func (b *Batch) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 }
 
 // CreateSnapshot returns an error if called on a Batch.
@@ -277,7 +234,138 @@ func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return 0, util.Errorf("cannot get approximate size from a Batch")
 }
 
+// NewIterator returns an iterator over Batch. Batch iterators are
+// not thread safe.
+func (b *Batch) NewIterator() Iterator {
+	return newBatchIterator(b.engine, &b.updates)
+}
+
 // NewBatch returns a new Batch instance wrapping same underlying engine.
 func (b *Batch) NewBatch() Engine {
 	return &Batch{engine: b.engine}
+}
+
+type batchIterator struct {
+	iter    Iterator
+	updates *llrb.Tree
+	pending []proto.RawKeyValue
+	err     error
+}
+
+// newBatchIterator returns a new iterator over the supplied Batch instance.
+func newBatchIterator(engine Engine, updates *llrb.Tree) *batchIterator {
+	return &batchIterator{
+		iter:    engine.NewIterator(),
+		updates: updates,
+	}
+}
+
+// The following methods implement the Iterator interface.
+func (bi *batchIterator) Close() {
+	bi.iter.Close()
+}
+
+func (bi *batchIterator) Seek(key []byte) {
+	bi.pending = []proto.RawKeyValue{}
+	bi.err = nil
+	bi.iter.Seek(key)
+	bi.mergeUpdates(key)
+}
+
+func (bi *batchIterator) Valid() bool {
+	return bi.err == nil && len(bi.pending) > 0
+}
+
+func (bi *batchIterator) Next() {
+	if !bi.Valid() {
+		bi.err = util.Errorf("next called with invalid iterator")
+		return
+	}
+	last := bi.pending[0].Key.Next()
+	if len(bi.pending) > 0 {
+		bi.pending = bi.pending[1:]
+	}
+	if len(bi.pending) == 0 {
+		bi.mergeUpdates(last)
+	}
+}
+
+func (bi *batchIterator) Key() []byte {
+	if !bi.Valid() {
+		debug.PrintStack()
+		bi.err = util.Errorf("access to invalid key")
+		return nil
+	}
+	return bi.pending[0].Key
+}
+
+func (bi *batchIterator) Value() []byte {
+	if !bi.Valid() {
+		bi.err = util.Errorf("access to invalid value")
+		return nil
+	}
+	return bi.pending[0].Value
+}
+
+func (bi *batchIterator) Error() error {
+	return bi.err
+}
+
+// mergeUpdates combines the next key/value from the engine iterator
+// with all batch updates which preceed it. The final batch update
+// which might overlap the next key/value is merged. The start
+// parameter indicates the first possible key to merge from either
+// iterator.
+func (bi *batchIterator) mergeUpdates(start proto.EncodedKey) {
+	// Use a for-loop because deleted entries might cause nothing
+	// to be added to bi.pending; in this case, we loop to next key.
+	for len(bi.pending) == 0 && bi.iter.Valid() {
+		kv := proto.RawKeyValue{Key: bi.iter.Key(), Value: bi.iter.Value()}
+		bi.iter.Next()
+
+		// Get updates up to the engine iterator's current key.
+		bi.getUpdates(start, kv.Key)
+
+		// Possibly merge an update with engine iterator's current key.
+		if val := bi.updates.Get(kv); val != nil {
+			switch t := val.(type) {
+			case BatchDelete:
+			case BatchPut:
+				bi.pending = append(bi.pending, t.RawKeyValue)
+			case BatchMerge:
+				mergedKV := proto.RawKeyValue{Key: t.Key}
+				mergedKV.Value, bi.err = goMerge(kv.Value, t.Value)
+				if bi.err == nil {
+					bi.pending = append(bi.pending, mergedKV)
+				}
+			}
+		} else {
+			bi.pending = append(bi.pending, kv)
+		}
+		start = kv.Key.Next()
+	}
+
+	if len(bi.pending) == 0 {
+		bi.getUpdates(start, proto.EncodedKey(KeyMax))
+	}
+}
+
+// getUpdates scans the updates tree from start to end, adding
+// each value to bi.pending.
+func (bi *batchIterator) getUpdates(start, end proto.EncodedKey) {
+	// Scan the updates tree for the key range, merging as we go.
+	bi.updates.DoRange(func(n llrb.Comparable) bool {
+		switch t := n.(type) {
+		case BatchDelete: // On delete, skip.
+		case BatchPut: // On put, override the corresponding engine entry.
+			bi.pending = append(bi.pending, t.RawKeyValue)
+		case BatchMerge: // On merge, merge with empty value.
+			kv := proto.RawKeyValue{Key: t.Key}
+			kv.Value, bi.err = goMerge([]byte(nil), t.Value)
+			if bi.err == nil {
+				bi.pending = append(bi.pending, kv)
+			}
+		}
+		return bi.err != nil
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: end})
 }

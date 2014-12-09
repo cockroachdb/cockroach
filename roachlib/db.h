@@ -48,25 +48,18 @@ typedef struct DBIterator DBIterator;
 typedef struct DBSnapshot DBSnapshot;
 
 typedef void (*DBLoggerFunc)(void* state, const char* str, int len);
-typedef void (*DBGCTimeoutsFunc)(void* state, int64_t* min_txn_ts, int64_t* min_rcache_ts);
 
 // DBOptions contains local database options.
 typedef struct {
   int64_t cache_size;
+  int allow_os_buffer;
   // The key prefix for transaction keys.
   DBSlice txn_prefix;
   // The key prefix for response cache keys.
   DBSlice rcache_prefix;
   // A function pointer to direct log messages to.
   DBLoggerFunc logger;
-  // A function pointer to receive the min transaction and response
-  // cache timestamps for GC.
-  DBGCTimeoutsFunc gc_timeouts;
-  // An untyped pointer that will be passed to the logger and
-  // gc_timeouts callbacks.
-  void* state;
 } DBOptions;
-
 
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
@@ -82,6 +75,9 @@ void DBClose(DBEngine* db);
 // Flushes all mem-table data to disk, blocking until the operation is
 // complete.
 DBStatus DBFlush(DBEngine* db);
+
+// Sets GC timeouts.
+void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts, int64_t min_rcache_ts);
 
 // Compacts the underlying storage for the key range
 // [start,end]. start==NULL is treated as a key before all keys in the

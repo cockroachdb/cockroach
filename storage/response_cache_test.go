@@ -255,10 +255,7 @@ func TestResponseCacheGC(t *testing.T) {
 	if err := rc.PutResponse(cmdID, &copyIncR); err != nil {
 		t.Fatalf("unexpected error putting responpse: %v", err)
 	}
-	rocksdb.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
-		minRCacheTS = 0 // avoids GC
-		return
-	})
+	rocksdb.SetGCTimeouts(0, 0) // avoids GC
 	rocksdb.CompactRange(nil, nil)
 	val := proto.IncrementResponse{}
 	if ok, err := rc.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
@@ -266,10 +263,7 @@ func TestResponseCacheGC(t *testing.T) {
 	}
 
 	// Now set minRCacheTS to 1, which will GC.
-	rocksdb.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
-		minRCacheTS = 1
-		return
-	})
+	rocksdb.SetGCTimeouts(0, 1)
 	rocksdb.CompactRange(nil, nil)
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("unexpected response or error: %t, %v", ok, err)

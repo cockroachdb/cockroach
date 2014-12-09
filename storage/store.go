@@ -239,12 +239,10 @@ func (s *Store) Start() error {
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
 	// response cache entries.
-	s.engine.SetGCTimeouts(func() (minTxnTS, minRCacheTS int64) {
-		now := s.clock.Now()
-		minTxnTS = 0 // disable GC of transactions until we know minimum write intent age
-		minRCacheTS = now.WallTime - GCResponseCacheExpiration.Nanoseconds()
-		return
-	})
+	now := s.clock.Now()
+	minTxnTS := int64(0) // disable GC of transactions until we know minimum write intent age
+	minRCacheTS := now.WallTime - GCResponseCacheExpiration.Nanoseconds()
+	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
 
 	// Read store ident and return a not-bootstrapped error if necessary.
 	ok, err := engine.MVCCGetProto(s.engine, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)

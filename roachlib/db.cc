@@ -217,35 +217,37 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
 
 class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
  public:
-  DBCompactionFilterFactory(void* state,
-                            const std::string& txn_prefix,
-                            const std::string& rcache_prefix,
-                            DBGCTimeoutsFunc f)
-      : state_(state),
-        txn_prefix_(txn_prefix),
-        rcache_prefix_(rcache_prefix),
-        func_(f) {
+  DBCompactionFilterFactory(const std::string& txn_prefix,
+                            const std::string& rcache_prefix)
+      : txn_prefix_(txn_prefix),
+        rcache_prefix_(rcache_prefix) {
   }
 
   virtual std::unique_ptr<rocksdb::CompactionFilter> CreateCompactionFilter(
       const rocksdb::CompactionFilter::Context& context) override {
-    int64_t min_txn_ts;
-    int64_t min_rcache_ts;
-    func_(state_, &min_txn_ts, &min_rcache_ts);
+    google::protobuf::MutexLock l(&mu_); // Protect access to gc timeouts.
     return std::unique_ptr<rocksdb::CompactionFilter>(
         new DBCompactionFilter(txn_prefix_, rcache_prefix_,
-                               min_txn_ts, min_rcache_ts));
+                               min_txn_ts_, min_rcache_ts_));
   }
 
   virtual const char* Name() const override {
     return "cockroach_compaction_filter_factory";
   }
 
+  void SetGCTimeouts(int64_t min_txn_ts, int64_t min_rcache_ts) {
+    google::protobuf::MutexLock l(&mu_);
+    min_txn_ts_ = min_txn_ts;
+    min_rcache_ts_ = min_rcache_ts;
+  }
+
  private:
-  void* const state_;
   const std::string txn_prefix_;
   const std::string rcache_prefix_;
-  const DBGCTimeoutsFunc func_;
+
+  google::protobuf::Mutex mu_; // Protects values below.
+  int64_t min_txn_ts_;
+  int64_t min_rcache_ts_;
 };
 
 bool WillOverflow(int64_t a, int64_t b) {
@@ -474,12 +476,10 @@ class DBLogger : public rocksdb::Logger {
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options;
   options.block_cache = rocksdb::NewLRUCache(db_opts.cache_size);
-  options.compaction_filter_factory.reset(
-      new DBCompactionFilterFactory(
-          db_opts.state,
-          ToString(db_opts.txn_prefix),
-          ToString(db_opts.rcache_prefix),
-          db_opts.gc_timeouts));
+  options.allow_os_buffer = db_opts.allow_os_buffer;
+  options.compaction_filter_factory.reset(new DBCompactionFilterFactory(
+      ToString(db_opts.txn_prefix),
+      ToString(db_opts.rcache_prefix)));
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logger));
   options.merge_operator.reset(new DBMergeOperator);
@@ -508,6 +508,12 @@ DBStatus DBFlush(DBEngine* db) {
   rocksdb::FlushOptions options;
   options.wait = true;
   return ToDBStatus(db->rep->Flush(options));
+}
+
+void DBSetGCTimeouts(DBEngine * db, int64_t min_txn_ts, int64_t min_rcache_ts) {
+  DBCompactionFilterFactory *db_cff =
+      (DBCompactionFilterFactory*)db->rep->GetOptions().compaction_filter_factory.get();
+  db_cff->SetGCTimeouts(min_txn_ts, min_rcache_ts);
 }
 
 DBStatus DBCompactRange(DBEngine* db, DBSlice* start, DBSlice* end) {
