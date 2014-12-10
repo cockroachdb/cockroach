@@ -106,8 +106,7 @@ func TestTxnDBBasics(t *testing.T) {
 // the maximumOffset given, verifying in the process that the correct values
 // are read (usually after one transaction restart).
 func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
-	db, _, clock, manualClock, lSender := createTestDB(t)
-	*manualClock = 0
+	db, _, clock, _, lSender := createTestDB(t)
 
 	txnOpts := &client.TransactionOptions{
 		Name: "test",
@@ -160,7 +159,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// Wait until the other goroutines are running.
 			wgStart.Wait()
 
-			txnManual := hlc.ManualClock(futureTS.WallTime)
+			txnManual := hlc.NewManualClock(futureTS.WallTime)
 			txnClock := hlc.NewClock(txnManual.UnixNano)
 			// Make sure to incorporate the logical component if the wall time
 			// hasn't changed (i=0). The logical component will change

@@ -23,6 +23,7 @@ package hlc
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -59,12 +60,30 @@ type Clock struct {
 
 // ManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
-// is manually controlled.
-type ManualClock int64
+// is manually controlled. ManualClock is thread safe.
+type ManualClock struct {
+	timestamp int64
+}
+
+// NewManualClock returns a new instance, initialized with
+// specified timestamp.
+func NewManualClock(timestamp int64) *ManualClock {
+	return &ManualClock{timestamp: timestamp}
+}
 
 // UnixNano returns the underlying manual clock's timestamp.
 func (m *ManualClock) UnixNano() int64 {
-	return int64(*m)
+	return atomic.LoadInt64(&m.timestamp)
+}
+
+// Increment atomically increments the manual clock's timestamp.
+func (m *ManualClock) Increment(incr int64) {
+	atomic.AddInt64(&m.timestamp, incr)
+}
+
+// Set atomically sets the manual clock's timestamp.
+func (m *ManualClock) Set(timestamp int64) {
+	atomic.StoreInt64(&m.timestamp, timestamp)
 }
 
 // UnixNano returns the local machine's physical nanosecond

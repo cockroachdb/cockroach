@@ -118,7 +118,7 @@ func splitTestRange(store *storage.Store, key, splitKey proto.Key, t *testing.T)
 }
 
 func TestLocalSenderLookupReplica(t *testing.T) {
-	manualClock := hlc.ManualClock(0)
+	manualClock := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manualClock.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()

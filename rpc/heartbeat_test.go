@@ -26,7 +26,7 @@ import (
 )
 
 func TestHeartbeatReply(t *testing.T) {
-	manual := hlc.ManualClock(5)
+	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -49,7 +49,7 @@ func TestHeartbeatReply(t *testing.T) {
 }
 
 func TestManualHeartbeat(t *testing.T) {
-	manual := hlc.ManualClock(5)
+	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano)
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,

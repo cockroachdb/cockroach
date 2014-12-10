@@ -123,7 +123,7 @@ func TestBuildEndpointList(t *testing.T) {
 		"2": proto.RemoteOffset{Offset: 2, Error: 10},
 		"3": proto.RemoteOffset{Offset: 3, Error: 10},
 	}
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -171,7 +171,7 @@ func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	// The stagnant offsets older than 10ns ago will be removed.
 	monitorInterval = 10 * time.Nanosecond
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(5 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -202,7 +202,7 @@ func TestFindOffsetInterval(t *testing.T) {
 		"3": proto.RemoteOffset{Offset: 91, Error: 31},
 	}
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -225,7 +225,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 		"3": proto.RemoteOffset{Offset: 4, Error: 1},
 	}
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -246,7 +246,7 @@ func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 		"3": proto.InfiniteOffset,
 	}
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -264,7 +264,7 @@ func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 // no recent remote clock readings.
 func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{}
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(10 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{
@@ -282,7 +282,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 		"0": proto.RemoteOffset{Offset: 0, Error: 10},
 	}
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	// The clock interval will be:
 	// [offset - error - maxOffset, offset + error + maxOffset]
@@ -299,7 +299,7 @@ func TestFindOffsetIntervalOneClock(t *testing.T) {
 func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{}
 
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(0 * time.Nanosecond)
 	remoteClocks := &RemoteClockMonitor{

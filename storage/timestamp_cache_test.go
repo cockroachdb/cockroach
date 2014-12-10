@@ -31,7 +31,7 @@ const (
 )
 
 func TestTimestampCache(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
@@ -52,7 +52,7 @@ func TestTimestampCache(t *testing.T) {
 	}
 
 	// Advance the clock and verify same low water mark.
-	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	if rTS, _ := tc.GetMax(proto.Key("a"), nil, proto.NoTxnMD5); rTS.WallTime != maxClockOffset.Nanoseconds() {
 		t.Error("expected maxClockOffset for key \"a\"")
 	}
@@ -103,18 +103,18 @@ func TestTimestampCache(t *testing.T) {
 // TestTimestampCacheEviction verifies the eviction of
 // timestamp cache entries after minCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
 
 	// Increment time to the maxClockOffset low water mark + 1.
-	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	aTS := clock.Now()
 	tc.Add(proto.Key("a"), nil, aTS, proto.NoTxnMD5, true)
 
 	// Increment time by the minCacheWindow and add another key.
-	manual = hlc.ManualClock(int64(manual) + minCacheWindow.Nanoseconds())
+	manual.Increment(minCacheWindow.Nanoseconds())
 	tc.Add(proto.Key("b"), nil, clock.Now(), proto.NoTxnMD5, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
@@ -127,11 +127,11 @@ func TestTimestampCacheEviction(t *testing.T) {
 // is chosen if previous entries have ranges which are layered over
 // each other.
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
-	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
 
 	adTS := clock.Now()
 	tc.Add(proto.Key("a"), proto.Key("d"), adTS, proto.NoTxnMD5, true)
@@ -176,13 +176,13 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 }
 
 func TestTimestampCacheClear(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
 	tc := NewTimestampCache(clock)
 
 	// Increment time to the maxClockOffset low water mark + 1.
-	manual = hlc.ManualClock(maxClockOffset.Nanoseconds() + 1)
+	manual.Set(maxClockOffset.Nanoseconds() + 1)
 	ts := clock.Now()
 	tc.Add(proto.Key("a"), nil, ts, proto.NoTxnMD5, true)
 
@@ -202,7 +202,7 @@ func TestTimestampCacheClear(t *testing.T) {
 // in the timestamp cache which completely "covers" an older
 // entry will replace it.
 func TestTimestampCacheReplacements(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
 
@@ -253,7 +253,7 @@ func TestTimestampCacheReplacements(t *testing.T) {
 // TestTimestampCacheWithTxnMD5 verifies that timestamps matching
 // a specified MD5 of the txn ID are ignored.
 func TestTimestampCacheWithTxnMD5(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
 
@@ -283,7 +283,7 @@ func TestTimestampCacheWithTxnMD5(t *testing.T) {
 // TestTimestampCacheReadVsWrite verifies that the timestamp cache
 // can differentiate between read and write timestamp.
 func TestTimestampCacheReadVsWrite(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
 

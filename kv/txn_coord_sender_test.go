@@ -41,7 +41,7 @@ import (
 func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.ManualClock, *LocalSender) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
 	lSender := NewLocalSender()
@@ -62,7 +62,7 @@ func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.Man
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	return db, eng, clock, &manual, lSender
+	return db, eng, clock, manual, lSender
 }
 
 // makeTS creates a new timestamp.
@@ -124,7 +124,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	// Advance time and send another put request. Lock the coordinator
 	// to prevent a data race.
 	coord.Lock()
-	*manual = hlc.ManualClock(1)
+	manual.Set(1)
 	coord.Unlock()
 	if err := db.Call(proto.Put, putReq, &proto.PutResponse{}); err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 		t.Errorf("expected length of transactions map to be 1; got %d", len(coord.txns))
 	}
 	txnMeta = coord.txns[string(txn.ID)]
-	if !ts.Less(txnMeta.lastUpdateTS) || txnMeta.lastUpdateTS.WallTime != int64(*manual) {
+	if !ts.Less(txnMeta.lastUpdateTS) || txnMeta.lastUpdateTS.WallTime != manual.UnixNano() {
 		t.Errorf("expected last update time to advance; got %+v", txnMeta.lastUpdateTS)
 	}
 }
@@ -302,7 +302,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 			// Advance clock by 1ns.
 			// Locking the TxnCoordSender to prevent a data race.
 			coord.Lock()
-			*manual = hlc.ManualClock(*manual + 1)
+			manual.Increment(1)
 			coord.Unlock()
 			if heartbeatTS.Less(*txn.LastHeartbeat) {
 				heartbeatTS = *txn.LastHeartbeat
@@ -453,7 +453,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	// Now, advance clock past the default client timeout.
 	// Locking the TxnCoordSender to prevent a data race.
 	coord.Lock()
-	*manual = hlc.ManualClock(defaultClientTimeout.Nanoseconds() + 1)
+	manual.Set(defaultClientTimeout.Nanoseconds() + 1)
 	coord.Unlock()
 
 	if err := util.IsTrueWithin(func() bool {
@@ -498,7 +498,7 @@ var testPutReq = &proto.PutRequest{
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(20)
 

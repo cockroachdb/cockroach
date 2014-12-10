@@ -332,7 +332,7 @@ func (be *blockingEngine) NewBatch() engine.Engine {
 // createTestRangeWithClock creates a range using a blocking engine. Returns
 // the range clock's manual unix nanos time and the range.
 func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *hlc.Clock, *blockingEngine) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	engine := newBlockingEngine()
 	store := NewStore(clock, engine, nil, nil)
@@ -346,7 +346,7 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 	if err := store.AddRange(rng); err != nil {
 		t.Fatal(err)
 	}
-	return store, rng, &manual, clock, engine
+	return store, rng, manual, clock, engine
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
@@ -557,7 +557,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	defer s.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
-	*mc = hlc.ManualClock(t0.Nanoseconds())
+	mc.Set(t0.Nanoseconds())
 	gArgs, gReply := getArgs([]byte("a"), 1, s.StoreID())
 	gArgs.Timestamp = clock.Now()
 	err := rng.AddCmd(proto.Get, gArgs, gReply, true)
@@ -566,7 +566,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 	}
 	// Set clock to time 2s for write.
 	t1 := 2 * time.Second
-	*mc = hlc.ManualClock(t1.Nanoseconds())
+	mc.Set(t1.Nanoseconds())
 	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 1, s.StoreID())
 	pArgs.Timestamp = clock.Now()
 	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
@@ -688,7 +688,7 @@ func TestRangeUseTSCache(t *testing.T) {
 	defer s.Stop()
 	// Set clock to time 1s and do the read.
 	t0 := 1 * time.Second
-	*mc = hlc.ManualClock(t0.Nanoseconds())
+	mc.Set(t0.Nanoseconds())
 	args, reply := getArgs([]byte("a"), 1, s.StoreID())
 	args.Timestamp = clock.Now()
 	err := rng.AddCmd(proto.Get, args, reply, true)
@@ -1038,7 +1038,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 		txn := newTransaction("test", key, 1, test.isolation, clock)
 		// End the transaction with args timestamp moved forward in time.
 		args, reply := endTxnArgs(txn, test.commit, 1, s.StoreID())
-		*mc = hlc.ManualClock(1)
+		mc.Set(1)
 		args.Timestamp = clock.Now()
 		err := rng.AddCmd(proto.EndTransaction, args, reply, true)
 		if test.expErr {
@@ -1106,7 +1106,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	defer s.Stop()
 
 	regressTS := clock.Now()
-	*mc = hlc.ManualClock(1)
+	mc.Set(1)
 	txn := newTransaction("test", proto.Key(""), 1, proto.SERIALIZABLE, clock)
 
 	testCases := []struct {
@@ -1288,7 +1288,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 		}
 
 		// Now, attempt to push the transaction with clock set to "currentTime".
-		*mc = hlc.ManualClock(test.currentTime)
+		mc.Set(test.currentTime)
 		args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
 		err := rng.AddCmd(proto.InternalPushTxn, args, reply, true)
 		if test.expSuccess != (err == nil) {

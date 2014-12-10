@@ -91,7 +91,7 @@ func (db *testSender) Close() {}
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, g)
@@ -108,13 +108,13 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	return store, &manual
+	return store, manual
 }
 
 // TestStoreInitAndBootstrap verifies store initialization and
 // bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, nil)
@@ -161,7 +161,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	if err := eng.Put(proto.EncodedKey("foo"), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	store := NewStore(clock, eng, nil, nil)
 
@@ -341,7 +341,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
 
 	// Set clock to time 1.
-	*mc = hlc.ManualClock(1)
+	mc.Set(1)
 	err := store.ExecuteCmd(proto.Get, args, reply)
 	if err != nil {
 		t.Fatal(err)
@@ -363,7 +363,7 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
 
 	// Set clock to time 1.
-	*mc = hlc.ManualClock(1)
+	mc.Set(1)
 	// Set clock max offset to 250ms.
 	maxOffset := 250 * time.Millisecond
 	store.clock.SetMaxOffset(maxOffset)

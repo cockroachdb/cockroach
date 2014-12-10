@@ -65,14 +65,14 @@ func ExampleNewClock() {
 }
 
 func TestLess(t *testing.T) {
-	var m ManualClock
+	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	a := c.Timestamp()
 	b := c.Timestamp()
 	if a.Less(b) || b.Less(a) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
-	m = ManualClock(1)
+	m.Set(1)
 	b = c.Now()
 	if !a.Less(b) {
 		t.Errorf("expected %+v < %+v", a, b)
@@ -84,14 +84,14 @@ func TestLess(t *testing.T) {
 }
 
 func TestEqual(t *testing.T) {
-	var m ManualClock
+	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	a := c.Timestamp()
 	b := c.Timestamp()
 	if !a.Equal(b) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
-	m = ManualClock(1)
+	m.Set(1)
 	b = c.Now()
 	if a.Equal(b) {
 		t.Errorf("expected %+v < %+v", a, b)
@@ -105,7 +105,7 @@ func TestEqual(t *testing.T) {
 // TestClock performs a complete test of all basic phenomena,
 // including backward jumps in local physical time and clock offset.
 func TestClock(t *testing.T) {
-	var m ManualClock
+	m := NewManualClock(0)
 	c := NewClock(m.UnixNano)
 	c.SetMaxOffset(1000)
 	expectedHistory := []struct {
@@ -138,7 +138,7 @@ func TestClock(t *testing.T) {
 	var current proto.Timestamp
 	var err error
 	for i, step := range expectedHistory {
-		m = ManualClock(step.wallClock)
+		m.Set(step.wallClock)
 		switch step.event {
 		case SEND:
 			current = c.Now()
@@ -161,7 +161,7 @@ func TestClock(t *testing.T) {
 // TestSetMaxOffset ensures that checking received timestamps
 // for excessive offsets works correctly.
 func TestSetMaxOffset(t *testing.T) {
-	var m ManualClock = 123456789
+	m := NewManualClock(123456789)
 	skewedTime := int64(123456789 + 51)
 	c := NewClock(m.UnixNano)
 	if c.MaxOffset() != 0 {
@@ -172,7 +172,7 @@ func TestSetMaxOffset(t *testing.T) {
 		t.Fatalf("unexpected offset setting")
 	}
 	c.Now()
-	if c.Timestamp().WallTime != int64(m) {
+	if c.Timestamp().WallTime != m.UnixNano() {
 		t.Fatalf("unexpected clock value")
 	}
 	_, err := c.Update(proto.Timestamp{WallTime: skewedTime})
@@ -190,13 +190,13 @@ func TestSetMaxOffset(t *testing.T) {
 // ExampleManualClock shows how a manual clock can be
 // used as a physical clock. This is useful for testing.
 func ExampleManualClock() {
-	var m ManualClock = 10
+	m := NewManualClock(10)
 	c := NewClock(m.UnixNano)
 	c.Now()
 	if c.Timestamp().WallTime != 10 {
 		log.Fatalf("manual clock error")
 	}
-	m = 20
+	m.Set(20)
 	c.Now()
 	if c.Timestamp().WallTime != 20 {
 		log.Fatalf("manual clock error")
