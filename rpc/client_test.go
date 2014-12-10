@@ -73,7 +73,7 @@ func TestClientHeartbeatBadServer(t *testing.T) {
 }
 
 func TestOffsetMeasurement(t *testing.T) {
-	serverManual := hlc.ManualClock(10)
+	serverManual := hlc.NewManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
 	s := createTestServer(serverClock, t)
 	defer s.Close()
@@ -113,7 +113,7 @@ func TestOffsetMeasurement(t *testing.T) {
 // InfiniteOffset if the heartbeat reply exceeds the maximumClockReadingDelay,
 // but not the heartbeat timeout.
 func TestDelayedOffsetMeasurement(t *testing.T) {
-	serverManual := hlc.ManualClock(10)
+	serverManual := hlc.NewManualClock(10)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
 	s := createTestServer(serverClock, t)
 	defer s.Close()
@@ -156,7 +156,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 }
 
 func TestFailedOffestMeasurement(t *testing.T) {
-	serverManual := hlc.ManualClock(0)
+	serverManual := hlc.NewManualClock(0)
 	serverClock := hlc.NewClock(serverManual.UnixNano)
 	s := createTestServer(serverClock, t)
 	defer s.Close()
@@ -169,7 +169,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	s.RegisterName("Heartbeat", heartbeat)
 
 	// Create a client that never receives a heartbeat after the first.
-	clientManual := hlc.ManualClock(0)
+	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
 	context := NewContext(clientClock, s.context.tlsConfig)
 	c := NewClient(s.Addr(), nil, context)

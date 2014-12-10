@@ -45,7 +45,7 @@ import (
 func createTestStore(t *testing.T) *storage.Store {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
-	manual := hlc.ManualClock(0)
+	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	lSender := kv.NewLocalSender()
