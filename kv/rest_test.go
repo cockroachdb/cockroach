@@ -341,6 +341,62 @@ func TestIncrement(t *testing.T) {
 	}
 }
 
+func TestMixingCounters(t *testing.T) {
+	addr, server, _ := startServer(t)
+	defer server.Close()
+
+	entryKey := "value"
+	counterKey := "counter"
+
+	testCases := []struct {
+		method             string
+		counter, increment bool
+		statusCode         int
+	}{
+		// The order of the operations within these groups must be preserved.
+
+		// First, post the counter and entry keys.
+		{methodPost, true, true, http.StatusOK},
+		{methodPost, false, false, http.StatusOK},
+
+		// Now, verify we can increment counter and update entry key.
+		{methodPost, true, true, http.StatusOK},
+		{methodPost, false, false, http.StatusOK},
+
+		// Now, try to reverse both. Setting counter key as entry is fine,
+		// but trying to increment entry key should fail.
+		{methodPost, true, false, http.StatusOK},
+		{methodPost, false, true, http.StatusBadRequest},
+	}
+	for _, tc := range testCases {
+		var body io.Reader
+		key := entryKey
+		prefix := EntryPrefix
+		if tc.counter {
+			key = counterKey
+		}
+		if tc.increment {
+			prefix = CounterPrefix
+		}
+		if tc.statusCode == http.StatusOK && tc.method == methodPost {
+			body = strings.NewReader("1")
+		}
+		resp, err := httpDo(addr, tc.method, prefix+key, body)
+		if err != nil {
+			t.Errorf("[%s] %s: error making request: %s", tc.method, key, err)
+			continue
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != tc.statusCode {
+			t.Errorf("[%s] %s: expected status code to be %d; got %d", tc.method, key, tc.statusCode, resp.StatusCode)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+	}
+}
+
 // TestSystemKeys makes sure that the internal system keys are
 // accessible through the HTTP API.
 // TODO(spencer): we need to ensure proper permissions through the
