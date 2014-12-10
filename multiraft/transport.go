@@ -56,13 +56,8 @@ type SendMessageRequest struct {
 type SendMessageResponse struct {
 }
 
-// ServerInterface is a generic interface based on net/rpc.
+// ServerInterface is the methods we expose for use by net/rpc.
 type ServerInterface interface {
-	DoRPC(name string, req, resp interface{}) error
-}
-
-// RPCInterface is the methods we expose for use by net/rpc.
-type RPCInterface interface {
 	SendMessage(req *SendMessageRequest, resp *SendMessageResponse) error
 }
 
@@ -78,26 +73,15 @@ type ClientInterface interface {
 	Close() error
 }
 
-// rpcAdapter converts the generic ServerInterface to the concrete RPCInterface
-type rpcAdapter struct {
-	server ServerInterface
-}
-
-func (r *rpcAdapter) SendMessage(req *SendMessageRequest, resp *SendMessageResponse) error {
-	return r.server.DoRPC(sendMessageName, req, resp)
-}
-
 // asyncClient bridges MultiRaft's channel-oriented interface with the synchronous RPC interface.
-// Outgoing requests are run in a goroutine and their response ops are returned on the
-// given channel.
+// Outgoing requests are run in a non-blocking fire-and-forget fashion.
 type asyncClient struct {
 	nodeID uint64
 	conn   ClientInterface
-	ch     chan *rpc.Call
 }
 
 func (a *asyncClient) sendMessage(req *SendMessageRequest) {
-	a.conn.Go(sendMessageName, req, &SendMessageResponse{}, a.ch)
+	a.conn.Go(sendMessageName, req, &SendMessageResponse{}, nil)
 }
 
 type localRPCTransport struct {
@@ -118,7 +102,7 @@ func NewLocalRPCTransport() Transport {
 
 func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
 	rpcServer := rpc.NewServer()
-	err := rpcServer.RegisterName("MultiRaft", &rpcAdapter{server})
+	err := rpcServer.RegisterName("MultiRaft", server)
 	if err != nil {
 		return err
 	}

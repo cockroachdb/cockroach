@@ -6,6 +6,7 @@ package multiraft
 import (
 	"sync"
 
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -35,10 +36,10 @@ func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
 }
 
-/*func (b *BlockableStorage) LoadGroups() <-chan *GroupPersistentState {
+func (b *BlockableStorage) LoadGroups() map[uint64]raft.Storage {
 	b.wait()
 	return b.storage.LoadGroups()
-}*/
+}
 
 func (b *BlockableStorage) GroupStorage(g uint64) WriteableGroupStorage {
 	return &blockableGroupStorage{b, b.storage.GroupStorage(g)}

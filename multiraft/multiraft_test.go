@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 type testCluster struct {
@@ -94,11 +95,6 @@ func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 // Trigger an election on node i and wait for it to complete.
 // TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
 func (c *testCluster) waitForElection(i int) *EventLeaderElection {
-	// TODO(bdarnell): remove this sleep.
-	// It addresses a race in which the node's initial configuration is not ready until
-	// a write task has completed, so if our second tick happens before that happens
-	// the election won't occur.
-	time.Sleep(time.Millisecond)
 	// Elections are currently triggered after ElectionTimeoutTicks+1 ticks.
 	c.tickers[i].Tick()
 	c.tickers[i].Tick()
@@ -146,7 +142,6 @@ func TestCommand(t *testing.T) {
 	}
 }
 
-// TODO(bdarnell): reinstate this test once we re-integrate the storage system.
 func TestSlowStorage(t *testing.T) {
 	cluster := newTestCluster(3, t)
 	defer cluster.stop()
@@ -201,7 +196,7 @@ func TestMembershipChange(t *testing.T) {
 
 	// Add each of the other three nodes to the cluster.
 	for i := 1; i < 4; i++ {
-		err := cluster.nodes[0].ChangeGroupMembership(groupID, ChangeMembershipAddMember,
+		err := cluster.nodes[0].ChangeGroupMembership(groupID, raftpb.ConfChangeAddNode,
 			cluster.nodes[i].nodeID)
 		if err != nil {
 			t.Fatal(err)
