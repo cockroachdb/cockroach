@@ -137,7 +137,7 @@ func TestCommand(t *testing.T) {
 	cluster.waitForElection(0)
 
 	// Submit a command to the leader
-	cluster.nodes[0].SubmitCommand(makeCommandID(), groupID, []byte("command"))
+	cluster.nodes[0].SubmitCommand(groupID, makeCommandID(), []byte("command"))
 
 	// The command will be committed on each node.
 	for i, events := range cluster.events {
@@ -163,7 +163,7 @@ func TestSlowStorage(t *testing.T) {
 	cluster.storages[2].Block()
 
 	// Submit a command to the leader
-	cluster.nodes[0].SubmitCommand(makeCommandID(), groupID, []byte("command"))
+	cluster.nodes[0].SubmitCommand(groupID, makeCommandID(), []byte("command"))
 
 	// Even with the third node blocked, the other nodes can make progress.
 	for i := 0; i < 2; i++ {
@@ -203,7 +203,7 @@ func TestMembershipChange(t *testing.T) {
 
 	// Add each of the other three nodes to the cluster.
 	for i := 1; i < 4; i++ {
-		err := cluster.nodes[0].ChangeGroupMembership(makeCommandID(), groupID,
+		err := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
 			cluster.nodes[i].nodeID)
 		if err != nil {

@@ -176,14 +176,14 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
-func (m *MultiRaft) SubmitCommand(commandID []byte, groupID uint64, command []byte) error {
+func (m *MultiRaft) SubmitCommand(groupID uint64, commandID []byte, command []byte) error {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	return m.multiNode.Propose(context.Background(), groupID, encodeCommand(commandID, command))
 }
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // TODO(bdarnell): same concerns as SubmitCommand
-func (m *MultiRaft) ChangeGroupMembership(commandID []byte, groupID uint64,
+func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID []byte,
 	changeType raftpb.ConfChangeType, nodeID uint64) error {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	return m.multiNode.ProposeConfChange(context.Background(), groupID,

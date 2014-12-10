@@ -18,8 +18,6 @@
 package storage
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"sync"
 
@@ -34,16 +32,10 @@ import (
 type cmdIDKey string
 
 func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
-	buf := bytes.NewBuffer(make([]byte, 0, 16))
-	err := binary.Write(buf, binary.BigEndian, cmdID.WallTime)
-	if err != nil {
-		panic(err)
-	}
-	err = binary.Write(buf, binary.BigEndian, cmdID.Random)
-	if err != nil {
-		panic(err)
-	}
-	return cmdIDKey(buf.String())
+	buf := make([]byte, 0, 16)
+	buf = encoding.EncodeUint64(buf, uint64(cmdID.WallTime))
+	buf = encoding.EncodeUint64(buf, uint64(cmdID.Random))
+	return cmdIDKey(string(buf))
 }
 
 // A ResponseCache provides idempotence for request retries. Each

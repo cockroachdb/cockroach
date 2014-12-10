@@ -197,10 +197,6 @@ message InternalRaftCommandUnion {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 message InternalRaftCommand {
-  // CmdID is used to identify a command when it has been
-  // committed. If the client specified a CmdID in its RequestHeader,
-  // that is used; otherwise the server generates an ID.
-  //optional ClientCmdID cmd_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CmdID"];
   optional int64 raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
   optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }

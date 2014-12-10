@@ -17,7 +17,7 @@
 
 package multiraft
 
-import "log"
+import "github.com/cockroachdb/cockroach/util/log"
 
 // An EventLeaderElection is broadcast when a group completes an election.
 type EventLeaderElection struct {
@@ -34,20 +34,24 @@ type EventCommandCommitted struct {
 // Commands are encoded with a 1-byte version (currently 0), a 16-byte ID,
 // followed by the payload. This inflexible encoding is used so we can efficiently
 // parse the command id while processing the logs.
-const commandIDLen = 16
+const (
+	commandIDLen           = 16
+	commandEncodingVersion = 0
+)
 
 func encodeCommand(commandID, command []byte) []byte {
 	if len(commandID) != commandIDLen {
 		log.Fatalf("invalid command ID length; %d != %d", len(commandID), commandIDLen)
 	}
 	x := make([]byte, 1, 1+commandIDLen+len(command))
+	x[0] = commandEncodingVersion
 	x = append(x, commandID...)
 	x = append(x, command...)
 	return x
 }
 
 func decodeCommand(data []byte) (commandID, command []byte) {
-	if data[0] != 0 {
+	if data[0] != commandEncodingVersion {
 		log.Fatalf("unknown command encoding version %v", data[0])
 	}
 	return data[1 : 1+commandIDLen], data[1+commandIDLen:]
