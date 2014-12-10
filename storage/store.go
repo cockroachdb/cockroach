@@ -790,13 +790,13 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 }
 
 // ProposeRaftCommand submits a command to raft.
-func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
+func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) {
 	// s.raft should be constant throughout the life of the store, but
 	// the race detector reports a race between this method and s.Stop.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	s.raft.propose(cmd)
+	s.raft.propose(idKey, cmd)
 }
 
 // processRaft processes read/write commands that have been committed
@@ -826,12 +826,13 @@ func (s *Store) processRaft(r raft, closer chan struct{}) {
 		select {
 		case raftCmd := <-r.committed():
 			s.mu.Lock()
-			r, ok := s.ranges[raftCmd.RaftID]
+			r, ok := s.ranges[raftCmd.cmd.RaftID]
 			s.mu.Unlock()
 			if !ok {
-				log.Errorf("got committed raft command for %d but have no range with that ID", raftCmd.RaftID)
+				log.Errorf("got committed raft command for %d but have no range with that ID",
+					raftCmd.cmd.RaftID)
 			} else {
-				r.processRaftCommand(raftCmd)
+				r.processRaftCommand(raftCmd.cmdIDKey, raftCmd.cmd)
 			}
 
 		case <-closer:

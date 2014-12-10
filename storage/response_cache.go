@@ -29,15 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type cmdIDKey struct {
-	walltime, random int64
-}
+type cmdIDKey string
 
 func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
-	return cmdIDKey{
-		walltime: cmdID.WallTime,
-		random:   cmdID.Random,
-	}
+	buf := make([]byte, 0, 16)
+	buf = encoding.EncodeUint64(buf, uint64(cmdID.WallTime))
+	buf = encoding.EncodeUint64(buf, uint64(cmdID.Random))
+	return cmdIDKey(string(buf))
 }
 
 // A ResponseCache provides idempotence for request retries. Each

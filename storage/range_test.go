@@ -1548,12 +1548,12 @@ func TestRemoteRaftCommand(t *testing.T) {
 	// Send an increment direct to raft.
 	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1, s.StoreID())
 	remoteIncArgs.Timestamp = proto.MinTimestamp
+	idKey := makeCmdIDKey(proto.ClientCmdID{WallTime: 1, Random: 1})
 	raftCmd := proto.InternalRaftCommand{
-		CmdID:  proto.ClientCmdID{WallTime: 1, Random: 1},
 		RaftID: r.Desc.RaftID,
 	}
 	raftCmd.Cmd.SetValue(remoteIncArgs)
-	r.rm.ProposeRaftCommand(raftCmd)
+	r.rm.ProposeRaftCommand(idKey, raftCmd)
 
 	// Send an increment through the normal flow, since this is our
 	// simplest way of waiting until this command (and all earlier ones)

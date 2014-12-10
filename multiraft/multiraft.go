@@ -176,20 +176,21 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 // when the command has been successfully sent, not when it has been committed.
 // TODO(bdarnell): should SubmitCommand wait until the commit?
 // TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
-func (m *MultiRaft) SubmitCommand(groupID uint64, command []byte) error {
+func (m *MultiRaft) SubmitCommand(groupID uint64, commandID []byte, command []byte) error {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
-	return m.multiNode.Propose(context.Background(), groupID, command)
+	return m.multiNode.Propose(context.Background(), groupID, encodeCommand(commandID, command))
 }
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // TODO(bdarnell): same concerns as SubmitCommand
-func (m *MultiRaft) ChangeGroupMembership(groupID uint64, changeType raftpb.ConfChangeType,
-	nodeID uint64) error {
+func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID []byte,
+	changeType raftpb.ConfChangeType, nodeID uint64) error {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	return m.multiNode.ProposeConfChange(context.Background(), groupID,
 		raftpb.ConfChange{
-			Type:   changeType,
-			NodeID: nodeID,
+			Type:    changeType,
+			NodeID:  nodeID,
+			Context: encodeCommand(commandID, nil),
 		})
 }
 
@@ -403,9 +404,10 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		for _, entry := range ready.CommittedEntries {
 			switch entry.Type {
 			case raftpb.EntryNormal:
-				// TODO(bdarnell): etcd raft adds a nil entry upon election; should this be given a different Type?
+				// etcd raft occasionally adds a nil entry (e.g. upon election); ignore these.
 				if entry.Data != nil {
-					s.sendEvent(&EventCommandCommitted{entry.Data})
+					commandID, command := decodeCommand(entry.Data)
+					s.sendEvent(&EventCommandCommitted{commandID, command})
 				}
 			case raftpb.EntryConfChange:
 				cc := raftpb.ConfChange{}
@@ -414,6 +416,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					log.Fatalf("invalid ConfChange data: %s", err)
 				}
 				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+				// TODO(bdarnell): dedupe by extracting commandID from cc.Context.
 				s.multiNode.ApplyConfChange(groupID, cc)
 			}
 		}

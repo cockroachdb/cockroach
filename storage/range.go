@@ -142,7 +142,7 @@ type RangeManager interface {
 	AddRange(rng *Range) error
 	RemoveRange(rng *Range) error
 	CreateSnapshot() (string, error)
-	ProposeRaftCommand(proto.InternalRaftCommand)
+	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand)
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -427,21 +427,23 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	raftCmd := proto.InternalRaftCommand{
 		RaftID: r.Desc.RaftID,
 	}
+	var cmdID proto.ClientCmdID
 	if !args.Header().CmdID.IsEmpty() {
-		raftCmd.CmdID = args.Header().CmdID
+		cmdID = args.Header().CmdID
 	} else {
-		raftCmd.CmdID = proto.ClientCmdID{
+		cmdID = proto.ClientCmdID{
 			WallTime: r.rm.Clock().PhysicalNow(),
 			Random:   rand.Int63(),
 		}
 	}
+	idKey := makeCmdIDKey(cmdID)
 	r.Lock()
-	r.pendingCmds[makeCmdIDKey(raftCmd.CmdID)] = pendingCmd
+	r.pendingCmds[idKey] = pendingCmd
 	r.Unlock()
 	// TODO(bdarnell): In certain raft failover scenarios, proposed
 	// commands may be abandoned. We need to re-propose the command
 	// if too much time passes with no response on the done channel.
-	r.rm.ProposeRaftCommand(raftCmd)
+	r.rm.ProposeRaftCommand(idKey, raftCmd)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
@@ -474,8 +476,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	return nil
 }
 
-func (r *Range) processRaftCommand(raftCmd proto.InternalRaftCommand) {
-	idKey := makeCmdIDKey(raftCmd.CmdID)
+func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCommand) {
 	r.Lock()
 	cmd := r.pendingCmds[idKey]
 	delete(r.pendingCmds, idKey)
