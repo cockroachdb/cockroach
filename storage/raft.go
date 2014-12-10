@@ -27,17 +27,22 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+type committedCommand struct {
+	cmdIDKey cmdIDKey
+	cmd      proto.InternalRaftCommand
+}
+
 // raft is the interface exposed by a raft implementation.
 type raft interface {
 	// propose a command to raft. If accepted by the consensus protocol it will
 	// eventually appear in the committed channel, but this is not guaranteed
 	// so callers may need to retry.
-	propose(proto.InternalRaftCommand)
+	propose(cmdIDKey, proto.InternalRaftCommand)
 
 	// committed returns a channel that yields commands as they are
 	// committed. Note that this includes commands proposed by this node
 	// and others.
-	committed() <-chan proto.InternalRaftCommand
+	committed() <-chan committedCommand
 
 	stop()
 }
@@ -46,7 +51,7 @@ type singleNodeRaft struct {
 	mr       *multiraft.MultiRaft
 	mu       sync.Mutex
 	groups   map[int64]struct{}
-	commitCh chan proto.InternalRaftCommand
+	commitCh chan committedCommand
 	stopper  chan struct{}
 }
 
@@ -64,7 +69,7 @@ func newSingleNodeRaft() *singleNodeRaft {
 	snr := &singleNodeRaft{
 		mr:       mr,
 		groups:   map[int64]struct{}{},
-		commitCh: make(chan proto.InternalRaftCommand, 10),
+		commitCh: make(chan committedCommand, 10),
 		stopper:  make(chan struct{}),
 	}
 	mr.Start()
@@ -74,7 +79,7 @@ func newSingleNodeRaft() *singleNodeRaft {
 
 var _ raft = (*singleNodeRaft)(nil)
 
-func (snr *singleNodeRaft) propose(cmd proto.InternalRaftCommand) {
+func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
 	snr.mu.Lock()
 	defer snr.mu.Unlock()
 	if _, ok := snr.groups[cmd.RaftID]; !ok {
@@ -89,10 +94,10 @@ func (snr *singleNodeRaft) propose(cmd proto.InternalRaftCommand) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	snr.mr.SubmitCommand(uint64(cmd.RaftID), data)
+	snr.mr.SubmitCommand([]byte(cmdIDKey), uint64(cmd.RaftID), data)
 }
 
-func (snr *singleNodeRaft) committed() <-chan proto.InternalRaftCommand {
+func (snr *singleNodeRaft) committed() <-chan committedCommand {
 	return snr.commitCh
 }
 
@@ -111,7 +116,7 @@ func (snr *singleNodeRaft) run() {
 				if err != nil {
 					log.Fatal(err)
 				}
-				snr.commitCh <- cmd
+				snr.commitCh <- committedCommand{cmdIDKey(e.CommandID), cmd}
 			}
 		case <-snr.stopper:
 			snr.mr.Stop()

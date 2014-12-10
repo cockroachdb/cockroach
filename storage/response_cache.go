@@ -18,6 +18,8 @@
 package storage
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"sync"
 
@@ -29,15 +31,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-type cmdIDKey struct {
-	walltime, random int64
-}
+type cmdIDKey string
 
 func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
-	return cmdIDKey{
-		walltime: cmdID.WallTime,
-		random:   cmdID.Random,
+	buf := bytes.NewBuffer(make([]byte, 0, 16))
+	err := binary.Write(buf, binary.BigEndian, cmdID.WallTime)
+	if err != nil {
+		panic(err)
 	}
+	err = binary.Write(buf, binary.BigEndian, cmdID.Random)
+	if err != nil {
+		panic(err)
+	}
+	return cmdIDKey(buf.String())
 }
 
 // A ResponseCache provides idempotence for request retries. Each
