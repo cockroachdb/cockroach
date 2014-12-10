@@ -276,6 +276,16 @@ func PutArgs(key Key, valueBytes []byte) *PutRequest {
 	}
 }
 
+// DeleteArgs returns a DeleteRequest object initialized to delete
+// the value at key.
+func DeleteArgs(key Key) *DeleteRequest {
+	return &DeleteRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
+		},
+	}
+}
+
 // ScanArgs returns a ScanRequest object initialized to scan
 // from start to end keys with max results.
 func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {
