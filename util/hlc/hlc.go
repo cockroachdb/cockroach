@@ -62,28 +62,28 @@ type Clock struct {
 // creating a hybrid logical clock whose physical clock
 // is manually controlled. ManualClock is thread safe.
 type ManualClock struct {
-	timestamp int64
+	nanos int64
 }
 
 // NewManualClock returns a new instance, initialized with
 // specified timestamp.
-func NewManualClock(timestamp int64) *ManualClock {
-	return &ManualClock{timestamp: timestamp}
+func NewManualClock(nanos int64) *ManualClock {
+	return &ManualClock{nanos: nanos}
 }
 
 // UnixNano returns the underlying manual clock's timestamp.
 func (m *ManualClock) UnixNano() int64 {
-	return atomic.LoadInt64(&m.timestamp)
+	return atomic.LoadInt64(&m.nanos)
 }
 
 // Increment atomically increments the manual clock's timestamp.
 func (m *ManualClock) Increment(incr int64) {
-	atomic.AddInt64(&m.timestamp, incr)
+	atomic.AddInt64(&m.nanos, incr)
 }
 
 // Set atomically sets the manual clock's timestamp.
-func (m *ManualClock) Set(timestamp int64) {
-	atomic.StoreInt64(&m.timestamp, timestamp)
+func (m *ManualClock) Set(nanos int64) {
+	atomic.StoreInt64(&m.nanos, nanos)
 }
 
 // UnixNano returns the local machine's physical nanosecond
