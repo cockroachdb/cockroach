@@ -418,6 +418,13 @@ func (s *state) createGroup(op *createGroupOp) {
 	s.groups[op.groupID] = &group{
 		groupID: op.groupID,
 	}
+
+	// HACK: for single-node groups force an immediate election instead of waiting
+	// for the randomized timeout.
+	if len(op.initialMembers) == 1 {
+		s.multiNode.Campaign(context.Background(), op.groupID)
+	}
+
 	op.ch <- nil
 }
 

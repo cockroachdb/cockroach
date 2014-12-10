@@ -199,7 +199,6 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		db:        db,
 		allocator: &allocator{},
 		gossip:    gossip,
-		raft:      newNoopRaft(),
 		closer:    make(chan struct{}),
 		ranges:    map[int64]*Range{},
 	}
@@ -211,6 +210,10 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 func (s *Store) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.raft != nil {
+		s.raft.stop()
+		s.raft = nil
+	}
 	for _, rng := range s.ranges {
 		rng.stop()
 	}
@@ -279,8 +282,10 @@ func (s *Store) Start() error {
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
+	s.raft = newSingleNodeRaft()
+
 	// Start Raft processing goroutine.
-	go s.processRaft(s.closer)
+	go s.processRaft(s.raft, s.closer)
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
@@ -786,6 +791,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 
 // ProposeRaftCommand submits a command to raft.
 func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
+	// s.raft should be constant throughout the life of the store, but
+	// the race detector reports a race between this method and s.Stop.
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	s.raft.propose(cmd)
 }
 
@@ -811,10 +821,10 @@ func (s *Store) ProposeRaftCommand(cmd proto.InternalRaftCommand) {
 //
 // TODO(bdarnell): remove the closer argument and access s.closer directly
 // when we no longer reassign s.closer in s.Stop.
-func (s *Store) processRaft(closer chan struct{}) {
+func (s *Store) processRaft(r raft, closer chan struct{}) {
 	for {
 		select {
-		case raftCmd := <-s.raft.committed():
+		case raftCmd := <-r.committed():
 			s.mu.Lock()
 			r, ok := s.ranges[raftCmd.RaftID]
 			s.mu.Unlock()

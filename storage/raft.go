@@ -17,7 +17,15 @@
 
 package storage
 
-import "github.com/cockroachdb/cockroach/proto"
+import (
+	"log"
+	"sync"
+	"time"
+
+	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	"github.com/cockroachdb/cockroach/multiraft"
+	"github.com/cockroachdb/cockroach/proto"
+)
 
 // raft is the interface exposed by a raft implementation.
 type raft interface {
@@ -30,19 +38,84 @@ type raft interface {
 	// committed. Note that this includes commands proposed by this node
 	// and others.
 	committed() <-chan proto.InternalRaftCommand
+
+	stop()
 }
 
-// noopRaft is a trivial implementation of the raft interface for testing.
-type noopRaft chan proto.InternalRaftCommand
-
-func newNoopRaft() noopRaft {
-	return make(noopRaft, 10)
+type singleNodeRaft struct {
+	mr       *multiraft.MultiRaft
+	mu       sync.Mutex
+	groups   map[int64]struct{}
+	commitCh chan proto.InternalRaftCommand
+	stopper  chan struct{}
 }
 
-func (nr noopRaft) propose(req proto.InternalRaftCommand) {
-	nr <- req
+func newSingleNodeRaft() *singleNodeRaft {
+	mr, err := multiraft.NewMultiRaft(1, &multiraft.Config{
+		Transport:              multiraft.NewLocalRPCTransport(),
+		Storage:                multiraft.NewMemoryStorage(),
+		TickInterval:           time.Millisecond,
+		ElectionTimeoutTicks:   5,
+		HeartbeatIntervalTicks: 1,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	snr := &singleNodeRaft{
+		mr:       mr,
+		groups:   map[int64]struct{}{},
+		commitCh: make(chan proto.InternalRaftCommand, 10),
+		stopper:  make(chan struct{}),
+	}
+	mr.Start()
+	go snr.run()
+	return snr
 }
 
-func (nr noopRaft) committed() <-chan proto.InternalRaftCommand {
-	return nr
+var _ raft = (*singleNodeRaft)(nil)
+
+func (snr *singleNodeRaft) propose(cmd proto.InternalRaftCommand) {
+	snr.mu.Lock()
+	defer snr.mu.Unlock()
+	if _, ok := snr.groups[cmd.RaftID]; !ok {
+		snr.groups[cmd.RaftID] = struct{}{}
+		// Lazily create group. TODO(bdarnell): make this non-lazy
+		err := snr.mr.CreateGroup(uint64(cmd.RaftID), []uint64{1})
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	data, err := gogoproto.Marshal(&cmd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	snr.mr.SubmitCommand(uint64(cmd.RaftID), data)
+}
+
+func (snr *singleNodeRaft) committed() <-chan proto.InternalRaftCommand {
+	return snr.commitCh
+}
+
+func (snr *singleNodeRaft) stop() {
+	close(snr.stopper)
+}
+
+func (snr *singleNodeRaft) run() {
+	for {
+		select {
+		case e := <-snr.mr.Events:
+			switch e := e.(type) {
+			case *multiraft.EventCommandCommitted:
+				var cmd proto.InternalRaftCommand
+				err := gogoproto.Unmarshal(e.Command, &cmd)
+				if err != nil {
+					log.Fatal(err)
+				}
+				snr.commitCh <- cmd
+			}
+		case <-snr.stopper:
+			snr.mr.Stop()
+			return
+		}
+	}
 }
