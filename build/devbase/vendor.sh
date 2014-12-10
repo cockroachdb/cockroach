@@ -7,6 +7,7 @@ cd -P "$(dirname $0)/../.."
 
 # Build dependencies into our shadow environment.
 VENDOR="$(pwd -P)/_vendor"
+GO_MD5SUM="$(pwd -P)/build/devbase/md5sum.go"
 USR="${VENDOR}/usr"
 LIB="${USR}/lib"
 INCLUDE="${USR}/include"
@@ -31,7 +32,7 @@ function download_verify()
     curl -LOs ${1}
     filename=`echo ${1} | sed 's/.*\///'`
     if [ -f ${filename} ]; then
-        dl_md5sum=`md5sum ${filename} | cut -c-32`
+        dl_md5sum=`go run ${GO_MD5SUM} < ${filename}`
         if [ ${dl_md5sum} != ${2} ]; then
             echo "$filename md5sum did not match."
             exit 1
