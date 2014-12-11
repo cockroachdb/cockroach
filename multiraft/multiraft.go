@@ -75,6 +75,7 @@ type MultiRaft struct {
 	Events          chan interface{}
 	nodeID          uint64
 	createGroupChan chan *createGroupOp
+	proposalChan    chan proposal
 	stopper         chan struct{}
 	stopped         chan struct{}
 }
@@ -100,6 +101,7 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
 		createGroupChan: make(chan *createGroupOp, 100),
+		proposalChan:    make(chan proposal, 100),
 		stopper:         make(chan struct{}),
 		stopped:         make(chan struct{}),
 	}
@@ -126,7 +128,8 @@ func (m *MultiRaft) Stop() {
 	m.multiNode.Stop()
 }
 
-// SendMessage implements ServerInterface
+// SendMessage implements ServerInterface; this method is called by net/rpc
+// when we *receive* a message.
 func (m *MultiRaft) SendMessage(req *SendMessageRequest,
 	resp *SendMessageResponse) error {
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
@@ -174,24 +177,47 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
-// TODO(bdarnell): should SubmitCommand wait until the commit?
-// TODO(bdarnell): what do we do if we lose leadership before a command we proposed commits?
-func (m *MultiRaft) SubmitCommand(groupID uint64, commandID []byte, command []byte) error {
+// The returned channel is closed when the command is committed.
+func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) chan struct{} {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
-	return m.multiNode.Propose(context.Background(), groupID, encodeCommand(commandID, command))
+	ch := make(chan struct{})
+	m.proposalChan <- proposal{
+		groupID:   groupID,
+		commandID: commandID,
+		fn: func() {
+			m.multiNode.Propose(context.Background(), groupID, encodeCommand(commandID, command))
+		},
+		ch: ch,
+	}
+	return ch
 }
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
-// TODO(bdarnell): same concerns as SubmitCommand
-func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID []byte,
-	changeType raftpb.ConfChangeType, nodeID uint64) error {
+func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
+	changeType raftpb.ConfChangeType, nodeID uint64) chan struct{} {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
-	return m.multiNode.ProposeConfChange(context.Background(), groupID,
-		raftpb.ConfChange{
-			Type:    changeType,
-			NodeID:  nodeID,
-			Context: encodeCommand(commandID, nil),
-		})
+	ch := make(chan struct{})
+	m.proposalChan <- proposal{
+		groupID:   groupID,
+		commandID: commandID,
+		fn: func() {
+			m.multiNode.ProposeConfChange(context.Background(), groupID,
+				raftpb.ConfChange{
+					Type:    changeType,
+					NodeID:  nodeID,
+					Context: encodeCommand(commandID, nil),
+				})
+		},
+		ch: ch,
+	}
+	return ch
+}
+
+type proposal struct {
+	groupID   uint64
+	commandID string
+	fn        func()
+	ch        chan struct{}
 }
 
 // group represents the state of a consensus group.
@@ -202,6 +228,8 @@ type group struct {
 	// leader is the node ID of the last known leader for this group, or
 	// 0 if an election is in progress.
 	leader uint64
+
+	pending map[string]proposal
 }
 
 type createGroupOp struct {
@@ -279,6 +307,9 @@ func (s *state) start() {
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
 			s.createGroup(op)
 
+		case prop := <-s.proposalChan:
+			s.propose(prop)
+
 		case readyGroups = <-raftReady:
 			s.handleRaftReady(readyGroups)
 
@@ -311,6 +342,20 @@ func (s *state) stop() {
 	close(s.stopped)
 }
 
+// addNode creates a node or increments the refcount on an existing node.
+func (s *state) addNode(nodeID uint64) error {
+	if node, ok := s.nodes[nodeID]; ok {
+		node.refCount++
+		return nil
+	}
+	conn, err := s.Transport.Connect(nodeID)
+	if err != nil {
+		return err
+	}
+	s.nodes[nodeID] = &node{nodeID, 1, &asyncClient{nodeID, conn}}
+	return nil
+}
+
 func (s *state) createGroup(op *createGroupOp) {
 	if _, ok := s.groups[op.groupID]; ok {
 		op.ch <- util.Errorf("group %v already exists", op.groupID)
@@ -321,19 +366,16 @@ func (s *state) createGroup(op *createGroupOp) {
 	peers := make([]raft.Peer, len(op.initialMembers))
 	for i, member := range op.initialMembers {
 		peers[i].ID = member
-		if node, ok := s.nodes[member]; ok {
-			node.refCount++
-			continue
-		}
-		conn, err := s.Transport.Connect(member)
+		err := s.addNode(member)
 		if err != nil {
 			op.ch <- err
 			return
 		}
-		s.nodes[member] = &node{member, 1, &asyncClient{member, conn}}
 	}
 	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
-	s.groups[op.groupID] = &group{}
+	s.groups[op.groupID] = &group{
+		pending: map[string]proposal{},
+	}
 
 	// HACK: for single-node groups force an immediate election instead of waiting
 	// for the randomized timeout.
@@ -342,6 +384,12 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 
 	op.ch <- nil
+}
+
+func (s *state) propose(p proposal) {
+	g := s.groups[p.groupID]
+	g.pending[p.commandID] = p
+	p.fn()
 }
 
 func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
@@ -405,12 +453,15 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
+		g := s.groups[groupID]
 		for _, entry := range ready.CommittedEntries {
+			var commandID string
 			switch entry.Type {
 			case raftpb.EntryNormal:
 				// etcd raft occasionally adds a nil entry (e.g. upon election); ignore these.
 				if entry.Data != nil {
-					commandID, command := decodeCommand(entry.Data)
+					var command []byte
+					commandID, command = decodeCommand(entry.Data)
 					s.sendEvent(&EventCommandCommitted{commandID, command})
 				}
 			case raftpb.EntryConfChange:
@@ -419,9 +470,25 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if err != nil {
 					log.Fatalf("invalid ConfChange data: %s", err)
 				}
+				if len(cc.Context) > 0 {
+					commandID, _ = decodeCommand(cc.Context)
+				}
 				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
-				// TODO(bdarnell): dedupe by extracting commandID from cc.Context.
+				// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
+				// TODO(bdarnell): support removing nodes; fix double-application of initial entries
+				err = s.addNode(cc.NodeID)
+				if err != nil {
+					log.Errorf("error applying configuration change %v: %s", cc, err)
+				}
 				s.multiNode.ApplyConfChange(groupID, cc)
+			}
+			if p, ok := g.pending[commandID]; ok {
+				// TODO(bdarnell): the command is now committed, but not applied until the
+				// application consumes EventCommandCommitted. Is closing the channel
+				// at this point useful or do we need to wait for the command to be
+				// applied too?
+				close(p.ch)
+				delete(g.pending, commandID)
 			}
 		}
 		for _, msg := range ready.Messages {
