@@ -233,6 +233,7 @@ message EndTransactionRequest {
   // internal use only and will be ignored if requested through the
   // public-facing KV API.
   optional SplitTrigger split_trigger = 3;
+  optional MergeTrigger merge_trigger = 4;
 }
 
 // An EndTransactionResponse is the return value from the
@@ -376,5 +377,24 @@ message AdminSplitRequest {
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 message AdminSplitResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// An AdminMergeRequest is arguments to the AdminMerge() method. A
+// merge is always performed by calling AdminMerge on the range
+// that is subsuming the passed in subsumed_range. The ranges must
+// be consecutive in the key space, such that the end_key of the
+// subsuming range must match the start_key of the range being subsumed.
+// After the merge operation, the subsumed_range will no longer exist and
+// the subsuming range will now encompass all keys from its original
+// start_key to the end_key of the subsumed_range.
+message AdminMergeRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional RangeDescriptor subsumed_range = 2 [(gogoproto.nullable) = false];
+}
+
+// An AdminMergeResponse is the return value from the AdminMerge()
+// method.
+message AdminMergeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
