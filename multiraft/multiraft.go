@@ -128,10 +128,10 @@ func (m *MultiRaft) Stop() {
 	m.multiNode.Stop()
 }
 
-// SendMessage implements ServerInterface; this method is called by net/rpc
-// when we *receive* a message.
-func (m *MultiRaft) SendMessage(req *SendMessageRequest,
-	resp *SendMessageResponse) error {
+// RaftMessage implements ServerInterface; this method is called by net/rpc
+// when we receive a message.
+func (m *MultiRaft) RaftMessage(req *RaftMessageRequest,
+	resp *RaftMessageResponse) error {
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
 		raft.DescribeMessage(req.Message))
 	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
@@ -494,7 +494,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		for _, msg := range ready.Messages {
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
 				raft.DescribeMessage(msg), msg.To)
-			s.nodes[msg.To].client.sendMessage(&SendMessageRequest{groupID, msg})
+			s.nodes[msg.To].client.raftMessage(&RaftMessageRequest{groupID, msg})
 		}
 	}
 }
