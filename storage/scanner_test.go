@@ -30,7 +30,7 @@ import (
 // a slice of ranges.
 type testIterator struct {
 	index  int
-	ranges []*Range
+	ranges []Range
 	count  int
 	start  time.Time
 	total  time.Duration
@@ -41,26 +41,28 @@ func newTestIterator(count int) *testIterator {
 	ti := &testIterator{
 		start: time.Now(),
 	}
-	ti.ranges = make([]*Range, 0, count)
-	for i := 0; i < count; i++ {
-		ti.ranges = append(ti.ranges, &Range{})
-	}
+	ti.ranges = make([]Range, count)
 	return ti
 }
 
-func (ti *testIterator) Next() (rng *Range, remaining int) {
+func (ti *testIterator) next() *Range {
 	ti.Lock()
 	defer ti.Unlock()
 	if ti.index >= len(ti.ranges) {
-		return
+		return nil
 	}
-	rng = ti.ranges[ti.index]
-	remaining = len(ti.ranges) - ti.index
+	oldIndex := ti.index
 	ti.index++
-	return
+	return &ti.ranges[oldIndex]
 }
 
-func (ti *testIterator) Reset() {
+func (ti *testIterator) estimatedCount() int {
+	ti.Lock()
+	defer ti.Unlock()
+	return len(ti.ranges) - ti.index
+}
+
+func (ti *testIterator) reset() {
 	ti.Lock()
 	defer ti.Unlock()
 	ti.index = 0
@@ -75,7 +77,7 @@ func (ti *testIterator) remove(index int) *Range {
 	defer ti.Unlock()
 	var rng *Range
 	if index < len(ti.ranges) {
-		rng = ti.ranges[index]
+		rng = &ti.ranges[index]
 		ti.ranges = append(ti.ranges[:index], ti.ranges[index+1:]...)
 	}
 	return rng
@@ -89,22 +91,35 @@ func (ti *testIterator) avgScan() time.Duration {
 // internal slice.
 type testQueue struct {
 	ranges []*Range
+	sync.Mutex
 }
 
-func (tq *testQueue) MaybeAdd(rng *Range) {
+func (tq *testQueue) maybeAdd(rng *Range) {
+	tq.Lock()
+	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {
 		tq.ranges = append(tq.ranges, rng)
 	}
 }
 
-func (tq *testQueue) MaybeRemove(rng *Range) {
+func (tq *testQueue) maybeRemove(rng *Range) {
+	tq.Lock()
+	defer tq.Unlock()
 	if index := tq.indexOf(rng); index != -1 {
 		tq.ranges = append(tq.ranges[:index], tq.ranges[index+1:]...)
 	}
 }
 
-func (tq *testQueue) Clear() {
+func (tq *testQueue) clear() {
+	tq.Lock()
+	defer tq.Unlock()
 	tq.ranges = []*Range(nil)
+}
+
+func (tq *testQueue) count() int {
+	tq.Lock()
+	defer tq.Unlock()
+	return len(tq.ranges)
 }
 
 func (tq *testQueue) indexOf(rng *Range) int {
@@ -122,13 +137,12 @@ func TestScannerAddToQueues(t *testing.T) {
 	const count = 3
 	iter := newTestIterator(count)
 	q1, q2 := &testQueue{}, &testQueue{}
-	s := newRangeScanner(iter, []rangeQueue{q1, q2})
+	s := newRangeScanner(1*time.Millisecond, iter, []rangeQueue{q1, q2})
 
 	// Start queue and verify that all ranges are added to both queues.
-	scanInterval = 1 * time.Millisecond
 	s.start()
 	if err := util.IsTrueWithin(func() bool {
-		return len(q1.ranges) == count && len(q2.ranges) == count
+		return q1.count() == count && q2.count() == count
 	}, 10*time.Millisecond); err != nil {
 		t.Error(err)
 	}
@@ -137,7 +151,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	rng := iter.remove(0)
 	s.removeRange(rng)
 	if err := util.IsTrueWithin(func() bool {
-		return len(q1.ranges) == count-1 && len(q2.ranges) == count-1
+		return q1.count() == count-1 && q2.count() == count-1
 	}, 10*time.Millisecond); err != nil {
 		t.Error(err)
 	}
@@ -164,10 +178,9 @@ func TestScannerTiming(t *testing.T) {
 		2 * time.Millisecond,
 	}
 	for i, duration := range durations {
-		scanInterval = duration
 		iter := newTestIterator(count)
 		q := &testQueue{}
-		s := newRangeScanner(iter, []rangeQueue{q})
+		s := newRangeScanner(duration, iter, []rangeQueue{q})
 		s.start()
 		time.Sleep(runTime)
 		s.stop()
@@ -178,5 +191,18 @@ func TestScannerTiming(t *testing.T) {
 			duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
 			t.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
 		}
+	}
+}
+
+// Verify that an empty iterator doesn't busy loop.
+func TestScannerEmptyIterator(t *testing.T) {
+	iter := newTestIterator(0)
+	q := &testQueue{}
+	s := newRangeScanner(1*time.Millisecond, iter, []rangeQueue{q})
+	s.start()
+	time.Sleep(3 * time.Millisecond)
+	s.stop()
+	if count := s.loopCount(); count > 3 {
+		t.Errorf("expected three loops; got %d", count)
 	}
 }
