@@ -439,6 +439,7 @@ func ExampleKV_Call() {
 	})
 	kvClient := client.NewKV(sender, nil)
 	kvClient.User = storage.UserRoot
+	defer kvClient.Close()
 
 	key := proto.Key("a")
 	value := []byte{1, 2, 3, 4}
@@ -484,6 +485,7 @@ func ExampleKV_Prepare() {
 	})
 	kvClient := client.NewKV(sender, nil)
 	kvClient.User = storage.UserRoot
+	defer kvClient.Close()
 
 	// Insert test data.
 	batchSize := 12
@@ -554,6 +556,7 @@ func ExampleKV_RunTransaction() {
 	})
 	kvClient := client.NewKV(sender, nil)
 	kvClient.User = storage.UserRoot
+	defer kvClient.Close()
 
 	// Create test data.
 	numKVPairs := 10
@@ -565,7 +568,7 @@ func ExampleKV_RunTransaction() {
 	}
 
 	// Insert all KV pairs inside a transaction.
-	putOpts := client.TransactionOptions{Name: "example put", Isolation: proto.SERIALIZABLE}
+	putOpts := client.TransactionOptions{Name: "example put"}
 	err := kvClient.RunTransaction(&putOpts, func(txn *client.KV) error {
 		for i := 0; i < numKVPairs; i++ {
 			txn.Prepare(proto.Put, proto.PutArgs(proto.Key(keys[i]), values[i]), &proto.PutResponse{})
