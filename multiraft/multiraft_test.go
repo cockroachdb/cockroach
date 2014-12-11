@@ -105,7 +105,13 @@ func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 	// Elections are currently triggered after ElectionTimeoutTicks+1 ticks.
 	c.tickers[i].Tick()
 	c.tickers[i].Tick()
-	return <-c.events[i].LeaderElection
+	for {
+		e := <-c.events[i].LeaderElection
+		// Ignore events with NodeID 0; these mark elections that are in progress.
+		if e.NodeID != 0 {
+			return e
+		}
+	}
 }
 
 func TestInitialLeaderElection(t *testing.T) {

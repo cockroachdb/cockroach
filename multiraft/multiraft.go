@@ -196,11 +196,12 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID []byte,
 
 // group represents the state of a consensus group.
 type group struct {
-	groupID uint64
+	// committedTerm is the term of the most recently committed entry.
+	committedTerm uint64
 
-	// softState is the last value received from node.Ready() so we can compare
-	// old and new values.
-	softState raft.SoftState
+	// leader is the node ID of the last known leader for this group, or
+	// 0 if an election is in progress.
+	leader uint64
 }
 
 type createGroupOp struct {
@@ -332,9 +333,7 @@ func (s *state) createGroup(op *createGroupOp) {
 		s.nodes[member] = &node{member, 1, &asyncClient{member, conn}}
 	}
 	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
-	s.groups[op.groupID] = &group{
-		groupID: op.groupID,
-	}
+	s.groups[op.groupID] = &group{}
 
 	// HACK: for single-node groups force an immediate election instead of waiting
 	// for the randomized timeout.
@@ -371,11 +370,16 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 		}
 
 		g := s.groups[groupID]
+		leader, term := g.leader, g.committedTerm
 		if ready.SoftState != nil {
-			if ready.SoftState.Lead != g.softState.Lead {
-				s.sendEvent(&EventLeaderElection{groupID, ready.SoftState.Lead})
-			}
-			g.softState = *ready.SoftState
+			leader = ready.SoftState.Lead
+		}
+		if len(ready.CommittedEntries) > 0 {
+			term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
+		}
+		if term != g.committedTerm || leader != g.leader {
+			g.leader, g.committedTerm = leader, term
+			s.sendEvent(&EventLeaderElection{groupID, g.leader, g.committedTerm})
 		}
 	}
 }

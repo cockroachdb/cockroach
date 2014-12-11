@@ -19,10 +19,12 @@ package multiraft
 
 import "github.com/cockroachdb/cockroach/util/log"
 
-// An EventLeaderElection is broadcast when a group completes an election.
+// An EventLeaderElection is broadcast when a group starts or completes
+// an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
 	GroupID uint64
 	NodeID  uint64
+	Term    uint64
 }
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
