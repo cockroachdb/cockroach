@@ -1358,10 +1358,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			return err
 		}
 		// Update range descriptor addressing record(s).
-		if err := UpdateRangeAddressing(txn, newDesc); err != nil {
-			return err
-		}
-		if err := UpdateRangeAddressing(txn, &updatedDesc); err != nil {
+		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
 			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
