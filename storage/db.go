@@ -76,10 +76,8 @@ func MergeRangeAddressing(db *client.KV, left, merged *proto.RangeDescriptor) er
 //     - meta1(desc.EndKey)
 //  3. If desc.EndKey is normal user key:
 //     - meta2(desc.EndKey)
-//    a. If desc.StartKey is KeyMin:
-//       - meta1(KeyMax)
-//    b. If desc.StartKey is meta2:
-//       - meta1(KeyMax)
+//     3a. If desc.StartKey is KeyMin or meta2:
+//         - meta1(KeyMax)
 func updateRangeAddressing(db *client.KV, desc *proto.RangeDescriptor, action metaAction) error {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||
@@ -99,15 +97,10 @@ func updateRangeAddressing(db *client.KV, desc *proto.RangeDescriptor, action me
 		if err := action(db, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
 			return err
 		}
-		// 3a. the range starts with KeyMin, we update the appropriate
-		// meta1 entry.
-		if bytes.Equal(desc.StartKey, engine.KeyMin) {
-			if err := action(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
-				return err
-			}
-		} else if bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
-			// 3b. the range contains the final set of meta2 addressing
-			// records, we update the meta1 entry pointing to KeyMax.
+		// 3a. the range starts with KeyMin or a meta2 addressing record,
+		// update the meta1 entry for KeyMax.
+		if bytes.Equal(desc.StartKey, engine.KeyMin) ||
+			bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
 			if err := action(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
 				return err
 			}
