@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // createTestStore creates a test store using an in-memory
@@ -169,29 +170,29 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// Now, merge all of our splits backwards...
 
 		// Merge meta2(m)-meta2(z).
-		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
+		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
 			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
 		// Merge meta2(m)-"a".
-		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
 			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
 		// Merge KeyMin-"a".
-		{true, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.KeyMin, proto.Key("a"),
+		{false, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.KeyMin, proto.Key("a"),
 			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
 		// Merge "a"-"z".
-		{true, proto.Key("a"), proto.Key("m"), proto.Key("a"), proto.Key("z"),
+		{false, proto.Key("a"), proto.Key("m"), proto.Key("a"), proto.Key("z"),
 			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
 		// Merge "a"-KeyMax.
-		{true, proto.Key("a"), proto.Key("z"), proto.Key("a"), engine.KeyMax,
+		{false, proto.Key("a"), proto.Key("z"), proto.Key("a"), engine.KeyMax,
 			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(engine.KeyMax)}},
 		// Merge KeyMin-KeyMax.
-		{true, engine.KeyMin, proto.Key("a"), engine.KeyMin, engine.KeyMax,
+		{false, engine.KeyMin, proto.Key("a"), engine.KeyMin, engine.KeyMax,
 			[]proto.Key{meta2Key(proto.Key("a"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
 	}
 	expMetas := metaSlice{}
 
 	for i, test := range testCases {
-		left := &proto.RangeDescriptor{RaftID: int64(i), StartKey: test.leftStart, EndKey: test.leftEnd}
-		right := &proto.RangeDescriptor{RaftID: int64(i), StartKey: test.rightStart, EndKey: test.rightEnd}
+		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
+		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
 		if test.split {
 			if err := storage.SplitRangeAddressing(store.DB(), left, right); err != nil {
 				t.Fatal(err)
@@ -231,7 +232,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				if found == -1 && add {
 					expMetas = append(expMetas, metaRecord{key: n, desc: desc})
 				} else if found != -1 && !add {
-					expMetas = append(expMetas[:i], expMetas[i+1:]...)
+					expMetas = append(expMetas[:found], expMetas[found+1:]...)
 				}
 			}
 		}
@@ -239,14 +240,28 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		addOrRemoveNew(test.rightExpNew, right, true)
 		sort.Sort(expMetas)
 
+		if test.split {
+			log.V(1).Infof("test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+		} else {
+			log.V(1).Infof("test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+		}
+		for _, meta := range metas {
+			log.V(1).Infof("%q", meta.key)
+		}
+		log.V(1).Infof("")
+
 		if !reflect.DeepEqual(expMetas, metas) {
 			t.Errorf("expected metas don't match")
-			for i, meta := range expMetas {
-				if !meta.key.Equal(metas[i].key) {
-					fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
-				}
-				if !reflect.DeepEqual(meta.desc, metas[i].desc) {
-					fmt.Printf("%d: expected %q vs %q and %s vs %s\n", i, meta.key, metas[i].key, meta.desc, metas[i].desc)
+			if len(expMetas) != len(metas) {
+				t.Errorf("len(expMetas) != len(metas); %d != %d", len(expMetas), len(metas))
+			} else {
+				for i, meta := range expMetas {
+					if !meta.key.Equal(metas[i].key) {
+						fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
+					}
+					if !reflect.DeepEqual(meta.desc, metas[i].desc) {
+						fmt.Printf("%d: expected %q vs %q and %s vs %s\n", i, meta.key, metas[i].key, meta.desc, metas[i].desc)
+					}
 				}
 			}
 		}
