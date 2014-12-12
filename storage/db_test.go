@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // createTestStore creates a test store using an in-memory
@@ -135,56 +136,71 @@ func meta2Key(key proto.Key) proto.Key {
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
 	store := createTestStore(t)
+	// When split is false, merging treats the right range as the merged
+	// range. With merging, expNewLeft indicates the addressing keys we
+	// expect to be removed.
 	testCases := []struct {
-		start, end proto.Key
-		expNew     []proto.Key
+		split                   bool
+		leftStart, leftEnd      proto.Key
+		rightStart, rightEnd    proto.Key
+		leftExpNew, rightExpNew []proto.Key
 	}{
 		// Start out with whole range.
-		{engine.KeyMin, engine.KeyMax,
-			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
-		// First half of splitting the range at key "a".
-		{engine.KeyMin, proto.Key("a"),
-			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
-		// Second half of splitting the range at key "a".
-		{proto.Key("a"), engine.KeyMax,
-			[]proto.Key{meta2Key(engine.KeyMax)}},
-		// First half of splitting the range at key "z".
-		{proto.Key("a"), proto.Key("z"),
-			[]proto.Key{meta2Key(proto.Key("z"))}},
-		// Second half of splitting the range at key "z"
-		{proto.Key("z"), engine.KeyMax,
-			[]proto.Key{meta2Key(engine.KeyMax)}},
-		// First half of splitting the range at key "m".
-		{proto.Key("a"), proto.Key("m"),
-			[]proto.Key{meta2Key(proto.Key("m"))}},
-		// Second half of splitting the range at key "m"
-		{proto.Key("m"), proto.Key("z"),
-			[]proto.Key{meta2Key(proto.Key("z"))}},
-		// First half of splitting at meta2(m).
-		{engine.KeyMin, engine.RangeMetaKey(proto.Key("m")),
-			[]proto.Key{meta1Key(proto.Key("m"))}},
-		// Second half of splitting at meta2(m).
-		{engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
-			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
-		// First half of splitting at meta2(z).
-		{engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
-			[]proto.Key{meta1Key(proto.Key("z"))}},
-		// Second half of splitting at meta2(z).
-		{engine.RangeMetaKey(proto.Key("z")), proto.Key("a"),
-			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
-		// First half of splitting at meta2(r).
-		{engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")),
-			[]proto.Key{meta1Key(proto.Key("r"))}},
-		// Second half of splitting at meta2(r).
-		{engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("z")),
-			[]proto.Key{meta1Key(proto.Key("z"))}},
+		{false, engine.KeyMin, engine.KeyMax, engine.KeyMin, engine.KeyMax,
+			[]proto.Key{}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
+		// Split KeyMin-KeyMax at key "a".
+		{true, engine.KeyMin, proto.Key("a"), proto.Key("a"), engine.KeyMax,
+			[]proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		// Split "a"-KeyMax at key "z".
+		{true, proto.Key("a"), proto.Key("z"), proto.Key("z"), engine.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		// Split "a"-"z" at key "m".
+		{true, proto.Key("a"), proto.Key("m"), proto.Key("m"), proto.Key("z"),
+			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
+		// Split KeyMin-"a" at meta2(m).
+		{true, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		// Split meta2(m)-"a" at meta2(z).
+		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("z")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		// Split meta2(m)-meta2(z) at meta2(r).
+		{true, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("z")),
+			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
+
+		// Now, merge all of our splits backwards...
+
+		// Merge meta2(m)-meta2(z).
+		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("r")), engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")),
+			[]proto.Key{meta1Key(proto.Key("r"))}, []proto.Key{meta1Key(proto.Key("z"))}},
+		// Merge meta2(m)-"a".
+		{false, engine.RangeMetaKey(proto.Key("m")), engine.RangeMetaKey(proto.Key("z")), engine.RangeMetaKey(proto.Key("m")), proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("z"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		// Merge KeyMin-"a".
+		{false, engine.KeyMin, engine.RangeMetaKey(proto.Key("m")), engine.KeyMin, proto.Key("a"),
+			[]proto.Key{meta1Key(proto.Key("m"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(proto.Key("a"))}},
+		// Merge "a"-"z".
+		{false, proto.Key("a"), proto.Key("m"), proto.Key("a"), proto.Key("z"),
+			[]proto.Key{meta2Key(proto.Key("m"))}, []proto.Key{meta2Key(proto.Key("z"))}},
+		// Merge "a"-KeyMax.
+		{false, proto.Key("a"), proto.Key("z"), proto.Key("a"), engine.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("z"))}, []proto.Key{meta2Key(engine.KeyMax)}},
+		// Merge KeyMin-KeyMax.
+		{false, engine.KeyMin, proto.Key("a"), engine.KeyMin, engine.KeyMax,
+			[]proto.Key{meta2Key(proto.Key("a"))}, []proto.Key{meta1Key(engine.KeyMax), meta2Key(engine.KeyMax)}},
 	}
 	expMetas := metaSlice{}
 
 	for i, test := range testCases {
-		desc := &proto.RangeDescriptor{RaftID: int64(i), StartKey: test.start, EndKey: test.end}
-		if err := storage.UpdateRangeAddressing(store.DB(), desc); err != nil {
-			t.Fatal(err)
+		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
+		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
+		if test.split {
+			if err := storage.SplitRangeAddressing(store.DB(), left, right); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := storage.MergeRangeAddressing(store.DB(), left, right); err != nil {
+				t.Fatal(err)
+			}
 		}
 		store.DB().Flush()
 		// Scan meta keys directly from engine.
@@ -203,24 +219,50 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		// Continue to build up the expected metas slice, replacing any earlier
 		// version of same key.
-		for _, n := range test.expNew {
-			found := false
-			for i := range expMetas {
-				if expMetas[i].key.Equal(n) {
-					found = true
-					expMetas[i].desc = desc
-					break
+		addOrRemoveNew := func(keys []proto.Key, desc *proto.RangeDescriptor, add bool) {
+			for _, n := range keys {
+				found := -1
+				for i := range expMetas {
+					if expMetas[i].key.Equal(n) {
+						found = i
+						expMetas[i].desc = desc
+						break
+					}
+				}
+				if found == -1 && add {
+					expMetas = append(expMetas, metaRecord{key: n, desc: desc})
+				} else if found != -1 && !add {
+					expMetas = append(expMetas[:found], expMetas[found+1:]...)
 				}
 			}
-			if !found {
-				expMetas = append(expMetas, metaRecord{key: n, desc: desc})
-			}
 		}
+		addOrRemoveNew(test.leftExpNew, left, test.split /* on split, add; on merge, remove */)
+		addOrRemoveNew(test.rightExpNew, right, true)
 		sort.Sort(expMetas)
+
+		if test.split {
+			log.V(1).Infof("test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+		} else {
+			log.V(1).Infof("test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+		}
+		for _, meta := range metas {
+			log.V(1).Infof("%q", meta.key)
+		}
+		log.V(1).Infof("")
+
 		if !reflect.DeepEqual(expMetas, metas) {
 			t.Errorf("expected metas don't match")
-			for i, meta := range expMetas {
-				fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
+			if len(expMetas) != len(metas) {
+				t.Errorf("len(expMetas) != len(metas); %d != %d", len(expMetas), len(metas))
+			} else {
+				for i, meta := range expMetas {
+					if !meta.key.Equal(metas[i].key) {
+						fmt.Printf("%d: expected %q vs %q\n", i, meta.key, metas[i].key)
+					}
+					if !reflect.DeepEqual(meta.desc, metas[i].desc) {
+						fmt.Printf("%d: expected %q vs %q and %s vs %s\n", i, meta.key, metas[i].key, meta.desc, metas[i].desc)
+					}
+				}
 			}
 		}
 	}
@@ -231,12 +273,9 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	store := createTestStore(t)
-	desc := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
-	if err := storage.UpdateRangeAddressing(store.DB(), desc); err == nil {
-		t.Error("expected failure trying to update addressing records for meta1 split")
-	}
-	desc = &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
-	if err := storage.UpdateRangeAddressing(store.DB(), desc); err == nil {
+	left := &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
+	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
+	if err := storage.SplitRangeAddressing(store.DB(), left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 }

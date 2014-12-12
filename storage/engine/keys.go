@@ -68,9 +68,16 @@ func KeyAddress(k proto.Key) proto.Key {
 	return k[KeyLocalPrefixLength:]
 }
 
-// RangeMetaKey returns a range metadata key for the given key. For ordinary
-// keys this returns a level 2 metadata key - for level 2 keys, it returns a
-// level 1 key. For level 1 keys and local keys, KeyMin is returned.
+// RangeDescriptorKey returns a system-local key for the descriptor
+// for the range with specified start key.
+func RangeDescriptorKey(startKey proto.Key) proto.Key {
+	return MakeLocalKey(KeyLocalRangeDescriptorPrefix, startKey)
+}
+
+// RangeMetaKey returns a range metadata (meta1, meta2) indexing key
+// for the given key. For ordinary keys this returns a level 2
+// metadata key - for level 2 keys, it returns a level 1 key. For
+// level 1 keys and local keys, KeyMin is returned.
 func RangeMetaKey(key proto.Key) proto.Key {
 	if len(key) == 0 {
 		return KeyMin
