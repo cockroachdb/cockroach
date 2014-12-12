@@ -26,7 +26,7 @@ import (
 )
 
 // A rangeQueue is a prioritized queue of ranges for which work is
-// schedule. For example, there's a GC queue for ranges which are due
+// scheduled. For example, there's a GC queue for ranges which are due
 // for garbage collection, a rebalance queue to move ranges from full
 // or busy stores, a recovery queue for ranges with dead replicas,
 // etc.
@@ -56,9 +56,8 @@ type rangeIterator interface {
 }
 
 // A rangeScanner iterates over ranges at a measured pace in order to
-// complete one full scan in approximately the scanInterval. Each
-// range is tested for inclusion in a sequence of prioritized range
-// queues.
+// complete approximately one full scan per interval. Each range is
+// tested for inclusion in a sequence of prioritized range queues.
 type rangeScanner struct {
 	interval time.Duration // Duration interval for scan loop
 	iter     rangeIterator // Iterator to implement scan of ranges
