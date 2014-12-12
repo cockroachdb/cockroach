@@ -179,6 +179,46 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
 }
 
+// storeRangeIterator is an implementation of rangeIterator which
+// cycles through a store's rangesByKey slice.
+type storeRangeIterator struct {
+	store     *Store
+	remaining int
+	index     int
+}
+
+func newStoreRangeIterator(store *Store) *storeRangeIterator {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return &storeRangeIterator{
+		store:     store,
+		remaining: len(store.rangesByKey),
+	}
+}
+
+func (si *storeRangeIterator) next() *Range {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	if index := si.index; index < len(si.store.rangesByKey) {
+		si.index++
+		si.remaining = len(si.store.rangesByKey) - si.index
+		return si.store.rangesByKey[index]
+	}
+	si.remaining = 0
+	return nil
+}
+
+func (si *storeRangeIterator) estimatedCount() int {
+	return si.remaining
+}
+
+func (si *storeRangeIterator) reset() {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	si.remaining = len(si.store.rangesByKey)
+	si.index = 0
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {

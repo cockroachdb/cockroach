@@ -257,6 +257,39 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
+func TestStoreRangeIterator(t *testing.T) {
+	store, _ := createTestStore(t)
+	defer store.Stop()
+
+	// Remove range 1.
+	rng1, err := store.GetRange(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveRange(rng1); err != nil {
+		t.Error(err)
+	}
+	// Add 10 new ranges.
+	const newCount = 10
+	for i := 0; i < newCount; i++ {
+		rng := createRange(store, int64(i+1), proto.Key(fmt.Sprintf("a%d", i)), proto.Key(fmt.Sprintf("a%d", i+1)))
+		if err := store.AddRange(rng); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify two passes of the iteration.
+	for pass := 0; pass < 2; pass++ {
+		iter := newStoreRangeIterator(store)
+		for i := 1; iter.estimatedCount() > 0; i++ {
+			if rng := iter.next(); rng == nil || rng.Desc.RaftID != int64(i) {
+				t.Errorf("expected range with Raft ID %d; got %s", i, rng)
+			}
+		}
+		iter.reset()
+	}
+}
+
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {
