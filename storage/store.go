@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"net"
 	"sort"
@@ -48,15 +49,25 @@ const (
 	// key length to transaction records, which have a UUID appended.
 	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
 	uuidLength = 36
+	// defaultScanInterval is the default value for the scan interval
+	// command line flag.
+	defaultScanInterval = 10 * time.Minute
 )
 
-// RangeRetryOptions sets the retry options for retrying commands.
-var RangeRetryOptions = util.RetryOptions{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-}
+var (
+	// RangeRetryOptions sets the retry options for retrying commands.
+	RangeRetryOptions = util.RetryOptions{
+		Backoff:     50 * time.Millisecond,
+		MaxBackoff:  5 * time.Second,
+		Constant:    2,
+		MaxAttempts: 0, // retry indefinitely
+	}
+
+	scanInterval = flag.Duration("scan_interval", defaultScanInterval, "specify "+
+		"--scan_interval to adjust the target for the duration of a single scan "+
+		"through a store's ranges. The scan is slowed as necessary to approximately"+
+		"achieve this duration.")
+)
 
 // verifyKeyLength verifies key length. Extra key length is allowed for
 // the local key prefix (for example, a transaction record), and also for

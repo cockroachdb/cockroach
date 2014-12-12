@@ -25,13 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var (
-	// scanInterval is the target for the duration of a single scan
-	// through available ranges. The scan is slowed as necessary to
-	// approximate this duration.
-	scanInterval = 10 * time.Minute
-)
-
 // A rangeQueue is a prioritized queue of ranges for which work is
 // schedule. For example, there's a GC queue for ranges which are due
 // for garbage collection, a rebalance queue to move ranges from full
