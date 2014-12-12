@@ -450,7 +450,7 @@ func (s *Store) BootstrapRange() error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
-	if err := engine.MVCCPutProto(batch, ms, makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
 	// Write meta1.
