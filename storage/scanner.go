@@ -31,6 +31,9 @@ import (
 // or busy stores, a recovery queue for ranges with dead replicas,
 // etc.
 type rangeQueue interface {
+	// next returns the highest priority range from the queue. If the
+	// queue is empty, returns nil.
+	next() *Range
 	// maybeAdd adds the range to the queue if the range meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.

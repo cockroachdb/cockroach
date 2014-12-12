@@ -94,6 +94,17 @@ type testQueue struct {
 	sync.Mutex
 }
 
+func (tq *testQueue) next() *Range {
+	tq.Lock()
+	defer tq.Unlock()
+	if len(tq.ranges) == 0 {
+		return nil
+	}
+	rng := tq.ranges[0]
+	tq.ranges = tq.ranges[1:]
+	return rng
+}
+
 func (tq *testQueue) maybeAdd(rng *Range) {
 	tq.Lock()
 	defer tq.Unlock()
