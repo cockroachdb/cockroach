@@ -188,23 +188,21 @@ type storeRangeIterator struct {
 }
 
 func newStoreRangeIterator(store *Store) *storeRangeIterator {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	return &storeRangeIterator{
-		store:     store,
-		remaining: len(store.rangesByKey),
+	r := &storeRangeIterator{
+		store: store,
 	}
+	r.reset()
+	return r
 }
 
 func (si *storeRangeIterator) next() *Range {
 	si.store.mu.Lock()
 	defer si.store.mu.Unlock()
-	if index := si.index; index < len(si.store.rangesByKey) {
+	if index, remaining := si.index, len(si.store.rangesByKey)-si.index; remaining > 0 {
 		si.index++
-		si.remaining = len(si.store.rangesByKey) - si.index
+		si.remaining = remaining - 1
 		return si.store.rangesByKey[index]
 	}
-	si.remaining = 0
 	return nil
 }
 
@@ -648,9 +646,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	if n >= len(s.rangesByKey) {
 		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
-	lastIdx := len(s.rangesByKey) - 1
-	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
-	s.rangesByKey = s.rangesByKey[:lastIdx]
+	s.rangesByKey = append(s.rangesByKey[:n], s.rangesByKey[n+1:]...)
 	return nil
 }
 
