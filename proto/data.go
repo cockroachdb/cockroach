@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -499,4 +500,20 @@ func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) i
 	}
 	// Otherwise, just return the expGCBytes.
 	return expGCBytes
+}
+
+// Add adds the given NodeID to the interface (unless already present)
+// and restores ordering.
+func (s *SeenNodes) Add(nodeID int32) {
+	if !s.Contains(nodeID) {
+		(*s).Nodes = append(s.Nodes, nodeID)
+		sort.Sort(util.Int32Slice(s.Nodes))
+	}
+}
+
+// Contains returns true if the underlying slice contains the given NodeID.
+func (s SeenNodes) Contains(nodeID int32) bool {
+	ns := s.GetNodes()
+	i := sort.Search(len(ns), func(i int) bool { return ns[i] >= nodeID })
+	return i < len(ns) && ns[i] == nodeID
 }

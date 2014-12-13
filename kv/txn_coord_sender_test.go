@@ -492,6 +492,9 @@ var testPutReq = &proto.PutRequest{
 		Txn: &proto.Transaction{
 			Name: "test txn",
 		},
+		Replica: proto.Replica{
+			NodeID: 12345,
+		},
 	},
 }
 
@@ -508,11 +511,21 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		expPri    int32
 		expTS     proto.Timestamp
 		expOrigTS proto.Timestamp
+		hostSeen  bool
 	}{
-		{&proto.ReadWithinUncertaintyIntervalError{ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11), makeTS(10, 11)},
-		{&proto.TransactionAbortedError{Txn: proto.Transaction{Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10), makeTS(0, 1)},
-		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9, makeTS(10, 11), makeTS(10, 11)},
-		{&proto.TransactionRetryError{Txn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10, makeTS(10, 10), makeTS(10, 10)},
+		{nil, 0, 1, makeTS(0, 1), makeTS(0, 1), false},
+		{&proto.ReadWithinUncertaintyIntervalError{
+			ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11),
+			makeTS(10, 11), true},
+		{&proto.TransactionAbortedError{Txn: proto.Transaction{
+			Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10),
+			makeTS(0, 1), false},
+		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{
+			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9,
+			makeTS(10, 11), makeTS(10, 11), false},
+		{&proto.TransactionRetryError{Txn: proto.Transaction{
+			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10,
+			makeTS(10, 10), makeTS(10, 10), false},
 	}
 
 	for i, test := range testCases {
@@ -526,16 +539,24 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
 		}
 		if reply.Txn.Epoch != test.expEpoch {
-			t.Errorf("%d: expected epoch = %d; got %d", i, test.expEpoch, reply.Txn.Epoch)
+			t.Errorf("%d: expected epoch = %d; got %d",
+				i, test.expEpoch, reply.Txn.Epoch)
 		}
 		if reply.Txn.Priority != test.expPri {
-			t.Errorf("%d: expected priority = %d; got %d", i, test.expPri, reply.Txn.Priority)
+			t.Errorf("%d: expected priority = %d; got %d",
+				i, test.expPri, reply.Txn.Priority)
 		}
 		if !reply.Txn.Timestamp.Equal(test.expTS) {
-			t.Errorf("%d: expected timestamp to be %s; got %s", i, test.expTS, reply.Txn.Timestamp)
+			t.Errorf("%d: expected timestamp to be %s; got %s",
+				i, test.expTS, reply.Txn.Timestamp)
 		}
 		if !reply.Txn.OrigTimestamp.Equal(test.expOrigTS) {
-			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s", i, test.expOrigTS, reply.Txn.OrigTimestamp)
+			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
+				i, test.expOrigTS, reply.Txn.OrigTimestamp)
+		}
+		if nodes := reply.Txn.CertainNodes.GetNodes(); (len(nodes) != 0) != test.hostSeen {
+			t.Errorf("%d: expected hostSeen=%t, but list of hosts is %v",
+				i, test.hostSeen, nodes)
 		}
 	}
 }

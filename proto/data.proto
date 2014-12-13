@@ -134,6 +134,12 @@ enum TransactionStatus {
   ABORTED = 2;
 }
 
+// SeenNodes keeps a growing set of NodeIDs as a sorted slice, with Add()
+// adding to the set and Contains() verifying membership.
+message SeenNodes {
+  repeated int32 nodes = 1 [packed=true];
+}
+
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
 // isolation and serializable snapshot isolation. Each Cockroach
@@ -150,21 +156,28 @@ message Transaction {
   optional TransactionStatus status = 5 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
   optional int32 epoch = 6 [(gogoproto.nullable) = false];
+  // The last heartbeat timestamp.
+  optional Timestamp last_heartbeat = 7;
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
-  optional Timestamp timestamp = 7 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 8 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
   // transaction will retry.
-  optional Timestamp orig_timestamp = 8 [(gogoproto.nullable) = false];
+  optional Timestamp orig_timestamp = 9 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
-  // retry error.
+  // retry error, unless the node being read is listed in nodes_read
+  // (in which case no more read uncertainty can occur).
   // The case MaxTimestamp < Timestamp is possible for transactions which have
   // been pushed; in this case, MaxTimestamp should be ignored.
-  optional Timestamp max_timestamp = 9 [(gogoproto.nullable) = false];
-  // The last hearbeat timestamp.
-  optional Timestamp last_heartbeat = 10;
+  optional Timestamp max_timestamp = 10 [(gogoproto.nullable) = false];
+  // A sorted list of ids of nodes for which an UncertaintyIntervalError
+  // occurred during a prior read. The purpose of keeping this information is
+  // that as a reaction to this error, the transaction's timestamp is forwarded
+  // appropriately to reflect that node's clock uncertainty. Future reads to
+  // the same node are therefore freed from uncertainty restarts.
+  optional SeenNodes certain_nodes = 11 [(gogoproto.nullable) = false];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

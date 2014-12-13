@@ -388,6 +388,10 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 	// Take action on various errors.
 	switch t := replyHeader.GoError().(type) {
 	case *proto.ReadWithinUncertaintyIntervalError:
+		// Mark the host as certain. See the protobuf comment for
+		// CertainNodes for details.
+		replyHeader.Txn.CertainNodes.Add(argsHeader.Replica.NodeID)
+
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
 		// up to MaxTimestamp, whichever comes first.
