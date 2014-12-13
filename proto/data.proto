@@ -185,3 +185,25 @@ message MVCCMetadata {
   // empty timestamp, key_bytes, and val_bytes.
   optional Value value = 6;
 }
+
+// GCMetadata holds stats describing the state of data on disk after a
+// garbage collection pass. These stats are used to prioritize system
+// GC passes and enable the scheduler to avoid GCing ranges which have
+// very little sufficiently aged data.
+message GCMetadata {
+  // The last GC timestamp in nanoseconds since the Unix epoch.
+  optional int64 last_gc_nanos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "LastGCNanos"];
+  // The GC TTL for the range at last GC.
+  optional int32 ttl_seconds = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
+
+  // Byte_counts is an array of byte counts with 10 entries. Each array
+  // entry corresponds to the number of non-live (historical) bytes aged
+  // less than some fraction of the TTL. The first entry in the array
+  // is the number of bytes aged less than 10% of the TTL; the second,
+  // the number aged less than 20%; etc...
+  //
+  // These are values at last GC, so given the current time,
+  // last_gc_nanos, and ttl_seconds, the count of bytes to be GC'd can
+  // be estimated.
+  repeated int64 byte_counts = 3 [(gogoproto.nullable) = false];
+}
