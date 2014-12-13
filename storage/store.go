@@ -179,6 +179,44 @@ func (s StoreDescriptor) Less(b util.Ordered) bool {
 	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
 }
 
+// storeRangeIterator is an implementation of rangeIterator which
+// cycles through a store's rangesByKey slice.
+type storeRangeIterator struct {
+	store     *Store
+	remaining int
+	index     int
+}
+
+func newStoreRangeIterator(store *Store) *storeRangeIterator {
+	r := &storeRangeIterator{
+		store: store,
+	}
+	r.reset()
+	return r
+}
+
+func (si *storeRangeIterator) next() *Range {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	if index, remaining := si.index, len(si.store.rangesByKey)-si.index; remaining > 0 {
+		si.index++
+		si.remaining = remaining - 1
+		return si.store.rangesByKey[index]
+	}
+	return nil
+}
+
+func (si *storeRangeIterator) estimatedCount() int {
+	return si.remaining
+}
+
+func (si *storeRangeIterator) reset() {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	si.remaining = len(si.store.rangesByKey)
+	si.index = 0
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
@@ -608,9 +646,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	if n >= len(s.rangesByKey) {
 		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
-	lastIdx := len(s.rangesByKey) - 1
-	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
-	s.rangesByKey = s.rangesByKey[:lastIdx]
+	s.rangesByKey = append(s.rangesByKey[:n], s.rangesByKey[n+1:]...)
 	return nil
 }
 
