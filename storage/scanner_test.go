@@ -94,6 +94,17 @@ type testQueue struct {
 	sync.Mutex
 }
 
+func (tq *testQueue) next() *Range {
+	tq.Lock()
+	defer tq.Unlock()
+	if len(tq.ranges) == 0 {
+		return nil
+	}
+	rng := tq.ranges[0]
+	tq.ranges = tq.ranges[1:]
+	return rng
+}
+
 func (tq *testQueue) maybeAdd(rng *Range) {
 	tq.Lock()
 	defer tq.Unlock()
@@ -172,10 +183,10 @@ func TestScannerAddToQueues(t *testing.T) {
 func TestScannerTiming(t *testing.T) {
 	const count = 3
 	const runTime = 10 * time.Millisecond
-	const maxError = 500 * time.Microsecond
+	const maxError = 1500 * time.Microsecond
 	durations := []time.Duration{
 		1 * time.Millisecond,
-		2 * time.Millisecond,
+		2500 * time.Microsecond,
 	}
 	for i, duration := range durations {
 		iter := newTestIterator(count)
