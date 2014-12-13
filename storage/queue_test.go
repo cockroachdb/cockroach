@@ -55,7 +55,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 	for i := 0; pq.Len() > 0; i++ {
 		item := heap.Pop(&pq).(*rangeItem)
 		if item.value != expRanges[i] {
-			t.Error("%d: unexpected range with priority %f", i, item.priority)
+			t.Errorf("%d: unexpected range with priority %f", i, item.priority)
 		}
 	}
 }
@@ -81,7 +81,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	bq.maybeAdd(r1)
 	bq.maybeAdd(r2)
 	if bq.length() != 2 {
-		t.Errorf("expected length 2; got %d", bq.length())
+		t.Fatalf("expected length 2; got %d", bq.length())
 	}
 	if bq.next() != r2 {
 		t.Error("expected r2")
@@ -90,7 +90,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error("expected r1")
 	}
 	if r := bq.next(); r != nil {
-		t.Error("expected empty queue; got %s", r)
+		t.Errorf("expected empty queue; got %s", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
@@ -113,7 +113,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	bq.maybeAdd(r1)
 	bq.maybeAdd(r2)
 	if bq.length() != 2 {
-		t.Errorf("expected length 2; got %d", bq.length())
+		t.Fatalf("expected length 2; got %d", bq.length())
 	}
 	if bq.next() != r1 {
 		t.Error("expected r1")
@@ -122,7 +122,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error("expected r2")
 	}
 	if r := bq.next(); r != nil {
-		t.Error("expected empty queue; got %s", r)
+		t.Errorf("expected empty queue; got %s", r)
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
@@ -131,7 +131,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	shouldAddMap[r2] = false
 	bq.maybeAdd(r2)
 	if bq.length() != 1 {
-		t.Errorf("expected length 1; got %d", bq.length())
+		t.Fatalf("expected length 1; got %d", bq.length())
 	}
 	if bq.next() != r1 {
 		t.Errorf("expected r1")

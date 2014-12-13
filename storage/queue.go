@@ -70,7 +70,9 @@ type shouldQueueFn func(*Range) (shouldQueue bool, priority float64)
 
 // baseQueue is the base implementation of the rangeQueue interface.
 // Queue implementations should embed a baseQueue and provide it
-// with shouldQueueFn
+// with shouldQueueFn.
+//
+// baseQueue is not thread safe.
 type baseQueue struct {
 	shouldQ   shouldQueueFn        // Should a range be queued?
 	maxSize   int                  // Maximum number of ranges to queue
@@ -111,8 +113,7 @@ func (bq *baseQueue) next() *Range {
 // maybeAdd adds the specified range if bq.shouldQ specifies it should
 // be queued. Ranges are added to the queue using the priority
 // returned by bq.shouldQ. If the queue is too full, an already-queued
-// range may be removed to make room in the event this range should be
-// queued and has higher priority.
+// range with the lowest priority may be dropped.
 func (bq *baseQueue) maybeAdd(rng *Range) {
 	should, priority := bq.shouldQ(rng)
 	item, ok := bq.ranges[rng.Desc.RaftID]
