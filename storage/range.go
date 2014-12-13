@@ -889,7 +889,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.Txn.Status = proto.ABORTED
 	}
 
-	// Persist the transaction record with updated status (& possibly timestmap).
+	// Persist the transaction record with updated status (& possibly timestamp).
 	if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return

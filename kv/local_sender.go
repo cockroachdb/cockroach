@@ -125,6 +125,24 @@ func (ls *LocalSender) Send(call *client.Call) {
 		if err != nil {
 			call.Reply.Header().SetGoError(err)
 		} else {
+			if header := call.Args.Header(); proto.IsReadOnly(call.Method) &&
+				header.Txn != nil {
+				// For a read only call, we can avoid uncertainty related retries
+				// in certain situations. See the protobuf comment on CertainNodes
+				// for details.
+				if header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
+					// Make sure that when this retryable function returns,
+					// MaxTimestamp is restored. On retries, there is no
+					// guarantee that the request gets routed to the same node
+					// as the replica may have moved.
+					defer func(ts proto.Timestamp) {
+						header.Txn.MaxTimestamp = ts
+					}(header.Txn.MaxTimestamp)
+					// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+					header.Txn.MaxTimestamp = header.Txn.Timestamp
+				}
+			}
+
 			if err = store.ExecuteCmd(call.Method, call.Args, call.Reply); err != nil {
 				// Check for range key mismatch error (this could happen if
 				// range was split between lookup and execution). In this case,
