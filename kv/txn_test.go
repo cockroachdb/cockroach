@@ -105,6 +105,39 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
+// BenchmarkTxnWrites benchmarks a number of transaction writing to the
+// same key back to back.
+func BenchmarkTxnWrites(b *testing.B) {
+	db, _, _, mClock, _, err := createTestDB()
+	if err != nil {
+		b.Fatal(err)
+	}
+	key := proto.Key("key")
+	txnOpts := &client.TransactionOptions{
+		Name: "benchWrite",
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		mClock.Increment(1)
+		if tErr := db.RunTransaction(txnOpts, func(txn *client.KV) error {
+			pr := &proto.PutResponse{}
+			pa := proto.PutArgs(key, []byte(fmt.Sprintf("value-%d", i)))
+			if err := txn.Call(proto.Put, pa, pr); err != nil {
+				// Nothing should go wrong here.
+				b.Fatal(err)
+			}
+			// Explicitly end the transaction. Not necessary, but since write
+			// intent errors play a role in this test, it cannot hurt to do
+			// this as early as possible.
+			etArgs := &proto.EndTransactionRequest{Commit: true}
+			etReply := &proto.EndTransactionResponse{}
+			return txn.Call(proto.EndTransaction, etArgs, etReply)
+		}); tErr != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // verifyUncertainty writes values to a key in 5ns intervals and then launches
 // a transaction at each value's timestamp reading that value with
 // the maximumOffset given, verifying in the process that the correct values
@@ -286,7 +319,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 			i++
 			mClock.Increment(1)
 			futureTS := clock.Now()
-			futureTS.WallTime += 1
+			futureTS.WallTime++
 			value.Bytes = []byte(fmt.Sprintf("value-%d", i))
 			err = engine.MVCCPut(eng, nil, key, futureTS, value, nil)
 			if err != nil {
