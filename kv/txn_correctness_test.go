@@ -606,7 +606,10 @@ func checkConcurrency(name string, isolations []proto.IsolationType, txns []stri
 	verify *verifier, expSuccess bool, t *testing.T) {
 	setCorrectnessRetryOptions()
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	db, _, _, _, _ := createTestDB(t)
+	db, _, _, _, _, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	verifier.run(isolations, db, t)
 }
 
