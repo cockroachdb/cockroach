@@ -824,7 +824,7 @@ func TestRangeIdempotence(t *testing.T) {
 		select {
 		case <-done:
 			// Success.
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(1000 * time.Millisecond):
 			t.Fatal("had to wait for increment to complete")
 		}
 	}
