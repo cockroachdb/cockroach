@@ -843,6 +843,10 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	if s.raft == nil {
+		log.Error("ignoring raft command proposed after shutdown")
+		return
+	}
 	s.raft.propose(idKey, cmd)
 }
 
