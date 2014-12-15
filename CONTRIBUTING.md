@@ -5,8 +5,6 @@
 ### Assumed
  * A working GCC (on mac os x something like `xcode-select --install` will get you started)
  * [Go environment](http://golang.org/doc/code.html)
- * [prerequisites for building
-RocksDB](https://github.com/cockroachdb/rocksdb/blob/master/INSTALL.md)
  * [protoc](https://github.com/google/protobuf/releases)
  * pkgconfig
  * curl
