@@ -453,6 +453,14 @@ func (mvcc *MVCCMetadata) IsInline() bool {
 	return mvcc.Value != nil
 }
 
+// NewGCMetadata returns a GCMetadata with ByteCounts slice
+// initialized to ten byte count values set to zero.
+func NewGCMetadata() *GCMetadata {
+	return &GCMetadata{
+		ByteCounts: make([]int64, 10),
+	}
+}
+
 // EstimatedBytes computes the estimated count of bytes which a GC run
 // is likely to free based on the current time, current non-live
 // bytes, and the details of the GCMetadata.
@@ -469,7 +477,7 @@ func (mvcc *MVCCMetadata) IsInline() bool {
 func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) int64 {
 	elapsed := now.UnixNano() - gc.LastGCNanos
 	ttlNanos := int64(gc.TTLSeconds) * 1000000000
-	if elapsed < ttlNanos/10 || len(gc.ByteCounts) != 10 {
+	if elapsed < ttlNanos/10 || len(gc.ByteCounts) != 10 || ttlNanos == 0 {
 		return 0
 	}
 	// Fraction of TTL we've advanced since last GC.
