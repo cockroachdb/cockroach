@@ -29,7 +29,7 @@ import (
 // It is implemented by *raft.MemoryStorage.
 type WriteableGroupStorage interface {
 	raft.Storage
-	Append(entries []raftpb.Entry)
+	Append(entries []raftpb.Entry) error
 	SetHardState(st raftpb.HardState) error
 }
 
