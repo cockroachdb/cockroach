@@ -50,9 +50,9 @@ type blockableGroupStorage struct {
 	s WriteableGroupStorage
 }
 
-func (b *blockableGroupStorage) Append(entries []raftpb.Entry) {
+func (b *blockableGroupStorage) Append(entries []raftpb.Entry) error {
 	b.b.wait()
-	b.s.Append(entries)
+	return b.s.Append(entries)
 }
 
 func (b *blockableGroupStorage) SetHardState(st raftpb.HardState) error {
