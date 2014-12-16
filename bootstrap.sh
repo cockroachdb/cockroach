@@ -26,7 +26,8 @@ function go_get() {
 # Grab binaries required by git hooks.
 go_get github.com/golang/lint/golint
 go_get golang.org/x/tools/cmd/goimports
-go_get github.com/cockroachdb/cockroach/tools/embedfile
+# embedfile should use whatever is within the checkout.
+go get github.com/cockroachdb/cockroach/tools/embedfile
 # go vet is special: it installs into $GOROOT (which $USER may not have
 # write access to) instead of $GOPATH. It is usually but not always
 # installed along with the rest of the go toolchain. Don't try to
