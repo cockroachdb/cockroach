@@ -59,10 +59,13 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser
+auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser embedfiles
 
 build: auxiliary
 	$(GO) build $(GOFLAGS) -i -o cockroach
+
+embedfiles:
+	$(GO) generate ./...
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
 	sed -e "s,@PWD@,$(CURDIR),g" -e "s,@LDEXTRA@,$(LDEXTRA),g" < $^ > $@
@@ -75,9 +78,6 @@ roach_lib: roach_proto
 
 sqlparser:
 	make -C $(SQL_PARSER)
-
-goget:
-	$(GO) get ./...
 
 test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
