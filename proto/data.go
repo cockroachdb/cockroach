@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"time"
 
 	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
@@ -450,4 +451,52 @@ func (t Transaction) String() string {
 // IsInline returns true if the value is inlined in the metadata.
 func (mvcc *MVCCMetadata) IsInline() bool {
 	return mvcc.Value != nil
+}
+
+// NewGCMetadata returns a GCMetadata with ByteCounts slice
+// initialized to ten byte count values set to zero.
+func NewGCMetadata() *GCMetadata {
+	return &GCMetadata{
+		ByteCounts: make([]int64, 10),
+	}
+}
+
+// EstimatedBytes computes the estimated count of bytes which a GC run
+// is likely to free based on the current time, current non-live
+// bytes, and the details of the GCMetadata.
+//
+// The difference between the non-live bytes as recorded in GCMetadata
+// as of the last GC and the current non-live bytes are the newly
+// non-live bytes. These are prorated according to (elapsed fraction
+// of TTL - 1) to determine which portion, if any, of the newly
+// non-live bytes are likely to be GC'able.
+//
+// If the TTL changed between the last run and the current time, the
+// estimate will of course be inaccurate, but that's OK for the
+// purposes of deciding the priority of a range for GC.
+func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) int64 {
+	elapsed := now.UnixNano() - gc.LastGCNanos
+	ttlNanos := int64(gc.TTLSeconds) * 1000000000
+	if elapsed < ttlNanos/10 || len(gc.ByteCounts) != 10 || ttlNanos == 0 {
+		return 0
+	}
+	// Fraction of TTL we've advanced since last GC.
+	ttlFraction := float64(elapsed) / float64(ttlNanos)
+	// Compute index into the byte counts array. Think of this as: which
+	// fraction of TTL (e.g. <10%, <20%, ...) that bytes would already
+	// need to have been aged in order to be GC'able now.
+	index := 10 - int(ttlFraction*10)
+	if index < 0 {
+		index = 0
+	}
+	expGCBytes := gc.ByteCounts[index]
+
+	// If the ttlFraction is >= 1, prorate the fraction of current
+	// non-live bytes we might expect to GC.
+	if ttlFraction >= 1 {
+		newNonLiveBytes := currentNonLiveBytes - gc.ByteCounts[0]
+		return int64(((ttlFraction-1)/ttlFraction)*float64(newNonLiveBytes)) + expGCBytes
+	}
+	// Otherwise, just return the expGCBytes.
+	return expGCBytes
 }

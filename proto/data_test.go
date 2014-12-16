@@ -22,6 +22,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 )
@@ -352,6 +353,33 @@ func TestValueChecksumWithInteger(t *testing.T) {
 		v.Integer = gogoproto.Int64(i + 1)
 		if err := v.Verify(k); err == nil {
 			t.Error("expected checksum verification failure on different value")
+		}
+	}
+}
+
+func TestGCMetadataEstimatedBytes(t *testing.T) {
+	gc := GCMetadata{
+		LastGCNanos: 0,
+		TTLSeconds:  100,
+		ByteCounts:  []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+	}
+	for i := int64(-1); i < int64(110); i++ {
+		expBytes := i / 10
+		if eb := gc.EstimatedBytes(time.Unix(i, 0), 0); eb != expBytes {
+			t.Errorf("expected %d @%ds; got %d", expBytes, i, eb)
+		}
+	}
+
+	// Throw in an estimation of current non-live bytes. These get
+	// prorated based on how far the elapsed time has exceeded
+	// TTLSeconds. We scale here from elapsed time being equal to
+	// TTL to elapsed time being 10x TTL. at 1x TTL, we get 0 prorated
+	// bytes from current non-live count. at 10x TTL, we get 90%.
+	for i := int64(100); i < int64(1000); i += 100 {
+		fraction := (float64(i)/100 - 1) / (float64(i) / 100)
+		expBytes := 10 + int64(100*fraction)
+		if eb := gc.EstimatedBytes(time.Unix(i, 0), 110); eb != expBytes {
+			t.Errorf("expected %d @%ds; got %d", expBytes, i, eb)
 		}
 	}
 }
