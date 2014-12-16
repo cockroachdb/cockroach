@@ -442,8 +442,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	if err != nil {
 		return util.Errorf("unable to scan engine to verify empty: %s", err)
 	} else if len(kvs) > 0 {
-		key, _, _ := engine.MVCCDecodeKey(kvs[0].Key)
-		return util.Errorf("non-empty engine %s (first key: %q)", s.engine, key)
+		return util.Errorf("non-empty engine %s (first key: %q)", s.engine, kvs[0].Key)
 	}
 	err = engine.MVCCPutProto(s.engine, nil, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)
 	return err
