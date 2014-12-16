@@ -229,6 +229,9 @@ type group struct {
 	// 0 if an election is in progress.
 	leader uint64
 
+	// pending contains all commands that have been proposed but not yet
+	// committed. When a proposal is committed, proposal.ch is closed
+	// and it is removed from this map.
 	pending map[string]proposal
 }
 
