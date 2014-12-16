@@ -257,6 +257,83 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 }
 
+func TestStoreRangeIterator(t *testing.T) {
+	store, _ := createTestStore(t)
+	defer store.Stop()
+
+	// Remove range 1.
+	rng1, err := store.GetRange(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := store.RemoveRange(rng1); err != nil {
+		t.Error(err)
+	}
+	// Add 10 new ranges.
+	const newCount = 10
+	for i := 0; i < newCount; i++ {
+		rng := createRange(store, int64(i+1), proto.Key(fmt.Sprintf("a%02d", i)), proto.Key(fmt.Sprintf("a%02d", i+1)))
+		if err := store.AddRange(rng); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify two passes of the iteration.
+	iter := newStoreRangeIterator(store)
+	for pass := 0; pass < 2; pass++ {
+		for i := 1; iter.estimatedCount() > 0; i++ {
+			if rng := iter.next(); rng == nil || rng.Desc.RaftID != int64(i) {
+				t.Errorf("expected range with Raft ID %d; got %s", i, rng)
+			}
+		}
+		iter.reset()
+	}
+
+	// Try iterating with an addition.
+	iter.next()
+	if ec := iter.estimatedCount(); ec != 9 {
+		t.Errorf("expected 9 remaining; got %d", ec)
+	}
+	// Insert range as second range.
+	rng := createRange(store, 11, proto.Key("a000"), proto.Key("a001"))
+	if err := store.AddRange(rng); err != nil {
+		t.Fatal(err)
+	}
+	// Estimated count will still be 9, as it's cached, but next() will refresh.
+	if ec := iter.estimatedCount(); ec != 9 {
+		t.Errorf("expected 9 remaining; got %d", ec)
+	}
+	if r := iter.next(); r == nil || r != rng {
+		t.Errorf("expected r==rng; got %d", r.Desc.RaftID)
+	}
+	if ec := iter.estimatedCount(); ec != 9 {
+		t.Errorf("expected 9 remaining; got %d", ec)
+	}
+
+	// Now, remove the next range in the iteration but verify iteration
+	// continues as expected.
+	rng = store.LookupRange(proto.Key("a01"), proto.Key("a01"))
+	if rng.Desc.RaftID != 2 {
+		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc.RaftID)
+	}
+	if err := store.RemoveRange(rng); err != nil {
+		t.Error(err)
+	}
+	if ec := iter.estimatedCount(); ec != 9 {
+		t.Errorf("expected 9 remaining; got %d", ec)
+	}
+	// Verify we skip removed range (id=2).
+	if r := iter.next(); r.Desc.RaftID != 3 {
+		t.Errorf("expected raftID=3; got %d", r.Desc.RaftID)
+	}
+	if ec := iter.estimatedCount(); ec != 7 {
+		t.Errorf("expected 7 remaining; got %d", ec)
+	}
+}
+
+func TestStoreIteratorWithAddAndRemoval(t *testing.T) {
+}
+
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {

@@ -19,6 +19,7 @@ package storage
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"net"
 	"sort"
@@ -48,15 +49,25 @@ const (
 	// key length to transaction records, which have a UUID appended.
 	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
 	uuidLength = 36
+	// defaultScanInterval is the default value for the scan interval
+	// command line flag.
+	defaultScanInterval = 10 * time.Minute
 )
 
-// RangeRetryOptions sets the retry options for retrying commands.
-var RangeRetryOptions = util.RetryOptions{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-}
+var (
+	// RangeRetryOptions sets the retry options for retrying commands.
+	RangeRetryOptions = util.RetryOptions{
+		Backoff:     50 * time.Millisecond,
+		MaxBackoff:  5 * time.Second,
+		Constant:    2,
+		MaxAttempts: 0, // retry indefinitely
+	}
+
+	scanInterval = flag.Duration("scan_interval", defaultScanInterval, "specify "+
+		"--scan_interval to adjust the target for the duration of a single scan "+
+		"through a store's ranges. The scan is slowed as necessary to approximately"+
+		"achieve this duration.")
+)
 
 // verifyKeyLength verifies key length. Extra key length is allowed for
 // the local key prefix (for example, a transaction record), and also for
@@ -166,6 +177,44 @@ func (s *StoreDescriptor) CombinedAttrs() *proto.Attributes {
 // Less compares two StoreDescriptors based on percentage of disk available.
 func (s StoreDescriptor) Less(b util.Ordered) bool {
 	return s.Capacity.PercentAvail() < b.(StoreDescriptor).Capacity.PercentAvail()
+}
+
+// storeRangeIterator is an implementation of rangeIterator which
+// cycles through a store's rangesByKey slice.
+type storeRangeIterator struct {
+	store     *Store
+	remaining int
+	index     int
+}
+
+func newStoreRangeIterator(store *Store) *storeRangeIterator {
+	r := &storeRangeIterator{
+		store: store,
+	}
+	r.reset()
+	return r
+}
+
+func (si *storeRangeIterator) next() *Range {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	if index, remaining := si.index, len(si.store.rangesByKey)-si.index; remaining > 0 {
+		si.index++
+		si.remaining = remaining - 1
+		return si.store.rangesByKey[index]
+	}
+	return nil
+}
+
+func (si *storeRangeIterator) estimatedCount() int {
+	return si.remaining
+}
+
+func (si *storeRangeIterator) reset() {
+	si.store.mu.Lock()
+	defer si.store.mu.Unlock()
+	si.remaining = len(si.store.rangesByKey)
+	si.index = 0
 }
 
 // A Store maintains a map of ranges by start key. A Store corresponds
@@ -450,7 +499,7 @@ func (s *Store) BootstrapRange() error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
-	if err := engine.MVCCPutProto(batch, ms, makeRangeKey(desc.StartKey), now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
 	// Write meta1.
@@ -597,9 +646,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	if n >= len(s.rangesByKey) {
 		return util.Errorf("couldn't find range in rangesByKey slice")
 	}
-	lastIdx := len(s.rangesByKey) - 1
-	s.rangesByKey[lastIdx], s.rangesByKey[n] = s.rangesByKey[n], s.rangesByKey[lastIdx]
-	s.rangesByKey = s.rangesByKey[:lastIdx]
+	s.rangesByKey = append(s.rangesByKey[:n], s.rangesByKey[n+1:]...)
 	return nil
 }
 
@@ -796,6 +843,10 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	if s.raft == nil {
+		log.Error("ignoring raft command proposed after shutdown")
+		return
+	}
 	s.raft.propose(idKey, cmd)
 }
 

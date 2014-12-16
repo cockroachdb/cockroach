@@ -35,7 +35,8 @@ error. The example below shows a get and a put.
   if err := kv.Call(proto.Get, proto.GetArgs(proto.Key("a")), getResp); err != nil {
     log.Fatal(err)
   }
-  if _, err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), getResp.Value.Bytes)) err != nil {
+  putResp := &proto.PutResponse{}
+  if _, err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), getResp.Value.Bytes), putResp) err != nil {
     log.Fatal(err)
   }
 
@@ -53,8 +54,8 @@ sequence of puts in parallel:
   kv := client.NewKV(client.NewHTTPSender("localhost:8080", tlsConfig))
 
   acResp, xzResp := &proto.ScanResponse{}, &proto.ScanResponse{}
-  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c")), acResp)
-  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("x"), proto.Key("z")), xzResp)
+  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c").Next()), acResp)
+  kv.Prepare(proto.Scan, proto.ScanArgs(proto.Key("x"), proto.Key("z").Next()), xzResp)
 
   // Flush sends both scans in parallel and returns first error or nil.
   if err := kv.Flush(); err != nil {

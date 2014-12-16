@@ -118,12 +118,6 @@ type pendingCmd struct {
 	done   chan error // Used to signal waiting RPC handler
 }
 
-// makeRangeKey returns a key addressing the range descriptor for the range
-// with specified start key.
-func makeRangeKey(startKey proto.Key) proto.Key {
-	return engine.MakeLocalKey(engine.KeyLocalRangeDescriptorPrefix, startKey)
-}
-
 // A RangeManager is an interface satisfied by Store through which ranges
 // contained in the store can access the methods required for splitting.
 type RangeManager interface {
@@ -214,8 +208,8 @@ func (r *Range) Destroy() error {
 	if err := engine.ClearRangeStats(r.rm.Engine(), r.Desc.RaftID); err != nil {
 		return util.Errorf("unable to clear range stats for range %d: %s", r.Desc.RaftID, err)
 	}
-	start = engine.MVCCEncodeKey(makeRangeKey(r.Desc.StartKey))
-	end = engine.MVCCEncodeKey(makeRangeKey(r.Desc.StartKey).Next())
+	start = engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey))
+	end = engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey).Next())
 	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
 		return util.Errorf("unable to clear metadata for range %d: %s", r.Desc.RaftID, err)
 	}
@@ -1351,18 +1345,15 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
-		if err := txn.PreparePutProto(makeRangeKey(newDesc.StartKey), newDesc); err != nil {
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(newDesc.StartKey), newDesc); err != nil {
 			return err
 		}
 		// Update existing range descriptor for first half of split.
-		if err := txn.PreparePutProto(makeRangeKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
-		if err := UpdateRangeAddressing(txn, newDesc); err != nil {
-			return err
-		}
-		if err := UpdateRangeAddressing(txn, &updatedDesc); err != nil {
+		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
 			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
