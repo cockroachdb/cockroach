@@ -59,12 +59,12 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser embedfiles
+auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser gogenerate
 
 build: auxiliary
 	$(GO) build $(GOFLAGS) -i -o cockroach
 
-embedfiles:
+gogenerate:
 	$(GO) generate ./...
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
