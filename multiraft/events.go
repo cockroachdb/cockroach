@@ -19,15 +19,17 @@ package multiraft
 
 import "github.com/cockroachdb/cockroach/util/log"
 
-// An EventLeaderElection is broadcast when a group completes an election.
+// An EventLeaderElection is broadcast when a group starts or completes
+// an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
 	GroupID uint64
 	NodeID  uint64
+	Term    uint64
 }
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
 type EventCommandCommitted struct {
-	CommandID []byte
+	CommandID string
 	Command   []byte
 }
 
@@ -39,20 +41,20 @@ const (
 	commandEncodingVersion = 0
 )
 
-func encodeCommand(commandID, command []byte) []byte {
+func encodeCommand(commandID string, command []byte) []byte {
 	if len(commandID) != commandIDLen {
 		log.Fatalf("invalid command ID length; %d != %d", len(commandID), commandIDLen)
 	}
 	x := make([]byte, 1, 1+commandIDLen+len(command))
 	x[0] = commandEncodingVersion
-	x = append(x, commandID...)
+	x = append(x, []byte(commandID)...)
 	x = append(x, command...)
 	return x
 }
 
-func decodeCommand(data []byte) (commandID, command []byte) {
+func decodeCommand(data []byte) (commandID string, command []byte) {
 	if data[0] != commandEncodingVersion {
 		log.Fatalf("unknown command encoding version %v", data[0])
 	}
-	return data[1 : 1+commandIDLen], data[1+commandIDLen:]
+	return string(data[1 : 1+commandIDLen]), data[1+commandIDLen:]
 }

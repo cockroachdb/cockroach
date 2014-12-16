@@ -45,24 +45,24 @@ type Transport interface {
 	Connect(id uint64) (ClientInterface, error)
 }
 
-// SendMessageRequest wraps a raft message.
-type SendMessageRequest struct {
+// RaftMessageRequest wraps a raft message.
+type RaftMessageRequest struct {
 	GroupID uint64
 	Message raftpb.Message
 }
 
-// SendMessageResponse is empty (raft uses a one-way messaging model; if a response
+// RaftMessageResponse is empty (raft uses a one-way messaging model; if a response
 // is needed it will be sent as a separate message).
-type SendMessageResponse struct {
+type RaftMessageResponse struct {
 }
 
 // ServerInterface is the methods we expose for use by net/rpc.
 type ServerInterface interface {
-	SendMessage(req *SendMessageRequest, resp *SendMessageResponse) error
+	RaftMessage(req *RaftMessageRequest, resp *RaftMessageResponse) error
 }
 
 var (
-	sendMessageName = "MultiRaft.SendMessage"
+	raftMessageName = "MultiRaft.RaftMessage"
 )
 
 // ClientInterface is the interface expected of the client provided by a transport.
@@ -80,8 +80,8 @@ type asyncClient struct {
 	conn   ClientInterface
 }
 
-func (a *asyncClient) sendMessage(req *SendMessageRequest) {
-	a.conn.Go(sendMessageName, req, &SendMessageResponse{}, nil)
+func (a *asyncClient) raftMessage(req *RaftMessageRequest) {
+	a.conn.Go(raftMessageName, req, &RaftMessageResponse{}, nil)
 }
 
 type localRPCTransport struct {

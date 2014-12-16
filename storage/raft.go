@@ -94,7 +94,7 @@ func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftComm
 	if err != nil {
 		log.Fatal(err)
 	}
-	snr.mr.SubmitCommand(uint64(cmd.RaftID), []byte(cmdIDKey), data)
+	snr.mr.SubmitCommand(uint64(cmd.RaftID), string(cmdIDKey), data)
 }
 
 func (snr *singleNodeRaft) committed() <-chan committedCommand {
