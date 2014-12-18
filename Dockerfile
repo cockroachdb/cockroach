@@ -20,6 +20,7 @@ RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 # Build the cockroach executable.
 RUN cd -P /cockroach && git submodule update --init && \
  cd -P /cockroach/_vendor/rocksdb && make static_lib
+RUN ["go", "install", "github.com/cockroachdb/cockroach/tools/embedfile"]
 RUN cd -P /cockroach && make build
 
 # Expose the http status port.
