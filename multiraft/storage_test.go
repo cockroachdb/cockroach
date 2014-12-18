@@ -6,7 +6,6 @@ package multiraft
 import (
 	"sync"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -34,11 +33,6 @@ func (b *BlockableStorage) Block() {
 // Unblock undoes the effect of Block() and allows blocked operations to proceed.
 func (b *BlockableStorage) Unblock() {
 	b.mu.Unlock()
-}
-
-func (b *BlockableStorage) LoadGroups() map[uint64]raft.Storage {
-	b.wait()
-	return b.storage.LoadGroups()
 }
 
 func (b *BlockableStorage) GroupStorage(g uint64) WriteableGroupStorage {

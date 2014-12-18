@@ -29,6 +29,7 @@ import (
 
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -98,8 +99,11 @@ func createTestRange(t *testing.T) (*Store, *Range, *gossip.Gossip, engine.Engin
 		t.Fatal(err)
 	}
 	initConfigs(engine, t)
-	r := NewRange(&testRangeDescriptor, store)
-	if err := store.AddRange(r); err != nil {
+	r, err := NewRange(&testRangeDescriptor, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.AddRange(r); err != nil {
 		t.Fatal(err)
 	}
 	return store, r, g, engine
@@ -120,8 +124,12 @@ func TestRangeContains(t *testing.T) {
 		EndKey:   proto.Key("b"),
 	}
 
+	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(desc, NewStore(clock, nil, nil, nil))
+	r, err := NewRange(desc, NewStore(clock, e, nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -342,8 +350,11 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	rng := NewRange(&testRangeDescriptor, store)
-	if err := store.AddRange(rng); err != nil {
+	rng, err := NewRange(&testRangeDescriptor, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.AddRange(rng); err != nil {
 		t.Fatal(err)
 	}
 	return store, rng, manual, clock, engine
@@ -1599,4 +1610,17 @@ func TestInternalMerge(t *testing.T) {
 	if a, e := resp.Value.Bytes, []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
+}
+
+func TestRaftStorage(t *testing.T) {
+	var s *Store
+	storagetest.RunTests(t,
+		func(t *testing.T) storagetest.WriteableStorage {
+			var r *Range
+			s, r, _, _ = createTestRange(t)
+			return r
+		},
+		func(t *testing.T, r storagetest.WriteableStorage) {
+			s.Stop()
+		})
 }

@@ -32,11 +32,14 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -149,6 +152,7 @@ type Range struct {
 	Desc      *proto.RangeDescriptor
 	rm        RangeManager  // Makes some store methods available
 	splitting int32         // 1 if a split is underway; updated atomically
+	lastIndex uint64        // last index in the raft log; updated atomically
 	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
@@ -158,8 +162,10 @@ type Range struct {
 	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
+var _ multiraft.WriteableGroupStorage = &Range{}
+
 // NewRange initializes the range using the given metadata.
-func NewRange(desc *proto.RangeDescriptor, rm RangeManager) *Range {
+func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		Desc:        desc,
 		rm:          rm,
@@ -169,7 +175,26 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) *Range {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	return r
+
+	// Look in the engine to find the last log index.
+	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
+	err := r.rm.Engine().Iterate(
+		proto.EncodedKey(logKey),
+		proto.EncodedKey(logKey.PrefixEnd()),
+		func(kv proto.RawKeyValue) (bool, error) {
+			var ent raftpb.Entry
+			err := gogoproto.Unmarshal(kv.Value, &ent)
+			if err != nil {
+				return false, err
+			}
+			atomic.StoreUint64(&r.lastIndex, ent.Index)
+			return true, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 // Start begins gossiping loop in the event this is the first
@@ -485,6 +510,10 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 		args = cmd.Args
 		reply = cmd.Reply
 	} else {
+		if raftCmd.Cmd.GetValue() == nil {
+			// This is a no-op.
+			return
+		}
 		// This command originated elsewhere so we must create a new
 		// reply buffer and reconstruct the method name.
 		args = raftCmd.Cmd.GetValue().(proto.Request)
@@ -1267,7 +1296,10 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	// Add the new split range to the store. This step atomically
 	// updates the EndKey of the updated range and also adds the
 	// new range to the store's range map.
-	newRng := NewRange(&split.NewDesc, r.rm)
+	newRng, err := NewRange(&split.NewDesc, r.rm)
+	if err != nil {
+		return err
+	}
 	// Write-lock the mutex to protect Desc, as SplitRange will modify
 	// Desc.EndKey.
 	r.Lock()
@@ -1369,4 +1401,120 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
 	}
+}
+
+// InitialState implements the raft.Storage interface.
+func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+	data, err := r.rm.Engine().Get(
+		proto.EncodedKey(engine.RaftStateKey(uint64(r.Desc.RaftID))))
+	if err != nil {
+		return raftpb.HardState{}, raftpb.ConfState{}, err
+	}
+	var hs raftpb.HardState
+	err = gogoproto.Unmarshal(data, &hs)
+	if err != nil {
+		return raftpb.HardState{}, raftpb.ConfState{}, err
+	}
+
+	// TODO(bdarnell): load ConfState if we have a previous snapshot.
+	return hs, raftpb.ConfState{}, nil
+}
+
+// Entries implements the raft.Storage interface.
+// TODO(bdarnell): consider caching for recent entries.
+func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
+	var ents []raftpb.Entry
+	// Scan over the log (which is stored backwards) to find the
+	// requested entries.  Reversing [lo, hi) gives us (hi, lo]; since
+	// Iterate is inclusive in the other direction we must increment both the
+	// start and end keys.
+	err := r.rm.Engine().Iterate(
+		proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next()),
+		proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next()),
+		func(kv proto.RawKeyValue) (bool, error) {
+			var ent raftpb.Entry
+			err := gogoproto.Unmarshal(kv.Value, &ent)
+			if err != nil {
+				return false, err
+			}
+			ents = append(ents, ent)
+			return false, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	if len(ents) != int(hi-lo) {
+		return nil, raft.ErrUnavailable
+	}
+	// Reverse the log to get it back into the proper order.
+	for i, j := 0, len(ents)-1; i < j; i, j = i+1, j-1 {
+		ents[i], ents[j] = ents[j], ents[i]
+	}
+	return ents, nil
+}
+
+// Term implements the raft.Storage interface.
+func (r *Range) Term(i uint64) (uint64, error) {
+	if i == 0 {
+		// TODO(bdarnell): handle the pre-snapshot dummy entry
+		return 0, nil
+	}
+	ents, err := r.Entries(i, i+1)
+	if err != nil {
+		return 0, err
+	}
+	if len(ents) == 0 {
+		return 0, nil
+	}
+	return ents[0].Term, nil
+}
+
+// LastIndex implements the raft.Storage interface.
+func (r *Range) LastIndex() (uint64, error) {
+	return atomic.LoadUint64(&r.lastIndex), nil
+}
+
+// FirstIndex implements the raft.Storage interface.
+func (r *Range) FirstIndex() (uint64, error) {
+	return 1, nil
+}
+
+// Snapshot implements the raft.Storage interface.
+func (r *Range) Snapshot() (raftpb.Snapshot, error) {
+	panic("TODO(bdarnell): implement raft.Storage.snapshot")
+}
+
+// Append implements the multiraft.WriteableGroupStorage interface.
+func (r *Range) Append(entries []raftpb.Entry) error {
+	batch := r.rm.Engine().NewBatch()
+	for _, ent := range entries {
+		data, err := gogoproto.Marshal(&ent)
+		if err != nil {
+			return err
+		}
+		err = batch.Put(proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index)), data)
+		if err != nil {
+			return err
+		}
+	}
+	// TODO(bdarnell): if the last entry's index < lastIndex, delete any remaining old entries.
+	err := batch.Commit()
+	if err != nil {
+		return err
+	}
+	atomic.StoreUint64(&r.lastIndex, entries[len(entries)-1].Index)
+	return nil
+}
+
+// SetHardState implements the multiraft.WriteableGroupStorage interface.
+func (r *Range) SetHardState(st raftpb.HardState) error {
+	data, err := gogoproto.Marshal(&st)
+	if err != nil {
+		return err
+	}
+	err = r.rm.Engine().Put(proto.EncodedKey(engine.RaftStateKey(uint64(r.Desc.RaftID))), data)
+	if err != nil {
+		return err
+	}
+	return nil
 }

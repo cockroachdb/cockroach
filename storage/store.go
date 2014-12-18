@@ -30,6 +30,7 @@ import (
 	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -230,13 +231,15 @@ type Store struct {
 	gossip      *gossip.Gossip // Configs and store capacities
 	raftIDAlloc *IDAllocator   // Raft ID allocator
 	configMu    sync.Mutex     // Limit config update processing
-	raft        raft
+	raft        raftInterface
 	closer      chan struct{}
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
 }
+
+var _ multiraft.Storage = &Store{}
 
 // NewStore returns a new instance of a store.
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
@@ -258,11 +261,16 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 // Stop calls Range.Stop() on all active ranges.
 func (s *Store) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.raft != nil {
-		s.raft.stop()
-		s.raft = nil
+	r := s.raft
+	s.mu.Unlock()
+	if r != nil {
+		// Must be called while unlocked.
+		r.stop()
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.raft = nil
 	for _, rng := range s.ranges {
 		rng.stop()
 	}
@@ -306,10 +314,12 @@ func (s *Store) Start() error {
 		return &NotBootstrappedError{}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	start := engine.KeyLocalRangeDescriptorPrefix
 	end := start.PrefixEnd()
+
+	s.raft = newSingleNodeRaft(s)
+	// Start Raft processing goroutine.
+	go s.processRaft(s.raft, s.closer)
 
 	// Iterate over all range descriptors, using just committed
 	// versions. Uncommitted intents which have been abandoned due to a
@@ -320,8 +330,17 @@ func (s *Store) Start() error {
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 			return false, err
 		}
-		rng := NewRange(&desc, s)
-		if err := s.addRangeInternal(rng, false /* don't sort on each addition */); err != nil {
+		rng, err := NewRange(&desc, s)
+		if err != nil {
+			return false, err
+		}
+		s.mu.Lock()
+		err = s.addRangeInternal(rng, false /* don't sort on each addition */)
+		s.mu.Unlock()
+		if err != nil {
+			return false, err
+		}
+		if err = s.raft.restoreGroup(rng.Desc.RaftID); err != nil {
 			return false, err
 		}
 		return false, nil
@@ -330,11 +349,6 @@ func (s *Store) Start() error {
 	}
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
-
-	s.raft = newSingleNodeRaft()
-
-	// Start Raft processing goroutine.
-	go s.processRaft(s.raft, s.closer)
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
@@ -597,17 +611,31 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	// within a command execution, Desc.EndKey is protected from other
 	// concurrent range accesses.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
-	return s.addRangeInternal(newRng, true)
+	err := s.addRangeInternal(newRng, true)
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if err := s.raft.createGroup(newRng.Desc.RaftID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // AddRange adds the range to the store's range map and to the sorted
 // rangesByKey slice.
 func (s *Store) AddRange(rng *Range) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.addRangeInternal(rng, true)
+	err := s.addRangeInternal(rng, true)
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if err := s.raft.createGroup(rng.Desc.RaftID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // addRangeInternal starts the range and adds it to the ranges map and
@@ -872,7 +900,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 //
 // TODO(bdarnell): remove the closer argument and access s.closer directly
 // when we no longer reassign s.closer in s.Stop.
-func (s *Store) processRaft(r raft, closer chan struct{}) {
+func (s *Store) processRaft(r raftInterface, closer chan struct{}) {
 	for {
 		select {
 		case raftCmd := <-r.committed():
@@ -890,4 +918,15 @@ func (s *Store) processRaft(r raft, closer chan struct{}) {
 			return
 		}
 	}
+}
+
+// GroupStorage implements the multiraft.Storage interface.
+func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.ranges[int64(groupID)]
+	if !ok {
+		log.Warningf("%p requested nonexistent range with raft ID %d", s, groupID)
+	}
+	return r
 }

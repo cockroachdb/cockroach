@@ -113,6 +113,9 @@ func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
 	}
 
 	lt.mu.Lock()
+	if _, ok := lt.listeners[id]; ok {
+		log.Fatalf("node %d already listening", id)
+	}
 	lt.listeners[id] = listener
 	lt.mu.Unlock()
 	go lt.accept(rpcServer, listener)

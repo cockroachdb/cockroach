@@ -20,6 +20,7 @@ package multiraft
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -38,9 +39,6 @@ var _ WriteableGroupStorage = (*raft.MemoryStorage)(nil)
 // The Storage interface is supplied by the application to manage persistent storage
 // of raft data.
 type Storage interface {
-	// LoadGroups is called at startup to load all previously-existing groups.
-	LoadGroups() map[uint64]raft.Storage
-
 	GroupStorage(groupID uint64) WriteableGroupStorage
 }
 
@@ -58,12 +56,6 @@ func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		groups: make(map[uint64]WriteableGroupStorage),
 	}
-}
-
-// LoadGroups implements the Storage interface.
-func (m *MemoryStorage) LoadGroups() map[uint64]raft.Storage {
-	// MemoryStorage always starts empty.
-	return map[uint64]raft.Storage{}
 }
 
 // GroupStorage implements the Storage interface.
@@ -114,7 +106,7 @@ type writeResponse struct {
 // writeTask manages a goroutine that interacts with the storage system.
 type writeTask struct {
 	storage Storage
-	stopper chan struct{}
+	stopper *util.Stopper
 
 	// ready is an unbuffered channel used for synchronization. If writes to this channel do not
 	// block, the writeTask is ready to receive a request.
@@ -129,7 +121,7 @@ type writeTask struct {
 func newWriteTask(storage Storage) *writeTask {
 	return &writeTask{
 		storage: storage,
-		stopper: make(chan struct{}),
+		stopper: util.NewStopper(1),
 		ready:   make(chan struct{}),
 		in:      make(chan *writeRequest, 1),
 		out:     make(chan *writeResponse, 1),
@@ -143,7 +135,8 @@ func (w *writeTask) start() {
 		select {
 		case <-w.ready:
 			continue
-		case <-w.stopper:
+		case <-w.stopper.ShouldStop():
+			w.stopper.SetStopped()
 			return
 		case request = <-w.in:
 		}
@@ -171,5 +164,5 @@ func (w *writeTask) start() {
 
 // stop the running task.
 func (w *writeTask) stop() {
-	close(w.stopper)
+	w.stopper.Stop()
 }

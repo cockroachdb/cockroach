@@ -110,7 +110,10 @@ func splitTestRange(store *storage.Store, key, splitKey proto.Key, t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRng := storage.NewRange(desc, store)
+	newRng, err := storage.NewRange(desc, store)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := store.SplitRange(rng, newRng); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +159,10 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		newRng := storage.NewRange(desc, s[i])
+		newRng, err := storage.NewRange(desc, s[i])
+		if err != nil {
+			t.Fatal(err)
+		}
 		if err := s[i].AddRange(newRng); err != nil {
 			t.Error(err)
 		}

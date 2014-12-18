@@ -76,9 +76,12 @@ type MultiRaft struct {
 	nodeID          uint64
 	createGroupChan chan *createGroupOp
 	proposalChan    chan proposal
-	stopper         chan struct{}
-	stopped         chan struct{}
+	stopper         *util.Stopper
 }
+
+// multiraftServer is a type alias to separate RPC methods
+// (which net/rpc finds via reflection) from others.
+type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
 func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
@@ -102,11 +105,10 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		Events:          make(chan interface{}, 1000),
 		createGroupChan: make(chan *createGroupOp, 100),
 		proposalChan:    make(chan proposal, 100),
-		stopper:         make(chan struct{}),
-		stopped:         make(chan struct{}),
+		stopper:         util.NewStopper(1),
 	}
 
-	err = m.Transport.Listen(nodeID, m)
+	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
 	if err != nil {
 		return nil, err
 	}
@@ -115,23 +117,25 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start() {
+func (m *MultiRaft) Start() error {
 	s := newState(m)
 	go s.start()
+
+	return nil
 }
 
 // Stop terminates the running raft instance and shuts down all network interfaces.
 func (m *MultiRaft) Stop() {
 	m.Transport.Stop(m.nodeID)
-	close(m.stopper)
-	<-m.stopped
+	m.stopper.Stop()
 	m.multiNode.Stop()
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc
 // when we receive a message.
-func (m *MultiRaft) RaftMessage(req *RaftMessageRequest,
+func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
+	m := (*MultiRaft)(ms)
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
 		raft.DescribeMessage(req.Message))
 	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
@@ -301,7 +305,7 @@ func (s *state) start() {
 
 		log.V(8).Infof("node %v: selecting", s.nodeID)
 		select {
-		case <-s.stopper:
+		case <-s.stopper.ShouldStop():
 			log.V(6).Infof("node %v: stopping", s.nodeID)
 			s.stop()
 			return
@@ -342,7 +346,7 @@ func (s *state) stop() {
 		}
 	}
 	s.writeTask.stop()
-	close(s.stopped)
+	s.stopper.SetStopped()
 }
 
 // addNode creates a node or increments the refcount on an existing node.
@@ -383,7 +387,7 @@ func (s *state) createGroup(op *createGroupOp) {
 	// HACK: for single-node groups force an immediate election instead of waiting
 	// for the randomized timeout.
 	if len(op.initialMembers) == 1 {
-		s.multiNode.Campaign(context.Background(), op.groupID)
+		//s.multiNode.Campaign(context.Background(), op.groupID)
 	}
 
 	op.ch <- nil
@@ -431,6 +435,11 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 		if term != g.committedTerm || leader != g.leader {
 			g.leader, g.committedTerm = leader, term
 			s.sendEvent(&EventLeaderElection{groupID, g.leader, g.committedTerm})
+
+			// Re-submit all pending proposals
+			for _, prop := range g.pending {
+				s.proposalChan <- prop
+			}
 		}
 	}
 }

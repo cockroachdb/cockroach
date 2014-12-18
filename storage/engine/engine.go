@@ -81,7 +81,8 @@ type Engine interface {
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
 	// invoked. If f returns an error or if the scan itself encounters
-	// an error, the iteration will stop and return f.
+	// an error, the iteration will stop and return the error.
+	// If the first result of f is true, the iteration stops.
 	Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error
 	// Clear removes the item from the db with the given key.
 	// Note that clear actually removes entries from the storage
