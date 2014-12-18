@@ -50,8 +50,9 @@ import (
 )
 
 var (
-	rpcAddr  = flag.String("rpc", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
-	httpAddr = flag.String("http", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
+	rpcAddr   = flag.String("rpc", ":0", "host:port to bind for RPC traffic; 0 to pick unused port")
+	httpAddr  = flag.String("http", ":8080", "host:port to bind for HTTP traffic; 0 to pick unused port")
+	staticDir = flag.String("staticdir", "./static/", "directory containing static files for UI")
 
 	certDir = flag.String("certs", "", "directory containing RSA key and x509 certs")
 
@@ -392,7 +393,7 @@ func (s *server) start(engines []engine.Engine, attrs, httpAddr string, selfBoot
 }
 
 func (s *server) initHTTP() {
-	// TODO(shawn) pretty "/" landing page
+	s.mux.Handle("/", http.FileServer(http.Dir(*staticDir)))
 
 	// Admin handlers.
 	s.admin.RegisterHandlers(s.mux)

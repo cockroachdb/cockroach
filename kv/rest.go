@@ -20,7 +20,6 @@ package kv
 import (
 	"encoding/json"
 	"errors"
-	"html/template"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -109,10 +108,6 @@ func (s *RESTServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			epHandler(s, w, r)
 			return
 		}
-	}
-	if r.URL.Path == RESTPrefix {
-		s.handleRESTUI(w, r)
-		return
 	}
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
@@ -317,17 +312,4 @@ func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	writeJSON(w, http.StatusOK, dr)
-}
-
-//go:generate embedfile -input=rest_ui.html -constantname=restUI
-func (s *RESTServer) handleRESTUI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	tmpl, err := template.New("rest_ui").Parse(restUI)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := tmpl.Execute(w, nil); err != nil {
-		log.Errorf("could not execute template: %v", err)
-	}
 }

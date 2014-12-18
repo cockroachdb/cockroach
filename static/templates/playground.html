@@ -1,0 +1,56 @@
+<!--
+Copyright 2014 The Cockroach Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing
+permissions and limitations under the License. See the AUTHORS file
+for names of contributors.
+
+Author: Andrew Bonventre (andybons@gmail.com)
+-->
+<div class="playground">
+  <div class="playgroundControls">
+    <section class="playgroundControls-control">
+      <h3>Put K/V Pair</h3>
+      <form>
+        <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
+        &rarr;
+        <input type="text" ng-model="kvValue" ng-disabled="responsePending" placeholder="Value">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Put" data-endpoint="/kv/rest/entry/" data-method="PUT">
+      </form>
+    </section>
+    <section class="playgroundControls-control">
+      <h3>Get/Head/Delete K/V Pair</h3>
+      <form>
+        <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/entry/" data-method="GET">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Head" data-endpoint="/kv/rest/entry/" data-method="HEAD">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/entry/" data-method="DELETE">
+      </form>
+    </section>
+    <section class="playgroundControls-control">
+      <h3>K/V Range</h3>
+      <form>
+        <input type="text" ng-model="kvRangeStart" ng-disabled="responsePending" placeholder="Start">
+        &rarr;
+        <input type="text" ng-model="kvRangeEnd" ng-disabled="responsePending" placeholder="End">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/range" data-method="GET">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/range" data-method="DELETE">
+      </form>
+    </section>
+  </div>
+  <div class="playgroundLog">
+    <h3>Console</h3>
+    <input type="button" class="playgroundLog-clearButton" value="Clear" ng-click="clearResponseLog($event)">
+    <div ng-repeat="log in responseLog track by $id($index)">{{log}}</div>
+  </div>
+</div>
+
