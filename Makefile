@@ -76,9 +76,6 @@ roach_lib: roach_proto
 sqlparser:
 	make -C $(SQL_PARSER)
 
-goget:
-	$(GO) get ./...
-
 test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
