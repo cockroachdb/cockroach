@@ -16,7 +16,7 @@
 // Author: Andrew Bonventre (andybons@gmail.com)
 
 var crApp = angular.module('cockroach');
-crApp.controller('PlaygroundCtrl', ['$scope', '$http',
+crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     function(scope, http) {
   scope.responseLog = [];
   scope.clearResponseLog = function(e) {

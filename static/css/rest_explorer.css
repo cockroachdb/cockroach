@@ -16,36 +16,36 @@ for names of contributors.
 
 Author: Andrew Bonventre (andybons@gmail.com)
 */
-.playground,
-.playgroundControls,
-.playgroundLog {
+.restExplorer,
+.restExplorerControls,
+.restExplorerLog {
   height: 100%;
 }
-.playgroundControls,
-.playgroundLog {
+.restExplorerControls,
+.restExplorerLog {
   float: left;
   padding: 10px 20px;
   width: 50%;
 }
-.playgroundControls {
+.restExplorerControls {
   background-color: #fff;
 }
-.playgroundControls-control {
+.restExplorerControls-control {
   margin-bottom: 20px;
 }
-.playgroundControls-control > h3 {
+.restExplorerControls-control > h3 {
   font-weight: normal;
   text-transform: uppercase;
   margin-bottom: 3px;
 }
-.playgroundControls-control input {
+.restExplorerControls-control input {
   font: inherit;
 }
-.playgroundLog {
+.restExplorerLog {
   position: relative;
   font-family: 'Source Code Pro', 'Courier New', Courier, monospace;
 }
-.playgroundLog-clearButton {
+.restExplorerLog-clearButton {
   position: absolute;
   right: 20px;
   top: 10px;

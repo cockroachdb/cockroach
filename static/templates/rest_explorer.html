@@ -15,10 +15,12 @@ permissions and limitations under the License. See the AUTHORS file
 for names of contributors.
 
 Author: Andrew Bonventre (andybons@gmail.com)
+
+TODO(andybons): Add support for kv/rest/counter.
 -->
-<div class="playground">
-  <div class="playgroundControls">
-    <section class="playgroundControls-control">
+<div class="restExplorer">
+  <div class="restExplorerControls">
+    <section class="restExplorerControls-control">
       <h3>Put K/V Pair</h3>
       <form>
         <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
@@ -27,7 +29,7 @@ Author: Andrew Bonventre (andybons@gmail.com)
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Put" data-endpoint="/kv/rest/entry/" data-method="PUT">
       </form>
     </section>
-    <section class="playgroundControls-control">
+    <section class="restExplorerControls-control">
       <h3>Get/Head/Delete K/V Pair</h3>
       <form>
         <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
@@ -36,7 +38,7 @@ Author: Andrew Bonventre (andybons@gmail.com)
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/entry/" data-method="DELETE">
       </form>
     </section>
-    <section class="playgroundControls-control">
+    <section class="restExplorerControls-control">
       <h3>K/V Range</h3>
       <form>
         <input type="text" ng-model="kvRangeStart" ng-disabled="responsePending" placeholder="Start">
@@ -47,9 +49,9 @@ Author: Andrew Bonventre (andybons@gmail.com)
       </form>
     </section>
   </div>
-  <div class="playgroundLog">
+  <div class="restExplorerLog">
     <h3>Console</h3>
-    <input type="button" class="playgroundLog-clearButton" value="Clear" ng-click="clearResponseLog($event)">
+    <input type="button" class="restExplorerLog-clearButton" value="Clear" ng-click="clearResponseLog($event)">
     <div ng-repeat="log in responseLog track by $id($index)">{{log}}</div>
   </div>
 </div>

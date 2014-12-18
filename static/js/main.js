@@ -17,9 +17,9 @@
 
 var crApp = angular.module('cockroach', ['ngRoute']);
 crApp.config(['$routeProvider', function(routeProvider) {
-  routeProvider.when('/playground', {
-    controller:'PlaygroundCtrl',
-    templateUrl:'/templates/playground.html'
+  routeProvider.when('/rest-explorer', {
+    controller:'RestExplorerCtrl',
+    templateUrl:'/templates/rest_explorer.html'
   }).otherwise({
     redirectTo:'/'
   });
