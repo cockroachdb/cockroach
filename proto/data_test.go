@@ -385,10 +385,10 @@ func TestGCMetadataEstimatedBytes(t *testing.T) {
 	}
 }
 
-// TestNodeIDSlice verifies that its public methods Add() and Contain()
+// TestNodeList verifies that its public methods Add() and Contain()
 // operate as expected.
-func TestNodeIDSlice(t *testing.T) {
-	sn := SeenNodes{}
+func TestNodeList(t *testing.T) {
+	sn := NodeList{}
 	items := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
 	for i, _ := range items {
 		n := int32(items[i])

@@ -539,7 +539,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		expPri    int32
 		expTS     proto.Timestamp
 		expOrigTS proto.Timestamp
-		hostSeen  bool
+		nodeSeen  bool
 	}{
 		{nil, 0, 1, makeTS(0, 1), makeTS(0, 1), false},
 		{&proto.ReadWithinUncertaintyIntervalError{
@@ -582,9 +582,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
 				i, test.expOrigTS, reply.Txn.OrigTimestamp)
 		}
-		if nodes := reply.Txn.CertainNodes.GetNodes(); (len(nodes) != 0) != test.hostSeen {
-			t.Errorf("%d: expected hostSeen=%t, but list of hosts is %v",
-				i, test.hostSeen, nodes)
+		if nodes := reply.Txn.CertainNodes.GetNodes(); (len(nodes) != 0) != test.nodeSeen {
+			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
+				i, test.nodeSeen, nodes)
 		}
 	}
 }

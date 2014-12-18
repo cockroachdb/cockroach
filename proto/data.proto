@@ -134,9 +134,9 @@ enum TransactionStatus {
   ABORTED = 2;
 }
 
-// SeenNodes keeps a growing set of NodeIDs as a sorted slice, with Add()
+// NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
-message SeenNodes {
+message NodeList {
   repeated int32 nodes = 1 [packed=true];
 }
 
@@ -172,12 +172,25 @@ message Transaction {
   // The case MaxTimestamp < Timestamp is possible for transactions which have
   // been pushed; in this case, MaxTimestamp should be ignored.
   optional Timestamp max_timestamp = 10 [(gogoproto.nullable) = false];
-  // A sorted list of ids of nodes for which an UncertaintyIntervalError
+  // A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
   // occurred during a prior read. The purpose of keeping this information is
   // that as a reaction to this error, the transaction's timestamp is forwarded
   // appropriately to reflect that node's clock uncertainty. Future reads to
   // the same node are therefore freed from uncertainty restarts.
-  optional SeenNodes certain_nodes = 11 [(gogoproto.nullable) = false];
+  //
+  // The exact mechanism is that upon encountering the above error, the trans-
+  // action will have to retry with a higher timestamp. This higher timestamp
+  // is either the one of the encountered future write returned in the error
+  // or (if higher, which is in the majority of cases), the time of the node
+  // serving the key at the time of the failed read.
+  // Additionally storing the node, we make sure to set MaxTimestamp=Timestamp
+  // at the time of the read for nodes whose clock we've taken into acount,
+  // which amounts to reading without any uncertainty.
+  //
+  // Bits of this mechanism are found in the local sender, the range and the
+  // txn_coord_sender, with brief comments referring here.
+  // See https://github.com/cockroachdb/cockroach/pull/221.
+  optional NodeList certain_nodes = 11 [(gogoproto.nullable) = false];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

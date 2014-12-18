@@ -261,6 +261,22 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	}
 }
 
+// Forward updates the timestamp from the one given, if that moves it
+// forwards in time.
+func (t *Timestamp) Forward(s Timestamp) {
+	if t.Less(s) {
+		*t = s
+	}
+}
+
+// Backward updates the timestamp from the one given, if that moves it
+// backwards in time.
+func (t *Timestamp) Backward(s Timestamp) {
+	if s.Less(*t) {
+		*t = s
+	}
+}
+
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly; if the value contains an integer,
@@ -400,8 +416,8 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 	t.UpgradePriority(upgradePriority)
 }
 
-// Update ratchets priority, timestamp and original timestamp values
-// for the transaction. If t.ID is empty, then the transaction is
+// Update ratchets priority, timestamp and original timestamp values (among
+// others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
 func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
@@ -423,6 +439,11 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.OrigTimestamp.Less(o.OrigTimestamp) {
 		t.OrigTimestamp = o.OrigTimestamp
 	}
+	// Should not actually change at the time of writing.
+	t.MaxTimestamp = o.MaxTimestamp
+	// Copy the list of nodes without time uncertainty.
+	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
+		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
 }
 
@@ -504,16 +525,23 @@ func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) i
 
 // Add adds the given NodeID to the interface (unless already present)
 // and restores ordering.
-func (s *SeenNodes) Add(nodeID int32) {
+func (s *NodeList) Add(nodeID int32) {
 	if !s.Contains(nodeID) {
 		(*s).Nodes = append(s.Nodes, nodeID)
-		sort.Sort(util.Int32Slice(s.Nodes))
+		sort.Sort(Int32Slice(s.Nodes))
 	}
 }
 
 // Contains returns true if the underlying slice contains the given NodeID.
-func (s SeenNodes) Contains(nodeID int32) bool {
+func (s NodeList) Contains(nodeID int32) bool {
 	ns := s.GetNodes()
 	i := sort.Search(len(ns), func(i int) bool { return ns[i] >= nodeID })
 	return i < len(ns) && ns[i] == nodeID
 }
+
+// Int32Slice implements sort.Interface.
+type Int32Slice []int32
+
+func (s Int32Slice) Len() int           { return len(s) }
+func (s Int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }

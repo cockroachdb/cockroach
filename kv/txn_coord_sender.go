@@ -389,7 +389,7 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 	switch t := replyHeader.GoError().(type) {
 	case *proto.ReadWithinUncertaintyIntervalError:
 		// Mark the host as certain. See the protobuf comment for
-		// CertainNodes for details.
+		// Transaction.CertainNodes for details.
 		replyHeader.Txn.CertainNodes.Add(argsHeader.Replica.NodeID)
 
 		// If the reader encountered a newer write within the uncertainty

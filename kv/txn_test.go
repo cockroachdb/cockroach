@@ -105,8 +105,8 @@ func TestTxnDBBasics(t *testing.T) {
 	}
 }
 
-// BenchmarkTxnWrites benchmarks a number of transaction writing to the
-// same key back to back.
+// BenchmarkTxnWrites benchmarks a number of transactions writing to the
+// same key back to back, without using Prepare/Flush.
 func BenchmarkTxnWrites(b *testing.B) {
 	db, _, _, mClock, _, err := createTestDB()
 	if err != nil {
@@ -123,15 +123,9 @@ func BenchmarkTxnWrites(b *testing.B) {
 			pr := &proto.PutResponse{}
 			pa := proto.PutArgs(key, []byte(fmt.Sprintf("value-%d", i)))
 			if err := txn.Call(proto.Put, pa, pr); err != nil {
-				// Nothing should go wrong here.
 				b.Fatal(err)
 			}
-			// Explicitly end the transaction. Not necessary, but since write
-			// intent errors play a role in this test, it cannot hurt to do
-			// this as early as possible.
-			etArgs := &proto.EndTransactionRequest{Commit: true}
-			etReply := &proto.EndTransactionResponse{}
-			return txn.Call(proto.EndTransaction, etArgs, etReply)
+			return nil
 		}); tErr != nil {
 			b.Fatal(err)
 		}
@@ -292,15 +286,15 @@ func TestTxnDBUncertainty(t *testing.T) {
 func TestUncertaintyRestarts(t *testing.T) {
 	{
 		db, eng, clock, mClock, _, err := createTestDB()
+		if err != nil {
+			t.Fatal(err)
+		}
 		// Set a large offset so that a busy restart-loop
 		// really shows. Also makes sure that the values
 		// we write in the future below don't actually
 		// wind up in the past.
 		offset := 4000 * time.Millisecond
 		clock.SetMaxOffset(offset)
-		if err != nil {
-			t.Fatal(err)
-		}
 		key := proto.Key("key")
 		value := proto.Value{
 			Bytes: nil, // Set for each Put
@@ -325,6 +319,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			gr.Reset()
 			if err := txn.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
 				return err
 			}
@@ -340,5 +335,93 @@ func TestUncertaintyRestarts(t *testing.T) {
 		if tErr != nil {
 			t.Fatal(tErr)
 		}
+	}
+}
+
+// TestUncertaintyMaxTimestampForwarding checks that we correctly read from
+// hosts which for which we control the uncertainty by checking that when a
+// transaction restarts after an uncertain read, it will also take into account
+// the target node's clock at the time of the failed read when forwarding the
+// read timestamp.
+// This is a prerequisite for being able to prevent further uncertainty
+// restarts for that node and transaction without sacrificing correctness.
+// See proto.Transaction.CertainNodes for details.
+func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
+	db, eng, clock, mClock, _, err := createTestDB()
+	// Large offset so that any value in the future is an uncertain read.
+	// Also makes sure that the values we write in the future below don't
+	// actually wind up in the past.
+	clock.SetMaxOffset(50000 * time.Millisecond)
+
+	txnOpts := &client.TransactionOptions{
+		Name: "uncertainty",
+	}
+
+	offsetNS := int64(100)
+	keySlow := proto.Key("slow")
+	keyFast := proto.Key("fast")
+	valSlow := []byte("wols")
+	valFast := []byte("tsaf")
+
+	// Write keySlow at now+offset, keyFast at now+2*offset
+	futureTS := clock.Now()
+	futureTS.WallTime += offsetNS
+	err = engine.MVCCPut(eng, nil, keySlow, futureTS,
+		proto.Value{Bytes: valSlow}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	futureTS.WallTime += offsetNS
+	err = engine.MVCCPut(eng, nil, keyFast, futureTS,
+		proto.Value{Bytes: valFast}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := 0
+	if tErr := db.RunTransaction(txnOpts, func(txn *client.KV) error {
+		i++
+		// The first command serves to start a Txn, fixing the timestamps.
+		// There will be a restart, but this is idempotent.
+		sr := &proto.ScanResponse{}
+		if err = txn.Call(proto.Scan, proto.ScanArgs(proto.Key("t"), proto.Key("t"),
+			0), sr); err != nil {
+			t.Fatal(err)
+		}
+
+		// The server's clock suddenly jumps ahead of keyFast's timestamp.
+		// There will be a restart, but this is idempotent.
+		mClock.Set(2*offsetNS + 1)
+
+		// Now read slowKey first. It should read at 0, catch an uncertainty error,
+		// and get keySlow's timestamp in that error, but upgrade it to the larger
+		// node clock (which is ahead of keyFast as well). If the last part does
+		// not happen, the read of keyFast should fail (i.e. read nothing).
+		// There will be exactly one restart here.
+		gr := &proto.GetResponse{}
+		if err = txn.Call(proto.Get, proto.GetArgs(keySlow), gr); err != nil {
+			if i != 1 {
+				t.Errorf("unexpected transaction error: %v", err)
+			}
+			return err
+		}
+		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, valSlow) {
+			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value,
+				valSlow)
+		}
+
+		gr.Reset()
+		// The node should already be certain, so we expect no restart here
+		// and to read the correct key.
+		if err = txn.Call(proto.Get, proto.GetArgs(keyFast), gr); err != nil {
+			t.Errorf("second Get failed with %v", err)
+		}
+		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, valFast) {
+			t.Errorf("read of %q returned %v, wanted value %q", keyFast, gr.Value,
+				valFast)
+		}
+		return nil
+	}); tErr != nil {
+		t.Fatal(tErr)
 	}
 }

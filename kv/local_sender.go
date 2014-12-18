@@ -125,11 +125,13 @@ func (ls *LocalSender) Send(call *client.Call) {
 		if err != nil {
 			call.Reply.Header().SetGoError(err)
 		} else {
-			if header := call.Args.Header(); proto.IsReadOnly(call.Method) &&
-				header.Txn != nil {
-				// For a read only call, we can avoid uncertainty related retries
-				// in certain situations. See the protobuf comment on CertainNodes
-				// for details.
+			if header := call.Args.Header(); header.Txn != nil {
+				// For calls that read data, we can avoid uncertainty related
+				// retries in certain situations.
+				// If the node is in "CertainNodes", we need not worry about
+				// uncertain reads any more. Setting MaxTimestamp=Timestamp
+				// for the operation accomplishes that.
+				// See proto.Transaction.CertainNodes for details.
 				if header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
 					// Make sure that when this retryable function returns,
 					// MaxTimestamp is restored. On retries, there is no
