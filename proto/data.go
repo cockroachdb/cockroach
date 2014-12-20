@@ -352,7 +352,8 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 
 	return &Transaction{
 		Name:          name,
-		ID:            append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
+		Key:           baseKey,
+		ID:            []byte(uuid.New()),
 		Priority:      priority,
 		Isolation:     isolation,
 		Timestamp:     now,
@@ -455,8 +456,8 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
-// MD5 returns the MD5 digest of the transaction ID as a string.
-// This method returns an empty string if the transaction is nil.
+// MD5 returns the MD5 digest of the transaction ID. This method
+// returns an empty string if the transaction is nil.
 func (t *Transaction) MD5() [md5.Size]byte {
 	if t == nil {
 		return NoTxnMD5

@@ -150,28 +150,34 @@ message Transaction {
   option (gogoproto.goproto_stringer) = false;
 
   optional string name = 1 [(gogoproto.nullable) = false];
-  optional bytes id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
-  optional int32 priority = 3 [(gogoproto.nullable) = false];
-  optional IsolationType isolation = 4 [(gogoproto.nullable) = false];
-  optional TransactionStatus status = 5 [(gogoproto.nullable) = false];
+  // Key is the key which anchors the transaction. This is typically
+  // the first key read or written during the transaction and
+  // determines which range in the cluster will hold the transaction
+  // record.
+  optional bytes key = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  // ID is a unique UUID value which identifies the transaction.
+  optional bytes id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+  optional int32 priority = 4 [(gogoproto.nullable) = false];
+  optional IsolationType isolation = 5 [(gogoproto.nullable) = false];
+  optional TransactionStatus status = 6 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
-  optional int32 epoch = 6 [(gogoproto.nullable) = false];
+  optional int32 epoch = 7 [(gogoproto.nullable) = false];
   // The last heartbeat timestamp.
-  optional Timestamp last_heartbeat = 7;
+  optional Timestamp last_heartbeat = 8;
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
-  optional Timestamp timestamp = 8 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 9 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
   // transaction will retry.
-  optional Timestamp orig_timestamp = 9 [(gogoproto.nullable) = false];
+  optional Timestamp orig_timestamp = 10 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
   // retry error, unless the node being read is listed in nodes_read
   // (in which case no more read uncertainty can occur).
   // The case MaxTimestamp < Timestamp is possible for transactions which have
   // been pushed; in this case, MaxTimestamp should be ignored.
-  optional Timestamp max_timestamp = 10 [(gogoproto.nullable) = false];
+  optional Timestamp max_timestamp = 11 [(gogoproto.nullable) = false];
   // A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
   // occurred during a prior read. The purpose of keeping this information is
   // that as a reaction to this error, the transaction's timestamp is forwarded
@@ -190,7 +196,7 @@ message Transaction {
   // Bits of this mechanism are found in the local sender, the range and the
   // txn_coord_sender, with brief comments referring here.
   // See https://github.com/cockroachdb/cockroach/pull/221.
-  optional NodeList certain_nodes = 11 [(gogoproto.nullable) = false];
+  optional NodeList certain_nodes = 12 [(gogoproto.nullable) = false];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

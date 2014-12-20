@@ -75,10 +75,6 @@ var (
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
-	// Transaction records get a UUID appended, so we increase allowed max length.
-	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
-		maxLength += uuidLength
-	}
 	if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
 		key = key[engine.KeyLocalPrefixLength:]
 	}
@@ -787,7 +783,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp:    args.Header().Timestamp,
-			Key:          wiErr.Txn.ID,
+			Key:          wiErr.Txn.Key,
 			User:         args.Header().User,
 			UserPriority: args.Header().UserPriority,
 			Txn:          args.Header().Txn,

@@ -440,7 +440,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID int32
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     txn.ID,
+			Key:     txn.Key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
@@ -457,7 +457,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, st
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       pushee.ID,
+			Key:       pushee.Key,
 			Timestamp: pusher.Timestamp,
 			RaftID:    raftID,
 			Replica:   proto.Replica{StoreID: storeID},
@@ -475,7 +475,7 @@ func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID int32) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:     txn.ID,
+			Key:     txn.Key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 			Txn:     txn,
@@ -1125,17 +1125,17 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		// Establish existing txn state by writing directly to range engine.
 		var existTxn proto.Transaction
 		gogoproto.Merge(&existTxn, txn)
-		existTxn.ID = test.key
+		existTxn.Key = test.key
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key)
+		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key, txn.ID)
 		if err := engine.MVCCPutProto(rng.rm.Engine(), nil, txnKey, proto.ZeroTimestamp, nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}
 
 		// End the transaction, verify expected error.
-		txn.ID = test.key
+		txn.Key = test.key
 		args, reply := endTxnArgs(txn, true, 1, s.StoreID())
 		args.Timestamp = txn.Timestamp
 		verifyErrorMatches(rng.AddCmd(proto.EndTransaction, args, reply, true), test.expErrRegexp, t)
@@ -1151,7 +1151,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, clock)
 
 	args, reply := pushTxnArgs(pusher, pushee, true, 1, s.StoreID())
-	args.Key = pusher.ID
+	args.Key = pusher.Key
 	verifyErrorMatches(rng.AddCmd(proto.InternalPushTxn, args, reply, true), ".*should match pushee.*", t)
 }
 

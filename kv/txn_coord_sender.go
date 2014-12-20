@@ -246,7 +246,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		}
 		// End transaction must have its key set to the txn ID.
 		if call.Method == proto.EndTransaction {
-			header.Key = header.Txn.ID
+			header.Key = header.Txn.Key
 		}
 	}
 
@@ -447,7 +447,7 @@ func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction) {
 // txnID has not been updated by the client adding a request within
 // the allowed timeout. If abandoned, the transaction is removed from
 // the txns map.
-func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID proto.Key) bool {
+func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txnID)]
@@ -470,7 +470,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  txn.ID,
+			Key:  txn.Key,
 			User: storage.UserRoot,
 			Txn:  txn,
 		},
@@ -483,7 +483,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// Before we send a heartbeat, determine whether this transaction
 			// should be considered abandoned. If so, exit heartbeat.
 			if tc.hasClientAbandonedCoord(txn.ID) {
-				log.V(1).Infof("transaction %q abandoned; stopping heartbeat", txn.ID)
+				log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
 				return
 			}
 			request.Header().Timestamp = tc.clock.Now()
@@ -498,7 +498,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// the heartbeat. It's either aborted or committed, and we resolve
 			// write intents accordingly.
 			if reply.GoError() != nil {
-				log.Warningf("heartbeat to %q failed: %s", txn.ID, reply.GoError())
+				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
 			} else if reply.Txn.Status != proto.PENDING {
 				tc.cleanupTxn(reply.Txn)
 				return
