@@ -242,6 +242,7 @@ func TestGzip(t *testing.T) {
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ts := StartTestServer(t)
 	tds := kv.NewTxnCoordSender(kv.NewDistSender(ts.Gossip()), ts.Clock())
+	defer tds.Close()
 
 	if err := ts.node.db.Call(proto.AdminSplit,
 		&proto.AdminSplitRequest{
@@ -332,7 +333,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if err := scan.Reply.Header().GoError(); err != nil {
 		t.Fatal(err)
 	}
-	// TODO: end this txn
 	if txn := scan.Reply.Header().Txn; txn == nil || txn.Name != "MyTxn" {
 		t.Errorf("wanted Txn to persist, but it changed to %v", txn)
 	}

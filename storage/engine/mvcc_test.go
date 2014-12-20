@@ -333,14 +333,6 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 // TestMVCCGetUncertainty verifies that the appropriate error results when
 // a transaction reads a key at a timestamp that has versions newer than that
 // timestamp, but older than the transaction's MaxTimestamp.
-// TODO(Tobias): Test this in a live transactions as well, verifying the
-// necessary transaction restarts happen correctly etc.
-// Spencer's suggestion:
-// Create 3 clocks, each with max drift (offset) set to 100ms. Set clock one to
-// time=t, clock two to time=t+50ms, clock three to time=t+100ms. Write three
-// values at current time according to each of the three clocks. Start three
-// txns, each using one of the three clocks. In each txn, read the three values
-// and ensure that all txns read the correct values.
 func TestMVCCGetUncertainty(t *testing.T) {
 	engine := createTestEngine()
 	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}

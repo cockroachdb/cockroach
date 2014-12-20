@@ -384,7 +384,8 @@ func mvccGetInternal(engine Engine, key proto.Key, kv proto.RawKeyValue, timesta
 			// Second case: Our read timestamp is behind the latest write, but the
 			// latest write could possibly have happened before our read in
 			// absolute time if the writer had a fast clock.
-			// The reader should try again at meta.Timestamp+1.
+			// The reader should try again with a later timestamp than the
+			// one given below.
 			return nil, &proto.ReadWithinUncertaintyIntervalError{
 				Timestamp:         timestamp,
 				ExistingTimestamp: meta.Timestamp,

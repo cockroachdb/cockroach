@@ -713,14 +713,27 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
-	if proto.IsReadWrite(method) && reply.Header().Error == nil {
-		ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
-		if err := batch.Commit(); err != nil {
-			reply.Header().SetGoError(err)
-		} else {
-			// If the commit succeeded, potentially initiate a split of this range.
-			r.maybeSplit()
+	if err := reply.Header().GoError(); err == nil {
+		if proto.IsReadWrite(method) {
+			ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
+			if err := batch.Commit(); err != nil {
+				reply.Header().SetGoError(err)
+			} else {
+				// If the commit succeeded, potentially initiate a split of this range.
+				r.maybeSplit()
+			}
 		}
+	} else if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+		// A ReadUncertaintyIntervalError contains the timestamp of the value
+		// that provoked the conflict. However, we forward the timestamp to the
+		// node's time here. The reason is that the caller (which is always
+		// transactional when this error occurs) in our implementation wants to
+		// use this information to extract a timestamp after which reads from
+		// the nodes are causally consistent with the transaction. This allows
+		// the node to be classified as without further uncertain reads for the
+		// remainder of the transaction.
+		// See the comment on proto.Transaction.CertainNodes.
+		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
@@ -889,7 +902,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.Txn.Status = proto.ABORTED
 	}
 
-	// Persist the transaction record with updated status (& possibly timestmap).
+	// Persist the transaction record with updated status (& possibly timestamp).
 	if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return

@@ -134,6 +134,12 @@ enum TransactionStatus {
   ABORTED = 2;
 }
 
+// NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
+// adding to the set and Contains() verifying membership.
+message NodeList {
+  repeated int32 nodes = 1 [packed=true];
+}
+
 // A Transaction is a unit of work performed on the database.
 // Cockroach transactions support two isolation levels: snapshot
 // isolation and serializable snapshot isolation. Each Cockroach
@@ -150,21 +156,41 @@ message Transaction {
   optional TransactionStatus status = 5 [(gogoproto.nullable) = false];
   // Incremented on txn retry.
   optional int32 epoch = 6 [(gogoproto.nullable) = false];
+  // The last heartbeat timestamp.
+  optional Timestamp last_heartbeat = 7;
   // The proposed timestamp for the transaction. This starts as
   // the current wall time on the txn coordinator.
-  optional Timestamp timestamp = 7 [(gogoproto.nullable) = false];
+  optional Timestamp timestamp = 8 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
   // transaction will retry.
-  optional Timestamp orig_timestamp = 8 [(gogoproto.nullable) = false];
+  optional Timestamp orig_timestamp = 9 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
-  // retry error.
+  // retry error, unless the node being read is listed in nodes_read
+  // (in which case no more read uncertainty can occur).
   // The case MaxTimestamp < Timestamp is possible for transactions which have
   // been pushed; in this case, MaxTimestamp should be ignored.
-  optional Timestamp max_timestamp = 9 [(gogoproto.nullable) = false];
-  // The last hearbeat timestamp.
-  optional Timestamp last_heartbeat = 10;
+  optional Timestamp max_timestamp = 10 [(gogoproto.nullable) = false];
+  // A sorted list of ids of nodes for which a ReadWithinUncertaintyIntervalError
+  // occurred during a prior read. The purpose of keeping this information is
+  // that as a reaction to this error, the transaction's timestamp is forwarded
+  // appropriately to reflect that node's clock uncertainty. Future reads to
+  // the same node are therefore freed from uncertainty restarts.
+  //
+  // The exact mechanism is that upon encountering the above error, the trans-
+  // action will have to retry with a higher timestamp. This higher timestamp
+  // is either the one of the encountered future write returned in the error
+  // or (if higher, which is in the majority of cases), the time of the node
+  // serving the key at the time of the failed read.
+  // Additionally storing the node, we make sure to set MaxTimestamp=Timestamp
+  // at the time of the read for nodes whose clock we've taken into acount,
+  // which amounts to reading without any uncertainty.
+  //
+  // Bits of this mechanism are found in the local sender, the range and the
+  // txn_coord_sender, with brief comments referring here.
+  // See https://github.com/cockroachdb/cockroach/pull/221.
+  optional NodeList certain_nodes = 11 [(gogoproto.nullable) = false];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
