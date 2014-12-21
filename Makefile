@@ -86,15 +86,10 @@ bench: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
-# Docker image, which is statically linked and has no build tools in its
-# environment. See ./build/deploy for details.
+# Docker image which comes without the build environment. See ./build/deploy
+# for details.
 # The test files are moved to the corresponding package. For example,
 # PKG=./storage/engine will generate ./storage/engine/engine.test.
-#
-# TODO(Tobias): This section needs improvement. Some packages don't end up
-# statically linked even when STATIC=1 is supplied; libpthread seems to play
-# a role. Currently able to work around this by linking these packages
-# without CGO in that case.
 testbuild: TESTS := $(shell $(GO) list $(PKG))
 testbuild: GOFLAGS += -c
 testbuild: auxiliary
@@ -104,10 +99,6 @@ testbuild: auxiliary
 	  DIR=$$($(GO) list -f {{.Dir}} ./...$$NAME); \
 	  $(GO) test $(GOFLAGS) "$$p" $(TESTFLAGS) || break; \
 	  if [ -f "$$OUT" ]; then \
-		if [ ! -z "$(STATIC)" ] && ldd "$$OUT" > /dev/null; then \
-		2>&1 echo "$$NAME: rebuilding with CGO_ENABLED=0 to get static binary..."; \
-		  CGO_ENABLED=0 $(GO) test $(GOFLAGS) "$$p" $(TESTFLAGS) || break; \
-		fi; \
 		mv "$$OUT" "$$DIR" || break; \
 	  fi \
 	done
@@ -126,7 +117,7 @@ acceptance:
 
 clean:
 	$(GO) clean
-	find . -name '*.test' -type f -exec rm {} \;
+	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
 	make -C $(ROACH_PROTO) clean
 	make -C $(ROACH_LIB) clean
