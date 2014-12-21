@@ -26,7 +26,8 @@ import (
 )
 
 var (
-	txnID = append([]byte("test-txn"), []byte(uuid.New())...)
+	txnKey = proto.Key("test-txn")
+	txnID  = []byte(uuid.New())
 )
 
 func makeTS(walltime int64, logical int32) proto.Timestamp {
@@ -50,6 +51,7 @@ func (ts *testSender) Send(call *Call) {
 	header := call.Args.Header()
 	header.UserPriority = gogoproto.Int32(-1)
 	if header.Txn != nil && len(header.Txn.ID) == 0 {
+		header.Txn.Key = txnKey
 		header.Txn.ID = txnID
 	}
 	call.Reply.Reset()

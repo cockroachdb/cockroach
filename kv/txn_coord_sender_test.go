@@ -178,8 +178,8 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	if reply.Txn.Priority != 10 {
 		t.Errorf("expected txn priority 10; got %d", reply.Txn.Priority)
 	}
-	if !bytes.HasPrefix(reply.Txn.ID, key) {
-		t.Errorf("expected txn ID to have prefix %q; got %q", key, reply.Txn.ID)
+	if !bytes.Equal(reply.Txn.Key, key) {
+		t.Errorf("expected txn Key to match %q != %q", key, reply.Txn.Key)
 	}
 	if reply.Txn.Isolation != proto.SNAPSHOT {
 		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", reply.Txn.Isolation)
@@ -314,7 +314,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(db, txn.ID)
+			ok, txn, err := getTxn(db, txn)
 			if !ok || err != nil {
 				return false
 			}
@@ -335,11 +335,12 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *client.KV, key proto.Key) (bool, *proto.Transaction, error) {
+func getTxn(db *client.KV, txn *proto.Transaction) (bool, *proto.Transaction, error) {
 	hr := &proto.InternalHeartbeatTxnResponse{}
 	if err := db.Call(proto.InternalHeartbeatTxn, &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: key,
+			Key: txn.Key,
+			Txn: txn,
 		},
 	}, hr); err != nil {
 		return false, nil, err
@@ -390,7 +391,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		Method: proto.EndTransaction,
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.ID,
+				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -427,7 +428,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2.Priority = 2
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: txn.ID,
+			Key: txn.Key,
 			Txn: txn2,
 		},
 		PusheeTxn: *txn,
@@ -441,7 +442,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// end transaction failed.
 	etArgs := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.ID,
+			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},

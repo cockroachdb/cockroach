@@ -834,7 +834,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1017,7 +1017,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, &txn)
@@ -1079,11 +1079,11 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
-		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
+	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn key %q", args.Key, args.PusheeTxn.Key))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
