@@ -8,7 +8,6 @@ ADD cockroach.sh /cockroach/
 ADD test.sh /cockroach/
 ADD ./resources /cockroach/resources/
 ADD ./ui /cockroach/ui
->>>>>>> origin/master
 
 # Set working directory  so that relative paths
 # are resolved appropriately when passed as args.
