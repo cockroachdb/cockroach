@@ -14,14 +14,19 @@ set -ex
 cd -P "$(dirname $0)"
 DIR=$(pwd -P)
 
-rm -rf resources cockroach .out && mkdir -p .out
-docker run "cockroachdb/cockroach-dev" shell "export STATIC=1 && \
-  cd /cockroach && (rm -f cockroach && make clean build testbuild) >/dev/null 2>&1 && \
-  tar -cf - cockroach \$(find . -name '*.test' -type f -printf '"%p" ') resources" \
-> .out/files.tar;
-tar -xvC .out/ -f .out/files.tar && rm -f .out/files.tar
-mv .out/cockroach .
-cp -r .out/resources ./resources
-cp -r .out/ui ./ui
+rm -rf resources ui cockroach
+mkdir -p build
+docker run -v "$(pwd)/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
+  rm -rf /build/*
+  make clean build testbuild >/dev/null 2>&1 && \
+  find . -name '*.test' -type f -printf "\"/build/%h \"" | xargs mkdir -p && \
+  find . -name '*.test' -type f -exec mv {} "/build/{}" \; && \
+  cp -r resources /build/resources && \
+  cp -r ui /build/ui && \
+  cp cockroach /build/cockroach"
+
+cp -r build/resources resources
+cp -r build/ui ./ui
+cp build/cockroach cockroach
 docker build -t cockroachdb/cockroach .
-docker run -v "${DIR}/.out":/test/.out cockroachdb/cockroach
+docker run -v "${DIR}/build":/build cockroachdb/cockroach

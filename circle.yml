@@ -32,11 +32,10 @@ test:
     - docker run "cockroachdb/cockroach-dev" test
     - make acceptance
 
-#deployment:
-#  docker:
-#    branch: master
-#    commands:
-#      # Build static binary container only on master.
-#      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
-#      - if [ -n "$DOCKER_EMAIL" ]; then ./build/build-docker-deploy.sh && docker push cockroachdb/cockroach; fi:
-#          timeout: 600
+deployment:
+  docker:
+    branch: master
+    commands:
+      # Build small deploy container for master branch.
+      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
+      - if [ -n "$DOCKER_EMAIL" ]; then ./build/build-docker-deploy.sh && docker push cockroachdb/cockroach; fi
