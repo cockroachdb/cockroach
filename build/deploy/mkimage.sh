@@ -14,7 +14,7 @@ set -ex
 cd -P "$(dirname $0)"
 DIR=$(pwd -P)
 
-rm -rf resources cockroach
+rm -rf resources ui cockroach
 mkdir -p build
 docker run -v "$(pwd)/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
   rm -rf /build/*
@@ -22,9 +22,11 @@ docker run -v "$(pwd)/build":/build "cockroachdb/cockroach-dev" shell "cd /cockr
   find . -name '*.test' -type f -printf "\"/build/%h \"" | xargs mkdir -p && \
   find . -name '*.test' -type f -exec mv {} "/build/{}" \; && \
   cp -r resources /build/resources && \
+  cp -r ui /build/ui && \
   cp cockroach /build/cockroach"
 
 cp -r build/resources resources
+cp -r build/ui ./ui
 cp build/cockroach cockroach
 docker build -t cockroachdb/cockroach .
 docker run -v "${DIR}/build":/build cockroachdb/cockroach

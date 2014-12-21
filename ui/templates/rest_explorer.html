@@ -15,37 +15,41 @@ permissions and limitations under the License. See the AUTHORS file
 for names of contributors.
 
 Author: Andrew Bonventre (andybons@gmail.com)
-
-TODO(andybons): Add support for kv/rest/counter.
 -->
 <div class="restExplorer">
   <div class="restExplorerControls">
     <section class="restExplorerControls-control">
-      <h3>Put K/V Pair</h3>
+      <h3>K/V Pair</h3>
       <form>
         <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
         &rarr;
         <input type="text" ng-model="kvValue" ng-disabled="responsePending" placeholder="Value">
-        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Put" data-endpoint="/kv/rest/entry/" data-method="PUT">
-      </form>
-    </section>
-    <section class="restExplorerControls-control">
-      <h3>Get/Head/Delete K/V Pair</h3>
-      <form>
-        <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/entry/" data-method="GET">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Head" data-endpoint="/kv/rest/entry/" data-method="HEAD">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Put" data-endpoint="/kv/rest/entry/" data-method="PUT">      
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/entry/" data-method="DELETE">
       </form>
     </section>
     <section class="restExplorerControls-control">
-      <h3>K/V Range</h3>
+      <h3>Range</h3>
       <form>
         <input type="text" ng-model="kvRangeStart" ng-disabled="responsePending" placeholder="Start">
         &rarr;
         <input type="text" ng-model="kvRangeEnd" ng-disabled="responsePending" placeholder="End">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/range" data-method="GET">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/range" data-method="DELETE">
+      </form>
+    </section>
+    <section class="restExplorerControls-control">
+      <h3>Counter</h3>
+      <form>
+        <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
+        &rarr;
+        <input type="number" ng-model="kvCounterVal" ng-disabled="responsePending" placeholder="0">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/counter/" data-method="GET">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Head" data-endpoint="/kv/rest/counter/" data-method="HEAD">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Post" data-endpoint="/kv/rest/counter/" data-method="POST">
+        <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Delete" data-endpoint="/kv/rest/counter/" data-method="DELETE">
       </form>
     </section>
   </div>
