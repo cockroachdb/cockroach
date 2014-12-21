@@ -55,4 +55,5 @@ body {
   font-weight: 800;
   font-size: 22px;
   text-transform: none;
+  vertical-align: -2px;
 }

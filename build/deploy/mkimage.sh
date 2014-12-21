@@ -22,6 +22,6 @@ docker run "cockroachdb/cockroach-dev" shell "export STATIC=1 && \
 tar -xvC .out/ -f .out/files.tar && rm -f .out/files.tar
 mv .out/cockroach .
 cp -r .out/resources ./resources
-cp -r .out/static ./static
+cp -r .out/ui ./ui
 docker build -t cockroachdb/cockroach .
 docker run -v "${DIR}/.out":/test/.out cockroachdb/cockroach

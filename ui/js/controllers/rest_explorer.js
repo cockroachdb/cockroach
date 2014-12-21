@@ -27,8 +27,7 @@ crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     e.preventDefault();
     var method = e.target.getAttribute('data-method');
     var endpoint = e.target.getAttribute('data-endpoint');
-    var rangeMethod = endpoint == '/kv/rest/range';
-    if (rangeMethod) {
+    if (endpoint == '/kv/rest/range') {
       endpoint += '?start=' + encodeURIComponent(scope.kvRangeStart);
       if (!!scope.kvRangeEnd) {
         endpoint += '&end=' + encodeURIComponent(scope.kvRangeEnd);
@@ -43,8 +42,14 @@ crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     var req = {
       method: method,
       url: endpoint,
-      data: data,
+      data: data
     };
+    if (endpoint.indexOf('/kv/rest/counter/') != -1) {
+      req.headers = {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+      };
+      req.data = scope.kvCounterVal;
+    }
     var responseFn = function(data, status, headers, config) {
       if (typeof data == 'object') {
         data = JSON.stringify(data);
