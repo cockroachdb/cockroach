@@ -28,6 +28,24 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+var testtime = int64(-446061360000000000)
+
+type tsIntSample struct {
+	offset int32
+	count  uint32
+	sum    int64
+	max    int64
+	min    int64
+}
+
+type tsFloatSample struct {
+	offset int32
+	count  uint32
+	sum    float32
+	max    float32
+	min    float32
+}
+
 func gibberishString(n int) string {
 	b := make([]byte, n, n)
 	for i := 0; i < n; i++ {
@@ -62,21 +80,52 @@ func appender(s string) []byte {
 	return mustMarshal(v)
 }
 
-// timeSeries generates a simple TimeSeriesData object which starts at the given
-// timestamp and lasts for the given duration.  The generated TimeSeriesData has
-// second-level precision, with one data point at each supplied offset.  Each
-// data point has a constant integer value of 5, which was chosen arbitrarily.
-func timeSeries(start int64, duration int64, offsets ...int32) []byte {
-	ts := &proto.TimeSeriesData{
-		StartTimestamp:    start,
-		DurationInSeconds: duration,
-		SamplePrecision:   proto.SECONDS,
+// timeSeriesInt generates a simple InternalTimeSeriesData object which starts
+// at the given timestamp and has samples of the given duration. Samples have
+// int values.
+func timeSeriesInt(start int64, duration int64, samples ...tsIntSample) []byte {
+	ts := &proto.InternalTimeSeriesData{
+		StartTimestampNanos: start,
+		SampleDurationNanos: duration,
 	}
-	for _, offset := range offsets {
-		ts.Data = append(ts.Data, &proto.TimeSeriesDataPoint{
-			Offset:   offset,
-			ValueInt: gogoproto.Int64(5),
-		})
+	for _, sample := range samples {
+		newSample := &proto.InternalTimeSeriesSample{
+			Offset:   sample.offset,
+			IntCount: sample.count,
+			IntSum:   gogoproto.Int64(sample.sum),
+		}
+		if sample.count > 1 {
+			newSample.IntMax = gogoproto.Int64(sample.max)
+			newSample.IntMin = gogoproto.Int64(sample.min)
+		}
+		ts.Samples = append(ts.Samples, newSample)
+	}
+	v, err := ts.ToValue()
+	if err != nil {
+		panic(err)
+	}
+	return mustMarshal(&proto.MVCCMetadata{Value: v})
+}
+
+// timeSeriesFloat generates a simple InternalTimeSeriesData object which starts
+// at the given timestamp and has samples of the given duration. Samples have
+// float values.
+func timeSeriesFloat(start int64, duration int64, samples ...tsFloatSample) []byte {
+	ts := &proto.InternalTimeSeriesData{
+		StartTimestampNanos: start,
+		SampleDurationNanos: duration,
+	}
+	for _, sample := range samples {
+		newSample := &proto.InternalTimeSeriesSample{
+			Offset:     sample.offset,
+			FloatCount: sample.count,
+			FloatSum:   gogoproto.Float32(sample.sum),
+		}
+		if sample.count > 1 {
+			newSample.FloatMax = gogoproto.Float32(sample.max)
+			newSample.FloatMin = gogoproto.Float32(sample.min)
+		}
+		ts.Samples = append(ts.Samples, newSample)
 	}
 	v, err := ts.ToValue()
 	if err != nil {
@@ -96,9 +145,40 @@ func TestGoMerge(t *testing.T) {
 		{appender(""), counter(0)},
 		{counter(0), nil},
 		{appender(""), nil},
-		{timeSeries(5000, 3600, 100), nil},
-		{timeSeries(5000, 3600, 100), appender("a")},
-		{appender("a"), timeSeries(5000, 3600, 100)},
+		{
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			nil,
+		},
+		{
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			appender("a"),
+		},
+		{
+			appender("a"),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+		},
+		{
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime+1, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+		},
+		{
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 100, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+		},
 	}
 	for i, c := range badCombinations {
 		_, err := goMerge(c.existing, c.update)
@@ -175,23 +255,98 @@ func TestGoMerge(t *testing.T) {
 	}{
 		{
 			nil,
-			timeSeries(-446061360, 3600, 30, 250, 460),
-			timeSeries(-446061360, 3600, 30, 250, 460),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
 		},
 		{
-			nil,
-			nil,
-			nil,
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+			}...),
 		},
 		{
-			timeSeries(-446061360, 3600, 30, 250, 460),
-			timeSeries(-446061360, 3600, 1000, 1900, 3000),
-			timeSeries(-446061360, 3600, 30, 250, 460, 1000, 1900, 3000),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
 		},
 		{
-			timeSeries(-446061360, 3600, 30, 250, 460),
-			timeSeries(-446061360, 3600),
-			timeSeries(-446061360, 3600, 30, 250, 460),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 10, 10, 10},
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 100, 100, 100},
+				{2, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 3, 115, 100, 5},
+				{2, 2, 10, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+		},
+		{
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+			}...),
+		},
+		{
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{1, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+		},
+		{
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{1, 1, 10, 10, 10},
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{1, 1, 100, 100, 100},
+				{2, 1, 5, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
+			timeSeriesFloat(testtime, 1000, []tsFloatSample{
+				{1, 3, 115, 100, 5},
+				{2, 2, 10, 5, 5},
+				{3, 1, 5, 5, 5},
+			}...),
 		},
 	}
 
@@ -206,8 +361,8 @@ func TestGoMerge(t *testing.T) {
 		var resultV, expectedV proto.MVCCMetadata
 		gogoproto.Unmarshal(result, &resultV)
 		gogoproto.Unmarshal(c.expected, &expectedV)
-		resultTS, _ := proto.TimeSeriesFromValue(resultV.Value)
-		expectedTS, _ := proto.TimeSeriesFromValue(expectedV.Value)
+		resultTS, _ := proto.InternalTimeSeriesDataFromValue(resultV.Value)
+		expectedTS, _ := proto.InternalTimeSeriesDataFromValue(expectedV.Value)
 		if !reflect.DeepEqual(resultTS, expectedTS) {
 			t.Errorf("goMerge error: %d: want %v, got %v", i, expectedTS, resultTS)
 		}
