@@ -34,8 +34,8 @@ import (
 )
 
 var linearizable = flag.Bool("linearizable", false, "enables linearizable behaviour "+
-	"of operations on this node by making sure that no commit timestamp is "+
-	"reported back to the client until all other node's clocks have passed it.")
+	"of operations on this node by making sure that no commit timestamp is reported "+
+	"back to the client until all other node clocks have necessarily passed it.")
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -327,7 +327,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 			// of the transaction. This is guaranteed if either
 			// - the commit timestamp is MaxOffset behind startNS
 			// - MaxOffset ns were spent in this function
-			// when returning to the client. Below we chose the option
+			// when returning to the client. Below we choose the option
 			// that involves less waiting, which is likely the first one
 			// unless a transaction commits with an odd timestamp.
 			if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
@@ -337,7 +337,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 				time.Duration(tc.clock.PhysicalNow()-startNS)
 			if *linearizable && sleepNS > 0 {
 				defer func() {
-					log.Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
+					log.V(1).Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
 					time.Sleep(sleepNS)
 				}()
 			}
