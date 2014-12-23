@@ -19,6 +19,7 @@
 package kv
 
 import (
+	"flag"
 	"sync"
 	"time"
 
@@ -31,6 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
+
+var linearizable = flag.Bool("linearizable", false, "enables linearizable behaviour "+
+	"of operations on this node by making sure that no commit timestamp is reported "+
+	"back to the client until all other node clocks have necessarily passed it.")
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -233,6 +238,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
 func (tc *TxnCoordSender) sendOne(call *client.Call) {
+	var startNS int64
 	header := call.Args.Header()
 	// If this call is part of a transaction...
 	if header.Txn != nil {
@@ -247,6 +253,9 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		// End transaction must have its key set to the txn ID.
 		if call.Method == proto.EndTransaction {
 			header.Key = header.Txn.Key
+			// Remember when EndTransaction started in case we want to
+			// be linearizable.
+			startNS = tc.clock.PhysicalNow()
 		}
 	}
 
@@ -313,6 +322,25 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		var txn *proto.Transaction
 		if call.Method == proto.EndTransaction {
 			txn = call.Reply.Header().Txn
+			// If the -linearizable flag is set, we want to make sure that
+			// all the clocks in the system are past the commit timestamp
+			// of the transaction. This is guaranteed if either
+			// - the commit timestamp is MaxOffset behind startNS
+			// - MaxOffset ns were spent in this function
+			// when returning to the client. Below we choose the option
+			// that involves less waiting, which is likely the first one
+			// unless a transaction commits with an odd timestamp.
+			if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
+				startNS = tsNS
+			}
+			sleepNS := tc.clock.MaxOffset() -
+				time.Duration(tc.clock.PhysicalNow()-startNS)
+			if *linearizable && sleepNS > 0 {
+				defer func() {
+					log.V(1).Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
+					time.Sleep(sleepNS)
+				}()
+			}
 		}
 		if txn != nil && txn.Status != proto.PENDING {
 			tc.cleanupTxn(txn)

@@ -36,13 +36,6 @@ See [TODO.md](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
 Don't have (a recent version > 1.2 of) Docker? Follow the [instructions for installing Docker on your host system](http://docs.docker.com/installation/). If you run into trouble below, check first that you're not running an old version.
 
-Now, pick your `$IMAGE`:
-* `cockroachdb/cockroach` for the small, deploy-only image - ideal if you just
-  want to play around
-* `cockroachdb/cockroach-dev` if you want the development image - comes with
-  a complete build toolchain and support for running the tests but is large.
-
-We'll use `cockroachdb/cockroach` below for simplicity.
 If you don't want to use Docker,
 * set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
 * `make build`
@@ -57,7 +50,8 @@ $ docker run -d -p 8080:8080 "cockroachdb/cockroach" \
     -stores="ssd=/tmp/db"
 ```
 This bootstraps and starts a single node with one temporary RocksDB instance at /tmp/db in the background (remove the `-d` flag if you want to see stdout).
-Now let's talk to this node:
+Now let's talk to this node. You can use the [REST Explorer at
+localhost:8080](http://localhost:8080) or talk directly to the API:
 ```bash
 $ curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
 ```
@@ -86,7 +80,9 @@ Note that `Q29ja3JvYWNo` equals `base64("Cockroach")`.
 *        (cd run; ./local-cluster.sh [start|stop])
 
 #### Building the Docker images yourself
-you can build both of the above images yourself:
+See [build/README.md](build/) for more information on the available Docker
+images `cockroachdb/cockroach` and `cockroachdb/cockroach-dev`.
+You can build both of these images yourself:
 
 * `cockroachdb/cockroach-dev`: `(cd build ; ./build-docker-dev.sh)`
 * `cockroachdb/cockroach`: `(cd build ; ./build-docker-deploy.sh)`

@@ -1,13 +1,12 @@
 #!/bin/bash
 # Build a statically linked Cockroach binary
 #
-# Requires a working cockroach/cockroach-dev image, in which a statically
-# linked (linux64) binary is built. Using this binary, a deploy image
-# based on BusyBox is created.
-# Additionally, we built statically linked tests which are mounted into
-# the appropriate location on the deploy image, running them once. These
-# are not a part of the resulting image but make sure that at least on
-# the machine that creates the deploy image, the tests all pass.
+# Requires a working cockroach/cockroach-dev image from which the cockroach
+# binary and some other necessary resources are taken. Additionally, we built
+# test binaries which are mounted into the appropriate location on the deploy
+# image, running them once. These are not a part of the resulting image but
+# make sure that at least on the machine that creates the deploy image, the
+# tests all pass.
 #
 # Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 set -ex
