@@ -272,11 +272,28 @@ func TestEngineMerge(t *testing.T) {
 			{
 				proto.EncodedKey("timeseriesmerged"),
 				[][]byte{
-					timeSeries(1415398729, 3600, 100),
-					timeSeries(1415398729, 3600, 200),
-					timeSeries(1415398729, 3600, 300),
+					timeSeriesInt(testtime, 1000, []tsIntSample{
+						{1, 1, 5, 5, 5},
+					}...),
+					timeSeriesInt(testtime, 1000, []tsIntSample{
+						{2, 1, 5, 5, 5},
+						{1, 2, 10, 7, 3},
+					}...),
+					timeSeriesInt(testtime, 1000, []tsIntSample{
+						{10, 1, 5, 5, 5},
+					}...),
+					timeSeriesInt(testtime, 1000, []tsIntSample{
+						{5, 1, 5, 5, 5},
+						{3, 1, 5, 5, 5},
+					}...),
 				},
-				timeSeries(1415398729, 3600, 100, 200, 300),
+				timeSeriesInt(testtime, 1000, []tsIntSample{
+					{1, 3, 15, 7, 3},
+					{2, 1, 5, 5, 5},
+					{3, 1, 5, 5, 5},
+					{5, 1, 5, 5, 5},
+					{10, 1, 5, 5, 5},
+				}...),
 			},
 		}
 		for _, tc := range testcases {

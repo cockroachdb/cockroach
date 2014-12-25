@@ -207,54 +207,88 @@ message InternalRaftCommand {
 // and C code.
 enum InternalValueType {
     option (gogoproto.goproto_enum_prefix) = false;
-    // _CR_TS is applied to values which contain TimeSeriesData.  This tag is
-    // used by the RocksDB Merge Operator to perform a specialized merge for
-    // this data.
+    // _CR_TS is applied to values which contain InternalTimeSeriesData. This
+    // tag is used by the RocksDB Merge Operator to perform a specialized merge
+    // for this data.
     _CR_TS = 1;
 }
 
-// TimeSeriesPrecision is an enumeration which can describe the precision of the
-// time at which data points are taken.  Currently, millisecond or second
-// precision is available.
-enum TimeSeriesPrecision {
-    option (gogoproto.goproto_enum_prefix) = false;
-    MILLISECONDS = 0;
-    SECONDS = 1;
-}
-
-// TimeSeriesData contains time series data collected over a given interval of
-// time. The data is represented as a variable number of distinct data points
-// falling within the interval; each data point is a numeric value paired an
-// offset from the start of the interval.
+// InternalTimeSeriesData is a collection of data samples for some measurable
+// value, where each sample is taken over a uniform time interval.
 //
-// Data points within a TimeSeriesData should correspond to samples of the same
-// statistic at different point in times. Information about the statistic which
-// is being sampled is encoded in the Key at which the TimeSeriesData is stored.
-message TimeSeriesData {
-    // Holds a wall time, expressed as a unix epoch time in seconds. This
-    // represents the start of the interval.
-    optional int64 start_timestamp = 1 [(gogoproto.nullable) = false];
-    // The duration of the interval in seconds.
-    optional int64 duration_in_seconds = 2 [(gogoproto.nullable) = false];
-    // The precision of the samples within this data set.
-    optional TimeSeriesPrecision sample_precision = 3 [(gogoproto.nullable) = false];
-    // A set of data points which fall within the interval.
-    repeated TimeSeriesDataPoint data = 4;
+// The collection itself contains a start timestamp (in seconds since the unix
+// epoch) and a sample duration (in milliseconds). Each sample in the collection
+// will contain a positive integer offset that indicates the length of time
+// between the start_timestamp of the collection and the time when the sample
+// began, expressed as an whole number of sample intervals. For example, if the
+// sample duration is 60000 (indicating 1 minute), then a contained sample with
+// an offset value of 5 begins (5*60000ms = 300000ms = 5 minutes) after the
+// start timestamp of this data.
+//
+// This is meant to be an efficient internal representation of time series data,
+// ensuring that very little redundant data is stored on disk. With this goal in
+// mind, this message does not identify the statistic which is actually being
+// measured; that information is expected be encoded in the key where this
+// message is stored.
+message InternalTimeSeriesData {
+    // Holds a wall time, expressed as a unix epoch time in nanoseconds. This
+    // represents the earliest possible timestamp for a sample within the
+    // collection.
+    optional int64 start_timestamp_nanos = 1 [(gogoproto.nullable) = false];
+    // The duration of each sample interval, expressed in nanoseconds.
+    optional int64 sample_duration_nanos = 2 [(gogoproto.nullable) = false];
+    // The actual data samples for this metric.
+    repeated InternalTimeSeriesSample samples = 3;
 }
 
-// A TimeSeriesDataPoint is a single point of numeric data sampled at particular
-// time. Multiple TimeSeriesDataPoints are grouped into a single TimeSeriesData
-// collection.
-message TimeSeriesDataPoint {
-    // Temporal offset from the "start_timestamp" of the TimeSeriesData
-    // collection this data point is stored in. The units of this value are
-    // determined by the value of the "sample_precision" field of the
-    // TimeSeriesData collection.
-    optional int32 offset = 2 [(gogoproto.nullable) = false];
-    // Value field for integer samples. If this value is present, then
-    // "value_float" must not be present.
-    optional int64 value_int = 4;
-    // Value field for floating point samples. If this value is present, then
-    // "value_int" must not be set.
-    optional float value_float = 5;
+// A InternalTimeSeriesSample represents data gathered from a single measurable
+// statistic over a given period of time. The length of that period of time is
+// stored in an InternalTimeSeriesData message; a sample cannot be interpreted
+// correctly without a start timestamp and sample duration.
+//
+// Each sample may contain data gathered from multiple measurements of the same
+// statistic, as long as all of those measurements occured within the sample
+// period. The sample stores several aggregated values from these measurements:
+// - The sum of all measured values
+// - A count of all measurements taken
+// - The maximum individual measurement seen
+// - The minimum individual measurement seen
+//
+// If zero measurements are present in a sample, then it should be omitted
+// entirely from any collection it would be a part of.
+//
+// If the count of measurements is 1, then max and min fields may be omitted
+// and assumed equal to the sum field.
+//
+// The underlying statistic sampled may be either an integer or a floating
+// point; therefore, there are two fields each for "sum", "max" and "min" to
+// hold either an integer or floating point number. In practice, only one set of
+// these fields should be present for any individual sample; however, int and
+// float values are recorded in parallel, allowing clients to write both floats
+// and integers to the same value. These are recorded separately to retain
+// precision, but are easily combined by higher-level logic at query time.
+message InternalTimeSeriesSample {
+    // Temporal offset from the "start_timestamp" of the InternalTimeSeriesData
+    // collection this data point is part in. The units of this value are
+    // determined by the value of the "sample_duration_milliseconds" field of
+    // the TimeSeriesData collection.
+    optional int32 offset = 1 [(gogoproto.nullable) = false];
+
+    // Count of integer measurements taken within this sample.
+    optional uint32 int_count = 2 [(gogoproto.nullable) = false];
+    // Sum of all integer measurements.
+    optional int64 int_sum = 3; 
+    // Maximum encountered integer measurement in this sample.
+    optional int64 int_max = 4;
+    // Minimum encountered integer measurement in this sample.
+    optional int64 int_min = 5;
+
+    // Count of floating point measurements taken within this sample.
+    optional uint32 float_count = 6 [(gogoproto.nullable) = false];
+    // Sum of all floating point measurements.
+    optional float float_sum = 7;
+    // Maximum encountered floating point measurement in this sample.
+    optional float float_max = 8;
+    // Minimum encountered floating point measurement in this sample.
+    optional float float_min = 9;
 }

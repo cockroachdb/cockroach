@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <google/protobuf/repeated_field.h>
 #include "rocksdb/cache.h"
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/db.h"
@@ -264,6 +265,12 @@ bool WillOverflow(int64_t a, int64_t b) {
   return (std::numeric_limits<int64_t>::min() - b) > a;
 }
 
+// Method used to sort InternalTimeSeriesSamples.
+bool TimeSeriesSampleOrdering(const proto::InternalTimeSeriesSample* a, 
+        const proto::InternalTimeSeriesSample* b) {
+    return a->offset() < b->offset();
+}
+
 // IsTimeSeriesData returns true if the given protobuffer Value contains a
 // TimeSeriesData message.
 bool IsTimeSeriesData(const proto::Value *val) {
@@ -271,50 +278,156 @@ bool IsTimeSeriesData(const proto::Value *val) {
         && val->tag() == proto::InternalValueType_Name(proto::_CR_TS);
 }
 
+long GetIntMax(const proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_int_max()) return sample->int_max();
+    if (sample->has_int_sum()) return sample->int_sum();
+    return std::numeric_limits<long>::min();
+}
+
+long GetIntMin(const proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_int_min()) return sample->int_min();
+    if (sample->has_int_sum()) return sample->int_sum();
+    return std::numeric_limits<long>::max();
+}
+
+float GetFloatMax(const proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_float_max()) return sample->float_max();
+    if (sample->has_float_sum()) return sample->float_sum();
+    return std::numeric_limits<float>::min();
+}
+
+float GetFloatMin(const proto::InternalTimeSeriesSample *sample) {
+    if (sample->has_float_min()) return sample->float_min();
+    if (sample->has_float_sum()) return sample->float_sum();
+    return std::numeric_limits<float>::max();
+}
+
+// AccumulateTimeSeriesSamples accumulates the individual values of two
+// InternalTimeSeriesSamples which have a matching timestamp. The dest parameter
+// is modified to contain the accumulated values.
+void AccumulateTimeSeriesSamples(proto::InternalTimeSeriesSample* dest,
+        const proto::InternalTimeSeriesSample &src) {
+    // Accumulate integer values
+    int total_int_count = dest->int_count() + src.int_count(); 
+    if (total_int_count > 1) {
+        // Keep explicit max and min values.
+        dest->set_int_max(std::max(GetIntMax(dest), GetIntMax(&src)));
+        dest->set_int_min(std::min(GetIntMin(dest), GetIntMin(&src)));
+    }
+    if (total_int_count > 0) {
+        dest->set_int_sum(dest->int_sum() + src.int_sum());
+    }
+    dest->set_int_count(total_int_count);
+
+    int total_float_count = dest->float_count() + src.float_count();
+    if (total_float_count > 1) {
+        // Keep explicit max and min values.
+        dest->set_float_max(std::max(GetFloatMax(dest), GetFloatMax(&src)));
+        dest->set_float_min(std::min(GetFloatMin(dest), GetFloatMin(&src)));
+    }
+    if (total_float_count > 0) {
+        dest->set_float_sum(dest->float_sum() + src.float_sum());
+    }
+    dest->set_float_count(total_float_count);
+}
+
 // MergeTimeSeriesValues attempts to merge two Values which contain
-// TimeSeriesData messages. The messages cannot be merged if they have different
-// start timestamps or durations. Returns true if the merge is successful.
-bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, rocksdb::Logger* logger) {
+// InternalTimeSeriesData messages. The messages cannot be merged if they have
+// different start timestamps or sample durations. Returns true if the merge is
+// successful.
+bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, 
+        bool full_merge, rocksdb::Logger* logger) {
     // Attempt to parse TimeSeriesData from both Values.
-    proto::TimeSeriesData left_ts;
-    proto::TimeSeriesData right_ts;
+    proto::InternalTimeSeriesData left_ts;
+    proto::InternalTimeSeriesData right_ts;
     if (!left_ts.ParseFromString(left->bytes())) {
         rocksdb::Warn(logger,
-                "left TimeSeriesData could not be parsed from bytes.");
+                "left InternalTimeSeriesData could not be parsed from bytes.");
         return false;
     }
     if (!right_ts.ParseFromString(right.bytes())) {
         rocksdb::Warn(logger,
-                "right TimeSeriesData could not be parsed from bytes.");
+                "right InternalTimeSeriesData could not be parsed from bytes.");
         return false;
     }
 
-    // Ensure that both TimeSeriesData have the same timestamp and duration.
-    if (left_ts.start_timestamp() != right_ts.start_timestamp()) {
+    // Ensure that both InternalTimeSeriesData have the same timestamp and
+    // sample_duration.
+    if (left_ts.start_timestamp_nanos() != right_ts.start_timestamp_nanos()) {
         rocksdb::Warn(logger,
                 "TimeSeries merge failed due to mismatched start timestamps");
         return false;
     }
-    if (left_ts.duration_in_seconds() != right_ts.duration_in_seconds()) {
+    if (left_ts.sample_duration_nanos() != 
+            right_ts.sample_duration_nanos()) {
         rocksdb::Warn(logger,
-                "TimeSeries merge failed due to mismatched durations.");
-        return false;
-    }
-    if (left_ts.sample_precision() != right_ts.sample_precision()) {
-        rocksdb::Warn(logger,
-                "TimeSeries merge failed due to mismatched sample precision.");
+                "TimeSeries merge failed due to mismatched sample durations.");
         return false;
     }
 
-    // A protobuffer merge is used to combine the TimeSeriesData.
-    left_ts.MergeFrom(right_ts);
+    // If only a partial merge, do not sort and combine - instead, just quickly
+    // merge the two values together. Values will be processed later after a
+    // full merge.
+    if (!full_merge) {
+        left_ts.MergeFrom(right_ts);
+        left_ts.SerializeToString(left->mutable_bytes());
+        return true;
+    }
+    
+    // Initialize new_ts and its primitive data fields. Values from the left and
+    // right collections will be merged into the new collection.
+    proto::InternalTimeSeriesData new_ts;
+    new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
+    new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
 
-    // Serialize the merged TimeSeriesData into the left value.
-    left_ts.SerializeToString(left->mutable_bytes());
+    // Sort values in right_ts. Assume values in left_ts have been sorted.
+    std::sort(right_ts.mutable_samples()->pointer_begin(),
+            right_ts.mutable_samples()->pointer_end(),
+            TimeSeriesSampleOrdering);
+
+    // Merge sample values of left and right into new_ts.
+    auto left_front = left_ts.samples().begin(),
+         left_end = left_ts.samples().end(),
+         right_front = right_ts.samples().begin(),
+         right_end = right_ts.samples().end();
+
+    // Loop until samples from both sides have been exhausted. 
+    while(left_front != left_end || right_front != right_end) {
+        // Select the lowest offset from either side.
+        long next_offset;
+        if (left_front == left_end) {
+            next_offset = right_front->offset();
+        } else if (right_front == right_end) {
+            next_offset = left_front->offset();
+        } else if (left_front->offset()<=right_front->offset()) {
+            next_offset = left_front->offset();
+        } else {
+            next_offset = right_front->offset();
+        }
+
+        // Create an empty sample in the output collection with the selected
+        // offset.  Accumulate data from all samples at the front of either left
+        // or right which match the selected timestamp. This behavior is needed
+        // because each side may individually have duplicated offsets.
+        proto::InternalTimeSeriesSample* ns = new_ts.add_samples();
+        ns->set_offset(next_offset);
+        while (left_front != left_end && left_front->offset() == ns->offset()) {
+            AccumulateTimeSeriesSamples(ns, *left_front);
+            left_front++;
+        }
+        while (right_front != right_end && right_front->offset() == ns->offset()) {
+            AccumulateTimeSeriesSamples(ns, *right_front);
+            right_front++;
+        }
+    }
+
+    // Serialize the new TimeSeriesData into the left value's byte field.
+    new_ts.SerializeToString(left->mutable_bytes());
     return true;
 }
 
-bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger* logger) {
+bool MergeValues(proto::Value *left, const proto::Value &right, 
+        bool full_merge, rocksdb::Logger* logger) {
     if (left->has_bytes()) {
         if (!right.has_bytes()) {
             rocksdb::Warn(logger,
@@ -328,7 +441,7 @@ bool MergeValues(proto::Value *left, const proto::Value &right, rocksdb::Logger*
                         "inconsistent value types for merge (left = TimeSeriesData, right = bytes)");
                 return false;
             }
-            return MergeTimeSeriesValues(left, right, logger);
+            return MergeTimeSeriesValues(left, right, full_merge, logger);
         } else if (IsTimeSeriesData(&right)) {
             // The right operand was a time series, but the left was not.
             rocksdb::Warn(logger,
@@ -409,7 +522,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     }
 
     for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&meta, operand_list[i], logger)) {
+      if (!MergeOne(&meta, operand_list[i], true, logger)) {
         return false;
       }
     }
@@ -429,7 +542,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     proto::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
-      if (!MergeOne(&meta, operand_list[i], logger)) {
+      if (!MergeOne(&meta, operand_list[i], false, logger)) {
         return false;
       }
     }
@@ -444,13 +557,15 @@ class DBMergeOperator : public rocksdb::MergeOperator {
  private:
   bool MergeOne(proto::MVCCMetadata* meta,
                 const rocksdb::Slice& operand,
+                bool full_merge,
                 rocksdb::Logger* logger) const {
     proto::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(meta->mutable_value(), operand_meta.value(), logger);
+    return MergeValues(meta->mutable_value(), operand_meta.value(), 
+            full_merge, logger);
   }
 };
 
@@ -664,7 +779,7 @@ DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value) {
     return ToDBString("corrupted update value");
   }
 
-  if (!MergeValues(meta.mutable_value(), update_meta.value(), NULL)) {
+  if (!MergeValues(meta.mutable_value(), update_meta.value(), true, NULL)) {
     return ToDBString("incompatible merge values");
   }
   return MergeResult(&meta, new_value);
