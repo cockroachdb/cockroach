@@ -62,7 +62,8 @@ all: build test
 auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser
 
 build: auxiliary
-	$(GO) build $(GOFLAGS) -i -o cockroach
+	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
+	$(GO) build $(GOFLAGS) -o cockroach
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
 	sed -e "s,@PWD@,$(CURDIR),g" -e "s,@LDEXTRA@,$(LDEXTRA),g" < $^ > $@
