@@ -621,15 +621,6 @@ func (gr *GetResponse) Verify(req Request) error {
 	return nil
 }
 
-// Verify verifies the integrity of the conditional put response's
-// actual value, if not nil.
-func (cpr *ConditionalPutResponse) Verify(req Request) error {
-	if cpr.ActualValue != nil {
-		return cpr.ActualValue.Verify(req.Header().Key)
-	}
-	return nil
-}
-
 // Verify verifies the integrity of every value returned in the scan.
 func (sr *ScanResponse) Verify(req Request) error {
 	for _, kv := range sr.Rows {

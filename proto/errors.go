@@ -142,3 +142,8 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 func (e *OpRequiresTxnError) Error() string {
 	return "the operation requires transactional context"
 }
+
+// Error formats error.
+func (e *ConditionFailedError) Error() string {
+	return fmt.Sprintf("unexpected value: %s", e.ActualValue)
+}

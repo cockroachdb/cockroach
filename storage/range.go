@@ -791,8 +791,7 @@ func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args *proto.PutRe
 // the expected value matches. If not, the return value contains
 // the actual value.
 func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	val, err := engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
-	reply.ActualValue = val
+	err := engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 	reply.SetGoError(err)
 }
 
