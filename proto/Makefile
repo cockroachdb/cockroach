@@ -19,14 +19,14 @@
 PROTO_LIB   := lib/libroachproto.a
 PROTOS      := api.proto config.proto data.proto errors.proto gossip.proto heartbeat.proto internal.proto
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
-GOGO_PROTOS := ../../../../code.google.com/p/gogoprotobuf/gogoproto/gogo.proto
-SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc lib/gossip.pb.cc lib/heartbeat.pb.cc lib/internal.pb.cc lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.cc
-HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/gossip.pb.h lib/heartbeat.pb.h lib/internal.pb.h lib/code.google.com/p/gogoprotobuf/gogoproto/gogo.pb.h
+GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
+SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc lib/gossip.pb.cc lib/heartbeat.pb.cc lib/internal.pb.cc lib/github.com/gogo/protobuf/gogoproto/gogo.pb.cc
+HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/gossip.pb.h lib/heartbeat.pb.h lib/internal.pb.h lib/github.com/gogo/protobuf/gogoproto/gogo.pb.h
 LIBOBJECTS  := $(SOURCES:.cc=.o)
 
 CXXFLAGS += -Ilib
 
-PROTO_PATH := ../../../../:../../../../code.google.com/p/gogoprotobuf/protobuf:../../../../code.google.com/p/gogoprotobuf/gogoproto
+PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf:../../../../github.com/gogo/protobuf/gogoproto
 
 all: static_lib
 

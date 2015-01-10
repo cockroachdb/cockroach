@@ -18,7 +18,7 @@
 
 package proto;
 
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
 // remote server. Error is the maximum error in the reading of this offset, so

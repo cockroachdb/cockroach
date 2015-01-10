@@ -9,9 +9,9 @@ import (
 	"hash/crc32"
 	"io"
 
-	"code.google.com/p/gogoprotobuf/proto"
 	"code.google.com/p/snappy-go/snappy"
 	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
+	"github.com/gogo/protobuf/proto"
 )
 
 func writeRequest(w io.Writer, id uint64, method string, request proto.Message) error {

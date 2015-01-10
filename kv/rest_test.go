@@ -35,13 +35,13 @@ import (
 	"strings"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	. "github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // startServer returns the server, server address and a KV client for

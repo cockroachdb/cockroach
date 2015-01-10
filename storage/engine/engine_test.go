@@ -30,9 +30,9 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []proto.RawKeyValue) {

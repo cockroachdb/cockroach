@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"code.google.com/p/go-uuid/uuid"
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var (

@@ -30,9 +30,9 @@ import (
 	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
 	"code.google.com/p/go-uuid/uuid"
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // KeyMaxLength is the maximum length of a Key in bytes.

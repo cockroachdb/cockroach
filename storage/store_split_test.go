@@ -27,12 +27,12 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func adminSplitArgs(key, splitKey []byte, raftID int64, storeID int32) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {

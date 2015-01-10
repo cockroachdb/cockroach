@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 type committedCommand struct {
