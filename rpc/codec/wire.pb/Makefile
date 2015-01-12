@@ -17,9 +17,9 @@
 
 PROTOS      := wire.proto
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
-GOGO_PROTOS := ../../../../code.google.com/p/gogoprotobuf/gogoproto/gogo.proto
+GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
 
-PROTO_PATH := ../../../../../../:../../../../../../code.google.com/p/gogoprotobuf/protobuf:../../../../../../code.google.com/p/gogoprotobuf/gogoproto
+PROTO_PATH := ../../../../../../:../../../../../../github.com/gogo/protobuf/protobuf:../../../../../../github.com/gogo/protobuf/gogoproto
 
 all: $(PROTO_GO)
 

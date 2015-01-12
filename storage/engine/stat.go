@@ -18,9 +18,9 @@
 package engine
 
 import (
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Constants for stat key construction.

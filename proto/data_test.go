@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TestKeyNext tests that the method for creating lexicographic

@@ -17,7 +17,7 @@
 
 package proto;
 
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.

@@ -18,8 +18,8 @@
 package proto
 
 import (
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TODO(spencer): change these string constants into a type.

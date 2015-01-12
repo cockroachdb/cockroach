@@ -3,7 +3,7 @@ roachlib/*.o
 roachlib/*.a
 proto/*.pb.go
 proto/lib/*
-proto/lib/code.google.com/p/gogoprotobuf/gogoproto/*
+proto/lib/github.com/gogo/protobuf/gogoproto/*
 storage/engine/engine.pc
 cockroach
 build/deploy

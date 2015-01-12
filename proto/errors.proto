@@ -19,7 +19,7 @@ package proto;
 
 import "config.proto";
 import "data.proto";
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // A GenericError is a generic representation of a go error including
 // the string message and whether or not the error is retryable.

@@ -20,7 +20,7 @@ package proto;
 import "api.proto";
 import "config.proto";
 import "data.proto";
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // An InternalRangeLookupRequest is arguments to the
 // InternalRangeLookup() method. It specifies the key for which the

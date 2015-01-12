@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Default constants for timeouts.

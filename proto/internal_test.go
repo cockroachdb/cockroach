@@ -21,7 +21,7 @@ import (
 	"bytes"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func TestTimeSeriesToValue(t *testing.T) {
