@@ -89,24 +89,32 @@ func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 var _ raftInterface = (*singleNodeRaft)(nil)
 
 func (snr *singleNodeRaft) createGroup(id int64) error {
+	snr.mu.Lock()
 	if _, ok := snr.groups[id]; !ok {
 		snr.groups[id] = struct{}{}
+		snr.mu.Unlock()
 		return snr.mr.CreateGroup(uint64(id), []uint64{1})
 	}
+	snr.mu.Unlock()
 	return nil
 }
 
 func (snr *singleNodeRaft) removeGroup(id int64) error {
+	snr.mu.Lock()
 	if _, ok := snr.groups[id]; ok {
 		delete(snr.groups, id)
+		snr.mu.Unlock()
 		return snr.mr.RemoveGroup(uint64(id))
 	}
+	snr.mu.Unlock()
 	return nil
 }
 
 func (snr *singleNodeRaft) restoreGroup(id int64) error {
+	snr.mu.Lock()
 	if _, ok := snr.groups[id]; !ok {
 		snr.groups[id] = struct{}{}
+		snr.mu.Unlock()
 		// TODO(bdarnell): don't create initial members here.
 		// restoreGroup is to be used when there is already state on disk,
 		// but we don't get the magic pre-commit behavior if we don't pass
@@ -114,12 +122,11 @@ func (snr *singleNodeRaft) restoreGroup(id int64) error {
 		// constructed snapshot.
 		return snr.mr.CreateGroup(uint64(id), []uint64{1})
 	}
+	snr.mu.Unlock()
 	return nil
 }
 
 func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
-	snr.mu.Lock()
-	defer snr.mu.Unlock()
 	// Lazily create group. TODO(bdarnell): make this non-lazy
 	err := snr.createGroup(cmd.RaftID)
 	if err != nil {

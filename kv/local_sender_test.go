@@ -144,6 +144,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	}
 
 	// Create two new stores with ranges we care about.
+	var e [2]engine.Engine
 	var s [2]*storage.Store
 	ranges := []struct {
 		storeID    int32
@@ -153,8 +154,17 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		{3, proto.Key("x"), proto.Key("z")},
 	}
 	for i, rng := range ranges {
-		s[i] = storage.NewStore(clock, eng, db, nil)
+		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
+		s[i] = storage.NewStore(clock, e[i], db, nil)
 		s[i].Ident.StoreID = rng.storeID
+		if err := s[i].Bootstrap(proto.StoreIdent{StoreID: rng.storeID}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s[i].Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer s[i].Stop()
+
 		desc, err := store.NewRangeDescriptor(rng.start, rng.end, []proto.Replica{{StoreID: rng.storeID}})
 		if err != nil {
 			t.Fatal(err)
