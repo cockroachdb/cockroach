@@ -68,7 +68,6 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 	if ok, err := rc.GetResponse(cmdID, &val); ok {
 		t.Errorf("unexpected success getting response: %t, %v, %+v", ok, err, val)
 	}
-
 }
 
 // TestResponseCacheEmptyCmdID tests operation with empty client
@@ -95,7 +94,6 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 // transferred correctly to another cache using CopyInto().
 func TestResposeCacheCopyInto(t *testing.T) {
 	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
-	rc2.raftID = 2
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
 	val := proto.IncrementResponse{}
@@ -113,7 +111,31 @@ func TestResposeCacheCopyInto(t *testing.T) {
 	if ok, err := rc2.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
 		t.Errorf("unexpected failure getting response from destination: %t, %v, %+v", ok, err, val)
 	}
+}
 
+// TestResponseCacheCopyFrom tests that responses cached in one cache get
+// transferred correctly to another cache using CopyFrom().
+func TestResposeCacheCopyFrom(t *testing.T) {
+	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
+	cmdID := makeCmdID(1, 1)
+	// Store an increment with new value one in the first cache.
+	val := proto.IncrementResponse{}
+	if err := rc1.PutResponse(cmdID, &incR); err != nil {
+		t.Errorf("unexpected error putting response: %v", err)
+	}
+
+	// Copy the first cache into the second.
+	if err := rc2.CopyFrom(rc1.engine, rc1.raftID); err != nil {
+		t.Errorf("unexpected error while copying response cache: %v", err)
+	}
+
+	// Get should return 1 for both caches.
+	if ok, err := rc1.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	}
+	if ok, err := rc2.GetResponse(cmdID, &val); !ok || err != nil || val.NewValue != 1 {
+		t.Errorf("unexpected failure getting response from source: %t, %v, %+v", ok, err, val)
+	}
 }
 
 // TestResponseCacheInflight verifies GetResponse invocations block on
