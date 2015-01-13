@@ -664,6 +664,9 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 func (s *Store) RemoveRange(rng *Range) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.raft.removeGroup(rng.Desc.RaftID); err != nil {
+		return err
+	}
 	rng.stop()
 	delete(s.ranges, rng.Desc.RaftID)
 	// Find the range in rangesByKey slice and swap it to end of slice
@@ -927,6 +930,7 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 	r, ok := s.ranges[int64(groupID)]
 	if !ok {
 		log.Warningf("%p requested nonexistent range with raft ID %d", s, groupID)
+		return nil
 	}
 	return r
 }

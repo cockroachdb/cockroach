@@ -75,6 +75,7 @@ type MultiRaft struct {
 	Events          chan interface{}
 	nodeID          uint64
 	createGroupChan chan *createGroupOp
+	removeGroupChan chan *removeGroupOp
 	proposalChan    chan proposal
 	stopper         *util.Stopper
 }
@@ -104,6 +105,7 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
 		createGroupChan: make(chan *createGroupOp, 100),
+		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan proposal, 100),
 		stopper:         util.NewStopper(1),
 	}
@@ -179,6 +181,18 @@ func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
 	return <-op.ch
 }
 
+// RemoveGroup destroys the consensus group with the given ID.
+// No events for this group will be emitted after this method returns
+// (but some events may still be in the channel buffer).
+func (m *MultiRaft) RemoveGroup(groupID uint64) error {
+	op := &removeGroupOp{
+		groupID,
+		make(chan error),
+	}
+	m.removeGroupChan <- op
+	return <-op.ch
+}
+
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
 // The returned channel is closed when the command is committed.
@@ -243,6 +257,11 @@ type createGroupOp struct {
 	groupID        uint64
 	initialMembers []uint64
 	ch             chan error
+}
+
+type removeGroupOp struct {
+	groupID uint64
+	ch      chan error
 }
 
 // node represents a connection to a remote node.
@@ -314,6 +333,10 @@ func (s *state) start() {
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
 			s.createGroup(op)
 
+		case op := <-s.removeGroupChan:
+			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+			s.removeGroup(op)
+
 		case prop := <-s.proposalChan:
 			s.propose(prop)
 
@@ -331,7 +354,7 @@ func (s *state) start() {
 			writingGroups = nil
 
 		case <-s.Ticker.Chan():
-			log.V(6).Infof("node %v: got tick", s.nodeID)
+			log.V(8).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
 		}
 	}
@@ -393,6 +416,12 @@ func (s *state) createGroup(op *createGroupOp) {
 	op.ch <- nil
 }
 
+func (s *state) removeGroup(op *removeGroupOp) {
+	s.multiNode.RemoveGroup(op.groupID)
+	delete(s.groups, op.groupID)
+	op.ch <- nil
+}
+
 func (s *state) propose(p proposal) {
 	g := s.groups[p.groupID]
 	g.pending[p.commandID] = p
@@ -424,7 +453,12 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			}
 		}
 
-		g := s.groups[groupID]
+		g, ok := s.groups[groupID]
+		if !ok {
+			// This is a stale message for a removed group
+			log.V(4).Infof("node %v: dropping stale ready message for group %v", s.nodeID, groupID)
+			continue
+		}
 		leader, term := g.leader, g.committedTerm
 		if ready.SoftState != nil {
 			leader = ready.SoftState.Lead
@@ -465,7 +499,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
-		g := s.groups[groupID]
+		g, ok := s.groups[groupID]
+		if !ok {
+			log.V(4).Infof("dropping write to group %v", groupID)
+			continue
+		}
 		for _, entry := range ready.CommittedEntries {
 			var commandID string
 			switch entry.Type {

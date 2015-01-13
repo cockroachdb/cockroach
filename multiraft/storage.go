@@ -145,6 +145,10 @@ func (w *writeTask) start() {
 
 		for groupID, groupReq := range request.groups {
 			group := w.storage.GroupStorage(groupID)
+			if group == nil {
+				log.V(4).Infof("dropping write to group %v", groupID)
+				continue
+			}
 			groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
 			response.groups[groupID] = groupResp
 			if !raft.IsEmptyHardState(groupReq.state) {

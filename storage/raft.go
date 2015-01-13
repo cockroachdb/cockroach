@@ -38,6 +38,8 @@ type raftInterface interface {
 	// createGroup initializes a raft group with the given id.
 	createGroup(int64) error
 
+	removeGroup(int64) error
+
 	// restoreGroup informs raft of an existing group with on-disk state.
 	restoreGroup(int64) error
 
@@ -90,6 +92,14 @@ func (snr *singleNodeRaft) createGroup(id int64) error {
 	if _, ok := snr.groups[id]; !ok {
 		snr.groups[id] = struct{}{}
 		return snr.mr.CreateGroup(uint64(id), []uint64{1})
+	}
+	return nil
+}
+
+func (snr *singleNodeRaft) removeGroup(id int64) error {
+	if _, ok := snr.groups[id]; ok {
+		delete(snr.groups, id)
+		return snr.mr.RemoveGroup(uint64(id))
 	}
 	return nil
 }
