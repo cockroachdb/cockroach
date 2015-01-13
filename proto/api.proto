@@ -159,8 +159,6 @@ message ConditionalPutRequest {
 // ConditionalPut() method.
 message ConditionalPutResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // ActualValue.Bytes set if conditional put failed.
-  optional Value actual_value = 2;
 }
 
 // An IncrementRequest is arguments to the Increment() method. It
