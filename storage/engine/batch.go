@@ -209,26 +209,6 @@ func (b *Batch) Capacity() (StoreCapacity, error) {
 func (b *Batch) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 }
 
-// CreateSnapshot returns an error if called on a Batch.
-func (b *Batch) CreateSnapshot(snapshotID string) error {
-	return util.Errorf("cannot create a snapshot from a Batch")
-}
-
-// ReleaseSnapshot returns an error if called on a Batch.
-func (b *Batch) ReleaseSnapshot(snapshotID string) error {
-	return util.Errorf("cannot release a snapshot from a Batch")
-}
-
-// GetSnapshot returns an error if called on a Batch.
-func (b *Batch) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
-	return nil, util.Errorf("cannot get with a snapshot from a Batch")
-}
-
-// IterateSnapshot returns an error if called on a Batch.
-func (b *Batch) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
-	return util.Errorf("cannot iterate with a snapshot from a Batch")
-}
-
 // ApproximateSize returns an error if called on a Batch.
 func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return 0, util.Errorf("cannot get approximate size from a Batch")
@@ -238,6 +218,11 @@ func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 // not thread safe.
 func (b *Batch) NewIterator() Iterator {
 	return newBatchIterator(b.engine, &b.updates)
+}
+
+// NewSnapshot returns nil if called on a Batch.
+func (b *Batch) NewSnapshot() Engine {
+	return nil
 }
 
 // NewBatch returns a new Batch instance wrapping same underlying engine.

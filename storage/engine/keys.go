@@ -196,9 +196,6 @@ var (
 	// KeyLocalTransactionPrefix specifies the key prefix for
 	// transaction records. The suffix is the transaction id.
 	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, proto.Key("txn-"))
-	// KeyLocalSnapshotIDGenerator is a snapshot ID generator sequence.
-	// Snapshot IDs must be unique per store ID.
-	KeyLocalSnapshotIDGenerator = MakeKey(KeyLocalPrefix, proto.Key("ssid"))
 
 	// KeyLocalMax is the end of the local key range.
 	KeyLocalMax = KeyLocalPrefix.PrefixEnd()

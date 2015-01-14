@@ -28,6 +28,7 @@ import (
 	"code.google.com/p/biogo.store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TODO(petermattis): Remove this file.
@@ -56,15 +57,13 @@ type InMem struct {
 	maxBytes  int64
 	usedBytes int64
 	data      llrb.Tree
-	snapshots map[string]llrb.Tree
 }
 
 // NewInMem allocates and returns a new InMem object.
 func NewInMem(attrs proto.Attributes, maxBytes int64) *InMem {
 	return &InMem{
-		snapshots: map[string]llrb.Tree{},
-		attrs:     attrs,
-		maxBytes:  maxBytes,
+		attrs:    attrs,
+		maxBytes: maxBytes,
 	}
 }
 
@@ -80,48 +79,6 @@ func (in *InMem) Start() error {
 
 // Stop is a noop for the InMem engine.
 func (in *InMem) Stop() {
-}
-
-// CreateSnapshot creates a snapshot handle from engine.
-func (in *InMem) CreateSnapshot(snapshotID string) error {
-	in.Lock()
-	defer in.Unlock()
-	_, ok := in.snapshots[snapshotID]
-	if ok {
-		return util.Errorf("snapshotID %s already exists", snapshotID)
-	}
-	snapshotHandle := cloneTree(in.data)
-	in.snapshots[snapshotID] = snapshotHandle
-	return nil
-}
-
-func cloneTree(a llrb.Tree) llrb.Tree {
-	var newTree = llrb.Tree{Count: a.Count}
-	newTree.Root = cloneNode(a.Root)
-	return newTree
-}
-
-func cloneNode(a *llrb.Node) *llrb.Node {
-	if a == nil {
-		return nil
-	}
-	var newNode = &llrb.Node{Elem: a.Elem, Color: a.Color}
-	newNode.Left = cloneNode(a.Left)
-	newNode.Right = cloneNode(a.Right)
-	return newNode
-}
-
-// ReleaseSnapshot releases the existing snapshot handle for the
-// given snapshotID.
-func (in *InMem) ReleaseSnapshot(snapshotID string) error {
-	in.Lock()
-	defer in.Unlock()
-	_, ok := in.snapshots[snapshotID]
-	if !ok {
-		return util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	delete(in.snapshots, snapshotID)
-	return nil
 }
 
 // Attrs returns the list of attributes describing this engine. This
@@ -189,18 +146,6 @@ func (in *InMem) Get(key proto.EncodedKey) ([]byte, error) {
 	return in.getLocked(key, in.data)
 }
 
-// GetSnapshot returns the value for the given key from the given
-// snapshotID, nil otherwise.
-func (in *InMem) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
-	in.RLock()
-	defer in.RUnlock()
-	snapshotHandle, ok := in.snapshots[snapshotID]
-	if !ok {
-		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	return in.getLocked(key, snapshotHandle)
-}
-
 // getLocked performs a get operation assuming that the caller
 // is already holding the mutex.
 func (in *InMem) getLocked(key proto.EncodedKey, data llrb.Tree) ([]byte, error) {
@@ -221,18 +166,6 @@ func (in *InMem) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) 
 	in.RLock()
 	defer in.RUnlock()
 	return in.iterateLocked(start, end, f, in.data)
-}
-
-// Iterate iterates from start to end keys using snapshot ID, invoking
-// f on each key/value pair. See engine.IterateSnapshot for details.
-func (in *InMem) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
-	in.RLock()
-	defer in.RUnlock()
-	snapshotHandle, ok := in.snapshots[snapshotID]
-	if !ok {
-		return util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	return in.iterateLocked(start, end, f, snapshotHandle)
 }
 
 func (in *InMem) iterateLocked(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error), data llrb.Tree) error {
@@ -342,6 +275,36 @@ func (in *InMem) NewIterator() Iterator {
 	}
 }
 
+// NewSnapshot creates a read-only snapshot engine from this engine.
+func (in *InMem) NewSnapshot() Engine {
+	in.Lock()
+	defer in.Unlock()
+	return &inMemSnapshot{
+		InMem: InMem{
+			attrs:     in.attrs,
+			maxBytes:  in.maxBytes,
+			usedBytes: in.usedBytes,
+			data:      cloneTree(in.data),
+		},
+	}
+}
+
+func cloneTree(a llrb.Tree) llrb.Tree {
+	var newTree = llrb.Tree{Count: a.Count}
+	newTree.Root = cloneNode(a.Root)
+	return newTree
+}
+
+func cloneNode(a *llrb.Node) *llrb.Node {
+	if a == nil {
+		return nil
+	}
+	var newNode = &llrb.Node{Elem: a.Elem, Color: a.Color}
+	newNode.Left = cloneNode(a.Left)
+	newNode.Right = cloneNode(a.Right)
+	return newNode
+}
+
 // Returns a new Batch wrapping this in-memory engine.
 func (in *InMem) NewBatch() Engine {
 	return &Batch{engine: in}
@@ -350,6 +313,47 @@ func (in *InMem) NewBatch() Engine {
 // Commit is a noop for in-memory engine.
 func (in *InMem) Commit() error {
 	return nil
+}
+
+// This implementation restricts operation of the underlying in memory
+// engine to read-only commands.
+type inMemSnapshot struct {
+	InMem
+}
+
+// Put is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) Put(key proto.EncodedKey, value []byte) error {
+	return util.Errorf("cannot Put to a snapshot")
+}
+
+// Clear is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) Clear(key proto.EncodedKey) error {
+	return util.Errorf("cannot Clear from a snapshot")
+}
+
+// WriteBatch is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) WriteBatch([]interface{}) error {
+	return util.Errorf("cannot WriteBatch to a snapshot")
+}
+
+// Merge is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) Merge(key proto.EncodedKey, value []byte) error {
+	return util.Errorf("cannot Merge to a snapshot")
+}
+
+// SetGCTimeouts is a noop for a snapshot.
+func (in *inMemSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
+}
+
+// NewBatch is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) NewBatch() Engine {
+	log.Errorf("cannot create a NewBatch from a snapshot")
+	return nil
+}
+
+// Commit is illegal for snapshot and returns an error.
+func (in *inMemSnapshot) Commit() error {
+	return util.Errorf("cannot Commit to a snapshot")
 }
 
 // This implementation is not very efficient because the biogo LLRB

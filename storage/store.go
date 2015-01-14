@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -646,17 +645,9 @@ func (s *Store) RemoveRange(rng *Range) error {
 	return nil
 }
 
-// CreateSnapshot creates a new snapshot, named using an internal counter.
-func (s *Store) CreateSnapshot() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := engine.KeyLocalSnapshotIDGenerator
-	candidateID, err := engine.MVCCIncrement(s.engine, nil, key, proto.ZeroTimestamp, nil, 1)
-	if err != nil {
-		return "", err
-	}
-	snapshotID := strconv.FormatInt(candidateID, 10)
-	return snapshotID, s.engine.CreateSnapshot(snapshotID)
+// NewSnapshot creates a new snapshot engine.
+func (s *Store) NewSnapshot() engine.Engine {
+	return s.engine.NewSnapshot()
 }
 
 // Attrs returns the attributes of the underlying store.

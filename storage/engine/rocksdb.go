@@ -29,7 +29,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"sync"
 	"syscall"
 	"unsafe"
 
@@ -51,17 +50,13 @@ type RocksDB struct {
 	rdb   *C.DBEngine
 	attrs proto.Attributes // Attributes for this engine
 	dir   string           // The data directory
-
-	sync.Mutex                          // Protects the snapshots map.
-	snapshots  map[string]*C.DBSnapshot // Map of snapshot handles by snapshot ID
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
 	return &RocksDB{
-		snapshots: map[string]*C.DBSnapshot{},
-		attrs:     attrs,
-		dir:       dir,
+		attrs: attrs,
+		dir:   dir,
 	}
 }
 
@@ -112,39 +107,6 @@ func (r *RocksDB) Start() error {
 func (r *RocksDB) Stop() {
 	C.DBClose(r.rdb)
 	r.rdb = nil
-}
-
-// CreateSnapshot creates a snapshot handle from engine.
-func (r *RocksDB) CreateSnapshot(snapshotID string) error {
-	if r.rdb == nil {
-		return util.Errorf("RocksDB is not initialized yet")
-	}
-	r.Lock()
-	defer r.Unlock()
-	_, ok := r.snapshots[snapshotID]
-	if ok {
-		return util.Errorf("snapshotID %s already exists", snapshotID)
-	}
-	snapshotHandle := C.DBNewSnapshot(r.rdb)
-	r.snapshots[snapshotID] = snapshotHandle
-	return nil
-}
-
-// ReleaseSnapshot releases the existing snapshot handle for the
-// given snapshotID.
-func (r *RocksDB) ReleaseSnapshot(snapshotID string) error {
-	if r.rdb == nil {
-		return util.Errorf("RocksDB is not initialized yet")
-	}
-	r.Lock()
-	defer r.Unlock()
-	snapshotHandle, ok := r.snapshots[snapshotID]
-	if !ok {
-		return util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	C.DBSnapshotRelease(snapshotHandle)
-	delete(r.snapshots, snapshotID)
-	return nil
 }
 
 // Attrs returns the list of attributes describing this engine. This
@@ -198,19 +160,6 @@ func (r *RocksDB) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
-// GetSnapshot returns the value for the given key from the given
-// snapshotID, nil otherwise.
-func (r *RocksDB) GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error) {
-	r.Lock()
-	snapshotHandle, ok := r.snapshots[snapshotID]
-	if !ok {
-		return nil, util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	r.Unlock()
-
-	return r.getInternal(key, snapshotHandle)
-}
-
 // Get returns the value for the given key.
 func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
@@ -236,19 +185,6 @@ func (r *RocksDB) Clear(key proto.EncodedKey) error {
 // key/value pair. See engine.Iterate for details.
 func (r *RocksDB) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
 	return r.iterateInternal(start, end, f, nil)
-}
-
-// IterateSnapshot iterates from start to end keys, invoking f on
-// each key/value pair. See engine.IterateSnapshot for details.
-func (r *RocksDB) IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error {
-	r.Lock()
-	snapshotHandle, ok := r.snapshots[snapshotID]
-	if !ok {
-		return util.Errorf("snapshotID %s does not exist", snapshotID)
-	}
-	r.Unlock()
-
-	return r.iterateInternal(start, end, f, snapshotHandle)
 }
 
 func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error),
@@ -428,6 +364,19 @@ func (r *RocksDB) NewIterator() Iterator {
 	return newRocksDBIterator(r.rdb, nil)
 }
 
+// NewSnapshot creates a snapshot handle from engine and returns a
+// read-only rocksDBSnapshot engine.
+func (r *RocksDB) NewSnapshot() Engine {
+	if r.rdb == nil {
+		log.Errorf("RocksDB is not initialized yet")
+		return nil
+	}
+	return &rocksDBSnapshot{
+		parent: r,
+		handle: C.DBNewSnapshot(r.rdb),
+	}
+}
+
 // Returns a new Batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Engine {
 	return &Batch{engine: r}
@@ -436,6 +385,98 @@ func (r *RocksDB) NewBatch() Engine {
 // Commit is a noop for RocksDB engine.
 func (r *RocksDB) Commit() error {
 	return nil
+}
+
+type rocksDBSnapshot struct {
+	parent *RocksDB
+	handle *C.DBSnapshot
+}
+
+// Start is a noop.
+func (r *rocksDBSnapshot) Start() error {
+	return nil
+}
+
+// Stop releases the snapshot handle.
+func (r *rocksDBSnapshot) Stop() {
+	C.DBSnapshotRelease(r.handle)
+}
+
+// Attrs returns the engine/store attributes.
+func (r *rocksDBSnapshot) Attrs() proto.Attributes {
+	return r.parent.Attrs()
+}
+
+// Put is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) Put(key proto.EncodedKey, value []byte) error {
+	return util.Errorf("cannot Put to a snapshot")
+}
+
+// Get returns the value for the given key, nil otherwise using
+// the snapshot handle.
+func (r *rocksDBSnapshot) Get(key proto.EncodedKey) ([]byte, error) {
+	return r.parent.getInternal(key, r.handle)
+}
+
+// Iterate iterates over the keys between start inclusive and end
+// exclusive, invoking f() on each key/value pair using the snapshot
+// handle.
+func (r *rocksDBSnapshot) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
+	return r.parent.iterateInternal(start, end, f, r.handle)
+}
+
+// Clear is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) Clear(key proto.EncodedKey) error {
+	return util.Errorf("cannot Clear from a snapshot")
+}
+
+// WriteBatch is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) WriteBatch([]interface{}) error {
+	return util.Errorf("cannot WriteBatch to a snapshot")
+}
+
+// Merge is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) Merge(key proto.EncodedKey, value []byte) error {
+	return util.Errorf("cannot Merge to a snapshot")
+}
+
+// Capacity returns capacity details for the engine's available storage.
+func (r *rocksDBSnapshot) Capacity() (StoreCapacity, error) {
+	return r.parent.Capacity()
+}
+
+// SetGCTimeouts is a noop for a snapshot.
+func (r *rocksDBSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
+}
+
+// ApproximateSize returns the approximate number of bytes the engine is
+// using to store data for the given range of keys.
+func (r *rocksDBSnapshot) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
+	return r.parent.ApproximateSize(start, end)
+}
+
+// NewIterator returns a new instance of an Iterator over the
+// engine using the snapshot handle.
+func (r *rocksDBSnapshot) NewIterator() Iterator {
+	return newRocksDBIterator(r.parent.rdb, r.handle)
+}
+
+// NewSnapshot returns a new instance of a read-only snapshot
+// from the original RocksDB instance. This will be an updated
+// snapshot.
+func (r *rocksDBSnapshot) NewSnapshot() Engine {
+	return r.parent.NewSnapshot()
+}
+
+// NewBatch is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) NewBatch() Engine {
+	log.Errorf("cannot create a NewBatch from a snapshot")
+	return nil
+}
+
+// Commit is illegal for snapshot and returns an error.
+func (r *rocksDBSnapshot) Commit() error {
+	return util.Errorf("cannot Commit to a snapshot")
 }
 
 type rocksDBIterator struct {

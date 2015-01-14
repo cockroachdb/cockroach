@@ -43,10 +43,6 @@ const (
 	// InternalResolveIntent resolves existing write intents for a key or
 	// key range.
 	InternalResolveIntent = "InternalResolveIntent"
-	// InternalSnapshotCopy scans the key range specified by start key through
-	// end key up to some maximum number of results from the given snapshot_id.
-	// It will create a snapshot if snapshot_id is empty.
-	InternalSnapshotCopy = "InternalSnapshotCopy"
 	// InternalMerge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not

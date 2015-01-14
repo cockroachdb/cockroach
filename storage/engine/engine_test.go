@@ -506,16 +506,11 @@ func TestSnapshot(t *testing.T) {
 				val, val1)
 		}
 
-		snapshotID := strconv.FormatInt(1, 10)
-		error := engine.CreateSnapshot(snapshotID)
-		if error != nil {
-			t.Fatalf("error : %s", error)
-		}
-
+		snap := engine.NewSnapshot()
 		val2 := []byte("2")
 		engine.Put(key, val2)
 		val, _ = engine.Get(key)
-		valSnapshot, error := engine.GetSnapshot(key, snapshotID)
+		valSnapshot, error := snap.Get(key)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -529,7 +524,7 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		keyvals, _ := Scan(engine, key, proto.EncodedKey(KeyMax), 0)
-		keyvalsSnapshot, error := ScanSnapshot(engine, key, proto.EncodedKey(KeyMax), 0, snapshotID)
+		keyvalsSnapshot, error := Scan(snap, key, proto.EncodedKey(KeyMax), 0)
 		if error != nil {
 			t.Fatalf("error : %s", error)
 		}
@@ -541,8 +536,7 @@ func TestSnapshot(t *testing.T) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				keyvalsSnapshot[0].Value, val1)
 		}
-
-		engine.ReleaseSnapshot(snapshotID)
+		snap.Stop()
 	}, t)
 }
 
