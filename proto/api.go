@@ -286,6 +286,17 @@ func DeleteArgs(key Key) *DeleteRequest {
 	}
 }
 
+// DeleteRangeArgs returns a DeleteRangeRequest object initialized to delete
+// the values in the given key range (excluding the endpoint).
+func DeleteRangeArgs(startKey, endKey Key) *DeleteRangeRequest {
+	return &DeleteRangeRequest{
+		RequestHeader: RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+	}
+}
+
 // ScanArgs returns a ScanRequest object initialized to scan
 // from start to end keys with max results.
 func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {

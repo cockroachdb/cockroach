@@ -610,3 +610,102 @@ func ExampleKV_RunTransaction() {
 	fmt.Println("Transaction example done.")
 	// Output: Transaction example done.
 }
+
+// concurrentIncrements starts two Goroutines in parallel, both of which
+// read the integers stored at the other's key and add it onto their own.
+// It is checked that the outcome is serializable, i.e. exactly one of the
+// two Goroutines (the later write) sees the previous write by the other.
+func concurrentIncrements(kvClient *client.KV, t *testing.T) {
+	// wgStart waits for all transactions to line up, wgEnd has the main
+	// function wait for them to finish.
+	var wgStart, wgEnd sync.WaitGroup
+	wgStart.Add(2 + 1)
+	wgEnd.Add(2)
+
+	for i := 0; i < 2; i++ {
+		go func(i int) {
+			// Read the other key, write key i.
+			readKey := []byte(fmt.Sprintf("value-%d", (i+1)%2))
+			writeKey := []byte(fmt.Sprintf("value-%d", i))
+			defer wgEnd.Done()
+			wgStart.Done()
+			// Wait until the other goroutines are running.
+			wgStart.Wait()
+
+			txnOpts := &client.TransactionOptions{
+				Name: fmt.Sprintf("test-%d", i),
+			}
+			if err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
+				// Retrieve the other key.
+				gr := &proto.GetResponse{}
+				if err := txn.Call(proto.Get, proto.GetArgs(readKey), gr); err != nil {
+					return err
+				}
+
+				otherValue := int64(0)
+				if gr.Value != nil && gr.Value.Integer != nil {
+					otherValue = *gr.Value.Integer
+				}
+
+				pr := &proto.IncrementResponse{}
+				pa := proto.IncrementArgs(writeKey, 1+otherValue)
+				if err := txn.Call(proto.Increment, pa, pr); err != nil {
+					return err
+				}
+
+				return nil
+			}); err != nil {
+				t.Error(err)
+			}
+		}(i)
+	}
+
+	// Kick the goroutines loose.
+	wgStart.Done()
+	// Wait for the goroutines to finish.
+	wgEnd.Wait()
+	// Verify that both keys contain something and, more importantly, that
+	// one key actually contains the value of the first writer and not only
+	// its own.
+	total := int64(0)
+	results := []int64(nil)
+	for i := 0; i < 2; i++ {
+		readKey := []byte(fmt.Sprintf("value-%d", i))
+		gr := &proto.GetResponse{}
+		if err := kvClient.Call(proto.Get, proto.GetArgs(readKey), gr); err != nil {
+			log.Fatal(err)
+		}
+		if gr.Value == nil || gr.Value.Integer == nil {
+			t.Fatalf("unexpected empty key: %v=%v", readKey, gr.Value)
+		}
+		total += *gr.Value.Integer
+		results = append(results, *gr.Value.Integer)
+	}
+
+	// First writer should have 1, second one 2
+	if total != 3 {
+		t.Fatalf("got unserializable values %v", results)
+	}
+
+}
+
+// TestConcurrentIncrements is a simple explicit test for serializability
+// for the concrete situation described in:
+// https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
+func TestConcurrentIncrements(t *testing.T) {
+	s := server.StartTestServer(t)
+	defer s.Stop()
+	kvClient := createTestClient(s.HTTPAddr)
+	kvClient.User = storage.UserRoot
+
+	// Convenience loop: Crank up this number for testing this
+	// more often. It'll increase test duration though.
+	for k := 0; k < 5; k++ {
+		if err := kvClient.Call(proto.DeleteRange,
+			proto.DeleteRangeArgs([]byte("value-0"), []byte("value-1x")),
+			&proto.DeleteRangeResponse{}); err != nil {
+			t.Fatalf("%d: unable to clean up: %v", k, err)
+		}
+		concurrentIncrements(kvClient, t)
+	}
+}
