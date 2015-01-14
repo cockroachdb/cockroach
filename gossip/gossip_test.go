@@ -28,6 +28,9 @@ import (
 
 // verifyConvergence verifies that info from each node is visible from
 // every node in the network within numCycles cycles of the gossip protocol.
+// TODO(Tobias): Currently this test is nondeterministic, usually requiring
+// more cycles for a fully connected network on busy hardware. The clock
+// should be advanced manually instead (this requires some changes to gossip).
 func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 	network := NewSimulationNetwork(numNodes, "unix", DefaultTestGossipInterval)
 
@@ -43,7 +46,8 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 // TODO(spencer): During race detector tests, it can take >= 8 cycles.
 // Figure out a more deterministic setup.
 func TestConvergence(t *testing.T) {
-	verifyConvergence(10, 10, t)
+	// 15 cycles to accommodate slower hardware. Usually 10 should do.
+	verifyConvergence(10, 15, t)
 }
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
