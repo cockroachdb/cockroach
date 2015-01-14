@@ -537,36 +537,7 @@ func (rh *ResponseHeader) GoError() error {
 	if rh.Error == nil {
 		return nil
 	}
-	switch {
-	case rh.Error.Generic != nil:
-		return rh.Error.Generic
-	case rh.Error.NotLeader != nil:
-		return rh.Error.NotLeader
-	case rh.Error.RangeNotFound != nil:
-		return rh.Error.RangeNotFound
-	case rh.Error.RangeKeyMismatch != nil:
-		return rh.Error.RangeKeyMismatch
-	case rh.Error.ReadWithinUncertaintyInterval != nil:
-		return rh.Error.ReadWithinUncertaintyInterval
-	case rh.Error.TransactionAborted != nil:
-		return rh.Error.TransactionAborted
-	case rh.Error.TransactionPush != nil:
-		return rh.Error.TransactionPush
-	case rh.Error.TransactionRetry != nil:
-		return rh.Error.TransactionRetry
-	case rh.Error.TransactionStatus != nil:
-		return rh.Error.TransactionStatus
-	case rh.Error.WriteIntent != nil:
-		return rh.Error.WriteIntent
-	case rh.Error.WriteTooOld != nil:
-		return rh.Error.WriteTooOld
-	case rh.Error.ReadWithinUncertaintyInterval != nil:
-		return rh.Error.ReadWithinUncertaintyInterval
-	case rh.Error.OpRequiresTxn != nil:
-		return rh.Error.OpRequiresTxn
-	default:
-		return nil
-	}
+	return rh.Error.GetValue().(error)
 }
 
 // SetGoError converts the specified type into either one of the proto-
@@ -576,40 +547,18 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = nil
 		return
 	}
-	switch t := err.(type) {
-	case *NotLeaderError:
-		rh.Error = &Error{NotLeader: t}
-	case *RangeNotFoundError:
-		rh.Error = &Error{RangeNotFound: t}
-	case *RangeKeyMismatchError:
-		rh.Error = &Error{RangeKeyMismatch: t}
-	case *ReadWithinUncertaintyIntervalError:
-		rh.Error = &Error{ReadWithinUncertaintyInterval: t}
-	case *TransactionAbortedError:
-		rh.Error = &Error{TransactionAborted: t}
-	case *TransactionPushError:
-		rh.Error = &Error{TransactionPush: t}
-	case *TransactionRetryError:
-		rh.Error = &Error{TransactionRetry: t}
-	case *TransactionStatusError:
-		rh.Error = &Error{TransactionStatus: t}
-	case *WriteIntentError:
-		rh.Error = &Error{WriteIntent: t}
-	case *WriteTooOldError:
-		rh.Error = &Error{WriteTooOld: t}
-	case *OpRequiresTxnError:
-		rh.Error = &Error{OpRequiresTxn: t}
-	default:
+	if rh.Error == nil {
+		rh.Error = &Error{}
+	}
+	if !rh.Error.SetValue(err) {
 		var canRetry bool
 		if r, ok := err.(util.Retryable); ok {
 			canRetry = r.CanRetry()
 		}
-		rh.Error = &Error{
-			Generic: &GenericError{
-				Message:   err.Error(),
-				Retryable: canRetry,
-			},
-		}
+		rh.Error.SetValue(&GenericError{
+			Message:   err.Error(),
+			Retryable: canRetry,
+		})
 	}
 }
 
