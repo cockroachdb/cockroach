@@ -150,9 +150,11 @@ type RangeManager interface {
 // as appropriate.
 type Range struct {
 	Desc      *proto.RangeDescriptor
-	rm        RangeManager  // Makes some store methods available
-	splitting int32         // 1 if a split is underway; updated atomically
-	lastIndex uint64        // last index in the raft log; updated atomically
+	rm        RangeManager // Makes some store methods available
+	splitting int32        // 1 if a split is underway; updated atomically
+	// Last index persisted to the raft log (not necessarily committed).
+	// Updated atomically.
+	lastIndex uint64
 	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
@@ -176,20 +178,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 
-	// Look in the engine to find the last log index.
-	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
-	err := r.rm.Engine().Iterate(
-		proto.EncodedKey(logKey),
-		proto.EncodedKey(logKey.PrefixEnd()),
-		func(kv proto.RawKeyValue) (bool, error) {
-			var ent raftpb.Entry
-			err := gogoproto.Unmarshal(kv.Value, &ent)
-			if err != nil {
-				return false, err
-			}
-			atomic.StoreUint64(&r.lastIndex, ent.Index)
-			return true, nil
-		})
+	err := r.loadLastIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -1417,43 +1406,61 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	data, err := r.rm.Engine().Get(
-		proto.EncodedKey(engine.RaftStateKey(uint64(r.Desc.RaftID))))
-	if err != nil {
-		return raftpb.HardState{}, raftpb.ConfState{}, err
-	}
 	var hs raftpb.HardState
-	err = gogoproto.Unmarshal(data, &hs)
+	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
+		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
-		return raftpb.HardState{}, raftpb.ConfState{}, err
+		return hs, raftpb.ConfState{}, err
 	}
 
-	// TODO(bdarnell): load ConfState if we have a previous snapshot.
+	// TODO(bdarnell): Synthesize ConfState from RangeDescriptor.
 	return hs, raftpb.ConfState{}, nil
 }
 
+// loadLastIndex looks in the engine to find the last log index.
+func (r *Range) loadLastIndex() error {
+	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
+	kvs, err := engine.MVCCScan(r.rm.Engine(),
+		logKey, logKey.PrefixEnd(),
+		1, // only the first (i.e. newest) result)
+		proto.ZeroTimestamp, nil)
+	if err != nil {
+		return err
+	}
+	if len(kvs) > 0 {
+		var ent raftpb.Entry
+		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &ent)
+		if err != nil {
+			return err
+		}
+		atomic.StoreUint64(&r.lastIndex, ent.Index)
+	}
+	return nil
+}
+
 // Entries implements the raft.Storage interface.
-// TODO(bdarnell): consider caching for recent entries.
+// TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
+// is insufficient.
 func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
-	var ents []raftpb.Entry
 	// Scan over the log (which is stored backwards) to find the
 	// requested entries.  Reversing [lo, hi) gives us (hi, lo]; since
-	// Iterate is inclusive in the other direction we must increment both the
+	// MVCCScan is inclusive in the other direction we must increment both the
 	// start and end keys.
-	err := r.rm.Engine().Iterate(
-		proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next()),
-		proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next()),
-		func(kv proto.RawKeyValue) (bool, error) {
-			var ent raftpb.Entry
-			err := gogoproto.Unmarshal(kv.Value, &ent)
-			if err != nil {
-				return false, err
-			}
-			ents = append(ents, ent)
-			return false, nil
-		})
+	kvs, err := engine.MVCCScan(r.rm.Engine(),
+		engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next(),
+		engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next(),
+		0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return nil, err
+	}
+	ents := make([]raftpb.Entry, 0, len(kvs))
+	for _, kv := range kvs {
+		var ent raftpb.Entry
+		err = gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
+		if err != nil {
+			return nil, err
+		}
+		ents = append(ents, ent)
 	}
 	if len(ents) != int(hi-lo) {
 		return nil, raft.ErrUnavailable
@@ -1500,11 +1507,8 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 func (r *Range) Append(entries []raftpb.Entry) error {
 	batch := r.rm.Engine().NewBatch()
 	for _, ent := range entries {
-		data, err := gogoproto.Marshal(&ent)
-		if err != nil {
-			return err
-		}
-		err = batch.Put(proto.EncodedKey(engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index)), data)
+		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index),
+			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
 		}
@@ -1520,13 +1524,6 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	data, err := gogoproto.Marshal(&st)
-	if err != nil {
-		return err
-	}
-	err = r.rm.Engine().Put(proto.EncodedKey(engine.RaftStateKey(uint64(r.Desc.RaftID))), data)
-	if err != nil {
-		return err
-	}
-	return nil
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(uint64(r.Desc.RaftID)),
+		proto.ZeroTimestamp, nil, &st)
 }
