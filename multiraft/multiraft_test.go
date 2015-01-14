@@ -191,6 +191,7 @@ func TestSlowStorage(t *testing.T) {
 
 	// After unblocking the third node, it will catch up.
 	cluster.storages[2].Unblock()
+	cluster.tickers[0].Tick()
 	log.Infof("waiting for event to be commited on node 2")
 	commit := <-cluster.events[2].CommandCommitted
 	if string(commit.Command) != "command" {
