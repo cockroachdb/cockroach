@@ -22,8 +22,8 @@ import (
 	"reflect"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var (

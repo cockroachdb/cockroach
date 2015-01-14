@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // init pre-registers RangeDescriptor, PrefixConfigMap types and Transaction.
@@ -742,14 +742,27 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
-	if proto.IsReadWrite(method) && reply.Header().Error == nil {
-		ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
-		if err := batch.Commit(); err != nil {
-			reply.Header().SetGoError(err)
-		} else {
-			// If the commit succeeded, potentially initiate a split of this range.
-			r.maybeSplit()
+	if err := reply.Header().GoError(); err == nil {
+		if proto.IsReadWrite(method) {
+			ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
+			if err := batch.Commit(); err != nil {
+				reply.Header().SetGoError(err)
+			} else {
+				// If the commit succeeded, potentially initiate a split of this range.
+				r.maybeSplit()
+			}
 		}
+	} else if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+		// A ReadUncertaintyIntervalError contains the timestamp of the value
+		// that provoked the conflict. However, we forward the timestamp to the
+		// node's time here. The reason is that the caller (which is always
+		// transactional when this error occurs) in our implementation wants to
+		// use this information to extract a timestamp after which reads from
+		// the nodes are causally consistent with the transaction. This allows
+		// the node to be classified as without further uncertain reads for the
+		// remainder of the transaction.
+		// See the comment on proto.Transaction.CertainNodes.
+		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
 	// Maybe update gossip configs on a put if there was no error.
@@ -807,8 +820,7 @@ func (r *Range) Put(batch engine.Engine, ms *engine.MVCCStats, args *proto.PutRe
 // the expected value matches. If not, the return value contains
 // the actual value.
 func (r *Range) ConditionalPut(batch engine.Engine, ms *engine.MVCCStats, args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) {
-	val, err := engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
-	reply.ActualValue = val
+	err := engine.MVCCConditionalPut(batch, ms, args.Key, args.Timestamp, args.Value, args.ExpValue, args.Txn)
 	reply.SetGoError(err)
 }
 
@@ -850,7 +862,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -918,7 +930,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.Txn.Status = proto.ABORTED
 	}
 
-	// Persist the transaction record with updated status (& possibly timestmap).
+	// Persist the transaction record with updated status (& possibly timestamp).
 	if err := engine.MVCCPutProto(batch, nil, key, proto.ZeroTimestamp, nil, reply.Txn); err != nil {
 		reply.SetGoError(err)
 		return
@@ -1033,7 +1045,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, &txn)
@@ -1095,11 +1107,11 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 // pusher, return TransactionPushError. Transaction will be retried
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
-	if !bytes.Equal(args.Key, args.PusheeTxn.ID) {
-		reply.SetGoError(util.Errorf("request key %q should match pushee's txn ID %q", args.Key, args.PusheeTxn.ID))
+	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
+		reply.SetGoError(util.Errorf("request key %q should match pushee's txn key %q", args.Key, args.PusheeTxn.Key))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Key)
+	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}

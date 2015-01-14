@@ -23,15 +23,16 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
 	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
 	"code.google.com/p/go-uuid/uuid"
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // KeyMaxLength is the maximum length of a Key in bytes.
@@ -260,6 +261,22 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	}
 }
 
+// Forward updates the timestamp from the one given, if that moves it
+// forwards in time.
+func (t *Timestamp) Forward(s Timestamp) {
+	if t.Less(s) {
+		*t = s
+	}
+}
+
+// Backward updates the timestamp from the one given, if that moves it
+// backwards in time.
+func (t *Timestamp) Backward(s Timestamp) {
+	if s.Less(*t) {
+		*t = s
+	}
+}
+
 // InitChecksum initializes a checksum based on the provided key and
 // the contents of the value. If the value contains a byte slice, the
 // checksum includes it directly; if the value contains an integer,
@@ -335,7 +352,8 @@ func NewTransaction(name string, baseKey Key, userPriority int32,
 
 	return &Transaction{
 		Name:          name,
-		ID:            append(append([]byte(nil), baseKey...), []byte(uuid.New())...),
+		Key:           baseKey,
+		ID:            []byte(uuid.New()),
 		Priority:      priority,
 		Isolation:     isolation,
 		Timestamp:     now,
@@ -399,8 +417,8 @@ func (t *Transaction) Restart(userPriority, upgradePriority int32, timestamp Tim
 	t.UpgradePriority(upgradePriority)
 }
 
-// Update ratchets priority, timestamp and original timestamp values
-// for the transaction. If t.ID is empty, then the transaction is
+// Update ratchets priority, timestamp and original timestamp values (among
+// others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
 func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
@@ -422,6 +440,11 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.OrigTimestamp.Less(o.OrigTimestamp) {
 		t.OrigTimestamp = o.OrigTimestamp
 	}
+	// Should not actually change at the time of writing.
+	t.MaxTimestamp = o.MaxTimestamp
+	// Copy the list of nodes without time uncertainty.
+	t.CertainNodes = NodeList{Nodes: append(Int32Slice(nil),
+		o.CertainNodes.Nodes...)}
 	t.UpgradePriority(o.Priority)
 }
 
@@ -433,8 +456,8 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
-// MD5 returns the MD5 digest of the transaction ID as a string.
-// This method returns an empty string if the transaction is nil.
+// MD5 returns the MD5 digest of the transaction ID. This method
+// returns an empty string if the transaction is nil.
 func (t *Transaction) MD5() [md5.Size]byte {
 	if t == nil {
 		return NoTxnMD5
@@ -500,3 +523,26 @@ func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) i
 	// Otherwise, just return the expGCBytes.
 	return expGCBytes
 }
+
+// Add adds the given NodeID to the interface (unless already present)
+// and restores ordering.
+func (s *NodeList) Add(nodeID int32) {
+	if !s.Contains(nodeID) {
+		(*s).Nodes = append(s.Nodes, nodeID)
+		sort.Sort(Int32Slice(s.Nodes))
+	}
+}
+
+// Contains returns true if the underlying slice contains the given NodeID.
+func (s NodeList) Contains(nodeID int32) bool {
+	ns := s.GetNodes()
+	i := sort.Search(len(ns), func(i int) bool { return ns[i] >= nodeID })
+	return i < len(ns) && ns[i] == nodeID
+}
+
+// Int32Slice implements sort.Interface.
+type Int32Slice []int32
+
+func (s Int32Slice) Len() int           { return len(s) }
+func (s Int32Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s Int32Slice) Less(i, j int) bool { return s[i] < s[j] }

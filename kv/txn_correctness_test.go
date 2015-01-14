@@ -28,12 +28,12 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // setCorrectnessRetryOptions sets client for aggressive retries with a
@@ -606,7 +606,10 @@ func checkConcurrency(name string, isolations []proto.IsolationType, txns []stri
 	verify *verifier, expSuccess bool, t *testing.T) {
 	setCorrectnessRetryOptions()
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	db, _, _, _, _ := createTestDB(t)
+	db, _, _, _, _, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	verifier.run(isolations, db, t)
 }
 

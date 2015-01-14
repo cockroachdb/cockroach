@@ -23,11 +23,11 @@ import (
 	"fmt"
 	"math"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -384,7 +384,8 @@ func mvccGetInternal(engine Engine, key proto.Key, kv proto.RawKeyValue, timesta
 			// Second case: Our read timestamp is behind the latest write, but the
 			// latest write could possibly have happened before our read in
 			// absolute time if the writer had a fast clock.
-			// The reader should try again at meta.Timestamp+1.
+			// The reader should try again with a later timestamp than the
+			// one given below.
 			return nil, &proto.ReadWithinUncertaintyIntervalError{
 				Timestamp:         timestamp,
 				ExistingTimestamp: meta.Timestamp,
@@ -612,33 +613,39 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the
-// expected value matches. If not, the return value contains the
-// actual value.
+// expected value matches. If not, the return a ConditionFailedError
+// containing the actual value.
 func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.Value,
-	expValue *proto.Value, txn *proto.Transaction) (*proto.Value, error) {
+	expValue *proto.Value, txn *proto.Transaction) error {
 	// Handle check for non-existence of key. In order to detect
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
 	existVal, err := MVCCGet(engine, key, proto.MaxTimestamp, txn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if expValue == nil && existVal != nil {
-		return existVal, util.Errorf("key %q already exists", key)
+		return &proto.ConditionFailedError{
+			ActualValue: existVal,
+		}
 	} else if expValue != nil {
 		// Handle check for existence when there is no key.
 		if existVal == nil {
-			return nil, util.Errorf("key %q does not exist", key)
+			return &proto.ConditionFailedError{}
 		} else if expValue.Bytes != nil && !bytes.Equal(expValue.Bytes, existVal.Bytes) {
-			return existVal, util.Errorf("key %q does not match existing", key)
+			return &proto.ConditionFailedError{
+				ActualValue: existVal,
+			}
 		} else if expValue.Integer != nil && (existVal.Integer == nil || expValue.GetInteger() != existVal.GetInteger()) {
-			return existVal, util.Errorf("key %q does not match existing", key)
+			return &proto.ConditionFailedError{
+				ActualValue: existVal,
+			}
 		}
 	}
 
-	return nil, MVCCPut(engine, ms, key, timestamp, value, txn)
+	return MVCCPut(engine, ms, key, timestamp, value, txn)
 }
 
 // MVCCMerge implements a merge operation. Merge adds integer values,

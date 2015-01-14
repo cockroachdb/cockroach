@@ -19,10 +19,10 @@
 package kv
 
 import (
+	"flag"
 	"sync"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
@@ -30,7 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+var linearizable = flag.Bool("linearizable", false, "enables linearizable behaviour "+
+	"of operations on this node by making sure that no commit timestamp is reported "+
+	"back to the client until all other node clocks have necessarily passed it.")
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -233,6 +238,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
 func (tc *TxnCoordSender) sendOne(call *client.Call) {
+	var startNS int64
 	header := call.Args.Header()
 	// If this call is part of a transaction...
 	if header.Txn != nil {
@@ -246,7 +252,10 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		}
 		// End transaction must have its key set to the txn ID.
 		if call.Method == proto.EndTransaction {
-			header.Key = header.Txn.ID
+			header.Key = header.Txn.Key
+			// Remember when EndTransaction started in case we want to
+			// be linearizable.
+			startNS = tc.clock.PhysicalNow()
 		}
 	}
 
@@ -313,6 +322,25 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		var txn *proto.Transaction
 		if call.Method == proto.EndTransaction {
 			txn = call.Reply.Header().Txn
+			// If the -linearizable flag is set, we want to make sure that
+			// all the clocks in the system are past the commit timestamp
+			// of the transaction. This is guaranteed if either
+			// - the commit timestamp is MaxOffset behind startNS
+			// - MaxOffset ns were spent in this function
+			// when returning to the client. Below we choose the option
+			// that involves less waiting, which is likely the first one
+			// unless a transaction commits with an odd timestamp.
+			if tsNS := txn.Timestamp.WallTime; startNS > tsNS {
+				startNS = tsNS
+			}
+			sleepNS := tc.clock.MaxOffset() -
+				time.Duration(tc.clock.PhysicalNow()-startNS)
+			if *linearizable && sleepNS > 0 {
+				defer func() {
+					log.V(1).Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
+					time.Sleep(sleepNS)
+				}()
+			}
 		}
 		if txn != nil && txn.Status != proto.PENDING {
 			tc.cleanupTxn(txn)
@@ -388,6 +416,10 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 	// Take action on various errors.
 	switch t := replyHeader.GoError().(type) {
 	case *proto.ReadWithinUncertaintyIntervalError:
+		// Mark the host as certain. See the protobuf comment for
+		// Transaction.CertainNodes for details.
+		replyHeader.Txn.CertainNodes.Add(argsHeader.Replica.NodeID)
+
 		// If the reader encountered a newer write within the uncertainty
 		// interval, move the timestamp forward, just past that write or
 		// up to MaxTimestamp, whichever comes first.
@@ -443,7 +475,7 @@ func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction) {
 // txnID has not been updated by the client adding a request within
 // the allowed timeout. If abandoned, the transaction is removed from
 // the txns map.
-func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID proto.Key) bool {
+func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txnID)]
@@ -466,7 +498,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  txn.ID,
+			Key:  txn.Key,
 			User: storage.UserRoot,
 			Txn:  txn,
 		},
@@ -479,7 +511,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// Before we send a heartbeat, determine whether this transaction
 			// should be considered abandoned. If so, exit heartbeat.
 			if tc.hasClientAbandonedCoord(txn.ID) {
-				log.V(1).Infof("transaction %q abandoned; stopping heartbeat", txn.ID)
+				log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
 				return
 			}
 			request.Header().Timestamp = tc.clock.Now()
@@ -494,7 +526,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// the heartbeat. It's either aborted or committed, and we resolve
 			// write intents accordingly.
 			if reply.GoError() != nil {
-				log.Warningf("heartbeat to %q failed: %s", txn.ID, reply.GoError())
+				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
 			} else if reply.Txn.Status != proto.PENDING {
 				tc.cleanupTxn(reply.Txn)
 				return

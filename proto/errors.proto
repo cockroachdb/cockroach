@@ -19,7 +19,7 @@ package proto;
 
 import "config.proto";
 import "data.proto";
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 // A GenericError is a generic representation of a go error including
 // the string message and whether or not the error is retryable.
@@ -119,6 +119,13 @@ message WriteTooOldError {
 message OpRequiresTxnError {
 }
 
+// A ConditionFailedError indicates that the expected value
+// of a ConditionalPutRequest was not found, either
+// because it was missing or was not equal. The error will
+// contain the actual value found.
+message ConditionFailedError {
+  optional Value actual_value = 1;
+}
 
 // Error is a union type containing all available errors.
 // NOTE: new error types must be added here, and potentially in
@@ -136,5 +143,6 @@ message Error {
   optional WriteIntentError write_intent = 10;
   optional WriteTooOldError write_too_old = 11;
   optional OpRequiresTxnError op_requires_txn = 12;
+  optional ConditionFailedError condition_failed = 13;
 }
 

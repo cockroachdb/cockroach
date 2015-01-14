@@ -24,7 +24,7 @@ import (
 	"regexp"
 	"strings"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 

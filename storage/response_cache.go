@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"sync"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 type cmdIDKey string
@@ -155,6 +155,28 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 		}
 		encKey := engine.MVCCEncodeKey(responseCacheKey(destRaftID, cmdID))
 		return false, e.Put(encKey, kv.Value)
+	})
+}
+
+// CopyFrom copies all the cached results from another response cache
+// into this one. Note that the cache will not be locked while copying
+// is in progress. Failures decoding individual cache entries return an
+// error. The copy is done directly using the engine instead of interpreting
+// values through MVCC for efficiency.
+func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
+	prefix := responseCacheKeyPrefix(originRaftID)
+	start := engine.MVCCEncodeKey(prefix)
+	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
+
+	return e.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
+		// Decode the key into a cmd, skipping on error. Otherwise,
+		// write it to the corresponding key in the new cache.
+		cmdID, err := rc.decodeKey(kv.Key)
+		if err != nil {
+			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
+		}
+		encKey := engine.MVCCEncodeKey(responseCacheKey(rc.raftID, cmdID))
+		return false, rc.engine.Put(encKey, kv.Value)
 	})
 }
 

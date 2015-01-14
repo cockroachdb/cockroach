@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 var testIdent = proto.StoreIdent{
@@ -604,7 +604,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
 			}
-			txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID)
+			txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.Key, pushee.ID)
 			var txn proto.Transaction
 			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 			if !ok || err != nil {
@@ -857,7 +857,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.ID)
+	txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.Key, pushee.ID)
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 	if !ok || err != nil {

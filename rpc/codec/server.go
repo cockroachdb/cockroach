@@ -11,8 +11,8 @@ import (
 	"net/rpc"
 	"sync"
 
-	"code.google.com/p/gogoprotobuf/proto"
 	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
+	"github.com/gogo/protobuf/proto"
 )
 
 type serverCodec struct {

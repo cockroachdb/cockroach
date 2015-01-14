@@ -1,4 +1,4 @@
-FROM golang:latest
+FROM golang:1.4.0
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
@@ -17,8 +17,8 @@ ENV VENDOR_LIB $VENDORPATH/usr/lib
 ENV VENDOR_INCLUDE $VENDORPATH/usr/include
 
 # Make our vendored libraries visible everywhere.
-ENV LIBRARY_PATH $VENDOR_LIB:$LIBRARY_PATH
-ENV CPLUS_INCLUDE_PATH $VENDOR_INCLUDE:$CPLUS_INCLUDE_PATH
+ENV LIBRARY_PATH $VENDOR_LIB
+ENV CPLUS_INCLUDE_PATH $VENDOR_INCLUDE
 ENV PATH $VENDORPATH/usr/bin:$PATH
 
 # Create required directories and a convenience symlink.

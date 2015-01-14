@@ -21,26 +21,28 @@ import (
 	"bytes"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func TestTimeSeriesToValue(t *testing.T) {
-	tsOriginal := &TimeSeriesData{
-		StartTimestamp:    1415398729,
-		DurationInSeconds: 3600,
-		SamplePrecision:   SECONDS,
-		Data: []*TimeSeriesDataPoint{
+	tsOriginal := &InternalTimeSeriesData{
+		StartTimestampNanos: 1415398729000000000,
+		SampleDurationNanos: 1000000000,
+		Samples: []*InternalTimeSeriesSample{
 			{
-				Offset:   100,
-				ValueInt: gogoproto.Int64(1),
+				Offset:   1,
+				IntCount: 1,
+				IntSum:   gogoproto.Int64(1),
 			},
 			{
-				Offset:   200,
-				ValueInt: gogoproto.Int64(2),
+				Offset:   2,
+				IntCount: 1,
+				IntSum:   gogoproto.Int64(2),
 			},
 			{
-				Offset:   300,
-				ValueInt: gogoproto.Int64(3),
+				Offset:   3,
+				IntCount: 1,
+				IntSum:   gogoproto.Int64(3),
 			},
 		},
 	}
@@ -48,7 +50,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	// Wrap the TSD into a Value
 	valueOriginal, err := tsOriginal.ToValue()
 	if err != nil {
-		t.Fatalf("error marshaling TimeSeriesData: %s", err.Error())
+		t.Fatalf("error marshaling InternalTimeSeriesData: %s", err.Error())
 	}
 	if a, e := valueOriginal.GetTag(), _CR_TS.String(); a != e {
 		t.Errorf("Value did not have expected tag value of %s, had %s", e, a)
@@ -64,9 +66,9 @@ func TestTimeSeriesToValue(t *testing.T) {
 	}
 
 	// Extract the TSD from the Value
-	tsNew, err := TimeSeriesFromValue(valueOriginal)
+	tsNew, err := InternalTimeSeriesDataFromValue(valueOriginal)
 	if err != nil {
-		t.Errorf("error extracting Time Series: %s")
+		t.Errorf("error extracting Time Series: %s", err.Error())
 	}
 	if !gogoproto.Equal(tsOriginal, tsNew) {
 		t.Errorf("extracted time series not equivalent to original; %v != %v", tsNew, tsOriginal)
@@ -76,7 +78,7 @@ func TestTimeSeriesToValue(t *testing.T) {
 	valueNotTs := &Value{
 		Bytes: []byte("testvalue"),
 	}
-	if _, err := TimeSeriesFromValue(valueNotTs); err == nil {
+	if _, err := InternalTimeSeriesDataFromValue(valueNotTs); err == nil {
 		t.Errorf("did not receive expected error when extracting TimeSeries from regular Byte value.")
 	}
 }

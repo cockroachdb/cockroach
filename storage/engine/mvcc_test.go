@@ -31,10 +31,10 @@ import (
 	"strings"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -333,14 +333,6 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 // TestMVCCGetUncertainty verifies that the appropriate error results when
 // a transaction reads a key at a timestamp that has versions newer than that
 // timestamp, but older than the transaction's MaxTimestamp.
-// TODO(Tobias): Test this in a live transactions as well, verifying the
-// necessary transaction restarts happen correctly etc.
-// Spencer's suggestion:
-// Create 3 clocks, each with max drift (offset) set to 100ms. Set clock one to
-// time=t, clock two to time=t+50ms, clock three to time=t+100ms. Write three
-// values at current time according to each of the three clocks. Start three
-// txns, each using one of the three clocks. In each txn, read the three values
-// and ensure that all txns read the correct values.
 func TestMVCCGetUncertainty(t *testing.T) {
 	engine := createTestEngine()
 	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}
@@ -764,56 +756,76 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 
 func TestMVCCConditionalPut(t *testing.T) {
 	engine := createTestEngine()
-	actualVal, err := MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &value2, nil)
+	err := MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &value2, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
 	}
-	if actualVal != nil {
-		t.Fatalf("expected missing actual value: %v", actualVal)
+	switch e := err.(type) {
+	default:
+		t.Fatal("unexpected error %T", e)
+	case *proto.ConditionFailedError:
+		if e.ActualValue != nil {
+			t.Fatalf("expected missing actual value: %v", e.ActualValue)
+		}
 	}
 
 	// Verify the difference between missing value and empty value.
-	actualVal, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &valueEmpty, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &valueEmpty, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
 	}
-	if actualVal != nil {
-		t.Fatalf("expected missing actual value: %v", actualVal)
+	switch e := err.(type) {
+	default:
+		t.Fatal("unexpected error %T", e)
+	case *proto.ConditionFailedError:
+		if e.ActualValue != nil {
+			t.Fatalf("expected missing actual value: %v", e.ActualValue)
+		}
 	}
 
 	// Do a conditional put with expectation that the value is completely missing; will succeed.
-	_, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, nil, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, nil, nil)
 	if err != nil {
 		t.Fatalf("expected success with condition that key doesn't yet exist: %v", err)
 	}
 
 	// Another conditional put expecting value missing will fail, now that value1 is written.
-	actualVal, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, nil, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, nil, nil)
 	if err == nil {
 		t.Fatal("expected error on key already exists")
 	}
-	if !bytes.Equal(actualVal.Bytes, value1.Bytes) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			actualVal.Bytes, value1.Bytes)
+	switch e := err.(type) {
+	default:
+		t.Fatal("unexpected error %T", e)
+	case *proto.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.Bytes, value1.Bytes)
+		}
 	}
 
 	// Conditional put expecting wrong value2, will fail.
-	actualVal, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &value2, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &value2, nil)
 	if err == nil {
 		t.Fatal("expected error on key does not match")
 	}
-	if !bytes.Equal(actualVal.Bytes, value1.Bytes) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			actualVal.Bytes, value1.Bytes)
+	switch e := err.(type) {
+	default:
+		t.Fatal("unexpected error %T", e)
+	case *proto.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				e.ActualValue.Bytes, value1.Bytes)
+		}
 	}
 
 	// Move to a empty value. Will succeed.
-	_, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), valueEmpty, &value1, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), valueEmpty, &value1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Now move to value2 from expected empty value.
-	_, err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value2, &valueEmpty, nil)
+	err = MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value2, &valueEmpty, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

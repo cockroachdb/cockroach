@@ -18,8 +18,8 @@
 package proto
 
 import (
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -60,7 +60,7 @@ const (
 // ToValue generates a Value message which contains an encoded copy of this
 // TimeSeriesData in its "bytes" field. The returned Value will also have its
 // "tag" string set to the TIME_SERIES constant.
-func (ts *TimeSeriesData) ToValue() (*Value, error) {
+func (ts *InternalTimeSeriesData) ToValue() (*Value, error) {
 	b, err := gogoproto.Marshal(ts)
 	if err != nil {
 		return nil, err
@@ -71,13 +71,13 @@ func (ts *TimeSeriesData) ToValue() (*Value, error) {
 	}, nil
 }
 
-// TimeSeriesFromValue attempts to extract a TimeSeriesData message from the
-// "bytes" field of the given value.
-func TimeSeriesFromValue(value *Value) (*TimeSeriesData, error) {
+// InternalTimeSeriesDataFromValue attempts to extract an InternalTimeSeriesData
+// message from the "bytes" field of the given value.
+func InternalTimeSeriesDataFromValue(value *Value) (*InternalTimeSeriesData, error) {
 	if value.GetTag() != _CR_TS.String() {
 		return nil, util.Errorf("value is not tagged as containing TimeSeriesData: %v", value)
 	}
-	var ts TimeSeriesData
+	var ts InternalTimeSeriesData
 	err := gogoproto.Unmarshal(value.Bytes, &ts)
 	if err != nil {
 		return nil, util.Errorf("TimeSeriesData could not be unmarshalled from value: %v %s", value, err)

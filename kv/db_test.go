@@ -23,12 +23,12 @@ import (
 	"net/http"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 

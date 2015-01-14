@@ -18,8 +18,8 @@
 package proto
 
 import (
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TODO(spencer): change these string constants into a type.
@@ -617,15 +617,6 @@ func (rh *ResponseHeader) SetGoError(err error) {
 func (gr *GetResponse) Verify(req Request) error {
 	if gr.Value != nil {
 		return gr.Value.Verify(req.Header().Key)
-	}
-	return nil
-}
-
-// Verify verifies the integrity of the conditional put response's
-// actual value, if not nil.
-func (cpr *ConditionalPutResponse) Verify(req Request) error {
-	if cpr.ActualValue != nil {
-		return cpr.ActualValue.Verify(req.Header().Key)
 	}
 	return nil
 }

@@ -7,12 +7,8 @@
 # purpose mounted to /test/.out.
 #
 # Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-mkdir -p .out
-for f in $(find .out -name '*.test' -type f); do
-  ldd "$f" > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
-    >&2 echo "skipping '$f' (not statically linked)"
-    continue
-  fi
+BUILD="../build"
+mkdir -p "${BUILD}"
+for f in $(find "${BUILD}" -name '*.test' -type f); do
   >&2 echo executing "$f" && (cd -P $(dirname $f) && ./$(basename $f)) || exit $?;
 done 

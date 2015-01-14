@@ -25,11 +25,11 @@ import (
 	"reflect"
 	"testing"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // encodePutResponse creates a put response using the specified
@@ -285,12 +285,11 @@ func BenchmarkMVCCMergeInteger(b *testing.B) {
 
 // BenchmarkMVCCMergeTimeSeries computes performance of merging time series data.
 func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
-	ts := &proto.TimeSeriesData{
-		StartTimestamp:    0,
-		DurationInSeconds: 3600,
-		SamplePrecision:   proto.SECONDS,
-		Data: []*proto.TimeSeriesDataPoint{
-			{Offset: 0, ValueInt: gogoproto.Int64(5)},
+	ts := &proto.InternalTimeSeriesData{
+		StartTimestampNanos: 0,
+		SampleDurationNanos: 1000,
+		Samples: []*proto.InternalTimeSeriesSample{
+			{Offset: 0, IntCount: 1, IntSum: gogoproto.Int64(5)},
 		},
 	}
 	value, err := ts.ToValue()

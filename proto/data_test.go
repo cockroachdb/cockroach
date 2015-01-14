@@ -20,11 +20,12 @@ package proto
 import (
 	"bytes"
 	"math"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -380,6 +381,32 @@ func TestGCMetadataEstimatedBytes(t *testing.T) {
 		expBytes := 10 + int64(100*fraction)
 		if eb := gc.EstimatedBytes(time.Unix(i, 0), 110); eb != expBytes {
 			t.Errorf("expected %d @%ds; got %d", expBytes, i, eb)
+		}
+	}
+}
+
+// TestNodeList verifies that its public methods Add() and Contain()
+// operate as expected.
+func TestNodeList(t *testing.T) {
+	sn := NodeList{}
+	items := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
+	for i, _ := range items {
+		n := int32(items[i])
+		if sn.Contains(n) {
+			t.Fatalf("%d: false positive hit for %d on slice %v",
+				i, n, sn.GetNodes())
+		}
+		// Add this item and, for good measure, all the previous ones.
+		for j := i; j >= 0; j-- {
+			sn.Add(int32(items[j]))
+		}
+		if nodes := sn.GetNodes(); len(nodes) != i+1 {
+			t.Fatalf("%d: missing values or duplicates: %v",
+				i, nodes)
+		}
+		if !sn.Contains(n) {
+			t.Fatalf("%d: false negative hit for %d on slice %v",
+				i, n, sn.GetNodes())
 		}
 	}
 }

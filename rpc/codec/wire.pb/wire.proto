@@ -29,7 +29,7 @@
 //	len(ResponseHeader) < Const.max_header_len.default
 package wire;
 
-import "code.google.com/p/gogoprotobuf/gogoproto/gogo.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 message Const {
   optional uint32 max_header_len = 1 [default = 1024];

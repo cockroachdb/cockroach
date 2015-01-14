@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	gogoproto "code.google.com/p/gogoprotobuf/proto"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -32,37 +31,39 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // createTestDB creates a *client.KV using a LocalSender object built
 // with a store using an in-memory engine. Returns the created kv
 // client and associated clock's manual time.
 // TODO(spencer): return a struct.
-func createTestDB(t *testing.T) (*client.KV, engine.Engine, *hlc.Clock, *hlc.ManualClock, *LocalSender) {
+func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
+	manual *hlc.ManualClock, lSender *LocalSender, err error) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 50<<20)
-	lSender := NewLocalSender()
+	manual = hlc.NewManualClock(0)
+	clock = hlc.NewClock(manual.UnixNano)
+	eng = engine.NewInMem(proto.Attributes{}, 50<<20)
+	lSender = NewLocalSender()
 	sender := NewTxnCoordSender(lSender, clock)
-	db := client.NewKV(sender, nil)
+	db = client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
-	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
-		t.Fatal(err)
+	if err = store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		return
 	}
-	if err := store.Start(); err != nil {
-		t.Fatal(err)
+	if err = store.Start(); err != nil {
+		return
 	}
 	lSender.AddStore(store)
-	if err := store.BootstrapRange(); err != nil {
-		t.Fatal(err)
+	if err = store.BootstrapRange(); err != nil {
+		return
 	}
-	if err := store.Start(); err != nil {
-		t.Fatal(err)
+	if err = store.Start(); err != nil {
+		return
 	}
-	return db, eng, clock, manual, lSender
+	return
 }
 
 // makeTS creates a new timestamp.
@@ -100,7 +101,10 @@ func createPutRequest(key proto.Key, value []byte, txn *proto.Transaction) *prot
 // transaction metadata and adding multiple requests with same
 // transaction ID updates the last update timestamp.
 func TestTxnCoordSenderAddRequest(t *testing.T) {
-	db, _, clock, manual, ls := createTestDB(t)
+	db, _, clock, manual, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coord := getCoord(db)
 	defer db.Close()
 	defer ls.Close()
@@ -141,7 +145,10 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 // TestTxnCoordSenderBeginTransaction verifies that a command sent with a
 // not-nil Txn with empty ID gets a new transaction initialized.
 func TestTxnCoordSenderBeginTransaction(t *testing.T) {
-	db, _, _, _, ls := createTestDB(t)
+	db, _, _, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	defer ls.Close()
 
@@ -171,8 +178,8 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	if reply.Txn.Priority != 10 {
 		t.Errorf("expected txn priority 10; got %d", reply.Txn.Priority)
 	}
-	if !bytes.HasPrefix(reply.Txn.ID, key) {
-		t.Errorf("expected txn ID to have prefix %q; got %q", key, reply.Txn.ID)
+	if !bytes.Equal(reply.Txn.Key, key) {
+		t.Errorf("expected txn Key to match %q != %q", key, reply.Txn.Key)
 	}
 	if reply.Txn.Isolation != proto.SNAPSHOT {
 		t.Errorf("expected txn isolation to be SNAPSHOT; got %s", reply.Txn.Isolation)
@@ -182,7 +189,10 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
-	db, _, _, _, ls := createTestDB(t)
+	db, _, _, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	defer ls.Close()
 
@@ -226,7 +236,10 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		{proto.Key("b"), proto.Key("c")},
 	}
 
-	db, _, clock, _, ls := createTestDB(t)
+	db, _, clock, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coord := getCoord(db)
 	defer db.Close()
 	defer ls.Close()
@@ -256,7 +269,10 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 // TestTxnCoordSenderMultipleTxns verifies correct operation with
 // multiple outstanding transactions.
 func TestTxnCoordSenderMultipleTxns(t *testing.T) {
-	db, _, clock, _, ls := createTestDB(t)
+	db, _, clock, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coord := getCoord(db)
 	defer db.Close()
 	defer ls.Close()
@@ -278,7 +294,10 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 // TestTxnCoordSenderHeartbeat verifies periodic heartbeat of the
 // transaction record.
 func TestTxnCoordSenderHeartbeat(t *testing.T) {
-	db, _, clock, manual, ls := createTestDB(t)
+	db, _, clock, manual, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coord := getCoord(db)
 	defer db.Close()
 	defer ls.Close()
@@ -295,7 +314,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	var heartbeatTS proto.Timestamp
 	for i := 0; i < 3; i++ {
 		if err := util.IsTrueWithin(func() bool {
-			ok, txn, err := getTxn(db, txn.ID)
+			ok, txn, err := getTxn(db, txn)
 			if !ok || err != nil {
 				return false
 			}
@@ -316,11 +335,12 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 }
 
 // getTxn fetches the requested key and returns the transaction info.
-func getTxn(db *client.KV, key proto.Key) (bool, *proto.Transaction, error) {
+func getTxn(db *client.KV, txn *proto.Transaction) (bool, *proto.Transaction, error) {
 	hr := &proto.InternalHeartbeatTxnResponse{}
 	if err := db.Call(proto.InternalHeartbeatTxn, &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: key,
+			Key: txn.Key,
+			Txn: txn,
 		},
 	}, hr); err != nil {
 		return false, nil, err
@@ -350,7 +370,10 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 // sends resolve write intent requests and removes the transaction
 // from the txns map.
 func TestTxnCoordSenderEndTxn(t *testing.T) {
-	db, eng, clock, _, ls := createTestDB(t)
+	db, eng, clock, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	defer ls.Close()
 
@@ -368,7 +391,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		Method: proto.EndTransaction,
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:       txn.ID,
+				Key:       txn.Key,
 				Timestamp: txn.Timestamp,
 				Txn:       txn,
 			},
@@ -385,7 +408,10 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 // TestTxnCoordSenderCleanupOnAborted verifies that if a txn receives a
 // TransactionAbortedError, the coordinator cleans up the transaction.
 func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
-	db, eng, clock, _, ls := createTestDB(t)
+	db, eng, clock, _, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
 	defer ls.Close()
 
@@ -402,7 +428,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	txn2.Priority = 2
 	pushArgs := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: txn.ID,
+			Key: txn.Key,
 			Txn: txn2,
 		},
 		PusheeTxn: *txn,
@@ -416,13 +442,13 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	// end transaction failed.
 	etArgs := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       txn.ID,
+			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Txn:       txn,
 		},
 		Commit: true,
 	}
-	err := db.Call(proto.EndTransaction, etArgs, &proto.EndTransactionResponse{})
+	err = db.Call(proto.EndTransaction, etArgs, &proto.EndTransactionResponse{})
 	switch err.(type) {
 	case nil:
 		t.Fatal("expected txn aborted error")
@@ -437,7 +463,10 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 // TestTxnCoordSenderGC verifies that the coordinator cleans up extant
 // transactions after the lastUpdateTS exceeds the timeout.
 func TestTxnCoordSenderGC(t *testing.T) {
-	db, _, clock, manual, ls := createTestDB(t)
+	db, _, clock, manual, ls, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	coord := getCoord(db)
 	defer db.Close()
 	defer ls.Close()
@@ -492,6 +521,9 @@ var testPutReq = &proto.PutRequest{
 		Txn: &proto.Transaction{
 			Name: "test txn",
 		},
+		Replica: proto.Replica{
+			NodeID: 12345,
+		},
 	},
 }
 
@@ -508,11 +540,21 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		expPri    int32
 		expTS     proto.Timestamp
 		expOrigTS proto.Timestamp
+		nodeSeen  bool
 	}{
-		{&proto.ReadWithinUncertaintyIntervalError{ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11), makeTS(10, 11)},
-		{&proto.TransactionAbortedError{Txn: proto.Transaction{Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10), makeTS(0, 1)},
-		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9, makeTS(10, 11), makeTS(10, 11)},
-		{&proto.TransactionRetryError{Txn: proto.Transaction{Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10, makeTS(10, 10), makeTS(10, 10)},
+		{nil, 0, 1, makeTS(0, 1), makeTS(0, 1), false},
+		{&proto.ReadWithinUncertaintyIntervalError{
+			ExistingTimestamp: makeTS(10, 10)}, 1, 1, makeTS(10, 11),
+			makeTS(10, 11), true},
+		{&proto.TransactionAbortedError{Txn: proto.Transaction{
+			Timestamp: makeTS(20, 10), Priority: 10}}, 0, 10, makeTS(20, 10),
+			makeTS(0, 1), false},
+		{&proto.TransactionPushError{PusheeTxn: proto.Transaction{
+			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 9,
+			makeTS(10, 11), makeTS(10, 11), false},
+		{&proto.TransactionRetryError{Txn: proto.Transaction{
+			Timestamp: makeTS(10, 10), Priority: int32(10)}}, 1, 10,
+			makeTS(10, 10), makeTS(10, 10), false},
 	}
 
 	for i, test := range testCases {
@@ -526,16 +568,24 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())
 		}
 		if reply.Txn.Epoch != test.expEpoch {
-			t.Errorf("%d: expected epoch = %d; got %d", i, test.expEpoch, reply.Txn.Epoch)
+			t.Errorf("%d: expected epoch = %d; got %d",
+				i, test.expEpoch, reply.Txn.Epoch)
 		}
 		if reply.Txn.Priority != test.expPri {
-			t.Errorf("%d: expected priority = %d; got %d", i, test.expPri, reply.Txn.Priority)
+			t.Errorf("%d: expected priority = %d; got %d",
+				i, test.expPri, reply.Txn.Priority)
 		}
 		if !reply.Txn.Timestamp.Equal(test.expTS) {
-			t.Errorf("%d: expected timestamp to be %s; got %s", i, test.expTS, reply.Txn.Timestamp)
+			t.Errorf("%d: expected timestamp to be %s; got %s",
+				i, test.expTS, reply.Txn.Timestamp)
 		}
 		if !reply.Txn.OrigTimestamp.Equal(test.expOrigTS) {
-			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s", i, test.expOrigTS, reply.Txn.OrigTimestamp)
+			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
+				i, test.expOrigTS, reply.Txn.OrigTimestamp)
+		}
+		if nodes := reply.Txn.CertainNodes.GetNodes(); (len(nodes) != 0) != test.nodeSeen {
+			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
+				i, test.nodeSeen, nodes)
 		}
 	}
 }
