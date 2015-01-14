@@ -240,6 +240,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 		{&proto.RangeNotFoundError{}, true},
 		{&proto.RangeKeyMismatchError{}, true},
 		{&proto.TransactionStatusError{}, true},
+		{&proto.ConditionFailedError{}, true},
 		{&proto.WriteIntentError{}, false},
 		{&proto.WriteTooOldError{}, false},
 	}
