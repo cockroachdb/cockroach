@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"regexp"
 	"sync"
@@ -1559,7 +1560,10 @@ func TestRemoteRaftCommand(t *testing.T) {
 	// Send an increment direct to raft.
 	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1, s.StoreID())
 	remoteIncArgs.Timestamp = proto.MinTimestamp
-	idKey := makeCmdIDKey(proto.ClientCmdID{WallTime: 1, Random: 1})
+	idKey := makeCmdIDKey(proto.ClientCmdID{
+		WallTime: s.Clock().PhysicalNow(),
+		Random:   rand.Int63(),
+	})
 	raftCmd := proto.InternalRaftCommand{
 		RaftID: r.Desc.RaftID,
 	}
