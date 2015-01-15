@@ -389,7 +389,16 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
 
-	s.multiNode.CreateGroup(op.groupID, nil, s.Storage.GroupStorage(op.groupID))
+	gs := s.Storage.GroupStorage(op.groupID)
+	_, cs, err := gs.InitialState()
+	if err != nil {
+		op.ch <- err
+	}
+	for _, nodeID := range cs.Nodes {
+		s.addNode(nodeID)
+	}
+
+	s.multiNode.CreateGroup(op.groupID, nil, gs)
 	s.groups[op.groupID] = &group{
 		pending: map[string]proposal{},
 	}

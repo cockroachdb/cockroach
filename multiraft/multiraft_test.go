@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -86,13 +87,28 @@ func (c *testCluster) stop() {
 // createGroup replicates a group among the first numReplicas nodes in the cluster
 func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 	var replicaIDs []uint64
-	var replicaNodes []*state
 	for i := 0; i < numReplicas; i++ {
-		replicaNodes = append(replicaNodes, c.nodes[i])
 		replicaIDs = append(replicaIDs, c.nodes[i].nodeID)
 	}
-	for _, node := range replicaNodes {
-		err := node.CreateGroup(groupID, replicaIDs)
+	for i := 0; i < numReplicas; i++ {
+		gs := c.storages[i].GroupStorage(groupID)
+		memStorage := gs.(*blockableGroupStorage).s.(*raft.MemoryStorage)
+		memStorage.SetHardState(raftpb.HardState{
+			Commit: 10,
+			Term:   5,
+		})
+		memStorage.ApplySnapshot(raftpb.Snapshot{
+			Metadata: raftpb.SnapshotMetadata{
+				ConfState: raftpb.ConfState{
+					Nodes: replicaIDs,
+				},
+				Index: 10,
+				Term:  5,
+			},
+		})
+
+		node := c.nodes[i]
+		err := node.CreateGroup(groupID)
 		if err != nil {
 			c.t.Fatal(err)
 		}
