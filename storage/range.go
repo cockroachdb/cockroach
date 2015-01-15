@@ -1422,16 +1422,13 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 		Vote:   raft.None,
 		Commit: raftInitialLogIndex,
 	}
-	cs := raftpb.ConfState{}
+	cs := raftpb.ConfState{
+		Nodes: []uint64{1},
+	}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return hs, cs, err
-	}
-
-	for _, rep := range r.Desc.Replicas {
-		// TODO(bdarnell): encode rep.NodeID and rep.StoreID into the raft NodeID.
-		cs.Nodes = append(cs.Nodes, uint64(rep.NodeID))
 	}
 
 	return hs, cs, nil
