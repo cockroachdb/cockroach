@@ -55,7 +55,7 @@ type Iterator interface {
 	// iterator was not positioned at the last key.
 	Next()
 	// Key returns the current key as a byte slice.
-	Key() []byte
+	Key() proto.EncodedKey
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// Error returns the error, if any, which the iterator encountered.

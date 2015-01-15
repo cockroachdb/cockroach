@@ -198,7 +198,7 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 	it.Seek(start)
 	for ; it.Valid(); it.Next() {
 		k := it.Key()
-		if bytes.Compare(it.Key(), end) >= 0 {
+		if !it.Key().Less(end) {
 			break
 		}
 		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
@@ -516,7 +516,7 @@ func (r *rocksDBIterator) Next() {
 	C.DBIterNext(r.iter)
 }
 
-func (r *rocksDBIterator) Key() []byte {
+func (r *rocksDBIterator) Key() proto.EncodedKey {
 	// The data returned by rocksdb_iter_{key,value} is not meant to be
 	// freed by the client. It is a direct reference to the data managed
 	// by the iterator, so it is copied instead of freed.

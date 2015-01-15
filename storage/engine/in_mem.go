@@ -409,9 +409,9 @@ func (in *inMemIterator) Next() {
 	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
 }
 
-func (in *inMemIterator) Key() []byte {
+func (in *inMemIterator) Key() proto.EncodedKey {
 	if !in.Valid() {
-		in.err = util.Errorf("access to invalid key")
+		in.err = util.Errorf("invalid iterator")
 		return nil
 	}
 	return in.cur.Key
@@ -419,7 +419,7 @@ func (in *inMemIterator) Key() []byte {
 
 func (in *inMemIterator) Value() []byte {
 	if !in.Valid() {
-		in.err = util.Errorf("access to invalid key")
+		in.err = util.Errorf("invalid iterator")
 		return nil
 	}
 	return in.cur.Value

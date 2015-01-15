@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -68,6 +69,12 @@ func KeyAddress(k proto.Key) proto.Key {
 	return k[KeyLocalPrefixLength:]
 }
 
+// RangeScanMetadataKey returns a system-local key for range scan
+// metadata.
+func RangeScanMetadataKey(startKey proto.Key) proto.Key {
+	return MakeLocalKey(KeyLocalRangeScanMetadataPrefix, startKey)
+}
+
 // RangeDescriptorKey returns a system-local key for the descriptor
 // for the range with specified start key.
 func RangeDescriptorKey(startKey proto.Key) proto.Key {
@@ -97,6 +104,13 @@ func RangeMetaKey(key proto.Key) proto.Key {
 // descriptor should be stored as a value.
 func RangeMetaLookupKey(r *proto.RangeDescriptor) proto.Key {
 	return RangeMetaKey(r.EndKey)
+}
+
+// TransactionKey returns a transaction key based on the provided
+// transaction key and ID. The base key is encoded in order to
+// guarantee that all transaction records for a range sort together.
+func TransactionKey(key proto.Key, id []byte) proto.Key {
+	return MakeKey(KeyLocalTransactionPrefix, encoding.EncodeBinary(nil, key), id)
 }
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
@@ -186,6 +200,8 @@ var (
 	// KeyLocalRangeDescriptorPrefix is the prefix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	KeyLocalRangeDescriptorPrefix = MakeKey(KeyLocalPrefix, proto.Key("rng-"))
+	// KeyLocalRangeScanMetadataPrefix is the prefix for a range's scan metadata.
+	KeyLocalRangeScanMetadataPrefix = MakeKey(KeyLocalPrefix, proto.Key("rsm-"))
 	// KeyLocalRangeStatPrefix is the prefix for range statistics.
 	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, proto.Key("rst-"))
 	// KeyLocalResponseCachePrefix is the prefix for keys storing command

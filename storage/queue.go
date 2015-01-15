@@ -17,7 +17,10 @@
 
 package storage
 
-import "container/heap"
+import (
+	"container/heap"
+	"time"
+)
 
 // A rangeItem holds a range and its priority for use with a priority queue.
 type rangeItem struct {
@@ -64,9 +67,13 @@ func (pq *priorityQueue) update(item *rangeItem, priority float64) {
 	heap.Fix(pq, item.index)
 }
 
-// shouldQueue accepts a Range and returns whether it should be
-// queued and if so, at what priority.
-type shouldQueueFn func(*Range) (shouldQueue bool, priority float64)
+// shouldQueue accepts current time and a Range and returns whether it
+// should be queued and if so, at what priority.
+type shouldQueueFn func(time.Time, *Range) (shouldQueue bool, priority float64)
+
+// processFn accepts current time and a range and executes
+// queue-specific work on it.
+type processFn func(time.Time, *Range) error
 
 // baseQueue is the base implementation of the rangeQueue interface.
 // Queue implementations should embed a baseQueue and provide it
@@ -75,6 +82,7 @@ type shouldQueueFn func(*Range) (shouldQueue bool, priority float64)
 // baseQueue is not thread safe.
 type baseQueue struct {
 	shouldQ   shouldQueueFn        // Should a range be queued?
+	process   processFn            // Executes queue-specific work on range
 	maxSize   int                  // Maximum number of ranges to queue
 	priorityQ priorityQueue        // The priority queue
 	ranges    map[int64]*rangeItem // Map from RaftID to rangeItem (for updating priority)
@@ -86,40 +94,42 @@ type baseQueue struct {
 // maxSize doesn't prevent new ranges from being added, it just
 // limits the total size. Higher priority ranges can still be
 // added; their addition simply removes the lowest priority range.
-func newBaseQueue(shouldQ shouldQueueFn, maxSize int) *baseQueue {
+func newBaseQueue(shouldQ shouldQueueFn, process processFn, maxSize int) *baseQueue {
 	return &baseQueue{
 		shouldQ: shouldQ,
+		process: process,
 		maxSize: maxSize,
 		ranges:  map[int64]*rangeItem{},
 	}
 }
 
-// length returns the current size of the queue.
-func (bq *baseQueue) length() int {
+// Length returns the current size of the queue.
+func (bq *baseQueue) Length() int {
 	return bq.priorityQ.Len()
 }
 
-// next dequeues and returns the highest priority range. If the queue
-// is empty, returns nil.
-func (bq *baseQueue) next() *Range {
+// Pop dequeues and processes the highest priority range in the queue.
+// Returns the range if not empty; otherwise, returns nil.
+func (bq *baseQueue) Pop() *Range {
 	if bq.priorityQ.Len() == 0 {
 		return nil
 	}
 	item := heap.Pop(&bq.priorityQ).(*rangeItem)
 	delete(bq.ranges, item.value.Desc.RaftID)
+	bq.process(time.Now(), item.value)
 	return item.value
 }
 
-// maybeAdd adds the specified range if bq.shouldQ specifies it should
+// MaybeAdd adds the specified range if bq.shouldQ specifies it should
 // be queued. Ranges are added to the queue using the priority
 // returned by bq.shouldQ. If the queue is too full, an already-queued
 // range with the lowest priority may be dropped.
-func (bq *baseQueue) maybeAdd(rng *Range) {
-	should, priority := bq.shouldQ(rng)
+func (bq *baseQueue) MaybeAdd(rng *Range) {
+	should, priority := bq.shouldQ(time.Now(), rng)
 	item, ok := bq.ranges[rng.Desc.RaftID]
 	if !should {
 		if ok {
-			bq.internalRemove(item.index)
+			bq.remove(item.index)
 		}
 		return
 	} else if ok {
@@ -134,24 +144,24 @@ func (bq *baseQueue) maybeAdd(rng *Range) {
 	// If adding this range has pushed the queue past its maximum size,
 	// remove the lowest priority element.
 	if pqLen := bq.priorityQ.Len(); pqLen > bq.maxSize {
-		bq.internalRemove(pqLen - 1)
+		bq.remove(pqLen - 1)
 	}
 }
 
-// maybeRemove removes the specified range from the queue if enqueued.
-func (bq *baseQueue) maybeRemove(rng *Range) {
+// MaybeRemove removes the specified range from the queue if enqueued.
+func (bq *baseQueue) MaybeRemove(rng *Range) {
 	if item, ok := bq.ranges[rng.Desc.RaftID]; ok {
-		bq.internalRemove(item.index)
+		bq.remove(item.index)
 	}
 }
 
-// clear removes all ranges from the queue.
-func (bq *baseQueue) clear() {
+// Clear removes all ranges from the queue.
+func (bq *baseQueue) Clear() {
 	bq.ranges = map[int64]*rangeItem{}
 	bq.priorityQ = nil
 }
 
-func (bq *baseQueue) internalRemove(index int) {
+func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*rangeItem)
 	delete(bq.ranges, item.value.Desc.RaftID)
 }

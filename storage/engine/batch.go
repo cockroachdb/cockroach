@@ -275,7 +275,7 @@ func (bi *batchIterator) Next() {
 	}
 }
 
-func (bi *batchIterator) Key() []byte {
+func (bi *batchIterator) Key() proto.EncodedKey {
 	if !bi.Valid() {
 		debug.PrintStack()
 		bi.err = util.Errorf("access to invalid key")

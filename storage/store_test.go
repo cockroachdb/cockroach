@@ -385,12 +385,6 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
-	// Try a put to txn record for a meta2 key.
-	pArgs, pReply = putArgs(engine.MakeKey(engine.KeyLocalTransactionPrefix,
-		engine.KeyMeta2Prefix, engine.KeyMax), []byte("value"), 1, store.StoreID())
-	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
-		t.Fatalf("unexpected error on put to meta2 value: %s", err)
-	}
 }
 
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
@@ -596,7 +590,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if err != nil {
 				t.Errorf("expected intent resolved; got unexpected error: %s", err)
 			}
-			txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.Key, pushee.ID)
+			txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
 			var txn proto.Transaction
 			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 			if !ok || err != nil {
@@ -849,7 +843,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, pushee.Key, pushee.ID)
+	txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
 	if !ok || err != nil {

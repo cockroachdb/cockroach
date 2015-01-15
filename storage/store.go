@@ -44,10 +44,6 @@ const (
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount = 10
-	// uuidLength is the length of a UUID string, used to allot extra
-	// key length to transaction records, which have a UUID appended.
-	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
-	uuidLength = 36
 	// defaultScanInterval is the default value for the scan interval
 	// command line flag.
 	defaultScanInterval = 10 * time.Minute
@@ -494,14 +490,20 @@ func (s *Store) BootstrapRange() error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
+	// Range descriptor.
 	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// Write meta1.
+	// Scan Metadata.
+	scanMeta := proto.NewScanMetadata(now.WallTime)
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeScanMetadataKey(desc.StartKey), proto.ZeroTimestamp, nil, scanMeta); err != nil {
+		return err
+	}
+	// Range addressing for meta1.
 	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
-	// Write meta2.
+	// Range addressing for meta2.
 	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
@@ -529,11 +531,15 @@ func (s *Store) BootstrapRange() error {
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
+		GC: &proto.GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}
+
 	ms.MergeStats(batch, 1, 1)
 	if err := batch.Commit(); err != nil {
 		return err
@@ -541,7 +547,7 @@ func (s *Store) BootstrapRange() error {
 	return nil
 }
 
-// The following methods are accessors implementation the RangeManager interface.
+// The following methods implement the RangeManager interface.
 
 // ClusterID accessor.
 func (s *Store) ClusterID() string { return s.Ident.ClusterID }

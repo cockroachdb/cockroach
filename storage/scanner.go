@@ -31,31 +31,31 @@ import (
 // or busy stores, a recovery queue for ranges with dead replicas,
 // etc.
 type rangeQueue interface {
-	// next returns the highest priority range from the queue. If the
+	// Next returns the highest priority range from the queue. If the
 	// queue is empty, returns nil.
-	next() *Range
-	// maybeAdd adds the range to the queue if the range meets
+	Next() *Range
+	// MaybeAdd adds the range to the queue if the range meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	maybeAdd(*Range)
-	// maybeRemove removes the range from the queue if it is present.
-	maybeRemove(*Range)
-	// clear clears all ranges from the queue.
-	clear()
+	MaybeAdd(*Range)
+	// MaybeRemove removes the range from the queue if it is present.
+	MaybeRemove(*Range)
+	// Clear clears all ranges from the queue.
+	Clear()
 }
 
 // A rangeIterator provides access to a sequence of ranges to consider
 // for inclusion in range queues. There are no requirements for the
 // ordering of the iteration.
 type rangeIterator interface {
-	// next returns the next range in the iteration. Returns nil if
+	// Next returns the next range in the iteration. Returns nil if
 	// there are no more ranges.
-	next() *Range
-	// estimatedCount returns the number of ranges estimated to remain
+	Next() *Range
+	// EstimatedCount returns the number of ranges estimated to remain
 	// in the iteration. This value does not need to be exact.
-	estimatedCount() int
-	// reset restarts the iterator at the beginning.
-	reset()
+	EstimatedCount() int
+	// Reset restarts the iterator at the beginning.
+	Reset()
 }
 
 // A rangeScanner iterates over ranges at a measured pace in order to
@@ -82,29 +82,29 @@ func newRangeScanner(interval time.Duration, iter rangeIterator, queues []rangeQ
 	}
 }
 
-// start spins up the scanning loop. Call stop() to exit the loop.
-func (rs *rangeScanner) start() {
+// Start spins up the scanning loop. Call Stop() to exit the loop.
+func (rs *rangeScanner) Start() {
 	go rs.scanLoop()
 }
 
-// stop stops the scanning loop.
-func (rs *rangeScanner) stop() {
+// Stop stops the scanning loop.
+func (rs *rangeScanner) Stop() {
 	rs.stopper.Stop()
 	for _, q := range rs.queues {
-		q.clear()
+		q.Clear()
 	}
 }
 
-// loopCount returns the number of times the scanner has cycled
-// through all ranges.
-func (rs *rangeScanner) loopCount() int64 {
+// Count returns the number of times the scanner has cycled through
+// all ranges.
+func (rs *rangeScanner) Count() int64 {
 	return atomic.LoadInt64(&rs.count)
 }
 
-// removeRange removes a range from any range queues the scanner may
+// RemoveRange removes a range from any range queues the scanner may
 // have placed it in. This method should be called by the Store
 // when a range is removed (e.g. rebalanced or merged).
-func (rs *rangeScanner) removeRange(rng *Range) {
+func (rs *rangeScanner) RemoveRange(rng *Range) {
 	rs.removed <- rng
 }
 
@@ -121,22 +121,22 @@ func (rs *rangeScanner) scanLoop() {
 			remainingNanos = 0
 		}
 		nextIteration := time.Duration(remainingNanos)
-		if count := rs.iter.estimatedCount(); count > 0 {
+		if count := rs.iter.EstimatedCount(); count > 0 {
 			nextIteration = time.Duration(remainingNanos / int64(count))
 		}
 		log.V(6).Infof("next range scan iteration in %s", nextIteration)
 
 		select {
 		case <-time.After(nextIteration):
-			rng := rs.iter.next()
+			rng := rs.iter.Next()
 			if rng != nil {
 				// Try adding range to all queues.
 				for _, q := range rs.queues {
-					q.maybeAdd(rng)
+					q.MaybeAdd(rng)
 				}
 			} else {
 				// Otherwise, reset iteration and start time.
-				rs.iter.reset()
+				rs.iter.Reset()
 				start = time.Now()
 				atomic.AddInt64(&rs.count, 1)
 				log.V(6).Infof("reset range scan iteration")
@@ -145,7 +145,7 @@ func (rs *rangeScanner) scanLoop() {
 		case rng := <-rs.removed:
 			// Remove range from all queues as applicable.
 			for _, q := range rs.queues {
-				q.maybeRemove(rng)
+				q.MaybeRemove(rng)
 			}
 			log.V(6).Infof("removed range %s", rng)
 
