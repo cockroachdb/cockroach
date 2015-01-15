@@ -164,17 +164,11 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 	}
 }
 
-// CreateGroup creates a new consensus group and joins it. The application should
-// arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
-	for _, id := range initialMembers {
-		if id == 0 {
-			return util.Error("Invalid NodeID")
-		}
-	}
+// CreateGroup creates a new consensus group and joins it. The initial membership of this
+// group is determined by the InitialState method of the group's Storage object.
+func (m *MultiRaft) CreateGroup(groupID uint64) error {
 	op := &createGroupOp{
 		groupID,
-		initialMembers,
 		make(chan error),
 	}
 	m.createGroupChan <- op
@@ -254,9 +248,8 @@ type group struct {
 }
 
 type createGroupOp struct {
-	groupID        uint64
-	initialMembers []uint64
-	ch             chan error
+	groupID uint64
+	ch      chan error
 }
 
 type removeGroupOp struct {
@@ -393,24 +386,9 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
 
-	peers := make([]raft.Peer, len(op.initialMembers))
-	for i, member := range op.initialMembers {
-		peers[i].ID = member
-		err := s.addNode(member)
-		if err != nil {
-			op.ch <- err
-			return
-		}
-	}
-	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
+	s.multiNode.CreateGroup(op.groupID, nil, s.Storage.GroupStorage(op.groupID))
 	s.groups[op.groupID] = &group{
 		pending: map[string]proposal{},
-	}
-
-	// HACK: for single-node groups force an immediate election instead of waiting
-	// for the randomized timeout.
-	if len(op.initialMembers) == 1 {
-		//s.multiNode.Campaign(context.Background(), op.groupID)
 	}
 
 	op.ch <- nil

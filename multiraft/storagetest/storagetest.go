@@ -45,45 +45,42 @@ func RunTests(t *testing.T, setUp func(*testing.T) WriteableStorage,
 }
 
 // testEmptyLog calls all the read methods on an empty log and verifies the expected
-// state.
+// state. Note that an empty log need not start from index zero.
 func testEmptyLog(t *testing.T, s WriteableStorage) {
 	hs, _, err := s.InitialState()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !raft.IsEmptyHardState(hs) {
-		t.Errorf("expected empty HardState, got %v", hs)
-	}
 
-	ents, err := s.Entries(1, 2)
-	if err != raft.ErrUnavailable {
-		t.Errorf("expected ErrUnavailable, got %v, %v", ents, err)
-	}
-
-	term, err := s.Term(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if term != 0 {
-		t.Errorf("expected Term(0) to be 0, got %d", term)
-	}
-
-	// FirstIndex starts at 1; LastIndex starts at 0.
-	// This is because both indices are inclusive so
-	// len == 1 + last - first
+	// When the log is empty, FirstIndex = LastIndex + 1 (typically 1 and 0).
+	// This is because both indices are inclusive so len == 1 + last - first
 	firstIndex, err := s.FirstIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if firstIndex != 1 {
-		t.Errorf("expected FirstIndex to be 1, got %d", firstIndex)
+	if firstIndex < 1 {
+		t.Errorf("expected FirstIndex to be >= 1, got %d", firstIndex)
 	}
 
 	lastIndex, err := s.LastIndex()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lastIndex != 0 {
-		t.Errorf("expected LastIndex to be 0, got %d", lastIndex)
+	if lastIndex != firstIndex-1 {
+		t.Errorf("expected LastIndex to be firstIndex - 1 (%d), got %d", firstIndex-1, lastIndex)
 	}
+
+	ents, err := s.Entries(firstIndex, firstIndex+1)
+	if err != raft.ErrUnavailable {
+		t.Errorf("expected ErrUnavailable, got %v, %v", ents, err)
+	}
+
+	term, err := s.Term(firstIndex - 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if term != hs.Term {
+		t.Errorf("expected Term(firstIndex) to be hs.Term (%d), got %d", hs.Term, term)
+	}
+
 }

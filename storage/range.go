@@ -70,6 +70,15 @@ var (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
+// raftInitialLogIndex is the starting point for the raft log. We bootstrap
+// the raft membership by synthesizing a snapshot as if there were some
+// discarded prefix to the log, so we must begin the log at an arbitrary
+// index greater than 1.
+const (
+	raftInitialLogIndex = 10
+	raftInitialLogTerm  = 5
+)
+
 // configDescriptor describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 type configDescriptor struct {
@@ -171,6 +180,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		Desc:        desc,
 		rm:          rm,
+		lastIndex:   raftInitialLogIndex,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
@@ -1406,15 +1416,25 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
-	var hs raftpb.HardState
+	// Set up the defaults if there is no stored HardState.
+	hs := raftpb.HardState{
+		Term:   raftInitialLogTerm,
+		Vote:   raft.None,
+		Commit: raftInitialLogIndex,
+	}
+	cs := raftpb.ConfState{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
-		return hs, raftpb.ConfState{}, err
+		return hs, cs, err
 	}
 
-	// TODO(bdarnell): Synthesize ConfState from RangeDescriptor.
-	return hs, raftpb.ConfState{}, nil
+	for _, rep := range r.Desc.Replicas {
+		// TODO(bdarnell): encode rep.NodeID and rep.StoreID into the raft NodeID.
+		cs.Nodes = append(cs.Nodes, uint64(rep.NodeID))
+	}
+
+	return hs, cs, nil
 }
 
 // loadLastIndex looks in the engine to find the last log index.
@@ -1474,9 +1494,9 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 
 // Term implements the raft.Storage interface.
 func (r *Range) Term(i uint64) (uint64, error) {
-	if i == 0 {
+	if i == raftInitialLogIndex {
 		// TODO(bdarnell): handle the pre-snapshot dummy entry
-		return 0, nil
+		return raftInitialLogTerm, nil
 	}
 	ents, err := r.Entries(i, i+1)
 	if err != nil {
@@ -1495,7 +1515,8 @@ func (r *Range) LastIndex() (uint64, error) {
 
 // FirstIndex implements the raft.Storage interface.
 func (r *Range) FirstIndex() (uint64, error) {
-	return 1, nil
+	// Add one to initialLogIndex to get the first regular log entry.
+	return raftInitialLogIndex + 1, nil
 }
 
 // Snapshot implements the raft.Storage interface.

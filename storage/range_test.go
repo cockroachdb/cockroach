@@ -50,11 +50,6 @@ var (
 				StoreID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
 			},
-			{
-				NodeID:  2,
-				StoreID: 2,
-				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
-			},
 		},
 	}
 	testDefaultAcctConfig = proto.AcctConfig{}

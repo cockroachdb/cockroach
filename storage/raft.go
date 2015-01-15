@@ -93,7 +93,7 @@ func (snr *singleNodeRaft) createGroup(id int64) error {
 	if _, ok := snr.groups[id]; !ok {
 		snr.groups[id] = struct{}{}
 		snr.mu.Unlock()
-		return snr.mr.CreateGroup(uint64(id), []uint64{1})
+		return snr.mr.CreateGroup(uint64(id))
 	}
 	snr.mu.Unlock()
 	return nil
@@ -115,12 +115,7 @@ func (snr *singleNodeRaft) restoreGroup(id int64) error {
 	if _, ok := snr.groups[id]; !ok {
 		snr.groups[id] = struct{}{}
 		snr.mu.Unlock()
-		// TODO(bdarnell): don't create initial members here.
-		// restoreGroup is to be used when there is already state on disk,
-		// but we don't get the magic pre-commit behavior if we don't pass
-		// in members here. I think this should change to always start from a
-		// constructed snapshot.
-		return snr.mr.CreateGroup(uint64(id), []uint64{1})
+		return snr.mr.CreateGroup(uint64(id))
 	}
 	snr.mu.Unlock()
 	return nil
