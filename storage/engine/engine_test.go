@@ -51,13 +51,18 @@ func ensureRangeEqual(t *testing.T, sortedKeys []string, keyMap map[string][]byt
 	}
 }
 
+var (
+	inMemAttrs   = proto.Attributes{Attrs: []string{"mem"}}
+	rocksDBAttrs = proto.Attributes{Attrs: []string{"ssd"}}
+)
+
 // runWithAllEngines creates a new engine of each supported type and
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
-	inMem := NewInMem(proto.Attributes{}, 10<<20)
+	inMem := NewInMem(inMemAttrs, 10<<20)
 
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	rocksdb := NewRocksDB(rocksDBAttrs, loc)
 	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
@@ -507,6 +512,8 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		snap := engine.NewSnapshot()
+		defer snap.Stop()
+
 		val2 := []byte("2")
 		engine.Put(key, val2)
 		val, _ = engine.Get(key)
@@ -536,7 +543,140 @@ func TestSnapshot(t *testing.T) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				keyvalsSnapshot[0].Value, val1)
 		}
-		snap.Stop()
+	}, t)
+}
+
+// TestSnapshotMethods verifies that snapshots allow only read-only
+// engine operations.
+func TestSnapshotMethods(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		keys := [][]byte{[]byte("a"), []byte("b")}
+		vals := [][]byte{[]byte("1"), []byte("2")}
+		for i := range keys {
+			engine.Put(keys[i], vals[i])
+		}
+		snap := engine.NewSnapshot()
+		defer snap.Stop()
+
+		// Verify Attrs.
+		var attrs proto.Attributes
+		switch engine.(type) {
+		case *InMem:
+			attrs = inMemAttrs
+		case *RocksDB:
+			attrs = rocksDBAttrs
+		}
+		if !reflect.DeepEqual(engine.Attrs(), attrs) {
+			t.Errorf("attrs mismatch; expected %+v, got %+v", attrs, engine.Attrs())
+		}
+
+		// Verify Put is error.
+		if err := snap.Put([]byte("c"), []byte("3")); err == nil {
+			t.Error("expected error on Put to snapshot")
+		}
+
+		// Verify Get.
+		valSnapshot, err := snap.Get(keys[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(vals[0], valSnapshot) {
+			t.Fatalf("the value %s in get result does not match the value %s in snapshot",
+				vals[0], valSnapshot)
+		}
+
+		// Verify Scan.
+		keyvals, _ := Scan(engine, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
+		keyvalsSnapshot, err := Scan(snap, proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(keyvals, keyvalsSnapshot) {
+			t.Fatalf("the key/values %v in scan result does not match the value %s in snapshot",
+				keyvals, keyvalsSnapshot)
+		}
+
+		// Verify Iterate.
+		index := 0
+		if err := snap.Iterate(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), func(kv proto.RawKeyValue) (bool, error) {
+			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s", keys[index], vals[index], kv.Key, kv.Value)
+			}
+			index++
+			return false, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify Clear is error.
+		if err := snap.Clear(keys[0]); err == nil {
+			t.Error("expected error on Clear to snapshot")
+		}
+
+		// Verify WriteBatch is error.
+		if err := snap.WriteBatch([]interface{}{BatchDelete{proto.RawKeyValue{Key: keys[0]}}}); err == nil {
+			t.Error("expected error on WriteBatch to snapshot")
+		}
+
+		// Verify Merge is error.
+		if err := snap.Merge([]byte("merge-key"), appender("x")); err == nil {
+			t.Error("expected error on Merge to snapshot")
+		}
+
+		// Verify Capacity.
+		capacity, err := engine.Capacity()
+		if err != nil {
+			t.Fatal(err)
+		}
+		capacitySnapshot, err := snap.Capacity()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(capacity, capacitySnapshot) {
+			t.Errorf("expected capacities to be equal: %v != %v", capacity, capacitySnapshot)
+		}
+
+		// Verify ApproximateSize.
+		approx, err := engine.ApproximateSize(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax))
+		if err != nil {
+			t.Fatal(err)
+		}
+		approxSnapshot, err := snap.ApproximateSize(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if approx != approxSnapshot {
+			t.Errorf("expected approx sizes to be equal: %d != %d", approx, approxSnapshot)
+		}
+
+		// Write a new key to engine.
+		newKey := []byte("c")
+		newVal := []byte("3")
+		if err := engine.Put(newKey, newVal); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify NewIterator still iterates over original snapshot.
+		iter := snap.NewIterator()
+		iter.Seek(newKey)
+		if iter.Valid() {
+			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
+		}
+
+		// Verify NewSnapshot returns nil.
+		if newSnap := snap.NewSnapshot(); newSnap != nil {
+			t.Error("expected NewSnapshot on snapshot to return nil; got %+v", newSnap)
+		}
+
+		// Verify NewBatch returns nil.
+		if batch := snap.NewBatch(); batch != nil {
+			t.Error("expected NewBatch on snapshot to return nil; got %+v", batch)
+		}
+
+		// Verify Commit is error.
+		if err := snap.Commit(); err == nil {
+			t.Error("expected error on Commit to snapshot")
+		}
 	}, t)
 }
 

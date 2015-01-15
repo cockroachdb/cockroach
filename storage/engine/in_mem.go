@@ -305,7 +305,7 @@ func cloneNode(a *llrb.Node) *llrb.Node {
 	return newNode
 }
 
-// Returns a new Batch wrapping this in-memory engine.
+// NewBatch returns a new Batch wrapping this in-memory engine.
 func (in *InMem) NewBatch() Engine {
 	return &Batch{engine: in}
 }
@@ -345,7 +345,13 @@ func (in *inMemSnapshot) Merge(key proto.EncodedKey, value []byte) error {
 func (in *inMemSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 }
 
-// NewBatch is illegal for snapshot and returns an error.
+// NewSnapshot is illegal for snapshot and returns nil.
+func (in *inMemSnapshot) NewSnapshot() Engine {
+	log.Errorf("cannot create a NewSnapshot from a snapshot")
+	return nil
+}
+
+// NewBatch is illegal for snapshot and returns nil.
 func (in *inMemSnapshot) NewBatch() Engine {
 	log.Errorf("cannot create a NewBatch from a snapshot")
 	return nil

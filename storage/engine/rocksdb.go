@@ -377,7 +377,7 @@ func (r *RocksDB) NewSnapshot() Engine {
 	}
 }
 
-// Returns a new Batch wrapping this rocksdb engine.
+// NewBatch returns a new Batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Engine {
 	return &Batch{engine: r}
 }
@@ -461,14 +461,13 @@ func (r *rocksDBSnapshot) NewIterator() Iterator {
 	return newRocksDBIterator(r.parent.rdb, r.handle)
 }
 
-// NewSnapshot returns a new instance of a read-only snapshot
-// from the original RocksDB instance. This will be an updated
-// snapshot.
+// NewSnapshot is illegal for snapshot and returns nil.
 func (r *rocksDBSnapshot) NewSnapshot() Engine {
-	return r.parent.NewSnapshot()
+	log.Errorf("cannot create a NewSnapshot from a snapshot")
+	return nil
 }
 
-// NewBatch is illegal for snapshot and returns an error.
+// NewBatch is illegal for snapshot and returns nil.
 func (r *rocksDBSnapshot) NewBatch() Engine {
 	log.Errorf("cannot create a NewBatch from a snapshot")
 	return nil
