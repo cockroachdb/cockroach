@@ -190,6 +190,9 @@ func (m *MultiRaft) RemoveGroup(groupID uint64) error {
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
 // The returned channel is closed when the command is committed.
+// As long as this node is alive, the command will be retried until committed
+// (e.g. in the event of leader failover). There is no guarantee that commands will be
+// committed in the same order as they were originally submitted.
 func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) chan struct{} {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})

@@ -20,7 +20,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"regexp"
 	"sync"
@@ -1544,40 +1543,6 @@ func TestRangeStats(t *testing.T) {
 	}
 	expMS = engine.MVCCStats{LiveBytes: 44, KeyBytes: 56, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
 	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
-}
-
-// TestRemoteRaftCommand ensures that commands entering the raft
-// subsystem from other nodes are applied correctly.
-func TestRemoteRaftCommand(t *testing.T) {
-	s, r, _, _ := createTestRange(t)
-	defer s.Stop()
-
-	// Send an increment direct to raft.
-	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1, s.StoreID())
-	remoteIncArgs.Timestamp = proto.MinTimestamp
-	idKey := makeCmdIDKey(proto.ClientCmdID{
-		WallTime: s.Clock().PhysicalNow(),
-		Random:   rand.Int63(),
-	})
-	raftCmd := proto.InternalRaftCommand{
-		RaftID: r.Desc.RaftID,
-	}
-	raftCmd.Cmd.SetValue(remoteIncArgs)
-	r.rm.ProposeRaftCommand(idKey, raftCmd)
-
-	// Send an increment through the normal flow, since this is our
-	// simplest way of waiting until this command (and all earlier ones)
-	// have been applied.
-	localIncArgs, localIncReply := incrementArgs([]byte("a"), 3, 1, s.StoreID())
-	err := r.AddCmd(proto.Increment, localIncArgs, localIncReply, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The reply should have the result of both commands
-	if localIncReply.NewValue != 5 {
-		t.Errorf("expected 5, got %d", localIncReply.NewValue)
-	}
 }
 
 // TestInternalMerge verifies that the InternalMerge command is behaving as
