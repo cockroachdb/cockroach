@@ -18,12 +18,12 @@
 package storage
 
 import (
-	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // Test implementation of a range iterator which cycles through
@@ -45,7 +45,7 @@ func newTestIterator(count int) *testIterator {
 	return ti
 }
 
-func (ti *testIterator) next() *Range {
+func (ti *testIterator) Next() *Range {
 	ti.Lock()
 	defer ti.Unlock()
 	if ti.index >= len(ti.ranges) {
@@ -56,13 +56,13 @@ func (ti *testIterator) next() *Range {
 	return &ti.ranges[oldIndex]
 }
 
-func (ti *testIterator) estimatedCount() int {
+func (ti *testIterator) EstimatedCount() int {
 	ti.Lock()
 	defer ti.Unlock()
 	return len(ti.ranges) - ti.index
 }
 
-func (ti *testIterator) reset() {
+func (ti *testIterator) Reset() {
 	ti.Lock()
 	defer ti.Unlock()
 	ti.index = 0
@@ -94,7 +94,7 @@ type testQueue struct {
 	sync.Mutex
 }
 
-func (tq *testQueue) next() *Range {
+func (tq *testQueue) Next() *Range {
 	tq.Lock()
 	defer tq.Unlock()
 	if len(tq.ranges) == 0 {
@@ -105,7 +105,7 @@ func (tq *testQueue) next() *Range {
 	return rng
 }
 
-func (tq *testQueue) maybeAdd(rng *Range) {
+func (tq *testQueue) MaybeAdd(rng *Range) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index == -1 {
@@ -113,7 +113,7 @@ func (tq *testQueue) maybeAdd(rng *Range) {
 	}
 }
 
-func (tq *testQueue) maybeRemove(rng *Range) {
+func (tq *testQueue) MaybeRemove(rng *Range) {
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(rng); index != -1 {
@@ -121,7 +121,7 @@ func (tq *testQueue) maybeRemove(rng *Range) {
 	}
 }
 
-func (tq *testQueue) clear() {
+func (tq *testQueue) Clear() {
 	tq.Lock()
 	defer tq.Unlock()
 	tq.ranges = []*Range(nil)
@@ -151,7 +151,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	s := newRangeScanner(1*time.Millisecond, iter, []rangeQueue{q1, q2})
 
 	// Start queue and verify that all ranges are added to both queues.
-	s.start()
+	s.Start()
 	if err := util.IsTrueWithin(func() bool {
 		return q1.count() == count && q2.count() == count
 	}, 10*time.Millisecond); err != nil {
@@ -160,7 +160,7 @@ func TestScannerAddToQueues(t *testing.T) {
 
 	// Remove first range and verify it does not exist in either range.
 	rng := iter.remove(0)
-	s.removeRange(rng)
+	s.RemoveRange(rng)
 	if err := util.IsTrueWithin(func() bool {
 		return q1.count() == count-1 && q2.count() == count-1
 	}, 10*time.Millisecond); err != nil {
@@ -168,7 +168,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	}
 
 	// Stop queue and verify all ranges are removed from both queues.
-	s.stop()
+	s.Stop()
 	if len(q1.ranges) != 0 || len(q2.ranges) != 0 {
 		t.Errorf("expected all ranges to have been removed on stop; got %d, %d", len(q1.ranges), len(q2.ranges))
 	}
@@ -192,12 +192,12 @@ func TestScannerTiming(t *testing.T) {
 		iter := newTestIterator(count)
 		q := &testQueue{}
 		s := newRangeScanner(duration, iter, []rangeQueue{q})
-		s.start()
+		s.Start()
 		time.Sleep(runTime)
-		s.stop()
+		s.Stop()
 
 		avg := iter.avgScan()
-		fmt.Printf("%d: average scan: %s\n", i, avg)
+		log.Infof("%d: average scan: %s\n", i, avg)
 		if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 			duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
 			t.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)
@@ -210,10 +210,10 @@ func TestScannerEmptyIterator(t *testing.T) {
 	iter := newTestIterator(0)
 	q := &testQueue{}
 	s := newRangeScanner(1*time.Millisecond, iter, []rangeQueue{q})
-	s.start()
+	s.Start()
 	time.Sleep(3 * time.Millisecond)
-	s.stop()
-	if count := s.loopCount(); count > 3 {
+	s.Stop()
+	if count := s.Count(); count > 3 {
 		t.Errorf("expected three loops; got %d", count)
 	}
 }

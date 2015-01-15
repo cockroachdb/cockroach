@@ -125,14 +125,14 @@ func TestRangeContains(t *testing.T) {
 	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
-	if !r.ContainsKey(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa"))) {
-		t.Errorf("expected range to contain key transaction key for \"aa\"")
+	if !r.ContainsKey(engine.RangeDescriptorKey([]byte("aa"))) {
+		t.Errorf("expected range to contain range descriptor key for \"aa\"")
 	}
 	if !r.ContainsKeyRange(proto.Key("aa"), proto.Key("b")) {
 		t.Errorf("expected range to contain key range \"aa\"-\"b\"")
 	}
-	if !r.ContainsKeyRange(engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("aa")),
-		engine.MakeLocalKey(engine.KeyLocalTransactionPrefix, []byte("b"))) {
+	if !r.ContainsKeyRange(engine.RangeDescriptorKey([]byte("aa")),
+		engine.RangeDescriptorKey([]byte("b"))) {
 		t.Errorf("expected range to contain key transaction range \"aa\"-\"b\"")
 	}
 }
@@ -1003,7 +1003,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := engine.MakeKey(engine.KeyLocalTransactionPrefix, test.key, txn.ID)
+		txnKey := engine.TransactionKey(test.key, txn.ID)
 		if err := engine.MVCCPutProto(rng.rm.Engine(), nil, txnKey, proto.ZeroTimestamp, nil, &existTxn); err != nil {
 			t.Fatal(err)
 		}

@@ -25,7 +25,6 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
-	"time"
 
 	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
@@ -476,11 +475,16 @@ func (mvcc *MVCCMetadata) IsInline() bool {
 	return mvcc.Value != nil
 }
 
-// NewGCMetadata returns a GCMetadata with ByteCounts slice
-// initialized to ten byte count values set to zero.
-func NewGCMetadata() *GCMetadata {
-	return &GCMetadata{
-		ByteCounts: make([]int64, 10),
+// NewScanMetadata returns a ScanMetadata with GCMetadata initialized
+// to have a ByteCounts slice with ten byte count values set to zero.
+// Now is specified as nanoseconds since the Unix epoch.
+func NewScanMetadata(nowNanos int64) *ScanMetadata {
+	return &ScanMetadata{
+		LastScanNanos:     nowNanos,
+		OldestIntentNanos: gogoproto.Int64(nowNanos),
+		GC: GCMetadata{
+			ByteCounts: make([]int64, 10),
+		},
 	}
 }
 
@@ -497,14 +501,17 @@ func NewGCMetadata() *GCMetadata {
 // If the TTL changed between the last run and the current time, the
 // estimate will of course be inaccurate, but that's OK for the
 // purposes of deciding the priority of a range for GC.
-func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) int64 {
-	elapsed := now.UnixNano() - gc.LastGCNanos
+func (gc *GCMetadata) EstimatedBytes(elapsedNanos, currentNonLiveBytes int64) int64 {
+	if len(gc.ByteCounts) != 10 {
+		panic(fmt.Sprintf("byte counts should have 10 entries: %v", gc.ByteCounts))
+	}
+	lastNonLiveBytes := gc.ByteCounts[0]
 	ttlNanos := int64(gc.TTLSeconds) * 1000000000
-	if elapsed < ttlNanos/10 || len(gc.ByteCounts) != 10 || ttlNanos == 0 {
+	if elapsedNanos < ttlNanos/10 || ttlNanos == 0 {
 		return 0
 	}
 	// Fraction of TTL we've advanced since last GC.
-	ttlFraction := float64(elapsed) / float64(ttlNanos)
+	ttlFraction := float64(elapsedNanos) / float64(ttlNanos)
 	// Compute index into the byte counts array. Think of this as: which
 	// fraction of TTL (e.g. <10%, <20%, ...) that bytes would already
 	// need to have been aged in order to be GC'able now.
@@ -512,16 +519,16 @@ func (gc *GCMetadata) EstimatedBytes(now time.Time, currentNonLiveBytes int64) i
 	if index < 0 {
 		index = 0
 	}
-	expGCBytes := gc.ByteCounts[index]
+	estGCBytes := gc.ByteCounts[index]
 
 	// If the ttlFraction is >= 1, prorate the fraction of current
 	// non-live bytes we might expect to GC.
 	if ttlFraction >= 1 {
-		newNonLiveBytes := currentNonLiveBytes - gc.ByteCounts[0]
-		return int64(((ttlFraction-1)/ttlFraction)*float64(newNonLiveBytes)) + expGCBytes
+		newNonLiveBytes := currentNonLiveBytes - lastNonLiveBytes
+		return int64(((ttlFraction-1)/ttlFraction)*float64(newNonLiveBytes)) + estGCBytes
 	}
-	// Otherwise, just return the expGCBytes.
-	return expGCBytes
+	// Otherwise, just return the estGCBytes.
+	return estGCBytes
 }
 
 // Add adds the given NodeID to the interface (unless already present)

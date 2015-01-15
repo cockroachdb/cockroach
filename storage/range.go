@@ -192,28 +192,13 @@ func (r *Range) stop() {
 
 // Destroy cleans up all data associated with this range.
 func (r *Range) Destroy() error {
-	start := engine.MVCCEncodeKey(proto.Key(r.Desc.StartKey))
-	end := engine.MVCCEncodeKey(proto.Key(r.Desc.EndKey))
-	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear key/value data for range %d: %s", r.Desc.RaftID, err)
+	var deletes []interface{}
+	iter := newRangeDataIterator(r, r.rm.Engine())
+	defer iter.Close()
+	for ; iter.Valid(); iter.Next() {
+		deletes = append(deletes, engine.BatchDelete{proto.RawKeyValue{Key: iter.Key()}})
 	}
-	start = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.StartKey))
-	end = engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalTransactionPrefix, r.Desc.EndKey))
-	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear txn records for range %d: %s", r.Desc.RaftID, err)
-	}
-	if err := r.respCache.ClearData(); err != nil {
-		return util.Errorf("unable to clear response cache for range %d: %s", r.Desc.RaftID, err)
-	}
-	if err := engine.ClearRangeStats(r.rm.Engine(), r.Desc.RaftID); err != nil {
-		return util.Errorf("unable to clear range stats for range %d: %s", r.Desc.RaftID, err)
-	}
-	start = engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey))
-	end = engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey).Next())
-	if _, err := engine.ClearRange(r.rm.Engine(), start, end); err != nil {
-		return util.Errorf("unable to clear metadata for range %d: %s", r.Desc.RaftID, err)
-	}
-	return nil
+	return r.rm.Engine().WriteBatch(deletes)
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -247,6 +232,23 @@ func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
 	r.RLock()
 	defer r.RUnlock()
 	return r.Desc.ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
+}
+
+// GetScanMetadata reads the latest scan metadata for this range.
+func (r *Range) GetScanMetadata() (*proto.ScanMetadata, error) {
+	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
+	scanMeta := &proto.ScanMetadata{}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, scanMeta)
+	if err != nil {
+		return nil, err
+	}
+	return scanMeta, nil
+}
+
+// PutScanMetadata writes the scan metadata for this range.
+func (r *Range) PutScanMetadata(scanMeta *proto.ScanMetadata) error {
+	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
+	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, scanMeta)
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -831,7 +833,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
+	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1014,7 +1016,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 // timestamp after receiving transaction heartbeat messages from
 // coordinator. Returns the updated transaction.
 func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) {
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.Txn.Key, args.Txn.ID)
+	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
 	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, &txn)
@@ -1080,7 +1082,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 		reply.SetGoError(util.Errorf("request key %q should match pushee's txn key %q", args.Key, args.PusheeTxn.Key))
 		return
 	}
-	key := engine.MakeKey(engine.KeyLocalTransactionPrefix, args.PusheeTxn.Key, args.PusheeTxn.ID)
+	key := engine.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
@@ -1227,6 +1229,15 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 		!bytes.Equal(r.Desc.EndKey, split.NewDesc.EndKey) {
 		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
+	}
+
+	// Copy the scan metadata.
+	scanMeta, err := r.GetScanMetadata()
+	if err != nil {
+		return util.Errorf("unable to fetch scan metadata: %s", err)
+	}
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeScanMetadataKey(split.NewDesc.StartKey), proto.ZeroTimestamp, nil, scanMeta); err != nil {
+		return util.Errorf("unable to copy scan metadata: %s", err)
 	}
 
 	// Compute stats for new range.

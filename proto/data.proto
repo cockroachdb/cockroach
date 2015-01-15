@@ -223,11 +223,8 @@ message MVCCMetadata {
 // GC passes and enable the scheduler to avoid GCing ranges which have
 // very little sufficiently aged data.
 message GCMetadata {
-  // The last GC timestamp in nanoseconds since the Unix epoch.
-  optional int64 last_gc_nanos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "LastGCNanos"];
   // The GC TTL for the range at last GC.
-  optional int32 ttl_seconds = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
-
+  optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
   // Byte_counts is an array of byte counts with 10 entries. Each array
   // entry corresponds to the number of non-live (historical) bytes aged
   // less than some fraction of the TTL. The first entry in the array
@@ -237,5 +234,17 @@ message GCMetadata {
   // These are values at last GC, so given the current time,
   // last_gc_nanos, and ttl_seconds, the count of bytes to be GC'd can
   // be estimated.
-  repeated int64 byte_counts = 3 [(gogoproto.nullable) = false];
+  repeated int64 byte_counts = 2 [(gogoproto.nullable) = false];
+}
+
+// ScanMetadata holds information about last complete key/value scan
+// of a range.
+message ScanMetadata {
+  // The last scan timestamp in nanoseconds since the Unix epoch.
+  optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];
+  // The oldest unresolved write intent in nanoseconds since epoch.
+  // Null if there are no unresolved write intents.
+  optional int64 oldest_intent_nanos = 2;
+  // GC information from last scan.
+  optional GCMetadata gc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GC"];
 }

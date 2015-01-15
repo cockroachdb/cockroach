@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -74,7 +75,14 @@ var (
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
-	if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
+	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
+		key = key[engine.KeyLocalPrefixLength:]
+		var remaining []byte
+		remaining, key = encoding.DecodeBinary(key)
+		if len(remaining) > uuidLength {
+			return util.Errorf("maximum uuid length in txn key exceeded: len(%s) > %d", remaining, uuidLength)
+		}
+	} else if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
 		key = key[engine.KeyLocalPrefixLength:]
 	}
 	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {
@@ -494,14 +502,20 @@ func (s *Store) BootstrapRange() error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
+	// Range descriptor.
 	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// Write meta1.
+	// Scan Metadata.
+	scanMeta := proto.NewScanMetadata(now.WallTime)
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeScanMetadataKey(desc.StartKey), proto.ZeroTimestamp, nil, scanMeta); err != nil {
+		return err
+	}
+	// Range addressing for meta1.
 	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
-	// Write meta2.
+	// Range addressing for meta2.
 	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
 		return err
 	}
@@ -529,11 +543,15 @@ func (s *Store) BootstrapRange() error {
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
+		GC: &proto.GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
 		return err
 	}
+
 	ms.MergeStats(batch, 1, 1)
 	if err := batch.Commit(); err != nil {
 		return err
@@ -541,7 +559,7 @@ func (s *Store) BootstrapRange() error {
 	return nil
 }
 
-// The following methods are accessors implementation the RangeManager interface.
+// The following methods implement the RangeManager interface.
 
 // ClusterID accessor.
 func (s *Store) ClusterID() string { return s.Ident.ClusterID }
