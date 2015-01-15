@@ -135,7 +135,7 @@ type RangeManager interface {
 	SplitRange(origRng, newRng *Range) error
 	AddRange(rng *Range) error
 	RemoveRange(rng *Range) error
-	CreateSnapshot() (string, error)
+	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand)
 }
 
@@ -704,8 +704,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case proto.InternalResolveIntent:
 		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
-	case proto.InternalSnapshotCopy:
-		r.InternalSnapshotCopy(r.rm.Engine(), args.(*proto.InternalSnapshotCopyRequest), reply.(*proto.InternalSnapshotCopyResponse))
 	case proto.InternalMerge:
 		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	default:
@@ -1210,33 +1208,6 @@ func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats,
 	}
 }
 
-// InternalSnapshotCopy scans the key range specified by start key through
-// end key up to some maximum number of results from the given snapshot_id.
-// It will create a snapshot if snapshot_id is empty.
-func (r *Range) InternalSnapshotCopy(e engine.Engine, args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) {
-	if len(args.SnapshotID) == 0 {
-		snapshotID, err := r.rm.CreateSnapshot()
-		if err != nil {
-			reply.SetGoError(err)
-			return
-		}
-		args.SnapshotID = snapshotID
-	}
-
-	kvs, err := engine.ScanSnapshot(e, proto.EncodedKey(args.Key), proto.EncodedKey(args.EndKey), args.MaxResults, args.SnapshotID)
-	if err != nil {
-		reply.SetGoError(err)
-		return
-	}
-	if len(kvs) == 0 {
-		err = e.ReleaseSnapshot(args.SnapshotID)
-	}
-
-	reply.Rows = kvs
-	reply.SnapshotID = args.SnapshotID
-	reply.SetGoError(err)
-}
-
 // InternalMerge is used to merge a value into an existing key. Merge is an
 // efficient accumulation operation which is exposed by RocksDB, used by
 // Cockroach for the efficient accumulation of certain values. Due to the
@@ -1307,16 +1278,10 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	// other commands.
 	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
-		snapshotID, err := r.rm.CreateSnapshot()
-		if err != nil {
-			reply.SetGoError(util.Errorf("unable to create snapshot: %s", err))
-			return
-		}
-		splitKey, err = engine.MVCCFindSplitKey(r.rm.Engine(), r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey, snapshotID)
-		if releaseErr := r.rm.Engine().ReleaseSnapshot(snapshotID); releaseErr != nil {
-			log.Errorf("unable to release snapshot: %s", releaseErr)
-		}
-		if err != nil {
+		snap := r.rm.NewSnapshot()
+		defer snap.Stop()
+		var err error
+		if splitKey, err = engine.MVCCFindSplitKey(snap, r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey); err != nil {
 			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
 			return
 		}

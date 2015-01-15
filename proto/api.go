@@ -102,7 +102,6 @@ var AllMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
-	InternalSnapshotCopy:  struct{}{},
 	InternalMerge:         struct{}{},
 }
 
@@ -131,20 +130,18 @@ var InternalMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
-	InternalSnapshotCopy:  struct{}{},
 	InternalMerge:         struct{}{},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
 var ReadMethods = stringSet{
-	Contains:             struct{}{},
-	Get:                  struct{}{},
-	ConditionalPut:       struct{}{},
-	Increment:            struct{}{},
-	Scan:                 struct{}{},
-	ReapQueue:            struct{}{},
-	InternalRangeLookup:  struct{}{},
-	InternalSnapshotCopy: struct{}{},
+	Contains:            struct{}{},
+	Get:                 struct{}{},
+	ConditionalPut:      struct{}{},
+	Increment:           struct{}{},
+	Scan:                struct{}{},
+	ReapQueue:           struct{}{},
+	InternalRangeLookup: struct{}{},
 }
 
 // WriteMethods specifies the set of methods which write data.
@@ -347,8 +344,6 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalPushTxn, nil
 	case *InternalResolveIntentRequest:
 		return InternalResolveIntent, nil
-	case *InternalSnapshotCopyRequest:
-		return InternalSnapshotCopy, nil
 	case *InternalMergeRequest:
 		return InternalMerge, nil
 	}
@@ -402,8 +397,6 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalPushTxnRequest{}, nil
 	case InternalResolveIntent:
 		return &InternalResolveIntentRequest{}, nil
-	case InternalSnapshotCopy:
-		return &InternalSnapshotCopyRequest{}, nil
 	case InternalMerge:
 		return &InternalMergeRequest{}, nil
 	}
@@ -447,8 +440,6 @@ func CreateReply(method string) (Response, error) {
 		return &InternalPushTxnResponse{}, nil
 	case InternalResolveIntent:
 		return &InternalResolveIntentResponse{}, nil
-	case InternalSnapshotCopy:
-		return &InternalSnapshotCopyResponse{}, nil
 	case InternalMerge:
 		return &InternalMergeResponse{}, nil
 	}

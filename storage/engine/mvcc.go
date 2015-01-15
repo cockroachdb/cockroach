@@ -1034,13 +1034,12 @@ func isValidEncodedSplitKey(key proto.EncodedKey) bool {
 
 // MVCCFindSplitKey suggests a split key from the given user-space key
 // range that aims to roughly cut into half the total number of bytes
-// used (in raw key and value byte strings) in both subranges. It will
-// operate on a snapshot of the underlying engine if a snapshotID is
-// given, and in that case may safely be invoked in a goroutine.
+// used (in raw key and value byte strings) in both subranges. Specify
+// a snapshot engine to safely invoke this method in a goroutine.
 //
 // The split key will never be chosen from the key ranges listed in
 // illegalSplitKeyRanges.
-func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key, snapshotID string) (proto.Key, error) {
+func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto.Key, error) {
 	if key.Less(KeyLocalMax) {
 		key = KeyLocalMax
 	}
@@ -1058,7 +1057,7 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key, snapsh
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
 
-	if err := engine.IterateSnapshot(encStartKey, encEndKey, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
+	if err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
 		// Is key within a legal key range?
 		valid := isValidEncodedSplitKey(kv.Key)
 

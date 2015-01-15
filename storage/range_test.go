@@ -485,25 +485,6 @@ func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID int32) (
 	return args, reply
 }
 
-// internalSnapshotCopyArgs returns a InternalSnapshotCopyRequest and
-// InternalSnapshotCopyResponse pair addressed to the default replica
-// for the specified key and endKey.
-func internalSnapshotCopyArgs(key []byte, endKey []byte, maxResults int64, snapshotID string, raftID int64, storeID int32) (
-	*proto.InternalSnapshotCopyRequest, *proto.InternalSnapshotCopyResponse) {
-	args := &proto.InternalSnapshotCopyRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:     key,
-			EndKey:  endKey,
-			RaftID:  raftID,
-			Replica: proto.Replica{StoreID: storeID},
-		},
-		SnapshotID: snapshotID,
-		MaxResults: maxResults,
-	}
-	reply := &proto.InternalSnapshotCopyResponse{}
-	return args, reply
-}
-
 // internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
@@ -832,113 +813,6 @@ func TestRangeIdempotence(t *testing.T) {
 	// counter starting at 2 all the way to 51 (sum of sequence = 1325).
 	if count != 1325 {
 		t.Errorf("expected sum of all increments to be 1325; got %d", count)
-	}
-}
-
-// TestRangeSnapshot.
-func TestRangeSnapshot(t *testing.T) {
-	s, rng, _, clock, _ := createTestRangeWithClock(t)
-	defer s.Stop()
-
-	key1 := []byte("a")
-	key2 := []byte("b")
-	val1 := []byte("1")
-	val2 := []byte("2")
-	val3 := []byte("3")
-
-	pArgs, pReply := putArgs(key1, val1, 1, s.StoreID())
-	pArgs.Timestamp = clock.Now()
-	err := rng.AddCmd(proto.Put, pArgs, pReply, true)
-
-	pArgs, pReply = putArgs(key2, val2, 1, s.StoreID())
-	pArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
-
-	gArgs, gReply := getArgs(key1, 1, s.StoreID())
-	gArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.Get, gArgs, gReply, true)
-
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	if !bytes.Equal(gReply.Value.Bytes, val1) {
-		t.Fatalf("the value %s in get result does not match the value %s in request",
-			gReply.Value.Bytes, val1)
-	}
-
-	iscArgs, iscReply := internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1, s.StoreID())
-	iscArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	snapshotID := iscReply.SnapshotID
-	expectedKey := engine.MVCCEncodeKey(key1)
-	expectedVal := getSerializedMVCCValue(&proto.Value{Bytes: val1})
-	if len(iscReply.Rows) != 4 ||
-		!bytes.Equal(iscReply.Rows[0].Key, expectedKey) ||
-		!bytes.Equal(iscReply.Rows[1].Value, expectedVal) {
-		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			iscReply.Rows[1].Value, iscReply.Rows[0].Key, expectedVal, expectedKey)
-	}
-
-	pArgs, pReply = putArgs(key2, val3, 1, s.StoreID())
-	pArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.Put, pArgs, pReply, true)
-
-	// Scan with the previous snapshot will get the old value val2 of key2.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, snapshotID, 1, s.StoreID())
-	iscArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	expectedKey = engine.MVCCEncodeKey(key2)
-	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val2})
-	if len(iscReply.Rows) != 4 ||
-		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
-		!bytes.Equal(iscReply.Rows[3].Value, expectedVal) {
-		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
-	}
-	snapshotLastKey := proto.Key(iscReply.Rows[3].Key)
-
-	// Create a new snapshot to cover the latest value.
-	iscArgs, iscReply = internalSnapshotCopyArgs(engine.MVCCEncodeKey(engine.KeyLocalPrefix.PrefixEnd()), engine.KeyMax, 50, "", 1, s.StoreID())
-	iscArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	snapshotID2 := iscReply.SnapshotID
-	expectedKey = engine.MVCCEncodeKey(key2)
-	expectedVal = getSerializedMVCCValue(&proto.Value{Bytes: val3})
-	// Expect one more mvcc version.
-	if len(iscReply.Rows) != 5 ||
-		!bytes.Equal(iscReply.Rows[2].Key, expectedKey) ||
-		!bytes.Equal(iscReply.Rows[3].Value, expectedVal) {
-		t.Fatalf("the value %v of key %v in get result does not match the value %v of key %v in request",
-			iscReply.Rows[3].Value, iscReply.Rows[2].Key, expectedVal, expectedKey)
-	}
-	snapshot2LastKey := proto.Key(iscReply.Rows[4].Key)
-
-	iscArgs, iscReply = internalSnapshotCopyArgs(snapshotLastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID, 1, s.StoreID())
-	iscArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	if len(iscReply.Rows) != 0 {
-		t.Fatalf("error : %d", len(iscReply.Rows))
-	}
-	iscArgs, iscReply = internalSnapshotCopyArgs(snapshot2LastKey.PrefixEnd(), engine.KeyMax, 50, snapshotID2, 1, s.StoreID())
-	iscArgs.Timestamp = clock.Now()
-	err = rng.AddCmd(proto.InternalSnapshotCopy, iscArgs, iscReply, true)
-	if err != nil {
-		t.Fatalf("error : %s", err)
-	}
-	if len(iscReply.Rows) != 0 {
-		t.Fatalf("error : %d", len(iscReply.Rows))
 	}
 }
 

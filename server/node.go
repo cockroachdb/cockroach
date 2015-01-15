@@ -476,11 +476,6 @@ func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, r
 	return n.executeCmd(proto.InternalResolveIntent, args, reply)
 }
 
-// InternalSnapshotCopy .
-func (n *Node) InternalSnapshotCopy(args *proto.InternalSnapshotCopyRequest, reply *proto.InternalSnapshotCopyResponse) error {
-	return n.executeCmd(proto.InternalSnapshotCopy, args, reply)
-}
-
 // InternalMerge .
 func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
 	return n.executeCmd(proto.InternalMerge, args, reply)
