@@ -32,7 +32,7 @@ const (
 	gcByteCountNormalization = 1 << 20 // 1 MB
 	// intentSweepInterval is the target duration for resolving extant
 	// write intents. If this much time has passed since the last scan
-	// and write intents are present, the range should be queue. Cleaning
+	// and write intents are present, the range should be queued. Cleaning
 	// up intents allows transaction records to be GC'd.
 	intentSweepInterval = 10 * 24 * time.Hour // 10 days
 	// intentAgeThreshold is the threshold after which an extant intent
@@ -63,7 +63,7 @@ type scanQueue struct {
 // newScanQueue returns a new instance of scanQueue.
 func newScanQueue() *scanQueue {
 	sq := &scanQueue{}
-	sq.baseQueue = newBaseQueue(sq.shouldQueue, sq.process, scanQueueMaxSize)
+	sq.baseQueue = newBaseQueue("scan", sq.shouldQueue, sq.process, scanQueueMaxSize)
 	return sq
 }
 
@@ -86,11 +86,10 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 	bytes, err := engine.GetRangeSize(rng.rm.Engine(), rng.Desc.RaftID)
 	if err != nil {
 		log.Errorf("unable to fetch range size stats: %s", err)
-		return
 	}
 	liveBytes, err := engine.GetRangeStat(rng.rm.Engine(), rng.Desc.RaftID, engine.StatLiveBytes)
 	if err != nil {
-		return
+		log.Errorf("unable to fetch live bytes stat: %s", err)
 	}
 	nonLiveBytes := bytes - liveBytes
 
@@ -102,7 +101,7 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 	// intent score if there are any outstanding intents.
 	intentBytes, err := engine.GetRangeStat(rng.rm.Engine(), rng.Desc.RaftID, engine.StatIntentBytes)
 	if err != nil {
-		return
+		log.Errorf("unable to fetch intent bytes stat: %s", err)
 	}
 	intentScore := float64(0)
 	if intentBytes > 0 {
@@ -139,6 +138,7 @@ func (sq *scanQueue) process(now time.Time, rng *Range) error {
 	defer snap.Stop()
 
 	for ; iter.Valid(); iter.Next() {
+		// TODO(spencer): implement processing.
 	}
 
 	return nil

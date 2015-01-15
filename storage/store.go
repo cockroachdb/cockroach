@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -44,6 +45,10 @@ const (
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount = 10
+	// uuidLength is the length of a UUID string, used to allot extra
+	// key length to transaction records, which have a UUID appended.
+	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
+	uuidLength = 36
 	// defaultScanInterval is the default value for the scan interval
 	// command line flag.
 	defaultScanInterval = 10 * time.Minute
@@ -70,7 +75,14 @@ var (
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
-	if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
+	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
+		key = key[engine.KeyLocalPrefixLength:]
+		var remaining []byte
+		remaining, key = encoding.DecodeBinary(key)
+		if len(remaining) > uuidLength {
+			return util.Errorf("maximum uuid length in txn key exceeded: len(%s) > %d", remaining, uuidLength)
+		}
+	} else if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
 		key = key[engine.KeyLocalPrefixLength:]
 	}
 	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {

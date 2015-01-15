@@ -79,7 +79,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		return shouldAddMap[r], priorityMap[r]
 	}
 	process := func(now time.Time, r *Range) error { return nil }
-	bq := newBaseQueue(shouldQ, process, 2)
+	bq := newBaseQueue("test", shouldQ, process, 2)
 	bq.MaybeAdd(r1)
 	bq.MaybeAdd(r2)
 	if bq.Length() != 2 {

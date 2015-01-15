@@ -20,6 +20,8 @@ package storage
 import (
 	"container/heap"
 	"time"
+
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A rangeItem holds a range and its priority for use with a priority queue.
@@ -81,6 +83,7 @@ type processFn func(time.Time, *Range) error
 //
 // baseQueue is not thread safe.
 type baseQueue struct {
+	name      string
 	shouldQ   shouldQueueFn        // Should a range be queued?
 	process   processFn            // Executes queue-specific work on range
 	maxSize   int                  // Maximum number of ranges to queue
@@ -94,8 +97,9 @@ type baseQueue struct {
 // maxSize doesn't prevent new ranges from being added, it just
 // limits the total size. Higher priority ranges can still be
 // added; their addition simply removes the lowest priority range.
-func newBaseQueue(shouldQ shouldQueueFn, process processFn, maxSize int) *baseQueue {
+func newBaseQueue(name string, shouldQ shouldQueueFn, process processFn, maxSize int) *baseQueue {
 	return &baseQueue{
+		name:    name,
 		shouldQ: shouldQ,
 		process: process,
 		maxSize: maxSize,
@@ -116,7 +120,12 @@ func (bq *baseQueue) Pop() *Range {
 	}
 	item := heap.Pop(&bq.priorityQ).(*rangeItem)
 	delete(bq.ranges, item.value.Desc.RaftID)
-	bq.process(time.Now(), item.value)
+	log.Infof("processing range %d from %s queue with priority %f...",
+		item.value.Desc.RaftID, bq.name, item.priority)
+	if err := bq.process(time.Now(), item.value); err != nil {
+		log.Errorf("failure processing range %d from %s queue: %s",
+			item.value.Desc.RaftID, bq.name, err)
+	}
 	return item.value
 }
 

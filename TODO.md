@@ -65,3 +65,8 @@
     utilized set may have rebalances in effect.
 
 * Cleanup proto files to adhere to proto capitalization instead of go's.
+
+* Consider moving all local keys into two sections, each prefixed by either
+  the Raft ID of the range or the start key of the range. This will allow
+  a less error-prone iteration over the data for a range, instead of having
+  to include each section of local data separately.
