@@ -1600,3 +1600,38 @@ func TestInternalMerge(t *testing.T) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
 }
+
+// TestConditionFailedError tests that a ConditionFailedError correctly
+// bubbles up from MVCC to Range.
+func TestConditionFailedError(t *testing.T) {
+	s, r, _, _ := createTestRange(t)
+	key := []byte("k")
+	value := []byte("quack")
+	pArgs, pReply := putArgs(key, value, 1, s.StoreID())
+	if err := r.executeCmd(proto.Put, pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+	args := &proto.ConditionalPutRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       key,
+			Timestamp: proto.MinTimestamp,
+			RaftID:    1,
+			Replica:   proto.Replica{StoreID: s.StoreID()},
+		},
+		Value: proto.Value{
+			Bytes: value,
+		},
+		ExpValue: &proto.Value{
+			Bytes: []byte("moo"),
+		},
+	}
+	reply := &proto.ConditionalPutResponse{}
+	err := r.executeCmd(proto.ConditionalPut, args, reply)
+	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
+		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
+			err, err)
+	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.Bytes, value) {
+		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
+			value, v)
+	}
+}

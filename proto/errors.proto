@@ -128,8 +128,6 @@ message ConditionFailedError {
 }
 
 // Error is a union type containing all available errors.
-// NOTE: new error types must be added here, and potentially in
-// the two locations (*ResponseHeader).{,Set}GoError().
 message Error {
   option (gogoproto.onlyone) = true;
   optional GenericError generic = 1;
