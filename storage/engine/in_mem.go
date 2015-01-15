@@ -28,7 +28,6 @@ import (
 	"code.google.com/p/biogo.store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TODO(petermattis): Remove this file.
@@ -347,14 +346,12 @@ func (in *inMemSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 
 // NewSnapshot is illegal for snapshot and returns nil.
 func (in *inMemSnapshot) NewSnapshot() Engine {
-	log.Errorf("cannot create a NewSnapshot from a snapshot")
-	return nil
+	panic("cannot create a NewSnapshot from a snapshot")
 }
 
 // NewBatch is illegal for snapshot and returns nil.
 func (in *inMemSnapshot) NewBatch() Engine {
-	log.Errorf("cannot create a NewBatch from a snapshot")
-	return nil
+	panic("cannot create a NewBatch from a snapshot")
 }
 
 // Commit is illegal for snapshot and returns an error.

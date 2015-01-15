@@ -368,8 +368,7 @@ func (r *RocksDB) NewIterator() Iterator {
 // read-only rocksDBSnapshot engine.
 func (r *RocksDB) NewSnapshot() Engine {
 	if r.rdb == nil {
-		log.Errorf("RocksDB is not initialized yet")
-		return nil
+		panic("RocksDB is not initialized yet")
 	}
 	return &rocksDBSnapshot{
 		parent: r,
@@ -463,14 +462,12 @@ func (r *rocksDBSnapshot) NewIterator() Iterator {
 
 // NewSnapshot is illegal for snapshot and returns nil.
 func (r *rocksDBSnapshot) NewSnapshot() Engine {
-	log.Errorf("cannot create a NewSnapshot from a snapshot")
-	return nil
+	panic("cannot create a NewSnapshot from a snapshot")
 }
 
 // NewBatch is illegal for snapshot and returns nil.
 func (r *rocksDBSnapshot) NewBatch() Engine {
-	log.Errorf("cannot create a NewBatch from a snapshot")
-	return nil
+	panic("cannot create a NewBatch from a snapshot")
 }
 
 // Commit is illegal for snapshot and returns an error.

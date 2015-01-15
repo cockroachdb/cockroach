@@ -663,20 +663,38 @@ func TestSnapshotMethods(t *testing.T) {
 			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
 		}
 
-		// Verify NewSnapshot returns nil.
-		if newSnap := snap.NewSnapshot(); newSnap != nil {
-			t.Error("expected NewSnapshot on snapshot to return nil; got %+v", newSnap)
-		}
-
-		// Verify NewBatch returns nil.
-		if batch := snap.NewBatch(); batch != nil {
-			t.Error("expected NewBatch on snapshot to return nil; got %+v", batch)
-		}
-
 		// Verify Commit is error.
 		if err := snap.Commit(); err == nil {
 			t.Error("expected error on Commit to snapshot")
 		}
+	}, t)
+}
+
+// TestSnapshotNewSnapshot panics.
+func TestSnapshotNewSnapshot(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+		snap := engine.NewSnapshot()
+		defer snap.Stop()
+		snap.NewSnapshot()
+	}, t)
+}
+
+// TestSnapshotNewBatch panics.
+func TestSnapshotNewBatch(t *testing.T) {
+	runWithAllEngines(func(engine Engine, t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("expected panic")
+			}
+		}()
+		snap := engine.NewSnapshot()
+		defer snap.Stop()
+		snap.NewBatch()
 	}, t)
 }
 
