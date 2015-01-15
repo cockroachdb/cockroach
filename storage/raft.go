@@ -38,10 +38,10 @@ type raftInterface interface {
 	// createGroup initializes a raft group with the given id.
 	createGroup(int64) error
 
+	// removeGroup removes the raft group with the given id.
+	// Note that committed commands for the removed group may still be
+	// present in the channel buffer.
 	removeGroup(int64) error
-
-	// restoreGroup informs raft of an existing group with on-disk state.
-	restoreGroup(int64) error
 
 	// propose a command to raft. If accepted by the consensus protocol it will
 	// eventually appear in the committed channel, but this is not guaranteed
@@ -105,17 +105,6 @@ func (snr *singleNodeRaft) removeGroup(id int64) error {
 		delete(snr.groups, id)
 		snr.mu.Unlock()
 		return snr.mr.RemoveGroup(uint64(id))
-	}
-	snr.mu.Unlock()
-	return nil
-}
-
-func (snr *singleNodeRaft) restoreGroup(id int64) error {
-	snr.mu.Lock()
-	if _, ok := snr.groups[id]; !ok {
-		snr.groups[id] = struct{}{}
-		snr.mu.Unlock()
-		return snr.mr.CreateGroup(uint64(id))
 	}
 	snr.mu.Unlock()
 	return nil

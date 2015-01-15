@@ -228,7 +228,15 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	if err := store.AddRange(rng2); err != nil {
 		t.Fatal(err)
 	}
-	// Try to add a range with preexisting ID.
+	// Try to add the same range twice
+	err = store.AddRange(rng2)
+	if err == nil {
+		t.Fatal("expected error re-adding same range")
+	}
+	if _, ok := err.(*rangeAlreadyExists); !ok {
+		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
+	}
+	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
 	if err := store.AddRange(rng2Dup); err != nil {
 		t.Fatal(err)

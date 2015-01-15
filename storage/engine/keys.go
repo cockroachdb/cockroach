@@ -133,8 +133,7 @@ func ValidateRangeMetaKey(key proto.Key) error {
 
 // RaftLogKey returns a system-local key for a raft log entry.
 func RaftLogKey(raftID, logIndex uint64) proto.Key {
-	b := MakeLocalKey(KeyLocalRaftLogPrefix)
-	b = encoding.EncodeUint64(b, raftID)
+	b := RaftLogPrefix(raftID)
 	// The log is stored "backwards" so we can easily find the highest index stored.
 	b = encoding.EncodeUint64Decreasing(b, logIndex)
 	return b

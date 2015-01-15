@@ -257,16 +257,6 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 // Stop calls Range.Stop() on all active ranges.
 func (s *Store) Stop() {
 	s.mu.Lock()
-	r := s.raft
-	s.mu.Unlock()
-	if r != nil {
-		// Must be called while unlocked.
-		r.stop()
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.raft = nil
 	for _, rng := range s.ranges {
 		rng.stop()
 	}
@@ -274,6 +264,13 @@ func (s *Store) Stop() {
 	s.rangesByKey = nil
 	close(s.closer)
 	s.closer = make(chan struct{})
+	r := s.raft
+	s.raft = nil
+	s.mu.Unlock()
+	if r != nil {
+		// Must be called while unlocked.
+		r.stop()
+	}
 }
 
 // String formats a store for debug output.
@@ -336,7 +333,7 @@ func (s *Store) Start() error {
 		if err != nil {
 			return false, err
 		}
-		if err = s.raft.restoreGroup(rng.Desc.RaftID); err != nil {
+		if err = s.raft.createGroup(rng.Desc.RaftID); err != nil {
 			return false, err
 		}
 		return false, nil

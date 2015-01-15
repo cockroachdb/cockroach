@@ -168,8 +168,8 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 // group is determined by the InitialState method of the group's Storage object.
 func (m *MultiRaft) CreateGroup(groupID uint64) error {
 	op := &createGroupOp{
-		groupID,
-		make(chan error),
+		groupID: groupID,
+		ch:      make(chan error, 1),
 	}
 	m.createGroupChan <- op
 	return <-op.ch
@@ -180,8 +180,8 @@ func (m *MultiRaft) CreateGroup(groupID uint64) error {
 // (but some events may still be in the channel buffer).
 func (m *MultiRaft) RemoveGroup(groupID uint64) error {
 	op := &removeGroupOp{
-		groupID,
-		make(chan error),
+		groupID: groupID,
+		ch:      make(chan error, 1),
 	}
 	m.removeGroupChan <- op
 	return <-op.ch
@@ -491,7 +491,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	for groupID, ready := range readyGroups {
 		g, ok := s.groups[groupID]
 		if !ok {
-			log.V(4).Infof("dropping write to group %v", groupID)
+			log.V(4).Infof("dropping stale write to group %v", groupID)
 			continue
 		}
 		for _, entry := range ready.CommittedEntries {
