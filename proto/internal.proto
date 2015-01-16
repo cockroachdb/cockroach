@@ -205,7 +205,7 @@ enum InternalValueType {
 //
 // This is meant to be an efficient internal representation of time series data,
 // ensuring that very little redundant data is stored on disk. With this goal in
-// mind, this message does not identify the statistic which is actually being
+// mind, this message does not identify the variable which is actually being
 // measured; that information is expected be encoded in the key where this
 // message is stored.
 message InternalTimeSeriesData {
@@ -219,13 +219,14 @@ message InternalTimeSeriesData {
     repeated InternalTimeSeriesSample samples = 3;
 }
 
-// A InternalTimeSeriesSample represents data gathered from a single measurable
-// statistic over a given period of time. The length of that period of time is
-// stored in an InternalTimeSeriesData message; a sample cannot be interpreted
-// correctly without a start timestamp and sample duration.
+// A InternalTimeSeriesSample represents data gathered from multiple
+// measurements of a variable value over a given period of time. The length of
+// that period of time is stored in an InternalTimeSeriesData message; a sample
+// cannot be interpreted correctly without a start timestamp and sample
+// duration.
 //
 // Each sample may contain data gathered from multiple measurements of the same
-// statistic, as long as all of those measurements occured within the sample
+// variable, as long as all of those measurements occured within the sample
 // period. The sample stores several aggregated values from these measurements:
 // - The sum of all measured values
 // - A count of all measurements taken
@@ -238,9 +239,9 @@ message InternalTimeSeriesData {
 // If the count of measurements is 1, then max and min fields may be omitted
 // and assumed equal to the sum field.
 //
-// The underlying statistic sampled may be either an integer or a floating
-// point; therefore, there are two fields each for "sum", "max" and "min" to
-// hold either an integer or floating point number. In practice, only one set of
+// The variable being measured may be either an integer or a floating point;
+// therefore, there are two fields each for "sum", "max" and "min" to hold
+// either an integer or floating point number. In practice, only one set of
 // these fields should be present for any individual sample; however, int and
 // float values are recorded in parallel, allowing clients to write both floats
 // and integers to the same value. These are recorded separately to retain

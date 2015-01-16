@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"math"
 	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -391,7 +392,7 @@ func TestGCMetadataEstimatedBytes(t *testing.T) {
 func TestNodeList(t *testing.T) {
 	sn := NodeList{}
 	items := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
-	for i, _ := range items {
+	for i := range items {
 		n := int32(items[i])
 		if sn.Contains(n) {
 			t.Fatalf("%d: false positive hit for %d on slice %v",
@@ -408,6 +409,220 @@ func TestNodeList(t *testing.T) {
 		if !sn.Contains(n) {
 			t.Fatalf("%d: false negative hit for %d on slice %v",
 				i, n, sn.GetNodes())
+		}
+	}
+}
+
+func ts(name string, dps ...*TimeSeriesDatapoint) *TimeSeriesData {
+	return &TimeSeriesData{
+		Name:       name,
+		Datapoints: dps,
+	}
+}
+
+func tsdpi(ts time.Duration, val int64) *TimeSeriesDatapoint {
+	return &TimeSeriesDatapoint{
+		TimestampNanos: int64(ts),
+		IntValue:       gogoproto.Int64(val),
+	}
+}
+
+func tsdpf(ts time.Duration, val float32) *TimeSeriesDatapoint {
+	return &TimeSeriesDatapoint{
+		TimestampNanos: int64(ts),
+		FloatValue:     gogoproto.Float32(val),
+	}
+}
+
+// TestToInternal verifies the conversion of TimeSeriesData to internal storage
+// format is correct.
+func TestToInternal(t *testing.T) {
+	tcases := []struct {
+		keyDuration    int64
+		sampleDuration int64
+		expectsError   bool
+		input          *TimeSeriesData
+		expected       []*InternalTimeSeriesData
+	}{
+		{
+			time.Minute.Nanoseconds(),
+			101,
+			true,
+			ts("error.series"),
+			nil,
+		},
+		{
+			time.Minute.Nanoseconds(),
+			time.Hour.Nanoseconds(),
+			true,
+			ts("error.series"),
+			nil,
+		},
+		{
+			time.Hour.Nanoseconds(),
+			time.Second.Nanoseconds(),
+			true,
+			ts("error.series",
+				tsdpi((time.Hour*50)+(time.Second*5), 1),
+				&TimeSeriesDatapoint{},
+			),
+			nil,
+		},
+		{
+			time.Hour.Nanoseconds(),
+			time.Second.Nanoseconds(),
+			true,
+			ts("error.series",
+				tsdpi((time.Hour*50)+(time.Second*5), 1),
+				&TimeSeriesDatapoint{
+					IntValue:   gogoproto.Int64(5),
+					FloatValue: gogoproto.Float32(5.0),
+				},
+			),
+			nil,
+		},
+		{
+			time.Hour.Nanoseconds(),
+			time.Second.Nanoseconds(),
+			false,
+			ts("test.series",
+				tsdpi((time.Hour*50)+(time.Second*5), 1),
+				tsdpi((time.Hour*51)+(time.Second*3), 2),
+				tsdpi((time.Hour*50)+(time.Second*10), 3),
+				tsdpi((time.Hour*53), 4),
+				tsdpi((time.Hour*50)+(time.Second*5)+1, 5),
+				tsdpi((time.Hour*53)+(time.Second*15), 0),
+			),
+			[]*InternalTimeSeriesData{
+				{
+					StartTimestampNanos: int64(time.Hour * 50),
+					SampleDurationNanos: int64(time.Second),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:   5,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(1),
+						},
+						{
+							Offset:   10,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(3),
+						},
+						{
+							Offset:   5,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(5),
+						},
+					},
+				},
+				{
+					StartTimestampNanos: int64(time.Hour * 51),
+					SampleDurationNanos: int64(time.Second),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:   3,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(2),
+						},
+					},
+				},
+				{
+					StartTimestampNanos: int64(time.Hour * 53),
+					SampleDurationNanos: int64(time.Second),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:   0,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(4),
+						},
+						{
+							Offset:   15,
+							IntCount: 1,
+							IntSum:   gogoproto.Int64(0),
+						},
+					},
+				},
+			},
+		},
+		{
+			(time.Hour * 24).Nanoseconds(),
+			(time.Minute * 20).Nanoseconds(),
+			false,
+			ts("test.series",
+				tsdpf((time.Hour*5)+(time.Minute*5), 1.0),
+				tsdpf((time.Hour*24)+(time.Minute*39), 2.0),
+				tsdpf((time.Hour*10)+(time.Minute*10), 3.0),
+				tsdpf((time.Hour*48), 4.0),
+				tsdpf((time.Hour*15)+(time.Minute*22)+1, 5.0),
+				tsdpf((time.Hour*52)+(time.Minute*15), 0.0),
+			),
+			[]*InternalTimeSeriesData{
+				{
+					StartTimestampNanos: 0,
+					SampleDurationNanos: int64(time.Minute * 20),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:     15,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(1.0),
+						},
+						{
+							Offset:     30,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(3.0),
+						},
+						{
+							Offset:     46,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(5.0),
+						},
+					},
+				},
+				{
+					StartTimestampNanos: int64(time.Hour * 24),
+					SampleDurationNanos: int64(time.Minute * 20),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:     1,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(2.0),
+						},
+					},
+				},
+				{
+					StartTimestampNanos: int64(time.Hour * 48),
+					SampleDurationNanos: int64(time.Minute * 20),
+					Samples: []*InternalTimeSeriesSample{
+						{
+							Offset:     0,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(4.0),
+						},
+						{
+							Offset:     12,
+							FloatCount: 1,
+							FloatSum:   gogoproto.Float32(0.0),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for i, tc := range tcases {
+		actual, err := tc.input.ToInternal(tc.keyDuration, tc.sampleDuration)
+		if err != nil {
+			if !tc.expectsError {
+				t.Errorf("unexpected error from case %d: %s", i, err.Error())
+			}
+			continue
+		} else if tc.expectsError {
+			t.Errorf("expected error from case %d, none encountered", i)
+			continue
+		}
+
+		if !reflect.DeepEqual(actual, tc.expected) {
+			t.Errorf("case %d fails: ToInternal result was %v, expected %v", i, actual, tc.expected)
 		}
 	}
 }

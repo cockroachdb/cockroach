@@ -248,3 +248,29 @@ message ScanMetadata {
   // GC information from last scan.
   optional GCMetadata gc = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "GC"];
 }
+
+// TimeSeriesDatapoint is a single point of time series data; a value associated
+// with a timestamp.
+message TimeSeriesDatapoint {
+    // The timestamp when this datapoint is located, expressed in nanoseconds
+    // since the unix epoch.
+    optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
+    // An integer representation of the value of this datapoint. If this field
+    // is set, then 'float_value' must not be set.
+    optional int64 int_value = 2;
+    // A floating point representation of the value of this datapoint. If this
+    // field is set, then 'int_value' must not be set.
+    optional float float_value = 3;
+}
+
+// TimeSeriesData is a set of observations of a single variable value at
+// multiple points in time. This message contains a string which uniquely
+// identifies the source variable, and a repeated set of TimeSeriesDatapoint
+// messages representing distinct measurements of that variable. 
+message TimeSeriesData {
+    // A string which uniquely identifies the variable from which this data was
+    // measured.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // Datapoints representing one or more measurements taken from the variable.
+    repeated TimeSeriesDatapoint datapoints = 2;
+}
