@@ -46,10 +46,6 @@ const (
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
 	raftIDAllocCount = 10
-	// uuidLength is the length of a UUID string, used to allot extra
-	// key length to transaction records, which have a UUID appended.
-	// UUID has the format "759b7562-d2c8-4977-a949-22d8084dade2".
-	uuidLength = 36
 	// defaultScanInterval is the default value for the scan interval
 	// command line flag.
 	defaultScanInterval = 10 * time.Minute
@@ -76,15 +72,9 @@ var (
 // special case for both key-local AND meta1 or meta2 addressing prefixes.
 func verifyKeyLength(key proto.Key) error {
 	maxLength := engine.KeyMaxLength
-	if bytes.HasPrefix(key, engine.KeyLocalTransactionPrefix) {
-		key = key[engine.KeyLocalPrefixLength:]
-		var remaining []byte
-		remaining, key = encoding.DecodeBinary(key)
-		if len(remaining) > uuidLength {
-			return util.Errorf("maximum uuid length in txn key exceeded: len(%s) > %d", remaining, uuidLength)
-		}
-	} else if bytes.HasPrefix(key, engine.KeyLocalPrefix) {
-		key = key[engine.KeyLocalPrefixLength:]
+	if bytes.HasPrefix(key, engine.KeyLocalRangeKeyPrefix) {
+		key = key[len(engine.KeyLocalRangeKeyPrefix):]
+		_, key = encoding.DecodeBinary(key)
 	}
 	if bytes.HasPrefix(key, engine.KeyMetaPrefix) {
 		key = key[len(engine.KeyMeta1Prefix):]
@@ -307,15 +297,16 @@ func (s *Store) Start() error {
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
 
 	// Read store ident and return a not-bootstrapped error if necessary.
-	ok, err := engine.MVCCGetProto(s.engine, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)
+	ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 	if err != nil {
 		return err
 	} else if !ok {
 		return &NotBootstrappedError{}
 	}
 
-	start := engine.KeyLocalRangeDescriptorPrefix
-	end := start.PrefixEnd()
+	// Iterator over all range-local key-based data.
+	start := engine.RangeDescriptorKey(engine.KeyMin)
+	end := engine.RangeDescriptorKey(engine.KeyMax)
 
 	s.raft = newSingleNodeRaft(s)
 	// Start Raft processing goroutine.
@@ -326,6 +317,11 @@ func (s *Store) Start() error {
 	// split crashing halfway will simply be resolved on the next split
 	// attempt. They can otherwise be ignored.
 	if err := engine.MVCCIterateCommitted(s.engine, start, end, func(kv proto.KeyValue) (bool, error) {
+		// Only consider range metadata entries; ignore others.
+		_, suffix, _ := engine.DecodeRangeKey(kv.Key)
+		if !suffix.Equal(engine.KeyLocalRangeDescriptorSuffix) {
+			return false, nil
+		}
 		var desc proto.RangeDescriptor
 		if err := gogoproto.Unmarshal(kv.Value.Bytes, &desc); err != nil {
 			return false, err
@@ -458,7 +454,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent) error {
 	} else if len(kvs) > 0 {
 		return util.Errorf("non-empty engine %s (first key: %q)", s.engine, kvs[0].Key)
 	}
-	err = engine.MVCCPutProto(s.engine, nil, engine.KeyLocalIdent, proto.ZeroTimestamp, nil, &s.Ident)
+	err = engine.MVCCPutProto(s.engine, nil, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 	return err
 }
 
