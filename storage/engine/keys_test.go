@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"testing"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 )
 
@@ -48,6 +49,26 @@ func TestMakeKey(t *testing.T) {
 	}
 }
 
+func TestKeyAddress(t *testing.T) {
+	testCases := []struct {
+		key, expAddress proto.Key
+	}{
+		{proto.Key{}, KeyMin},
+		{proto.Key("123"), proto.Key("123")},
+		{MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
+		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
+		{RangeScanMetadataKey(proto.Key("bar")), proto.Key("bar")},
+		{TransactionKey(proto.Key("baz"), proto.Key(uuid.New())), proto.Key("baz")},
+		{TransactionKey(KeyMax, proto.Key(uuid.New())), KeyMax},
+	}
+	for i, test := range testCases {
+		result := KeyAddress(test.key)
+		if !result.Equal(test.expAddress) {
+			t.Errorf("%d: expected address for key %q doesn't match %q", i, test.key, test.expAddress)
+		}
+	}
+}
+
 func TestRangeMetaKey(t *testing.T) {
 	testCases := []struct {
 		key, expKey proto.Key
@@ -55,14 +76,6 @@ func TestRangeMetaKey(t *testing.T) {
 		{
 			key:    proto.Key{},
 			expKey: KeyMin,
-		},
-		{
-			key:    MakeLocalKey(KeyLocalTransactionPrefix, proto.Key("foo")),
-			expKey: proto.Key("\x00\x00meta2foo"),
-		},
-		{
-			key:    MakeLocalKey(KeyLocalResponseCachePrefix, proto.Key("bar")),
-			expKey: proto.Key("\x00\x00meta2bar"),
 		},
 		{
 			key:    MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")),

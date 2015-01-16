@@ -1393,7 +1393,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	cs := raftpb.ConfState{
 		Nodes: []uint64{1},
 	}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
+	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return hs, cs, err
@@ -1404,7 +1404,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 
 // loadLastIndex looks in the engine to find the last log index.
 func (r *Range) loadLastIndex() error {
-	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
+	logKey := engine.RaftLogPrefix(r.Desc.RaftID)
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
 		1, // only the first (i.e. newest) result)
@@ -1432,8 +1432,8 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 	// MVCCScan is inclusive in the other direction we must increment both the
 	// start and end keys.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
-		engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next(),
-		engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next(),
+		engine.RaftLogKey(r.Desc.RaftID, hi).Next(),
+		engine.RaftLogKey(r.Desc.RaftID, lo).Next(),
 		0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return nil, err
@@ -1493,7 +1493,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 func (r *Range) Append(entries []raftpb.Entry) error {
 	batch := r.rm.Engine().NewBatch()
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index),
+		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc.RaftID, ent.Index),
 			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -1510,6 +1510,6 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(uint64(r.Desc.RaftID)),
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }

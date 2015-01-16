@@ -25,7 +25,6 @@ import (
 	"log"
 	"math"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -401,17 +400,21 @@ func TestStoreVerifyKeys(t *testing.T) {
 	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatalf("unexpected error on put to meta2 value: %s", err)
 	}
-	// Try a put to txn record for a meta2 key.
+	// Try to put a range descriptor record for a start key which is
+	// maximum length.
+	key := append([]byte{}, engine.KeyMax...)
+	key[len(key)-1] = 0x01
+	pArgs, pReply = putArgs(engine.RangeDescriptorKey(key), []byte("value"), 1, store.StoreID())
+	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
+		t.Fatalf("unexpected error on put to range descriptor for KeyMax value: %s", err)
+	}
+	// Try a put to txn record for a meta2 key (note that this doesn't
+	// actually happen in practice, as txn records are not put directly,
+	// but are instead manipulated only through txn methods).
 	pArgs, pReply = putArgs(engine.TransactionKey(meta2KeyMax, []byte(uuid.New())),
 		[]byte("value"), 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatalf("unexpected error on put to txn meta2 value: %s", err)
-	}
-	// Verify a UUID on txn key which is too long.
-	pArgs, pReply = putArgs(engine.TransactionKey(engine.KeyMax, []byte(strings.Repeat("x", 37))),
-		[]byte("value"), 1, store.StoreID())
-	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err == nil {
-		t.Fatalf("expected error on put to txn key with extra character in uuid")
 	}
 }
 

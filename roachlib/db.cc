@@ -29,6 +29,7 @@
 #include "data.pb.h"
 #include "internal.pb.h"
 #include "db.h"
+#include "encoding.h"
 
 extern "C" {
 
@@ -52,6 +53,13 @@ struct DBSnapshot {
 }  // extern "C"
 
 namespace {
+
+// NOTE: these constants must be kept in sync with the values
+// in storage/engine/keys.go.
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\x00\x00i", 4);
+const rocksdb::Slice kKeyLocalRangeKeyPrefix("\x00\x00\x00k", 4);
+const rocksdb::Slice kKeyLocalResponseCacheSuffix("res-");
+const rocksdb::Slice kKeyLocalTransactionSuffix("txn-");
 
 const DBStatus kSuccess = { NULL, 0 };
 
@@ -141,14 +149,45 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
 //   all ranges in the map.
 class DBCompactionFilter : public rocksdb::CompactionFilter {
  public:
-  DBCompactionFilter(const std::string& txn_prefix,
-                     const std::string& rcache_prefix,
-                     int64_t min_txn_ts,
+  DBCompactionFilter(int64_t min_txn_ts,
                      int64_t min_rcache_ts)
-      : txn_prefix_(txn_prefix),
-        rcache_prefix_(rcache_prefix),
-        min_txn_ts_(min_txn_ts),
+      : min_txn_ts_(min_txn_ts),
         min_rcache_ts_(min_rcache_ts) {
+  }
+
+  // IsKeyOfType determines whether key, when binary-decoded, matches
+  // the format: <prefix>[enc-value]\x00<suffix>[remainder].
+  bool IsKeyOfType(const rocksdb::Slice& key, const rocksdb::Slice& prefix, const rocksdb::Slice& suffix) const {
+    std::string decStr;
+    if (!DecodeBinary(key, &decStr, NULL)) {
+      return false;
+    }
+    rocksdb::Slice decKey(decStr);
+    if (!decKey.starts_with(prefix)) {
+      return false;
+    }
+    decKey.remove_prefix(prefix.size());
+
+    // Remove bytes up to including the first null byte.
+    int i = 0;
+    for (; i < decKey.size(); i++) {
+      if (decKey[i] == 0x0) {
+        break;
+      }
+    }
+    if (i == decKey.size()) {
+      return false;
+    }
+    decKey.remove_prefix(i+1);
+    return decKey.starts_with(suffix);
+  }
+
+  bool IsResponseCacheEntry(const rocksdb::Slice& key) const {
+    return IsKeyOfType(key, kKeyLocalRangeIDPrefix, kKeyLocalResponseCacheSuffix);
+  }
+
+  bool IsTransactionRecord(const rocksdb::Slice& key) const {
+    return IsKeyOfType(key, kKeyLocalRangeKeyPrefix, kKeyLocalTransactionSuffix);
   }
 
   virtual bool Filter(int level,
@@ -159,7 +198,9 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     *value_changed = false;
 
     // Only filter response cache entries and transaction rows.
-    if (!key.starts_with(rcache_prefix_) && !key.starts_with(txn_prefix_)) {
+    bool is_rcache = IsResponseCacheEntry(key);
+    bool is_txn = IsTransactionRecord(key);
+    if (!is_rcache && !is_txn) {
       return false;
     }
     // Parse MVCC metadata for inlined value.
@@ -174,7 +215,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     }
     // Response cache rows are GC'd if their timestamp is older than the
     // response cache GC timeout.
-    if (key.starts_with(rcache_prefix_)) {
+    if (is_rcache) {
       proto::ReadWriteCmdResponse rwResp;
       if (!rwResp.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse response cache entry";
@@ -188,7 +229,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       if (header->timestamp().wall_time() <= min_rcache_ts_) {
         return true;
       }
-    } else if (key.starts_with(txn_prefix_)) {
+    } else if (is_txn) {
       // Transaction rows are GC'd if their timestamp is older than
       // the system-wide minimum write intent timestamp. This
       // system-wide minimum write intent is periodically computed via
@@ -210,26 +251,19 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
   }
 
  private:
-  const std::string txn_prefix_;
-  const std::string rcache_prefix_;
   const int64_t min_txn_ts_;
   const int64_t min_rcache_ts_;
 };
 
 class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
  public:
-  DBCompactionFilterFactory(const std::string& txn_prefix,
-                            const std::string& rcache_prefix)
-      : txn_prefix_(txn_prefix),
-        rcache_prefix_(rcache_prefix) {
-  }
+  DBCompactionFilterFactory() {}
 
   virtual std::unique_ptr<rocksdb::CompactionFilter> CreateCompactionFilter(
       const rocksdb::CompactionFilter::Context& context) override {
     google::protobuf::MutexLock l(&mu_); // Protect access to gc timeouts.
     return std::unique_ptr<rocksdb::CompactionFilter>(
-        new DBCompactionFilter(txn_prefix_, rcache_prefix_,
-                               min_txn_ts_, min_rcache_ts_));
+        new DBCompactionFilter(min_txn_ts_, min_rcache_ts_));
   }
 
   virtual const char* Name() const override {
@@ -243,9 +277,6 @@ class DBCompactionFilterFactory : public rocksdb::CompactionFilterFactory {
   }
 
  private:
-  const std::string txn_prefix_;
-  const std::string rcache_prefix_;
-
   google::protobuf::Mutex mu_; // Protects values below.
   int64_t min_txn_ts_;
   int64_t min_rcache_ts_;
@@ -592,9 +623,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options;
   options.block_cache = rocksdb::NewLRUCache(db_opts.cache_size);
   options.allow_os_buffer = db_opts.allow_os_buffer;
-  options.compaction_filter_factory.reset(new DBCompactionFilterFactory(
-      ToString(db_opts.txn_prefix),
-      ToString(db_opts.rcache_prefix)));
+  options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logger));
   options.merge_operator.reset(new DBMergeOperator);
