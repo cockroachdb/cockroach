@@ -65,8 +65,18 @@ func (ts *txnSender) Send(call *Call) {
 			Priority:  t.Txn.Priority, // acts as a minimum priority on restart
 		}
 	case nil:
-		if call.Method == proto.EndTransaction {
-			ts.txnEnd = true // set this txn as having been ended
+		// Check for whether the transaction was ended as a direct call
+		// or as part of a batch.
+		switch call.Method {
+		case proto.EndTransaction:
+			ts.txnEnd = true
+		case proto.Batch:
+			for _, batchReq := range call.Args.(*proto.BatchRequest).Requests {
+				req := batchReq.GetValue().(proto.Request)
+				if method, err := proto.MethodForRequest(req); err == nil && method == proto.EndTransaction {
+					ts.txnEnd = true
+				}
+			}
 		}
 	}
 }

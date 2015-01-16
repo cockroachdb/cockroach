@@ -40,14 +40,17 @@ import (
 // limit on number of attempts so we don't get stuck behind indefinite
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
-func setCorrectnessRetryOptions() {
-	storage.RangeRetryOptions = util.RetryOptions{
-		Backoff:     1 * time.Millisecond,
-		MaxBackoff:  10 * time.Millisecond,
-		Constant:    2,
-		MaxAttempts: 3,
-		UseV1Info:   true,
-	}
+func setCorrectnessRetryOptions(lSender *LocalSender) {
+	lSender.VisitStores(func(s *storage.Store) error {
+		s.RetryOpts = util.RetryOptions{
+			Backoff:     1 * time.Millisecond,
+			MaxBackoff:  10 * time.Millisecond,
+			Constant:    2,
+			MaxAttempts: 3,
+			UseV1Info:   true,
+		}
+		return nil
+	})
 }
 
 // The following structs and methods provide a mechanism for verifying
@@ -604,12 +607,12 @@ func (hv *historyVerifier) runCmd(db *client.KV, txnIdx, retry, cmdIdx int, cmds
 // and runs the verifier.
 func checkConcurrency(name string, isolations []proto.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
-	setCorrectnessRetryOptions()
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	db, _, _, _, _, err := createTestDB()
+	db, _, _, _, lSender, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
+	setCorrectnessRetryOptions(lSender)
 	verifier.run(isolations, db, t)
 }
 

@@ -48,8 +48,8 @@ var testIdent = proto.StoreIdent{
 // setTestRetryOptions sets aggressive retries with a limit on number
 // of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
-func setTestRetryOptions() {
-	RangeRetryOptions = util.RetryOptions{
+func setTestRetryOptions(s *Store) {
+	s.RetryOpts = util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  2 * time.Millisecond,
 		Constant:    2,
@@ -687,7 +687,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Stop()
-	setTestRetryOptions()
+	setTestRetryOptions(store)
 
 	testCases := []struct {
 		resolvable bool

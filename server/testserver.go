@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -121,4 +122,12 @@ func (ts *TestServer) Start() error {
 // Stop stops the TestServer.
 func (ts *TestServer) Stop() {
 	ts.stop()
+}
+
+// Sets the retry options for stores in TestServer.
+func (ts *TestServer) SetRangeRetryOptions(ro util.RetryOptions) {
+	ts.server.node.lSender.VisitStores(func(s *storage.Store) error {
+		s.RetryOpts = ro
+		return nil
+	})
 }
