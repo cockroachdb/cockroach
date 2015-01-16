@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -32,8 +33,16 @@ type committedCommand struct {
 	cmd      proto.InternalRaftCommand
 }
 
-// raft is the interface exposed by a raft implementation.
-type raft interface {
+// raftInterface is the interface exposed by a raft implementation.
+type raftInterface interface {
+	// createGroup initializes a raft group with the given id.
+	createGroup(int64) error
+
+	// removeGroup removes the raft group with the given id.
+	// Note that committed commands for the removed group may still be
+	// present in the channel buffer.
+	removeGroup(int64) error
+
 	// propose a command to raft. If accepted by the consensus protocol it will
 	// eventually appear in the committed channel, but this is not guaranteed
 	// so callers may need to retry.
@@ -52,13 +61,13 @@ type singleNodeRaft struct {
 	mu       sync.Mutex
 	groups   map[int64]struct{}
 	commitCh chan committedCommand
-	stopper  chan struct{}
+	stopper  *util.Stopper
 }
 
-func newSingleNodeRaft() *singleNodeRaft {
+func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 	mr, err := multiraft.NewMultiRaft(1, &multiraft.Config{
 		Transport:              multiraft.NewLocalRPCTransport(),
-		Storage:                multiraft.NewMemoryStorage(),
+		Storage:                storage,
 		TickInterval:           time.Millisecond,
 		ElectionTimeoutTicks:   5,
 		HeartbeatIntervalTicks: 1,
@@ -70,25 +79,42 @@ func newSingleNodeRaft() *singleNodeRaft {
 		mr:       mr,
 		groups:   map[int64]struct{}{},
 		commitCh: make(chan committedCommand, 10),
-		stopper:  make(chan struct{}),
+		stopper:  util.NewStopper(1),
 	}
 	mr.Start()
 	go snr.run()
 	return snr
 }
 
-var _ raft = (*singleNodeRaft)(nil)
+var _ raftInterface = (*singleNodeRaft)(nil)
+
+func (snr *singleNodeRaft) createGroup(id int64) error {
+	snr.mu.Lock()
+	if _, ok := snr.groups[id]; !ok {
+		snr.groups[id] = struct{}{}
+		snr.mu.Unlock()
+		return snr.mr.CreateGroup(uint64(id))
+	}
+	snr.mu.Unlock()
+	return nil
+}
+
+func (snr *singleNodeRaft) removeGroup(id int64) error {
+	snr.mu.Lock()
+	if _, ok := snr.groups[id]; ok {
+		delete(snr.groups, id)
+		snr.mu.Unlock()
+		return snr.mr.RemoveGroup(uint64(id))
+	}
+	snr.mu.Unlock()
+	return nil
+}
 
 func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
-	snr.mu.Lock()
-	defer snr.mu.Unlock()
-	if _, ok := snr.groups[cmd.RaftID]; !ok {
-		snr.groups[cmd.RaftID] = struct{}{}
-		// Lazily create group. TODO(bdarnell): make this non-lazy
-		err := snr.mr.CreateGroup(uint64(cmd.RaftID), []uint64{1})
-		if err != nil {
-			log.Fatal(err)
-		}
+	// Lazily create group. TODO(bdarnell): make this non-lazy
+	err := snr.createGroup(cmd.RaftID)
+	if err != nil {
+		log.Fatal(err)
 	}
 	data, err := gogoproto.Marshal(&cmd)
 	if err != nil {
@@ -102,7 +128,7 @@ func (snr *singleNodeRaft) committed() <-chan committedCommand {
 }
 
 func (snr *singleNodeRaft) stop() {
-	close(snr.stopper)
+	snr.stopper.Stop()
 }
 
 func (snr *singleNodeRaft) run() {
@@ -118,8 +144,9 @@ func (snr *singleNodeRaft) run() {
 				}
 				snr.commitCh <- committedCommand{cmdIDKey(e.CommandID), cmd}
 			}
-		case <-snr.stopper:
+		case <-snr.stopper.ShouldStop():
 			snr.mr.Stop()
+			snr.stopper.SetStopped()
 			return
 		}
 	}

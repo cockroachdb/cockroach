@@ -22,6 +22,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strings"
@@ -202,7 +203,11 @@ func createRange(s *Store, raftID int64, start, end proto.Key) *Range {
 		StartKey: start,
 		EndKey:   end,
 	}
-	return NewRange(desc, s)
+	r, err := NewRange(desc, s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return r
 }
 
 func TestStoreAddRemoveRanges(t *testing.T) {
@@ -225,7 +230,15 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	if err := store.AddRange(rng2); err != nil {
 		t.Fatal(err)
 	}
-	// Try to add a range with preexisting ID.
+	// Try to add the same range twice
+	err = store.AddRange(rng2)
+	if err == nil {
+		t.Fatal("expected error re-adding same range")
+	}
+	if _, ok := err.(*rangeAlreadyExists); !ok {
+		t.Fatalf("expected rangeAlreadyExists error; got %s", err)
+	}
+	// Try to add a range with previously-used (but now removed) ID.
 	rng2Dup := createRange(store, 1, proto.Key("a"), proto.Key("b"))
 	if err := store.AddRange(rng2Dup); err != nil {
 		t.Fatal(err)
@@ -482,8 +495,11 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range 
 	if err != nil {
 		t.Fatal(err)
 	}
-	newRng := NewRange(desc, store)
-	if err := store.SplitRange(rng, newRng); err != nil {
+	newRng, err := NewRange(desc, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SplitRange(rng, newRng); err != nil {
 		t.Fatal(err)
 	}
 	return newRng

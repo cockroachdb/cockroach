@@ -31,11 +31,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -65,6 +68,15 @@ var (
 	// continually re-gossipped. The replica which is the raft leader of
 	// the first range gossips it.
 	ttlClusterIDGossip = 30 * time.Second
+)
+
+// raftInitialLogIndex is the starting point for the raft log. We bootstrap
+// the raft membership by synthesizing a snapshot as if there were some
+// discarded prefix to the log, so we must begin the log at an arbitrary
+// index greater than 1.
+const (
+	raftInitialLogIndex = 10
+	raftInitialLogTerm  = 5
 )
 
 // configDescriptor describes administrative configuration maps
@@ -147,8 +159,11 @@ type RangeManager interface {
 // as appropriate.
 type Range struct {
 	Desc      *proto.RangeDescriptor
-	rm        RangeManager  // Makes some store methods available
-	splitting int32         // 1 if a split is underway; updated atomically
+	rm        RangeManager // Makes some store methods available
+	splitting int32        // 1 if a split is underway; updated atomically
+	// Last index persisted to the raft log (not necessarily committed).
+	// Updated atomically.
+	lastIndex uint64
 	closer    chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
@@ -158,18 +173,27 @@ type Range struct {
 	pendingCmds  map[cmdIDKey]*pendingCmd
 }
 
+var _ multiraft.WriteableGroupStorage = &Range{}
+
 // NewRange initializes the range using the given metadata.
-func NewRange(desc *proto.RangeDescriptor, rm RangeManager) *Range {
+func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		Desc:        desc,
 		rm:          rm,
+		lastIndex:   raftInitialLogIndex,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
-	return r
+
+	err := r.loadLastIndex()
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 // Start begins gossiping loop in the event this is the first
@@ -487,6 +511,10 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 		args = cmd.Args
 		reply = cmd.Reply
 	} else {
+		if raftCmd.Cmd.GetValue() == nil {
+			// This is a no-op.
+			return
+		}
 		// This command originated elsewhere so we must create a new
 		// reply buffer and reconstruct the method name.
 		args = raftCmd.Cmd.GetValue().(proto.Request)
@@ -1261,7 +1289,10 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	// Add the new split range to the store. This step atomically
 	// updates the EndKey of the updated range and also adds the
 	// new range to the store's range map.
-	newRng := NewRange(&split.NewDesc, r.rm)
+	newRng, err := NewRange(&split.NewDesc, r.rm)
+	if err != nil {
+		return err
+	}
 	// Write-lock the mutex to protect Desc, as SplitRange will modify
 	// Desc.EndKey.
 	r.Lock()
@@ -1357,4 +1388,136 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
 	}
+}
+
+// InitialState implements the raft.Storage interface.
+func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+	// Set up the defaults if there is no stored HardState.
+	hs := raftpb.HardState{
+		Term:   raftInitialLogTerm,
+		Vote:   raft.None,
+		Commit: raftInitialLogIndex,
+	}
+	cs := raftpb.ConfState{
+		Nodes: []uint64{1},
+	}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
+		proto.ZeroTimestamp, nil, &hs)
+	if err != nil {
+		return hs, cs, err
+	}
+
+	return hs, cs, nil
+}
+
+// loadLastIndex looks in the engine to find the last log index.
+func (r *Range) loadLastIndex() error {
+	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
+	kvs, err := engine.MVCCScan(r.rm.Engine(),
+		logKey, logKey.PrefixEnd(),
+		1, // only the first (i.e. newest) result)
+		proto.ZeroTimestamp, nil)
+	if err != nil {
+		return err
+	}
+	if len(kvs) > 0 {
+		var ent raftpb.Entry
+		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &ent)
+		if err != nil {
+			return err
+		}
+		atomic.StoreUint64(&r.lastIndex, ent.Index)
+	}
+	return nil
+}
+
+// Entries implements the raft.Storage interface.
+// TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
+// is insufficient.
+func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
+	// Scan over the log (which is stored backwards) to find the
+	// requested entries.  Reversing [lo, hi) gives us (hi, lo]; since
+	// MVCCScan is inclusive in the other direction we must increment both the
+	// start and end keys.
+	kvs, err := engine.MVCCScan(r.rm.Engine(),
+		engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next(),
+		engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next(),
+		0, proto.ZeroTimestamp, nil)
+	if err != nil {
+		return nil, err
+	}
+	ents := make([]raftpb.Entry, 0, len(kvs))
+	for _, kv := range kvs {
+		var ent raftpb.Entry
+		err = gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
+		if err != nil {
+			return nil, err
+		}
+		ents = append(ents, ent)
+	}
+	if len(ents) != int(hi-lo) {
+		return nil, raft.ErrUnavailable
+	}
+	// Reverse the log to get it back into the proper order.
+	for i, j := 0, len(ents)-1; i < j; i, j = i+1, j-1 {
+		ents[i], ents[j] = ents[j], ents[i]
+	}
+	return ents, nil
+}
+
+// Term implements the raft.Storage interface.
+func (r *Range) Term(i uint64) (uint64, error) {
+	if i == raftInitialLogIndex {
+		// TODO(bdarnell): handle the pre-snapshot dummy entry
+		return raftInitialLogTerm, nil
+	}
+	ents, err := r.Entries(i, i+1)
+	if err != nil {
+		return 0, err
+	}
+	if len(ents) == 0 {
+		return 0, nil
+	}
+	return ents[0].Term, nil
+}
+
+// LastIndex implements the raft.Storage interface.
+func (r *Range) LastIndex() (uint64, error) {
+	return atomic.LoadUint64(&r.lastIndex), nil
+}
+
+// FirstIndex implements the raft.Storage interface.
+func (r *Range) FirstIndex() (uint64, error) {
+	// Add one to initialLogIndex to get the first regular log entry.
+	return raftInitialLogIndex + 1, nil
+}
+
+// Snapshot implements the raft.Storage interface.
+func (r *Range) Snapshot() (raftpb.Snapshot, error) {
+	panic("TODO(bdarnell): implement raft.Storage.snapshot")
+}
+
+// Append implements the multiraft.WriteableGroupStorage interface.
+func (r *Range) Append(entries []raftpb.Entry) error {
+	batch := r.rm.Engine().NewBatch()
+	for _, ent := range entries {
+		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index),
+			proto.ZeroTimestamp, nil, &ent)
+		if err != nil {
+			return err
+		}
+	}
+	// TODO(bdarnell): if the last entry's index < lastIndex, delete any remaining old entries.
+	err := batch.Commit()
+	if err != nil {
+		return err
+	}
+	atomic.StoreUint64(&r.lastIndex, entries[len(entries)-1].Index)
+	return nil
+}
+
+// SetHardState implements the multiraft.WriteableGroupStorage interface.
+func (r *Range) SetHardState(st raftpb.HardState) error {
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(uint64(r.Desc.RaftID)),
+		proto.ZeroTimestamp, nil, &st)
 }

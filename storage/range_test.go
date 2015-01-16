@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -47,11 +48,6 @@ var (
 				NodeID:  1,
 				StoreID: 1,
 				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
-			},
-			{
-				NodeID:  2,
-				StoreID: 2,
-				Attrs:   proto.Attributes{Attrs: []string{"dc2", "mem"}},
 			},
 		},
 	}
@@ -98,8 +94,11 @@ func createTestRange(t *testing.T) (*Store, *Range, *gossip.Gossip, engine.Engin
 		t.Fatal(err)
 	}
 	initConfigs(engine, t)
-	r := NewRange(&testRangeDescriptor, store)
-	if err := store.AddRange(r); err != nil {
+	r, err := NewRange(&testRangeDescriptor, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.AddRange(r); err != nil {
 		t.Fatal(err)
 	}
 	return store, r, g, engine
@@ -120,8 +119,12 @@ func TestRangeContains(t *testing.T) {
 		EndKey:   proto.Key("b"),
 	}
 
+	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	clock := hlc.NewClock(hlc.UnixNano)
-	r := NewRange(desc, NewStore(clock, nil, nil, nil))
+	r, err := NewRange(desc, NewStore(clock, e, nil, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !r.ContainsKey(proto.Key("aa")) {
 		t.Errorf("expected range to contain key \"aa\"")
 	}
@@ -342,8 +345,11 @@ func createTestRangeWithClock(t *testing.T) (*Store, *Range, *hlc.ManualClock, *
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
-	rng := NewRange(&testRangeDescriptor, store)
-	if err := store.AddRange(rng); err != nil {
+	rng, err := NewRange(&testRangeDescriptor, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.AddRange(rng); err != nil {
 		t.Fatal(err)
 	}
 	return store, rng, manual, clock, engine
@@ -1413,37 +1419,6 @@ func TestRangeStats(t *testing.T) {
 	verifyRangeStats(eng, rng.Desc.RaftID, expMS, t)
 }
 
-// TestRemoteRaftCommand ensures that commands entering the raft
-// subsystem from other nodes are applied correctly.
-func TestRemoteRaftCommand(t *testing.T) {
-	s, r, _, _ := createTestRange(t)
-	defer s.Stop()
-
-	// Send an increment direct to raft.
-	remoteIncArgs, _ := incrementArgs([]byte("a"), 2, 1, s.StoreID())
-	remoteIncArgs.Timestamp = proto.MinTimestamp
-	idKey := makeCmdIDKey(proto.ClientCmdID{WallTime: 1, Random: 1})
-	raftCmd := proto.InternalRaftCommand{
-		RaftID: r.Desc.RaftID,
-	}
-	raftCmd.Cmd.SetValue(remoteIncArgs)
-	r.rm.ProposeRaftCommand(idKey, raftCmd)
-
-	// Send an increment through the normal flow, since this is our
-	// simplest way of waiting until this command (and all earlier ones)
-	// have been applied.
-	localIncArgs, localIncReply := incrementArgs([]byte("a"), 3, 1, s.StoreID())
-	err := r.AddCmd(proto.Increment, localIncArgs, localIncReply, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// The reply should have the result of both commands
-	if localIncReply.NewValue != 5 {
-		t.Errorf("expected 5, got %d", localIncReply.NewValue)
-	}
-}
-
 // TestInternalMerge verifies that the InternalMerge command is behaving as
 // expected. Merge semantics for different data types are tested more robustly
 // at the engine level; this test is intended only to show that values passed to
@@ -1473,6 +1448,19 @@ func TestInternalMerge(t *testing.T) {
 	if a, e := resp.Value.Bytes, []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
 	}
+}
+
+func TestRaftStorage(t *testing.T) {
+	var s *Store
+	storagetest.RunTests(t,
+		func(t *testing.T) storagetest.WriteableStorage {
+			var r *Range
+			s, r, _, _ = createTestRange(t)
+			return r
+		},
+		func(t *testing.T, r storagetest.WriteableStorage) {
+			s.Stop()
+		})
 }
 
 // TestConditionFailedError tests that a ConditionFailedError correctly

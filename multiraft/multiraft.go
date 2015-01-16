@@ -75,10 +75,14 @@ type MultiRaft struct {
 	Events          chan interface{}
 	nodeID          uint64
 	createGroupChan chan *createGroupOp
+	removeGroupChan chan *removeGroupOp
 	proposalChan    chan proposal
-	stopper         chan struct{}
-	stopped         chan struct{}
+	stopper         *util.Stopper
 }
+
+// multiraftServer is a type alias to separate RPC methods
+// (which net/rpc finds via reflection) from others.
+type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
 func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
@@ -101,12 +105,12 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
 		createGroupChan: make(chan *createGroupOp, 100),
+		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan proposal, 100),
-		stopper:         make(chan struct{}),
-		stopped:         make(chan struct{}),
+		stopper:         util.NewStopper(1),
 	}
 
-	err = m.Transport.Listen(nodeID, m)
+	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
 	if err != nil {
 		return nil, err
 	}
@@ -115,23 +119,25 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start() {
+func (m *MultiRaft) Start() error {
 	s := newState(m)
 	go s.start()
+
+	return nil
 }
 
 // Stop terminates the running raft instance and shuts down all network interfaces.
 func (m *MultiRaft) Stop() {
 	m.Transport.Stop(m.nodeID)
-	close(m.stopper)
-	<-m.stopped
+	m.stopper.Stop()
 	m.multiNode.Stop()
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc
 // when we receive a message.
-func (m *MultiRaft) RaftMessage(req *RaftMessageRequest,
+func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
+	m := (*MultiRaft)(ms)
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
 		raft.DescribeMessage(req.Message))
 	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
@@ -158,26 +164,35 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 	}
 }
 
-// CreateGroup creates a new consensus group and joins it. The application should
-// arrange to call CreateGroup on all nodes named in initialMembers.
-func (m *MultiRaft) CreateGroup(groupID uint64, initialMembers []uint64) error {
-	for _, id := range initialMembers {
-		if id == 0 {
-			return util.Error("Invalid NodeID")
-		}
-	}
+// CreateGroup creates a new consensus group and joins it. The initial membership of this
+// group is determined by the InitialState method of the group's Storage object.
+func (m *MultiRaft) CreateGroup(groupID uint64) error {
 	op := &createGroupOp{
-		groupID,
-		initialMembers,
-		make(chan error),
+		groupID: groupID,
+		ch:      make(chan error, 1),
 	}
 	m.createGroupChan <- op
+	return <-op.ch
+}
+
+// RemoveGroup destroys the consensus group with the given ID.
+// No events for this group will be emitted after this method returns
+// (but some events may still be in the channel buffer).
+func (m *MultiRaft) RemoveGroup(groupID uint64) error {
+	op := &removeGroupOp{
+		groupID: groupID,
+		ch:      make(chan error, 1),
+	}
+	m.removeGroupChan <- op
 	return <-op.ch
 }
 
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
 // The returned channel is closed when the command is committed.
+// As long as this node is alive, the command will be retried until committed
+// (e.g. in the event of leader failover). There is no guarantee that commands will be
+// committed in the same order as they were originally submitted.
 func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) chan struct{} {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})
@@ -236,9 +251,13 @@ type group struct {
 }
 
 type createGroupOp struct {
-	groupID        uint64
-	initialMembers []uint64
-	ch             chan error
+	groupID uint64
+	ch      chan error
+}
+
+type removeGroupOp struct {
+	groupID uint64
+	ch      chan error
 }
 
 // node represents a connection to a remote node.
@@ -301,7 +320,7 @@ func (s *state) start() {
 
 		log.V(8).Infof("node %v: selecting", s.nodeID)
 		select {
-		case <-s.stopper:
+		case <-s.stopper.ShouldStop():
 			log.V(6).Infof("node %v: stopping", s.nodeID)
 			s.stop()
 			return
@@ -309,6 +328,10 @@ func (s *state) start() {
 		case op := <-s.createGroupChan:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
 			s.createGroup(op)
+
+		case op := <-s.removeGroupChan:
+			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+			s.removeGroup(op)
 
 		case prop := <-s.proposalChan:
 			s.propose(prop)
@@ -327,7 +350,7 @@ func (s *state) start() {
 			writingGroups = nil
 
 		case <-s.Ticker.Chan():
-			log.V(6).Infof("node %v: got tick", s.nodeID)
+			log.V(8).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
 		}
 	}
@@ -342,7 +365,7 @@ func (s *state) stop() {
 		}
 	}
 	s.writeTask.stop()
-	close(s.stopped)
+	s.stopper.SetStopped()
 }
 
 // addNode creates a node or increments the refcount on an existing node.
@@ -366,26 +389,26 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
 
-	peers := make([]raft.Peer, len(op.initialMembers))
-	for i, member := range op.initialMembers {
-		peers[i].ID = member
-		err := s.addNode(member)
-		if err != nil {
-			op.ch <- err
-			return
-		}
+	gs := s.Storage.GroupStorage(op.groupID)
+	_, cs, err := gs.InitialState()
+	if err != nil {
+		op.ch <- err
 	}
-	s.multiNode.CreateGroup(op.groupID, peers, s.Storage.GroupStorage(op.groupID))
+	for _, nodeID := range cs.Nodes {
+		s.addNode(nodeID)
+	}
+
+	s.multiNode.CreateGroup(op.groupID, nil, gs)
 	s.groups[op.groupID] = &group{
 		pending: map[string]proposal{},
 	}
 
-	// HACK: for single-node groups force an immediate election instead of waiting
-	// for the randomized timeout.
-	if len(op.initialMembers) == 1 {
-		s.multiNode.Campaign(context.Background(), op.groupID)
-	}
+	op.ch <- nil
+}
 
+func (s *state) removeGroup(op *removeGroupOp) {
+	s.multiNode.RemoveGroup(op.groupID)
+	delete(s.groups, op.groupID)
 	op.ch <- nil
 }
 
@@ -420,7 +443,12 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			}
 		}
 
-		g := s.groups[groupID]
+		g, ok := s.groups[groupID]
+		if !ok {
+			// This is a stale message for a removed group
+			log.V(4).Infof("node %v: dropping stale ready message for group %v", s.nodeID, groupID)
+			continue
+		}
 		leader, term := g.leader, g.committedTerm
 		if ready.SoftState != nil {
 			leader = ready.SoftState.Lead
@@ -431,6 +459,11 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 		if term != g.committedTerm || leader != g.leader {
 			g.leader, g.committedTerm = leader, term
 			s.sendEvent(&EventLeaderElection{groupID, g.leader, g.committedTerm})
+
+			// Re-submit all pending proposals
+			for _, prop := range g.pending {
+				s.proposalChan <- prop
+			}
 		}
 	}
 }
@@ -456,7 +489,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 	// Everything has been written to disk; now we can apply updates to the state machine
 	// and send outgoing messages.
 	for groupID, ready := range readyGroups {
-		g := s.groups[groupID]
+		g, ok := s.groups[groupID]
+		if !ok {
+			log.V(4).Infof("dropping stale write to group %v", groupID)
+			continue
+		}
 		for _, entry := range ready.CommittedEntries {
 			var commandID string
 			switch entry.Type {

@@ -144,6 +144,34 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	return nil
 }
 
+// RaftLogKey returns a system-local key for a raft log entry.
+func RaftLogKey(raftID, logIndex uint64) proto.Key {
+	b := RaftLogPrefix(raftID)
+	// The log is stored "backwards" so we can easily find the highest index stored.
+	b = encoding.EncodeUint64Decreasing(b, logIndex)
+	return b
+}
+
+// RaftLogPrefix returns the system-local prefix shared by all entries in a raft log.
+func RaftLogPrefix(raftID uint64) proto.Key {
+	b := MakeLocalKey(KeyLocalRaftLogPrefix)
+	b = encoding.EncodeUint64(b, raftID)
+	return b
+}
+
+// RaftStateKey returns a system-local key for a raft HardState.
+func RaftStateKey(raftID uint64) proto.Key {
+	b := MakeLocalKey(KeyLocalRaftStatePrefix)
+	b = encoding.EncodeUint64(b, raftID)
+	return b
+}
+
+// DecodeRaftStateKey extracts the raft ID from a RaftStateKey.
+func DecodeRaftStateKey(k proto.Key) uint64 {
+	_, raftID := encoding.DecodeUint64(k[len(KeyLocalRaftStatePrefix):])
+	return raftID
+}
+
 func init() {
 	if KeyLocalPrefixLength%7 != 0 {
 		log.Fatalf("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
@@ -212,6 +240,10 @@ var (
 	// KeyLocalTransactionPrefix specifies the key prefix for
 	// transaction records. The suffix is the transaction id.
 	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, proto.Key("txn-"))
+	// KeyLocalRaftLogPrefix is the prefix for the raft log.
+	KeyLocalRaftLogPrefix = MakeKey(KeyLocalPrefix, proto.Key("rftl"))
+	// KeyLocalRaftStatePrefix is the prefix for the raft HardState.
+	KeyLocalRaftStatePrefix = MakeKey(KeyLocalPrefix, proto.Key("rfts"))
 
 	// KeyLocalMax is the end of the local key range.
 	KeyLocalMax = KeyLocalPrefix.PrefixEnd()
