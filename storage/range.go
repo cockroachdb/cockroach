@@ -120,14 +120,12 @@ func UsesTimestampCache(method string) bool {
 	return ok
 }
 
-// A pendingCmd holds method, args, reply and a done channel for a command
+// A pendingCmd holds the reply buffer and a done channel for a command
 // sent to Raft. Once committed to the Raft log, the command is
 // executed and the result returned via the done channel.
 type pendingCmd struct {
-	Method string
-	Args   proto.Request
-	Reply  proto.Response
-	done   chan error // Used to signal waiting RPC handler
+	Reply proto.Response
+	done  chan error // Used to signal waiting RPC handler
 }
 
 // A RangeManager is an interface satisfied by Store through which ranges
@@ -439,10 +437,8 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 
 	// Create command and enqueue for Raft.
 	pendingCmd := &pendingCmd{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
-		done:   make(chan error, 1),
+		Reply: reply,
+		done:  make(chan error, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
 		RaftID: r.Desc.RaftID,
@@ -455,6 +451,10 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 			WallTime: r.rm.Clock().PhysicalNow(),
 			Random:   rand.Int63(),
 		}
+	}
+	ok := raftCmd.Cmd.SetValue(args)
+	if !ok {
+		log.Fatalf("unknown command type %T", args)
 	}
 	idKey := makeCmdIDKey(cmdID)
 	r.Lock()
@@ -484,7 +484,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
 			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
-				pendingCmd.Method, pendingCmd.Args, err)
+				method, args, err)
 		}
 		return err
 	}
@@ -501,27 +501,19 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 	cmd := r.pendingCmds[idKey]
 	delete(r.pendingCmds, idKey)
 	r.Unlock()
-	var method string
-	var args proto.Request
+
+	args := raftCmd.Cmd.GetValue().(proto.Request)
+	method, err := proto.MethodForRequest(args)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var reply proto.Response
-	var err error
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied reply.
-		method = cmd.Method
-		args = cmd.Args
 		reply = cmd.Reply
 	} else {
-		if raftCmd.Cmd.GetValue() == nil {
-			// This is a no-op.
-			return
-		}
-		// This command originated elsewhere so we must create a new
-		// reply buffer and reconstruct the method name.
-		args = raftCmd.Cmd.GetValue().(proto.Request)
-		method, err = proto.MethodForRequest(args)
-		if err != nil {
-			log.Fatal(err)
-		}
+		// This command originated elsewhere so we must create a new reply buffer.
 		_, reply, err = proto.CreateArgsAndReply(method)
 		if err != nil {
 			log.Fatal(err)
@@ -1401,7 +1393,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	cs := raftpb.ConfState{
 		Nodes: []uint64{1},
 	}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(uint64(r.Desc.RaftID)),
+	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return hs, cs, err
@@ -1412,7 +1404,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 
 // loadLastIndex looks in the engine to find the last log index.
 func (r *Range) loadLastIndex() error {
-	logKey := engine.RaftLogPrefix(uint64(r.Desc.RaftID))
+	logKey := engine.RaftLogPrefix(r.Desc.RaftID)
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
 		1, // only the first (i.e. newest) result)
@@ -1440,8 +1432,8 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 	// MVCCScan is inclusive in the other direction we must increment both the
 	// start and end keys.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
-		engine.RaftLogKey(uint64(r.Desc.RaftID), hi).Next(),
-		engine.RaftLogKey(uint64(r.Desc.RaftID), lo).Next(),
+		engine.RaftLogKey(r.Desc.RaftID, hi).Next(),
+		engine.RaftLogKey(r.Desc.RaftID, lo).Next(),
 		0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return nil, err
@@ -1501,7 +1493,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 func (r *Range) Append(entries []raftpb.Entry) error {
 	batch := r.rm.Engine().NewBatch()
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(uint64(r.Desc.RaftID), ent.Index),
+		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc.RaftID, ent.Index),
 			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -1518,6 +1510,6 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(uint64(r.Desc.RaftID)),
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }

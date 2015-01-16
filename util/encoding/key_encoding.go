@@ -173,7 +173,7 @@ func DecodeBinary(buf []byte) ([]byte, []byte) {
 		}
 
 		t = (buf[i] << (8 - s)) & 0xff
-		
+
 		if buf[i] == orderedEncodingTerminator {
 			break
 		}

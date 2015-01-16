@@ -92,7 +92,7 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 
 // TestResponseCacheCopyInto tests that responses cached in one cache get
 // transferred correctly to another cache using CopyInto().
-func TestResposeCacheCopyInto(t *testing.T) {
+func TestResponseCacheCopyInto(t *testing.T) {
 	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
@@ -115,7 +115,7 @@ func TestResposeCacheCopyInto(t *testing.T) {
 
 // TestResponseCacheCopyFrom tests that responses cached in one cache get
 // transferred correctly to another cache using CopyFrom().
-func TestResposeCacheCopyFrom(t *testing.T) {
+func TestResponseCacheCopyFrom(t *testing.T) {
 	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.

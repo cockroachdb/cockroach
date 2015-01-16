@@ -111,6 +111,9 @@ func (snr *singleNodeRaft) removeGroup(id int64) error {
 }
 
 func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
+	if cmd.Cmd.GetValue() == nil {
+		panic("proposed a nil command")
+	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
 	err := snr.createGroup(cmd.RaftID)
 	if err != nil {

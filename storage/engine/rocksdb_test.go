@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"testing"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -63,8 +64,8 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 }
 
 // TestRocksDBCompaction verifies that a garbage collector can be
-// installed on a RocksDB engine and will properly compact entries
-// response cache and transaction entries.
+// installed on a RocksDB engine and will properly compact response
+// cache and transaction entries.
 func TestRocksDBCompaction(t *testing.T) {
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
@@ -81,26 +82,25 @@ func TestRocksDBCompaction(t *testing.T) {
 		}
 	}(t)
 
-	rcPre := KeyLocalResponseCachePrefix
-	txnPre := KeyLocalTransactionPrefix
+	cmdID := &proto.ClientCmdID{WallTime: 1, Random: 1}
 
 	// Write two transaction values and two response cache values such
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	kvs := []proto.KeyValue{
 		proto.KeyValue{
-			Key:   MakeLocalKey(rcPre, proto.Key("a")),
+			Key:   ResponseCacheKey(1, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
 		},
 		proto.KeyValue{
-			Key:   MakeLocalKey(rcPre, proto.Key("b")),
+			Key:   ResponseCacheKey(2, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
 		proto.KeyValue{
-			Key:   MakeLocalKey(txnPre, proto.Key("a")),
+			Key:   TransactionKey(proto.Key("a"), proto.Key(uuid.New())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
 		proto.KeyValue{
-			Key:   MakeLocalKey(txnPre, proto.Key("b")),
+			Key:   TransactionKey(proto.Key("b"), proto.Key(uuid.New())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
 	}
@@ -121,8 +121,8 @@ func TestRocksDBCompaction(t *testing.T) {
 		keys = append(keys, kv.Key)
 	}
 	expKeys := []proto.Key{
-		MakeLocalKey(rcPre, proto.Key("b")),
-		MakeLocalKey(txnPre, proto.Key("b")),
+		kvs[1].Key,
+		kvs[3].Key,
 	}
 	if !reflect.DeepEqual(expKeys, keys) {
 		t.Errorf("expected keys %+v, got keys %+v", expKeys, keys)

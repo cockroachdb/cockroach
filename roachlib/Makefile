@@ -17,7 +17,7 @@
 # Author: Andrew Bonventre (andybons@gmail.com)
 
 ROACH_LIB := libroach.a
-SOURCES   := db.cc
+SOURCES   := db.cc encoding.cc
 OBJECTS   := $(SOURCES:.cc=.o)
 
 CXXFLAGS += -std=c++11 -I../proto/lib -I../_vendor/rocksdb/include

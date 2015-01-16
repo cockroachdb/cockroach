@@ -34,12 +34,15 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		key proto.Key
 		ts  proto.Timestamp
 	}{
-		{responseCacheKey(r.Desc.RaftID, proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{responseCacheKey(r.Desc.RaftID, proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{engine.ResponseCacheKey(r.Desc.RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{engine.ResponseCacheKey(r.Desc.RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{engine.RaftLogKey(r.Desc.RaftID, 2), ts0},
+		{engine.RaftLogKey(r.Desc.RaftID, 1), ts0},
+		{engine.RaftStateKey(r.Desc.RaftID), ts0},
+		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyBytes), ts0},
+		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyCount), ts0},
 		{engine.RangeDescriptorKey(r.Desc.StartKey), ts},
 		{engine.RangeScanMetadataKey(r.Desc.StartKey), ts0},
-		{engine.MakeRangeStatKey(r.Desc.RaftID, engine.StatKeyBytes), ts0},
-		{engine.MakeRangeStatKey(r.Desc.RaftID, engine.StatKeyCount), ts0},
 		{engine.TransactionKey(r.Desc.StartKey, []byte("1234")), ts0},
 		{engine.TransactionKey(r.Desc.StartKey.Next(), []byte("5678")), ts0},
 		{engine.TransactionKey(r.Desc.EndKey.Prev(), []byte("2468")), ts0},

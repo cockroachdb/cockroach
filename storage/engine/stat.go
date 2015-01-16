@@ -19,7 +19,6 @@ package engine
 
 import (
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -53,25 +52,23 @@ var (
 	StatIntentCount = proto.Key("intent-count")
 )
 
-// MakeRangeStatKey returns the key for accessing the named stat
+// RangeStatKey returns the key for accessing the named stat
 // for the specified Raft ID.
-func MakeRangeStatKey(raftID int64, stat proto.Key) proto.Key {
-	encRaftID := encoding.EncodeInt(nil, raftID)
-	return MakeKey(KeyLocalRangeStatPrefix, encRaftID, stat)
+func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeStatSuffix, stat)
 }
 
-// MakeStoreStatKey returns the key for accessing the named stat
+// StoreStatKey returns the key for accessing the named stat
 // for the specified store ID.
-func MakeStoreStatKey(storeID int32, stat proto.Key) proto.Key {
-	encStoreID := encoding.EncodeInt(nil, int64(storeID))
-	return MakeKey(KeyLocalStoreStatPrefix, encStoreID, stat)
+func StoreStatKey(storeID int32, stat proto.Key) proto.Key {
+	return MakeStoreKey(KeyLocalStoreStatSuffix, stat)
 }
 
 // GetRangeStat fetches the specified stat from the provided engine.
 // If the stat could not be found, returns 0. An error is returned
 // on stat decode error.
 func GetRangeStat(engine Engine, raftID int64, stat proto.Key) (int64, error) {
-	val, err := MVCCGet(engine, MakeRangeStatKey(raftID, stat), proto.ZeroTimestamp, nil)
+	val, err := MVCCGet(engine, RangeStatKey(raftID, stat), proto.ZeroTimestamp, nil)
 	if err != nil || val == nil {
 		return 0, err
 	}
@@ -87,12 +84,12 @@ func MergeStat(engine Engine, raftID int64, storeID int32, stat proto.Key, statV
 	}
 	value := proto.Value{Integer: gogoproto.Int64(statVal)}
 	if raftID != 0 {
-		if err := MVCCMerge(engine, nil, MakeRangeStatKey(raftID, stat), value); err != nil {
+		if err := MVCCMerge(engine, nil, RangeStatKey(raftID, stat), value); err != nil {
 			return err
 		}
 	}
 	if storeID != 0 {
-		if err := MVCCMerge(engine, nil, MakeStoreStatKey(storeID, stat), value); err != nil {
+		if err := MVCCMerge(engine, nil, StoreStatKey(storeID, stat), value); err != nil {
 			return err
 		}
 	}
@@ -105,12 +102,12 @@ func MergeStat(engine Engine, raftID int64, storeID int32, stat proto.Key, statV
 func SetStat(engine Engine, raftID int64, storeID int32, stat proto.Key, statVal int64) error {
 	value := proto.Value{Integer: gogoproto.Int64(statVal)}
 	if raftID != 0 {
-		if err := MVCCPut(engine, nil, MakeRangeStatKey(raftID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+		if err := MVCCPut(engine, nil, RangeStatKey(raftID, stat), proto.ZeroTimestamp, value, nil); err != nil {
 			return err
 		}
 	}
 	if storeID != 0 {
-		if err := MVCCPut(engine, nil, MakeStoreStatKey(storeID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+		if err := MVCCPut(engine, nil, StoreStatKey(storeID, stat), proto.ZeroTimestamp, value, nil); err != nil {
 			return err
 		}
 	}
@@ -133,7 +130,8 @@ func GetRangeSize(engine Engine, raftID int64) (int64, error) {
 
 // ClearRangeStats clears stats for the specified range.
 func ClearRangeStats(engine Engine, raftID int64) error {
-	statStartKey := MakeKey(KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, raftID))
-	_, err := ClearRange(engine, MVCCEncodeKey(statStartKey), MVCCEncodeKey(statStartKey.PrefixEnd()))
+	statStartKey := RangeStatKey(raftID, proto.Key{})
+	statEndKey := RangeStatKey(raftID+1, proto.Key{})
+	_, err := ClearRange(engine, MVCCEncodeKey(statStartKey), MVCCEncodeKey(statEndKey))
 	return err
 }

@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 
@@ -45,8 +46,7 @@ func makeCmdIDKey(cmdID proto.ClientCmdID) cmdIDKey {
 // machine and the results are stored in the ResponseCache.
 //
 // The ResponseCache stores responses in the underlying engine, using
-// keys derived from KeyLocalResponseCachePrefix, Raft ID and the
-// ClientCmdID.
+// keys derived from the Raft ID and the ClientCmdID.
 //
 // A ResponseCache is safe for concurrent access.
 type ResponseCache struct {
@@ -82,7 +82,7 @@ func (rc *ResponseCache) ClearInflight() {
 // ClearData removes all items stored in the persistent cache. It does not alter
 // the inflight map.
 func (rc *ResponseCache) ClearData() error {
-	p := responseCacheKeyPrefix(rc.raftID)
+	p := engine.ResponseCacheKey(rc.raftID, nil) // prefix for all response cache entries with this raft ID
 	end := p.PrefixEnd()
 	_, err := engine.ClearRange(rc.engine, engine.MVCCEncodeKey(p), engine.MVCCEncodeKey(end))
 	return err
@@ -119,7 +119,7 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
-	key := responseCacheKey(rc.raftID, cmdID)
+	key := engine.ResponseCacheKey(rc.raftID, &cmdID)
 	if ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, nil, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
@@ -142,18 +142,18 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 	rc.Lock()
 	defer rc.Unlock()
 
-	prefix := responseCacheKeyPrefix(rc.raftID)
+	prefix := engine.ResponseCacheKey(rc.raftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
 	return rc.engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
-		cmdID, err := rc.decodeKey(kv.Key)
+		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
 		if err != nil {
 			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
 		}
-		encKey := engine.MVCCEncodeKey(responseCacheKey(destRaftID, cmdID))
+		encKey := engine.MVCCEncodeKey(engine.ResponseCacheKey(destRaftID, &cmdID))
 		return false, e.Put(encKey, kv.Value)
 	})
 }
@@ -164,18 +164,18 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 // error. The copy is done directly using the engine instead of interpreting
 // values through MVCC for efficiency.
 func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
-	prefix := responseCacheKeyPrefix(originRaftID)
+	prefix := engine.ResponseCacheKey(originRaftID, nil) // response cache prefix
 	start := engine.MVCCEncodeKey(prefix)
 	end := engine.MVCCEncodeKey(prefix.PrefixEnd())
 
 	return e.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
 		// Decode the key into a cmd, skipping on error. Otherwise,
 		// write it to the corresponding key in the new cache.
-		cmdID, err := rc.decodeKey(kv.Key)
+		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
 		if err != nil {
 			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
 		}
-		encKey := engine.MVCCEncodeKey(responseCacheKey(rc.raftID, cmdID))
+		encKey := engine.MVCCEncodeKey(engine.ResponseCacheKey(rc.raftID, &cmdID))
 		return false, rc.engine.Put(encKey, kv.Value)
 	})
 }
@@ -193,7 +193,7 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	// Write the response value to the engine.
 	var err error
 	if rc.shouldCacheResponse(reply) {
-		key := responseCacheKey(rc.raftID, cmdID)
+		key := engine.ResponseCacheKey(rc.raftID, &cmdID)
 		rwResp := &proto.ReadWriteCmdResponse{}
 		rwResp.SetValue(reply)
 		err = engine.MVCCPutProto(rc.engine, nil, key, proto.ZeroTimestamp, nil, rwResp)
@@ -243,40 +243,25 @@ func (rc *ResponseCache) removeInflightLocked(cmdID proto.ClientCmdID) {
 	}
 }
 
-// responseCacheKeyPrefix generates the prefix under which all entries
-// for the given range are stored in the engine.
-func responseCacheKeyPrefix(raftID int64) proto.Key {
-	b := append([]byte(nil), engine.KeyLocalResponseCachePrefix...)
-	return encoding.EncodeInt(b, raftID)
-}
-
-// responseCacheKey encodes the Raft ID and client command ID into a
-// key for storage in the underlying engine. Note that the prefix for
-// response cache keys sorts them at the very top of the engine's
-// keyspace.
-func responseCacheKey(raftID int64, cmdID proto.ClientCmdID) proto.Key {
-	b := responseCacheKeyPrefix(raftID)
-	b = encoding.EncodeInt(b, cmdID.WallTime) // wall time helps sort for locality
-	b = encoding.EncodeInt(b, cmdID.Random)   // TODO(spencer): encode as Fixed64
-	return b
-}
-
-func (rc *ResponseCache) decodeKey(encKey []byte) (proto.ClientCmdID, error) {
+func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.ClientCmdID, error) {
 	ret := proto.ClientCmdID{}
 	key, _, isValue := engine.MVCCDecodeKey(encKey)
 	if isValue {
 		return ret, util.Errorf("key %q is not a raw MVCC value", encKey)
 	}
-	minLen := len(engine.KeyLocalResponseCachePrefix)
-	if len(key) < minLen {
-		return ret, util.Errorf("key not long enough to be decoded: %q", key)
+	if !bytes.HasPrefix(key, engine.KeyLocalRangeIDPrefix) {
+		return ret, util.Errorf("key %q does not have %q prefix", key, engine.KeyLocalRangeIDPrefix)
 	}
-	// First, Cut the prefix and the Raft ID.
-	b := key[minLen:]
+	// Cut the prefix and the Raft ID.
+	b := key[len(engine.KeyLocalRangeIDPrefix):]
 	b, _ = encoding.DecodeInt(b)
-	// Second, read the wall time.
+	if !bytes.HasPrefix(b, engine.KeyLocalResponseCacheSuffix) {
+		return ret, util.Errorf("key %q does not contain the response cache suffix %q", key, engine.KeyLocalResponseCacheSuffix)
+	}
+	// Cut the response cache suffix.
+	b = b[len(engine.KeyLocalResponseCacheSuffix):]
+	// Now, decode the command ID.
 	b, wt := encoding.DecodeInt(b)
-	// Third, read the Random component.
 	b, rd := encoding.DecodeInt(b)
 	if len(b) > 0 {
 		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, b)

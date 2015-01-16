@@ -53,10 +53,6 @@ typedef void (*DBLoggerFunc)(void* state, const char* str, int len);
 typedef struct {
   int64_t cache_size;
   int allow_os_buffer;
-  // The key prefix for transaction keys.
-  DBSlice txn_prefix;
-  // The key prefix for response cache keys.
-  DBSlice rcache_prefix;
   // A function pointer to direct log messages to.
   DBLoggerFunc logger;
 } DBOptions;

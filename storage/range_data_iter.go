@@ -49,24 +49,12 @@ func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
-				start: engine.MVCCEncodeKey(responseCacheKeyPrefix(r.Desc.RaftID)),
-				end:   engine.MVCCEncodeKey(responseCacheKeyPrefix(r.Desc.RaftID + 1)),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, r.Desc.RaftID))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, r.Desc.RaftID+1))),
 			},
 			{
-				start: engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey)),
-				end:   engine.MVCCEncodeKey(engine.RangeDescriptorKey(r.Desc.StartKey).Next()),
-			},
-			{
-				start: engine.MVCCEncodeKey(engine.RangeScanMetadataKey(r.Desc.StartKey)),
-				end:   engine.MVCCEncodeKey(engine.RangeScanMetadataKey(r.Desc.StartKey).Next()),
-			},
-			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, r.Desc.RaftID))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeStatPrefix, encoding.EncodeInt(nil, r.Desc.RaftID+1))),
-			},
-			{
-				start: engine.MVCCEncodeKey(engine.TransactionKey(r.Desc.StartKey, []byte(nil))),
-				end:   engine.MVCCEncodeKey(engine.TransactionKey(r.Desc.EndKey, []byte(nil))),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, r.Desc.StartKey))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, r.Desc.EndKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(startKey),

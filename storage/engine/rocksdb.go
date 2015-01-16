@@ -73,20 +73,10 @@ func (r *RocksDB) Start() error {
 		return nil
 	}
 
-	// Encoded keys have a nul-byte suffix as part of their encoding. We
-	// need to trim this suffix in order to get the prefix that is
-	// common to transaction and response cache keys.
-	txnPrefix := goToCSlice(MVCCEncodeKey(KeyLocalTransactionPrefix))
-	txnPrefix.len-- // Trim nul-byte suffix
-	rcachePrefix := goToCSlice(MVCCEncodeKey(KeyLocalResponseCachePrefix))
-	rcachePrefix.len-- // Trim nul-byte suffix
-
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache_size:      C.int64_t(*cacheSize),
 			allow_os_buffer: C.int(1),
-			txn_prefix:      txnPrefix,
-			rcache_prefix:   rcachePrefix,
 			logger:          C.DBLoggerFunc(nil),
 		})
 	err := statusToError(status)

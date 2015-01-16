@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 func adminSplitArgs(key, splitKey []byte, raftID int64, storeID int32) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
@@ -405,15 +404,13 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	acctConfig := &proto.AcctConfig{}
 	zoneConfig := &proto.ZoneConfig{}
 
-	// Write accounting configs for db1 & db2 and zone configs for db3 & db4.
-	for _, k := range []string{"db4", "db3", "db2", "db1"} {
-		prefix := engine.KeyConfigAccountingPrefix
-		var config gogoproto.Message = acctConfig
-		if k == "db3" || k == "db4" {
-			prefix = engine.KeyConfigZonePrefix
-			config = zoneConfig
-		}
-		store.DB().PreparePutProto(engine.MakeKey(prefix, proto.Key(k)), config)
+	// Write zone configs for db3 & db4.
+	for _, k := range []string{"db4", "db3"} {
+		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)), zoneConfig)
+	}
+	// Write accounting configs for db1 & db2.
+	for _, k := range []string{"db2", "db1"} {
+		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)), acctConfig)
 	}
 	if err := store.DB().Flush(); err != nil {
 		t.Fatal(err)

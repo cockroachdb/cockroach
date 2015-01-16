@@ -33,16 +33,111 @@ func MakeKey(keys ...proto.Key) proto.Key {
 	return proto.MakeKey(keys...)
 }
 
-// MakeLocalKey is a simple passthrough to MakeKey, with verification
-// that the first key has length KeyLocalPrefixLength.
-func MakeLocalKey(keys ...proto.Key) proto.Key {
-	if len(keys) == 0 {
-		log.Fatal("no key components specified in call to MakeLocalKey")
+// MakeStoreKey creates a store-local key based on the metadata key
+// suffix, and optional detail.
+func MakeStoreKey(suffix, detail proto.Key) proto.Key {
+	return MakeKey(KeyLocalStorePrefix, suffix, detail)
+}
+
+// StoreIdentKey returns a store-local key for the store metadata.
+func StoreIdentKey() proto.Key {
+	return MakeStoreKey(KeyLocalStoreIdentSuffix, proto.Key{})
+}
+
+// MakeRangeIDKey creates a range-local key based on the range's
+// Raft ID, metadata key suffix, and optional detail (e.g. the
+// encoded command ID for a response cache entry, etc.).
+func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
+	if len(suffix) != KeyLocalSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
 	}
-	if len(keys[0]) != KeyLocalPrefixLength {
-		log.Fatalf("local key prefix length must be %d: %q", KeyLocalPrefixLength, keys[0])
+	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, raftID), suffix, detail)
+}
+
+// RaftLogKey returns a system-local key for a Raft log entry.
+func RaftLogKey(raftID int64, logIndex uint64) proto.Key {
+	// The log is stored "backwards" so we can easily find the highest index stored.
+	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, encoding.EncodeUint64Decreasing(nil, logIndex))
+}
+
+// RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
+func RaftLogPrefix(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, proto.Key{})
+}
+
+// RaftStateKey returns a system-local key for a Raft HardState.
+func RaftStateKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftStateSuffix, proto.Key{})
+}
+
+// DecodeRaftStateKey extracts the Raft ID from a RaftStateKey.
+func DecodeRaftStateKey(key proto.Key) int64 {
+	if !bytes.HasPrefix(key, KeyLocalRangeIDPrefix) {
+		panic(fmt.Sprintf("key %q does not have %q prefix", key, KeyLocalRangeIDPrefix))
 	}
-	return proto.MakeKey(keys...)
+	// Cut the prefix and the Raft ID.
+	b := key[len(KeyLocalRangeIDPrefix):]
+	_, raftID := encoding.DecodeInt(b)
+	return raftID
+}
+
+// ResponseCacheKey returns a range-local key by Raft ID for a
+// response cache entry, with detail specified by encoding the
+// supplied client command ID.
+func ResponseCacheKey(raftID int64, cmdID *proto.ClientCmdID) proto.Key {
+	detail := proto.Key{}
+	if cmdID != nil {
+		detail = encoding.EncodeInt(nil, cmdID.WallTime)  // wall time helps sort for locality
+		detail = encoding.EncodeInt(detail, cmdID.Random) // TODO(spencer): encode as Fixed64
+	}
+	return MakeRangeIDKey(raftID, KeyLocalResponseCacheSuffix, detail)
+}
+
+// MakeRangeKey creates a range-local key based on the range
+// start key, metadata key suffix, and optional detail (e.g. the
+// transaction UUID for a txn record, etc.).
+func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
+	if len(suffix) != KeyLocalSuffixLength {
+		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
+	}
+	return MakeKey(KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, key), suffix, detail)
+}
+
+// DecodeRangeKey decodes the range key into range start key,
+// suffix and optional detail (may be nil).
+func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
+	if !bytes.HasPrefix(key, KeyLocalRangeKeyPrefix) {
+		panic(fmt.Sprintf("key %q does not have %q prefix", key, KeyLocalRangeKeyPrefix))
+	}
+	// Cut the prefix and the Raft ID.
+	b := key[len(KeyLocalRangeKeyPrefix):]
+	b, startKey = encoding.DecodeBinary(b)
+	if len(b) < KeyLocalSuffixLength {
+		panic(fmt.Sprintf("key %q does not have suffix of length %d", key, KeyLocalSuffixLength))
+	}
+	// Cut the response cache suffix.
+	suffix = b[:KeyLocalSuffixLength]
+	detail = b[KeyLocalSuffixLength:]
+	return
+}
+
+// RangeScanMetadataKey returns a range-local key for range scan
+// metadata.
+func RangeScanMetadataKey(key proto.Key) proto.Key {
+	return MakeRangeKey(key, KeyLocalRangeScanMetadataSuffix, proto.Key{})
+}
+
+// RangeDescriptorKey returns a range-local key for the descriptor
+// for the range with specified key.
+func RangeDescriptorKey(key proto.Key) proto.Key {
+	return MakeRangeKey(key, KeyLocalRangeDescriptorSuffix, proto.Key{})
+}
+
+// TransactionKey returns a transaction key based on the provided
+// transaction key and ID. The base key is encoded in order to
+// guarantee that all transaction records for a range sort together.
+func TransactionKey(key proto.Key, id []byte) proto.Key {
+	return MakeRangeKey(key, KeyLocalTransactionSuffix, proto.Key(id))
 }
 
 // KeyAddress returns the address for the key, used to lookup the
@@ -54,31 +149,22 @@ func MakeLocalKey(keys ...proto.Key) proto.Key {
 // as non-local keys, but are stored separately so that they don't
 // collide with user-space or global system keys.
 //
-// However, not all local keys are addressable in the global map.
-// Range metadata, response cache entries, and various other keys are
-// strictly local, as the non-local suffix is not itself a key
-// (e.g. in the case of range metadata, it's the encoded range ID) and
-// so are not globally addressable.
+// However, not all local keys are addressable in the global map. Only
+// range local keys incorporating a range key (start key or transaction
+// key) are addressable (e.g. range metadata and txn records). Range
+// local keys incorporating the Raft ID are not (e.g. response cache
+// entries, and range stats).
 func KeyAddress(k proto.Key) proto.Key {
 	if !bytes.HasPrefix(k, KeyLocalPrefix) {
 		return k
 	}
-	if len(k) < KeyLocalPrefixLength {
-		log.Fatalf("local key %q malformed; should contain prefix %q and four-character designation", k, KeyLocalPrefix)
+	if bytes.HasPrefix(k, KeyLocalRangeKeyPrefix) {
+		k = k[len(KeyLocalRangeKeyPrefix):]
+		_, k = encoding.DecodeBinary(k)
+		return k
 	}
-	return k[KeyLocalPrefixLength:]
-}
-
-// RangeScanMetadataKey returns a system-local key for range scan
-// metadata.
-func RangeScanMetadataKey(startKey proto.Key) proto.Key {
-	return MakeLocalKey(KeyLocalRangeScanMetadataPrefix, startKey)
-}
-
-// RangeDescriptorKey returns a system-local key for the descriptor
-// for the range with specified start key.
-func RangeDescriptorKey(startKey proto.Key) proto.Key {
-	return MakeLocalKey(KeyLocalRangeDescriptorPrefix, startKey)
+	log.Fatalf("local key %q malformed; should contain prefix %q", k, KeyLocalRangeKeyPrefix)
+	return nil
 }
 
 // RangeMetaKey returns a range metadata (meta1, meta2) indexing key
@@ -104,13 +190,6 @@ func RangeMetaKey(key proto.Key) proto.Key {
 // descriptor should be stored as a value.
 func RangeMetaLookupKey(r *proto.RangeDescriptor) proto.Key {
 	return RangeMetaKey(r.EndKey)
-}
-
-// TransactionKey returns a transaction key based on the provided
-// transaction key and ID. The base key is encoded in order to
-// guarantee that all transaction records for a range sort together.
-func TransactionKey(key proto.Key, id []byte) proto.Key {
-	return MakeKey(KeyLocalTransactionPrefix, encoding.EncodeBinary(nil, key), id)
 }
 
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
@@ -144,40 +223,6 @@ func ValidateRangeMetaKey(key proto.Key) error {
 	return nil
 }
 
-// RaftLogKey returns a system-local key for a raft log entry.
-func RaftLogKey(raftID, logIndex uint64) proto.Key {
-	b := RaftLogPrefix(raftID)
-	// The log is stored "backwards" so we can easily find the highest index stored.
-	b = encoding.EncodeUint64Decreasing(b, logIndex)
-	return b
-}
-
-// RaftLogPrefix returns the system-local prefix shared by all entries in a raft log.
-func RaftLogPrefix(raftID uint64) proto.Key {
-	b := MakeLocalKey(KeyLocalRaftLogPrefix)
-	b = encoding.EncodeUint64(b, raftID)
-	return b
-}
-
-// RaftStateKey returns a system-local key for a raft HardState.
-func RaftStateKey(raftID uint64) proto.Key {
-	b := MakeLocalKey(KeyLocalRaftStatePrefix)
-	b = encoding.EncodeUint64(b, raftID)
-	return b
-}
-
-// DecodeRaftStateKey extracts the raft ID from a RaftStateKey.
-func DecodeRaftStateKey(k proto.Key) uint64 {
-	_, raftID := encoding.DecodeUint64(k[len(KeyLocalRaftStatePrefix):])
-	return raftID
-}
-
-func init() {
-	if KeyLocalPrefixLength%7 != 0 {
-		log.Fatalf("local key prefix is not a multiple of 7: %d", KeyLocalPrefixLength)
-	}
-}
-
 // Constants for system-reserved keys in the KV map.
 var (
 	// KeyMaxLength is the maximum key length in bytes. This value is
@@ -194,56 +239,81 @@ var (
 	KeyMax = proto.KeyMax
 
 	// KeyLocalPrefix is the prefix for keys which hold data local to a
-	// RocksDB instance, such as range accounting information
-	// (e.g. range metadata, range-spanning binary tree node pointers),
-	// response cache values, transaction records, and message
-	// queues. Some local data are replicated, such as transaction rows,
-	// but are located in the local area so that they remain in
-	// proximity to one or more keys which they affect, but without
-	// unnecessarily polluting the key space. Further, some local data
-	// are stored with MVCC and contribute to distributed transactions,
-	// such as range metadata, range-spanning binary tree node pointers,
-	// and message queues.
+	// RocksDB instance, such as store and range-specific metadata which
+	// must not pollute the user key space, but must be colocated with
+	// the store and/or ranges which they refer to. Storing this
+	// information in the normal system keyspace would place the data on
+	// an arbitrary set of stores, with no guarantee of colocation.
+	// Local data includes store metadata, range metadata, response
+	// cache values, transaction records, range-spanning binary tree
+	// node pointers, and message queues.
 	//
 	// The local key prefix has been deliberately chosen to sort before
 	// the KeySystemPrefix, because these local keys are not addressable
 	// via the meta range addressing indexes.
+	//
+	// Some local data are not replicated, such as the store's 'ident'
+	// record. Most local data are replicated, such as response cache
+	// entries and transaction rows, but are not addressable as normal
+	// MVCC values as part of transactions. Finally, some local data are
+	// stored as MVCC values and are addressable as part of distributed
+	// transactions, such as range metadata, range-spanning binary tree
+	// node pointers, and message queues.
 	KeyLocalPrefix = proto.Key("\x00\x00\x00")
 
-	// KeyLocalPrefixLength is the maximum length of the local prefix.
-	// It includes both the standard prefix and an additional four
-	// characters to designate the type of local data.
-	//
-	// NOTE: this is very important! In order to support prefix matches
-	//   (e.g. for garbage collection of transaction and response cache
-	//   rows), the number of bytes in the key local prefix must be a
-	//   multiple of 7. This provides an encoded binary string with no
-	//   leftover bits to "bleed" into the next byte in the non-prefix
-	//   part of the local key.
-	KeyLocalPrefixLength = len(KeyLocalPrefix) + 4
+	// KeyLocalSuffixLength specifies the length in bytes of all local
+	// key suffixes.
+	KeyLocalSuffixLength = 4
 
-	// KeyLocalIdent stores an immutable identifier for this store,
-	// created when the store is first bootstrapped.
-	KeyLocalIdent = MakeKey(KeyLocalPrefix, proto.Key("iden"))
-	// KeyLocalRangeDescriptorPrefix is the prefix for keys storing
+	// There are three types of local key data enumerated below:
+	// store-local, range-local by ID, and range-local by key.
+
+	// KeyLocalStorePrefix is the prefix identifying per-store data.
+	KeyLocalStorePrefix = MakeKey(KeyLocalPrefix, proto.Key("s"))
+	// KeyLocalStoreIdentSuffix stores an immutable identifier for this
+	// store, created when the store is first bootstrapped.
+	KeyLocalStoreIdentSuffix = proto.Key("iden")
+	// KeyLocalStoreStatSuffix is the suffix for store statistics.
+	KeyLocalStoreStatSuffix = proto.Key("sst-")
+
+	// KeyLocalRangeIDPrefix is the prefix identifying per-range data
+	// indexed by Raft ID. The Raft ID is appended to this prefix,
+	// encoded using EncodeInt. The specific sort of per-range metadata
+	// is identified by one of the suffixes listed below, along with
+	// potentially additional encoded key info, such as a command ID in
+	// the case of response cache entry.
+	KeyLocalRangeIDPrefix = MakeKey(KeyLocalPrefix, proto.Key("i"))
+	// KeyLocalRaftLogSuffix is the suffix for the raft log.
+	KeyLocalRaftLogSuffix = proto.Key("rftl")
+	// KeyLocalRaftStateSuffix is the Suffix for the raft HardState.
+	KeyLocalRaftStateSuffix = proto.Key("rfts")
+	// KeyLocalRangeStatSuffix is the suffix for range statistics.
+	KeyLocalRangeStatSuffix = proto.Key("rst-")
+	// KeyLocalResponseCacheSuffix is the suffix for keys storing
+	// command responses used to guarantee idempotency (see
+	// ResponseCache).
+	// NOTE: if this value changes, it must be updated in C++
+	// (roachlib/db.cc).
+	KeyLocalResponseCacheSuffix = proto.Key("res-")
+
+	// KeyLocalRangeKeyPrefix is the prefix identifying per-range data
+	// indexed by range key (either start key, or some key in the
+	// range). The key is appended to this prefix, encoded using
+	// EncodeBinary. The specific sort of per-range metadata is
+	// identified by one of the suffixes listed below, along with
+	// potentially additional encoded key info, such as the txn UUID in
+	// the case of a transaction record.
+	KeyLocalRangeKeyPrefix = MakeKey(KeyLocalPrefix, proto.Key("k"))
+	// KeyLocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
-	KeyLocalRangeDescriptorPrefix = MakeKey(KeyLocalPrefix, proto.Key("rng-"))
-	// KeyLocalRangeScanMetadataPrefix is the prefix for a range's scan metadata.
-	KeyLocalRangeScanMetadataPrefix = MakeKey(KeyLocalPrefix, proto.Key("rsm-"))
-	// KeyLocalRangeStatPrefix is the prefix for range statistics.
-	KeyLocalRangeStatPrefix = MakeKey(KeyLocalPrefix, proto.Key("rst-"))
-	// KeyLocalResponseCachePrefix is the prefix for keys storing command
-	// responses used to guarantee idempotency (see ResponseCache).
-	KeyLocalResponseCachePrefix = MakeKey(KeyLocalPrefix, proto.Key("res-"))
-	// KeyLocalStoreStatPrefix is the prefix for store statistics.
-	KeyLocalStoreStatPrefix = MakeKey(KeyLocalPrefix, proto.Key("sst-"))
-	// KeyLocalTransactionPrefix specifies the key prefix for
-	// transaction records. The suffix is the transaction id.
-	KeyLocalTransactionPrefix = MakeKey(KeyLocalPrefix, proto.Key("txn-"))
-	// KeyLocalRaftLogPrefix is the prefix for the raft log.
-	KeyLocalRaftLogPrefix = MakeKey(KeyLocalPrefix, proto.Key("rftl"))
-	// KeyLocalRaftStatePrefix is the prefix for the raft HardState.
-	KeyLocalRaftStatePrefix = MakeKey(KeyLocalPrefix, proto.Key("rfts"))
+	KeyLocalRangeDescriptorSuffix = proto.Key("rdsc")
+	// KeyLocalRangeScanMetadataSuffix is the suffix for a range's scan metadata.
+	KeyLocalRangeScanMetadataSuffix = proto.Key("rscm")
+	// KeyLocalTransactionSuffix specifies the key suffix for
+	// transaction records. The additional detail is the transaction id.
+	// NOTE: if this value changes, it must be updated in C++
+	// (roachlib/db.cc).
+	KeyLocalTransactionSuffix = proto.Key("txn-")
 
 	// KeyLocalMax is the end of the local key range.
 	KeyLocalMax = KeyLocalPrefix.PrefixEnd()
