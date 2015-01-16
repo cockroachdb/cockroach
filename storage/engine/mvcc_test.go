@@ -762,7 +762,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 	switch e := err.(type) {
 	default:
-		t.Fatal("unexpected error %T", e)
+		t.Fatalf("unexpected error %T", e)
 	case *proto.ConditionFailedError:
 		if e.ActualValue != nil {
 			t.Fatalf("expected missing actual value: %v", e.ActualValue)
@@ -776,7 +776,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 	switch e := err.(type) {
 	default:
-		t.Fatal("unexpected error %T", e)
+		t.Fatalf("unexpected error %T", e)
 	case *proto.ConditionFailedError:
 		if e.ActualValue != nil {
 			t.Fatalf("expected missing actual value: %v", e.ActualValue)
@@ -796,7 +796,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 	switch e := err.(type) {
 	default:
-		t.Fatal("unexpected error %T", e)
+		t.Fatalf("unexpected error %T", e)
 	case *proto.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -811,7 +811,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	}
 	switch e := err.(type) {
 	default:
-		t.Fatal("unexpected error %T", e)
+		t.Fatalf("unexpected error %T", e)
 	case *proto.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.Bytes, value1.Bytes) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
@@ -1238,19 +1238,15 @@ func TestFindSplitKey(t *testing.T) {
 		}
 	}
 	ms.MergeStats(engine, raftID, 0) // write stats
-	if err := engine.CreateSnapshot("snap1"); err != nil {
-		t.Fatal(err)
-	}
-	humanSplitKey, err := MVCCFindSplitKey(engine, raftID, KeyMin, KeyMax, "snap1")
+	snap := engine.NewSnapshot()
+	defer snap.Stop()
+	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ind, _ := strconv.Atoi(string(humanSplitKey))
 	if diff := splitReservoirSize/2 - ind; diff > 1 || diff < -1 {
 		t.Fatalf("wanted key #%d+-1, but got %d (diff %d)", ind+diff, ind, diff)
-	}
-	if err := engine.ReleaseSnapshot("snap1"); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -1341,12 +1337,11 @@ func TestFindValidSplitKeys(t *testing.T) {
 			}
 		}
 		ms.MergeStats(engine, raftID, 0) // write stats
-		if err := engine.CreateSnapshot("snap1"); err != nil {
-			t.Fatal(err)
-		}
+		snap := engine.NewSnapshot()
+		defer snap.Stop()
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
-		splitKey, err := MVCCFindSplitKey(engine, raftID, rangeStart, rangeEnd, "snap1")
+		splitKey, err := MVCCFindSplitKey(snap, raftID, rangeStart, rangeEnd)
 		if test.expError {
 			if err == nil {
 				t.Errorf("%d: expected error", i)
@@ -1359,9 +1354,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 		}
 		if !splitKey.Equal(test.expSplit) {
 			t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
-		}
-		if err := engine.ReleaseSnapshot("snap1"); err != nil {
-			t.Fatal(err)
 		}
 	}
 }
@@ -1428,19 +1420,15 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			}
 		}
 		ms.MergeStats(engine, raftID, 0) // write stats
-		if err := engine.CreateSnapshot("snap1"); err != nil {
-			t.Fatal(err)
-		}
-		splitKey, err := MVCCFindSplitKey(engine, raftID, proto.Key("\x01"), proto.KeyMax, "snap1")
+		snap := engine.NewSnapshot()
+		defer snap.Stop()
+		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 			continue
 		}
 		if !splitKey.Equal(expKey) {
 			t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
-		}
-		if err := engine.ReleaseSnapshot("snap1"); err != nil {
-			t.Fatal(err)
 		}
 	}
 }

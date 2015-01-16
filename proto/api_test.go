@@ -54,6 +54,16 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 	}
 }
 
+// TestResponseHeaderNilError verifies that a nil error can be set
+// and retrieved from a response header.
+func TestResponseHeaderNilError(t *testing.T) {
+	rh := ResponseHeader{}
+	rh.SetGoError(nil)
+	if err := rh.GoError(); err != nil {
+		t.Errorf("expected nil error; got %s", err)
+	}
+}
+
 type XX interface {
 	Run()
 }

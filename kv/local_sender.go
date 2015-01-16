@@ -104,6 +104,7 @@ func (ls *LocalSender) Send(call *client.Call) {
 		MaxAttempts: 2,
 	}
 	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		call.Reply.Header().Error = nil
 		var err error
 		var store *storage.Store
 
@@ -149,14 +150,13 @@ func (ls *LocalSender) Send(call *client.Call) {
 				// Check for range key mismatch error (this could happen if
 				// range was split between lookup and execution). In this case,
 				// reset header.Replica and engage retry loop.
+				call.Reply.Header().SetGoError(err)
 				switch err.(type) {
 				case *proto.RangeKeyMismatchError:
 					// Clear request replica & response error.
 					header.Replica = proto.Replica{}
-					call.Reply.Header().Error = nil
 					return util.RetryContinue, nil
 				}
-				call.Reply.Header().SetGoError(err)
 			}
 		}
 		return util.RetryBreak, nil

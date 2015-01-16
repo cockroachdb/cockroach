@@ -360,13 +360,13 @@ func TestValueChecksumWithInteger(t *testing.T) {
 
 func TestGCMetadataEstimatedBytes(t *testing.T) {
 	gc := GCMetadata{
-		LastGCNanos: 0,
-		TTLSeconds:  100,
-		ByteCounts:  []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
+		TTLSeconds: 100,
+		ByteCounts: []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 	}
 	for i := int64(-1); i < int64(110); i++ {
 		expBytes := i / 10
-		if eb := gc.EstimatedBytes(time.Unix(i, 0), 0); eb != expBytes {
+		elapsedNanos := time.Unix(i, 0).UnixNano()
+		if eb := gc.EstimatedBytes(elapsedNanos, 0); eb != expBytes {
 			t.Errorf("expected %d @%ds; got %d", expBytes, i, eb)
 		}
 	}
@@ -379,7 +379,8 @@ func TestGCMetadataEstimatedBytes(t *testing.T) {
 	for i := int64(100); i < int64(1000); i += 100 {
 		fraction := (float64(i)/100 - 1) / (float64(i) / 100)
 		expBytes := 10 + int64(100*fraction)
-		if eb := gc.EstimatedBytes(time.Unix(i, 0), 110); eb != expBytes {
+		elapsedNanos := time.Unix(i, 0).UnixNano()
+		if eb := gc.EstimatedBytes(elapsedNanos, 110); eb != expBytes {
 			t.Errorf("expected %d @%ds; got %d", expBytes, i, eb)
 		}
 	}

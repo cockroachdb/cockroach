@@ -55,7 +55,7 @@ type Iterator interface {
 	// iterator was not positioned at the last key.
 	Next()
 	// Key returns the current key as a byte slice.
-	Key() []byte
+	Key() proto.EncodedKey
 	// Value returns the current value as a byte slice.
 	Value() []byte
 	// Error returns the error, if any, which the iterator encountered.
@@ -64,9 +64,6 @@ type Iterator interface {
 
 // Engine is the interface that wraps the core operations of a
 // key/value store.
-// TODO(Jiang-Ming,Spencer): Remove some of the *Snapshot methods and have
-// their non-snapshot counterparts accept a snapshotID which is used unless
-// empty.
 type Engine interface {
 	// Start initializes and starts the engine.
 	Start() error
@@ -116,17 +113,6 @@ type Engine interface {
 	// Rows with timestamps less than the associated value will be GC'd
 	// during compaction.
 	SetGCTimeouts(minTxnTS, minRCacheTS int64)
-	// CreateSnapshot creates a snapshot handle from engine.
-	CreateSnapshot(snapshotID string) error
-	// ReleaseSnapshot releases the existing snapshot handle for the
-	// given snapshotID.
-	ReleaseSnapshot(snapshotID string) error
-	// GetSnapshot returns the value for the given key from the given
-	// snapshotID, nil otherwise.
-	GetSnapshot(key proto.EncodedKey, snapshotID string) ([]byte, error)
-	// IterateSnapshot scans from start to end keys, visiting at
-	// most max key/value pairs from the specified snapshot ID.
-	IterateSnapshot(start, end proto.EncodedKey, snapshotID string, f func(proto.RawKeyValue) (bool, error)) error
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end proto.EncodedKey) (uint64, error)
@@ -134,6 +120,12 @@ type Engine interface {
 	// engine. The caller must invoke Iterator.Close() when finished with
 	// the iterator to free resources.
 	NewIterator() Iterator
+	// NewSnapshot returns a new instance of a read-only snapshot
+	// engine. Snapshots are instantaneous and, as long as they're
+	// released relatively quickly, inexpensive. Snapshots are released
+	// by invoking Stop(). Note that snapshots must not be used after the
+	// original engine has been stopped.
+	NewSnapshot() Engine
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply
 	// them atomically on a call to Commit().
@@ -141,11 +133,6 @@ type Engine interface {
 	// Commit atomically applies any batched updates to the underlying
 	// engine. This is a noop unless the engine was created via NewBatch().
 	Commit() error
-
-	// TODO(petermattis): Remove the WriteBatch functionality from this
-	//   interface. Add a "NewSnapshot() Engine" method which works
-	//   similarly to NewBatch and remove CreateSnapshot, GetSnapshot,
-	//   IterateSnapshot.
 }
 
 // A BatchDelete is a delete operation executed as part of an atomic batch.
@@ -250,19 +237,6 @@ func Increment(engine Engine, key proto.EncodedKey, inc int64) (int64, error) {
 func Scan(engine Engine, start, end proto.EncodedKey, max int64) ([]proto.RawKeyValue, error) {
 	var kvs []proto.RawKeyValue
 	err := engine.Iterate(start, end, func(kv proto.RawKeyValue) (bool, error) {
-		if max != 0 && int64(len(kvs)) >= max {
-			return true, nil
-		}
-		kvs = append(kvs, kv)
-		return false, nil
-	})
-	return kvs, err
-}
-
-// ScanSnapshot scans using the given snapshot ID.
-func ScanSnapshot(engine Engine, start, end proto.EncodedKey, max int64, snapshotID string) ([]proto.RawKeyValue, error) {
-	var kvs []proto.RawKeyValue
-	err := engine.IterateSnapshot(start, end, snapshotID, func(kv proto.RawKeyValue) (bool, error) {
 		if max != 0 && int64(len(kvs)) >= max {
 			return true, nil
 		}

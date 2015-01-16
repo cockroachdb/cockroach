@@ -111,27 +111,6 @@ message InternalResolveIntentResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// An InternalSnapshotCopyRequest is arguments to the InternalSnapshotCopy()
-// method. It specifies the start and end keys for the scan and the
-// maximum number of results from the given snapshot_id. It will create
-// a snapshot if snapshot_id is empty.
-message InternalSnapshotCopyRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Optional, a new snapshot will be created if it is empty.
-  optional string snapshot_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SnapshotID"];
-  // Must be > 0.
-  optional int64 max_results = 3 [(gogoproto.nullable) = false];
-}
-
-// An InternalSnapshotCopyResponse is the return value from the
-// InternalSnapshotCopy() method.
-message InternalSnapshotCopyResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional string snapshot_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SnapshotID"];
-  // Empty if no rows were scanned.
-  repeated RawKeyValue rows = 3 [(gogoproto.nullable) = false];
-}
-
 // An InternalMergeRequest contains arguments to the InternalMerge() method. It
 // specifies a key and a value which should be merged into the existing value at
 // that key.
@@ -190,8 +169,7 @@ message InternalRaftCommandUnion {
   optional InternalHeartbeatTxnRequest internal_heartbeat_txn = 32;
   optional InternalPushTxnRequest internal_push_txn = 33;
   optional InternalResolveIntentRequest internal_resolve_intent = 34;
-  optional InternalSnapshotCopyRequest internal_snapshot_copy = 35;
-  optional InternalMergeRequest internal_merge_response = 36;
+  optional InternalMergeRequest internal_merge_response = 35;
 }
 
 // An InternalRaftCommand is a command which can be serialized and

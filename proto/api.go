@@ -102,7 +102,6 @@ var AllMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
-	InternalSnapshotCopy:  struct{}{},
 	InternalMerge:         struct{}{},
 }
 
@@ -131,20 +130,18 @@ var InternalMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
-	InternalSnapshotCopy:  struct{}{},
 	InternalMerge:         struct{}{},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
 var ReadMethods = stringSet{
-	Contains:             struct{}{},
-	Get:                  struct{}{},
-	ConditionalPut:       struct{}{},
-	Increment:            struct{}{},
-	Scan:                 struct{}{},
-	ReapQueue:            struct{}{},
-	InternalRangeLookup:  struct{}{},
-	InternalSnapshotCopy: struct{}{},
+	Contains:            struct{}{},
+	Get:                 struct{}{},
+	ConditionalPut:      struct{}{},
+	Increment:           struct{}{},
+	Scan:                struct{}{},
+	ReapQueue:           struct{}{},
+	InternalRangeLookup: struct{}{},
 }
 
 // WriteMethods specifies the set of methods which write data.
@@ -286,6 +283,17 @@ func DeleteArgs(key Key) *DeleteRequest {
 	}
 }
 
+// DeleteRangeArgs returns a DeleteRangeRequest object initialized to delete
+// the values in the given key range (excluding the endpoint).
+func DeleteRangeArgs(startKey, endKey Key) *DeleteRangeRequest {
+	return &DeleteRangeRequest{
+		RequestHeader: RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+	}
+}
+
 // ScanArgs returns a ScanRequest object initialized to scan
 // from start to end keys with max results.
 func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {
@@ -336,8 +344,6 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalPushTxn, nil
 	case *InternalResolveIntentRequest:
 		return InternalResolveIntent, nil
-	case *InternalSnapshotCopyRequest:
-		return InternalSnapshotCopy, nil
 	case *InternalMergeRequest:
 		return InternalMerge, nil
 	}
@@ -391,8 +397,6 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalPushTxnRequest{}, nil
 	case InternalResolveIntent:
 		return &InternalResolveIntentRequest{}, nil
-	case InternalSnapshotCopy:
-		return &InternalSnapshotCopyRequest{}, nil
 	case InternalMerge:
 		return &InternalMergeRequest{}, nil
 	}
@@ -436,8 +440,6 @@ func CreateReply(method string) (Response, error) {
 		return &InternalPushTxnResponse{}, nil
 	case InternalResolveIntent:
 		return &InternalResolveIntentResponse{}, nil
-	case InternalSnapshotCopy:
-		return &InternalSnapshotCopyResponse{}, nil
 	case InternalMerge:
 		return &InternalMergeResponse{}, nil
 	}
@@ -537,36 +539,7 @@ func (rh *ResponseHeader) GoError() error {
 	if rh.Error == nil {
 		return nil
 	}
-	switch {
-	case rh.Error.Generic != nil:
-		return rh.Error.Generic
-	case rh.Error.NotLeader != nil:
-		return rh.Error.NotLeader
-	case rh.Error.RangeNotFound != nil:
-		return rh.Error.RangeNotFound
-	case rh.Error.RangeKeyMismatch != nil:
-		return rh.Error.RangeKeyMismatch
-	case rh.Error.ReadWithinUncertaintyInterval != nil:
-		return rh.Error.ReadWithinUncertaintyInterval
-	case rh.Error.TransactionAborted != nil:
-		return rh.Error.TransactionAborted
-	case rh.Error.TransactionPush != nil:
-		return rh.Error.TransactionPush
-	case rh.Error.TransactionRetry != nil:
-		return rh.Error.TransactionRetry
-	case rh.Error.TransactionStatus != nil:
-		return rh.Error.TransactionStatus
-	case rh.Error.WriteIntent != nil:
-		return rh.Error.WriteIntent
-	case rh.Error.WriteTooOld != nil:
-		return rh.Error.WriteTooOld
-	case rh.Error.ReadWithinUncertaintyInterval != nil:
-		return rh.Error.ReadWithinUncertaintyInterval
-	case rh.Error.OpRequiresTxn != nil:
-		return rh.Error.OpRequiresTxn
-	default:
-		return nil
-	}
+	return rh.Error.GetValue().(error)
 }
 
 // SetGoError converts the specified type into either one of the proto-
@@ -576,40 +549,18 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = nil
 		return
 	}
-	switch t := err.(type) {
-	case *NotLeaderError:
-		rh.Error = &Error{NotLeader: t}
-	case *RangeNotFoundError:
-		rh.Error = &Error{RangeNotFound: t}
-	case *RangeKeyMismatchError:
-		rh.Error = &Error{RangeKeyMismatch: t}
-	case *ReadWithinUncertaintyIntervalError:
-		rh.Error = &Error{ReadWithinUncertaintyInterval: t}
-	case *TransactionAbortedError:
-		rh.Error = &Error{TransactionAborted: t}
-	case *TransactionPushError:
-		rh.Error = &Error{TransactionPush: t}
-	case *TransactionRetryError:
-		rh.Error = &Error{TransactionRetry: t}
-	case *TransactionStatusError:
-		rh.Error = &Error{TransactionStatus: t}
-	case *WriteIntentError:
-		rh.Error = &Error{WriteIntent: t}
-	case *WriteTooOldError:
-		rh.Error = &Error{WriteTooOld: t}
-	case *OpRequiresTxnError:
-		rh.Error = &Error{OpRequiresTxn: t}
-	default:
+	if rh.Error == nil {
+		rh.Error = &Error{}
+	}
+	if !rh.Error.SetValue(err) {
 		var canRetry bool
 		if r, ok := err.(util.Retryable); ok {
 			canRetry = r.CanRetry()
 		}
-		rh.Error = &Error{
-			Generic: &GenericError{
-				Message:   err.Error(),
-				Retryable: canRetry,
-			},
-		}
+		rh.Error.SetValue(&GenericError{
+			Message:   err.Error(),
+			Retryable: canRetry,
+		})
 	}
 }
 

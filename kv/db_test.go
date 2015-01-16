@@ -62,7 +62,7 @@ func TestKVDBCoverage(t *testing.T) {
 	containsReq.Key = key
 	containsResp := &proto.ContainsResponse{}
 	if err := kvClient.Call(proto.Contains, containsReq, containsResp); err != nil || containsResp.Error != nil {
-		t.Fatal("%s, %s", err, containsResp.GoError())
+		t.Fatalf("%s, %s", err, containsResp.GoError())
 	}
 	if !containsResp.Exists {
 		t.Error("expected contains to be true")
@@ -109,7 +109,7 @@ func TestKVDBCoverage(t *testing.T) {
 		t.Fatalf("%s, %s", err, delResp.GoError())
 	}
 	if err := kvClient.Call(proto.Contains, containsReq, containsResp); err != nil || containsResp.Error != nil {
-		t.Fatal("%s, %s", err, containsResp.GoError())
+		t.Fatalf("%s, %s", err, containsResp.GoError())
 	}
 	if containsResp.Exists {
 		t.Error("expected contains to be false after delete")
@@ -170,7 +170,6 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{proto.InternalHeartbeatTxn, &proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}},
 		{proto.InternalPushTxn, &proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
 		{proto.InternalResolveIntent, &proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},
-		{proto.InternalSnapshotCopy, &proto.InternalSnapshotCopyRequest{}, &proto.InternalSnapshotCopyResponse{}},
 		{proto.InternalMerge, &proto.InternalMergeRequest{}, &proto.InternalMergeResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
