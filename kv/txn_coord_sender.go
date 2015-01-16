@@ -354,11 +354,12 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 	// Prepare the calls by unrolling the batch. If the batchReply is
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.
-	calls := []*client.Call{}
+	// TODO(spencer): send calls in parallel.
 	for i := range batchArgs.Requests {
 		// Initialize args header values where appropriate.
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
 		method, err := proto.MethodForRequest(args)
+		call := &client.Call{Method: method, Args: args}
 		if err != nil {
 			batchReply.SetGoError(err)
 			return
@@ -372,33 +373,23 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 		args.Header().Txn = batchArgs.Txn
 
 		// Create a reply from the method type and add to batch response.
-		reply, err := proto.CreateReply(method)
-		if err != nil {
-			batchReply.SetGoError(util.Errorf("unsupported method in batch: %s", method))
-			return
+		if i >= len(batchReply.Responses) {
+			if call.Reply, err = proto.CreateReply(method); err != nil {
+				batchReply.SetGoError(util.Errorf("unsupported method in batch: %s", method))
+				return
+			}
+			batchReply.Add(call.Reply)
+		} else {
+			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)
 		}
-		batchReply.Add(reply)
-		calls = append(calls, &client.Call{Method: method, Args: args, Reply: reply})
-	}
-
-	// Send calls in parallel and wait for all to complete.
-	wg := sync.WaitGroup{}
-	wg.Add(len(calls))
-	for _, call := range calls {
-		go func(call *client.Call) {
-			tc.sendOne(call)
-			wg.Done()
-		}(call)
-	}
-	wg.Wait()
-
-	// Propagate first error and amalgamate transaction updates.
-	for _, call := range calls {
-		if batchReply.Error == nil {
-			batchReply.Error = call.Reply.Header().Error
-		}
+		tc.sendOne(call)
+		// Amalgamate transaction updates and propagate first error, if applicable.
 		if batchReply.Txn != nil {
 			batchReply.Txn.Update(call.Reply.Header().Txn)
+		}
+		if call.Reply.Header().Error != nil {
+			batchReply.Error = call.Reply.Header().Error
+			return
 		}
 	}
 }
