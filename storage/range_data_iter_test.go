@@ -66,18 +66,20 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 // TestRangeDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
 func TestRangeDataIteratorEmptyRange(t *testing.T) {
-	s, r, _, _ := createTestRange(t)
-	defer s.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
 	// Adjust the range descriptor to avoid existing data such as meta
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
-	r.Lock()
-	newDesc := *r.Desc
+	tc.rng.Lock()
+	newDesc := *tc.rng.Desc
 	newDesc.StartKey = proto.Key("a")
-	r.Desc = &newDesc
-	r.Unlock()
+	tc.rng.Desc = &newDesc
+	tc.rng.Unlock()
 
-	iter := newRangeDataIterator(r, r.rm.Engine())
+	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
 		t.Error("expected empty iteration")
@@ -90,32 +92,34 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 // and verifies it's empty. Finally, it verifies the pre and post
 // ranges still contain the expected data.
 func TestRangeDataIterator(t *testing.T) {
-	s, r, _, _ := createTestRange(t)
-	defer s.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
 	// See notes in EmptyRange test method for adjustment to descriptor.
-	r.Lock()
-	newDesc := *r.Desc
+	tc.rng.Lock()
+	newDesc := *tc.rng.Desc
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
-	r.Desc = &newDesc
-	r.Unlock()
+	tc.rng.Desc = &newDesc
+	tc.rng.Unlock()
 
 	// Create two more ranges, one before the test range and one after.
-	preRng := createRange(s, 2, proto.Key("a"), proto.Key("b"))
-	if err := s.AddRange(preRng); err != nil {
+	preRng := createRange(tc.store, 2, proto.Key("a"), proto.Key("b"))
+	if err := tc.store.AddRange(preRng); err != nil {
 		t.Fatal(err)
 	}
-	postRng := createRange(s, 3, proto.Key("c"), proto.Key("d"))
-	if err := s.AddRange(postRng); err != nil {
+	postRng := createRange(tc.store, 3, proto.Key("c"), proto.Key("d"))
+	if err := tc.store.AddRange(postRng); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create range data for all three ranges.
 	preKeys := createRangeData(preRng, t)
-	keys := createRangeData(r, t)
+	keys := createRangeData(tc.rng, t)
 	postKeys := createRangeData(postRng, t)
 
-	iter := newRangeDataIterator(r, r.rm.Engine())
+	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
 	defer iter.Close()
 	for i := 0; iter.Valid(); iter.Next() {
 		if err := iter.Error(); err != nil {
@@ -133,10 +137,10 @@ func TestRangeDataIterator(t *testing.T) {
 	}
 
 	// Destroy range and verify that its data has been completely cleared.
-	if err := r.Destroy(); err != nil {
+	if err := tc.rng.Destroy(); err != nil {
 		t.Fatal(err)
 	}
-	iter = newRangeDataIterator(r, r.rm.Engine())
+	iter = newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
 	defer iter.Close()
 	if iter.Valid() {
 		t.Errorf("expected empty iteration; got first key %q", iter.Key())
