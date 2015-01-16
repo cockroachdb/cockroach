@@ -62,7 +62,7 @@ func RaftLogKey(raftID int64, logIndex uint64) proto.Key {
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
 func RaftLogPrefix(raftID int64) proto.Key {
-	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, raftID), KeyLocalRaftLogSuffix)
+	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, proto.Key{})
 }
 
 // RaftStateKey returns a system-local key for a Raft HardState.
