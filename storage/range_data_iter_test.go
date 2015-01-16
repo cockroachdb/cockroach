@@ -68,9 +68,11 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// Adjust the range descriptor to avoid existing data such as meta
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
+	r.Lock()
 	newDesc := *r.Desc
 	newDesc.StartKey = proto.Key("a")
 	r.Desc = &newDesc
+	r.Unlock()
 
 	iter := newRangeDataIterator(r, r.rm.Engine())
 	defer iter.Close()
@@ -88,10 +90,12 @@ func TestRangeDataIterator(t *testing.T) {
 	s, r, _, _ := createTestRange(t)
 	defer s.Stop()
 	// See notes in EmptyRange test method for adjustment to descriptor.
+	r.Lock()
 	newDesc := *r.Desc
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
 	r.Desc = &newDesc
+	r.Unlock()
 
 	// Create two more ranges, one before the test range and one after.
 	preRng := createRange(s, 2, proto.Key("a"), proto.Key("b"))
