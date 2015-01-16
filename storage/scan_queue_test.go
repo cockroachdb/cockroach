@@ -35,8 +35,9 @@ import (
 // bytes), and the time since last scan for verification of checksum
 // data.
 func TestScanQueueShouldQueue(t *testing.T) {
-	s, r, _, _ := createTestRange(t)
-	defer s.Stop()
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
 
 	day := 1 * 24 * time.Hour // 1 day
 	mb := int64(1 << 20)      // 1 MB
@@ -101,20 +102,22 @@ func TestScanQueueShouldQueue(t *testing.T) {
 
 	for i, test := range testCases {
 		// Write scan metadata.
-		if err := r.PutScanMetadata(test.scanMeta); err != nil {
+		if err := tc.rng.PutScanMetadata(test.scanMeta); err != nil {
 			t.Fatal(err)
 		}
 		// Write non live bytes as key bytes; since "live" bytes will be zero, this will translate into non live bytes.
 		nonLiveBytes := test.scanMeta.GC.ByteCounts[0] + test.nonLiveBytes
-		if err := engine.SetStat(r.rm.Engine(), r.Desc.RaftID, 0, engine.StatKeyBytes, nonLiveBytes); err != nil {
+		if err := engine.SetStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID, 0,
+			engine.StatKeyBytes, nonLiveBytes); err != nil {
 			log.Fatal(err)
 		}
 		// Write intent bytes. Note: the actual accounting on bytes is fictional in this test.
-		if err := engine.SetStat(r.rm.Engine(), r.Desc.RaftID, 0, engine.StatIntentBytes, test.intentBytes); err != nil {
+		if err := engine.SetStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID, 0,
+			engine.StatIntentBytes, test.intentBytes); err != nil {
 			log.Fatal(err)
 		}
 
-		shouldQ, priority := scanQ.shouldQueue(test.now, r)
+		shouldQ, priority := scanQ.shouldQueue(test.now, tc.rng)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
