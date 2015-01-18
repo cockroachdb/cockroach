@@ -261,10 +261,10 @@ func (mc *UnorderedCache) length() int {
 //
 // OrderedCache requires that keys implement llrb.Comparable.
 //
-// UnorderedCache is not safe for concurrent access.
+// OrderedCache is not safe for concurrent access.
 type OrderedCache struct {
 	*baseCache
-	llrb *llrb.Tree
+	llrb llrb.Tree
 }
 
 // NewOrderedCache creates a new Cache backed by a left-leaning red
@@ -273,7 +273,6 @@ type OrderedCache struct {
 func NewOrderedCache(config CacheConfig) *OrderedCache {
 	oc := &OrderedCache{
 		baseCache: newBaseCache(config),
-		llrb:      &llrb.Tree{},
 	}
 	oc.baseCache.store = oc
 	return oc
