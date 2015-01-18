@@ -28,10 +28,10 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-var rand = util.NewPseudoRand()
+var testRand = util.NewPseudoRand()
 
 func makeCommandID() string {
-	return util.RandString(rand, commandIDLen)
+	return util.RandString(testRand, commandIDLen)
 }
 
 type testCluster struct {

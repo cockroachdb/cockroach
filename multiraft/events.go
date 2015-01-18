@@ -37,8 +37,8 @@ type EventCommandCommitted struct {
 // followed by the payload. This inflexible encoding is used so we can efficiently
 // parse the command id while processing the logs.
 const (
-	commandIDLen           = 16
-	commandEncodingVersion = 0
+	commandIDLen                = 16
+	commandEncodingVersion byte = 0
 )
 
 func encodeCommand(commandID string, command []byte) []byte {
