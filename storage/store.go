@@ -925,8 +925,8 @@ func (s *Store) processRaft(r raftInterface, closer chan struct{}) {
 
 // GroupStorage implements the multiraft.Storage interface.
 func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	r, ok := s.ranges[int64(groupID)]
 	if !ok {
 		log.Warningf("%p requested nonexistent range with raft ID %d", s, groupID)

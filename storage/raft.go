@@ -18,13 +18,13 @@
 package storage
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -57,9 +57,13 @@ type raftInterface interface {
 }
 
 type singleNodeRaft struct {
-	mr       *multiraft.MultiRaft
-	mu       sync.Mutex
-	groups   map[int64]struct{}
+	mr *multiraft.MultiRaft
+	mu sync.Mutex
+	// groups is the set of active group IDs. The map itself is
+	// protected by 'mu', but group creation is asynchronous without
+	// holding 'mu'. The channels in this map will be closed when each
+	// group is fully created.
+	groups   map[int64]chan struct{}
 	commitCh chan committedCommand
 	stopper  *util.Stopper
 }
@@ -77,7 +81,7 @@ func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 	}
 	snr := &singleNodeRaft{
 		mr:       mr,
-		groups:   map[int64]struct{}{},
+		groups:   map[int64]chan struct{}{},
 		commitCh: make(chan committedCommand, 10),
 		stopper:  util.NewStopper(1),
 	}
@@ -90,20 +94,26 @@ var _ raftInterface = (*singleNodeRaft)(nil)
 
 func (snr *singleNodeRaft) createGroup(id int64) error {
 	snr.mu.Lock()
-	if _, ok := snr.groups[id]; !ok {
-		snr.groups[id] = struct{}{}
+	ch, ok := snr.groups[id]
+	if !ok {
+		ch = make(chan struct{})
+		snr.groups[id] = ch
 		snr.mu.Unlock()
-		return snr.mr.CreateGroup(uint64(id))
+		err := snr.mr.CreateGroup(uint64(id))
+		close(ch)
+		return err
 	}
 	snr.mu.Unlock()
+	<-ch
 	return nil
 }
 
 func (snr *singleNodeRaft) removeGroup(id int64) error {
 	snr.mu.Lock()
-	if _, ok := snr.groups[id]; ok {
+	if ch, ok := snr.groups[id]; ok {
 		delete(snr.groups, id)
 		snr.mu.Unlock()
+		<-ch
 		return snr.mr.RemoveGroup(uint64(id))
 	}
 	snr.mu.Unlock()
