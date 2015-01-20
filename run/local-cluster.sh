@@ -75,7 +75,7 @@ DNS_FILE="$DNS_DIR/addn-hosts"
 
 # Start dnsmasq container. We wait in a loop until the DNS additional
 # hosts file appears before starting the dnsmasq process.
-DNS_CID=$(docker run -d -v "$DNS_DIR:/dnsmasq.hosts" --name=$DNSMASQ_NAME $DNSMASQ_IMAGE /bin/sh -c "while true; do if [ -f /dnsmasq.hosts/addn-hosts ]; then break; else echo 'waiting 1s for DNS address info...'; sleep 1; fi; done; /usr/sbin/dnsmasq -d")
+DNS_CID=$(docker run -d -v "$DNS_DIR:/dnsmasq.hosts" --name=$DNSMASQ_NAME $DNSMASQ_IMAGE /bin/sh -c "while true; do if [ -f /dnsmasq.hosts/addn-hosts ]; then break; else echo 'waiting 1s for DNS address info...'; sleep 1; fi; done; cat /dnsmasq.hosts/addn-hosts; cat /etc/resolv.dnsmasq.conf; /usr/sbin/dnsmasq -d")
 DNS_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $DNS_CID)
 echo "* ${DNSMASQ_NAME}"
 
@@ -85,14 +85,13 @@ HTTP_PORT=8080
 
 # Start all nodes.
 for i in $(seq 1 $NODES); do
-  HOSTS[$i]="$COCKROACH_NAME$i"
+  HOSTS[$i]="$COCKROACH_NAME$i.local"
 
   # If this is the first node, command is init; otherwise start.
   CMD="start"
   if [[ $i == 1 ]]; then
     CMD="init"
   fi
-
   # Command args specify two data directories per instance to simulate two physical devices.
   CMD_ARGS="-gossip=${HOSTS[1]}:$RPC_PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -rpc=${HOSTS[$i]}:$RPC_PORT -http=${HOSTS[$i]}:$HTTP_PORT"
 
@@ -124,35 +123,36 @@ if [[ $DOCKERHOST != "127.0.0.1" ]]; then
 fi
 
 # Get gossip network contents from each node in turn.
-echo -n "Waiting for complete gossip network"
+echo -n "Waiting for complete gossip network of $((NODES*NODES)) peerings: "
 MAX_WAIT=20 # seconds
 for ATTEMPT in $(seq 1 $MAX_WAIT); do
-  echo -n .
-  ALL_FOUND=1
+  FOUND=0
   for i in $(seq 1 $NODES); do
-    GOSSIP=$(curl -s $DOCKERHOST:${HTTP_PORTS[$i]}/_status/gossip)
-    for j in $(seq 1 $NODES); do
-      if [[ $(echo $GOSSIP | grep "node-$j") == "" ]]; then
-        ALL_FOUND=0
-        break
+    FOUND_NAMES=""
+    GOSSIP_URL="$DOCKERHOST:${HTTP_PORTS[$i]}/_status/gossip"
+    GOSSIP=$(curl --noproxy '*' -s $GOSSIP_URL)
+    for j in $(seq 1 $((2*NODES))); do
+      if [[ ! -z $(echo $GOSSIP | grep "node-$j") ]]; then
+        FOUND=$((FOUND+1))
+        FOUND_NAMES="$FOUND_NAMES node-$j"
       fi
     done
-    if [[ $ALL_FOUND == 0 ]]; then
-      sleep 1
-      break
-    fi
   done
+  echo -n "$FOUND "
   # This will only be true if ALL hosts get ALL gossip.
-  if [[ $ALL_FOUND == 1 ]]; then
+  if [[ $FOUND == $((NODES*NODES)) ]]; then
     echo
-    echo "All nodes verified in the cluster"
+    echo "All nodes verified in the cluster:"
+    echo $FOUND_NAMES
     exit 0
   fi
+  sleep 1
 done
 
 # Print all node logs for debugging.
 echo
 echo "Failed to verify nodes in cluster after $MAX_WAIT seconds"
+echo "Last seen nodes: $FOUND_NODES"
 for i in $(seq 1 $NODES); do
   echo ""
   echo "Output for ${HOSTS[$i]}..."
