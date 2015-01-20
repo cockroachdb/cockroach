@@ -355,6 +355,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 	// pre-initialized with replies, use those; otherwise create replies
 	// as needed.
 	// TODO(spencer): send calls in parallel.
+	batchReply.Txn = batchArgs.Txn
 	for i := range batchArgs.Requests {
 		// Initialize args header values where appropriate.
 		args := batchArgs.Requests[i].GetValue().(proto.Request)

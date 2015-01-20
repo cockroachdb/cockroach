@@ -87,12 +87,14 @@ func createTestClient(addr string) *client.KV {
 // where the non-transactional put can push the txn, we expect the
 // transaction's value to be written after all retries are complete.
 func TestKVClientRetryNonTxn(t *testing.T) {
-	storage.RangeRetryOptions.Backoff = 1 * time.Millisecond
-	storage.RangeRetryOptions.MaxAttempts = 2
-	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
-
 	s := server.StartTestServer(t)
 	defer s.Stop()
+	s.SetRangeRetryOptions(util.RetryOptions{
+		Backoff:     1 * time.Millisecond,
+		MaxBackoff:  5 * time.Millisecond,
+		Constant:    2,
+		MaxAttempts: 2,
+	})
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
 

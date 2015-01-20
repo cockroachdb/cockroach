@@ -52,8 +52,9 @@ const (
 )
 
 var (
-	// RangeRetryOptions sets the retry options for retrying commands.
-	RangeRetryOptions = util.RetryOptions{
+	// defaultRangeRetryOptions are default retry options for retrying commands
+	// sent to the store's ranges, for WriteTooOld and WriteIntent errors.
+	defaultRangeRetryOptions = util.RetryOptions{
 		Backoff:     50 * time.Millisecond,
 		MaxBackoff:  5 * time.Second,
 		Constant:    2,
@@ -217,6 +218,7 @@ type Store struct {
 	*StoreFinder
 
 	Ident       proto.StoreIdent
+	RetryOpts   util.RetryOptions
 	clock       *hlc.Clock
 	engine      engine.Engine  // The underlying key-value store
 	db          *client.KV     // Cockroach KV DB
@@ -238,14 +240,14 @@ var _ multiraft.Storage = &Store{}
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
 	s := &Store{
 		StoreFinder: &StoreFinder{gossip: gossip},
-
-		clock:     clock,
-		engine:    eng,
-		db:        db,
-		allocator: &allocator{},
-		gossip:    gossip,
-		closer:    make(chan struct{}),
-		ranges:    map[int64]*Range{},
+		RetryOpts:   defaultRangeRetryOptions,
+		clock:       clock,
+		engine:      eng,
+		db:          db,
+		allocator:   &allocator{},
+		gossip:      gossip,
+		closer:      make(chan struct{}),
+		ranges:      map[int64]*Range{},
 	}
 	s.allocator.storeFinder = s.findStores
 	return s
@@ -748,7 +750,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Backoff and retry loop for handling errors.
-	retryOpts := RangeRetryOptions
+	retryOpts := s.RetryOpts
 	retryOpts.Tag = method
 	err = util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// Add the command to the range for execution; exit retry loop on success.
