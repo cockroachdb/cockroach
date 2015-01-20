@@ -68,13 +68,8 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	testCases := []struct {
 		scanMeta     *proto.ScanMetadata
 		nonLiveBytes int64
-<<<<<<< HEAD
 		intentCount  int64
 		now          time.Time
-=======
-		intentBytes  int64
-		now          proto.Timestamp
->>>>>>> Modify GC API to return latest timestamp for garbage collection.
 		shouldQ      bool
 		priority     float64
 	}{

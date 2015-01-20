@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -71,11 +72,11 @@ func (pq *priorityQueue) update(item *rangeItem, priority float64) {
 
 // shouldQueue accepts current time and a Range and returns whether it
 // should be queued and if so, at what priority.
-type shouldQueueFn func(time.Time, *Range) (shouldQueue bool, priority float64)
+type shouldQueueFn func(proto.Timestamp, *Range) (shouldQueue bool, priority float64)
 
 // processFn accepts current time and a range and executes
 // queue-specific work on it.
-type processFn func(time.Time, *Range) error
+type processFn func(proto.Timestamp, *Range) error
 
 // baseQueue is the base implementation of the rangeQueue interface.
 // Queue implementations should embed a baseQueue and provide it

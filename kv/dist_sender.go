@@ -56,7 +56,7 @@ var rpcRetryOpts = util.RetryOptions{
 }
 
 // A firstRangeMissingError indicates that the first range has not yet
-// been gossipped. This will be the case for a node which hasn't yet
+// been gossiped. This will be the case for a node which hasn't yet
 // joined the gossip network.
 type firstRangeMissingError struct{}
 
@@ -240,7 +240,7 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied
-// proto.Replica slice. First, replicas which have gossipped
+// proto.Replica slice. First, replicas which have gossiped
 // addresses are corralled and then sent via rpc.Send, with requirement
 // that one RPC to a server must succeed.
 func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, reply proto.Response) error {
@@ -248,13 +248,13 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 		return util.Errorf("%s: replicas set is empty", method)
 	}
 
-	// Build a slice of replica addresses (if gossipped).
+	// Build a slice of replica addresses (if gossiped).
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
 		addr, err := ds.nodeIDToAddr(desc.Replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossipped", desc.Replicas[i].NodeID)
+			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
 			continue
 		}
 		addrs = append(addrs, addr)

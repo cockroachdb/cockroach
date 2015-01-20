@@ -18,7 +18,6 @@
 package engine
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
@@ -81,57 +80,48 @@ func TestGarbageCollectorMVCCPrefix(t *testing.T) {
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
-	gc := NewGarbageCollector(makeTS(0, 0), func(key proto.Key) *proto.GCPolicy {
-		var seconds int32
-		if bytes.Compare(key, proto.Key("b")) < 0 {
-			seconds = 1
-		} else if bytes.Compare(key, proto.Key("c")) < 0 {
-			seconds = 2
-		} else {
-			seconds = 0
-		}
-		return &proto.GCPolicy{
-			TTLSeconds: seconds,
-		}
-	})
+	gcA := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 1})
+	gcB := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 2})
+	gcC := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 0})
 	e := []byte{}
 	n := serializedMVCCValue(false, t)
 	d := serializedMVCCValue(true, t)
 	testData := []struct {
-		time      proto.Timestamp
-		keys      []proto.EncodedKey
-		values    [][]byte
-		expDelete []bool
+		gc       *GarbageCollector
+		time     proto.Timestamp
+		keys     []proto.EncodedKey
+		values   [][]byte
+		expDelTS proto.Timestamp
 	}{
-		{makeTS(0, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, false, false}},
-		{makeTS(0, 0), aKeys, [][]byte{e, d, d, d}, []bool{true, true, true, true}},
-		{makeTS(0, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, false}},
-		{makeTS(0, 0), bKeys, [][]byte{e, d, d}, []bool{true, true, true}},
-		{makeTS(0, 0), cKeys, [][]byte{n}, nil},
-		{makeTS(1E9, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, false, false}},
-		{makeTS(1E9, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, false}},
-		{makeTS(1E9, 0), cKeys, [][]byte{n}, nil},
-		{makeTS(2E9, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, false, false}},
-		{makeTS(2E9, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, false}},
-		{makeTS(2E9, 0), cKeys, [][]byte{n}, nil},
-		{makeTS(3E9, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, true, true}},
-		{makeTS(3E9, 0), aKeys, [][]byte{e, d, n, n}, []bool{true, true, true, true}},
-		{makeTS(3E9, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, false}},
-		{makeTS(3E9, 0), cKeys, [][]byte{n}, nil},
-		{makeTS(4E9, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, true, true}},
-		{makeTS(4E9, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, true}},
-		{makeTS(4E9, 0), bKeys, [][]byte{e, d, n}, []bool{true, true, true}},
-		{makeTS(4E9, 0), cKeys, [][]byte{n}, nil},
-		{makeTS(5E9, 0), aKeys, [][]byte{e, n, n, n}, []bool{false, false, true, true}},
-		{makeTS(5E9, 0), bKeys, [][]byte{e, n, n}, []bool{false, false, true}},
-		{makeTS(5E9, 0), bKeys, [][]byte{e, d, n}, []bool{true, true, true}},
-		{makeTS(5E9, 0), cKeys, [][]byte{n}, nil},
+		{gcA, makeTS(0, 0), aKeys, [][]byte{e, n, n, n}, proto.ZeroTimestamp},
+		{gcA, makeTS(0, 0), aKeys, [][]byte{e, d, d, d}, makeTS(2E9, 0)},
+		{gcB, makeTS(0, 0), bKeys, [][]byte{e, n, n}, proto.ZeroTimestamp},
+		{gcB, makeTS(0, 0), bKeys, [][]byte{e, d, d}, makeTS(2E9, 0)},
+		{gcC, makeTS(0, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
+		{gcA, makeTS(1E9, 0), aKeys, [][]byte{e, n, n, n}, proto.ZeroTimestamp},
+		{gcB, makeTS(1E9, 0), bKeys, [][]byte{e, n, n}, proto.ZeroTimestamp},
+		{gcC, makeTS(1E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
+		{gcA, makeTS(2E9, 0), aKeys, [][]byte{e, n, n, n}, proto.ZeroTimestamp},
+		{gcB, makeTS(2E9, 0), bKeys, [][]byte{e, n, n}, proto.ZeroTimestamp},
+		{gcC, makeTS(2E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
+		{gcA, makeTS(3E9, 0), aKeys, [][]byte{e, n, n, n}, makeTS(1E9, 1)},
+		{gcA, makeTS(3E9, 0), aKeys, [][]byte{e, d, n, n}, makeTS(2E9, 0)},
+		{gcB, makeTS(3E9, 0), bKeys, [][]byte{e, n, n}, proto.ZeroTimestamp},
+		{gcC, makeTS(3E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
+		{gcA, makeTS(4E9, 0), aKeys, [][]byte{e, n, n, n}, makeTS(1E9, 1)},
+		{gcB, makeTS(4E9, 0), bKeys, [][]byte{e, n, n}, makeTS(1E9, 0)},
+		{gcB, makeTS(4E9, 0), bKeys, [][]byte{e, d, n}, makeTS(2E9, 0)},
+		{gcC, makeTS(4E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
+		{gcA, makeTS(5E9, 0), aKeys, [][]byte{e, n, n, n}, makeTS(1E9, 1)},
+		{gcB, makeTS(5E9, 0), bKeys, [][]byte{e, n, n}, makeTS(1E9, 0)},
+		{gcB, makeTS(5E9, 0), bKeys, [][]byte{e, d, n}, makeTS(2E9, 0)},
+		{gcC, makeTS(5E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
 	}
 	for i, test := range testData {
-		gc.now = test.time
-		toDelete := gc.Filter(test.keys, test.values)
-		if !reflect.DeepEqual(toDelete, test.expDelete) {
-			t.Errorf("expected deletions (test %d): %v; got %v", i, test.expDelete, toDelete)
+		test.gc.now = test.time
+		delTS := test.gc.Filter(test.keys, test.values)
+		if !delTS.Equal(test.expDelTS) {
+			t.Errorf("expected deletion timestamp %s; got %v", i, test.expDelTS, delTS)
 		}
 	}
 }

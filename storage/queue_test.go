@@ -20,7 +20,6 @@ package storage
 import (
 	"container/heap"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 )
@@ -75,10 +74,10 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		r1: 1.0,
 		r2: 2.0,
 	}
-	shouldQ := func(now time.Time, r *Range) (shouldQueue bool, priority float64) {
+	shouldQ := func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 		return shouldAddMap[r], priorityMap[r]
 	}
-	process := func(now time.Time, r *Range) error { return nil }
+	process := func(now proto.Timestamp, r *Range) error { return nil }
 	bq := newBaseQueue("test", shouldQ, process, 2)
 	bq.MaybeAdd(r1)
 	bq.MaybeAdd(r2)

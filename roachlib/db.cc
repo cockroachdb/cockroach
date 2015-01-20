@@ -235,7 +235,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // Transaction rows are GC'd if their timestamp is older than
       // the system-wide minimum write intent timestamp. This
       // system-wide minimum write intent is periodically computed via
-      // map-reduce over all ranges and gossipped.
+      // map-reduce over all ranges and gossiped.
       proto::Transaction txn;
       if (!txn.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse transaction entry";

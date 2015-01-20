@@ -65,7 +65,7 @@ var (
 	// serves as the sentinel gossip key which informs a node whether or
 	// not it's connected to the primary gossip network and not just a
 	// partition. As such it must expire on a reasonable basis and be
-	// continually re-gossipped. The replica which is the raft leader of
+	// continually re-gossiped. The replica which is the raft leader of
 	// the first range gossips it.
 	ttlClusterIDGossip = 30 * time.Second
 )
