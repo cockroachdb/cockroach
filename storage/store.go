@@ -406,20 +406,21 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 			s.mu.Unlock()
 			continue
 		}
-		desc := *s.rangesByKey[n].Desc
+		start := s.rangesByKey[n].Desc.StartKey
+		end := s.rangesByKey[n].Desc.EndKey
 		s.mu.Unlock()
 
 		// Now split the range into pieces by intersecting it with the
 		// boundaries of the config map.
-		splits, err := configMap.SplitRangeByPrefixes(desc.StartKey, desc.EndKey)
+		splits, err := configMap.SplitRangeByPrefixes(start, end)
 		if err != nil {
-			log.Errorf("unable to split range %q-%q by prefix map %s", desc.StartKey, desc.EndKey, configMap)
+			log.Errorf("unable to split range %q-%q by prefix map %s", start, end, configMap)
 			continue
 		}
 		// Gather new splits.
 		var splitKeys []proto.Key
 		for _, split := range splits {
-			if split.end.Less(desc.EndKey) {
+			if split.end.Less(end) {
 				splitKeys = append(splitKeys, split.end)
 			}
 		}
@@ -427,7 +428,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 			continue
 		}
 		// Invoke admin split for each proposed split key.
-		log.Infof("splitting range %q-%q at keys %v", desc.StartKey, desc.EndKey, splitKeys)
+		log.Infof("splitting range %q-%q at keys %v", start, end, splitKeys)
 		for _, splitKey := range splitKeys {
 			req := &proto.AdminSplitRequest{
 				RequestHeader: proto.RequestHeader{Key: splitKey},
