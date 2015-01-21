@@ -44,6 +44,12 @@ func StoreIdentKey() proto.Key {
 	return MakeStoreKey(KeyLocalStoreIdentSuffix, proto.Key{})
 }
 
+// StoreStatKey returns the key for accessing the named stat
+// for the specified store ID.
+func StoreStatKey(storeID int32, stat proto.Key) proto.Key {
+	return MakeStoreKey(KeyLocalStoreStatSuffix, stat)
+}
+
 // MakeRangeIDKey creates a range-local key based on the range's
 // Raft ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
@@ -79,6 +85,12 @@ func DecodeRaftStateKey(key proto.Key) int64 {
 	b := key[len(KeyLocalRangeIDPrefix):]
 	_, raftID := encoding.DecodeInt(b)
 	return raftID
+}
+
+// RangeStatKey returns the key for accessing the named stat
+// for the specified Raft ID.
+func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeStatSuffix, stat)
 }
 
 // ResponseCacheKey returns a range-local key by Raft ID for a
@@ -222,6 +234,43 @@ func ValidateRangeMetaKey(key proto.Key) error {
 
 	return nil
 }
+
+// Constants for stat key construction.
+var (
+	// StatLiveBytes counts how many bytes are "live", including bytes
+	// from both keys and values. Live rows include only non-deleted
+	// keys and only the most recent value.
+	StatLiveBytes = proto.Key("live-bytes")
+	// StatKeyBytes counts how many bytes are used to store all keys,
+	// including bytes from deleted keys. Key bytes are re-counted for
+	// each versioned value.
+	StatKeyBytes = proto.Key("key-bytes")
+	// StatValBytes counts how many bytes are used to store all values,
+	// including all historical versions and deleted tombstones.
+	StatValBytes = proto.Key("val-bytes")
+	// StatIntentBytes counts how many bytes are used to store values
+	// which are unresolved intents. Includes bytes used for both intent
+	// keys and values.
+	StatIntentBytes = proto.Key("intent-bytes")
+	// StatLiveCount counts how many keys are "live". This includes only
+	// non-deleted keys.
+	StatLiveCount = proto.Key("live-count")
+	// StatKeyCount counts the total number of keys, including both live
+	// and deleted keys.
+	StatKeyCount = proto.Key("key-count")
+	// StatValCount counts the total number of values, including all
+	// historical versions and deleted tombstones.
+	StatValCount = proto.Key("val-count")
+	// StatIntentCount counts the number of unresolved intents.
+	StatIntentCount = proto.Key("intent-count")
+	// StatIntentAge counts the total age of unresolved intents.
+	StatIntentAge = proto.Key("intent-age")
+	// StatIntentElapsedNanos counts the elapsed nanos since the unix
+	// epoch. This really is tracking the wall time as at last update
+	// to the intents age stat, but is a merged stat, with successive
+	// counts of elapsed nanos being added at each stat computation.
+	StatElapsedNanos = proto.Key("elapsed-nanos")
+)
 
 // Constants for system-reserved keys in the KV map.
 var (

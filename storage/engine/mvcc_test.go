@@ -127,7 +127,7 @@ func TestMVCCEmptyKey(t *testing.T) {
 	if _, err := MVCCScan(engine, testKey1, proto.Key{}, 0, makeTS(0, 1), nil); err == nil {
 		t.Error("expected empty key error")
 	}
-	if err := MVCCResolveWriteIntent(engine, nil, proto.Key{}, txn1); err == nil {
+	if err := MVCCResolveWriteIntent(engine, nil, proto.Key{}, makeTS(0, 1), txn1); err == nil {
 		t.Error("expected empty key error")
 	}
 }
@@ -846,8 +846,8 @@ func TestMVCCResolveTxn(t *testing.T) {
 			value1.Bytes, value.Bytes)
 	}
 
-	// Resolve will write with txn1's timestamp which is 0,0.
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit)
+	// Resolve will write with txn1's timestamp which is 0,1.
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -862,7 +862,7 @@ func TestMVCCResolveTxn(t *testing.T) {
 func TestMVCCAbortTxn(t *testing.T) {
 	engine := createTestEngine()
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -888,7 +888,7 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value3, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn1Abort)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(2, 0), txn1Abort)
 	if err := engine.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -937,7 +937,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1e2Commit, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Now try writing an earlier intent--should get write too old error.
@@ -1018,7 +1018,7 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resolve the intent, pushing its timestamp forward.
-	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0))); err != nil {
+	if err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), makeTxn(txn1, makeTS(1, 0))); err != nil {
 		t.Fatal(err)
 	}
 	// Attempt to read using naive txn's previous timestamp.
@@ -1032,7 +1032,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	engine := createTestEngine()
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	err = MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, txn1e2)
-	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, txn1e2Commit)
+	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, makeTS(0, 1), txn1e2Commit)
 	if num != 2 {
 		t.Errorf("expected 2 rows resolved; got %d", num)
 	}
@@ -1063,7 +1063,7 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp -- this should rewrite the
 	// intent when making it permanent.
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1Commit, makeTS(1, 0)))
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1Commit, makeTS(1, 0)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1093,7 +1093,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 
 	// Resolve with a higher commit timestamp, but with still-pending transaction.
 	// This represents a straightforward push (i.e. from a read/write conflict).
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTxn(txn1, makeTS(1, 0)))
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), makeTxn(txn1, makeTS(1, 0)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1117,21 +1117,21 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 	engine := createTestEngine()
 
 	// Resolve a non existent key; noop.
-	err := MVCCResolveWriteIntent(engine, nil, testKey1, txn1Commit)
+	err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add key and resolve despite there being no intent.
 	err = MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write intent and resolve with different txn.
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, txn1)
-	err = MVCCResolveWriteIntent(engine, nil, testKey1, txn2Commit)
+	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(1, 0), txn2Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1144,7 +1144,7 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 	err = MVCCPut(engine, nil, testKey3, makeTS(0, 1), value3, txn2)
 	err = MVCCPut(engine, nil, testKey4, makeTS(0, 1), value4, txn1)
 
-	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey4.Next(), 0, txn1Commit)
+	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey4.Next(), 0, makeTS(0, 1), txn1Commit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1237,7 +1237,7 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ms.MergeStats(engine, raftID, 0) // write stats
+	ms.MergeStats(engine, raftID) // write stats
 	snap := engine.NewSnapshot()
 	defer snap.Stop()
 	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
@@ -1336,7 +1336,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, raftID, 0) // write stats
+		ms.MergeStats(engine, raftID) // write stats
 		snap := engine.NewSnapshot()
 		defer snap.Stop()
 		rangeStart := test.keys[0]
@@ -1419,7 +1419,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, raftID, 0) // write stats
+		ms.MergeStats(engine, raftID) // write stats
 		snap := engine.NewSnapshot()
 		defer snap.Stop()
 		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)
@@ -1468,6 +1468,9 @@ func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 	if ms.IntentCount != expMS.IntentCount {
 		t.Errorf("%s: mvcc intentCount %d; measured %d", debug, expMS.IntentCount, ms.IntentCount)
 	}
+	if ms.IntentAge != expMS.IntentAge {
+		t.Errorf("%s: mvcc intentAge %d; measured %d", debug, expMS.IntentAge, ms.IntentAge)
+	}
 }
 
 // TestMVCCStatsBasic writes a value, then deletes it as an intent via
@@ -1478,7 +1481,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	ms := &MVCCStats{}
 
 	// Put a value.
-	ts := makeTS(0, 1)
+	ts := makeTS(1, 0)
 	key := proto.Key("a")
 	value := proto.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
@@ -1500,8 +1503,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after put", ms, expMS, t)
 
 	// Delete the value using a transaction.
-	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(0, 1)}
-	ts2 := makeTS(0, 2)
+	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1, 0)}
+	ts2 := makeTS(2, 0)
 	if err := MVCCDelete(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -1515,12 +1518,13 @@ func TestMVCCStatsBasic(t *testing.T) {
 		ValCount:    2,
 		IntentBytes: v2KeySize + v2ValSize,
 		IntentCount: 1,
+		IntentAge:   0,
 	}
 	verifyStats("after delete", ms, expMS2, t)
 
 	// Resolve the deletion by aborting it.
 	txn.Status = proto.ABORTED
-	if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
+	if err := MVCCResolveWriteIntent(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
 	// Stats should equal same as before the deletion after aborting the intent.
@@ -1528,25 +1532,55 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	// Re-delete, but this time commit it.
 	txn.Status = proto.PENDING
-	ts3 := makeTS(0, 3)
+	ts3 := makeTS(3, 0)
 	if err := MVCCDelete(engine, ms, key, ts3, txn); err != nil {
 		t.Fatal(err)
 	}
 	verifyStats("after 2nd delete", ms, expMS2, t) // should be same as before.
 
-	// Now commit.
-	txn.Status = proto.COMMITTED
-	if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
+	// Put another intent, which should age deleted intent.
+	ts4 := makeTS(4, 0)
+	key2 := proto.Key("b")
+	value2 := proto.Value{Bytes: []byte("value")}
+	if err := MVCCPut(engine, ms, key2, ts4, value2, txn); err != nil {
 		t.Fatal(err)
 	}
-	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts3, Deleted: true}, t)
+	mKey2Size := int64(len(MVCCEncodeKey(key2)))
+	mVal2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
+	vKey2Size := int64(len(MVCCEncodeVersionKey(key2, ts4)))
+	vVal2Size := encodedSize(&proto.MVCCValue{Value: &value2}, t)
 	expMS3 := &MVCCStats{
-		KeyBytes: mKeySize + vKeySize + v2KeySize,
-		KeyCount: 1,
-		ValBytes: m3ValSize + vValSize + v2ValSize,
-		ValCount: 2,
+		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
+		KeyCount:    2,
+		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
+		ValCount:    3,
+		LiveBytes:   mKey2Size + vKey2Size + mVal2Size + vVal2Size,
+		LiveCount:   1,
+		IntentBytes: v2KeySize + v2ValSize + vKey2Size + vVal2Size,
+		IntentCount: 2,
 	}
-	verifyStats("after abort", ms, expMS3, t)
+	verifyStats("after 2nd put", ms, expMS3, t)
+
+	// Now commit both values.
+	txn.Status = proto.COMMITTED
+	if err := MVCCResolveWriteIntent(engine, ms, key, ts4, txn); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCResolveWriteIntent(engine, ms, key2, ts4, txn); err != nil {
+		t.Fatal(err)
+	}
+	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
+	m2Val2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4}, t)
+	expMS4 := &MVCCStats{
+		KeyBytes:  mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
+		KeyCount:  2,
+		ValBytes:  m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
+		ValCount:  3,
+		LiveBytes: mKey2Size + vKey2Size + m2Val2Size + vVal2Size,
+		LiveCount: 1,
+		IntentAge: -1,
+	}
+	verifyStats("after commit", ms, expMS4, t)
 }
 
 // TestMVCCStatsWithRandomRuns creates a random sequence of puts,
@@ -1569,11 +1603,14 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	// either commit or abort.
 	keys := map[int32][]byte{}
 	for i := int32(0); i < int32(1000); i++ {
+		// Do manual computation of additional intent age based on one extra nanosecond in simulation.
+		ms.IntentAge += ms.IntentCount
+
 		key := []byte(fmt.Sprintf("%s-%d", util.RandString(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
 		var txn *proto.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
-			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(0, i+1)}
+			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1), 0)}
 		}
 		// With 25% probability, put a new value; otherwise, delete an earlier
 		// key. Because an earlier step in this process may have itself been
@@ -1583,17 +1620,17 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i > 0 && isDelete {
 			idx := rng.Int31n(i)
 			log.V(1).Infof("*** DELETE index %d", idx)
-			if err := MVCCDelete(engine, ms, keys[idx], makeTS(0, i+1), txn); err != nil {
+			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1), 0), txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*proto.WriteIntentError); ok {
 					wiErr.Txn.Status = proto.ABORTED
 					log.V(1).Infof("*** ABORT index %d", idx)
-					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], &wiErr.Txn); err != nil {
+					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1), 0), &wiErr.Txn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.
 					log.V(1).Infof("*** RE-DELETE index %d", idx)
-					if err := MVCCDelete(engine, ms, keys[idx], makeTS(0, i+1), txn); err != nil {
+					if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1), 0), txn); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -1603,7 +1640,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		} else {
 			rngVal := proto.Value{Bytes: []byte(util.RandString(rng, int(rng.Int31n(128))))}
 			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
-			if err := MVCCPut(engine, ms, key, makeTS(0, i+1), rngVal, txn); err != nil {
+			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1), 0), rngVal, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1613,7 +1650,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				txn.Status = proto.ABORTED
 			}
 			log.V(1).Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
-			if err := MVCCResolveWriteIntent(engine, ms, key, txn); err != nil {
+			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1), 0), txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1621,7 +1658,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
-			expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax)
+			expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, int64(i+1))
 			if err != nil {
 				t.Fatal(err)
 			}

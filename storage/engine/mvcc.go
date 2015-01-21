@@ -47,31 +47,35 @@ const (
 type MVCCStats struct {
 	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
 	LiveCount, KeyCount, ValCount, IntentCount int64
+	IntentAge, ElapsedNanos                    int64
 }
 
-// MergeStats merges accumulated stats to stat counters for both the
-// affected range and store.
-func (ms *MVCCStats) MergeStats(engine Engine, raftID int64, storeID int32) {
-	MergeStat(engine, raftID, storeID, StatLiveBytes, ms.LiveBytes)
-	MergeStat(engine, raftID, storeID, StatKeyBytes, ms.KeyBytes)
-	MergeStat(engine, raftID, storeID, StatValBytes, ms.ValBytes)
-	MergeStat(engine, raftID, storeID, StatIntentBytes, ms.IntentBytes)
-	MergeStat(engine, raftID, storeID, StatLiveCount, ms.LiveCount)
-	MergeStat(engine, raftID, storeID, StatKeyCount, ms.KeyCount)
-	MergeStat(engine, raftID, storeID, StatValCount, ms.ValCount)
-	MergeStat(engine, raftID, storeID, StatIntentCount, ms.IntentCount)
+// MergeStats merges accumulated stats to stat counters for specified range.
+func (ms *MVCCStats) MergeStats(engine Engine, raftID int64) {
+	MVCCMergeRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes)
+	MVCCMergeRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes)
+	MVCCMergeRangeStat(engine, raftID, StatValBytes, ms.ValBytes)
+	MVCCMergeRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes)
+	MVCCMergeRangeStat(engine, raftID, StatLiveCount, ms.LiveCount)
+	MVCCMergeRangeStat(engine, raftID, StatKeyCount, ms.KeyCount)
+	MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount)
+	MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
+	MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
+	MVCCMergeRangeStat(engine, raftID, StatElapsedNanos, ms.ElapsedNanos)
 }
 
-// SetStats sets stat counters for both the affected range and store.
-func (ms *MVCCStats) SetStats(engine Engine, raftID int64, storeID int32) {
-	SetStat(engine, raftID, storeID, StatLiveBytes, ms.LiveBytes)
-	SetStat(engine, raftID, storeID, StatKeyBytes, ms.KeyBytes)
-	SetStat(engine, raftID, storeID, StatValBytes, ms.ValBytes)
-	SetStat(engine, raftID, storeID, StatIntentBytes, ms.IntentBytes)
-	SetStat(engine, raftID, storeID, StatLiveCount, ms.LiveCount)
-	SetStat(engine, raftID, storeID, StatKeyCount, ms.KeyCount)
-	SetStat(engine, raftID, storeID, StatValCount, ms.ValCount)
-	SetStat(engine, raftID, storeID, StatIntentCount, ms.IntentCount)
+// SetStats sets stat counters for specified range.
+func (ms *MVCCStats) SetStats(engine Engine, raftID int64) {
+	MVCCSetRangeStat(engine, raftID, StatLiveBytes, ms.LiveBytes)
+	MVCCSetRangeStat(engine, raftID, StatKeyBytes, ms.KeyBytes)
+	MVCCSetRangeStat(engine, raftID, StatValBytes, ms.ValBytes)
+	MVCCSetRangeStat(engine, raftID, StatIntentBytes, ms.IntentBytes)
+	MVCCSetRangeStat(engine, raftID, StatLiveCount, ms.LiveCount)
+	MVCCSetRangeStat(engine, raftID, StatKeyCount, ms.KeyCount)
+	MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount)
+	MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
+	MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
+	MVCCSetRangeStat(engine, raftID, StatElapsedNanos, ms.ElapsedNanos)
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
@@ -111,7 +115,8 @@ func (ms *MVCCStats) updateStatsForInline(key proto.Key, origMetaKeySize, origMe
 // values. Unfortunately, we're unable to keep accurate stats on merge
 // as the actual details of the merge play out asynchronously during
 // compaction. Instead, we undercount by adding only the size of the
-// value.Bytes byte slice. These errors are corrected during splits.
+// value.Bytes byte slice. These errors are corrected during splits
+// and merges.
 func (ms *MVCCStats) updateStatsOnMerge(key proto.Key, valSize int64) {
 	if !ms.updateStatsForKey(key) {
 		return
@@ -126,7 +131,7 @@ func (ms *MVCCStats) updateStatsOnMerge(key proto.Key, valSize int64) {
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
 func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata) {
+	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata, elapsedNanos int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
@@ -151,6 +156,7 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 			ms.ValCount--
 			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 			ms.IntentCount--
+			ms.IntentAge -= elapsedNanos
 		}
 	}
 
@@ -174,7 +180,7 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
 func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool) {
+	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool, elapsedNanos int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
@@ -191,6 +197,7 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 	if commit {
 		ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
 		ms.IntentCount--
+		ms.IntentAge -= elapsedNanos
 	}
 }
 
@@ -199,7 +206,7 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
 func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMetaValSize,
-	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata) {
+	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata, elapsedNanos int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
@@ -213,6 +220,7 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 	ms.ValCount--
 	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 	ms.IntentCount--
+	ms.IntentAge -= elapsedNanos
 
 	// If restored version isn't a deletion tombstone, add it to live counters.
 	if restored != nil {
@@ -229,33 +237,86 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 	}
 }
 
+// MVCCGetRangeStat returns the value for the specified range stat, by
+// Raft ID and stat name.
+func MVCCGetRangeStat(engine Engine, raftID int64, stat proto.Key) (int64, error) {
+	val, err := MVCCGet(engine, RangeStatKey(raftID, stat), proto.ZeroTimestamp, nil)
+	if err != nil || val == nil {
+		return 0, err
+	}
+	return val.GetInteger(), nil
+}
+
+// MVCCSetRangeStat sets the value for the specified range stat, by
+// Raft ID and stat name.
+func MVCCSetRangeStat(engine Engine, raftID int64, stat proto.Key, statVal int64) error {
+	value := proto.Value{Integer: gogoproto.Int64(statVal)}
+	if err := MVCCPut(engine, nil, RangeStatKey(raftID, stat), proto.ZeroTimestamp, value, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MVCCMergeRangeStat flushes the specified stat to merge counters via
+// the provided engine instance.
+func MVCCMergeRangeStat(engine Engine, raftID int64, stat proto.Key, statVal int64) error {
+	if statVal == 0 {
+		return nil
+	}
+	value := proto.Value{Integer: gogoproto.Int64(statVal)}
+	if err := MVCCMerge(engine, nil, RangeStatKey(raftID, stat), value); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MVCCGetRangeSize returns the size of the range, equal to the sum of
+// the key and value stats.
+func MVCCGetRangeSize(engine Engine, raftID int64) (int64, error) {
+	keyBytes, err := MVCCGetRangeStat(engine, raftID, StatKeyBytes)
+	if err != nil {
+		return 0, err
+	}
+	valBytes, err := MVCCGetRangeStat(engine, raftID, StatValBytes)
+	if err != nil {
+		return 0, err
+	}
+	return keyBytes + valBytes, nil
+}
+
 // MVCCGetRangeStats reads stat counters for the specified range and
 // returns an MVCCStats object on success.
 func MVCCGetRangeStats(engine Engine, raftID int64) (*MVCCStats, error) {
 	ms := &MVCCStats{}
 	var err error
-	if ms.LiveBytes, err = GetRangeStat(engine, raftID, StatLiveBytes); err != nil {
+	if ms.LiveBytes, err = MVCCGetRangeStat(engine, raftID, StatLiveBytes); err != nil {
 		return nil, err
 	}
-	if ms.KeyBytes, err = GetRangeStat(engine, raftID, StatKeyBytes); err != nil {
+	if ms.KeyBytes, err = MVCCGetRangeStat(engine, raftID, StatKeyBytes); err != nil {
 		return nil, err
 	}
-	if ms.ValBytes, err = GetRangeStat(engine, raftID, StatValBytes); err != nil {
+	if ms.ValBytes, err = MVCCGetRangeStat(engine, raftID, StatValBytes); err != nil {
 		return nil, err
 	}
-	if ms.IntentBytes, err = GetRangeStat(engine, raftID, StatIntentBytes); err != nil {
+	if ms.IntentBytes, err = MVCCGetRangeStat(engine, raftID, StatIntentBytes); err != nil {
 		return nil, err
 	}
-	if ms.LiveCount, err = GetRangeStat(engine, raftID, StatLiveCount); err != nil {
+	if ms.LiveCount, err = MVCCGetRangeStat(engine, raftID, StatLiveCount); err != nil {
 		return nil, err
 	}
-	if ms.KeyCount, err = GetRangeStat(engine, raftID, StatKeyCount); err != nil {
+	if ms.KeyCount, err = MVCCGetRangeStat(engine, raftID, StatKeyCount); err != nil {
 		return nil, err
 	}
-	if ms.ValCount, err = GetRangeStat(engine, raftID, StatValCount); err != nil {
+	if ms.ValCount, err = MVCCGetRangeStat(engine, raftID, StatValCount); err != nil {
 		return nil, err
 	}
-	if ms.IntentCount, err = GetRangeStat(engine, raftID, StatIntentCount); err != nil {
+	if ms.IntentCount, err = MVCCGetRangeStat(engine, raftID, StatIntentCount); err != nil {
+		return nil, err
+	}
+	if ms.IntentAge, err = MVCCGetRangeStat(engine, raftID, StatIntentAge); err != nil {
+		return nil, err
+	}
+	if ms.ElapsedNanos, err = MVCCGetRangeStat(engine, raftID, StatElapsedNanos); err != nil {
 		return nil, err
 	}
 	return ms, nil
@@ -487,6 +548,10 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	if err != nil {
 		return err
 	}
+	var elapsedNanos int64
+	if meta.Txn != nil {
+		elapsedNanos = timestamp.WallTime - meta.Timestamp.WallTime
+	}
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(proto.ZeroTimestamp)
@@ -569,7 +634,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	}
 
 	// Update MVCC stats.
-	ms.updateStatsOnPut(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
+	ms.updateStatsOnPut(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, elapsedNanos)
 
 	return nil
 }
@@ -821,7 +886,7 @@ func MVCCIterateCommitted(engine Engine, key, endKey proto.Key, f func(proto.Key
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *proto.Transaction) error {
+func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
@@ -840,6 +905,8 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *pr
 	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
 		return nil
 	}
+	elapsedNanos := timestamp.WallTime - meta.Timestamp.WallTime
+
 	// If we're committing, or if the commit timestamp of the intent has
 	// been moved forward, and if the proposed epoch matches the existing
 	// epoch: update the meta.Txn. For commit, it's set to nil;
@@ -863,7 +930,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *pr
 		}
 
 		// Update stat counters related to resolving the intent.
-		ms.updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit)
+		ms.updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit, elapsedNanos)
 
 		// If timestamp of value changed, need to rewrite versioned value.
 		// TODO(spencer,tobias): think about a new merge operator for
@@ -909,7 +976,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *pr
 	if len(kvs) == 0 {
 		engine.Clear(metaKey)
 		// Clear stat counters attributable to the intent we're aborting.
-		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil)
+		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, elapsedNanos)
 	} else {
 		_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
 		if !isValue {
@@ -934,7 +1001,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *pr
 		}
 
 		// Update stat counters with older version.
-		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta)
+		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, elapsedNanos)
 	}
 
 	return nil
@@ -944,7 +1011,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, txn *pr
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
 // txns. Specify max=0 for unbounded resolves.
-func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, txn *proto.Transaction) (int64, error) {
+func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) (int64, error) {
 	if txn == nil {
 		return 0, util.Error("no txn specified")
 	}
@@ -968,7 +1035,7 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 		if isValue {
 			return 0, util.Errorf("expected an MVCC metadata key: %s", kvs[0].Key)
 		}
-		err = MVCCResolveWriteIntent(engine, ms, currentKey, txn)
+		err = MVCCResolveWriteIntent(engine, ms, currentKey, timestamp, txn)
 		if err != nil {
 			log.Warningf("failed to resolve intent for key %q: %v", currentKey, err)
 		} else {
@@ -1047,7 +1114,7 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 	encEndKey := MVCCEncodeKey(endKey)
 
 	// Get range size from stats.
-	rangeSize, err := GetRangeSize(engine, raftID)
+	rangeSize, err := MVCCGetRangeSize(engine, raftID)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,15 +1164,17 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 // used after a range is split to recompute stats for each
 // subrange. The start key is always adjusted to avoid counting local
 // keys in the event stats are being recomputed for the first range
-// (i.e. the one with start key == KeyMin).
-func MVCCComputeStats(engine Engine, key, endKey proto.Key) (MVCCStats, error) {
+// (i.e. the one with start key == KeyMin). The elapsedNanos arg
+// specifies the wall time in nanoseconds since the epoch and is used
+// to compute the total age of all intents.
+func MVCCComputeStats(engine Engine, key, endKey proto.Key, elapsedNanos int64) (MVCCStats, error) {
 	if key.Less(KeyLocalMax) {
 		key = KeyLocalMax
 	}
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
 
-	ms := MVCCStats{}
+	ms := MVCCStats{ElapsedNanos: elapsedNanos}
 	first := false
 	meta := &proto.MVCCMetadata{}
 	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
@@ -1134,6 +1203,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key) (MVCCStats, error) {
 				if meta.Txn != nil {
 					ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
 					ms.IntentCount++
+					ms.IntentAge += (elapsedNanos - meta.Timestamp.WallTime)
 				}
 				if meta.KeyBytes != int64(len(kv.Key)) {
 					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
