@@ -42,6 +42,9 @@ crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     var req = {
       method: method,
       url: endpoint,
+      headers: {
+        'Content-Type': 'text/plain; charset=UTF-8'
+      },
       data: data
     };
     if (endpoint.indexOf('/kv/rest/counter/') != -1) {
