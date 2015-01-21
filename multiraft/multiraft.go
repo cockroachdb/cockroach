@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -47,6 +48,8 @@ type Config struct {
 	// If Strict is true, some warnings become fatal panics and additional (possibly expensive)
 	// sanity checks will be done.
 	Strict bool
+
+	EntryFormatter raft.EntryFormatter
 }
 
 // Validate returns an error if any required elements of the Config are missing or invalid.
@@ -98,6 +101,19 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 		config.Ticker = newTicker(config.TickInterval)
 	}
 
+	if config.EntryFormatter != nil {
+		// Wrap the EntryFormatter to strip off the command id.
+		ef := config.EntryFormatter
+		config.EntryFormatter = func(data []byte) string {
+			if len(data) == 0 {
+				return "[empty]"
+			}
+			id, cmd := decodeCommand(data)
+			formatted := ef(cmd)
+			return fmt.Sprintf("%x: %s", id, formatted)
+		}
+	}
+
 	m := &MultiRaft{
 		Config: *config,
 		multiNode: raft.StartMultiNode(nodeID, config.ElectionTimeoutTicks,
@@ -139,7 +155,7 @@ func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
 	m := (*MultiRaft)(ms)
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
-		raft.DescribeMessage(req.Message))
+		ms.EntryFormatter.DescribeMessage(req.Message))
 	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
 }
 
@@ -390,11 +406,11 @@ func (s *state) createGroup(op *createGroupOp) {
 	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
 
 	gs := s.Storage.GroupStorage(op.groupID)
-	_, cs, err := gs.InitialState()
+	state, err := gs.InitialState()
 	if err != nil {
 		op.ch <- err
 	}
-	for _, nodeID := range cs.Nodes {
+	for _, nodeID := range state.ConfState.Nodes {
 		s.addNode(nodeID)
 	}
 
@@ -430,16 +446,16 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 				log.Infof("HardState updated: %+v", ready.HardState)
 			}
 			for i, e := range ready.Entries {
-				log.Infof("New Entry[%d]: %s", i, raft.DescribeEntry(e))
+				log.Infof("New Entry[%d]: %s", i, s.EntryFormatter.DescribeEntry(e))
 			}
 			for i, e := range ready.CommittedEntries {
-				log.Infof("Committed Entry[%d]: %s", i, raft.DescribeEntry(e))
+				log.Infof("Committed Entry[%d]: %s", i, s.EntryFormatter.DescribeEntry(e))
 			}
 			if !raft.IsEmptySnap(ready.Snapshot) {
 				log.Infof("Snapshot updated: %s", ready.Snapshot)
 			}
 			for i, m := range ready.Messages {
-				log.Infof("Outgoing Message[%d]: %s", i, raft.DescribeMessage(m))
+				log.Infof("Outgoing Message[%d]: %s", i, s.EntryFormatter.DescribeMessage(m))
 			}
 		}
 
@@ -533,7 +549,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		}
 		for _, msg := range ready.Messages {
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
-				raft.DescribeMessage(msg), msg.To)
+				s.EntryFormatter.DescribeMessage(msg), msg.To)
 			s.nodes[msg.To].client.raftMessage(&RaftMessageRequest{groupID, msg})
 		}
 	}

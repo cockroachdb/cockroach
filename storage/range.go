@@ -1383,7 +1383,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 }
 
 // InitialState implements the raft.Storage interface.
-func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *Range) InitialState() (raft.InitialState, error) {
 	// Set up the defaults if there is no stored HardState.
 	hs := raftpb.HardState{
 		Term:   raftInitialLogTerm,
@@ -1396,10 +1396,13 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
-		return hs, cs, err
+		return raft.InitialState{}, err
 	}
 
-	return hs, cs, nil
+	return raft.InitialState{
+		HardState: hs,
+		ConfState: cs,
+	}, nil
 }
 
 // loadLastIndex looks in the engine to find the last log index.
