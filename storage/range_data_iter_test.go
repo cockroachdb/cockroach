@@ -74,9 +74,11 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
 	tc.rng.Lock()
+	tc.store.mu.Lock()
 	newDesc := *tc.rng.Desc
 	newDesc.StartKey = proto.Key("a")
 	tc.rng.Desc = &newDesc
+	tc.store.mu.Unlock()
 	tc.rng.Unlock()
 
 	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
@@ -98,10 +100,12 @@ func TestRangeDataIterator(t *testing.T) {
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
 	tc.rng.Lock()
+	tc.store.mu.Lock()
 	newDesc := *tc.rng.Desc
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
 	tc.rng.Desc = &newDesc
+	tc.store.mu.Unlock()
 	tc.rng.Unlock()
 
 	// Create two more ranges, one before the test range and one after.

@@ -240,9 +240,9 @@ func (r *Range) GetReplica() *proto.Replica {
 }
 
 // ContainsKey returns whether this range contains the specified key.
+// Read-lock the mutex to protect access to Desc, which might be changed
+// concurrently via range split.
 func (r *Range) ContainsKey(key proto.Key) bool {
-	// Read-lock the mutex to protect access to Desc, which might be changed
-	// concurrently via range split.
 	r.RLock()
 	defer r.RUnlock()
 	return r.Desc.ContainsKey(engine.KeyAddress(key))
