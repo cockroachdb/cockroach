@@ -1402,6 +1402,8 @@ func (r *Range) InitialState() (raft.InitialState, error) {
 	return raft.InitialState{
 		HardState: hs,
 		ConfState: cs,
+		// TODO(bdarnell): account for skew between Commit and Applied.
+		AppliedIndex: hs.Commit,
 	}, nil
 }
 

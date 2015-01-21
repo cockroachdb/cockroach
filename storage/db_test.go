@@ -41,25 +41,35 @@ import (
 )
 
 // createTestStore creates a test store using an in-memory
-// engine. Returns the store clock's manual unix nanos time and the
-// store. The caller is responsible for closing the store on exit.
+// engine. The caller is responsible for closing the store on exit.
 func createTestStore(t *testing.T) *storage.Store {
+	return createTestStoreWithEngine(t,
+		engine.NewInMem(proto.Attributes{}, 1<<20),
+		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
+		true)
+}
+
+// createTestStoreWithEngine creates a test store using the given engine and clock.
+// The caller is responsible for closing the store on exit.
+func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
+	bootstrap bool) *storage.Store {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext)
-	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock)
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
-	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
-		t.Fatal(err)
+	if bootstrap {
+		if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	lSender.AddStore(store)
-	if err := store.BootstrapRange(); err != nil {
-		t.Fatal(err)
+	if bootstrap {
+		if err := store.BootstrapRange(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
