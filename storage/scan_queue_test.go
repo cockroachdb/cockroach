@@ -46,19 +46,20 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	day := 1 * 24 * time.Hour // 1 day
-	mb := int64(1 << 20)      // 1 MB
+	hour := time.Hour.Nanoseconds()
+	day := (1 * 24 * time.Hour).Nanoseconds() // 1 day
+	mb := int64(1 << 20)                      // 1 MB
 	scanMeta0 := &proto.ScanMetadata{
 		LastScanNanos: 0,
 		GC: proto.GCMetadata{
-			TTLSeconds: int32(day.Nanoseconds() / 1000000000),
+			TTLSeconds: int32(day / 1000000000),
 			ByteCounts: []int64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		},
 	}
 	scanMeta1 := &proto.ScanMetadata{
 		LastScanNanos: 0,
 		GC: proto.GCMetadata{
-			TTLSeconds: int32(day.Nanoseconds() / 1000000000),
+			TTLSeconds: int32(day / 1000000000),
 			ByteCounts: []int64{
 				10 * mb, 9 * mb, 8 * mb, 7 * mb, 6 * mb, 5 * mb, 4 * mb, 3 * mb, 2 * mb, 1 * mb / 2,
 			},
@@ -68,46 +69,44 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	testCases := []struct {
 		scanMeta     *proto.ScanMetadata
 		nonLiveBytes int64
-<<<<<<< HEAD
 		intentCount  int64
+		intentAge    int64
 		now          time.Time
-=======
-		intentBytes  int64
-		now          proto.Timestamp
->>>>>>> Modify GC API to return latest timestamp for garbage collection.
 		shouldQ      bool
 		priority     float64
 	}{
 		// No GC'able bytes, no time elapsed.
-		{scanMeta0, 0, 0, makeTS(0, 0), false, 0},
-		// No GC'able bytes, no intent bytes, but intent interval elapsed.
-		{scanMeta0, 0, 0, makeTS(intentSweepInterval.Nanoseconds(), 0), false, 0},
-		// No GC'able bytes, with intent bytes, intent interval elapsed.
-		{scanMeta0, 0, 1, makeTS(intentSweepInterval.Nanoseconds(), 0), false, 0},
-		// No GC'able bytes, with intent bytes, intent interval * 2 elapsed.
-		{scanMeta0, 0, 1, makeTS(intentSweepInterval.Nanoseconds()*2, 0), true, 1},
+		{scanMeta0, 0, 0, 0, makeTS(0, 0), false, 0},
+		// No GC'able bytes, with intent age, 1/2 intent normalization period elapsed.
+		{scanMeta0, 0, 1, hour, makeTS(0, 0), false, 0},
+		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
+		{scanMeta0, 0, 1, hour, makeTS(hour, 0), false, 0},
+		// No GC'able bytes, with intent age=4 hours.
+		{scanMeta0, 0, 1, 3 * hour, makeTS(hour, 0), true, 1},
+		// No GC'able bytes, 2 intents, with avg intent age=8 hours.
+		{scanMeta0, 0, 2, 14 * hour, makeTS(hour, 0), true, 3},
 		// No GC'able bytes, no intent bytes, verification interval elapsed.
-		{scanMeta0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), false, 0},
+		{scanMeta0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), false, 0},
 		// No GC'able bytes, no intent bytes, verification interval * 2 elapsed.
-		{scanMeta0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), true, 1},
+		{scanMeta0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), true, 1},
 		// No GC'able bytes, with combination of intent bytes and verification interval * 2 elapsed.
-		{scanMeta0, 0, 1, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 6},
+		{scanMeta0, 0, 1, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 361},
 		// GC'able bytes, no time elapsed.
-		{scanMeta1, 0, 0, makeTS(0, 0), false, 0},
+		{scanMeta1, 0, 0, 0, makeTS(0, 0), false, 0},
 		// GC'able bytes, TTLSeconds / 10 elapsed (note that 1st 1/10 of bytes is 0.5M).
-		{scanMeta1, 0, 0, makeTS(24*360*1000000000, 0), true, 0.5},
+		{scanMeta1, 0, 0, 0, makeTS(24*360*1000000000, 0), true, 0.5},
 		// GC'able bytes, TTLSeconds / 2 elapsed.
-		{scanMeta1, 0, 0, makeTS(12*3600*1000000000, 0), true, 5},
+		{scanMeta1, 0, 0, 0, makeTS(12*3600*1000000000, 0), true, 5},
 		// GC'able bytes, TTLSeconds elapsed.
-		{scanMeta1, 0, 0, makeTS(24*3600*1000000000, 0), true, 10},
+		{scanMeta1, 0, 0, 0, makeTS(24*3600*1000000000, 0), true, 10},
 		// GC'able bytes with non-live bytes, TTLSeconds elapsed.
-		{scanMeta1, 1 * mb, 0, makeTS(24*3600*1000000000, 0), true, 10},
+		{scanMeta1, 1 * mb, 0, 0, makeTS(24*3600*1000000000, 0), true, 10},
 		// GC'able bytes with non-live bytes, TTLSeconds * 2 elapsed.
-		{scanMeta1, 1 * mb, 0, makeTS(48*3600*1000000000, 0), true, 10.5},
+		{scanMeta1, 1 * mb, 0, 0, makeTS(48*3600*1000000000, 0), true, 10.5},
 		// GC'able bytes with non-live bytes, TTLSeconds * 4 elapsed.
-		{scanMeta1, 1 * mb, 0, makeTS(96*3600*1000000000, 0), true, 10.75},
-		// GC'able bytes with non-live bytes, intent bytes, and intent interval * 2 elapsed.
-		{scanMeta1, 1 * mb, 1, makeTS(intentSweepInterval.Nanoseconds()*2, 0), true, 11.95},
+		{scanMeta1, 1 * mb, 0, 0, makeTS(96*3600*1000000000, 0), true, 10.75},
+		// GC'able bytes with non-live bytes, intent bytes, and intent normalization * 2 elapsed.
+		{scanMeta1, 1 * mb, 1, 0, makeTS(intentAgeNormalization.Nanoseconds()*2, 0), true, 11.95},
 	}
 
 	scanQ := newScanQueue()
@@ -125,6 +124,7 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		stats := engine.MVCCStats{
 			KeyBytes:    nonLiveBytes,
 			IntentCount: test.intentCount,
+			IntentAge:   test.intentAge,
 		}
 		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats)
 

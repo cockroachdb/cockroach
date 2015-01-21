@@ -33,11 +33,9 @@ const (
 	// gcByteCountNormalization is the count of GC'able bytes which
 	// amount to a score of "1" added to total range priority.
 	gcByteCountNormalization = 1 << 20 // 1 MB
-	// intentSweepInterval is the target duration for resolving extant
-	// write intents. If this much time has passed since the last scan
-	// and write intents are present, the range should be queued. Cleaning
-	// up intents allows transaction records to be GC'd.
-	intentSweepInterval = 10 * 24 * time.Hour // 10 days
+	// intentAgeNormalization is the average age of outstanding intents
+	// which amount to a score of "1" added to total range priority.
+	intentAgeNormalization = 2 * time.Hour // 2 hours
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 1 * time.Hour // 1 hour
@@ -88,15 +86,18 @@ func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool,
 	// Compute non-live bytes.
 	nonLiveBytes := rng.stats.GetSize() - rng.stats.LiveBytes
 
-	// GC score.
+	// GC score. This computes estimated bytes to GC and normalizes.
 	estGCBytes := scanMeta.GC.EstimatedBytes(elapsedNanos, nonLiveBytes)
 	gcScore := float64(estGCBytes) / float64(gcByteCountNormalization)
 
-	// Intent sweep score. First check for intents. We only compute an
-	// intent score if there are any outstanding intents.
-	intentScore := float64(0)
-	if rng.stats.IntentCount > 0 {
-		intentScore = float64(elapsedNanos) / float64(intentSweepInterval.Nanoseconds())
+	// Intent score. This computes the average age of outstanding intents
+	// and normalizes.
+	intentScore := 0
+	avgIntentAge, err := rng.stats.GetAvgIntentAge(rng.rm.Engine(), now.WallTime)
+	if err != nil {
+		log.Errorf("unable to compute intent score: %s", err)
+	} else {
+		intentScore = avgIntentAge / float64(intentAgeNormalization.Nanoseconds())
 	}
 
 	// Verify score.
