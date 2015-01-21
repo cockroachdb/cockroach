@@ -30,7 +30,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer tc.Stop()
 
 	s := tc.rng.stats
-	if s.elapsedNanos != 0 || s.intentCount != 0 {
+	if s.lastUpdateNanos != 0 || s.intentCount != 0 {
 		t.Errorf("expected elapsed nanos and intent count to initialize to 0: %+v", s)
 	}
 }
@@ -40,8 +40,8 @@ func TestRangeStatsInit(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	ms := &engine.MVCCStats{
-		ElapsedNanos: 10,
-		IntentCount:  5,
+		IntentCount:           5,
+		IntentLastUpdateNanos: 10,
 	}
 	ms.SetStats(tc.engine, 1)
 
@@ -49,8 +49,8 @@ func TestRangeStatsInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.elapsedNanos != 10 || s.intentCount != 5 {
-		t.Errorf("expected elapsed nanos=10 and intent count=5: %+v", s)
+	if s.lastUpdateNanos != 10 || s.intentCount != 5 {
+		t.Errorf("expected lastUpdateanos=10 and intentCount=5: %+v", s)
 	}
 }
 
@@ -59,30 +59,30 @@ func TestRangeStatsMerge(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	ms := &engine.MVCCStats{
-		LiveBytes:    1,
-		KeyBytes:     1,
-		ValBytes:     1,
-		IntentBytes:  1,
-		LiveCount:    1,
-		KeyCount:     1,
-		ValCount:     1,
-		IntentCount:  1,
-		IntentAge:    1,
-		ElapsedNanos: 1,
+		LiveBytes:             1,
+		KeyBytes:              1,
+		ValBytes:              1,
+		IntentBytes:           1,
+		LiveCount:             1,
+		KeyCount:              1,
+		ValCount:              1,
+		IntentCount:           1,
+		IntentAge:             1,
+		IntentLastUpdateNanos: 1,
 	}
 	tc.rng.stats.MergeMVCCStats(tc.engine, ms, 10)
 	tc.rng.stats.Update(ms)
 	expMS := &engine.MVCCStats{
-		LiveBytes:    1,
-		KeyBytes:     1,
-		ValBytes:     1,
-		IntentBytes:  1,
-		LiveCount:    1,
-		KeyCount:     1,
-		ValCount:     1,
-		IntentCount:  1,
-		IntentAge:    1,
-		ElapsedNanos: 10,
+		LiveBytes:             1,
+		KeyBytes:              1,
+		ValBytes:              1,
+		IntentBytes:           1,
+		LiveCount:             1,
+		KeyCount:              1,
+		ValCount:              1,
+		IntentCount:           1,
+		IntentAge:             1,
+		IntentLastUpdateNanos: 10,
 	}
 	ms, err := engine.MVCCGetRangeStats(tc.engine, 1)
 	if err != nil {
@@ -96,16 +96,16 @@ func TestRangeStatsMerge(t *testing.T) {
 	tc.rng.stats.MergeMVCCStats(tc.engine, ms, 20)
 	tc.rng.stats.Update(ms)
 	expMS = &engine.MVCCStats{
-		LiveBytes:    2,
-		KeyBytes:     2,
-		ValBytes:     2,
-		IntentBytes:  2,
-		LiveCount:    2,
-		KeyCount:     2,
-		ValCount:     2,
-		IntentCount:  2,
-		IntentAge:    12,
-		ElapsedNanos: 20,
+		LiveBytes:             2,
+		KeyBytes:              2,
+		ValBytes:              2,
+		IntentBytes:           2,
+		LiveCount:             2,
+		KeyCount:              2,
+		ValCount:              2,
+		IntentCount:           2,
+		IntentAge:             12,
+		IntentLastUpdateNanos: 20,
 	}
 	ms, err = engine.MVCCGetRangeStats(tc.engine, 1)
 	if err != nil {
@@ -115,8 +115,8 @@ func TestRangeStatsMerge(t *testing.T) {
 		t.Errorf("expected %+v; got %+v", expMS, ms)
 	}
 
-	if tc.rng.stats.elapsedNanos != 20 || tc.rng.stats.intentCount != 2 {
-		t.Errorf("expected elapsedNanos==20, intentCount==2; got %+v", tc.rng.stats)
+	if tc.rng.stats.lastUpdateNanos != 20 || tc.rng.stats.intentCount != 2 {
+		t.Errorf("expected lastUpdateNanos==20, intentCount==2; got %+v", tc.rng.stats)
 	}
 }
 
@@ -125,16 +125,16 @@ func TestRangeStatsClear(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 	expMS := &engine.MVCCStats{
-		LiveBytes:    1,
-		KeyBytes:     1,
-		ValBytes:     1,
-		IntentBytes:  1,
-		LiveCount:    1,
-		KeyCount:     1,
-		ValCount:     1,
-		IntentCount:  1,
-		IntentAge:    1,
-		ElapsedNanos: 1,
+		LiveBytes:             1,
+		KeyBytes:              1,
+		ValBytes:              1,
+		IntentBytes:           1,
+		LiveCount:             1,
+		KeyCount:              1,
+		ValCount:              1,
+		IntentCount:           1,
+		IntentAge:             1,
+		IntentLastUpdateNanos: 1,
 	}
 	tc.rng.stats.SetMVCCStats(tc.engine, expMS)
 	ms, err := engine.MVCCGetRangeStats(tc.engine, 1)

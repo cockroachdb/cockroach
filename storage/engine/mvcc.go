@@ -47,7 +47,7 @@ const (
 type MVCCStats struct {
 	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
 	LiveCount, KeyCount, ValCount, IntentCount int64
-	IntentAge, ElapsedNanos                    int64
+	IntentAge, IntentLastUpdateNanos           int64
 }
 
 // MergeStats merges accumulated stats to stat counters for specified range.
@@ -61,7 +61,7 @@ func (ms *MVCCStats) MergeStats(engine Engine, raftID int64) {
 	MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount)
 	MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
 	MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCMergeRangeStat(engine, raftID, StatElapsedNanos, ms.ElapsedNanos)
+	MVCCMergeRangeStat(engine, raftID, StatIntentLastUpdateNanos, ms.IntentLastUpdateNanos)
 }
 
 // SetStats sets stat counters for specified range.
@@ -75,7 +75,7 @@ func (ms *MVCCStats) SetStats(engine Engine, raftID int64) {
 	MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount)
 	MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
 	MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCSetRangeStat(engine, raftID, StatElapsedNanos, ms.ElapsedNanos)
+	MVCCSetRangeStat(engine, raftID, StatIntentLastUpdateNanos, ms.IntentLastUpdateNanos)
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
@@ -316,7 +316,7 @@ func MVCCGetRangeStats(engine Engine, raftID int64) (*MVCCStats, error) {
 	if ms.IntentAge, err = MVCCGetRangeStat(engine, raftID, StatIntentAge); err != nil {
 		return nil, err
 	}
-	if ms.ElapsedNanos, err = MVCCGetRangeStat(engine, raftID, StatElapsedNanos); err != nil {
+	if ms.IntentLastUpdateNanos, err = MVCCGetRangeStat(engine, raftID, StatIntentLastUpdateNanos); err != nil {
 		return nil, err
 	}
 	return ms, nil
@@ -1164,17 +1164,17 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 // used after a range is split to recompute stats for each
 // subrange. The start key is always adjusted to avoid counting local
 // keys in the event stats are being recomputed for the first range
-// (i.e. the one with start key == KeyMin). The elapsedNanos arg
-// specifies the wall time in nanoseconds since the epoch and is used
-// to compute the total age of all intents.
-func MVCCComputeStats(engine Engine, key, endKey proto.Key, elapsedNanos int64) (MVCCStats, error) {
+// (i.e. the one with start key == KeyMin). The nowNanos arg specifies
+// the wall time in nanoseconds since the epoch and is used to compute
+// the total age of all intents.
+func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVCCStats, error) {
 	if key.Less(KeyLocalMax) {
 		key = KeyLocalMax
 	}
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
 
-	ms := MVCCStats{ElapsedNanos: elapsedNanos}
+	ms := MVCCStats{IntentLastUpdateNanos: nowNanos}
 	first := false
 	meta := &proto.MVCCMetadata{}
 	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
@@ -1203,7 +1203,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, elapsedNanos int64) 
 				if meta.Txn != nil {
 					ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
 					ms.IntentCount++
-					ms.IntentAge += (elapsedNanos - meta.Timestamp.WallTime)
+					ms.IntentAge += (nowNanos - meta.Timestamp.WallTime)
 				}
 				if meta.KeyBytes != int64(len(kv.Key)) {
 					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)

@@ -29,19 +29,19 @@ import (
 type rangeStats struct {
 	raftID int64
 	// The following values are cached from the underlying stats.
-	elapsedNanos int64 // nanos since the epoch
-	intentCount  int64
+	lastUpdateNanos int64 // nanos since the epoch
+	intentCount     int64
 }
 
 // newRangeStats creates a new instance of rangeStats using the
-// provided engine and range. In particular, the values of elapsed
-// nanos and intent count are pulled from the engine and cached in
-// the struct for efficient processing (i.e. each new merge does
-// not require the values to be read from the engine).
+// provided engine and range. In particular, the values of last update
+// nanos and intent count are pulled from the engine and cached in the
+// struct for efficient processing (i.e. each new merge does not
+// require the values to be read from the engine).
 func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{raftID: raftID}
 	var err error
-	if rs.elapsedNanos, err = engine.MVCCGetRangeStat(e, raftID, engine.StatElapsedNanos); err != nil {
+	if rs.lastUpdateNanos, err = engine.MVCCGetRangeStat(e, raftID, engine.StatIntentLastUpdateNanos); err != nil {
 		return nil, err
 	}
 	if rs.intentCount, err = engine.MVCCGetRangeStat(e, raftID, engine.StatIntentCount); err != nil {
@@ -72,12 +72,12 @@ func (rs *rangeStats) GetSize(e engine.Engine) (int64, error) {
 // MergeMVCCStats merges the results of an MVCC operation or series of
 // MVCC operations into the range's stats. The intent age is augmented
 // by multiplying the previous intent count by the elapsed nanos since
-// the last merge.
+// the last update to range stats.
 func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) {
 	// Augment the current intent age.
-	ms.ElapsedNanos = nowNanos - rs.elapsedNanos
-	if ms.ElapsedNanos != 0 {
-		ms.IntentAge += rs.intentCount * ms.ElapsedNanos
+	ms.IntentLastUpdateNanos = nowNanos - rs.lastUpdateNanos
+	if ms.IntentLastUpdateNanos != 0 {
+		ms.IntentAge += rs.intentCount * ms.IntentLastUpdateNanos
 	}
 	ms.MergeStats(e, rs.raftID)
 }
@@ -87,11 +87,11 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms *engine.MVCCStats) {
 	ms.SetStats(e, rs.raftID)
 }
 
-// Update updates the rangeStats' internal values for elapsedNanos and
+// Update updates the rangeStats' internal values for lastUpdateNanos and
 // intentCount. This method should be invoked only after a successful
 // commit of merged values to the underlying engine.
 func (rs *rangeStats) Update(ms *engine.MVCCStats) {
-	rs.elapsedNanos += ms.ElapsedNanos
+	rs.lastUpdateNanos += ms.IntentLastUpdateNanos
 	rs.intentCount += ms.IntentCount
 }
 
@@ -106,7 +106,7 @@ func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) (float64,
 		return 0, err
 	}
 	// Advance age by any elapsed time since last computed.
-	elapsedNanos := nowNanos - rs.elapsedNanos
+	elapsedNanos := nowNanos - rs.lastUpdateNanos
 	intentAge += rs.intentCount * elapsedNanos
 	return float64(intentAge) / float64(rs.intentCount), nil
 }
