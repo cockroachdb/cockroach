@@ -65,3 +65,6 @@
     utilized set may have rebalances in effect.
 
 * Cleanup proto files to adhere to proto capitalization instead of go's.
+
+* Implement split / merge range queue and remove check for split on
+  every read/write range command.

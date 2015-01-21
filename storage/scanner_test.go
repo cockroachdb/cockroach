@@ -182,11 +182,11 @@ func TestScannerAddToQueues(t *testing.T) {
 // an issue on virtual machines used for continuous integration.
 func TestScannerTiming(t *testing.T) {
 	const count = 3
-	const runTime = 10 * time.Millisecond
-	const maxError = 1500 * time.Microsecond
+	const runTime = 50 * time.Millisecond
+	const maxError = 7500 * time.Microsecond
 	durations := []time.Duration{
-		1 * time.Millisecond,
-		2500 * time.Microsecond,
+		5 * time.Millisecond,
+		12500 * time.Microsecond,
 	}
 	for i, duration := range durations {
 		iter := newTestIterator(count)

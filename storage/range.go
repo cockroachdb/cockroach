@@ -158,6 +158,7 @@ type RangeManager interface {
 type Range struct {
 	Desc      *proto.RangeDescriptor
 	rm        RangeManager // Makes some store methods available
+	stats     *rangeStats  // Range statistics
 	splitting int32        // 1 if a split is underway; updated atomically
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
@@ -188,6 +189,9 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 
 	err := r.loadLastIndex()
 	if err != nil {
+		return nil, err
+	}
+	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
 	}
 
@@ -640,7 +644,7 @@ func (r *Range) ShouldSplit() bool {
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
-	rangeSize, err := engine.GetRangeSize(r.rm.Engine(), r.Desc.RaftID)
+	rangeSize, err := r.stats.GetSize(r.rm.Engine())
 	if err != nil {
 		log.Errorf("unable to compute size from stats for range %d: %s", r.Desc.RaftID, err)
 		return false
@@ -735,10 +739,12 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// On success, flush the MVCC stats to the batch and commit.
 	if err := reply.Header().GoError(); err == nil {
 		if proto.IsReadWrite(method) {
-			ms.MergeStats(batch, r.Desc.RaftID, r.rm.StoreID())
+			r.stats.MergeMVCCStats(batch, ms, header.Timestamp.WallTime)
 			if err := batch.Commit(); err != nil {
 				reply.Header().SetGoError(err)
 			} else {
+				// After successful commit, update cached stats values.
+				r.stats.Update(ms)
 				// If the commit succeeded, potentially initiate a split of this range.
 				r.maybeSplit()
 			}
@@ -1223,9 +1229,9 @@ func (r *Range) InternalResolveIntent(batch engine.Engine, ms *engine.MVCCStats,
 		return
 	}
 	if len(args.EndKey) == 0 || bytes.Equal(args.Key, args.EndKey) {
-		reply.SetGoError(engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Txn))
+		reply.SetGoError(engine.MVCCResolveWriteIntent(batch, ms, args.Key, args.Timestamp, args.Txn))
 	} else {
-		_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Txn)
+		_, err := engine.MVCCResolveWriteIntentRange(batch, ms, args.Key, args.EndKey, 0, args.Timestamp, args.Txn)
 		reply.SetGoError(err)
 	}
 }
@@ -1260,18 +1266,13 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 		return util.Errorf("unable to copy scan metadata: %s", err)
 	}
 
-	// Compute stats for new range.
-	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey)
-	if err != nil {
-		return util.Errorf("unable to compute stats for new range after split: %s", err)
-	}
-	ms.SetStats(batch, split.NewDesc.RaftID, 0)
 	// Compute stats for updated range.
-	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey)
+	now := r.rm.Clock().Timestamp()
+	ms, err := engine.MVCCComputeStats(r.rm.Engine(), split.UpdatedDesc.StartKey, split.UpdatedDesc.EndKey, now.WallTime)
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	ms.SetStats(batch, r.Desc.RaftID, 0)
+	r.stats.SetMVCCStats(batch, &ms)
 
 	// Initialize the new range's response cache by copying the original's.
 	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
@@ -1285,6 +1286,13 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return err
 	}
+	// Compute stats for new range.
+	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for new range after split: %s", err)
+	}
+	newRng.stats.SetMVCCStats(batch, &ms)
+
 	// Write-lock the mutex to protect Desc, as SplitRange will modify
 	// Desc.EndKey.
 	r.Lock()

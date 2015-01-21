@@ -83,11 +83,11 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 	elapsedNanos := now.UnixNano() - scanMeta.LastScanNanos
 
 	// Compute non-live bytes.
-	bytes, err := engine.GetRangeSize(rng.rm.Engine(), rng.Desc.RaftID)
+	bytes, err := rng.stats.GetSize(rng.rm.Engine())
 	if err != nil {
 		log.Errorf("unable to fetch range size stats: %s", err)
 	}
-	liveBytes, err := engine.GetRangeStat(rng.rm.Engine(), rng.Desc.RaftID, engine.StatLiveBytes)
+	liveBytes, err := rng.stats.Get(rng.rm.Engine(), engine.StatLiveBytes)
 	if err != nil {
 		log.Errorf("unable to fetch live bytes stat: %s", err)
 	}
@@ -99,7 +99,7 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 
 	// Intent sweep score. First check for intents. We only compute an
 	// intent score if there are any outstanding intents.
-	intentBytes, err := engine.GetRangeStat(rng.rm.Engine(), rng.Desc.RaftID, engine.StatIntentBytes)
+	intentBytes, err := rng.stats.Get(rng.rm.Engine(), engine.StatIntentBytes)
 	if err != nil {
 		log.Errorf("unable to fetch intent bytes stat: %s", err)
 	}

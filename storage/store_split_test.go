@@ -168,11 +168,11 @@ func TestStoreRangeSplit(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	keyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
+	keyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	valBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
+	valBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,19 +227,19 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non ero and
 	// exceed the original range when summed.
-	lKeyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
+	lKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lValBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
+	lValBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rKeyBytes, err := engine.GetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatKeyBytes)
+	rKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rValBytes, err := engine.GetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatValBytes)
+	rValBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,11 +330,11 @@ func TestStoreRangeSplitStats(t *testing.T) {
 func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64, t *testing.T) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		keyBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
+		keyBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatKeyBytes)
 		if err != nil {
 			t.Fatal(err)
 		}
-		valBytes, err := engine.GetRangeStat(store.Engine(), raftID, engine.StatValBytes)
+		valBytes, err := engine.MVCCGetRangeStat(store.Engine(), raftID, engine.StatValBytes)
 		if err != nil {
 			t.Fatal(err)
 		}

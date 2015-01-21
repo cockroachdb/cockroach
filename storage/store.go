@@ -562,7 +562,7 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 
-	ms.MergeStats(batch, 1, 1)
+	ms.MergeStats(batch, 1)
 	if err := batch.Commit(); err != nil {
 		return err
 	}

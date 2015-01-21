@@ -1393,7 +1393,7 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
 	// Also verify the GetRangeSize method.
-	rangeSize, err := engine.GetRangeSize(eng, raftID)
+	rangeSize, err := engine.MVCCGetRangeSize(eng, raftID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1402,12 +1402,12 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 	}
 }
 
-// TestRangeStats verifies that commands executed against a range
-// update the range stat counters. The stat values are empirically
-// derived; we're really just testing that they increment in the right
-// ways, not the exact amounts. If the encodings change, will need to
-// update this test.
-func TestRangeStats(t *testing.T) {
+// TestRangeStatsComputation verifies that commands executed against a
+// range update the range stat counters. The stat values are
+// empirically derived; we're really just testing that they increment
+// in the right ways, not the exact amounts. If the encodings change,
+// will need to update this test.
+func TestRangeStatsComputation(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

@@ -107,12 +107,12 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		}
 		// Write non live bytes as key bytes; since "live" bytes will be zero, this will translate into non live bytes.
 		nonLiveBytes := test.scanMeta.GC.ByteCounts[0] + test.nonLiveBytes
-		if err := engine.SetStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID, 0,
+		if err := engine.MVCCSetRangeStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID,
 			engine.StatKeyBytes, nonLiveBytes); err != nil {
 			log.Fatal(err)
 		}
 		// Write intent bytes. Note: the actual accounting on bytes is fictional in this test.
-		if err := engine.SetStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID, 0,
+		if err := engine.MVCCSetRangeStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID,
 			engine.StatIntentBytes, test.intentBytes); err != nil {
 			log.Fatal(err)
 		}
