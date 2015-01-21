@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
@@ -71,12 +72,13 @@ var (
 // testContext{}. Any fields which are initialized to non-nil values
 // will be used as-is.
 type testContext struct {
-	store       *Store
-	rng         *Range
-	gossip      *gossip.Gossip
-	engine      engine.Engine
-	manualClock *hlc.ManualClock
-	clock       *hlc.Clock
+	store         *Store
+	rng           *Range
+	gossip        *gossip.Gossip
+	engine        engine.Engine
+	manualClock   *hlc.ManualClock
+	clock         *hlc.Clock
+	skipBootstrap bool
 }
 
 // testContext.Start initializes the test context with a single range covering the
@@ -98,9 +100,12 @@ func (tc *testContext) Start(t *testing.T) {
 
 	if tc.store == nil {
 		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip)
-		if err := tc.store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
-			t.Fatal(err)
+		if !tc.skipBootstrap {
+			if err := tc.store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+				t.Fatal(err)
+			}
 		}
+		tc.store.db = client.NewKV(&testSender{store: tc.store}, nil)
 		if err := tc.store.Start(); err != nil {
 			t.Fatal(err)
 		}

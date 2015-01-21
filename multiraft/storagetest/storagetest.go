@@ -47,7 +47,7 @@ func RunTests(t *testing.T, setUp func(*testing.T) WriteableStorage,
 // testEmptyLog calls all the read methods on an empty log and verifies the expected
 // state. Note that an empty log need not start from index zero.
 func testEmptyLog(t *testing.T, s WriteableStorage) {
-	hs, _, err := s.InitialState()
+	state, err := s.InitialState()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +79,8 @@ func testEmptyLog(t *testing.T, s WriteableStorage) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if term != hs.Term {
-		t.Errorf("expected Term(firstIndex) to be hs.Term (%d), got %d", hs.Term, term)
+	if term != state.HardState.Term {
+		t.Errorf("expected Term(firstIndex) to be hs.Term (%d), got %d", state.HardState.Term, term)
 	}
 
 }

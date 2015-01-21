@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -75,6 +76,7 @@ func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 		TickInterval:           time.Millisecond,
 		ElectionTimeoutTicks:   5,
 		HeartbeatIntervalTicks: 1,
+		EntryFormatter:         entryFormatter,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -163,4 +165,20 @@ func (snr *singleNodeRaft) run() {
 			return
 		}
 	}
+}
+
+func entryFormatter(data []byte) string {
+	if len(data) == 0 {
+		return "[empty]"
+	}
+	var cmd proto.InternalRaftCommand
+	if err := gogoproto.Unmarshal(data, &cmd); err != nil {
+		return fmt.Sprintf("[error parsing entry: %s]", err)
+	}
+	s := cmd.String()
+	maxLen := 300
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	return s
 }
