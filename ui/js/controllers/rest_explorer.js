@@ -35,9 +35,9 @@ crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     } else if (!!scope.kvKey) {
       endpoint += scope.kvKey;
     }
-    var data = {};
+    var data = '';
     if (!!scope.kvValue) {
-      data['value'] = scope.kvValue;
+      data = scope.kvValue;
     }
     var req = {
       method: method,
