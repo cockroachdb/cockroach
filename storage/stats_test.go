@@ -45,7 +45,7 @@ func TestRangeStatsInit(t *testing.T) {
 	}
 	ms.SetStats(tc.engine, 1)
 
-	s, err := newRangeStats(tc.engine, tc.rng)
+	s, err := newRangeStats(1, tc.engine)
 	if err != nil {
 		t.Fatal(err)
 	}

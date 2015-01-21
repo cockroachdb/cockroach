@@ -27,7 +27,7 @@ import (
 // stat increments accumulated via MVCCStats structs. Stats are
 // efficiently aggregated using the engine.Merge operator.
 type rangeStats struct {
-	rng *Range
+	raftID int64
 	// The following values are cached from the underlying stats.
 	elapsedNanos int64 // nanos since the epoch
 	intentCount  int64
@@ -38,13 +38,13 @@ type rangeStats struct {
 // nanos and intent count are pulled from the engine and cached in
 // the struct for efficient processing (i.e. each new merge does
 // not require the values to be read from the engine).
-func newRangeStats(e engine.Engine, rng *Range) (*rangeStats, error) {
-	rs := &rangeStats{rng: rng}
+func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
+	rs := &rangeStats{raftID: raftID}
 	var err error
-	if rs.elapsedNanos, err = engine.MVCCGetRangeStat(e, rng.Desc.RaftID, engine.StatElapsedNanos); err != nil {
+	if rs.elapsedNanos, err = engine.MVCCGetRangeStat(e, raftID, engine.StatElapsedNanos); err != nil {
 		return nil, err
 	}
-	if rs.intentCount, err = engine.MVCCGetRangeStat(e, rng.Desc.RaftID, engine.StatIntentCount); err != nil {
+	if rs.intentCount, err = engine.MVCCGetRangeStat(e, raftID, engine.StatIntentCount); err != nil {
 		return nil, err
 	}
 	return rs, nil
@@ -52,13 +52,13 @@ func newRangeStats(e engine.Engine, rng *Range) (*rangeStats, error) {
 
 // Get returns the value of the named stat.
 func (rs *rangeStats) Get(e engine.Engine, stat proto.Key) (int64, error) {
-	return engine.MVCCGetRangeStat(e, rs.rng.Desc.RaftID, stat)
+	return engine.MVCCGetRangeStat(e, rs.raftID, stat)
 }
 
 // Clear clears stats for the specified range.
 func (rs *rangeStats) Clear(e engine.Engine) error {
-	statStartKey := engine.RangeStatKey(rs.rng.Desc.RaftID, proto.Key{})
-	statEndKey := engine.RangeStatKey(rs.rng.Desc.RaftID+1, proto.Key{})
+	statStartKey := engine.RangeStatKey(rs.raftID, proto.Key{})
+	statEndKey := engine.RangeStatKey(rs.raftID+1, proto.Key{})
 	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(statStartKey), engine.MVCCEncodeKey(statEndKey))
 	return err
 }
@@ -66,7 +66,7 @@ func (rs *rangeStats) Clear(e engine.Engine) error {
 // GetSize returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values.
 func (rs *rangeStats) GetSize(e engine.Engine) (int64, error) {
-	return engine.MVCCGetRangeSize(e, rs.rng.Desc.RaftID)
+	return engine.MVCCGetRangeSize(e, rs.raftID)
 }
 
 // MergeMVCCStats merges the results of an MVCC operation or series of
@@ -79,12 +79,12 @@ func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowN
 	if ms.ElapsedNanos != 0 {
 		ms.IntentAge += rs.intentCount * ms.ElapsedNanos
 	}
-	ms.MergeStats(e, rs.rng.Desc.RaftID)
+	ms.MergeStats(e, rs.raftID)
 }
 
 // SetStats sets stat counters.
 func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms *engine.MVCCStats) {
-	ms.SetStats(e, rs.rng.Desc.RaftID)
+	ms.SetStats(e, rs.raftID)
 }
 
 // Update updates the rangeStats' internal values for elapsedNanos and
@@ -93,4 +93,20 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms *engine.MVCCStats) {
 func (rs *rangeStats) Update(ms *engine.MVCCStats) {
 	rs.elapsedNanos += ms.ElapsedNanos
 	rs.intentCount += ms.IntentCount
+}
+
+// GetAvgIntentAge returns the average age of outstanding intents,
+// based on current wall time specified via nowNanos.
+func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) (float64, error) {
+	if rs.intentCount == 0 {
+		return 0, nil
+	}
+	intentAge, err := rs.Get(e, engine.StatIntentAge)
+	if err == nil {
+		return 0, err
+	}
+	// Advance age by any elapsed time since last computed.
+	elapsedNanos := nowNanos - rs.elapsedNanos
+	intentAge += rs.intentCount * elapsedNanos
+	return float64(intentAge) / float64(rs.intentCount), nil
 }

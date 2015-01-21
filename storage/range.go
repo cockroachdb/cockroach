@@ -191,7 +191,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	if err != nil {
 		return nil, err
 	}
-	if r.stats, err = newRangeStats(rm.Engine(), r); err != nil {
+	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
 	}
 
