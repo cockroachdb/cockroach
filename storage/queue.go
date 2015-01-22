@@ -19,7 +19,6 @@ package storage
 
 import (
 	"container/heap"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -115,7 +114,7 @@ func (bq *baseQueue) Length() int {
 
 // Pop dequeues and processes the highest priority range in the queue.
 // Returns the range if not empty; otherwise, returns nil.
-func (bq *baseQueue) Pop() *Range {
+func (bq *baseQueue) Pop(now proto.Timestamp) *Range {
 	if bq.priorityQ.Len() == 0 {
 		return nil
 	}
@@ -123,7 +122,7 @@ func (bq *baseQueue) Pop() *Range {
 	delete(bq.ranges, item.value.Desc.RaftID)
 	log.Infof("processing range %d from %s queue with priority %f...",
 		item.value.Desc.RaftID, bq.name, item.priority)
-	if err := bq.process(time.Now(), item.value); err != nil {
+	if err := bq.process(now, item.value); err != nil {
 		log.Errorf("failure processing range %d from %s queue: %s",
 			item.value.Desc.RaftID, bq.name, err)
 	}
@@ -134,8 +133,8 @@ func (bq *baseQueue) Pop() *Range {
 // be queued. Ranges are added to the queue using the priority
 // returned by bq.shouldQ. If the queue is too full, an already-queued
 // range with the lowest priority may be dropped.
-func (bq *baseQueue) MaybeAdd(rng *Range) {
-	should, priority := bq.shouldQ(time.Now(), rng)
+func (bq *baseQueue) MaybeAdd(now proto.Timestamp, rng *Range) {
+	should, priority := bq.shouldQ(now, rng)
 	item, ok := bq.ranges[rng.Desc.RaftID]
 	if !should {
 		if ok {

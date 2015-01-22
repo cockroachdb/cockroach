@@ -1272,7 +1272,10 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
 	}
 
-	// Copy the scan metadata.
+	// Copy the scan metadata. This will result in an inaccurate scan
+	// metadata, but it's good enough for government work. The scan
+	// metadata will be refreshed on the next scan and recomputing each
+	// separately would almost always just be unnecessary latency here.
 	scanMeta, err := r.GetScanMetadata()
 	if err != nil {
 		return util.Errorf("unable to fetch scan metadata: %s", err)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -92,7 +93,7 @@ func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool,
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
-	intentScore := 0
+	intentScore := float64(0)
 	avgIntentAge, err := rng.stats.GetAvgIntentAge(rng.rm.Engine(), now.WallTime)
 	if err != nil {
 		log.Errorf("unable to compute intent score: %s", err)
@@ -130,9 +131,9 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	defer snap.Stop()
 
 	// Lookup the GC policy for the zone containing this key range.
-	info, err := s.gossip.GetInfo(gossip.KeyConfigZone)
+	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {
-		return util.Errorf("unable to fetch %s config from gossip: %s", key, err)
+		return util.Errorf("unable to fetch zone config from gossip: %s", err)
 	}
 	configMap, ok := info.(PrefixConfigMap)
 	if !ok {
@@ -148,11 +149,68 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	if !isCovered {
 		return util.Errorf("range is only partially covered by zone %s; must wait for range split", prefixConfig)
 	}
+
+	// Get zone, init GC and new scan metadata.
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
+	scanMeta := proto.NewScanMetadata(now.WallTime)
 	gc := engine.NewGarbageCollector(now, zone.GC)
 
+	// Compute intent expiration (intent age at which we attempt to resolve).
+	intentExp := now
+	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
+
+	/*
+		gcRequest := &proto.InternalGCRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:       rng.Desc.StartKey,
+				Timestamp: now,
+				RaftID:    rng.Desc.RaftID,
+			},
+		}*/
+	var keys []proto.EncodedKey
+	var vals [][]byte
 	for ; iter.Valid(); iter.Next() {
-		// TODO(spencer): implement processing.
+		_, _, isValue := MVCCDecodeKey(iter.Key())
+		if !isValue {
+			// Moving to the next key (& values). If there's more than a
+			// single value for the key, possibly send for GC.
+			if len(keys) > 1 {
+				meta := &proto.MVCCMetadata{}
+				if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
+					log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+				} else {
+					// In the event that there's an active intent, send for
+					// intent resolution if older than the threshold.
+					startIdx := 1
+					if meta.Txn != nil {
+						if meta.Txn.Timestamp.Less(intentExp) {
+							// TODO(spencer): push txn / resolve intent. Don't forget to
+							// update the oldest intent nanos if the resolve fails.
+						} else if scanMeta.OldestIntentNanos == nil || meta.Timestamp.WallTime < *scanMeta.OldestIntentNanos {
+							scanMeta.OldestIntentNanos = gogoproto.Int64(meta.Timestamp.WallTime)
+						}
+						// With an active intent, GC ignores MVCC metadata & intent value.
+						startIdx = 2
+					}
+					// See if any values may be GC'd.
+					if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
+						//gcRequest.Keys = append(gcRequest.Keys, proto.GCKey{Key: keys[0], Timestamp: gcTS})
+					}
+				}
+			}
+			keys := []proto.EncodedKey{iter.Key()}
+			values := [][]byte{iter.Value()}
+		} else {
+			keys = append(keys, iter.Key())
+			values = append(values, iter.Value())
+		}
+	}
+
+	// TODO(spencer): send GC request through range.
+
+	// Store new scan metadata.
+	if err := rng.PutScanMetadata(scanMeta); err != nil {
+		return err
 	}
 
 	return nil

@@ -28,15 +28,17 @@ import (
 // policy allows either the union or intersection of maximum # of
 // versions and maximum age.
 type GarbageCollector struct {
-	now    proto.Timestamp // time at start of GC
-	policy *proto.GCPolicy
+	expiration proto.Timestamp
+	policy     *proto.GCPolicy
 }
 
-// NewGarbageCollector allocates and returns a new GC.
+// NewGarbageCollector allocates and returns a new GC, with expiration
+// computed based on current time and policy.TTLSeconds.
 func NewGarbageCollector(now proto.Timestamp, policy *proto.GCPolicy) *GarbageCollector {
+	ttlNanos := int64(policy.TTLSeconds) * 1E9
 	return &GarbageCollector{
-		now:    now,
-		policy: policy,
+		expiration: proto.Timestamp{WallTime: now.WallTime - ttlNanos},
+		policy:     policy,
 	}
 }
 
@@ -49,38 +51,30 @@ func (gc *GarbageCollector) MVCCPrefix(key proto.EncodedKey) int {
 
 // Filter makes decisions about garbage collection based on the
 // garbage collection policy for batches of values for the same key.
-// Returns a timestamp representing the most recent value to be
-// deleted, if any. If no values should be GC'd, returns
+// Returns the timestamp including, and after which, all values should
+// be garbage collected. If no values should be GC'd, returns
 // proto.ZeroTimestamp.
 func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) proto.Timestamp {
+	delTS = proto.ZeroTimestamp
 	if gc.policy.TTLSeconds <= 0 {
-		return proto.ZeroTimestamp
+		return delTS
 	}
-	if len(keys) == 1 {
-		return proto.ZeroTimestamp
+	if len(keys) == 0 {
+		return delTS
 	}
-	// Decode the first key and make sure it's an MVCC metadata key.
-	_, ts, isValue := MVCCDecodeKey(keys[0])
-	if isValue {
-		log.Errorf("unexpected MVCC value encountered: %q", keys[0])
-		return proto.ZeroTimestamp
-	}
-	expiration := gc.now
-	expiration.WallTime -= int64(gc.policy.TTLSeconds) * 1E9
 
-	delTS := proto.ZeroTimestamp
-	var survivors bool
 	// Loop over remaining values. All should be MVCC versions.
-	for i, key := range keys[1:] {
+	var survivors bool
+	for i, key := range keys {
 		_, ts, isValue = MVCCDecodeKey(key)
 		if !isValue {
 			log.Errorf("unexpected MVCC metadata encountered: %q", key)
-			return proto.ZeroTimestamp
+			return delTS
 		}
 		mvccVal := proto.MVCCValue{}
-		if err := gogoproto.Unmarshal(values[i+1], &mvccVal); err != nil {
+		if err := gogoproto.Unmarshal(values[i], &mvccVal); err != nil {
 			log.Errorf("unable to unmarshal MVCC value %q: %v", key, err)
-			return proto.ZeroTimestamp
+			return delTS
 		}
 		if i == 0 {
 			// If the first value isn't a deletion tombstone, don't consider GC.
@@ -90,7 +84,7 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 			}
 		}
 		// If we encounter a version older than our GC timestamp, mark for deletion.
-		if ts.Less(expiration) {
+		if ts.Less(gc.expiration) {
 			delTS = ts
 			break
 		} else if !mvccVal.Deleted {

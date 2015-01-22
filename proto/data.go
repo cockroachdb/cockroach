@@ -482,53 +482,7 @@ func NewScanMetadata(nowNanos int64) *ScanMetadata {
 	return &ScanMetadata{
 		LastScanNanos:     nowNanos,
 		OldestIntentNanos: gogoproto.Int64(nowNanos),
-		GC: GCMetadata{
-			ByteCounts: make([]int64, 10),
-		},
 	}
-}
-
-// EstimatedBytes computes the estimated count of bytes which a GC run
-// is likely to free based on the current time, current non-live
-// bytes, and the details of the GCMetadata.
-//
-// The difference between the non-live bytes as recorded in GCMetadata
-// as of the last GC and the current non-live bytes are the newly
-// non-live bytes. These are prorated according to (elapsed fraction
-// of TTL - 1) to determine which portion, if any, of the newly
-// non-live bytes are likely to be GC'able.
-//
-// If the TTL changed between the last run and the current time, the
-// estimate will of course be inaccurate, but that's OK for the
-// purposes of deciding the priority of a range for GC.
-func (gc *GCMetadata) EstimatedBytes(elapsedNanos, currentNonLiveBytes int64) int64 {
-	if len(gc.ByteCounts) != 10 {
-		panic(fmt.Sprintf("byte counts should have 10 entries: %v", gc.ByteCounts))
-	}
-	lastNonLiveBytes := gc.ByteCounts[0]
-	ttlNanos := int64(gc.TTLSeconds) * 1000000000
-	if elapsedNanos < ttlNanos/10 || ttlNanos == 0 {
-		return 0
-	}
-	// Fraction of TTL we've advanced since last GC.
-	ttlFraction := float64(elapsedNanos) / float64(ttlNanos)
-	// Compute index into the byte counts array. Think of this as: which
-	// fraction of TTL (e.g. <10%, <20%, ...) that bytes would already
-	// need to have been aged in order to be GC'able now.
-	index := 10 - int(ttlFraction*10)
-	if index < 0 {
-		index = 0
-	}
-	estGCBytes := gc.ByteCounts[index]
-
-	// If the ttlFraction is >= 1, prorate the fraction of current
-	// non-live bytes we might expect to GC.
-	if ttlFraction >= 1 {
-		newNonLiveBytes := currentNonLiveBytes - lastNonLiveBytes
-		return int64(((ttlFraction-1)/ttlFraction)*float64(newNonLiveBytes)) + estGCBytes
-	}
-	// Otherwise, just return the estGCBytes.
-	return estGCBytes
 }
 
 // Add adds the given NodeID to the interface (unless already present)

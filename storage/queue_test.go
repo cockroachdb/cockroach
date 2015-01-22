@@ -79,31 +79,31 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	process := func(now proto.Timestamp, r *Range) error { return nil }
 	bq := newBaseQueue("test", shouldQ, process, 2)
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop() != r2 {
+	if bq.Pop(proto.ZeroTimestamp) != r2 {
 		t.Error("expected r2")
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Error("expected r1")
 	}
-	if r := bq.Pop(); r != nil {
+	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same range twice.
-	bq.MaybeAdd(r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -111,30 +111,30 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Error("expected r1")
 	}
-	if bq.Pop() != r2 {
+	if bq.Pop(proto.ZeroTimestamp) != r2 {
 		t.Error("expected r2")
 	}
-	if r := bq.Pop(); r != nil {
+	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Errorf("expected r1")
 	}
 }
