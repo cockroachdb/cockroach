@@ -210,7 +210,7 @@ func testArithClientAsync(t *testing.T, client *rpc.Client) {
 		got := calls[i].Reply.(*msg.ArithResponse).GetC()
 		expected := callInfoList[i].reply.GetC()
 		if got != expected {
-			t.Fatalf(`%d: expected %v, Got = %v`,
+			t.Fatalf(`%s: expected %v, Got = %v`,
 				callInfoList[i].method, got, expected,
 			)
 		}

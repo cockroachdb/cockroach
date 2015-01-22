@@ -600,7 +600,8 @@ func TestSnapshotMethods(t *testing.T) {
 		index := 0
 		if err := snap.Iterate(proto.EncodedKey(KeyMin), proto.EncodedKey(KeyMax), func(kv proto.RawKeyValue) (bool, error) {
 			if !bytes.Equal(kv.Key, keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
-				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s", keys[index], vals[index], kv.Key, kv.Value)
+				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
+					index, keys[index], vals[index], kv.Key, kv.Value)
 			}
 			index++
 			return false, nil

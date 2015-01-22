@@ -96,7 +96,6 @@ func (kv *KV) Sender() KVSender {
 	default:
 		return t
 	}
-	return nil
 }
 
 // Call invokes the KV command synchronously and returns the response

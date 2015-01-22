@@ -59,7 +59,7 @@ func TestMinGroupShouldInclude(t *testing.T) {
 		t.Error("could not insert")
 	}
 	if _, err := group.addInfo(info3); err != nil {
-		t.Error("could not insert: %s", err)
+		t.Errorf("could not insert: %s", err)
 	}
 	// A larger insert shouldn't include.
 	info4 := newTestInfo("a.d", int64(3))
