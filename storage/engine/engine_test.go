@@ -632,8 +632,10 @@ func TestSnapshotMethods(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(capacity, capacitySnapshot) {
-			t.Errorf("expected capacities to be equal: %v != %v", capacity, capacitySnapshot)
+		// The Available fields of capacity may differ due to processes beyond our control.
+		if capacity.Capacity != capacitySnapshot.Capacity {
+			t.Errorf("expected capacities to be equal: %v != %v",
+				capacity.Capacity, capacitySnapshot.Capacity)
 		}
 
 		// Verify ApproximateSize.
