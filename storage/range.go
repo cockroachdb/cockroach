@@ -179,8 +179,11 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 // NewRange initializes the range using the given metadata.
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
-		Desc:        desc,
-		rm:          rm,
+		Desc: desc,
+		rm:   rm,
+		// firstIndex and lastIndex are both inclusive, so when the log is empty
+		// firstIndex == lastIndex + 1. raftInitialLogIndex is the dummy term-only
+		// entry; raftInitialLogIndex+1 is the first regular entry.
 		firstIndex:  raftInitialLogIndex + 1,
 		lastIndex:   raftInitialLogIndex,
 		closer:      make(chan struct{}),
@@ -1253,17 +1256,14 @@ func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *p
 
 // InternalTruncateLog discards a prefix of the raft log.
 func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) {
-	kvs, err := engine.MVCCScan(batch,
-		engine.RaftLogKey(r.Desc.RaftID, args.Index).Next(),
-		engine.RaftLogKey(r.Desc.RaftID, 0),
-		0, proto.ZeroTimestamp, nil)
-	if err != nil {
-		reply.SetGoError(err)
-		return
-	}
-	for _, kv := range kvs {
-		engine.MVCCDelete(batch, ms, kv.Key, proto.ZeroTimestamp, nil)
-	}
+	start := engine.RaftLogKey(r.Desc.RaftID, args.Index).Next()
+	end := engine.RaftLogKey(r.Desc.RaftID, 0)
+	err := batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
+		func(kv proto.RawKeyValue) (bool, error) {
+			err := batch.Clear(kv.Key)
+			return false, err
+		})
+	reply.SetGoError(err)
 	atomic.StoreUint64(&r.firstIndex, args.Index)
 }
 
