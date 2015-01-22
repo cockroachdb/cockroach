@@ -255,20 +255,12 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 
 // Stop calls Range.Stop() on all active ranges.
 func (s *Store) Stop() {
-	s.mu.Lock()
+	close(s.closer)
 	for _, rng := range s.ranges {
 		rng.stop()
 	}
-	s.ranges = map[int64]*Range{}
-	s.rangesByKey = nil
-	close(s.closer)
-	s.closer = make(chan struct{})
-	r := s.raft
-	s.raft = nil
-	s.mu.Unlock()
-	if r != nil {
-		// Must be called while unlocked.
-		r.stop()
+	if s.raft != nil {
+		s.raft.stop()
 	}
 }
 
@@ -279,9 +271,6 @@ func (s *Store) String() string {
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start() error {
-	// Stop store for idempotency.
-	s.Stop()
-
 	// Start engine (i.e. open and initialize RocksDB database).
 	if err := s.engine.Start(); err != nil {
 		return err
