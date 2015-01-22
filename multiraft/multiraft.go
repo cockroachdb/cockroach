@@ -52,9 +52,9 @@ type Config struct {
 	EntryFormatter raft.EntryFormatter
 }
 
-// Validate returns an error if any required elements of the Config are missing or invalid.
+// validate returns an error if any required elements of the Config are missing or invalid.
 // Called automatically by NewMultiRaft.
-func (c *Config) Validate() error {
+func (c *Config) validate() error {
 	if c.Transport == nil {
 		return util.Error("Transport is required")
 	}
@@ -92,7 +92,7 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 	if nodeID == 0 {
 		return nil, util.Error("Invalid NodeID")
 	}
-	err := config.Validate()
+	err := config.validate()
 	if err != nil {
 		return nil, err
 	}

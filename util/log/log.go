@@ -19,6 +19,11 @@ package log
 
 import "github.com/golang/glog"
 
+func init() {
+	// Raft logs verbosely with log.Printf.
+	glog.CopyStandardLogTo("INFO")
+}
+
 // FatalOnPanic recovers from a panic and exits the process with a
 // Fatal log. This is useful for avoiding a panic being caught through
 // a CGo exported function or preventing HTTP handlers from recovering
