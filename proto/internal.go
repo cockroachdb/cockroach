@@ -51,6 +51,8 @@ const (
 	// The logic used to merge values of different types is described in more
 	// detail by the "Merge" method of engine.Engine.
 	InternalMerge = "InternalMerge"
+	// InternalTruncateLog discards a prefix of the raft log.
+	InternalTruncateLog = "InternalTruncateLog"
 )
 
 // ToValue generates a Value message which contains an encoded copy of this

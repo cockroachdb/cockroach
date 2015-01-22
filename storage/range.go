@@ -160,6 +160,8 @@ type Range struct {
 	rm        RangeManager // Makes some store methods available
 	stats     *rangeStats  // Range statistics
 	splitting int32        // 1 if a split is underway; updated atomically
+	// First non-truncated entry in the raft log. Updated atomically.
+	firstIndex uint64
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -179,6 +181,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		Desc:        desc,
 		rm:          rm,
+		firstIndex:  raftInitialLogIndex + 1,
 		lastIndex:   raftInitialLogIndex,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
@@ -187,7 +190,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
 
-	err := r.loadLastIndex()
+	err := r.loadFirstAndLastIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -732,6 +735,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case proto.InternalMerge:
 		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
+	case proto.InternalTruncateLog:
+		r.InternalTruncateLog(batch, ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -1246,6 +1251,22 @@ func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *p
 	reply.SetGoError(err)
 }
 
+// InternalTruncateLog discards a prefix of the raft log.
+func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) {
+	kvs, err := engine.MVCCScan(batch,
+		engine.RaftLogKey(r.Desc.RaftID, args.Index).Next(),
+		engine.RaftLogKey(r.Desc.RaftID, 0),
+		0, proto.ZeroTimestamp, nil)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	for _, kv := range kvs {
+		engine.MVCCDelete(batch, ms, kv.Key, proto.ZeroTimestamp, nil)
+	}
+	atomic.StoreUint64(&r.firstIndex, args.Index)
+}
+
 // splitTrigger is called on a successful commit of an AdminSplit
 // transaction. It copies the response cache for the new range and
 // recomputes stats for both the existing, updated range and the new
@@ -1415,23 +1436,31 @@ func (r *Range) InitialState() (raft.InitialState, error) {
 	}, nil
 }
 
-// loadLastIndex looks in the engine to find the last log index.
-func (r *Range) loadLastIndex() error {
+// loadFirstAndLastIndex looks in the engine to find the first and last log index.
+// TODO(bdarnell): remove unnecessary calls to FirstIndex in etcd/raft and then load
+// the first index lazily (so we don't need to scan the whole range at startup)
+func (r *Range) loadFirstAndLastIndex() error {
 	logKey := engine.RaftLogPrefix(r.Desc.RaftID)
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
-		1, // only the first (i.e. newest) result)
-		proto.ZeroTimestamp, nil)
+		0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return err
 	}
 	if len(kvs) > 0 {
-		var ent raftpb.Entry
-		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &ent)
+		var lastEnt raftpb.Entry
+		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &lastEnt)
 		if err != nil {
 			return err
 		}
-		atomic.StoreUint64(&r.lastIndex, ent.Index)
+		atomic.StoreUint64(&r.lastIndex, lastEnt.Index)
+
+		var firstEnt raftpb.Entry
+		err = gogoproto.Unmarshal(kvs[len(kvs)-1].Value.Bytes, &firstEnt)
+		if err != nil {
+			return err
+		}
+		atomic.StoreUint64(&r.firstIndex, firstEnt.Index)
 	}
 	return nil
 }
@@ -1493,8 +1522,7 @@ func (r *Range) LastIndex() (uint64, error) {
 
 // FirstIndex implements the raft.Storage interface.
 func (r *Range) FirstIndex() (uint64, error) {
-	// Add one to initialLogIndex to get the first regular log entry.
-	return raftInitialLogIndex + 1, nil
+	return atomic.LoadUint64(&r.firstIndex), nil
 }
 
 // Snapshot implements the raft.Storage interface.
