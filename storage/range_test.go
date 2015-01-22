@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -524,6 +525,19 @@ func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID int3
 		Value: value,
 	}
 	reply := &proto.InternalMergeResponse{}
+	return args, reply
+}
+
+func internalTruncateLogArgs(index uint64, raftID int64, storeID int32) (
+	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
+	args := &proto.InternalTruncateLogRequest{
+		RequestHeader: proto.RequestHeader{
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
+		},
+		Index: index,
+	}
+	reply := &proto.InternalTruncateLogResponse{}
 	return args, reply
 }
 
@@ -1494,6 +1508,59 @@ func TestInternalMerge(t *testing.T) {
 	}
 	if a, e := resp.Value.Bytes, []byte(stringExpected); !bytes.Equal(a, e) {
 		t.Errorf("Get did not return expected value: %s != %s", string(a), e)
+	}
+}
+
+// TestInternalTruncateLog verifies that the InternalTruncateLog command
+// removes a prefix of the raft logs (modifying FirstIndex() and making them
+// inaccessible via Entries()).
+func TestInternalTruncateLog(t *testing.T) {
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Populate the log with 10 entries. Save the LastIndex after each write.
+	var indexes []uint64
+	for i := 0; i < 10; i++ {
+		args, resp := incrementArgs([]byte("a"), int64(i), 1, tc.store.StoreID())
+		if err := tc.rng.AddCmd(proto.Increment, args, resp, true); err != nil {
+			t.Fatal(err)
+		}
+		idx, err := tc.rng.LastIndex()
+		if err != nil {
+			t.Fatal(err)
+		}
+		indexes = append(indexes, idx)
+	}
+
+	// Discard the first half of the log
+	truncateArgs, truncateResp := internalTruncateLogArgs(indexes[5], 1, tc.store.StoreID())
+	if err := tc.rng.AddCmd(proto.InternalTruncateLog, truncateArgs, truncateResp, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// FirstIndex has changed.
+	firstIndex, err := tc.rng.FirstIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstIndex != indexes[5] {
+		t.Errorf("expected firstIndex == %d, got %d", indexes[5], firstIndex)
+	}
+
+	// We can still get what remains of the log.
+	entries, err := tc.rng.Entries(indexes[5], indexes[9])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != int(indexes[9]-indexes[5]) {
+		t.Errorf("expected %d entries, got %d", indexes[9]-indexes[5], len(entries))
+	}
+
+	// But any range that includes the truncated entries returns an error.
+	_, err = tc.rng.Entries(indexes[4], indexes[9])
+	if err != raft.ErrUnavailable {
+		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }
 

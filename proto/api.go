@@ -103,6 +103,7 @@ var AllMethods = stringSet{
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
+	InternalTruncateLog:   struct{}{},
 }
 
 // PublicMethods specifies the set of methods accessible via the
@@ -131,6 +132,7 @@ var InternalMethods = stringSet{
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
+	InternalTruncateLog:   struct{}{},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
@@ -160,6 +162,7 @@ var WriteMethods = stringSet{
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
+	InternalTruncateLog:   struct{}{},
 }
 
 // TxnMethods specifies the set of methods which leave key intents
@@ -346,6 +349,8 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalResolveIntent, nil
 	case *InternalMergeRequest:
 		return InternalMerge, nil
+	case *InternalTruncateLogRequest:
+		return InternalTruncateLog, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -399,6 +404,8 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalResolveIntentRequest{}, nil
 	case InternalMerge:
 		return &InternalMergeRequest{}, nil
+	case InternalTruncateLog:
+		return &InternalTruncateLogRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -442,6 +449,8 @@ func CreateReply(method string) (Response, error) {
 		return &InternalResolveIntentResponse{}, nil
 	case InternalMerge:
 		return &InternalMergeResponse{}, nil
+	case InternalTruncateLog:
+		return &InternalTruncateLogResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }

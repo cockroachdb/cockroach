@@ -480,3 +480,7 @@ func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, r
 func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
 	return n.executeCmd(proto.InternalMerge, args, reply)
 }
+
+func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
+	return n.executeCmd(proto.InternalTruncateLog, args, reply)
+}

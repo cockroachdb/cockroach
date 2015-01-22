@@ -130,6 +130,8 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.internal_resolve_intent().header();
   } else if (rwResp.has_internal_merge()) {
     return &rwResp.internal_merge().header();
+  } else if (rwResp.has_internal_truncate_log()) {
+    return &rwResp.internal_truncate_log().header();
   }
   return NULL;
 }

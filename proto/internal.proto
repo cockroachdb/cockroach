@@ -124,6 +124,23 @@ message InternalMergeResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// InternalTruncateLogRequest is used to remove a prefix of the raft log. While there
+// is no requirement for correctness that the raft log truncation be synchronized across
+// replicas, it is nice to preserve the property that all replicas of a range are as close
+// to identical as possible. The raft leader can also inform decisions about the cutoff point
+// with its knowledge of the replicas' acknowledgement status.
+message InternalTruncateLogRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Log entries < this index are to be discarded.
+  optional uint64 index = 2 [(gogoproto.nullable) = false];
+}
+
+// InternalTruncateLogResponse is the response to an InternalTruncateLog() operation.
+message InternalTruncateLogResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in roachlib/db.cc in GetResponseHeader().
@@ -142,6 +159,7 @@ message ReadWriteCmdResponse {
   optional InternalPushTxnResponse internal_push_txn = 11;
   optional InternalResolveIntentResponse internal_resolve_intent = 12;
   optional InternalMergeResponse internal_merge = 13;
+  optional InternalTruncateLogResponse internal_truncate_log = 14;
 }
 
 // An InternalRaftCommandUnion is the union of all commands which can be
@@ -170,6 +188,7 @@ message InternalRaftCommandUnion {
   optional InternalPushTxnRequest internal_push_txn = 33;
   optional InternalResolveIntentRequest internal_resolve_intent = 34;
   optional InternalMergeRequest internal_merge_response = 35;
+  optional InternalTruncateLogRequest internal_truncate_log = 36;
 }
 
 // An InternalRaftCommand is a command which can be serialized and
