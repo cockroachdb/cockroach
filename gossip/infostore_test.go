@@ -531,7 +531,7 @@ func TestCallbacks(t *testing.T) {
 			t.Errorf("expected %v, got %v", expKeys, cb2.Keys())
 		}
 		if expKeys := []string{"key1-true", "key2-true", "key3-true"}; !reflect.DeepEqual(cbAll.Keys(), expKeys) {
-			t.Errorf("expected expKeys, got %v", expKeys, cbAll.Keys())
+			t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
 		}
 	}
 

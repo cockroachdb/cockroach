@@ -228,7 +228,7 @@ func (r *Range) Destroy() error {
 	iter := newRangeDataIterator(r, r.rm.Engine())
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		deletes = append(deletes, engine.BatchDelete{proto.RawKeyValue{Key: iter.Key()}})
+		deletes = append(deletes, engine.BatchDelete{RawKeyValue: proto.RawKeyValue{Key: iter.Key()}})
 	}
 	return r.rm.Engine().WriteBatch(deletes)
 }

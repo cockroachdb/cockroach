@@ -71,7 +71,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 					t.Error("expected batch for > 1 buffered calls")
 				}
 				if call.Args.Header().CmdID.WallTime == 0 {
-					t.Errorf("expected batch client command ID to be initialized: %s", call.Args.Header().CmdID)
+					t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
 				}
 			}
 		}), nil)
@@ -264,7 +264,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 				t.Errorf("%d: expected one retry; got %d", i, count)
 			}
 			if err != nil {
-				t.Errorf("%d: expected success on retry; got %S", i, err)
+				t.Errorf("%d: expected success on retry; got %s", i, err)
 			}
 		} else {
 			if count != 1 {

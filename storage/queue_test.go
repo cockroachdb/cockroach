@@ -92,7 +92,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error("expected r1")
 	}
 	if r := bq.Pop(); r != nil {
-		t.Errorf("expected empty queue; got %s", r)
+		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
@@ -124,7 +124,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		t.Error("expected r2")
 	}
 	if r := bq.Pop(); r != nil {
-		t.Errorf("expected empty queue; got %s", r)
+		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.

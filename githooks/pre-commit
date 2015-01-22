@@ -16,17 +16,21 @@ if [ "${GO_SKIP_PRECOMMIT_CHECKS}" != "1" -a -n "${gofiles}" ]; then
   fi
 
   # Check for lint errors.
-  unlinted=$(golint ${gofiles} | awk -F: '{print $1}' | uniq)
-  if [ -n "${unlinted}" ]; then
-    echo -e >&2 "\nGo files with lint errors:"
-    for fn in ${unlinted}; do
-      echo >&2 "  golint $fn"
-    done
-    exit 1
-  fi
+  # TODO(bdarnell): golint does not accept files from multiple packages in the same
+  # invocation, so to re-enable this we need to split ${gofiles} by package and combine
+  # multiple runs of golint.
+  #
+  #unlinted=$(golint ${gofiles} 2>&1 | awk -F: '{print $1}' | uniq)
+  #if [ -n "${unlinted}" ]; then
+  #  echo -e >&2 "\nGo files with lint errors:"
+  #  for fn in ${unlinted}; do
+  #    echo >&2 "  golint $fn"
+  #  done
+  #  exit 1
+  #fi
 
   # Check for vet errors.
-  unvetted=$(go tool vet ${gofiles} | awk -F: '{print $1}' | uniq)
+  unvetted=$(go tool vet ${gofiles} 2>&1 | awk -F: '{print $1}' | uniq)
   if [ -n "${unvetted}" ]; then
     echo -e >&2 "\nGo files with vet errors:"
     for fn in ${unvetted}; do

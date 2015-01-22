@@ -266,7 +266,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 
 	for i, test := range testCases {
 		if r := store.LookupRange(test.start, test.end); r != test.expRng {
-			t.Errorf("%d: expected range %s; got %s", i, test.expRng, r)
+			t.Errorf("%d: expected range %v; got %v", i, test.expRng, r)
 		}
 	}
 }
@@ -297,7 +297,7 @@ func TestStoreRangeIterator(t *testing.T) {
 	for pass := 0; pass < 2; pass++ {
 		for i := 1; iter.estimatedCount() > 0; i++ {
 			if rng := iter.next(); rng == nil || rng.Desc.RaftID != int64(i) {
-				t.Errorf("expected range with Raft ID %d; got %s", i, rng)
+				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
 		}
 		iter.reset()
