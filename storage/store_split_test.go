@@ -49,11 +49,11 @@ func adminSplitArgs(key, splitKey []byte, raftID int64, storeID int32) (*proto.A
 }
 
 func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.MVCCGetRangeStats(eng, raftID)
-	if err != nil {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(expMS, *ms) {
+	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
 }
@@ -289,8 +289,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		}
 	}
 	// Get the range stats now that we have data.
-	ms, err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID)
-	if err != nil {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID, &ms); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,13 +300,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msLeft, err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID)
-	if err != nil {
+	var msLeft, msRight engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupRange(proto.Key("Z"), nil)
-	msRight, err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc.RaftID)
-	if err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc.RaftID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -321,7 +320,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		ValCount:    msLeft.ValCount + msRight.ValCount,
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
-	if !reflect.DeepEqual(expMS, *ms) {
+	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected left and right ranges to equal original: %+v + %+v != %+v", msLeft, msRight, ms)
 	}
 }

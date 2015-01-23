@@ -1445,31 +1445,34 @@ func encodedSize(msg gogoproto.Message, t *testing.T) int64 {
 func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 	// ...And verify stats.
 	if ms.LiveBytes != expMS.LiveBytes {
-		t.Errorf("%s: mvcc live bytes %d; measured %d", debug, expMS.LiveBytes, ms.LiveBytes)
+		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
 	}
 	if ms.KeyBytes != expMS.KeyBytes {
-		t.Errorf("%s: mvcc keyBytes %d; measured %d", debug, expMS.KeyBytes, ms.KeyBytes)
+		t.Errorf("%s: mvcc keyBytes %d; expected %d", debug, ms.KeyBytes, expMS.KeyBytes)
 	}
 	if ms.ValBytes != expMS.ValBytes {
-		t.Errorf("%s: mvcc valBytes %d; measured %d", debug, expMS.ValBytes, ms.ValBytes)
+		t.Errorf("%s: mvcc valBytes %d; expected %d", debug, ms.ValBytes, expMS.ValBytes)
 	}
 	if ms.IntentBytes != expMS.IntentBytes {
-		t.Errorf("%s: mvcc intentBytes %d; measured %d", debug, expMS.IntentBytes, ms.IntentBytes)
+		t.Errorf("%s: mvcc intentBytes %d; expected %d", debug, ms.IntentBytes, expMS.IntentBytes)
 	}
 	if ms.LiveCount != expMS.LiveCount {
-		t.Errorf("%s: mvcc liveCount %d; measured %d", debug, expMS.LiveCount, ms.LiveCount)
+		t.Errorf("%s: mvcc liveCount %d; expected %d", debug, ms.LiveCount, expMS.LiveCount)
 	}
 	if ms.KeyCount != expMS.KeyCount {
-		t.Errorf("%s: mvcc keyCount %d; measured %d", debug, expMS.KeyCount, ms.KeyCount)
+		t.Errorf("%s: mvcc keyCount %d; expected %d", debug, ms.KeyCount, expMS.KeyCount)
 	}
 	if ms.ValCount != expMS.ValCount {
-		t.Errorf("%s: mvcc valCount %d; measured %d", debug, expMS.ValCount, ms.ValCount)
+		t.Errorf("%s: mvcc valCount %d; expected %d", debug, ms.ValCount, expMS.ValCount)
 	}
 	if ms.IntentCount != expMS.IntentCount {
-		t.Errorf("%s: mvcc intentCount %d; measured %d", debug, expMS.IntentCount, ms.IntentCount)
+		t.Errorf("%s: mvcc intentCount %d; expected %d", debug, ms.IntentCount, expMS.IntentCount)
 	}
 	if ms.IntentAge != expMS.IntentAge {
-		t.Errorf("%s: mvcc intentAge %d; measured %d", debug, expMS.IntentAge, ms.IntentAge)
+		t.Errorf("%s: mvcc intentAge %d; expected %d", debug, ms.IntentAge, expMS.IntentAge)
+	}
+	if ms.GCBytesAge != expMS.GCBytesAge {
+		t.Errorf("%s: mvcc gcBytesAge %d; expected %d", debug, ms.GCBytesAge, expMS.GCBytesAge)
 	}
 }
 
@@ -1481,7 +1484,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	ms := &MVCCStats{}
 
 	// Put a value.
-	ts := makeTS(1, 0)
+	ts := makeTS(1*1E9, 0)
 	key := proto.Key("a")
 	value := proto.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
@@ -1503,8 +1506,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 	verifyStats("after put", ms, expMS, t)
 
 	// Delete the value using a transaction.
-	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1, 0)}
-	ts2 := makeTS(2, 0)
+	txn := &proto.Transaction{ID: []byte("txn1"), Timestamp: makeTS(1*1E9, 0)}
+	ts2 := makeTS(2*1E9, 0)
 	if err := MVCCDelete(engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
@@ -1519,6 +1522,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		IntentBytes: v2KeySize + v2ValSize,
 		IntentCount: 1,
 		IntentAge:   0,
+		GCBytesAge:  vValSize + vKeySize, // immediately recognizes GC'able bytes from old value
 	}
 	verifyStats("after delete", ms, expMS2, t)
 
@@ -1530,16 +1534,19 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// Stats should equal same as before the deletion after aborting the intent.
 	verifyStats("after abort", ms, expMS, t)
 
-	// Re-delete, but this time commit it.
+	// Re-delete, but this time, we're going to commit it.
 	txn.Status = proto.PENDING
-	ts3 := makeTS(3, 0)
+	ts3 := makeTS(3*1E9, 0)
 	if err := MVCCDelete(engine, ms, key, ts3, txn); err != nil {
 		t.Fatal(err)
 	}
+	// GCBytesAge will be x2 seconds now.
+	expMS2.GCBytesAge = (vValSize + vKeySize) * 2
 	verifyStats("after 2nd delete", ms, expMS2, t) // should be same as before.
 
 	// Put another intent, which should age deleted intent.
-	ts4 := makeTS(4, 0)
+	ts4 := makeTS(4*1E9, 0)
+	txn.Timestamp = ts4
 	key2 := proto.Key("b")
 	value2 := proto.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key2, ts4, value2, txn); err != nil {
@@ -1558,6 +1565,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		LiveCount:   1,
 		IntentBytes: v2KeySize + v2ValSize + vKey2Size + vVal2Size,
 		IntentCount: 2,
+		GCBytesAge:  (vValSize + vKeySize) * 2,
 	}
 	verifyStats("after 2nd put", ms, expMS3, t)
 
@@ -1572,15 +1580,28 @@ func TestMVCCStatsBasic(t *testing.T) {
 	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
 	m2Val2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4}, t)
 	expMS4 := &MVCCStats{
-		KeyBytes:  mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
-		KeyCount:  2,
-		ValBytes:  m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
-		ValCount:  3,
-		LiveBytes: mKey2Size + vKey2Size + m2Val2Size + vVal2Size,
-		LiveCount: 1,
-		IntentAge: -1,
+		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
+		KeyCount:   2,
+		ValBytes:   m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
+		ValCount:   3,
+		LiveBytes:  mKey2Size + vKey2Size + m2Val2Size + vVal2Size,
+		LiveCount:  1,
+		IntentAge:  -1,
+		GCBytesAge: (vValSize+vKeySize)*2 + (m3ValSize - m2ValSize), // subtract off difference in metas
 	}
 	verifyStats("after commit", ms, expMS4, t)
+
+	// Write over existing value to create GC'able bytes.
+	ts5 := makeTS(10*1E9, 0) // skip ahead 6s
+	if err := MVCCPut(engine, ms, key2, ts5, value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	expMS5 := expMS4
+	expMS5.KeyBytes += vKey2Size
+	expMS5.ValBytes += vVal2Size
+	expMS5.ValCount = 4
+	expMS5.GCBytesAge += (vKey2Size + vVal2Size) * 6 // since we skipped ahead 6s
+	verifyStats("after overwrite", ms, expMS5, t)
 }
 
 // TestMVCCStatsWithRandomRuns creates a random sequence of puts,
@@ -1598,19 +1619,21 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	engine := createTestEngine()
 	ms := &MVCCStats{}
 
-	// Now, generate a rngom sequence of puts, deletes and resolves.
+	// Now, generate a random sequence of puts, deletes and resolves.
 	// Each put and delete may or may not involve a txn. Resolves may
 	// either commit or abort.
 	keys := map[int32][]byte{}
 	for i := int32(0); i < int32(1000); i++ {
-		// Do manual computation of additional intent age based on one extra nanosecond in simulation.
+		// Manually advance aggregate intent age based on one extra second of simulation.
 		ms.IntentAge += ms.IntentCount
+		// Same for aggregate gc'able bytes age.
+		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 
 		key := []byte(fmt.Sprintf("%s-%d", util.RandString(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
 		var txn *proto.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
-			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1), 0)}
+			txn = &proto.Transaction{ID: []byte(fmt.Sprintf("txn-%d", i)), Timestamp: makeTS(int64(i+1)*1E9, 0)}
 		}
 		// With 25% probability, put a new value; otherwise, delete an earlier
 		// key. Because an earlier step in this process may have itself been
@@ -1620,17 +1643,17 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if i > 0 && isDelete {
 			idx := rng.Int31n(i)
 			log.V(1).Infof("*** DELETE index %d", idx)
-			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1), 0), txn); err != nil {
+			if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				// Abort any write intent on an earlier, unresolved txn.
 				if wiErr, ok := err.(*proto.WriteIntentError); ok {
 					wiErr.Txn.Status = proto.ABORTED
 					log.V(1).Infof("*** ABORT index %d", idx)
-					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1), 0), &wiErr.Txn); err != nil {
+					if err := MVCCResolveWriteIntent(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), &wiErr.Txn); err != nil {
 						t.Fatal(err)
 					}
 					// Now, re-delete.
 					log.V(1).Infof("*** RE-DELETE index %d", idx)
-					if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1), 0), txn); err != nil {
+					if err := MVCCDelete(engine, ms, keys[idx], makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 						t.Fatal(err)
 					}
 				} else {
@@ -1640,7 +1663,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		} else {
 			rngVal := proto.Value{Bytes: []byte(util.RandString(rng, int(rng.Int31n(128))))}
 			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
-			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1), 0), rngVal, txn); err != nil {
+			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1)*1E9, 0), rngVal, txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1650,7 +1673,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				txn.Status = proto.ABORTED
 			}
 			log.V(1).Infof("*** RESOLVE index %d; COMMIT=%t", i, txn.Status == proto.COMMITTED)
-			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1), 0), txn); err != nil {
+			if err := MVCCResolveWriteIntent(engine, ms, key, makeTS(int64(i+1)*1E9, 0), txn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1658,7 +1681,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Every 10th step, verify the stats via manual engine scan.
 		if i%10 == 0 {
 			// Compute the stats manually.
-			expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, int64(i+1))
+			expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, int64(i+1)*1E9)
 			if err != nil {
 				t.Fatal(err)
 			}

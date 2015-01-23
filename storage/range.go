@@ -650,13 +650,7 @@ func (r *Range) ShouldSplit() bool {
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
-	rangeSize, err := r.stats.GetSize(r.rm.Engine())
-	if err != nil {
-		log.Errorf("unable to compute size from stats for range %d: %s", r.Desc.RaftID, err)
-		return false
-	}
-
-	return rangeSize > zone.RangeMaxBytes
+	return r.stats.GetSize() > zone.RangeMaxBytes
 }
 
 // maybeSplit initiates an asynchronous split via AdminSplit request
@@ -701,7 +695,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// Create a new batch for the command to ensure all or nothing semantics.
 	batch := r.rm.Engine().NewBatch()
 	// Create an engine.MVCCStats instance.
-	ms := &engine.MVCCStats{}
+	ms := engine.MVCCStats{}
 
 	switch method {
 	case proto.Contains:
@@ -709,15 +703,15 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	case proto.Get:
 		r.Get(batch, args.(*proto.GetRequest), reply.(*proto.GetResponse))
 	case proto.Put:
-		r.Put(batch, ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
+		r.Put(batch, &ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
 	case proto.ConditionalPut:
-		r.ConditionalPut(batch, ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
+		r.ConditionalPut(batch, &ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
 	case proto.Increment:
-		r.Increment(batch, ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
+		r.Increment(batch, &ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
 	case proto.Delete:
-		r.Delete(batch, ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
+		r.Delete(batch, &ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
 	case proto.DeleteRange:
-		r.DeleteRange(batch, ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
+		r.DeleteRange(batch, &ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
 	case proto.Scan:
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case proto.EndTransaction:
@@ -735,11 +729,11 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	case proto.InternalPushTxn:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case proto.InternalResolveIntent:
-		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
+		r.InternalResolveIntent(batch, &ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case proto.InternalMerge:
-		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
+		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	case proto.InternalTruncateLog:
-		r.InternalTruncateLog(batch, ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
+		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -747,7 +741,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// On success, flush the MVCC stats to the batch and commit.
 	if err := reply.Header().GoError(); err == nil {
 		if proto.IsReadWrite(method) {
-			r.stats.MergeMVCCStats(batch, ms, header.Timestamp.WallTime)
+			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
 			if err := batch.Commit(); err != nil {
 				reply.Header().SetGoError(err)
 			} else {
@@ -1293,7 +1287,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for updated range after split: %s", err)
 	}
-	r.stats.SetMVCCStats(batch, &ms)
+	r.stats.SetMVCCStats(batch, ms)
 
 	// Initialize the new range's response cache by copying the original's.
 	if err = r.respCache.CopyInto(batch, split.NewDesc.RaftID); err != nil {
@@ -1312,7 +1306,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return util.Errorf("unable to compute stats for new range after split: %s", err)
 	}
-	newRng.stats.SetMVCCStats(batch, &ms)
+	newRng.stats.SetMVCCStats(batch, ms)
 
 	// Write-lock the mutex to protect Desc, as SplitRange will modify
 	// Desc.EndKey.

@@ -1404,11 +1404,11 @@ func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
 }
 
 func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t *testing.T) {
-	ms, err := engine.MVCCGetRangeStats(eng, raftID)
-	if err != nil {
+	var ms engine.MVCCStats
+	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(expMS, *ms) {
+	if !reflect.DeepEqual(expMS, ms) {
 		t.Errorf("expected stats %+v; got %+v", expMS, ms)
 	}
 	// Also verify the GetRangeSize method.
