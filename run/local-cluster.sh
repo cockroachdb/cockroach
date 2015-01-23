@@ -33,9 +33,8 @@ elif [[ $1 == "stop" ]]; then
   if [[ $CONTAINERS == "" ]]; then
     exit 0
   fi
-  echo "Stopping and removing containers..."
+  echo "Stopping containers..."
   docker kill $CONTAINERS > /dev/null
-  docker rm $CONTAINERS > /dev/null
   exit 0
 else
   echo "Usage: $0 [start|stop]"
@@ -44,6 +43,10 @@ fi
 
 # Make sure to clean up any remaining containers
 $0 stop
+# Doing this here only so that after a cluster has been started and stopped,
+# the containers are still available for debugging.
+echo "Removing any old containers..."
+docker rm $CONTAINERS > /dev/null
 
 # Default number of nodes.
 NODES=${NODES:-3}
@@ -94,6 +97,8 @@ for i in $(seq 1 $NODES); do
   fi
   # Command args specify two data directories per instance to simulate two physical devices.
   CMD_ARGS="-gossip=${HOSTS[1]}:$RPC_PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -rpc=${HOSTS[$i]}:$RPC_PORT -http=${HOSTS[$i]}:$HTTP_PORT"
+  # Log (almost) everything.
+  CMD_ARGS="${CMD_ARGS} -v 7"
 
   # Node-specific arguments for node container.
   NODE_ARGS="--hostname=${HOSTS[$i]} --name=${HOSTS[$i]} --dns=$DNS_IP"

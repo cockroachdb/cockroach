@@ -30,7 +30,14 @@ dependencies:
 test:
   override:
     - docker run "cockroachdb/cockroach-dev" test
+      # Kill off the previous images since we don't care for them any more,
+      # but we do want to save the logs for the following ones.
+      # `docker rm` actually errors on CircleCI but still works, hence the ';'.
+    - docker rm $(docker ps -aq) || true
     - make acceptance
+  post:
+      # Write the container's log output to artifacts.
+    - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_${cid}.log"; done
 
 deployment:
   docker:
