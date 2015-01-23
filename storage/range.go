@@ -650,13 +650,7 @@ func (r *Range) ShouldSplit() bool {
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
-	rangeSize, err := r.stats.GetSize(r.rm.Engine())
-	if err != nil {
-		log.Errorf("unable to compute size from stats for range %d: %s", r.Desc.RaftID, err)
-		return false
-	}
-
-	return rangeSize > zone.RangeMaxBytes
+	return r.stats.GetSize() > zone.RangeMaxBytes
 }
 
 // maybeSplit initiates an asynchronous split via AdminSplit request

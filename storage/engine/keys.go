@@ -265,8 +265,6 @@ var (
 	StatIntentCount = proto.Key("intent-count")
 	// StatIntentAge counts the total age of unresolved intents.
 	StatIntentAge = proto.Key("intent-age")
-	// StatGCBytes counts the gc'able bytes.
-	StatGCBytes = proto.Key("gc-bytes")
 	// StatGCBytesAge counts the total age of gc'able bytes.
 	StatGCBytesAge = proto.Key("gc-age")
 	// StatLastUpdateNanos counts nanoseconds since the unix epoch for

@@ -20,7 +20,6 @@ package storage
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -83,15 +82,7 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 	elapsedNanos := now.UnixNano() - scanMeta.LastScanNanos
 
 	// Compute non-live bytes.
-	bytes, err := rng.stats.GetSize(rng.rm.Engine())
-	if err != nil {
-		log.Errorf("unable to fetch range size stats: %s", err)
-	}
-	liveBytes, err := rng.stats.Get(rng.rm.Engine(), engine.StatLiveBytes)
-	if err != nil {
-		log.Errorf("unable to fetch live bytes stat: %s", err)
-	}
-	nonLiveBytes := bytes - liveBytes
+	nonLiveBytes := rng.stats.GetSize() - rng.stats.LiveBytes
 
 	// GC score.
 	estGCBytes := scanMeta.GC.EstimatedBytes(elapsedNanos, nonLiveBytes)
@@ -99,12 +90,8 @@ func (sq *scanQueue) shouldQueue(now time.Time, rng *Range) (shouldQ bool, prior
 
 	// Intent sweep score. First check for intents. We only compute an
 	// intent score if there are any outstanding intents.
-	intentBytes, err := rng.stats.Get(rng.rm.Engine(), engine.StatIntentBytes)
-	if err != nil {
-		log.Errorf("unable to fetch intent bytes stat: %s", err)
-	}
 	intentScore := float64(0)
-	if intentBytes > 0 {
+	if rng.stats.IntentCount > 0 {
 		intentScore = float64(elapsedNanos) / float64(intentSweepInterval.Nanoseconds())
 	}
 

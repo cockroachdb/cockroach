@@ -18,7 +18,6 @@
 package storage
 
 import (
-	"log"
 	"math"
 	"testing"
 	"time"
@@ -61,7 +60,7 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	testCases := []struct {
 		scanMeta     *proto.ScanMetadata
 		nonLiveBytes int64
-		intentBytes  int64
+		intentCount  int64
 		now          time.Time
 		shouldQ      bool
 		priority     float64
@@ -105,17 +104,16 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.PutScanMetadata(test.scanMeta); err != nil {
 			t.Fatal(err)
 		}
-		// Write non live bytes as key bytes; since "live" bytes will be zero, this will translate into non live bytes.
+		// Write non live bytes as key bytes; since "live" bytes will be
+		// zero, this will translate into non live bytes.  Also write
+		// intent count. Note: the actual accounting on bytes is fictional
+		// in this test.
 		nonLiveBytes := test.scanMeta.GC.ByteCounts[0] + test.nonLiveBytes
-		if err := engine.MVCCSetRangeStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID,
-			engine.StatKeyBytes, nonLiveBytes); err != nil {
-			log.Fatal(err)
+		stats := engine.MVCCStats{
+			KeyBytes:    nonLiveBytes,
+			IntentCount: test.intentCount,
 		}
-		// Write intent bytes. Note: the actual accounting on bytes is fictional in this test.
-		if err := engine.MVCCSetRangeStat(tc.rng.rm.Engine(), tc.rng.Desc.RaftID,
-			engine.StatIntentBytes, test.intentBytes); err != nil {
-			log.Fatal(err)
-		}
+		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats)
 
 		shouldQ, priority := scanQ.shouldQueue(test.now, tc.rng)
 		if shouldQ != test.shouldQ {
