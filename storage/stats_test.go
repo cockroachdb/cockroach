@@ -24,6 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
+func TestRangeStatsEmpty(t *testing.T) {
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	s := tc.rng.stats
+	if !reflect.DeepEqual(s.MVCCStats, engine.MVCCStats{}) {
+		t.Errorf("expected empty stats; got %+v", s.MVCCStats)
+	}
+}
+
 func TestRangeStatsInit(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)

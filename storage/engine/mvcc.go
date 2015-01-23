@@ -146,10 +146,10 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 			ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 			ms.LiveCount--
 			// Also, add the bytes from overwritten value to the GC'able bytes age stat.
-			ms.GCBytesAge += (orig.KeyBytes + orig.ValBytes) * origAgeSeconds
+			ms.GCBytesAge += MVCCComputeGCBytesAge(orig.KeyBytes+orig.ValBytes, origAgeSeconds)
 		} else {
 			// Remove the meta byte previously counted for deleted value from GC'able bytes age stat.
-			ms.GCBytesAge -= (origMetaKeySize + origMetaValSize) * origAgeSeconds
+			ms.GCBytesAge -= MVCCComputeGCBytesAge(origMetaKeySize+origMetaValSize, origAgeSeconds)
 		}
 		ms.KeyBytes -= origMetaKeySize
 		ms.ValBytes -= origMetaValSize
@@ -198,7 +198,7 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 	if !meta.Deleted {
 		ms.LiveBytes += keyDiff + valDiff
 	} else {
-		ms.GCBytesAge += (keyDiff + valDiff) * origAgeSeconds
+		ms.GCBytesAge += MVCCComputeGCBytesAge(keyDiff+valDiff, origAgeSeconds)
 	}
 	ms.KeyBytes += keyDiff
 	ms.ValBytes += valDiff
@@ -226,7 +226,7 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 		ms.LiveCount--
 	} else {
 		// Remove the bytes from previously deleted intent from the GC'able bytes age stat.
-		ms.GCBytesAge -= origTotalBytes * origAgeSeconds
+		ms.GCBytesAge -= MVCCComputeGCBytesAge(origTotalBytes, origAgeSeconds)
 	}
 	ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
 	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
@@ -242,10 +242,10 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 			ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
 			ms.LiveCount++
 			// Also, remove the bytes from previously overwritten value from the GC'able bytes age stat.
-			ms.GCBytesAge -= (restored.KeyBytes + restored.ValBytes) * restoredAgeSeconds
+			ms.GCBytesAge -= MVCCComputeGCBytesAge(restored.KeyBytes+restored.ValBytes, restoredAgeSeconds)
 		} else {
 			// Add back in the meta key/value bytes to GC'able bytes age stat.
-			ms.GCBytesAge += (restoredMetaKeySize + restoredMetaValSize) * restoredAgeSeconds
+			ms.GCBytesAge += MVCCComputeGCBytesAge(restoredMetaKeySize+restoredMetaValSize, restoredAgeSeconds)
 		}
 		ms.KeyBytes += restoredMetaKeySize
 		ms.ValBytes += restoredMetaValSize
@@ -254,6 +254,12 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 			panic("restored version should never be an intent")
 		}
 	}
+}
+
+// MVCCComputeGCBytesAge comptues the value to assign to the specified
+// number of bytes, at the given age (in seconds).
+func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
+	return bytes * ageSeconds
 }
 
 // MVCCGetRangeStat returns the value for the specified range stat, by
@@ -304,7 +310,7 @@ func MVCCGetRangeSize(engine Engine, raftID int64) (int64, error) {
 }
 
 // MVCCGetRangeStats reads stat counters for the specified range and
-// returns an MVCCStats object on success.
+// sets the values in the supplied MVCCStats struct.
 func MVCCGetRangeStats(engine Engine, raftID int64, ms *MVCCStats) error {
 	var err error
 	if ms.LiveBytes, err = MVCCGetRangeStat(engine, raftID, StatLiveBytes); err != nil {
