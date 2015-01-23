@@ -543,7 +543,12 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				// application consumes EventCommandCommitted. Is closing the channel
 				// at this point useful or do we need to wait for the command to be
 				// applied too?
-				close(p.ch)
+				if p.ch != nil {
+					// Because of the way we re-queue proposals during leadership
+					// changes, we may close the same proposal object twice.
+					close(p.ch)
+					p.ch = nil
+				}
 				delete(g.pending, commandID)
 			}
 		}
