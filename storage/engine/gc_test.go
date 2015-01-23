@@ -18,7 +18,6 @@
 package engine
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -28,22 +27,15 @@ import (
 var (
 	aKey  = proto.Key("a")
 	bKey  = proto.Key("b")
-	cKey  = proto.Key("c")
 	aKeys = []proto.EncodedKey{
-		MVCCEncodeKey(aKey),
 		MVCCEncodeVersionKey(aKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 1)),
 		MVCCEncodeVersionKey(aKey, makeTS(1E9, 0)),
 	}
 	bKeys = []proto.EncodedKey{
-		MVCCEncodeKey(bKey),
 		MVCCEncodeVersionKey(bKey, makeTS(2E9, 0)),
 		MVCCEncodeVersionKey(bKey, makeTS(1E9, 0)),
 	}
-	cKeys = []proto.EncodedKey{
-		MVCCEncodeKey(cKey),
-	}
-	keys = append(aKeys, append(bKeys, cKeys...)...)
 )
 
 func serializedMVCCValue(deleted bool, t *testing.T) []byte {
@@ -54,35 +46,11 @@ func serializedMVCCValue(deleted bool, t *testing.T) []byte {
 	return data
 }
 
-// TestGarbageCollectorMVCCPrefix verifies that MVCC variants of same
-// key are grouped together and non-MVCC keys are considered singly.
-func TestGarbageCollectorMVCCPrefix(t *testing.T) {
-	expPrefixes := []proto.EncodedKey{
-		MVCCEncodeKey(aKey),
-		MVCCEncodeKey(aKey),
-		MVCCEncodeKey(aKey),
-		MVCCEncodeKey(aKey),
-		MVCCEncodeKey(bKey),
-		MVCCEncodeKey(bKey),
-		MVCCEncodeKey(bKey),
-		MVCCEncodeKey(cKey),
-	}
-	gc := NewGarbageCollector(makeTS(0, 0), nil)
-	prefixes := []proto.EncodedKey{}
-	for _, key := range keys {
-		prefixes = append(prefixes, key[:gc.MVCCPrefix(key)])
-	}
-	if !reflect.DeepEqual(expPrefixes, prefixes) {
-		t.Errorf("prefixes %s doesn't equal expected prefixes %s", prefixes, expPrefixes)
-	}
-}
-
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
-	gcA := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 1})
-	gcB := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 2})
-	gcC := NewGarbageCollector(makeTS(0, 0), &proto.GCPolicy{TTLSeconds: 0})
+	gcA := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 1})
+	gcB := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 2})
 	n := serializedMVCCValue(false, t)
 	d := serializedMVCCValue(true, t)
 	testData := []struct {
@@ -109,13 +77,13 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		{gcA, makeTS(5E9, 0), aKeys, [][]byte{n, n, n}, makeTS(1E9, 1)},
 		{gcB, makeTS(5E9, 0), bKeys, [][]byte{n, n}, makeTS(1E9, 0)},
 		{gcB, makeTS(5E9, 0), bKeys, [][]byte{d, n}, makeTS(2E9, 0)},
-		{gcC, makeTS(5E9, 0), cKeys, [][]byte{n}, proto.ZeroTimestamp},
 	}
 	for i, test := range testData {
-		test.gc.now = test.time
+		test.gc.expiration = test.time
+		test.gc.expiration.WallTime -= int64(test.gc.policy.TTLSeconds) * 1E9
 		delTS := test.gc.Filter(test.keys, test.values)
 		if !delTS.Equal(test.expDelTS) {
-			t.Errorf("expected deletion timestamp %s; got %s", i, test.expDelTS, delTS)
+			t.Errorf("%d: expected deletion timestamp %s; got %s", i, test.expDelTS, delTS)
 		}
 	}
 }

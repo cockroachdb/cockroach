@@ -20,7 +20,6 @@ package storage
 import (
 	"math"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -46,46 +45,47 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	hour := time.Hour.Nanoseconds()
-	day := (1 * 24 * time.Hour).Nanoseconds() // 1 day
-	mb := int64(1 << 20)                      // 1 MB
+	iaN := intentAgeNormalization.Nanoseconds()
+	ia := iaN / 1E9
+	bc := int64(gcByteCountNormalization)
+	ttl := int64(24 * 60 * 60)
 	scanMeta := &proto.ScanMetadata{}
 
 	testCases := []struct {
-		nonLiveBytes int64
-		gcBytesAge   int64
-		intentCount  int64
-		intentAge    int64
-		now          time.Time
-		shouldQ      bool
-		priority     float64
+		gcBytes     int64
+		gcBytesAge  int64
+		intentCount int64
+		intentAge   int64
+		now         proto.Timestamp
+		shouldQ     bool
+		priority    float64
 	}{
 		// No GC'able bytes, no time elapsed.
 		{0, 0, 0, 0, makeTS(0, 0), false, 0},
 		// No GC'able bytes, with intent age, 1/2 intent normalization period elapsed.
-		{0, 0, 1, hour, makeTS(0, 0), false, 0},
+		{0, 0, 1, ia / 2, makeTS(0, 0), false, 0},
 		// No GC'able bytes, with intent age=1/2 period, and other 1/2 period elapsed.
-		{0, 0, 1, hour, makeTS(hour, 0), false, 0},
-		// No GC'able bytes, with intent age=4 hours.
-		{0, 0, 1, 3 * hour, makeTS(hour, 0), true, 1},
-		// No GC'able bytes, 2 intents, with avg intent age=8 hours.
-		{0, 0, 2, 14 * hour, makeTS(hour, 0), true, 3},
+		{0, 0, 1, ia / 2, makeTS(iaN/2, 0), false, 0},
+		// No GC'able bytes, with intent age=2*intent normalization.
+		{0, 0, 1, 3 * ia / 2, makeTS(iaN/2, 0), true, 2},
+		// No GC'able bytes, 2 intents, with avg intent age=4x intent normalization.
+		{0, 0, 2, 7 * ia, makeTS(iaN, 0), true, 4.5},
 		// No GC'able bytes, no intent bytes, verification interval elapsed.
 		{0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), false, 0},
 		// No GC'able bytes, no intent bytes, verification interval * 2 elapsed.
-		{0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), true, 1},
+		{0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 2},
 		// No GC'able bytes, with combination of intent bytes and verification interval * 2 elapsed.
-		{0, 0, 1, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 361},
+		{0, 0, 1, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 62},
 		// GC'able bytes, no time elapsed.
-		{mb, 0, 0, 0, makeTS(0, 0), false, 0},
+		{bc, 0, 0, 0, makeTS(0, 0), false, 0},
 		// GC'able bytes, avg age = TTLSeconds.
-		{mb, mb * ttl, 0, 0, makeTS(0, 0), true, 1},
-		// GC'able bytes, avg age = TTLSeconds * 2.
-		{mb, 2 * mb * ttl, 0, 0, makeTS(0, 0), true, 2},
+		{bc, bc * ttl, 0, 0, makeTS(0, 0), false, 0},
+		// GC'able bytes, avg age = 2*TTLSeconds.
+		{bc, 2 * bc * ttl, 0, 0, makeTS(0, 0), true, 2},
 		// x2 GC'able bytes, avg age = TTLSeconds.
-		{2 * mb, 2 * mb * ttl, 0, 0, makeTS(0, 0), true, 2},
+		{2 * bc, 2 * bc * ttl, 0, 0, makeTS(0, 0), true, 2},
 		// GC'able bytes, intent bytes, and intent normalization * 2 elapsed.
-		{mb, mb * ttl, 1, 0, makeTS(intentAgeNormalization.Nanoseconds()*2, 0), true, 2.16666667},
+		{bc, bc * ttl, 1, 0, makeTS(iaN*2, 0), true, 5},
 	}
 
 	scanQ := newScanQueue()
@@ -95,12 +95,12 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		if err := tc.rng.PutScanMetadata(scanMeta); err != nil {
 			t.Fatal(err)
 		}
-		// Write non live bytes as key bytes; since "live" bytes will be
+		// Write gc'able bytes as key bytes; since "live" bytes will be
 		// zero, this will translate into non live bytes.  Also write
 		// intent count. Note: the actual accounting on bytes is fictional
 		// in this test.
 		stats := engine.MVCCStats{
-			KeyBytes:    test.nonLiveBytes,
+			KeyBytes:    test.gcBytes,
 			IntentCount: test.intentCount,
 			IntentAge:   test.intentAge,
 			GCBytesAge:  test.gcBytesAge,

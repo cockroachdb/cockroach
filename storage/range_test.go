@@ -65,6 +65,9 @@ var (
 		},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
+		GC: &proto.GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
 	}
 )
 

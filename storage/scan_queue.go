@@ -36,7 +36,7 @@ const (
 	gcByteCountNormalization = 1 << 20 // 1 MB
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total range priority.
-	intentAgeNormalization = 2 * time.Hour // 2 hours
+	intentAgeNormalization = 24 * time.Hour // 1 day
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 1 * time.Hour // 1 hour
@@ -77,42 +77,37 @@ func newScanQueue() *scanQueue {
 // GC'able bytes and how many multiples of intent or verification
 // intervals have elapsed since the last scan.
 func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+	// Get last scan metadata & GC policy.
 	scanMeta, err := rng.GetScanMetadata()
 	if err != nil {
 		log.Errorf("unable to fetch scan metadata: %s", err)
 		return
 	}
-	elapsedNanos := now.WallTime - scanMeta.LastScanNanos
+	policy, err := sq.lookupGCPolicy(rng)
+	if err != nil {
+		log.Errorf("GC policy: %s", err)
+		return
+	}
 
-	// Compute non-live bytes.
-	nonLiveBytes := rng.stats.GetSize() - rng.stats.LiveBytes
-
-	// GC score. This computes estimated bytes to GC and normalizes.
-	estGCBytes := scanMeta.GC.EstimatedBytes(elapsedNanos, nonLiveBytes)
-	gcScore := float64(estGCBytes) / float64(gcByteCountNormalization)
+	// GC score is the total GC'able bytes age normalized by 1 MB * the range's TTL in seconds.
+	gcScore := float64(rng.stats.GetGCBytesAge(now.WallTime)) / float64(policy.TTLSeconds) / float64(gcByteCountNormalization)
 
 	// Intent score. This computes the average age of outstanding intents
 	// and normalizes.
-	intentScore := float64(0)
-	avgIntentAge, err := rng.stats.GetAvgIntentAge(rng.rm.Engine(), now.WallTime)
-	if err != nil {
-		log.Errorf("unable to compute intent score: %s", err)
-	} else {
-		intentScore = avgIntentAge / float64(intentAgeNormalization.Nanoseconds())
-	}
+	intentScore := rng.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
 	// Verify score.
-	verifyScore := float64(elapsedNanos) / float64(verificationInterval.Nanoseconds())
+	verifyScore := float64(now.WallTime-scanMeta.LastScanNanos) / float64(verificationInterval.Nanoseconds())
 
 	// Compute priority.
-	if gcScore > 0 {
+	if gcScore > 1 {
 		priority += gcScore
 	}
 	if intentScore > 1 {
-		priority += (intentScore - 1)
+		priority += intentScore
 	}
 	if verifyScore > 1 {
-		priority += (verifyScore - 1)
+		priority += verifyScore
 	}
 	shouldQ = priority > 0
 	return
@@ -131,29 +126,13 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	defer snap.Stop()
 
 	// Lookup the GC policy for the zone containing this key range.
-	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
+	policy, err := sq.lookupGCPolicy(rng)
 	if err != nil {
-		return util.Errorf("unable to fetch zone config from gossip: %s", err)
-	}
-	configMap, ok := info.(PrefixConfigMap)
-	if !ok {
-		return util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
-	}
-	// Verify that the range doesn't cross over the zone config prefix.
-	// This could be the case if the zone config is new and the range
-	// hasn't been split yet along the new boundary.
-	rng.RLock()
-	prefixConfig := configMap.MatchByPrefix(rng.Desc.StartKey)
-	isCovered := !prefixConfig.Prefix.PrefixEnd().Less(rng.Desc.EndKey)
-	rng.RUnlock()
-	if !isCovered {
-		return util.Errorf("range is only partially covered by zone %s; must wait for range split", prefixConfig)
+		return err
 	}
 
-	// Get zone, init GC and new scan metadata.
-	zone := prefixConfig.Config.(*proto.ZoneConfig)
 	scanMeta := proto.NewScanMetadata(now.WallTime)
-	gc := engine.NewGarbageCollector(now, zone.GC)
+	gc := engine.NewGarbageCollector(now, policy)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now
@@ -167,11 +146,13 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 				RaftID:    rng.Desc.RaftID,
 			},
 		}*/
+	var expBaseKey proto.Key
 	var keys []proto.EncodedKey
 	var vals [][]byte
 	for ; iter.Valid(); iter.Next() {
-		_, _, isValue := MVCCDecodeKey(iter.Key())
+		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
 		if !isValue {
+			expBaseKey = baseKey
 			// Moving to the next key (& values). If there's more than a
 			// single value for the key, possibly send for GC.
 			if len(keys) > 1 {
@@ -198,11 +179,15 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 					}
 				}
 			}
-			keys := []proto.EncodedKey{iter.Key()}
-			values := [][]byte{iter.Value()}
+			keys = []proto.EncodedKey{iter.Key()}
+			vals = [][]byte{iter.Value()}
 		} else {
+			if !baseKey.Equal(expBaseKey) {
+				log.Errorf("unexpectedly found a value for %q with ts=%s; expected key %q", baseKey, ts, expBaseKey)
+				continue
+			}
 			keys = append(keys, iter.Key())
-			values = append(values, iter.Value())
+			vals = append(vals, iter.Value())
 		}
 	}
 
@@ -214,4 +199,36 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	}
 
 	return nil
+}
+
+func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
+	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
+	if err != nil {
+		return proto.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)
+	}
+	configMap, ok := info.(PrefixConfigMap)
+	if !ok {
+		return proto.GCPolicy{}, util.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+	}
+
+	// Verify that the range doesn't cross over the zone config prefix.
+	// This could be the case if the zone config is new and the range
+	// hasn't been split yet along the new boundary.
+	rng.RLock()
+	prefixConfigs := configMap.MatchesByPrefix(rng.Desc.StartKey)
+	var zone *proto.ZoneConfig
+	for _, prefixConfig := range prefixConfigs {
+		zone = prefixConfig.Config.(*proto.ZoneConfig)
+		if zone.GC != nil {
+			isCovered := !prefixConfig.Prefix.PrefixEnd().Less(rng.Desc.EndKey)
+			rng.RUnlock()
+			if !isCovered {
+				return proto.GCPolicy{}, util.Errorf("range is only partially covered by zone %s; must wait for range split", prefixConfig)
+			}
+			return *zone.GC, nil
+		}
+	}
+
+	// We should always match the default GC.
+	return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc.StartKey)
 }
