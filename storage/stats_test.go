@@ -24,24 +24,22 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
-func TestRangeStatsEmpty(t *testing.T) {
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-
-	s := tc.rng.stats
-	if s.lastUpdateNanos != 0 || s.intentCount != 0 {
-		t.Errorf("expected elapsed nanos and intent count to initialize to 0: %+v", s)
-	}
-}
-
 func TestRangeStatsInit(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := &engine.MVCCStats{
-		IntentCount:           5,
-		IntentLastUpdateNanos: 10,
+	ms := engine.MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        2,
+		ValBytes:        3,
+		IntentBytes:     4,
+		LiveCount:       5,
+		KeyCount:        6,
+		ValCount:        7,
+		IntentCount:     8,
+		IntentAge:       9,
+		GCBytesAge:      10,
+		LastUpdateNanos: 11,
 	}
 	ms.SetStats(tc.engine, 1)
 
@@ -49,8 +47,8 @@ func TestRangeStatsInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.lastUpdateNanos != 10 || s.intentCount != 5 {
-		t.Errorf("expected lastUpdateanos=10 and intentCount=5: %+v", s)
+	if !reflect.DeepEqual(ms, s.cached) {
+		t.Errorf("mvcc stats mismatch %+v != %+v", ms, s.cached)
 	}
 }
 
@@ -58,34 +56,35 @@ func TestRangeStatsMerge(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := &engine.MVCCStats{
-		LiveBytes:             1,
-		KeyBytes:              1,
-		ValBytes:              1,
-		IntentBytes:           1,
-		LiveCount:             1,
-		KeyCount:              1,
-		ValCount:              1,
-		IntentCount:           1,
-		IntentAge:             1,
-		IntentLastUpdateNanos: 1,
+	ms := engine.MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        2,
+		ValBytes:        2,
+		IntentBytes:     1,
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		LastUpdateNanos: 1 * 1E9,
 	}
-	tc.rng.stats.MergeMVCCStats(tc.engine, ms, 10)
+	tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9)
 	tc.rng.stats.Update(ms)
-	expMS := &engine.MVCCStats{
-		LiveBytes:             1,
-		KeyBytes:              1,
-		ValBytes:              1,
-		IntentBytes:           1,
-		LiveCount:             1,
-		KeyCount:              1,
-		ValCount:              1,
-		IntentCount:           1,
-		IntentAge:             1,
-		IntentLastUpdateNanos: 10,
+	expMS := engine.MVCCStats{
+		LiveBytes:       1,
+		KeyBytes:        2,
+		ValBytes:        2,
+		IntentBytes:     1,
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		IntentCount:     1,
+		IntentAge:       1,
+		GCBytesAge:      1,
+		LastUpdateNanos: 10 * 1E9,
 	}
-	ms, err := engine.MVCCGetRangeStats(tc.engine, 1)
-	if err != nil {
+	if err := engine.MVCCGetRangeStats(tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(ms, expMS) {
@@ -93,66 +92,28 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 
 	// Merge again, but with 10 more ns.
-	tc.rng.stats.MergeMVCCStats(tc.engine, ms, 20)
+	tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9)
 	tc.rng.stats.Update(ms)
-	expMS = &engine.MVCCStats{
-		LiveBytes:             2,
-		KeyBytes:              2,
-		ValBytes:              2,
-		IntentBytes:           2,
-		LiveCount:             2,
-		KeyCount:              2,
-		ValCount:              2,
-		IntentCount:           2,
-		IntentAge:             12,
-		IntentLastUpdateNanos: 20,
+	expMS = engine.MVCCStats{
+		LiveBytes:       2,
+		KeyBytes:        4,
+		ValBytes:        4,
+		IntentBytes:     2,
+		LiveCount:       2,
+		KeyCount:        2,
+		ValCount:        2,
+		IntentCount:     2,
+		IntentAge:       12,
+		GCBytesAge:      32,
+		LastUpdateNanos: 20 * 1E9,
 	}
-	ms, err = engine.MVCCGetRangeStats(tc.engine, 1)
-	if err != nil {
+	if err := engine.MVCCGetRangeStats(tc.engine, 1, &ms); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(ms, expMS) {
 		t.Errorf("expected %+v; got %+v", expMS, ms)
 	}
-
-	if tc.rng.stats.lastUpdateNanos != 20 || tc.rng.stats.intentCount != 2 {
-		t.Errorf("expected lastUpdateNanos==20, intentCount==2; got %+v", tc.rng.stats)
-	}
-}
-
-func TestRangeStatsClear(t *testing.T) {
-	tc := testContext{}
-	tc.Start(t)
-	defer tc.Stop()
-	expMS := &engine.MVCCStats{
-		LiveBytes:             1,
-		KeyBytes:              1,
-		ValBytes:              1,
-		IntentBytes:           1,
-		LiveCount:             1,
-		KeyCount:              1,
-		ValCount:              1,
-		IntentCount:           1,
-		IntentAge:             1,
-		IntentLastUpdateNanos: 1,
-	}
-	tc.rng.stats.SetMVCCStats(tc.engine, expMS)
-	ms, err := engine.MVCCGetRangeStats(tc.engine, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(ms, expMS) {
-		t.Errorf("expected %+v; got %+v", expMS, ms)
-	}
-
-	if err := tc.rng.stats.Clear(tc.engine); err != nil {
-		t.Fatal(err)
-	}
-	ms, err = engine.MVCCGetRangeStats(tc.engine, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(ms, &engine.MVCCStats{}) {
-		t.Errorf("expected %+v; got %+v", &engine.MVCCStats{}, ms)
+	if !reflect.DeepEqual(tc.rng.stats.cached, expMS) {
+		t.Errorf("expected %+v; got %+v", expMS, tc.rng.stats.cached)
 	}
 }

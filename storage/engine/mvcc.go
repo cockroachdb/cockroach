@@ -47,7 +47,7 @@ const (
 type MVCCStats struct {
 	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
 	LiveCount, KeyCount, ValCount, IntentCount int64
-	IntentAge, IntentLastUpdateNanos           int64
+	IntentAge, GCBytesAge, LastUpdateNanos     int64
 }
 
 // MergeStats merges accumulated stats to stat counters for specified range.
@@ -61,7 +61,8 @@ func (ms *MVCCStats) MergeStats(engine Engine, raftID int64) {
 	MVCCMergeRangeStat(engine, raftID, StatValCount, ms.ValCount)
 	MVCCMergeRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
 	MVCCMergeRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCMergeRangeStat(engine, raftID, StatIntentLastUpdateNanos, ms.IntentLastUpdateNanos)
+	MVCCMergeRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge)
+	MVCCMergeRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos)
 }
 
 // SetStats sets stat counters for specified range.
@@ -75,7 +76,8 @@ func (ms *MVCCStats) SetStats(engine Engine, raftID int64) {
 	MVCCSetRangeStat(engine, raftID, StatValCount, ms.ValCount)
 	MVCCSetRangeStat(engine, raftID, StatIntentCount, ms.IntentCount)
 	MVCCSetRangeStat(engine, raftID, StatIntentAge, ms.IntentAge)
-	MVCCSetRangeStat(engine, raftID, StatIntentLastUpdateNanos, ms.IntentLastUpdateNanos)
+	MVCCSetRangeStat(engine, raftID, StatGCBytesAge, ms.GCBytesAge)
+	MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos)
 }
 
 // updateStatsForKey returns whether or not the bytes and counts for
@@ -131,7 +133,7 @@ func (ms *MVCCStats) updateStatsOnMerge(key proto.Key, valSize int64) {
 // deletion tombstone, updates the live stat counters as well.
 // If this value is an intent, updates the intent counters.
 func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata, elapsedNanos int64) {
+	metaKeySize, metaValSize int64, orig, meta *proto.MVCCMetadata, origAgeSeconds int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
@@ -141,8 +143,13 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 		// its contribution from live bytes in anticipation of adding in
 		// contribution from new version below.
 		if !orig.Deleted {
-			ms.LiveBytes -= (orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize)
+			ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 			ms.LiveCount--
+			// Also, add the bytes from overwritten value to the GC'able bytes age stat.
+			ms.GCBytesAge += (orig.KeyBytes + orig.ValBytes) * origAgeSeconds
+		} else {
+			// Remove the meta byte previously counted for deleted value from GC'able bytes age stat.
+			ms.GCBytesAge -= (origMetaKeySize + origMetaValSize) * origAgeSeconds
 		}
 		ms.KeyBytes -= origMetaKeySize
 		ms.ValBytes -= origMetaValSize
@@ -156,7 +163,7 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 			ms.ValCount--
 			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 			ms.IntentCount--
-			ms.IntentAge -= elapsedNanos
+			ms.IntentAge -= origAgeSeconds
 		}
 	}
 
@@ -180,7 +187,7 @@ func (ms *MVCCStats) updateStatsOnPut(key proto.Key, origMetaKeySize, origMetaVa
 // resolved value (key & bytes) are subtracted from the intents
 // counters if commit=true.
 func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMetaValSize,
-	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool, elapsedNanos int64) {
+	metaKeySize, metaValSize int64, meta *proto.MVCCMetadata, commit bool, origAgeSeconds int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
@@ -190,6 +197,8 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 	valDiff := metaValSize - origMetaValSize
 	if !meta.Deleted {
 		ms.LiveBytes += keyDiff + valDiff
+	} else {
+		ms.GCBytesAge += (keyDiff + valDiff) * origAgeSeconds
 	}
 	ms.KeyBytes += keyDiff
 	ms.ValBytes += valDiff
@@ -197,7 +206,7 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 	if commit {
 		ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
 		ms.IntentCount--
-		ms.IntentAge -= elapsedNanos
+		ms.IntentAge -= origAgeSeconds
 	}
 }
 
@@ -206,13 +215,18 @@ func (ms *MVCCStats) updateStatsOnResolve(key proto.Key, origMetaKeySize, origMe
 // was restored, the restored values are added to live bytes and
 // count if the restored value isn't a deletion tombstone.
 func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMetaValSize,
-	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata, elapsedNanos int64) {
+	restoredMetaKeySize, restoredMetaValSize int64, orig, restored *proto.MVCCMetadata,
+	origAgeSeconds, restoredAgeSeconds int64) {
 	if !ms.updateStatsForKey(key) {
 		return
 	}
+	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 	if !orig.Deleted {
-		ms.LiveBytes -= (orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize)
+		ms.LiveBytes -= origTotalBytes
 		ms.LiveCount--
+	} else {
+		// Remove the bytes from previously deleted intent from the GC'able bytes age stat.
+		ms.GCBytesAge -= origTotalBytes * origAgeSeconds
 	}
 	ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
 	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
@@ -220,13 +234,18 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 	ms.ValCount--
 	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 	ms.IntentCount--
-	ms.IntentAge -= elapsedNanos
+	ms.IntentAge -= origAgeSeconds
 
 	// If restored version isn't a deletion tombstone, add it to live counters.
 	if restored != nil {
 		if !restored.Deleted {
 			ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
 			ms.LiveCount++
+			// Also, remove the bytes from previously overwritten value from the GC'able bytes age stat.
+			ms.GCBytesAge -= (restored.KeyBytes + restored.ValBytes) * restoredAgeSeconds
+		} else {
+			// Add back in the meta key/value bytes to GC'able bytes age stat.
+			ms.GCBytesAge += (restoredMetaKeySize + restoredMetaValSize) * restoredAgeSeconds
 		}
 		ms.KeyBytes += restoredMetaKeySize
 		ms.ValBytes += restoredMetaValSize
@@ -286,40 +305,42 @@ func MVCCGetRangeSize(engine Engine, raftID int64) (int64, error) {
 
 // MVCCGetRangeStats reads stat counters for the specified range and
 // returns an MVCCStats object on success.
-func MVCCGetRangeStats(engine Engine, raftID int64) (*MVCCStats, error) {
-	ms := &MVCCStats{}
+func MVCCGetRangeStats(engine Engine, raftID int64, ms *MVCCStats) error {
 	var err error
 	if ms.LiveBytes, err = MVCCGetRangeStat(engine, raftID, StatLiveBytes); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.KeyBytes, err = MVCCGetRangeStat(engine, raftID, StatKeyBytes); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.ValBytes, err = MVCCGetRangeStat(engine, raftID, StatValBytes); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.IntentBytes, err = MVCCGetRangeStat(engine, raftID, StatIntentBytes); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.LiveCount, err = MVCCGetRangeStat(engine, raftID, StatLiveCount); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.KeyCount, err = MVCCGetRangeStat(engine, raftID, StatKeyCount); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.ValCount, err = MVCCGetRangeStat(engine, raftID, StatValCount); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.IntentCount, err = MVCCGetRangeStat(engine, raftID, StatIntentCount); err != nil {
-		return nil, err
+		return err
 	}
 	if ms.IntentAge, err = MVCCGetRangeStat(engine, raftID, StatIntentAge); err != nil {
-		return nil, err
+		return err
 	}
-	if ms.IntentLastUpdateNanos, err = MVCCGetRangeStat(engine, raftID, StatIntentLastUpdateNanos); err != nil {
-		return nil, err
+	if ms.GCBytesAge, err = MVCCGetRangeStat(engine, raftID, StatGCBytesAge); err != nil {
+		return err
 	}
-	return ms, nil
+	if ms.LastUpdateNanos, err = MVCCGetRangeStat(engine, raftID, StatLastUpdateNanos); err != nil {
+		return err
+	}
+	return nil
 }
 
 // MVCCGetProto fetches the value at the specified key and unmarshals
@@ -548,10 +569,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	if err != nil {
 		return err
 	}
-	var elapsedNanos int64
-	if meta.Txn != nil {
-		elapsedNanos = timestamp.WallTime - meta.Timestamp.WallTime
-	}
+	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp.Equal(proto.ZeroTimestamp)
@@ -634,7 +652,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	}
 
 	// Update MVCC stats.
-	ms.updateStatsOnPut(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, elapsedNanos)
+	ms.updateStatsOnPut(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds)
 
 	return nil
 }
@@ -905,7 +923,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	if !ok || meta.Txn == nil || !bytes.Equal(meta.Txn.ID, txn.ID) {
 		return nil
 	}
-	elapsedNanos := timestamp.WallTime - meta.Timestamp.WallTime
+	origAgeSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 
 	// If we're committing, or if the commit timestamp of the intent has
 	// been moved forward, and if the proposed epoch matches the existing
@@ -930,7 +948,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		}
 
 		// Update stat counters related to resolving the intent.
-		ms.updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit, elapsedNanos)
+		ms.updateStatsOnResolve(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, &newMeta, commit, origAgeSeconds)
 
 		// If timestamp of value changed, need to rewrite versioned value.
 		// TODO(spencer,tobias): think about a new merge operator for
@@ -976,7 +994,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 	if len(kvs) == 0 {
 		engine.Clear(metaKey)
 		// Clear stat counters attributable to the intent we're aborting.
-		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, elapsedNanos)
+		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, origAgeSeconds, 0)
 	} else {
 		_, ts, isValue := MVCCDecodeKey(kvs[0].Key)
 		if !isValue {
@@ -999,9 +1017,10 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		if err != nil {
 			return err
 		}
+		restoredAgeSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
 
 		// Update stat counters with older version.
-		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, elapsedNanos)
+		ms.updateStatsOnAbort(key, origMetaKeySize, origMetaValSize, metaKeySize, metaValSize, meta, newMeta, origAgeSeconds, restoredAgeSeconds)
 	}
 
 	return nil
@@ -1174,19 +1193,23 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 	encStartKey := MVCCEncodeKey(key)
 	encEndKey := MVCCEncodeKey(endKey)
 
-	ms := MVCCStats{IntentLastUpdateNanos: nowNanos}
+	ms := MVCCStats{LastUpdateNanos: nowNanos}
 	first := false
 	meta := &proto.MVCCMetadata{}
 	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
-		_, _, isValue := MVCCDecodeKey(kv.Key)
+		_, ts, isValue := MVCCDecodeKey(kv.Key)
+		totalBytes := int64(len(kv.Value)) + int64(len(kv.Key))
 		if !isValue {
 			first = true
 			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 				return false, util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
 			}
 			if !meta.Deleted {
-				ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+				ms.LiveBytes += totalBytes
 				ms.LiveCount++
+			} else {
+				// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
+				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
 			}
 			ms.KeyBytes += int64(len(kv.Key))
 			ms.ValBytes += int64(len(kv.Value))
@@ -1198,12 +1221,15 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 			if first {
 				first = false
 				if !meta.Deleted {
-					ms.LiveBytes += int64(len(kv.Value)) + int64(len(kv.Key))
+					ms.LiveBytes += totalBytes
+				} else {
+					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - meta.Timestamp.WallTime/1E9)
 				}
 				if meta.Txn != nil {
-					ms.IntentBytes += int64(len(kv.Key)) + int64(len(kv.Value))
+					ms.IntentBytes += totalBytes
 					ms.IntentCount++
-					ms.IntentAge += (nowNanos - meta.Timestamp.WallTime)
+					ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
 				}
 				if meta.KeyBytes != int64(len(kv.Key)) {
 					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
@@ -1211,6 +1237,9 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 				if meta.ValBytes != int64(len(kv.Value)) {
 					return false, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
 				}
+			} else {
+				// Overwritten value; add value bytes to the GC'able bytes age stat.
+				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - ts.WallTime/1E9)
 			}
 			ms.KeyBytes += int64(len(kv.Key))
 			ms.ValBytes += int64(len(kv.Value))

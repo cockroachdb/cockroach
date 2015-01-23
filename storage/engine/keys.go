@@ -265,12 +265,16 @@ var (
 	StatIntentCount = proto.Key("intent-count")
 	// StatIntentAge counts the total age of unresolved intents.
 	StatIntentAge = proto.Key("intent-age")
-	// StatIntentLastUpdateNanos counts nanoseconds since the unix epoch
-	// for the last update to the intent age. This really is tracking
-	// the wall time as at last update, but is a merged stat, with
-	// successive counts of elapsed nanos being added at each stat
-	// computation.
-	StatIntentLastUpdateNanos = proto.Key("intent-nanos")
+	// StatGCBytes counts the gc'able bytes.
+	StatGCBytes = proto.Key("gc-bytes")
+	// StatGCBytesAge counts the total age of gc'able bytes.
+	StatGCBytesAge = proto.Key("gc-age")
+	// StatLastUpdateNanos counts nanoseconds since the unix epoch for
+	// the last update to the intent / GC'able bytes ages. This really
+	// is tracking the wall time as at last update, but is a merged
+	// stat, with successive counts of elapsed nanos being added at each
+	// stat computation.
+	StatLastUpdateNanos = proto.Key("update-nanos")
 )
 
 // Constants for system-reserved keys in the KV map.

@@ -28,9 +28,8 @@ import (
 // efficiently aggregated using the engine.Merge operator.
 type rangeStats struct {
 	raftID int64
-	// The following values are cached from the underlying stats.
-	lastUpdateNanos int64 // nanos since the epoch
-	intentCount     int64
+	// Cached from the underlying stats.
+	cached engine.MVCCStats
 }
 
 // newRangeStats creates a new instance of rangeStats using the
@@ -40,11 +39,7 @@ type rangeStats struct {
 // require the values to be read from the engine).
 func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
 	rs := &rangeStats{raftID: raftID}
-	var err error
-	if rs.lastUpdateNanos, err = engine.MVCCGetRangeStat(e, raftID, engine.StatIntentLastUpdateNanos); err != nil {
-		return nil, err
-	}
-	if rs.intentCount, err = engine.MVCCGetRangeStat(e, raftID, engine.StatIntentCount); err != nil {
+	if err := engine.MVCCGetRangeStats(e, raftID, &rs.cached); err != nil {
 		return nil, err
 	}
 	return rs, nil
@@ -53,14 +48,6 @@ func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
 // Get returns the value of the named stat.
 func (rs *rangeStats) Get(e engine.Engine, stat proto.Key) (int64, error) {
 	return engine.MVCCGetRangeStat(e, rs.raftID, stat)
-}
-
-// Clear clears stats for the specified range.
-func (rs *rangeStats) Clear(e engine.Engine) error {
-	statStartKey := engine.RangeStatKey(rs.raftID, proto.Key{})
-	statEndKey := engine.RangeStatKey(rs.raftID+1, proto.Key{})
-	_, err := engine.ClearRange(e, engine.MVCCEncodeKey(statStartKey), engine.MVCCEncodeKey(statEndKey))
-	return err
 }
 
 // GetSize returns the range size as the sum of the key and value
@@ -75,38 +62,56 @@ func (rs *rangeStats) GetSize(e engine.Engine) (int64, error) {
 // the last update to range stats.
 func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) {
 	// Augment the current intent age.
-	ms.IntentLastUpdateNanos = nowNanos - rs.lastUpdateNanos
-	if ms.IntentLastUpdateNanos != 0 {
-		ms.IntentAge += rs.intentCount * ms.IntentLastUpdateNanos
-	}
+	diffSeconds := nowNanos/1E9 - rs.cached.LastUpdateNanos/1E9
+	ms.LastUpdateNanos = nowNanos - rs.cached.LastUpdateNanos
+	ms.IntentAge += rs.cached.IntentCount * diffSeconds
+	ms.GCBytesAge += (rs.cached.KeyBytes + rs.cached.ValBytes - rs.cached.LiveBytes) * diffSeconds
 	ms.MergeStats(e, rs.raftID)
 }
 
 // SetStats sets stat counters.
-func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms *engine.MVCCStats) {
+func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) {
 	ms.SetStats(e, rs.raftID)
 }
 
 // Update updates the rangeStats' internal values for lastUpdateNanos and
 // intentCount. This method should be invoked only after a successful
 // commit of merged values to the underlying engine.
-func (rs *rangeStats) Update(ms *engine.MVCCStats) {
-	rs.lastUpdateNanos += ms.IntentLastUpdateNanos
-	rs.intentCount += ms.IntentCount
+func (rs *rangeStats) Update(ms engine.MVCCStats) {
+	rs.cached.LiveBytes += ms.LiveBytes
+	rs.cached.KeyBytes += ms.KeyBytes
+	rs.cached.ValBytes += ms.ValBytes
+	rs.cached.IntentBytes += ms.IntentBytes
+	rs.cached.LiveCount += ms.LiveCount
+	rs.cached.KeyCount += ms.KeyCount
+	rs.cached.ValCount += ms.ValCount
+	rs.cached.IntentCount += ms.IntentCount
+	rs.cached.IntentAge += ms.IntentAge
+	rs.cached.GCBytesAge += ms.GCBytesAge
+	rs.cached.LastUpdateNanos += ms.LastUpdateNanos
 }
 
 // GetAvgIntentAge returns the average age of outstanding intents,
 // based on current wall time specified via nowNanos.
-func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) (float64, error) {
-	if rs.intentCount == 0 {
-		return 0, nil
-	}
-	intentAge, err := rs.Get(e, engine.StatIntentAge)
-	if err == nil {
-		return 0, err
+func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) float64 {
+	if rs.cached.IntentCount == 0 {
+		return 0
 	}
 	// Advance age by any elapsed time since last computed.
-	elapsedNanos := nowNanos - rs.lastUpdateNanos
-	intentAge += rs.intentCount * elapsedNanos
-	return float64(intentAge) / float64(rs.intentCount), nil
+	elapsedSeconds := nowNanos/1E9 - rs.cached.LastUpdateNanos/1E9
+	advancedIntentAge := rs.cached.IntentAge + rs.cached.IntentCount*elapsedSeconds
+	return float64(advancedIntentAge) / float64(rs.cached.IntentCount)
+}
+
+// GetAvgGCBytesAge returns the average age of outstanding gc'able
+// bytes, based on current wall time specified via nowNanos.
+func (rs *rangeStats) GetAvgGCBytesAge(e engine.Engine, nowNanos int64) float64 {
+	gcBytes := (rs.cached.KeyBytes + rs.cached.ValBytes - rs.cached.LiveBytes)
+	if gcBytes == 0 {
+		return 0
+	}
+	// Advance gc bytes age by any elapsed time since last computed.
+	elapsedSeconds := nowNanos/1E9 - rs.cached.LastUpdateNanos/1E9
+	advancedGCBytesAge := rs.cached.GCBytesAge + gcBytes*elapsedSeconds
+	return float64(advancedGCBytesAge) / float64(gcBytes)
 }
