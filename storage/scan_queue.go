@@ -221,12 +221,12 @@ func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 	// Verify that the range doesn't cross over the zone config prefix.
 	// This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
-	rng.RLock()
 	prefixConfigs := configMap.MatchesByPrefix(rng.Desc.StartKey)
 	var zone *proto.ZoneConfig
 	for _, prefixConfig := range prefixConfigs {
 		zone = prefixConfig.Config.(*proto.ZoneConfig)
 		if zone.GC != nil {
+			rng.RLock()
 			isCovered := !prefixConfig.Prefix.PrefixEnd().Less(rng.Desc.EndKey)
 			rng.RUnlock()
 			if !isCovered {
