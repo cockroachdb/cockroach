@@ -42,6 +42,8 @@ class GCPolicy;
 class AcctConfig;
 class PermConfig;
 class ZoneConfig;
+class RangeTree;
+class RangeTreeNode;
 
 // ===================================================================
 
@@ -731,6 +733,204 @@ class ZoneConfig : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static ZoneConfig* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class RangeTree : public ::google::protobuf::Message {
+ public:
+  RangeTree();
+  virtual ~RangeTree();
+
+  RangeTree(const RangeTree& from);
+
+  inline RangeTree& operator=(const RangeTree& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RangeTree& default_instance();
+
+  void Swap(RangeTree* other);
+
+  // implements Message ----------------------------------------------
+
+  RangeTree* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const RangeTree& from);
+  void MergeFrom(const RangeTree& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int64 root_id = 1;
+  inline bool has_root_id() const;
+  inline void clear_root_id();
+  static const int kRootIdFieldNumber = 1;
+  inline ::google::protobuf::int64 root_id() const;
+  inline void set_root_id(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.RangeTree)
+ private:
+  inline void set_has_root_id();
+  inline void clear_has_root_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int64 root_id_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static RangeTree* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class RangeTreeNode : public ::google::protobuf::Message {
+ public:
+  RangeTreeNode();
+  virtual ~RangeTreeNode();
+
+  RangeTreeNode(const RangeTreeNode& from);
+
+  inline RangeTreeNode& operator=(const RangeTreeNode& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RangeTreeNode& default_instance();
+
+  void Swap(RangeTreeNode* other);
+
+  // implements Message ----------------------------------------------
+
+  RangeTreeNode* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const RangeTreeNode& from);
+  void MergeFrom(const RangeTreeNode& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int64 raft_id = 1;
+  inline bool has_raft_id() const;
+  inline void clear_raft_id();
+  static const int kRaftIdFieldNumber = 1;
+  inline ::google::protobuf::int64 raft_id() const;
+  inline void set_raft_id(::google::protobuf::int64 value);
+
+  // optional bool black = 2;
+  inline bool has_black() const;
+  inline void clear_black();
+  static const int kBlackFieldNumber = 2;
+  inline bool black() const;
+  inline void set_black(bool value);
+
+  // optional int64 parent_id = 3;
+  inline bool has_parent_id() const;
+  inline void clear_parent_id();
+  static const int kParentIdFieldNumber = 3;
+  inline ::google::protobuf::int64 parent_id() const;
+  inline void set_parent_id(::google::protobuf::int64 value);
+
+  // optional int64 left_id = 4;
+  inline bool has_left_id() const;
+  inline void clear_left_id();
+  static const int kLeftIdFieldNumber = 4;
+  inline ::google::protobuf::int64 left_id() const;
+  inline void set_left_id(::google::protobuf::int64 value);
+
+  // optional int64 right_id = 5;
+  inline bool has_right_id() const;
+  inline void clear_right_id();
+  static const int kRightIdFieldNumber = 5;
+  inline ::google::protobuf::int64 right_id() const;
+  inline void set_right_id(::google::protobuf::int64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.RangeTreeNode)
+ private:
+  inline void set_has_raft_id();
+  inline void clear_has_raft_id();
+  inline void set_has_black();
+  inline void clear_has_black();
+  inline void set_has_parent_id();
+  inline void clear_has_parent_id();
+  inline void set_has_left_id();
+  inline void clear_has_left_id();
+  inline void set_has_right_id();
+  inline void clear_has_right_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int64 raft_id_;
+  ::google::protobuf::int64 parent_id_;
+  ::google::protobuf::int64 left_id_;
+  ::google::protobuf::int64 right_id_;
+  bool black_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto();
+
+  void InitAsDefaultInstance();
+  static RangeTreeNode* default_instance_;
 };
 // ===================================================================
 
@@ -1437,6 +1637,158 @@ inline void ZoneConfig::set_allocated_gc(::cockroach::proto::GCPolicy* gc) {
     clear_has_gc();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ZoneConfig.gc)
+}
+
+// -------------------------------------------------------------------
+
+// RangeTree
+
+// optional int64 root_id = 1;
+inline bool RangeTree::has_root_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RangeTree::set_has_root_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RangeTree::clear_has_root_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RangeTree::clear_root_id() {
+  root_id_ = GOOGLE_LONGLONG(0);
+  clear_has_root_id();
+}
+inline ::google::protobuf::int64 RangeTree::root_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTree.root_id)
+  return root_id_;
+}
+inline void RangeTree::set_root_id(::google::protobuf::int64 value) {
+  set_has_root_id();
+  root_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTree.root_id)
+}
+
+// -------------------------------------------------------------------
+
+// RangeTreeNode
+
+// optional int64 raft_id = 1;
+inline bool RangeTreeNode::has_raft_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RangeTreeNode::set_has_raft_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RangeTreeNode::clear_has_raft_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RangeTreeNode::clear_raft_id() {
+  raft_id_ = GOOGLE_LONGLONG(0);
+  clear_has_raft_id();
+}
+inline ::google::protobuf::int64 RangeTreeNode::raft_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTreeNode.raft_id)
+  return raft_id_;
+}
+inline void RangeTreeNode::set_raft_id(::google::protobuf::int64 value) {
+  set_has_raft_id();
+  raft_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTreeNode.raft_id)
+}
+
+// optional bool black = 2;
+inline bool RangeTreeNode::has_black() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void RangeTreeNode::set_has_black() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void RangeTreeNode::clear_has_black() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void RangeTreeNode::clear_black() {
+  black_ = false;
+  clear_has_black();
+}
+inline bool RangeTreeNode::black() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTreeNode.black)
+  return black_;
+}
+inline void RangeTreeNode::set_black(bool value) {
+  set_has_black();
+  black_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTreeNode.black)
+}
+
+// optional int64 parent_id = 3;
+inline bool RangeTreeNode::has_parent_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void RangeTreeNode::set_has_parent_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void RangeTreeNode::clear_has_parent_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void RangeTreeNode::clear_parent_id() {
+  parent_id_ = GOOGLE_LONGLONG(0);
+  clear_has_parent_id();
+}
+inline ::google::protobuf::int64 RangeTreeNode::parent_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTreeNode.parent_id)
+  return parent_id_;
+}
+inline void RangeTreeNode::set_parent_id(::google::protobuf::int64 value) {
+  set_has_parent_id();
+  parent_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTreeNode.parent_id)
+}
+
+// optional int64 left_id = 4;
+inline bool RangeTreeNode::has_left_id() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void RangeTreeNode::set_has_left_id() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void RangeTreeNode::clear_has_left_id() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void RangeTreeNode::clear_left_id() {
+  left_id_ = GOOGLE_LONGLONG(0);
+  clear_has_left_id();
+}
+inline ::google::protobuf::int64 RangeTreeNode::left_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTreeNode.left_id)
+  return left_id_;
+}
+inline void RangeTreeNode::set_left_id(::google::protobuf::int64 value) {
+  set_has_left_id();
+  left_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTreeNode.left_id)
+}
+
+// optional int64 right_id = 5;
+inline bool RangeTreeNode::has_right_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void RangeTreeNode::set_has_right_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void RangeTreeNode::clear_has_right_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void RangeTreeNode::clear_right_id() {
+  right_id_ = GOOGLE_LONGLONG(0);
+  clear_has_right_id();
+}
+inline ::google::protobuf::int64 RangeTreeNode::right_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RangeTreeNode.right_id)
+  return right_id_;
+}
+inline void RangeTreeNode::set_right_id(::google::protobuf::int64 value) {
+  set_has_right_id();
+  right_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RangeTreeNode.right_id)
 }
 
 

@@ -155,6 +155,12 @@ func RangeLastVerificationTimestampKey(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRangeLastVerificationTimestampSuffix, proto.Key{})
 }
 
+// RangeTreeNodeKey returns a range-local key for the the range's
+// node in the range tree.
+func RangeTreeNodeKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeTreeNodeSuffix, proto.Key{})
+}
+
 // RangeDescriptorKey returns a range-local key for the descriptor
 // for the range with specified key.
 func RangeDescriptorKey(key proto.Key) proto.Key {
@@ -394,6 +400,9 @@ var (
 	// KeyLocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	KeyLocalRangeDescriptorSuffix = proto.Key("rdsc")
+	// KeyLocalRangeTreeNodeSuffix is the suffix for keys storing
+	// range tree nodes.  The value is a struct of type RangeTreeNode.
+	KeyLocalRangeTreeNodeSuffix = proto.Key("rtn-")
 	// KeyLocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
@@ -440,4 +449,6 @@ var (
 	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
 	// generators, one per node, for store IDs.
 	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, proto.Key("store-idgen-"))
+	// KeyRangeTreeRoot specifies the root range in the range tree.
+	KeyRangeTreeRoot = MakeKey(KeySystemPrefix, proto.Key("range-tree-root"))
 )

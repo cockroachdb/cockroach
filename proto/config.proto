@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
 
 syntax = "proto2";
 package cockroach.proto;
@@ -93,4 +94,22 @@ message ZoneConfig {
   // If GC policy is not set, uses the next highest, non-null policy
   // in the zone config hierarchy, up to the default policy if necessary.
   optional GCPolicy gc = 4 [(gogoproto.customname) = "GC", (gogoproto.moretags) = "yaml:\"gc,omitempty\""];
+}
+
+// RangeTree holds the root node and size of the range tree.
+message RangeTree {
+  optional int64 root_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RootID"];
+}
+
+// RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
+message RangeTreeNode {
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+
+  // Color is black if true, red if false.
+  optional bool black = 2 [(gogoproto.nullable) = false];
+
+  // If the parent key is null, this is the root node.
+  optional int64 parent_id = 3 [(gogoproto.customname) = "ParentID"];
+  optional int64 left_id = 4 [(gogoproto.customname) = "LeftID"];
+  optional int64 right_id = 5 [(gogoproto.customname) = "RightID"];
 }

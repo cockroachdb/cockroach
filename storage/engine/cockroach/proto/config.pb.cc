@@ -42,6 +42,12 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* ZoneConfig_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ZoneConfig_reflection_ = NULL;
+const ::google::protobuf::Descriptor* RangeTree_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  RangeTree_reflection_ = NULL;
+const ::google::protobuf::Descriptor* RangeTreeNode_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  RangeTreeNode_reflection_ = NULL;
 
 }  // namespace
 
@@ -166,6 +172,40 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ZoneConfig));
+  RangeTree_descriptor_ = file->message_type(7);
+  static const int RangeTree_offsets_[1] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, root_id_),
+  };
+  RangeTree_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      RangeTree_descriptor_,
+      RangeTree::default_instance_,
+      RangeTree_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(RangeTree));
+  RangeTreeNode_descriptor_ = file->message_type(8);
+  static const int RangeTreeNode_offsets_[5] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, raft_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, black_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, parent_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, left_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, right_id_),
+  };
+  RangeTreeNode_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      RangeTreeNode_descriptor_,
+      RangeTreeNode::default_instance_,
+      RangeTreeNode_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(RangeTreeNode));
 }
 
 namespace {
@@ -192,6 +232,10 @@ void protobuf_RegisterTypes(const ::std::string&) {
     PermConfig_descriptor_, &PermConfig::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     ZoneConfig_descriptor_, &ZoneConfig::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    RangeTree_descriptor_, &RangeTree::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    RangeTreeNode_descriptor_, &RangeTreeNode::default_instance());
 }
 
 }  // namespace
@@ -211,6 +255,10 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto() {
   delete PermConfig_reflection_;
   delete ZoneConfig::default_instance_;
   delete ZoneConfig_reflection_;
+  delete RangeTree::default_instance_;
+  delete RangeTree_reflection_;
+  delete RangeTreeNode::default_instance_;
+  delete RangeTreeNode_reflection_;
 }
 
 void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
@@ -245,7 +293,12 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "\022A\n\017range_max_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:"
     "\"range_max_bytes,omitempty\"\022D\n\002gc\030\004 \001(\0132"
     "\031.cockroach.proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023ya"
-    "ml:\"gc,omitempty\"B\007Z\005proto", 986);
+    "ml:\"gc,omitempty\"\",\n\tRangeTree\022\037\n\007root_i"
+    "d\030\001 \001(\003B\016\310\336\037\000\342\336\037\006RootID\"\242\001\n\rRangeTreeNod"
+    "e\022\037\n\007raft_id\030\001 \001(\003B\016\310\336\037\000\342\336\037\006RaftID\022\023\n\005bl"
+    "ack\030\002 \001(\010B\004\310\336\037\000\022\037\n\tparent_id\030\003 \001(\003B\014\342\336\037\010"
+    "ParentID\022\033\n\007left_id\030\004 \001(\003B\n\342\336\037\006LeftID\022\035\n"
+    "\010right_id\030\005 \001(\003B\013\342\336\037\007RightIDB\007Z\005proto", 1197);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -255,6 +308,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   AcctConfig::default_instance_ = new AcctConfig();
   PermConfig::default_instance_ = new PermConfig();
   ZoneConfig::default_instance_ = new ZoneConfig();
+  RangeTree::default_instance_ = new RangeTree();
+  RangeTreeNode::default_instance_ = new RangeTreeNode();
   Attributes::default_instance_->InitAsDefaultInstance();
   Replica::default_instance_->InitAsDefaultInstance();
   RangeDescriptor::default_instance_->InitAsDefaultInstance();
@@ -262,6 +317,8 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
   AcctConfig::default_instance_->InitAsDefaultInstance();
   PermConfig::default_instance_->InitAsDefaultInstance();
   ZoneConfig::default_instance_->InitAsDefaultInstance();
+  RangeTree::default_instance_->InitAsDefaultInstance();
+  RangeTreeNode::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fproto_2fconfig_2eproto);
 }
 
@@ -2283,6 +2340,616 @@ void ZoneConfig::Swap(ZoneConfig* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = ZoneConfig_descriptor_;
   metadata.reflection = ZoneConfig_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int RangeTree::kRootIdFieldNumber;
+#endif  // !_MSC_VER
+
+RangeTree::RangeTree()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.RangeTree)
+}
+
+void RangeTree::InitAsDefaultInstance() {
+}
+
+RangeTree::RangeTree(const RangeTree& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RangeTree)
+}
+
+void RangeTree::SharedCtor() {
+  _cached_size_ = 0;
+  root_id_ = GOOGLE_LONGLONG(0);
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+RangeTree::~RangeTree() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.RangeTree)
+  SharedDtor();
+}
+
+void RangeTree::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void RangeTree::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* RangeTree::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return RangeTree_descriptor_;
+}
+
+const RangeTree& RangeTree::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  return *default_instance_;
+}
+
+RangeTree* RangeTree::default_instance_ = NULL;
+
+RangeTree* RangeTree::New() const {
+  return new RangeTree;
+}
+
+void RangeTree::Clear() {
+  root_id_ = GOOGLE_LONGLONG(0);
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool RangeTree::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.RangeTree)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int64 root_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &root_id_)));
+          set_has_root_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.RangeTree)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.RangeTree)
+  return false;
+#undef DO_
+}
+
+void RangeTree::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeTree)
+  // optional int64 root_id = 1;
+  if (has_root_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->root_id(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.RangeTree)
+}
+
+::google::protobuf::uint8* RangeTree::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeTree)
+  // optional int64 root_id = 1;
+  if (has_root_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->root_id(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RangeTree)
+  return target;
+}
+
+int RangeTree::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional int64 root_id = 1;
+    if (has_root_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->root_id());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RangeTree::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const RangeTree* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const RangeTree*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void RangeTree::MergeFrom(const RangeTree& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_root_id()) {
+      set_root_id(from.root_id());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void RangeTree::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void RangeTree::CopyFrom(const RangeTree& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RangeTree::IsInitialized() const {
+
+  return true;
+}
+
+void RangeTree::Swap(RangeTree* other) {
+  if (other != this) {
+    std::swap(root_id_, other->root_id_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata RangeTree::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = RangeTree_descriptor_;
+  metadata.reflection = RangeTree_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int RangeTreeNode::kRaftIdFieldNumber;
+const int RangeTreeNode::kBlackFieldNumber;
+const int RangeTreeNode::kParentIdFieldNumber;
+const int RangeTreeNode::kLeftIdFieldNumber;
+const int RangeTreeNode::kRightIdFieldNumber;
+#endif  // !_MSC_VER
+
+RangeTreeNode::RangeTreeNode()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.RangeTreeNode)
+}
+
+void RangeTreeNode::InitAsDefaultInstance() {
+}
+
+RangeTreeNode::RangeTreeNode(const RangeTreeNode& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RangeTreeNode)
+}
+
+void RangeTreeNode::SharedCtor() {
+  _cached_size_ = 0;
+  raft_id_ = GOOGLE_LONGLONG(0);
+  black_ = false;
+  parent_id_ = GOOGLE_LONGLONG(0);
+  left_id_ = GOOGLE_LONGLONG(0);
+  right_id_ = GOOGLE_LONGLONG(0);
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+RangeTreeNode::~RangeTreeNode() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.RangeTreeNode)
+  SharedDtor();
+}
+
+void RangeTreeNode::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void RangeTreeNode::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* RangeTreeNode::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return RangeTreeNode_descriptor_;
+}
+
+const RangeTreeNode& RangeTreeNode::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto();
+  return *default_instance_;
+}
+
+RangeTreeNode* RangeTreeNode::default_instance_ = NULL;
+
+RangeTreeNode* RangeTreeNode::New() const {
+  return new RangeTreeNode;
+}
+
+void RangeTreeNode::Clear() {
+#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
+  &reinterpret_cast<RangeTreeNode*>(16)->f) - \
+   reinterpret_cast<char*>(16))
+
+#define ZR_(first, last) do {                              \
+    size_t f = OFFSET_OF_FIELD_(first);                    \
+    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
+    ::memset(&first, 0, n);                                \
+  } while (0)
+
+  if (_has_bits_[0 / 32] & 31) {
+    ZR_(raft_id_, black_);
+  }
+
+#undef OFFSET_OF_FIELD_
+#undef ZR_
+
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool RangeTreeNode::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.RangeTreeNode)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int64 raft_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &raft_id_)));
+          set_has_raft_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(16)) goto parse_black;
+        break;
+      }
+
+      // optional bool black = 2;
+      case 2: {
+        if (tag == 16) {
+         parse_black:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &black_)));
+          set_has_black();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_parent_id;
+        break;
+      }
+
+      // optional int64 parent_id = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_parent_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &parent_id_)));
+          set_has_parent_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(32)) goto parse_left_id;
+        break;
+      }
+
+      // optional int64 left_id = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_left_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &left_id_)));
+          set_has_left_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(40)) goto parse_right_id;
+        break;
+      }
+
+      // optional int64 right_id = 5;
+      case 5: {
+        if (tag == 40) {
+         parse_right_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &right_id_)));
+          set_has_right_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.RangeTreeNode)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.RangeTreeNode)
+  return false;
+#undef DO_
+}
+
+void RangeTreeNode::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeTreeNode)
+  // optional int64 raft_id = 1;
+  if (has_raft_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->raft_id(), output);
+  }
+
+  // optional bool black = 2;
+  if (has_black()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->black(), output);
+  }
+
+  // optional int64 parent_id = 3;
+  if (has_parent_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->parent_id(), output);
+  }
+
+  // optional int64 left_id = 4;
+  if (has_left_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->left_id(), output);
+  }
+
+  // optional int64 right_id = 5;
+  if (has_right_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->right_id(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.RangeTreeNode)
+}
+
+::google::protobuf::uint8* RangeTreeNode::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeTreeNode)
+  // optional int64 raft_id = 1;
+  if (has_raft_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->raft_id(), target);
+  }
+
+  // optional bool black = 2;
+  if (has_black()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->black(), target);
+  }
+
+  // optional int64 parent_id = 3;
+  if (has_parent_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->parent_id(), target);
+  }
+
+  // optional int64 left_id = 4;
+  if (has_left_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->left_id(), target);
+  }
+
+  // optional int64 right_id = 5;
+  if (has_right_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->right_id(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RangeTreeNode)
+  return target;
+}
+
+int RangeTreeNode::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional int64 raft_id = 1;
+    if (has_raft_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->raft_id());
+    }
+
+    // optional bool black = 2;
+    if (has_black()) {
+      total_size += 1 + 1;
+    }
+
+    // optional int64 parent_id = 3;
+    if (has_parent_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->parent_id());
+    }
+
+    // optional int64 left_id = 4;
+    if (has_left_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->left_id());
+    }
+
+    // optional int64 right_id = 5;
+    if (has_right_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->right_id());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RangeTreeNode::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const RangeTreeNode* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const RangeTreeNode*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void RangeTreeNode::MergeFrom(const RangeTreeNode& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_raft_id()) {
+      set_raft_id(from.raft_id());
+    }
+    if (from.has_black()) {
+      set_black(from.black());
+    }
+    if (from.has_parent_id()) {
+      set_parent_id(from.parent_id());
+    }
+    if (from.has_left_id()) {
+      set_left_id(from.left_id());
+    }
+    if (from.has_right_id()) {
+      set_right_id(from.right_id());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void RangeTreeNode::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void RangeTreeNode::CopyFrom(const RangeTreeNode& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RangeTreeNode::IsInitialized() const {
+
+  return true;
+}
+
+void RangeTreeNode::Swap(RangeTreeNode* other) {
+  if (other != this) {
+    std::swap(raft_id_, other->raft_id_);
+    std::swap(black_, other->black_);
+    std::swap(parent_id_, other->parent_id_);
+    std::swap(left_id_, other->left_id_);
+    std::swap(right_id_, other->right_id_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata RangeTreeNode::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = RangeTreeNode_descriptor_;
+  metadata.reflection = RangeTreeNode_reflection_;
   return metadata;
 }
 

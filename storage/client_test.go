@@ -47,10 +47,20 @@ import (
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for closing the store on exit.
 func createTestStore(t *testing.T) *storage.Store {
-	return createTestStoreWithEngine(t,
+	store, _ := createTestStoreWithClock(t)
+	return store
+}
+
+// createTestStoreWithClock creates a test store using an in-memory
+// engine and also returns the clock. The caller is responsible for closing the
+// store on exit.
+func createTestStoreWithClock(t *testing.T) (*storage.Store, *hlc.Clock) {
+	clock := hlc.NewClock(hlc.NewManualClock(0).UnixNano)
+	store := createTestStoreWithEngine(t,
 		engine.NewInMem(proto.Attributes{}, 10<<20),
-		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
+		clock,
 		true)
+	return store, clock
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
