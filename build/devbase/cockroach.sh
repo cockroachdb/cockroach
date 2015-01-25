@@ -1,14 +1,12 @@
 #!/bin/sh
-# This file serves as an entrypoint for the docker image.
-# Its purpose is to allow running of "./cockroach test"
-# to run the tests.
+# This file serves as an entrypoint for the docker image,
+# allowing injection of shell commands.
 cd "$(dirname $0)"
 
-if [ $# -eq 1 ] && [ "$1" = "test" ]; then
-  make test && make testrace
+if [ "$1" = "test" ] || [ "$1" = "testrace" ]; then
+  make "$@"
   exit $?
-fi
-if [ $# -ge 1 ] && [ "$1" = "shell" ]; then
+elif [ "$1" = "shell" ]; then
   shift
   if [ $# -eq 0 ]; then
     /bin/bash
