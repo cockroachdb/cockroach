@@ -167,6 +167,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		reply  proto.Response
 	}{
 		{proto.InternalRangeLookup, &proto.InternalRangeLookupRequest{}, &proto.InternalRangeLookupResponse{}},
+		{proto.InternalGC, &proto.InternalGCRequest{}, &proto.InternalGCResponse{}},
 		{proto.InternalHeartbeatTxn, &proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}},
 		{proto.InternalPushTxn, &proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}},
 		{proto.InternalResolveIntent, &proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}},

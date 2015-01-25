@@ -30,6 +30,11 @@ const (
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.
 	InternalHeartbeatTxn = "InternalHeartbeatTxn"
+	// InternalGC garbage collects values based on expired timestamps
+	// for a list of keys in a range. This method is called by the
+	// range leader after a snapshot scan. The call goes through Raft,
+	// so all range replicas GC the exact same values.
+	InternalGC = "InternalGC"
 	// InternalPushTxn attempts to resolve read or write conflicts between
 	// transactions. Both the pusher (args.Txn) and the pushee
 	// (args.PushTxn) are supplied. However, args.Key should be set to the

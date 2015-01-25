@@ -138,21 +138,19 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	intentExp := now
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 
-	/*
-		gcRequest := &proto.InternalGCRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:       rng.Desc.StartKey,
-				Timestamp: now,
-				RaftID:    rng.Desc.RaftID,
-			},
-		}*/
+	gcArgs := &proto.InternalGCRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       rng.Desc.StartKey,
+			Timestamp: now,
+			RaftID:    rng.Desc.RaftID,
+		},
+	}
 	var expBaseKey proto.Key
 	var keys []proto.EncodedKey
 	var vals [][]byte
 	for ; iter.Valid(); iter.Next() {
 		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
 		if !isValue {
-			expBaseKey = baseKey
 			// Moving to the next key (& values). If there's more than a
 			// single value for the key, possibly send for GC.
 			if len(keys) > 1 {
@@ -171,14 +169,16 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 							scanMeta.OldestIntentNanos = gogoproto.Int64(meta.Timestamp.WallTime)
 						}
 						// With an active intent, GC ignores MVCC metadata & intent value.
+						log.Infof("there's an intent on key %q", expBaseKey)
 						startIdx = 2
 					}
 					// See if any values may be GC'd.
 					if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
-						//gcRequest.Keys = append(gcRequest.Keys, proto.GCKey{Key: keys[0], Timestamp: gcTS})
+						gcArgs.Keys = append(gcArgs.Keys, proto.InternalGCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 					}
 				}
 			}
+			expBaseKey = baseKey
 			keys = []proto.EncodedKey{iter.Key()}
 			vals = [][]byte{iter.Value()}
 		} else {
@@ -190,11 +190,18 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 			vals = append(vals, iter.Value())
 		}
 	}
+	if iter.Error() != nil {
+		// TODO(spencer): do something other than fatal error
+		// here. Presumably, this means a checksum failure while iterating
+		// over the underlying key/value data. We want to quarantine this
+		// range, make it a non-participating raft follower until it can be
+		// replaced and then destroyed.
+		log.Fatalf("unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
+	}
 
-	// TODO(spencer): send GC request through range.
-
-	// Store new scan metadata.
-	if err := rng.PutScanMetadata(scanMeta); err != nil {
+	// Send GC request through range.
+	gcArgs.ScanMeta = *scanMeta
+	if err := rng.AddCmd(proto.InternalGC, gcArgs, &proto.InternalGCResponse{}, true); err != nil {
 		return err
 	}
 
@@ -227,6 +234,7 @@ func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 			}
 			return *zone.GC, nil
 		}
+		log.V(1).Infof("skipping zone config %+v, because no GC policy is set", zone)
 	}
 
 	// We should always match the default GC.

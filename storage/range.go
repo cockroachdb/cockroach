@@ -277,12 +277,6 @@ func (r *Range) GetScanMetadata() (*proto.ScanMetadata, error) {
 	return scanMeta, nil
 }
 
-// PutScanMetadata writes the scan metadata for this range.
-func (r *Range) PutScanMetadata(scanMeta *proto.ScanMetadata) error {
-	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
-	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, scanMeta)
-}
-
 // AddCmd adds a command for execution on this range. The command's
 // affected keys are verified to be contained within the range and the
 // range's leadership is confirmed. The command is then dispatched
@@ -726,6 +720,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case proto.InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+	case proto.InternalGC:
+		r.InternalGC(batch, &ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
 	case proto.InternalPushTxn:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case proto.InternalResolveIntent:
@@ -1070,6 +1066,23 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 		}
 	}
 	reply.Txn = &txn
+}
+
+// InternalGC iterates through the list of keys to garbage collect
+// specified in the arguments. MVCCGarbageCollect is invoked on
+// each listed key along with the expiration timestamp. The scan
+// metadata specified in the args is persisted after GC.
+func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalGCRequest, reply *proto.InternalGCResponse) {
+	// Garbage collect the specified keys by expiration timestamps.
+	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
+		reply.SetGoError(err)
+		return
+	}
+
+	// Store the scan metadata for this range.
+	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
+	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.ScanMeta)
+	reply.SetGoError(err)
 }
 
 // InternalPushTxn resolves conflicts between concurrent txns (or

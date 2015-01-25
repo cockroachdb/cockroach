@@ -466,6 +466,11 @@ func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, rep
 	return n.executeCmd(proto.InternalHeartbeatTxn, args, reply)
 }
 
+// InternalGC .
+func (n *Node) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
+	return n.executeCmd(proto.InternalGC, args, reply)
+}
+
 // InternalPushTxn .
 func (n *Node) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
 	return n.executeCmd(proto.InternalPushTxn, args, reply)
@@ -481,6 +486,7 @@ func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.Inte
 	return n.executeCmd(proto.InternalMerge, args, reply)
 }
 
+// InternalTruncateLog .
 func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
 	return n.executeCmd(proto.InternalTruncateLog, args, reply)
 }
