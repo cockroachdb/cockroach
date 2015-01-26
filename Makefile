@@ -26,7 +26,7 @@ GOFLAGS :=
 STATIC := $(STATIC)
 
 RUN  := run
-GOPATH  := $(CURDIR)/_vendor:$(GOPATH)
+GOPATH  := $(CURDIR)/_vendor:$(CURDIR)/../../../..
 # Exposes protoc.
 PATH := $(CURDIR)/_vendor/usr/bin:$(PATH)
 # Expose protobuf.
@@ -123,3 +123,9 @@ clean:
 	make -C $(ROACH_PROTO) clean
 	make -C $(ROACH_LIB) clean
 	make -C $(SQL_PARSER) clean
+
+# The gopath target outputs the GOPATH that should be used for building this
+# package. It is used by the emacs go-projectile package for automatic
+# configuration.
+gopath:
+	@echo -n $(GOPATH)
