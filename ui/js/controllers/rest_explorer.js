@@ -18,6 +18,7 @@
 var crApp = angular.module('cockroach');
 crApp.controller('RestExplorerCtrl', ['$scope', '$http',
     function(scope, http) {
+  scope.kvCounterVal = 0;
   scope.responseLog = [];
   scope.clearResponseLog = function(e) {
     scope.responseLog = [];
