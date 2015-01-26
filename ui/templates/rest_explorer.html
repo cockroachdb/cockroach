@@ -45,7 +45,7 @@ Author: Andrew Bonventre (andybons@gmail.com)
       <form>
         <input type="text" ng-model="kvKey" ng-disabled="responsePending" placeholder="Key">
         &rarr;
-        <input type="number" ng-model="kvCounterVal" ng-disabled="responsePending" placeholder="0">
+        <input type="number" ng-model="kvCounterVal" ng-disabled="responsePending">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Get" data-endpoint="/kv/rest/counter/" data-method="GET">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Head" data-endpoint="/kv/rest/counter/" data-method="HEAD">
         <input type="button" ng-click="handleClick($event)" ng-disabled="responsePending" value="Post" data-endpoint="/kv/rest/counter/" data-method="POST">
