@@ -465,15 +465,18 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			log.V(4).Infof("node %v: dropping stale ready message for group %v", s.nodeID, groupID)
 			continue
 		}
-		leader, term := g.leader, g.committedTerm
+		term := g.committedTerm
 		if ready.SoftState != nil {
-			leader = ready.SoftState.Lead
+			// Always save the leader whenever we get a SoftState.
+			g.leader = ready.SoftState.Lead
 		}
 		if len(ready.CommittedEntries) > 0 {
 			term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
 		}
-		if term != g.committedTerm || leader != g.leader {
-			g.leader, g.committedTerm = leader, term
+		if term != g.committedTerm && g.leader != 0 {
+			// Whenever the committed term has advanced and we know our leader,
+			// emit an event.
+			g.committedTerm = term
 			s.sendEvent(&EventLeaderElection{groupID, g.leader, g.committedTerm})
 
 			// Re-submit all pending proposals
