@@ -54,9 +54,9 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 		return proto.ZeroTimestamp
 	}
 
-	// Loop over remaining values. All should be MVCC versions.
-	var delTS proto.Timestamp
-	var survivors bool
+	// Loop over values. All should be MVCC versions.
+	delTS := proto.ZeroTimestamp
+	survivors := false
 	for i, key := range keys {
 		_, ts, isValue := MVCCDecodeKey(key)
 		if !isValue {
@@ -69,7 +69,8 @@ func (gc *GarbageCollector) Filter(keys []proto.EncodedKey, values [][]byte) pro
 			return proto.ZeroTimestamp
 		}
 		if i == 0 {
-			// If the first value isn't a deletion tombstone, don't con
+			// If the first value isn't a deletion tombstone, don't consider
+			// it for GC. It should always survive if non-deleted.
 			if !mvccVal.Deleted {
 				survivors = true
 				continue

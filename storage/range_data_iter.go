@@ -42,10 +42,13 @@ type rangeDataIterator struct {
 }
 
 func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
+	r.RLock()
 	startKey := r.Desc.StartKey
 	if startKey.Equal(engine.KeyMin) {
 		startKey = engine.KeyLocalMax
 	}
+	endKey := r.Desc.EndKey
+	r.RUnlock()
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
@@ -53,12 +56,12 @@ func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
 				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, r.Desc.RaftID+1))),
 			},
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, r.Desc.StartKey))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, r.Desc.EndKey))),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, startKey))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, endKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(startKey),
-				end:   engine.MVCCEncodeKey(r.Desc.EndKey),
+				end:   engine.MVCCEncodeKey(endKey),
 			},
 		},
 		iter: e.NewIterator(),

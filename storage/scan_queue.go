@@ -174,6 +174,9 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 					}
 					// See if any values may be GC'd.
 					if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
+						// TODO(spencer): need to split the requests up into
+						// multiple requests in the event that more than X keys
+						// are added to the request.
 						gcArgs.Keys = append(gcArgs.Keys, proto.InternalGCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 					}
 				}
