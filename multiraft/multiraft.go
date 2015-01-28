@@ -155,7 +155,7 @@ func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
 	m := (*MultiRaft)(ms)
 	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
-		ms.EntryFormatter.DescribeMessage(req.Message))
+		raft.DescribeMessage(req.Message, ms.EntryFormatter))
 	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
 }
 
@@ -446,16 +446,16 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 				log.Infof("HardState updated: %+v", ready.HardState)
 			}
 			for i, e := range ready.Entries {
-				log.Infof("New Entry[%d]: %s", i, s.EntryFormatter.DescribeEntry(e))
+				log.Infof("New Entry[%d]: %s", i, raft.DescribeEntry(e, s.EntryFormatter))
 			}
 			for i, e := range ready.CommittedEntries {
-				log.Infof("Committed Entry[%d]: %s", i, s.EntryFormatter.DescribeEntry(e))
+				log.Infof("Committed Entry[%d]: %s", i, raft.DescribeEntry(e, s.EntryFormatter))
 			}
 			if !raft.IsEmptySnap(ready.Snapshot) {
 				log.Infof("Snapshot updated: %s", ready.Snapshot)
 			}
 			for i, m := range ready.Messages {
-				log.Infof("Outgoing Message[%d]: %s", i, s.EntryFormatter.DescribeMessage(m))
+				log.Infof("Outgoing Message[%d]: %s", i, raft.DescribeMessage(m, s.EntryFormatter))
 			}
 		}
 
@@ -557,7 +557,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		}
 		for _, msg := range ready.Messages {
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
-				s.EntryFormatter.DescribeMessage(msg), msg.To)
+				raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 			s.nodes[msg.To].client.raftMessage(&RaftMessageRequest{groupID, msg})
 		}
 	}
