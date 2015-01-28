@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -148,6 +149,59 @@ func TestInitialLeaderElection(t *testing.T) {
 				event.NodeID)
 		}
 		cluster.stop()
+	}
+}
+
+func TestLeaderElectionEvent(t *testing.T) {
+	// Leader election events are fired when the leader commits an entry, not when it
+	// issues a call for votes.
+	cluster := newTestCluster(3, t)
+	defer cluster.stop()
+	groupID := uint64(1)
+	cluster.createGroup(groupID, 3)
+
+	// Send a Ready with a new leader but no new commits.
+	// This happens while an election is in progress.
+	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
+		groupID: raft.Ready{
+			SoftState: &raft.SoftState{
+				Lead: 3,
+			},
+		},
+	})
+
+	// No events are sent.
+	select {
+	case e := <-cluster.events[1].LeaderElection:
+		t.Fatalf("got unexpected event %v", e)
+	case <-time.After(time.Millisecond):
+	}
+
+	// Now there are new committed entries. A new leader always commits an entry
+	// to conclude the election.
+	entry := raftpb.Entry{
+		Index: 42,
+		Term:  42,
+	}
+	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
+		groupID: raft.Ready{
+			Entries:          []raftpb.Entry{entry},
+			CommittedEntries: []raftpb.Entry{entry},
+		},
+	})
+
+	// Now we get an event.
+	select {
+	case e := <-cluster.events[1].LeaderElection:
+		if !reflect.DeepEqual(e, &EventLeaderElection{
+			GroupID: groupID,
+			NodeID:  3,
+			Term:    42,
+		}) {
+			t.Errorf("election event did not match expectations: %+v", e)
+		}
+	case <-time.After(time.Millisecond):
+		t.Fatal("didn't get expected event")
 	}
 }
 
