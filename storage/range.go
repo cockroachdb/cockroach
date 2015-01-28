@@ -65,7 +65,7 @@ var (
 	// serves as the sentinel gossip key which informs a node whether or
 	// not it's connected to the primary gossip network and not just a
 	// partition. As such it must expire on a reasonable basis and be
-	// continually re-gossipped. The replica which is the raft leader of
+	// continually re-gossiped. The replica which is the raft leader of
 	// the first range gossips it.
 	ttlClusterIDGossip = 30 * time.Second
 )
@@ -275,12 +275,6 @@ func (r *Range) GetScanMetadata() (*proto.ScanMetadata, error) {
 		return nil, err
 	}
 	return scanMeta, nil
-}
-
-// PutScanMetadata writes the scan metadata for this range.
-func (r *Range) PutScanMetadata(scanMeta *proto.ScanMetadata) error {
-	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
-	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, scanMeta)
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -726,6 +720,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case proto.InternalHeartbeatTxn:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
+	case proto.InternalGC:
+		r.InternalGC(batch, &ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
 	case proto.InternalPushTxn:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case proto.InternalResolveIntent:
@@ -1072,6 +1068,23 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 	reply.Txn = &txn
 }
 
+// InternalGC iterates through the list of keys to garbage collect
+// specified in the arguments. MVCCGarbageCollect is invoked on
+// each listed key along with the expiration timestamp. The scan
+// metadata specified in the args is persisted after GC.
+func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalGCRequest, reply *proto.InternalGCResponse) {
+	// Garbage collect the specified keys by expiration timestamps.
+	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
+		reply.SetGoError(err)
+		return
+	}
+
+	// Store the scan metadata for this range.
+	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
+	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.ScanMeta)
+	reply.SetGoError(err)
+}
+
 // InternalPushTxn resolves conflicts between concurrent txns (or
 // between a non-transactional reader or writer and a txn) in several
 // ways depending on the statuses and priorities of the conflicting
@@ -1272,7 +1285,10 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
 	}
 
-	// Copy the scan metadata.
+	// Copy the scan metadata. This will result in an inaccurate scan
+	// metadata, but it's good enough for government work. The scan
+	// metadata will be refreshed on the next scan and recomputing each
+	// separately would almost always just be unnecessary latency here.
 	scanMeta, err := r.GetScanMetadata()
 	if err != nil {
 		return util.Errorf("unable to fetch scan metadata: %s", err)

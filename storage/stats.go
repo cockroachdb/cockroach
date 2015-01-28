@@ -85,7 +85,7 @@ func (rs *rangeStats) Update(ms engine.MVCCStats) {
 
 // GetAvgIntentAge returns the average age of outstanding intents,
 // based on current wall time specified via nowNanos.
-func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) float64 {
+func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 	if rs.IntentCount == 0 {
 		return 0
 	}
@@ -95,15 +95,14 @@ func (rs *rangeStats) GetAvgIntentAge(e engine.Engine, nowNanos int64) float64 {
 	return float64(advancedIntentAge) / float64(rs.IntentCount)
 }
 
-// GetAvgGCBytesAge returns the average age of outstanding gc'able
+// GetGCBytesAge returns the total age of outstanding gc'able
 // bytes, based on current wall time specified via nowNanos.
-func (rs *rangeStats) GetAvgGCBytesAge(e engine.Engine, nowNanos int64) float64 {
+func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
 	gcBytes := (rs.KeyBytes + rs.ValBytes - rs.LiveBytes)
 	if gcBytes == 0 {
 		return 0
 	}
 	// Advance gc bytes age by any elapsed time since last computed.
 	elapsedSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
-	advancedGCBytesAge := rs.GCBytesAge + gcBytes*elapsedSeconds
-	return float64(advancedGCBytesAge) / float64(gcBytes)
+	return rs.GCBytesAge + engine.MVCCComputeGCBytesAge(gcBytes, elapsedSeconds)
 }

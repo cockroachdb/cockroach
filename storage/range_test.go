@@ -65,6 +65,9 @@ var (
 		},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
+		GC: &proto.GCPolicy{
+			TTLSeconds: 24 * 60 * 60, // 1 day
+		},
 	}
 )
 
@@ -194,10 +197,10 @@ func TestRangeGossipFirstRange(t *testing.T) {
 			}
 			if key == gossip.KeyFirstRangeDescriptor &&
 				!reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-				t.Errorf("expected gossipped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+				t.Errorf("expected gossiped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
 			}
 			if key == gossip.KeyClusterID && info.(string) != tc.store.Ident.ClusterID {
-				t.Errorf("expected gossipped cluster ID %s; got %s", tc.store.Ident.ClusterID, info.(string))
+				t.Errorf("expected gossiped cluster ID %s; got %s", tc.store.Ident.ClusterID, info.(string))
 			}
 		}
 		return true
@@ -207,7 +210,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 }
 
 // TestRangeGossipAllConfigs verifies that all config types are
-// gossipped.
+// gossiped.
 func TestRangeGossipAllConfigs(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
@@ -234,7 +237,7 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 }
 
 // TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
-// key prefixes for a config are gossipped.
+// key prefixes for a config are gossiped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
@@ -275,7 +278,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 }
 
 // TestRangeGossipConfigUpdates verifies that writes to the
-// permissions cause the updated configs to be re-gossipped.
+// permissions cause the updated configs to be re-gossiped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)

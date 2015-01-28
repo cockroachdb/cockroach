@@ -1689,3 +1689,148 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		}
 	}
 }
+
+// TestMVCCGarbageCollect writes a series of gc'able bytes and then
+// sends an MVCC GC request and verifies cleared values and updated
+// stats.
+func TestMVCCGarbageCollect(t *testing.T) {
+	engine := createTestEngine()
+	ms := &MVCCStats{}
+
+	bytes := []byte("value")
+	ts1 := makeTS(1E9, 0)
+	ts2 := makeTS(2E9, 0)
+	ts3 := makeTS(3E9, 0)
+	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
+	val2 := proto.Value{Bytes: bytes, Timestamp: &ts2}
+	val3 := proto.Value{Bytes: bytes, Timestamp: &ts3}
+
+	testData := []struct {
+		key       proto.Key
+		vals      []proto.Value
+		isDeleted bool // is the most recent value a deletion tombstone?
+	}{
+		{proto.Key("a"), []proto.Value{val1, val2}, false},
+		{proto.Key("a-del"), []proto.Value{val1, val2}, true},
+		{proto.Key("b"), []proto.Value{val1, val2, val3}, false},
+		{proto.Key("b-del"), []proto.Value{val1, val2, val3}, true},
+	}
+
+	for i := 0; i < 3; i++ {
+		// Manually advance aggregate gc'able bytes age based on one extra second of simulation.
+		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
+
+		for _, test := range testData {
+			if i >= len(test.vals) {
+				continue
+			}
+			for _, val := range test.vals[i : i+1] {
+				if i == len(test.vals)-1 && test.isDeleted {
+					if err := MVCCDelete(engine, ms, test.key, *val.Timestamp, nil); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				if err := MVCCPut(engine, ms, test.key, *val.Timestamp, val, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	kvsn, err := Scan(engine, MVCCEncodeKey(KeyMin), MVCCEncodeKey(KeyMax), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, kv := range kvsn {
+		key, ts, _ := MVCCDecodeKey(kv.Key)
+		log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
+	}
+
+	keys := []proto.InternalGCRequest_GCKey{
+		{Key: proto.Key("a"), Timestamp: ts1},
+		{Key: proto.Key("a-del"), Timestamp: ts2},
+		{Key: proto.Key("b"), Timestamp: ts1},
+		{Key: proto.Key("b-del"), Timestamp: ts2},
+	}
+	if err := MVCCGarbageCollect(engine, ms, keys, ts3); err != nil {
+		t.Fatal(err)
+	}
+
+	expEncKeys := []proto.EncodedKey{
+		MVCCEncodeKey(proto.Key("a")),
+		MVCCEncodeVersionKey(proto.Key("a"), ts2),
+		MVCCEncodeKey(proto.Key("b")),
+		MVCCEncodeVersionKey(proto.Key("b"), ts3),
+		MVCCEncodeVersionKey(proto.Key("b"), ts2),
+		MVCCEncodeKey(proto.Key("b-del")),
+		MVCCEncodeVersionKey(proto.Key("b-del"), ts3),
+	}
+	kvs, err := Scan(engine, MVCCEncodeKey(KeyMin), MVCCEncodeKey(KeyMax), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != len(expEncKeys) {
+		t.Fatalf("number of kvs %d != expected %d", len(kvs), len(expEncKeys))
+	}
+	for i, kv := range kvs {
+		key, ts, _ := MVCCDecodeKey(kv.Key)
+		log.Infof("%d: %q, ts=%s", i, key, ts)
+		if !kv.Key.Equal(expEncKeys[i]) {
+			t.Errorf("%d: expected key %q; got %q", expEncKeys[i], kv.Key)
+		}
+	}
+
+	// Verify aggregated stats match computed stats after GC.
+	expMS, err := MVCCComputeStats(engine, KeyMin, KeyMax, ts3.WallTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifyStats("verification", ms, &expMS, t)
+}
+
+// TestMVCCGarbageCollectNonDeleted verifies that the first value for
+// a key cannot be GC'd if it's not deleted.
+func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
+	engine := createTestEngine()
+	bytes := []byte("value")
+	ts1 := makeTS(1E9, 0)
+	ts2 := makeTS(2E9, 0)
+	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
+	val2 := proto.Value{Bytes: bytes, Timestamp: &ts2}
+	key := proto.Key("a")
+	vals := []proto.Value{val1, val2}
+	for _, val := range vals {
+		if err := MVCCPut(engine, nil, key, *val.Timestamp, val, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys := []proto.InternalGCRequest_GCKey{
+		{Key: proto.Key("a"), Timestamp: ts2},
+	}
+	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
+		t.Fatal("expected error garbage collecting a non-deleted live value")
+	}
+}
+
+// TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
+func TestMVCCGarbageCollectIntent(t *testing.T) {
+	engine := createTestEngine()
+	bytes := []byte("value")
+	ts1 := makeTS(1E9, 0)
+	ts2 := makeTS(2E9, 0)
+	val1 := proto.Value{Bytes: bytes, Timestamp: &ts1}
+	key := proto.Key("a")
+	if err := MVCCPut(engine, nil, key, ts1, val1, nil); err != nil {
+		t.Fatal(err)
+	}
+	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: ts2}
+	if err := MVCCDelete(engine, nil, key, ts2, txn); err != nil {
+		t.Fatal(err)
+	}
+	keys := []proto.InternalGCRequest_GCKey{
+		{Key: proto.Key("a"), Timestamp: ts2},
+	}
+	if err := MVCCGarbageCollect(engine, nil, keys, ts2); err == nil {
+		t.Fatal("expected error garbage collecting an intent")
+	}
+}

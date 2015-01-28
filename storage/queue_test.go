@@ -20,7 +20,6 @@ package storage
 import (
 	"container/heap"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 )
@@ -75,36 +74,36 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 		r1: 1.0,
 		r2: 2.0,
 	}
-	shouldQ := func(now time.Time, r *Range) (shouldQueue bool, priority float64) {
+	shouldQ := func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 		return shouldAddMap[r], priorityMap[r]
 	}
-	process := func(now time.Time, r *Range) error { return nil }
+	process := func(now proto.Timestamp, r *Range) error { return nil }
 	bq := newBaseQueue("test", shouldQ, process, 2)
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop() != r2 {
+	if bq.Pop(proto.ZeroTimestamp) != r2 {
 		t.Error("expected r2")
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Error("expected r1")
 	}
-	if r := bq.Pop(); r != nil {
+	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same range twice.
-	bq.MaybeAdd(r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -112,30 +111,30 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Error("expected r1")
 	}
-	if bq.Pop() != r2 {
+	if bq.Pop(proto.ZeroTimestamp) != r2 {
 		t.Error("expected r2")
 	}
-	if r := bq.Pop(); r != nil {
+	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(r1)
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(r2)
+	bq.MaybeAdd(proto.ZeroTimestamp, r2)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
-	if bq.Pop() != r1 {
+	if bq.Pop(proto.ZeroTimestamp) != r1 {
 		t.Errorf("expected r1")
 	}
 }

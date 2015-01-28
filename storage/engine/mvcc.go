@@ -256,6 +256,25 @@ func (ms *MVCCStats) updateStatsOnAbort(key proto.Key, origMetaKeySize, origMeta
 	}
 }
 
+// updateStatsOnGC updates stat counters after garbage collection
+// by subtracting key and value byte counts, updating key and
+// value counts, and updating the GC'able bytes age. If meta is
+// not nil, then the value being GC'd is the mvcc metadata and we
+// decrement the key count.
+func (ms *MVCCStats) updateStatsOnGC(key proto.Key, keySize, valSize int64, meta *proto.MVCCMetadata, ageSeconds int64) {
+	if !ms.updateStatsForKey(key) {
+		return
+	}
+	ms.KeyBytes -= keySize
+	ms.ValBytes -= valSize
+	if meta != nil {
+		ms.KeyCount--
+	} else {
+		ms.ValCount--
+	}
+	ms.GCBytesAge -= MVCCComputeGCBytesAge(keySize+valSize, ageSeconds)
+}
+
 // MVCCComputeGCBytesAge comptues the value to assign to the specified
 // number of bytes, at the given age (in seconds).
 func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
@@ -1076,6 +1095,56 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *MVCCStats, key, endKey proto
 	}
 
 	return num, nil
+}
+
+// MVCCGarbageCollect creates an iterator on the engine. In parallel
+// it iterates through the keys listed for garbage collection by the
+// keys slice. The engine iterator is seeked in turn to each listed
+// key, clearing all values with timestamps <= to expiration.
+func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.InternalGCRequest_GCKey, timestamp proto.Timestamp) error {
+	iter := engine.NewIterator()
+
+	// Iterate through specified GC keys.
+	for _, gcKey := range keys {
+		encKey := MVCCEncodeKey(gcKey.Key)
+		iter.Seek(encKey)
+		if !iter.Valid() {
+			return util.Errorf("could not seek to key %q", gcKey.Key)
+		}
+		// First, check whether all values of the key are being deleted.
+		meta := &proto.MVCCMetadata{}
+		if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
+			return util.Errorf("unable to marshal mvcc meta: %s", err)
+		}
+		if !gcKey.Timestamp.Less(meta.Timestamp) {
+			if !meta.Deleted {
+				return util.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
+			}
+			if meta.Txn != nil {
+				return util.Errorf("request to GC intent at %q", gcKey.Key)
+			}
+			ageSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
+			ms.updateStatsOnGC(gcKey.Key, int64(len(iter.Key())), int64(len(iter.Value())), meta, ageSeconds)
+			engine.Clear(iter.Key())
+		}
+
+		// Now, iterate through all values, GC'ing ones which have expired.
+		// Note that we start the for loop by iterating once to move past
+		// the metadata key.
+		for iter.Next(); iter.Valid(); iter.Next() {
+			_, ts, isValue := MVCCDecodeKey(iter.Key())
+			if !isValue {
+				break
+			}
+			if !gcKey.Timestamp.Less(ts) {
+				ageSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
+				ms.updateStatsOnGC(gcKey.Key, int64(len(iter.Key())), int64(len(iter.Value())), nil, ageSeconds)
+				engine.Clear(iter.Key())
+			}
+		}
+	}
+
+	return nil
 }
 
 // IsValidSplitKey returns whether the key is a valid split key.

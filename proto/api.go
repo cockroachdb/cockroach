@@ -100,6 +100,7 @@ var AllMethods = stringSet{
 	AdminSplit:            struct{}{},
 	Batch:                 struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
+	InternalGC:            struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
@@ -129,6 +130,7 @@ var PublicMethods = stringSet{
 // via the internal node RPC API.
 var InternalMethods = stringSet{
 	InternalHeartbeatTxn:  struct{}{},
+	InternalGC:            struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
@@ -159,6 +161,7 @@ var WriteMethods = stringSet{
 	EnqueueMessage:        struct{}{},
 	Batch:                 struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
+	InternalGC:            struct{}{},
 	InternalPushTxn:       struct{}{},
 	InternalResolveIntent: struct{}{},
 	InternalMerge:         struct{}{},
@@ -343,6 +346,8 @@ func MethodForRequest(req Request) (string, error) {
 		return AdminSplit, nil
 	case *InternalHeartbeatTxnRequest:
 		return InternalHeartbeatTxn, nil
+	case *InternalGCRequest:
+		return InternalGC, nil
 	case *InternalPushTxnRequest:
 		return InternalPushTxn, nil
 	case *InternalResolveIntentRequest:
@@ -398,6 +403,8 @@ func CreateArgs(method string) (Request, error) {
 		return &AdminSplitRequest{}, nil
 	case InternalHeartbeatTxn:
 		return &InternalHeartbeatTxnRequest{}, nil
+	case InternalGC:
+		return &InternalGCRequest{}, nil
 	case InternalPushTxn:
 		return &InternalPushTxnRequest{}, nil
 	case InternalResolveIntent:
@@ -443,6 +450,8 @@ func CreateReply(method string) (Response, error) {
 		return &AdminSplitResponse{}, nil
 	case InternalHeartbeatTxn:
 		return &InternalHeartbeatTxnResponse{}, nil
+	case InternalGC:
+		return &InternalGCResponse{}, nil
 	case InternalPushTxn:
 		return &InternalPushTxnResponse{}, nil
 	case InternalResolveIntent:

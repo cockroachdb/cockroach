@@ -55,7 +55,7 @@ func newServer(interval time.Duration) *server {
 	return s
 }
 
-// Gossip receives gossipped information from a peer node.
+// Gossip receives gossiped information from a peer node.
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) error {
@@ -85,7 +85,7 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		s.clientAddrMap[lAddr.String()] = addr
 	}
 
-	// Update infostore with gossipped infos.
+	// Update infostore with gossiped infos.
 	if args.Delta != nil {
 		delta := &infoStore{}
 		if err := gob.NewDecoder(bytes.NewBuffer(args.Delta)).Decode(delta); err != nil {

@@ -176,7 +176,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 
 // start starts the node by initializing network/physical topology
 // attributes gleaned from the environment and initializing stores
-// for each specified engine. Launches periodic store gossipping
+// for each specified engine. Launches periodic store gossiping
 // in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	engines []engine.Engine, attrs proto.Attributes) error {
@@ -315,7 +315,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 // connectGossip connects to gossip network and reads cluster ID. If
 // this node is already part of a cluster, the cluster ID is verified
 // for a match. If not part of a cluster, the cluster ID is set. The
-// node's address is gossipped with node ID as the gossip key.
+// node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip() {
 	log.Infof("connecting to gossip network to verify cluster ID...")
 	<-n.gossip.Connected
@@ -466,6 +466,11 @@ func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, rep
 	return n.executeCmd(proto.InternalHeartbeatTxn, args, reply)
 }
 
+// InternalGC .
+func (n *Node) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
+	return n.executeCmd(proto.InternalGC, args, reply)
+}
+
 // InternalPushTxn .
 func (n *Node) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
 	return n.executeCmd(proto.InternalPushTxn, args, reply)
@@ -481,6 +486,7 @@ func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.Inte
 	return n.executeCmd(proto.InternalMerge, args, reply)
 }
 
+// InternalTruncateLog .
 func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
 	return n.executeCmd(proto.InternalTruncateLog, args, reply)
 }

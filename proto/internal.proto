@@ -61,6 +61,26 @@ message InternalHeartbeatTxnResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalGCRequest is arguments to the InternalGC() method. It's
+// sent by range leaders after scanning range data to find expired
+// MVCC values.
+message InternalGCRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional ScanMetadata scan_meta = 2 [(gogoproto.nullable) = false];
+
+  message GCKey {
+    optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+    optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+  repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+}
+
+// An InternalGCResponse is the return value from the InternalGC()
+// method.
+message InternalGCResponse {
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // An InternalPushTxnRequest is arguments to the InternalPushTxn()
 // method. It's sent by readers or writers which have encountered an
 // "intent" laid down by another transaction. The goal is to resolve
@@ -160,6 +180,7 @@ message ReadWriteCmdResponse {
   optional InternalResolveIntentResponse internal_resolve_intent = 12;
   optional InternalMergeResponse internal_merge = 13;
   optional InternalTruncateLogResponse internal_truncate_log = 14;
+  optional InternalGCResponse internal_gc = 15;
 }
 
 // An InternalRaftCommandUnion is the union of all commands which can be
@@ -189,6 +210,7 @@ message InternalRaftCommandUnion {
   optional InternalResolveIntentRequest internal_resolve_intent = 34;
   optional InternalMergeRequest internal_merge_response = 35;
   optional InternalTruncateLogRequest internal_truncate_log = 36;
+  optional InternalGCRequest internal_gc = 37;
 }
 
 // An InternalRaftCommand is a command which can be serialized and

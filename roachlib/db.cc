@@ -124,6 +124,8 @@ const proto::ResponseHeader* GetResponseHeader(const proto::ReadWriteCmdResponse
     return &rwResp.enqueue_message().header();
   } else if (rwResp.has_internal_heartbeat_txn()) {
     return &rwResp.internal_heartbeat_txn().header();
+  } else if (rwResp.has_internal_gc()) {
+    return &rwResp.internal_gc().header();
   } else if (rwResp.has_internal_push_txn()) {
     return &rwResp.internal_push_txn().header();
   } else if (rwResp.has_internal_resolve_intent()) {
@@ -235,7 +237,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
       // Transaction rows are GC'd if their timestamp is older than
       // the system-wide minimum write intent timestamp. This
       // system-wide minimum write intent is periodically computed via
-      // map-reduce over all ranges and gossipped.
+      // map-reduce over all ranges and gossiped.
       proto::Transaction txn;
       if (!txn.ParseFromArray(meta.value().bytes().data(), meta.value().bytes().size())) {
         // *error_msg = (char*)"failed to parse transaction entry";
@@ -299,7 +301,7 @@ bool WillOverflow(int64_t a, int64_t b) {
 }
 
 // Method used to sort InternalTimeSeriesSamples.
-bool TimeSeriesSampleOrdering(const proto::InternalTimeSeriesSample* a, 
+bool TimeSeriesSampleOrdering(const proto::InternalTimeSeriesSample* a,
         const proto::InternalTimeSeriesSample* b) {
     return a->offset() < b->offset();
 }
@@ -341,7 +343,7 @@ float GetFloatMin(const proto::InternalTimeSeriesSample *sample) {
 void AccumulateTimeSeriesSamples(proto::InternalTimeSeriesSample* dest,
         const proto::InternalTimeSeriesSample &src) {
     // Accumulate integer values
-    int total_int_count = dest->int_count() + src.int_count(); 
+    int total_int_count = dest->int_count() + src.int_count();
     if (total_int_count > 1) {
         // Keep explicit max and min values.
         dest->set_int_max(std::max(GetIntMax(dest), GetIntMax(&src)));
@@ -368,7 +370,7 @@ void AccumulateTimeSeriesSamples(proto::InternalTimeSeriesSample* dest,
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
-bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right, 
+bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right,
         bool full_merge, rocksdb::Logger* logger) {
     // Attempt to parse TimeSeriesData from both Values.
     proto::InternalTimeSeriesData left_ts;
@@ -391,7 +393,7 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right,
                 "TimeSeries merge failed due to mismatched start timestamps");
         return false;
     }
-    if (left_ts.sample_duration_nanos() != 
+    if (left_ts.sample_duration_nanos() !=
             right_ts.sample_duration_nanos()) {
         rocksdb::Warn(logger,
                 "TimeSeries merge failed due to mismatched sample durations.");
@@ -406,7 +408,7 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right,
         left_ts.SerializeToString(left->mutable_bytes());
         return true;
     }
-    
+
     // Initialize new_ts and its primitive data fields. Values from the left and
     // right collections will be merged into the new collection.
     proto::InternalTimeSeriesData new_ts;
@@ -424,7 +426,7 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right,
          right_front = right_ts.samples().begin(),
          right_end = right_ts.samples().end();
 
-    // Loop until samples from both sides have been exhausted. 
+    // Loop until samples from both sides have been exhausted.
     while(left_front != left_end || right_front != right_end) {
         // Select the lowest offset from either side.
         long next_offset;
@@ -459,7 +461,7 @@ bool MergeTimeSeriesValues(proto::Value *left, const proto::Value &right,
     return true;
 }
 
-bool MergeValues(proto::Value *left, const proto::Value &right, 
+bool MergeValues(proto::Value *left, const proto::Value &right,
         bool full_merge, rocksdb::Logger* logger) {
     if (left->has_bytes()) {
         if (!right.has_bytes()) {
@@ -597,7 +599,7 @@ class DBMergeOperator : public rocksdb::MergeOperator {
       rocksdb::Warn(logger, "corrupted operand value");
       return false;
     }
-    return MergeValues(meta->mutable_value(), operand_meta.value(), 
+    return MergeValues(meta->mutable_value(), operand_meta.value(),
             full_merge, logger);
   }
 };
