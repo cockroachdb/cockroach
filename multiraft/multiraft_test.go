@@ -35,16 +35,18 @@ func makeCommandID() string {
 }
 
 type testCluster struct {
-	t        *testing.T
-	nodes    []*state
-	tickers  []*manualTicker
-	events   []*eventDemux
-	storages []*BlockableStorage
+	t         *testing.T
+	nodes     []*state
+	tickers   []*manualTicker
+	events    []*eventDemux
+	storages  []*BlockableStorage
+	transport *localRPCTransport
 }
 
 func newTestCluster(size int, t *testing.T) *testCluster {
 	transport := NewLocalRPCTransport()
 	cluster := &testCluster{t: t}
+	cluster.transport = transport.(*localRPCTransport)
 	for i := 0; i < size; i++ {
 		ticker := newManualTicker()
 		storage := &BlockableStorage{storage: NewMemoryStorage()}
@@ -54,7 +56,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 			Ticker:                 ticker,
 			ElectionTimeoutTicks:   1,
 			HeartbeatIntervalTicks: 1,
-			TickInterval:           time.Millisecond,
+			TickInterval:           time.Hour, // not in use
 			Strict:                 true,
 		}
 		mr, err := NewMultiRaft(NodeID(i+1), config)
@@ -69,11 +71,14 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 		cluster.events = append(cluster.events, demux)
 		cluster.storages = append(cluster.storages, storage)
 	}
+	return cluster
+}
+
+func (c *testCluster) start() {
 	// Let all the states listen before starting any.
-	for _, node := range cluster.nodes {
+	for _, node := range c.nodes {
 		go node.start()
 	}
-	return cluster
 }
 
 func (c *testCluster) stop() {
@@ -137,6 +142,7 @@ func TestInitialLeaderElection(t *testing.T) {
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		log.Infof("testing leader election for node %v", leaderIndex)
 		cluster := newTestCluster(3, t)
+		cluster.start()
 		groupID := uint64(1)
 		cluster.createGroup(groupID, 3)
 
@@ -156,6 +162,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	// Leader election events are fired when the leader commits an entry, not when it
 	// issues a call for votes.
 	cluster := newTestCluster(3, t)
+	cluster.start()
 	defer cluster.stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 3)
@@ -207,6 +214,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	cluster := newTestCluster(3, t)
+	cluster.start()
 	defer cluster.stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 3)
@@ -227,6 +235,7 @@ func TestCommand(t *testing.T) {
 
 func TestSlowStorage(t *testing.T) {
 	cluster := newTestCluster(3, t)
+	cluster.start()
 	defer cluster.stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 3)
@@ -272,6 +281,7 @@ func TestSlowStorage(t *testing.T) {
 func TestMembershipChange(t *testing.T) {
 	t.Skip("TODO(bdarnell): arrange for createGroup to be called on joining nodes")
 	cluster := newTestCluster(4, t)
+	cluster.start()
 	defer cluster.stop()
 
 	// Create a group with a single member, cluster.nodes[0].
