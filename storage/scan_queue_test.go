@@ -240,9 +240,9 @@ func TestScanQueueProcess(t *testing.T) {
 	}
 	for i, kv := range kvs {
 		if key, ts, isValue := engine.MVCCDecodeKey(kv.Key); isValue {
-			log.Infof("%d: %q, ts=%s", i, key, ts)
+			log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
 		} else {
-			log.Infof("%d: %q meta", i, key)
+			log.V(1).Infof("%d: %q meta", i, key)
 		}
 	}
 	if len(kvs) != len(expKVs) {
@@ -261,6 +261,18 @@ func TestScanQueueProcess(t *testing.T) {
 		} else {
 			log.V(1).Infof("%d: %q meta", i, key)
 		}
+	}
+
+	// Verify the oldest extant intent age.
+	scanMeta, err := tc.rng.GetScanMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scanMeta.LastScanNanos != now {
+		t.Errorf("expected last scan nanos=%d; got %d", now, scanMeta.LastScanNanos)
+	}
+	if *scanMeta.OldestIntentNanos != ts4.WallTime {
+		t.Errorf("expected oldest intent nanos=%d; got %d", ts4.WallTime, scanMeta.OldestIntentNanos)
 	}
 }
 
