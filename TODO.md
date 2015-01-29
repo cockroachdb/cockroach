@@ -68,3 +68,7 @@
 
 * Implement split / merge range queue and remove check for split on
   every read/write range command.
+
+* Move split/merge trigger into a submessage in internal.proto / api.proto.
+  This will simplify the logic in kv/db.go for neutering any public-facing
+  request which specifies triggers.
