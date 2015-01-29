@@ -18,6 +18,9 @@
 package storage
 
 import (
+	"math"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -39,7 +42,7 @@ const (
 	intentAgeNormalization = 24 * time.Hour // 1 day
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
-	intentAgeThreshold = 1 * time.Hour // 1 hour
+	intentAgeThreshold = 2 * time.Hour // 2 hour
 	// verificationInterval is the target duration for verifying on-disk
 	// checksums via full scan.
 	verificationInterval = 30 * 24 * time.Hour // 30 days
@@ -145,42 +148,57 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 			RaftID:    rng.Desc.RaftID,
 		},
 	}
+	var oldestIntentNanos int64 = math.MaxInt64
+	var wg sync.WaitGroup
 	var expBaseKey proto.Key
 	var keys []proto.EncodedKey
 	var vals [][]byte
-	for ; iter.Valid(); iter.Next() {
-		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
-		if !isValue {
-			// Moving to the next key (& values). If there's more than a
-			// single value for the key, possibly send for GC.
-			if len(keys) > 1 {
-				meta := &proto.MVCCMetadata{}
-				if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
-					log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
-				} else {
-					// In the event that there's an active intent, send for
-					// intent resolution if older than the threshold.
-					startIdx := 1
-					if meta.Txn != nil {
-						if meta.Txn.Timestamp.Less(intentExp) {
-							// TODO(spencer): push txn / resolve intent. Don't forget to
-							// update the oldest intent nanos if the resolve fails.
-						} else if scanMeta.OldestIntentNanos == nil || meta.Timestamp.WallTime < *scanMeta.OldestIntentNanos {
-							scanMeta.OldestIntentNanos = gogoproto.Int64(meta.Timestamp.WallTime)
-						}
-						// With an active intent, GC ignores MVCC metadata & intent value.
-						log.Infof("there's an intent on key %q", expBaseKey)
-						startIdx = 2
+
+	// processKeysAndValues is invoked with each key and its set of
+	// values. Intents older than the intent age threshold are sent for
+	// resolution and values after the MVCC metadata, and possible
+	// intent, are sent for garbage collection.
+	processKeysAndValues := func() {
+		// If there's more than a single value for the key, possibly send for GC.
+		if len(keys) > 1 {
+			meta := &proto.MVCCMetadata{}
+			if err := gogoproto.Unmarshal(vals[0], meta); err != nil {
+				log.Errorf("unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
+			} else {
+				// In the event that there's an active intent, send for
+				// intent resolution if older than the threshold.
+				startIdx := 1
+				if meta.Txn != nil {
+					// Resolve intent asynchronously in a goroutine if the intent
+					// is older than the intent expiration threshold.
+					if meta.Timestamp.Less(intentExp) {
+						log.Infof("base=%q, now=%s, meta ts=%s, intentExp=%s", expBaseKey, now, meta.Timestamp, intentExp)
+						wg.Add(1)
+						go sq.resolveIntent(rng, expBaseKey, meta, &oldestIntentNanos, &wg)
+					} else if meta.Timestamp.WallTime < atomic.LoadInt64(&oldestIntentNanos) {
+						atomic.StoreInt64(&oldestIntentNanos, meta.Timestamp.WallTime)
 					}
-					// See if any values may be GC'd.
-					if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
-						// TODO(spencer): need to split the requests up into
-						// multiple requests in the event that more than X keys
-						// are added to the request.
-						gcArgs.Keys = append(gcArgs.Keys, proto.InternalGCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
-					}
+					// With an active intent, GC ignores MVCC metadata & intent value.
+					startIdx = 2
+				}
+				// See if any values may be GC'd.
+				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); !gcTS.Equal(proto.ZeroTimestamp) {
+					// TODO(spencer): need to split the requests up into
+					// multiple requests in the event that more than X keys
+					// are added to the request.
+					gcArgs.Keys = append(gcArgs.Keys, proto.InternalGCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
 				}
 			}
+		}
+	}
+
+	// Iterate through this range's keys and values.
+	for ; iter.Valid(); iter.Next() {
+		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
+		log.Infof("base key: %q, ts=%s", baseKey, ts)
+		if !isValue {
+			// Moving to the next key (& values).
+			processKeysAndValues()
 			expBaseKey = baseKey
 			keys = []proto.EncodedKey{iter.Key()}
 			vals = [][]byte{iter.Value()}
@@ -193,14 +211,20 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 			vals = append(vals, iter.Value())
 		}
 	}
+	// Handle last collected set of keys/vals.
+	processKeysAndValues()
+
+	// An error during iteration is presumed to means a checksum failure
+	// while iterating over the underlying key/value data.
 	if iter.Error() != nil {
-		// TODO(spencer): do something other than fatal error
-		// here. Presumably, this means a checksum failure while iterating
-		// over the underlying key/value data. We want to quarantine this
-		// range, make it a non-participating raft follower until it can be
-		// replaced and then destroyed.
+		// TODO(spencer): do something other than fatal error here. We
+		// want to quarantine this range, make it a non-participating raft
+		// follower until it can be replaced and then destroyed.
 		log.Fatalf("unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
 	}
+	// Wait for any outstanding intent resolves and set oldest extant intent.
+	wg.Wait()
+	scanMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 
 	// Send GC request through range.
 	gcArgs.ScanMeta = *scanMeta
@@ -211,6 +235,62 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	return nil
 }
 
+// resolveIntent resolves the intent at key by attempting to abort the
+// transaction and resolve the intent. If the transaction cannot be
+// aborted or intent cannot be resolved, the oldestIntentNanos value
+// is atomically updated to the min of oldestIntentNanos and the
+// intent's timestamp. The wait group is signaled on completion.
+func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMetadata,
+	oldestIntentNanos *int64, wg *sync.WaitGroup) {
+	defer wg.Done() // signal wait group always on completion
+
+	log.Infof("resolving intent at %q ts=%s", key, meta.Timestamp)
+
+	// Attempt to push the transaction which created the intent.
+	now := rng.rm.Clock().Now()
+	pushArgs := &proto.InternalPushTxnRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp:    now,
+			Key:          meta.Txn.Key,
+			User:         UserRoot,
+			UserPriority: gogoproto.Int32(proto.MaxPriority),
+			Txn:          nil,
+		},
+		PusheeTxn: *meta.Txn,
+		Abort:     true,
+	}
+	pushReply := &proto.InternalPushTxnResponse{}
+	if err := rng.rm.DB().Call(proto.InternalPushTxn, pushArgs, pushReply); err != nil {
+		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
+		// Atomically update the oldest intent.
+		if meta.Timestamp.WallTime < atomic.LoadInt64(oldestIntentNanos) {
+			atomic.StoreInt64(oldestIntentNanos, meta.Timestamp.WallTime)
+		}
+		return
+	}
+
+	// We pushed the transaction successfully, so resolve the intent.
+	resolveArgs := &proto.InternalResolveIntentRequest{
+		RequestHeader: proto.RequestHeader{
+			Timestamp: now,
+			Key:       key,
+			User:      UserRoot,
+			Txn:       pushReply.PusheeTxn,
+		},
+	}
+	if err := rng.AddCmd(proto.InternalResolveIntent, resolveArgs, &proto.InternalResolveIntentResponse{}, true); err != nil {
+		log.Warningf("resolve of key %q failed: %s", key, err)
+		// Atomically update the oldest intent.
+		if meta.Timestamp.WallTime < atomic.LoadInt64(oldestIntentNanos) {
+			atomic.StoreInt64(oldestIntentNanos, meta.Timestamp.WallTime)
+		}
+	}
+}
+
+// lookupGCPolicy queries the gossip prefix config map based on the
+// supplied range's start key. It queries all matching config prefixes
+// and then iterates from most specific to least, returning the first
+// non-nil GC policy.
 func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {

@@ -851,7 +851,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	resolveReply := &proto.InternalResolveIntentResponse{}
 	// Add resolve command with wait=false to add to Raft but not wait for completion.
 	if resolveErr := rng.AddCmd(proto.InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
-		log.Warningf("resolve %+v failed: +v", resolveArgs, resolveErr)
+		log.Warningf("resolve of key %q failed: %s", wiErr.Key, resolveErr)
 	}
 
 	return wiErr
