@@ -72,3 +72,6 @@
 * Move split/merge trigger into a submessage in internal.proto / api.proto.
   This will simplify the logic in kv/db.go for neutering any public-facing
   request which specifies triggers.
+
+* Unexport range.Desc and make func (r *Range) Desc() proto.RangeDescriptor
+  mutex-protected accessor method.
