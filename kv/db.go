@@ -43,6 +43,9 @@ func verifyRequest(args proto.Request) error {
 		if t.SplitTrigger != nil {
 			return util.Errorf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
 		}
+		if t.MergeTrigger != nil {
+			return util.Errorf("EndTransaction request from public KV API contains merge trigger: %+v", t.GetMergeTrigger())
+		}
 	}
 	return nil
 }

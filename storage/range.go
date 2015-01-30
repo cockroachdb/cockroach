@@ -16,6 +16,7 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
 
 package storage
 
@@ -132,21 +133,22 @@ type pendingCmd struct {
 // contained in the store can access the methods required for splitting.
 type RangeManager interface {
 	// Accessors for shared state.
-	ClusterID() string
-	StoreID() int32
-	Clock() *hlc.Clock
-	Engine() engine.Engine
-	DB() *client.KV
 	Allocator() *allocator
+	Clock() *hlc.Clock
+	ClusterID() string
+	DB() *client.KV
+	Engine() engine.Engine
 	Gossip() *gossip.Gossip
+	StoreID() int32
 
 	// Range manipulation methods.
-	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
-	SplitRange(origRng, newRng *Range) error
 	AddRange(rng *Range) error
-	RemoveRange(rng *Range) error
+	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
+	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand)
+	RemoveRange(rng *Range) error
+	SplitRange(origRng, newRng *Range) error
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -323,6 +325,8 @@ func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Respo
 	switch method {
 	case proto.AdminSplit:
 		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
+	case proto.AdminMerge:
+		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
 	default:
 		return util.Errorf("unrecognized admin command type: %s", method)
 	}
@@ -936,6 +940,8 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 	if reply.Txn.Status == proto.COMMITTED {
 		if args.SplitTrigger != nil {
 			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
+		} else if args.MergeTrigger != nil {
+			reply.SetGoError(r.mergeTrigger(batch, args.MergeTrigger))
 		}
 	}
 }
@@ -1331,6 +1337,44 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	return r.rm.SplitRange(r, newRng)
 }
 
+// mergeTrigger is called on a successful commit of an AdminMerge
+// transaction. It recomputes stats for the receiving range.
+func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
+	if !bytes.Equal(r.Desc.StartKey, merge.UpdatedDesc.StartKey) {
+		return util.Errorf("range and updated range start keys do not match: %q != %q",
+			r.Desc.StartKey, merge.UpdatedDesc.StartKey)
+	}
+
+	if !r.Desc.EndKey.Less(merge.UpdatedDesc.EndKey) {
+		return util.Errorf("range end key is not less than the post merge end key: %q < %q",
+			r.Desc.EndKey, merge.UpdatedDesc.StartKey)
+	}
+
+	if merge.SubsumedRaftID <= 0 {
+		return util.Errorf("subsumed raft ID must be provided: %d", merge.SubsumedRaftID)
+	}
+
+	// Copy the subsumed range's response cache to the subsuming one.
+	if err := r.respCache.CopyFrom(batch, merge.SubsumedRaftID); err != nil {
+		return util.Errorf("unable to copy response cache to new split range: %s", err)
+	}
+
+	// Compute stats for updated range.
+	now := r.rm.Clock().Timestamp()
+	ms, err := engine.MVCCComputeStats(r.rm.Engine(), merge.UpdatedDesc.StartKey,
+		merge.UpdatedDesc.EndKey, now.WallTime)
+	if err != nil {
+		return util.Errorf("unable to compute stats for the range after merge: %s", err)
+	}
+	r.stats.SetMVCCStats(batch, ms)
+
+	// Write-lock the mutex to protect Desc, as MergeRange will modify
+	// Desc.EndKey.
+	r.Lock()
+	defer r.Unlock()
+	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+}
+
 // AdminSplit divides the range into into two ranges, using either
 // args.SplitKey (if provided) or an internally computed key that aims to
 // roughly equipartition the range by size. The split is done inside of
@@ -1480,7 +1524,7 @@ func (r *Range) loadFirstAndLastIndex() error {
 // is insufficient.
 func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 	// Scan over the log (which is stored backwards) to find the
-	// requested entries.  Reversing [lo, hi) gives us (hi, lo]; since
+	// requested entries. Reversing [lo, hi) gives us (hi, lo]; since
 	// MVCCScan is inclusive in the other direction we must increment both the
 	// start and end keys.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
@@ -1563,4 +1607,104 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 func (r *Range) SetHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &st)
+}
+
+// ReplicaSetsEqual is used in AdminMerge to ensure that the ranges are
+// all collocate on the same set of replicas.
+func ReplicaSetsEqual(a, b []proto.Replica) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	set := make(map[int32]int)
+	for _, replica := range a {
+		set[replica.StoreID]++
+	}
+
+	for _, replica := range b {
+		set[replica.StoreID]--
+	}
+
+	for _, value := range set {
+		if value != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// AdminMerge extends the range to subsume the range that comes next in
+// the key space. The range being subsumed is provided in args.SubsumedRange.
+// The EndKey of the subsuming range must equal the start key of the
+// range being subsumed. The merge is performed inside of a distributed
+// transaction which writes the updated range descriptor for the subsuming range
+// and deletes the range descriptor for the subsumed one. It also updates the
+// range addressing metadata. The handover of responsibility for
+// the reassigned key range is carried out seamlessly through a merge trigger
+// carried out as part of the commit of that transaction.
+// A merge requires that the two ranges are collocate on the same set of replicas.
+func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) {
+	// Only allow a single split/merge per range at a time.
+	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {
+		reply.SetGoError(util.Errorf("already splitting/merging range %d", r.Desc.RaftID))
+		return
+	}
+	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
+
+	subsumedDesc := args.SubsumedRange
+
+	// Make sure the range being subsumed follows this one.
+	if !bytes.Equal(r.Desc.EndKey, subsumedDesc.StartKey) {
+		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %d = %d",
+			r.Desc.EndKey, subsumedDesc.StartKey))
+		return
+	}
+
+	// Ensure that both ranges are collocate by intersecting the store ids from
+	// their replicas.
+	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), r.Desc.GetReplicas()) {
+		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
+	}
+
+	// Init updated version of existing range descriptor.
+	updatedDesc := *r.Desc
+	updatedDesc.EndKey = subsumedDesc.EndKey
+
+	log.Infof("initiating a merge of range %d %q-%q into range %d %q-%q",
+		subsumedDesc.RaftID, proto.Key(subsumedDesc.StartKey), proto.Key(subsumedDesc.EndKey),
+		r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey)
+
+	txnOpts := &client.TransactionOptions{
+		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, r.Desc.RaftID),
+	}
+	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+		// Update the range descriptor for the receiving range.
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+			return err
+		}
+
+		// Remove the range descriptor for the deleted range.
+		deleteResponse := &proto.DeleteResponse{}
+		txn.Prepare(proto.Delete, proto.DeleteArgs(engine.RangeDescriptorKey(subsumedDesc.StartKey)),
+			deleteResponse)
+
+		if err := MergeRangeAddressing(txn, r.Desc, &updatedDesc); err != nil {
+			return err
+		}
+
+		// End the transaction manually instead of letting RunTransaction
+		// loop do it, in order to provide a merge trigger.
+		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: args.Key},
+			Commit:        true,
+			MergeTrigger: &proto.MergeTrigger{
+				UpdatedDesc:    updatedDesc,
+				SubsumedRaftID: subsumedDesc.RaftID,
+			},
+		}, &proto.EndTransactionResponse{})
+	}); err != nil {
+		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
+			subsumedDesc.RaftID, r.Desc.RaftID, err))
+	}
 }

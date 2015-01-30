@@ -68,6 +68,8 @@ const (
 	Batch = "Batch"
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit = "AdminSplit"
+	// AdminMerge is called to coordinate a merge of two adjacent ranges.
+	AdminMerge = "AdminMerge"
 )
 
 type stringSet map[string]struct{}
@@ -98,6 +100,7 @@ var AllMethods = stringSet{
 	EnqueueUpdate:         struct{}{},
 	EnqueueMessage:        struct{}{},
 	AdminSplit:            struct{}{},
+	AdminMerge:            struct{}{},
 	Batch:                 struct{}{},
 	InternalHeartbeatTxn:  struct{}{},
 	InternalGC:            struct{}{},
@@ -186,6 +189,7 @@ var TxnMethods = stringSet{
 // the Raft leader.
 var adminMethods = stringSet{
 	AdminSplit: struct{}{},
+	AdminMerge: struct{}{},
 }
 
 // NeedReadPerm returns true if the specified method requires read permissions.
@@ -344,6 +348,8 @@ func MethodForRequest(req Request) (string, error) {
 		return Batch, nil
 	case *AdminSplitRequest:
 		return AdminSplit, nil
+	case *AdminMergeRequest:
+		return AdminMerge, nil
 	case *InternalHeartbeatTxnRequest:
 		return InternalHeartbeatTxn, nil
 	case *InternalGCRequest:
@@ -401,6 +407,8 @@ func CreateArgs(method string) (Request, error) {
 		return &BatchRequest{}, nil
 	case AdminSplit:
 		return &AdminSplitRequest{}, nil
+	case AdminMerge:
+		return &AdminMergeRequest{}, nil
 	case InternalHeartbeatTxn:
 		return &InternalHeartbeatTxnRequest{}, nil
 	case InternalGC:
@@ -448,6 +456,8 @@ func CreateReply(method string) (Response, error) {
 		return &BatchResponse{}, nil
 	case AdminSplit:
 		return &AdminSplitResponse{}, nil
+	case AdminMerge:
+		return &AdminMergeResponse{}, nil
 	case InternalHeartbeatTxn:
 		return &InternalHeartbeatTxnResponse{}, nil
 	case InternalGC:

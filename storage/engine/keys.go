@@ -292,10 +292,10 @@ var (
 
 	// KeyLocalPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as store and range-specific metadata which
-	// must not pollute the user key space, but must be colocated with
+	// must not pollute the user key space, but must be collocate with
 	// the store and/or ranges which they refer to. Storing this
 	// information in the normal system keyspace would place the data on
-	// an arbitrary set of stores, with no guarantee of colocation.
+	// an arbitrary set of stores, with no guarantee of collocation.
 	// Local data includes store metadata, range metadata, response
 	// cache values, transaction records, range-spanning binary tree
 	// node pointers, and message queues.

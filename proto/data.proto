@@ -104,6 +104,15 @@ message SplitTrigger {
   optional RangeDescriptor new_desc = 2 [(gogoproto.nullable) = false];
 }
 
+// A MergeTrigger is run after a successful commit of an AdminMerge
+// command. It provides the updated range descriptor that now encompasses
+// what was originally both ranges. This information allows the final bookkeeping
+// for the merge to be completed and put into operation.
+message MergeTrigger {
+  optional RangeDescriptor updated_desc = 1 [(gogoproto.nullable) = false];
+  optional int64 subsumed_raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SubsumedRaftID"];
+}
+
 // IsolationType TODO(jiajia) Needs documentation.
 enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;

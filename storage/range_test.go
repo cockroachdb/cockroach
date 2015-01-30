@@ -152,6 +152,19 @@ func newTransaction(name string, baseKey proto.Key, userPriority int32,
 		isolation, clock.Now(), clock.MaxOffset().Nanoseconds())
 }
 
+// CreateReplicaSets creates new proto.Replica protos based on an array of integers
+// to aid in testing. Note that this does not actualy produce any actual replicas, it
+// just creates the proto.
+func createReplicaSets(replicaNumbers []int32) []proto.Replica {
+	result := []proto.Replica{}
+	for _, replicaNumber := range replicaNumbers {
+		result = append(result, proto.Replica{
+			StoreID: replicaNumber,
+		})
+	}
+	return result
+}
+
 // TestRangeContains verifies that the range uses Key.Address() in
 // order to properly resolve addresses for local keys.
 func TestRangeContains(t *testing.T) {
@@ -1615,5 +1628,33 @@ func TestConditionFailedError(t *testing.T) {
 	} else if v := cErr.ActualValue; v == nil || !bytes.Equal(v.Bytes, value) {
 		t.Errorf("ConditionFailedError with bytes %q expected, but got %+v",
 			value, v)
+	}
+}
+
+// TestReplicaSetsEqual tests to ensure that intersectReplicaSets
+// returns the correct responses.
+func TestReplicaSetsEqual(t *testing.T) {
+	testData := []struct {
+		expected bool
+		a        []proto.Replica
+		b        []proto.Replica
+	}{
+		{true, []proto.Replica{}, []proto.Replica{}},
+		{true, createReplicaSets([]int32{1}), createReplicaSets([]int32{1})},
+		{true, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{1, 2})},
+		{true, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{2, 1})},
+		{false, createReplicaSets([]int32{1}), createReplicaSets([]int32{2})},
+		{false, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{2})},
+		{false, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{1})},
+		{false, createReplicaSets([]int32{}), createReplicaSets([]int32{1})},
+		{true, createReplicaSets([]int32{1, 2, 3}), createReplicaSets([]int32{2, 3, 1})},
+		{true, createReplicaSets([]int32{1, 1}), createReplicaSets([]int32{1, 1})},
+		{false, createReplicaSets([]int32{1, 1}), createReplicaSets([]int32{1, 1, 1})},
+		{true, createReplicaSets([]int32{1, 2, 3, 1, 2, 3}), createReplicaSets([]int32{1, 1, 2, 2, 3, 3})},
+	}
+	for _, test := range testData {
+		if ReplicaSetsEqual(test.a, test.b) != test.expected {
+			t.Fatalf("unexpected replica intersection: %+v", test)
+		}
 	}
 }
