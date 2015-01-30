@@ -34,8 +34,12 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// KeyMaxLength is the maximum length of a Key in bytes.
-const KeyMaxLength = 4096
+const (
+	// KeyMaxLength is the maximum length of a Key in bytes.
+	KeyMaxLength = 4096
+	// MaxPriority is the maximum allowed priority.
+	MaxPriority = math.MaxInt32
+)
 
 var (
 	// KeyMin is a minimum key value which sorts before all other keys.

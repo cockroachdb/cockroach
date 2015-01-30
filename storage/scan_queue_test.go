@@ -131,15 +131,20 @@ func TestScanQueueProcess(t *testing.T) {
 	const now int64 = 48 * 60 * 60 * 1E9 // 2d past the epoch
 	tc.manualClock.Set(now)
 
-	ts1 := makeTS(now-48*60*60*1E9+1, 0) // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1E9, 0)   // GC will occur at time=25 hours
-	ts3 := makeTS(now-1E9, 0)            // 1s old
+	ts1 := makeTS(now-2*24*60*60*1E9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1E9, 0)                         // GC will occur at time=25 hours
+	ts3 := makeTS(now-(intentAgeThreshold.Nanoseconds()+1), 0) // 2h+1ns old
+	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-ns old
+	ts5 := makeTS(now-1E9, 0)                                  // 1s old
 	key1 := proto.Key("a")
 	key2 := proto.Key("b")
 	key3 := proto.Key("c")
 	key4 := proto.Key("d")
 	key5 := proto.Key("e")
 	key6 := proto.Key("f")
+	key7 := proto.Key("g")
+	key8 := proto.Key("h")
+	key9 := proto.Key("i")
 
 	data := []struct {
 		key proto.Key
@@ -150,15 +155,15 @@ func TestScanQueueProcess(t *testing.T) {
 		// For key1, we expect first two values to GC.
 		{key1, ts1, false, false},
 		{key1, ts2, false, false},
-		{key1, ts3, false, false},
+		{key1, ts5, false, false},
 		// For key2, we expect all values to GC, because most recent is deletion.
 		{key2, ts1, false, false},
 		{key2, ts2, false, false},
-		{key2, ts3, true, false},
+		{key2, ts5, true, false},
 		// For key3, we expect just ts1 to GC, because most recent deletion is intent.
 		{key3, ts1, false, false},
 		{key3, ts2, false, false},
-		{key3, ts3, true, true},
+		{key3, ts5, true, true},
 		// For key4, expect oldest value to GC.
 		{key4, ts1, false, false},
 		{key4, ts2, false, false},
@@ -167,7 +172,15 @@ func TestScanQueueProcess(t *testing.T) {
 		{key5, ts2, true, false},
 		// For key6, expect no values to GC because most recent value is intent.
 		{key6, ts1, false, false},
-		{key6, ts2, true, true},
+		{key6, ts5, true, true},
+		// For key7, expect no values to GC because intent is exactly 2h old.
+		{key7, ts2, false, false},
+		{key7, ts4, true, true},
+		// For key8, expect most recent value to resolve by aborting, which will clean it up.
+		{key8, ts2, false, false},
+		{key8, ts3, true, true},
+		// /For key9, resolve naked intent with no remaining values.
+		{key9, ts3, true, false},
 	}
 
 	for _, datum := range data {
@@ -205,20 +218,32 @@ func TestScanQueueProcess(t *testing.T) {
 		ts  proto.Timestamp
 	}{
 		{key1, proto.ZeroTimestamp},
-		{key1, ts3},
+		{key1, ts5},
 		{key3, proto.ZeroTimestamp},
-		{key3, ts3},
+		{key3, ts5},
 		{key3, ts2},
 		{key4, proto.ZeroTimestamp},
 		{key4, ts2},
 		{key6, proto.ZeroTimestamp},
-		{key6, ts2},
+		{key6, ts5},
 		{key6, ts1},
+		{key7, proto.ZeroTimestamp},
+		{key7, ts4},
+		{key7, ts2},
+		{key8, proto.ZeroTimestamp},
+		{key8, ts2},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
 	kvs, err := engine.Scan(tc.store.Engine(), engine.MVCCEncodeKey(key1), engine.MVCCEncodeKey(engine.KeyMax), 0)
 	if err != nil {
 		t.Fatal(err)
+	}
+	for i, kv := range kvs {
+		if key, ts, isValue := engine.MVCCDecodeKey(kv.Key); isValue {
+			log.V(1).Infof("%d: %q, ts=%s", i, key, ts)
+		} else {
+			log.V(1).Infof("%d: %q meta", i, key)
+		}
 	}
 	if len(kvs) != len(expKVs) {
 		t.Fatalf("expected length %d; got %d", len(expKVs), len(kvs))
@@ -236,6 +261,18 @@ func TestScanQueueProcess(t *testing.T) {
 		} else {
 			log.V(1).Infof("%d: %q meta", i, key)
 		}
+	}
+
+	// Verify the oldest extant intent age.
+	scanMeta, err := tc.rng.GetScanMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scanMeta.LastScanNanos != now {
+		t.Errorf("expected last scan nanos=%d; got %d", now, scanMeta.LastScanNanos)
+	}
+	if *scanMeta.OldestIntentNanos != ts4.WallTime {
+		t.Errorf("expected oldest intent nanos=%d; got %d", ts4.WallTime, scanMeta.OldestIntentNanos)
 	}
 }
 
