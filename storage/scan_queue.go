@@ -20,7 +20,6 @@ package storage
 import (
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -148,11 +147,21 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 			RaftID:    rng.Desc.RaftID,
 		},
 	}
+	var mu sync.Mutex
 	var oldestIntentNanos int64 = math.MaxInt64
 	var wg sync.WaitGroup
 	var expBaseKey proto.Key
 	var keys []proto.EncodedKey
 	var vals [][]byte
+
+	// updateOldestIntent atomically updates the oldest intent.
+	updateOldestIntent := func(intentNanos int64) {
+		mu.Lock()
+		defer mu.Unlock()
+		if intentNanos < oldestIntentNanos {
+			oldestIntentNanos = intentNanos
+		}
+	}
 
 	// processKeysAndValues is invoked with each key and its set of
 	// values. Intents older than the intent age threshold are sent for
@@ -174,9 +183,9 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 					if meta.Timestamp.Less(intentExp) {
 						log.Infof("base=%q, now=%s, meta ts=%s, intentExp=%s", expBaseKey, now, meta.Timestamp, intentExp)
 						wg.Add(1)
-						go sq.resolveIntent(rng, expBaseKey, meta, &oldestIntentNanos, &wg)
-					} else if meta.Timestamp.WallTime < atomic.LoadInt64(&oldestIntentNanos) {
-						atomic.StoreInt64(&oldestIntentNanos, meta.Timestamp.WallTime)
+						go sq.resolveIntent(rng, expBaseKey, meta, updateOldestIntent, &wg)
+					} else {
+						updateOldestIntent(meta.Timestamp.WallTime)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
@@ -195,7 +204,6 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 	// Iterate through this range's keys and values.
 	for ; iter.Valid(); iter.Next() {
 		baseKey, ts, isValue := engine.MVCCDecodeKey(iter.Key())
-		log.Infof("base key: %q, ts=%s", baseKey, ts)
 		if !isValue {
 			// Moving to the next key (& values).
 			processKeysAndValues()
@@ -241,7 +249,7 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 // is atomically updated to the min of oldestIntentNanos and the
 // intent's timestamp. The wait group is signaled on completion.
 func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMetadata,
-	oldestIntentNanos *int64, wg *sync.WaitGroup) {
+	updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 
 	log.Infof("resolving intent at %q ts=%s", key, meta.Timestamp)
@@ -262,10 +270,7 @@ func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMe
 	pushReply := &proto.InternalPushTxnResponse{}
 	if err := rng.rm.DB().Call(proto.InternalPushTxn, pushArgs, pushReply); err != nil {
 		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
-		// Atomically update the oldest intent.
-		if meta.Timestamp.WallTime < atomic.LoadInt64(oldestIntentNanos) {
-			atomic.StoreInt64(oldestIntentNanos, meta.Timestamp.WallTime)
-		}
+		updateOldestIntent(meta.Timestamp.WallTime)
 		return
 	}
 
@@ -280,10 +285,7 @@ func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMe
 	}
 	if err := rng.AddCmd(proto.InternalResolveIntent, resolveArgs, &proto.InternalResolveIntentResponse{}, true); err != nil {
 		log.Warningf("resolve of key %q failed: %s", key, err)
-		// Atomically update the oldest intent.
-		if meta.Timestamp.WallTime < atomic.LoadInt64(oldestIntentNanos) {
-			atomic.StoreInt64(oldestIntentNanos, meta.Timestamp.WallTime)
-		}
+		updateOldestIntent(meta.Timestamp.WallTime)
 	}
 }
 
