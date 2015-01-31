@@ -20,9 +20,7 @@ package multiraft
 import (
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -40,48 +38,43 @@ func processEventsUntil(ch <-chan *interceptMessage, f func(*RaftMessageRequest)
 // Once the channel closes or enough heartbeat responses have been observed,
 // the function returns.
 func validateHeartbeatCount(ch <-chan *interceptMessage,
-	heartbeatCount, heartbeatResponseCount int, t *testing.T) {
+	expHeartbeatPairs int, t *testing.T) {
 	// maps nodeID to heartbeats sent by this node minus heartbeat
 	// responses received by this node.
 	outInDelta := make(map[uint64]int)
-	cntH := 0
 	cntR := 0
-	defer func() {
-		for nodeID, delta := range outInDelta {
-			// If one of the checks below fails, this information will be useful.
-			log.Infof("node %v: %d heartbeats without response", nodeID, delta)
-		}
-		if cntH != heartbeatCount {
-			t.Errorf("unexpected total number of heartbeats: %d (expected %d)",
-				cntH, heartbeatCount)
-		}
-		if cntR != heartbeatResponseCount {
-			t.Errorf("unexpected total number of heartbeat responses: %d (expected %d)",
-				cntR, heartbeatResponseCount)
-		}
-	}()
-	for iMsg := range ch {
+	for {
+		iMsg := <-ch
 		iMsg.ack <- struct{}{}
 		req := iMsg.args.(*RaftMessageRequest)
 		switch req.Message.Type {
 		case raftpb.MsgHeartbeat:
-			cntH++
 			outInDelta[req.Message.From]++
 		case raftpb.MsgHeartbeatResp:
 			cntR++
 			nodeID := req.Message.To
 			outInDelta[nodeID]--
 			if outInDelta[nodeID] < 0 {
-				t.Errorf("node %v: more responses received than heartbeats sent",
-					nodeID)
+				t.Errorf("node %v: more responses received than heartbeats sent after %d heartbeats",
+					cntR-outInDelta[nodeID], nodeID)
 			}
 		}
 		// If we've already received all the heartbeat responses that
 		// we have asked for, return. Without this, it's more awkward
 		// to know when to shut down the cluster.
-		if cntR >= heartbeatResponseCount {
-			return
+		if cntR >= expHeartbeatPairs {
+			break
 		}
+	}
+	for nodeID, delta := range outInDelta {
+		// If one of the checks below fails, this information will be useful.
+		if delta != 0 {
+			t.Errorf("node %v: %d heartbeats without response", nodeID, delta)
+		}
+	}
+	if cntR != expHeartbeatPairs {
+		t.Errorf("unexpected total number of heartbeat responses: %d (expected %d)",
+			cntR, expHeartbeatPairs)
 	}
 }
 
@@ -99,15 +92,19 @@ func TestHeartbeat(t *testing.T) {
 	unansweredHeartbeats := (nodeCount - 1) * 2 // 2 because of 2 election ticks.
 
 	// How many heartbeats and heartbeat responses we expect in total.
-	expHeartbeatCount := (nodeCount-1)*leaderTickCount + unansweredHeartbeats
-	expHeartbeatRespCount := (nodeCount - 1) * leaderTickCount
+	expHeartbeatPairs := (nodeCount - 1) * leaderTickCount
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
+		processEventsUntil(cluster.transport.Events, func(msg *RaftMessageRequest) bool {
+			if msg.Message.Type == raftpb.MsgHeartbeat {
+				unansweredHeartbeats--
+			}
+			return unansweredHeartbeats == 0
+		})
 		// Run the actual checks, consuming from the Events channel.
-		validateHeartbeatCount(cluster.transport.Events, expHeartbeatCount,
-			expHeartbeatRespCount, t)
+		validateHeartbeatCount(cluster.transport.Events, expHeartbeatPairs, t)
 		// Once we're here, we may begin tearing down.
 		wg.Done()
 		// For the rest of this test, simply keep acknowledging messages
@@ -134,17 +131,12 @@ func TestHeartbeat(t *testing.T) {
 	// No further elections should have happened in the meantime.
 	for i := 0; i < nodeCount; i++ {
 		for {
-			depleted := false
-			select {
-			case ev := <-cluster.events[i].LeaderElection:
-				if ev.Term != election.Term {
-					t.Errorf("node %v: unexpected election event: %v (original election: %v)", i, ev, election)
-				}
-			case <-time.After(time.Millisecond):
-				depleted = true
-			}
-			if depleted {
+			ev, ok := <-cluster.events[i].LeaderElection
+			if !ok {
 				break
+			}
+			if ev.Term != election.Term {
+				t.Errorf("node %v: unexpected election event: %v (original election: %v)", i, ev, election)
 			}
 		}
 	}

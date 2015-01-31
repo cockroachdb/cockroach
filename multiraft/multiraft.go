@@ -457,33 +457,37 @@ func (s *state) start() {
 			log.V(8).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
 			ticks++
-			if ticks < s.HeartbeatIntervalTicks {
-				break
-			}
-			ticks = 0
-			// TODO(Tobias): We don't need to send heartbeats to nodes that have
-			// no group following one of our local groups. But that's unlikely
-			// to be the case for many of our nodes. It could make sense though
-			// to space out the heartbeats over the heartbeat interval so that
-			// we don't try to send for all nodes at once.
-			for nodeID, node := range s.nodes {
-				// Don't heartbeat yourself - it will abort elections and
-				// may efficiently prevent progress.
-				if nodeID == s.nodeID {
-					continue
-				}
-				log.V(6).Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
-				msg := raftpb.Message{
-					From: s.nodeID,
-					To:   nodeID,
-					Type: raftpb.MsgHeartbeat,
-				}
-				node.client.raftMessage(&RaftMessageRequest{
-					GroupID: math.MaxUint64, // irrelevant
-					Message: msg,
-				})
+			// TODO move around
+			if ticks >= s.HeartbeatIntervalTicks {
+				ticks = 0
+				s.coalescedHeartbeat()
 			}
 		}
+	}
+}
+
+func (s *state) coalescedHeartbeat() {
+	// TODO(Tobias): We don't need to send heartbeats to nodes that have
+	// no group following one of our local groups. But that's unlikely
+	// to be the case for many of our nodes. It could make sense though
+	// to space out the heartbeats over the heartbeat interval so that
+	// we don't try to send for all nodes at once.
+	for nodeID, node := range s.nodes {
+		// Don't heartbeat yourself - it will abort elections and
+		// may efficiently prevent progress.
+		if nodeID == s.nodeID {
+			continue
+		}
+		log.V(6).Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
+		msg := raftpb.Message{
+			From: s.nodeID,
+			To:   nodeID,
+			Type: raftpb.MsgHeartbeat,
+		}
+		node.client.raftMessage(&RaftMessageRequest{
+			GroupID: math.MaxUint64, // irrelevant
+			Message: msg,
+		})
 	}
 }
 
