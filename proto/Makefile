@@ -27,6 +27,7 @@ LIBOBJECTS  := $(SOURCES:.cc=.o)
 CXXFLAGS += -Ilib
 
 PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf:../../../../github.com/gogo/protobuf/gogoproto
+PROTOC_GEN_GOGO :=../../../../../bin/protoc-gen-gogo
 
 all: static_lib
 
@@ -37,7 +38,7 @@ $(PROTO_LIB): $(PROTO_GO) $(SOURCES) $(LIBOBJECTS)
 	ar -rsv $(PROTO_LIB) $(LIBOBJECTS)
 
 $(PROTO_GO): $(PROTOS)
-	protoc --gogo_out=. --cpp_out=lib --proto_path=.:$(PROTO_PATH) $(PROTOS)
+	protoc --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=lib --proto_path=.:$(PROTO_PATH) $(PROTOS)
 
 $(SOURCES): $(GOGO_PROTOS)
 	protoc --cpp_out=lib --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
