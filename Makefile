@@ -26,7 +26,7 @@ GOFLAGS :=
 STATIC := $(STATIC)
 
 RUN  := run
-GOPATH  := $(CURDIR)/_vendor:$(CURDIR)/../../../..
+GOPATH  := $(CURDIR)/../../../..:$(CURDIR)/_vendor
 # Exposes protoc.
 PATH := $(CURDIR)/_vendor/usr/bin:$(PATH)
 # Expose protobuf.
