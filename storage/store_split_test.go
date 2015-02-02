@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminSplitArgs(key, splitKey []byte, raftID int64, storeID int32) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
+func adminSplitArgs(key, splitKey []byte, raftID int64, storeID proto.StoreID) (*proto.AdminSplitRequest, *proto.AdminSplitResponse) {
 	args := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,

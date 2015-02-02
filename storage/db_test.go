@@ -79,7 +79,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID int64, storeID int32) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -93,7 +93,7 @@ func getArgs(key []byte, raftID int64, storeID int32) (*proto.GetRequest, *proto
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID int64, storeID int32) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -110,7 +110,7 @@ func putArgs(key, value []byte, raftID int64, storeID int32) (*proto.PutRequest,
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID int64, storeID int32) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,

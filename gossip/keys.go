@@ -17,7 +17,11 @@
 
 package gossip
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/cockroachdb/cockroach/proto"
+)
 
 // Constants for gossip keys.
 const (
@@ -63,6 +67,6 @@ const (
 )
 
 // MakeNodeIDGossipKey returns the gossip key for node ID info.
-func MakeNodeIDGossipKey(nodeID int32) string {
+func MakeNodeIDGossipKey(nodeID proto.NodeID) string {
 	return KeyNodeIDPrefix + strconv.FormatInt(int64(nodeID), 16)
 }

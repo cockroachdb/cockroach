@@ -139,7 +139,7 @@ type RangeManager interface {
 	DB() *client.KV
 	Engine() engine.Engine
 	Gossip() *gossip.Gossip
-	StoreID() int32
+	StoreID() proto.StoreID
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -1616,7 +1616,7 @@ func ReplicaSetsEqual(a, b []proto.Replica) bool {
 		return false
 	}
 
-	set := make(map[int32]int)
+	set := make(map[proto.StoreID]int)
 	for _, replica := range a {
 		set[replica.StoreID]++
 	}

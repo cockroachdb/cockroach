@@ -23,7 +23,46 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/gogo/protobuf/proto"
 )
+
+// NodeID is a custom type for a cockroach node ID. (not a raft node ID)
+type NodeID int32
+
+// Marshal implements the gogoproto Marshaler interface.
+func (n NodeID) Marshal() ([]byte, error) {
+	return proto.EncodeVarint(uint64(n)), nil
+}
+
+// Unmarshal implements the gogoproto Unmarshaler interface.
+func (n *NodeID) Unmarshal(bytes []byte) error {
+	x, length := proto.DecodeVarint(bytes)
+	if length != len(bytes) {
+		return util.Errorf("invalid varint")
+	}
+	*n = NodeID(x)
+	return nil
+}
+
+// StoreID is a custom type for a cockroach store ID.
+type StoreID int32
+
+// Marshal implements the gogoproto Marshaler interface.
+func (n StoreID) Marshal() ([]byte, error) {
+	return proto.EncodeVarint(uint64(n)), nil
+}
+
+// Unmarshal implements the gogoproto Unmarshaler interface.
+func (n *StoreID) Unmarshal(bytes []byte) error {
+	x, length := proto.DecodeVarint(bytes)
+	if length != len(bytes) {
+		return util.Errorf("invalid varint")
+	}
+	*n = StoreID(x)
+	return nil
+}
 
 // IsSubset returns whether attributes list a is a subset of
 // attributes list b.
@@ -74,7 +113,7 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 
 // FindReplica returns the replica which matches the specified store
 // ID. Panic in the event that no replica matches.
-func (r *RangeDescriptor) FindReplica(storeID int32) *Replica {
+func (r *RangeDescriptor) FindReplica(storeID StoreID) *Replica {
 	for i := range r.Replicas {
 		if r.Replicas[i].StoreID == storeID {
 			return &r.Replicas[i]

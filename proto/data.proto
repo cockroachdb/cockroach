@@ -90,8 +90,10 @@ message RawKeyValue {
 // store-reserved system key (KeyLocalIdent).
 message StoreIdent {
   optional string cluster_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID"];
-  optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
-  optional int32 store_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  optional int32 node_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional int32 store_id = 3 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
 }
 
 // A SplitTrigger is run after a successful commit of an AdminSplit
@@ -146,6 +148,8 @@ enum TransactionStatus {
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 message NodeList {
+  // Note that this does not use the NodeID custom type because that appears
+  // to interact badly with the repeated and/or packed options.
   repeated int32 nodes = 1 [packed=true];
 }
 

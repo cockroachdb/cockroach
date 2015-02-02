@@ -36,13 +36,13 @@ type Transport interface {
 	// Listen informs the Transport of the local node's ID and callback interface.
 	// The Transport should associate the given id with the server object so other Transport's
 	// Connect methods can find it.
-	Listen(id uint64, server ServerInterface) error
+	Listen(id NodeID, server ServerInterface) error
 
 	// Stop undoes a previous Listen.
-	Stop(id uint64)
+	Stop(id NodeID)
 
 	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
-	Connect(id uint64) (ClientInterface, error)
+	Connect(id NodeID) (ClientInterface, error)
 }
 
 // RaftMessageRequest wraps a raft message.
@@ -76,7 +76,7 @@ type ClientInterface interface {
 // asyncClient bridges MultiRaft's channel-oriented interface with the synchronous RPC interface.
 // Outgoing requests are run in a non-blocking fire-and-forget fashion.
 type asyncClient struct {
-	nodeID uint64
+	nodeID NodeID
 	conn   ClientInterface
 }
 
@@ -86,7 +86,7 @@ func (a *asyncClient) raftMessage(req *RaftMessageRequest) {
 
 type localRPCTransport struct {
 	mu        sync.Mutex
-	listeners map[uint64]net.Listener
+	listeners map[NodeID]net.Listener
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -96,11 +96,11 @@ type localRPCTransport struct {
 // Because this is just for local testing, it doesn't use TLS.
 func NewLocalRPCTransport() Transport {
 	return &localRPCTransport{
-		listeners: make(map[uint64]net.Listener),
+		listeners: make(map[NodeID]net.Listener),
 	}
 }
 
-func (lt *localRPCTransport) Listen(id uint64, server ServerInterface) error {
+func (lt *localRPCTransport) Listen(id NodeID, server ServerInterface) error {
 	rpcServer := rpc.NewServer()
 	err := rpcServer.RegisterName("MultiRaft", server)
 	if err != nil {
@@ -137,14 +137,14 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 	}
 }
 
-func (lt *localRPCTransport) Stop(id uint64) {
+func (lt *localRPCTransport) Stop(id NodeID) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
 }
 
-func (lt *localRPCTransport) Connect(id uint64) (ClientInterface, error) {
+func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
 	lt.mu.Lock()
 	address := lt.listeners[id].Addr().String()
 	lt.mu.Unlock()

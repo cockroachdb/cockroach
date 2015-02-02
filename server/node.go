@@ -69,7 +69,7 @@ type Node struct {
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
-func allocateNodeID(db *client.KV) (int32, error) {
+func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 	iReply := &proto.IncrementResponse{}
 	if err := db.Call(proto.Increment, &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
@@ -80,13 +80,13 @@ func allocateNodeID(db *client.KV) (int32, error) {
 	}, iReply); err != nil {
 		return 0, util.Errorf("unable to allocate node ID: %v", err)
 	}
-	return int32(iReply.NewValue), nil
+	return proto.NodeID(iReply.NewValue), nil
 }
 
 // allocateStoreIDs increments the store id generator key for the
 // specified node to allocate "inc" new, unique store ids. The
 // first ID in a contiguous range is returned on success.
-func allocateStoreIDs(nodeID int32, inc int64, db *client.KV) (int32, error) {
+func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.StoreID, error) {
 	iReply := &proto.IncrementResponse{}
 	if err := db.Call(proto.Increment, &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
@@ -97,7 +97,7 @@ func allocateStoreIDs(nodeID int32, inc int64, db *client.KV) (int32, error) {
 	}, iReply); err != nil {
 		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %v", inc, nodeID, err)
 	}
-	return int32(iReply.NewValue - inc + 1), nil
+	return proto.StoreID(iReply.NewValue - inc + 1), nil
 }
 
 // BootstrapCluster bootstraps a store using the provided engine and

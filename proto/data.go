@@ -491,18 +491,18 @@ func NewScanMetadata(nowNanos int64) *ScanMetadata {
 
 // Add adds the given NodeID to the interface (unless already present)
 // and restores ordering.
-func (s *NodeList) Add(nodeID int32) {
+func (s *NodeList) Add(nodeID NodeID) {
 	if !s.Contains(nodeID) {
-		(*s).Nodes = append(s.Nodes, nodeID)
+		(*s).Nodes = append(s.Nodes, int32(nodeID))
 		sort.Sort(Int32Slice(s.Nodes))
 	}
 }
 
 // Contains returns true if the underlying slice contains the given NodeID.
-func (s NodeList) Contains(nodeID int32) bool {
-	ns := s.GetNodes()
-	i := sort.Search(len(ns), func(i int) bool { return ns[i] >= nodeID })
-	return i < len(ns) && ns[i] == nodeID
+func (s NodeList) Contains(nodeID NodeID) bool {
+	ns := s.Nodes
+	i := sort.Search(len(ns), func(i int) bool { return NodeID(ns[i]) >= nodeID })
+	return i < len(ns) && NodeID(ns[i]) == nodeID
 }
 
 // Int32Slice implements sort.Interface.

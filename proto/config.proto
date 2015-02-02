@@ -30,8 +30,10 @@ message Attributes {
 // device) and associated attributes. Replicas are stored in Range
 // lookup records (meta1, meta2).
 message Replica {
-  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
-  optional int32 store_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  optional int32 node_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional int32 store_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
   // Combination of node & store attributes.
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
 }

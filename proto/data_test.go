@@ -365,22 +365,22 @@ func TestNodeList(t *testing.T) {
 	sn := NodeList{}
 	items := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
 	for i := range items {
-		n := int32(items[i])
+		n := NodeID(items[i])
 		if sn.Contains(n) {
 			t.Fatalf("%d: false positive hit for %d on slice %v",
-				i, n, sn.GetNodes())
+				i, n, sn.Nodes)
 		}
 		// Add this item and, for good measure, all the previous ones.
 		for j := i; j >= 0; j-- {
-			sn.Add(int32(items[j]))
+			sn.Add(NodeID(items[j]))
 		}
-		if nodes := sn.GetNodes(); len(nodes) != i+1 {
+		if nodes := sn.Nodes; len(nodes) != i+1 {
 			t.Fatalf("%d: missing values or duplicates: %v",
 				i, nodes)
 		}
 		if !sn.Contains(n) {
 			t.Fatalf("%d: false negative hit for %d on slice %v",
-				i, n, sn.GetNodes())
+				i, n, sn.Nodes)
 		}
 	}
 }
