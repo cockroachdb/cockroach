@@ -61,7 +61,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
 	if bootstrap {
-		if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
 		}
 	}

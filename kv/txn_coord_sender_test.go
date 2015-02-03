@@ -50,7 +50,7 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	db = client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g)
-	if err = store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+	if err = store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		return
 	}
 	if err = store.Start(); err != nil {

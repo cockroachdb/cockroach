@@ -57,7 +57,7 @@ type raftInterface interface {
 	stop()
 }
 
-type singleNodeRaft struct {
+type raftImpl struct {
 	mr *multiraft.MultiRaft
 	mu sync.Mutex
 	// groups is the set of active group IDs. The map itself is
@@ -69,9 +69,10 @@ type singleNodeRaft struct {
 	stopper  *util.Stopper
 }
 
-func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
-	mr, err := multiraft.NewMultiRaft(1, &multiraft.Config{
-		Transport:              multiraft.NewLocalRPCTransport(),
+func newRaft(nodeID multiraft.NodeID, storage multiraft.Storage,
+	transport multiraft.Transport) raftInterface {
+	mr, err := multiraft.NewMultiRaft(nodeID, &multiraft.Config{
+		Transport:              transport,
 		Storage:                storage,
 		TickInterval:           time.Millisecond,
 		ElectionTimeoutTicks:   5,
@@ -81,7 +82,7 @@ func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 	if err != nil {
 		log.Fatal(err)
 	}
-	snr := &singleNodeRaft{
+	snr := &raftImpl{
 		mr:       mr,
 		groups:   map[int64]chan struct{}{},
 		commitCh: make(chan committedCommand, 10),
@@ -92,9 +93,9 @@ func newSingleNodeRaft(storage multiraft.Storage) *singleNodeRaft {
 	return snr
 }
 
-var _ raftInterface = (*singleNodeRaft)(nil)
+var _ raftInterface = (*raftImpl)(nil)
 
-func (snr *singleNodeRaft) createGroup(id int64) error {
+func (snr *raftImpl) createGroup(id int64) error {
 	snr.mu.Lock()
 	ch, ok := snr.groups[id]
 	if !ok {
@@ -110,7 +111,7 @@ func (snr *singleNodeRaft) createGroup(id int64) error {
 	return nil
 }
 
-func (snr *singleNodeRaft) removeGroup(id int64) error {
+func (snr *raftImpl) removeGroup(id int64) error {
 	snr.mu.Lock()
 	if ch, ok := snr.groups[id]; ok {
 		delete(snr.groups, id)
@@ -122,7 +123,7 @@ func (snr *singleNodeRaft) removeGroup(id int64) error {
 	return nil
 }
 
-func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
+func (snr *raftImpl) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftCommand) {
 	if cmd.Cmd.GetValue() == nil {
 		panic("proposed a nil command")
 	}
@@ -138,15 +139,15 @@ func (snr *singleNodeRaft) propose(cmdIDKey cmdIDKey, cmd proto.InternalRaftComm
 	snr.mr.SubmitCommand(uint64(cmd.RaftID), string(cmdIDKey), data)
 }
 
-func (snr *singleNodeRaft) committed() <-chan committedCommand {
+func (snr *raftImpl) committed() <-chan committedCommand {
 	return snr.commitCh
 }
 
-func (snr *singleNodeRaft) stop() {
+func (snr *raftImpl) stop() {
 	snr.stopper.Stop()
 }
 
-func (snr *singleNodeRaft) run() {
+func (snr *raftImpl) run() {
 	for {
 		select {
 		case e := <-snr.mr.Events:
