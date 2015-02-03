@@ -40,13 +40,15 @@ type testCluster struct {
 	tickers   []*manualTicker
 	events    []*eventDemux
 	storages  []*BlockableStorage
-	transport *localRPCTransport
+	transport Transport
 }
 
-func newTestCluster(size int, t *testing.T) *testCluster {
-	transport := NewLocalRPCTransport()
+func newTestCluster(transport Transport, size int, t *testing.T) *testCluster {
+	if transport == nil {
+		transport = NewLocalRPCTransport()
+	}
 	cluster := &testCluster{t: t}
-	cluster.transport = transport.(*localRPCTransport)
+	cluster.transport = transport
 	for i := 0; i < size; i++ {
 		ticker := newManualTicker()
 		storage := &BlockableStorage{storage: NewMemoryStorage()}
@@ -71,6 +73,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 		cluster.events = append(cluster.events, demux)
 		cluster.storages = append(cluster.storages, storage)
 	}
+	cluster.start()
 	return cluster
 }
 
@@ -90,14 +93,15 @@ func (c *testCluster) stop() {
 	}
 }
 
-// createGroup replicates a group among the first numReplicas nodes in the cluster
-func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
+// createGroup replicates a group consisting of numReplicas members,
+// the first being the node at index firstNode.
+func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
-		replicaIDs = append(replicaIDs, uint64(c.nodes[i].nodeID))
+		replicaIDs = append(replicaIDs, uint64(c.nodes[firstNode+i].nodeID))
 	}
 	for i := 0; i < numReplicas; i++ {
-		gs := c.storages[i].GroupStorage(groupID)
+		gs := c.storages[firstNode+i].GroupStorage(groupID)
 		memStorage := gs.(*blockableGroupStorage).s.(*raft.MemoryStorage)
 		memStorage.SetHardState(raftpb.HardState{
 			Commit: 10,
@@ -113,7 +117,7 @@ func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 			},
 		})
 
-		node := c.nodes[i]
+		node := c.nodes[firstNode+i]
 		err := node.CreateGroup(groupID)
 		if err != nil {
 			c.t.Fatal(err)
@@ -141,10 +145,9 @@ func TestInitialLeaderElection(t *testing.T) {
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		log.Infof("testing leader election for node %v", leaderIndex)
-		cluster := newTestCluster(3, t)
-		cluster.start()
+		cluster := newTestCluster(nil, 3, t)
 		groupID := uint64(1)
-		cluster.createGroup(groupID, 3)
+		cluster.createGroup(groupID, 0, 3)
 
 		event := cluster.waitForElection(leaderIndex)
 		if event.GroupID != groupID {
@@ -161,11 +164,10 @@ func TestInitialLeaderElection(t *testing.T) {
 func TestLeaderElectionEvent(t *testing.T) {
 	// Leader election events are fired when the leader commits an entry, not when it
 	// issues a call for votes.
-	cluster := newTestCluster(3, t)
-	cluster.start()
+	cluster := newTestCluster(nil, 3, t)
 	defer cluster.stop()
 	groupID := uint64(1)
-	cluster.createGroup(groupID, 3)
+	cluster.createGroup(groupID, 0, 3)
 
 	// Send a Ready with a new leader but no new commits.
 	// This happens while an election is in progress.
@@ -213,11 +215,10 @@ func TestLeaderElectionEvent(t *testing.T) {
 }
 
 func TestCommand(t *testing.T) {
-	cluster := newTestCluster(3, t)
-	cluster.start()
+	cluster := newTestCluster(nil, 3, t)
 	defer cluster.stop()
 	groupID := uint64(1)
-	cluster.createGroup(groupID, 3)
+	cluster.createGroup(groupID, 0, 3)
 	cluster.waitForElection(0)
 
 	// Submit a command to the leader
@@ -234,11 +235,10 @@ func TestCommand(t *testing.T) {
 }
 
 func TestSlowStorage(t *testing.T) {
-	cluster := newTestCluster(3, t)
-	cluster.start()
+	cluster := newTestCluster(nil, 3, t)
 	defer cluster.stop()
 	groupID := uint64(1)
-	cluster.createGroup(groupID, 3)
+	cluster.createGroup(groupID, 0, 3)
 
 	cluster.waitForElection(0)
 
@@ -280,13 +280,12 @@ func TestSlowStorage(t *testing.T) {
 
 func TestMembershipChange(t *testing.T) {
 	t.Skip("TODO(bdarnell): arrange for createGroup to be called on joining nodes")
-	cluster := newTestCluster(4, t)
-	cluster.start()
+	cluster := newTestCluster(nil, 4, t)
 	defer cluster.stop()
 
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := uint64(1)
-	cluster.createGroup(groupID, 1)
+	cluster.createGroup(groupID, 0, 1)
 	cluster.waitForElection(0)
 
 	// Add each of the other three nodes to the cluster.

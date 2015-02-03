@@ -247,8 +247,7 @@ type Store struct {
 	raft        raftInterface
 	closer      chan struct{}
 
-	mu sync.RWMutex // Protects variables below...
-	// TODO(Tobias) change int64 to uint64?
+	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
 }

@@ -18,127 +18,211 @@
 package multiraft
 
 import (
-	"sync"
+	"fmt"
+	"reflect"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
+// processEventsUntil reads and acknowledges messages from the given channel
+// until either the given conditional returns true, the channel is closed or a
+// read on the channel times out.
 func processEventsUntil(ch <-chan *interceptMessage, f func(*RaftMessageRequest) bool) {
-	for e := range ch {
-		e.ack <- struct{}{}
-		if f(e.args.(*RaftMessageRequest)) {
+	t := time.After(500 * time.Millisecond)
+	for {
+		select {
+		case e, ok := <-ch:
+			if !ok {
+				return
+			}
+			e.ack <- struct{}{}
+			if f(e.args.(*RaftMessageRequest)) {
+				return
+			}
+		case <-t:
+			log.Error("timeout when reading from intercept channel")
 			return
 		}
 	}
 }
 
-// validateHeartbeatCount receives messages from the given channel and compares
-// the observed number of heartbeat requests and responses.
-// Once the channel closes or enough heartbeat responses have been observed,
-// the function returns.
-func validateHeartbeatCount(ch <-chan *interceptMessage,
-	expHeartbeatPairs int, t *testing.T) {
-	// maps nodeID to heartbeats sent by this node minus heartbeat
-	// responses received by this node.
-	outInDelta := make(map[uint64]int)
-	cntR := 0
-	for {
-		iMsg := <-ch
-		iMsg.ack <- struct{}{}
-		req := iMsg.args.(*RaftMessageRequest)
+// a heartbeatCondition is invoked when determining whether the intercepted
+// stream should be let go. The heartbeatCountMap reflects the heartbeats
+// intercepted up to and including the given *RaftMessageRequest.
+type heartbeatCondition func(*RaftMessageRequest, heartbeatCountMap) bool
+
+func alwaysFalse(r *RaftMessageRequest) bool {
+	return false
+}
+
+// a heartbeatCountMap helps us keep track of the amount of heartbeats sent and
+// received for a number of nodes, indexed by their NodeID.
+type heartbeatCountMap map[uint64]heartbeatCount
+
+func (hcm heartbeatCountMap) Sum() int {
+	sum := 0
+	for _, v := range hcm {
+		sum += v.Sum()
+	}
+	return sum
+}
+
+func (hcm heartbeatCountMap) String() string {
+	max := uint64(0)
+	for k := range hcm {
+		if k > max {
+			max = k
+		}
+	}
+	ret := "{ "
+	for i := uint64(1); i <= max; i++ {
+		ret += fmt.Sprintf("%d: %s, ", i, hcm[i])
+	}
+	return ret + "}"
+}
+
+type heartbeatCount struct {
+	reqOut, reqIn, respOut, respIn int
+}
+
+func (hc heartbeatCount) Sum() int {
+	return hc.reqOut + hc.reqIn + hc.respOut + hc.respIn
+}
+
+func (hc heartbeatCount) String() string {
+	return fmt.Sprintf("[reqOut=%d reqIn=%d respOut=%d respIn=%d]",
+		hc.reqOut, hc.reqIn, hc.respOut, hc.respIn)
+}
+
+// countHeartbeats reads intercepted messages from the channel until the given
+// conditional returns true (or the channel closes or times out). The returned
+// heartbeatCountMap will contain the count of heartbeat requests and responses
+// for each nodeID observed in the message stream.
+func countHeartbeats(ch <-chan *interceptMessage,
+	cond heartbeatCondition) heartbeatCountMap {
+
+	cnt := make(heartbeatCountMap)
+	processEventsUntil(ch, func(req *RaftMessageRequest) bool {
+		from := cnt[req.Message.From]
+		to := cnt[req.Message.To]
 		switch req.Message.Type {
 		case raftpb.MsgHeartbeat:
-			outInDelta[req.Message.From]++
+			from.reqOut++
+			to.reqIn++
 		case raftpb.MsgHeartbeatResp:
-			cntR++
-			nodeID := req.Message.To
-			outInDelta[nodeID]--
-			if outInDelta[nodeID] < 0 {
-				t.Errorf("node %v: more responses received than heartbeats sent after %d heartbeats",
-					cntR-outInDelta[nodeID], nodeID)
-			}
+			from.respOut++
+			to.respIn++
+		default:
+			// Don't evaluate cond() when this is
+			// not a heartbeat.
+			return false
 		}
-		// If we've already received all the heartbeat responses that
-		// we have asked for, return. Without this, it's more awkward
-		// to know when to shut down the cluster.
-		if cntR >= expHeartbeatPairs {
-			break
+		cnt[req.Message.From] = from
+		cnt[req.Message.To] = to
+		return cond(req, cnt)
+	})
+	return cnt
+}
+
+// a blockingCluster is a cluster in which we intercept and acknowledge all
+// inter-node traffic.
+func blockingCluster(nodeCount int, t *testing.T) *testCluster {
+	transport := NewLocalInterceptableTransport()
+	cluster := newTestCluster(transport, nodeCount, t)
+	// Outgoing messages block the client until we acknowledge them, and
+	// messages are sent synchronously.
+	return cluster
+}
+
+// TestHeartbeatSingleGroup makes sure that in a single raft consensus group
+// with a ticking master the correct heartbeats are sent and acknowledged.
+func TestHeartbeatSingleGroup(t *testing.T) {
+	for _, nodeCount := range []int{2, 3, 5, 10} {
+		for tickCount := range []int{0, 1, 2, 3, 8} {
+			validateHeartbeatSingleGroup(nodeCount, tickCount, t)
 		}
-	}
-	for nodeID, delta := range outInDelta {
-		// If one of the checks below fails, this information will be useful.
-		if delta != 0 {
-			t.Errorf("node %v: %d heartbeats without response", nodeID, delta)
-		}
-	}
-	if cntR != expHeartbeatPairs {
-		t.Errorf("unexpected total number of heartbeat responses: %d (expected %d)",
-			cntR, expHeartbeatPairs)
 	}
 }
 
-func TestHeartbeat(t *testing.T) {
-	nodeCount := 3
-	cluster := newTestCluster(nodeCount, t)
-	// Outgoing messages block the client until we acknowledge them, and
-	// messages are sent synchronously.
-	cluster.transport.EnableEvents()
+// validateHeartbeatSingleGroup creates a raft group consisting of nodeCount
+// nodes, with the first node being elected master. Once elected, the leader
+// will tick tickCount times, and the first follower once. The remaining
+// followers, if any, will not experience ticks. All heartbeats and responses
+// sent by nodes in the system are intercepted and validated.
+func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
+	leaderIndex := 0 // first node is leader.
+	nc := nodeCount
+	ltc := tickCount // leader tick count
+	ec := 2          // extra ticks; due to election triggering.
+	// Ticks of first follower. Hard coded to one in the test below, since any
+	// higher value can lead to new elections which break the test.
+	// Assigning this to a valuable helps to make sense of the formulae below.
+	ftc := 1
 
-	cluster.start()
-	leaderTickCount := 18
-	// Since waitForElection() currently triggers two ticks, it also triggers
-	// some heartbeats which remain unanswered (the sender isn't leader yet).
-	unansweredHeartbeats := (nodeCount - 1) * 2 // 2 because of 2 election ticks.
+	expCnt := heartbeatCountMap{
+		// The leader is the only node that receives responses.
+		uint64(leaderIndex + 1): {reqOut: (ec + ltc) * (nc - 1), reqIn: ftc, respOut: 0, respIn: ltc * (nc - 1)},
+	}
+	// The first follower ticks `ftc` times, but nobody responds.
+	expCnt[2] = heartbeatCount{reqOut: (nc - 1) * ftc, reqIn: ec + ltc, respOut: ltc, respIn: 0}
+	// The remaining nodes follow the leader and don't tick.
+	for i := 2; i < nodeCount; i++ {
+		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ec + ltc + ftc, respOut: ltc, respIn: 0}
+	}
 
-	// How many heartbeats and heartbeat responses we expect in total.
-	expHeartbeatPairs := (nodeCount - 1) * leaderTickCount
+	cluster := blockingCluster(nc, t)
+	transport := cluster.transport.(*localInterceptableTransport)
+	blocker := make(chan struct{})
+	// Some more synchronization to prevent many heartbeat responses to be
+	// triggered individually; this would lead to responses being optimized
+	// away in the send loop and would complicate the count logic.
+	readyForTick := make(chan struct{}, 100)
+	readyForTick <- struct{}{} // queue initial tick
+	ticks := 1                 // ticks queued so far
 
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
 	go func() {
-		processEventsUntil(cluster.transport.Events, func(msg *RaftMessageRequest) bool {
-			if msg.Message.Type == raftpb.MsgHeartbeat {
-				unansweredHeartbeats--
-			}
-			return unansweredHeartbeats == 0
-		})
-		// Run the actual checks, consuming from the Events channel.
-		validateHeartbeatCount(cluster.transport.Events, expHeartbeatPairs, t)
-		// Once we're here, we may begin tearing down.
-		wg.Done()
-		// For the rest of this test, simply keep acknowledging messages
-		// so that Raft makes progress. This mostly serves to avoid deadlock
-		// in cases where there is unexpected behaviour.
-		processEventsUntil(cluster.transport.Events, func(r *RaftMessageRequest) bool {
-			return false
-		})
+		// Create group, elect leader, then send ticks as we want them.
+		cluster.createGroup(1, 0, nc)
+		cluster.waitForElection(leaderIndex)
+		cluster.tickers[leaderIndex+1].Tick() // Single tick for first follower.
+		for i := 0; i < ltc; i++ {
+			<-readyForTick
+			cluster.tickers[leaderIndex].Tick()
+		}
+		close(blocker)
 	}()
 
-	groupID := uint64(1)
-	leaderIndex := 0
-	cluster.createGroup(groupID, 3)
-	election := cluster.waitForElection(leaderIndex)
-
-	for i := 0; i < leaderTickCount; i++ {
-		cluster.tickers[leaderIndex].Tick()
+	// The main message processing loop.
+	actCnt := countHeartbeats(transport.Events,
+		func(req *RaftMessageRequest, cnt heartbeatCountMap) bool {
+			// Whenever all followers have sent responses for all of the ticks,
+			// we can send the next tick. The only reason for this fairly
+			// complicated setup is to guarantee that no responses are
+			// optimized away in handleRaftReady, which would make counting the
+			// heartbeats trickier.
+			tick := true
+			for i := 2; i < nodeCount+1; i++ {
+				if cnt[uint64(i)].respOut != ticks {
+					tick = false
+					break
+				}
+			}
+			if tick {
+				ticks++
+				readyForTick <- struct{}{}
+			}
+			return cnt.Sum() >= expCnt.Sum()
+		})
+	// Once done counting, simply process messages.
+	go processEventsUntil(transport.Events, alwaysFalse)
+	<-blocker
+	if !reflect.DeepEqual(actCnt, expCnt) {
+		t.Errorf("actual and expected heartbeat counts differ for %d nodes, "+
+			"%d leader ticks:\n%v\n%v",
+			nc, ltc, actCnt, expCnt)
 	}
-
-	wg.Wait()
-
 	cluster.stop()
-
-	// No further elections should have happened in the meantime.
-	for i := 0; i < nodeCount; i++ {
-		for {
-			ev, ok := <-cluster.events[i].LeaderElection
-			if !ok {
-				break
-			}
-			if ev.Term != election.Term {
-				t.Errorf("node %v: unexpected election event: %v (original election: %v)", i, ev, election)
-			}
-		}
-	}
-	close(cluster.transport.Events)
 }

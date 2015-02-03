@@ -190,14 +190,15 @@ func (m *MultiRaft) sendEvent(event interface{}) {
 func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
-	originNode, _ := s.nodes[req.Message.From]
+	fromID := NodeID(req.Message.From)
+	originNode, _ := s.nodes[fromID]
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the sending node is leading that group, don't
 		// propagate.
-		if s.groups[groupID].leader != req.Message.From || req.Message.From == s.nodeID {
+		if s.groups[groupID].leader != fromID || fromID == s.nodeID {
 			log.V(8).Infof("node %v: not fanning out heartbeat to %v, msg is from %d and leader is %d",
-				s.nodeID, req.Message.To, req.Message.From, s.groups[groupID].leader)
+				s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
 			continue
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
@@ -208,19 +209,20 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	}
 	log.V(7).Infof("node %v: received coalesced heartbeat from node %v; "+
 		"fanned out to %d followers in %d overlapping groups",
-		s.nodeID, req.Message.From, cnt, len(originNode.groupIDs))
+		s.nodeID, fromID, cnt, len(originNode.groupIDs))
 }
 
 // fanoutHeartbeatResponse sends the given heartbeat response to all groups
 // which overlap with the sender's groups and consider themselves leader.
 func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
-	originNode, _ := s.nodes[req.Message.From]
+	fromID := NodeID(req.Message.From)
+	originNode, _ := s.nodes[fromID]
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.
-		if s.groups[groupID].leader != s.nodeID || req.Message.From == s.nodeID {
+		if s.groups[groupID].leader != s.nodeID || fromID == s.nodeID {
 			log.V(8).Infof("node %v: not fanning out heartbeat response to %v, msg is from %d and leader is %d",
-				s.nodeID, req.Message.To, req.Message.From, s.groups[groupID].leader)
+				s.nodeID, req.Message.To, fromID, s.groups[groupID].leader)
 			continue
 		}
 		if err := s.multiNode.Step(context.Background(), groupID, req.Message); err != nil {
@@ -231,7 +233,7 @@ func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 	}
 	log.V(7).Infof("node %v: received coalesced heartbeat response from node %v; "+
 		"fanned out to %d leaders in %d overlapping groups",
-		s.nodeID, req.Message.From, cnt, len(originNode.groupIDs))
+		s.nodeID, fromID, cnt, len(originNode.groupIDs))
 }
 
 // CreateGroup creates a new consensus group and joins it. The initial membership of this
@@ -312,7 +314,7 @@ type group struct {
 
 	// leader is the node ID of the last known leader for this group, or
 	// 0 if an election is in progress.
-	leader uint64
+	leader NodeID
 
 	// pending contains all commands that have been proposed but not yet
 	// committed. When a proposal is committed, proposal.ch is closed
@@ -408,9 +410,9 @@ func (s *state) start() {
 
 		case req := <-s.reqChan:
 			_, groupOK := s.groups[req.GroupID]
-			_, nodeOK := s.nodes[req.Message.From]
+			_, nodeOK := s.nodes[NodeID(req.Message.From)]
 			groupOK = groupOK || req.Message.Type == raftpb.MsgHeartbeat
-			if !groupOK || !nodeOK || req.Message.To != s.nodeID {
+			if !groupOK || !nodeOK || NodeID(req.Message.To) != s.nodeID {
 				log.V(4).Infof("node %v: discarding ill-addressed message %s", s.nodeID, req.GroupID,
 					raft.DescribeMessage(req.Message, s.EntryFormatter))
 				break
@@ -457,7 +459,6 @@ func (s *state) start() {
 			log.V(8).Infof("node %v: got tick", s.nodeID)
 			s.multiNode.Tick()
 			ticks++
-			// TODO move around
 			if ticks >= s.HeartbeatIntervalTicks {
 				ticks = 0
 				s.coalescedHeartbeat()
@@ -473,15 +474,14 @@ func (s *state) coalescedHeartbeat() {
 	// to space out the heartbeats over the heartbeat interval so that
 	// we don't try to send for all nodes at once.
 	for nodeID, node := range s.nodes {
-		// Don't heartbeat yourself - it will abort elections and
-		// may efficiently prevent progress.
+		// Don't heartbeat yourself.
 		if nodeID == s.nodeID {
 			continue
 		}
 		log.V(6).Infof("node %v: triggering coalesced heartbeat to node %v", s.nodeID, nodeID)
 		msg := raftpb.Message{
-			From: s.nodeID,
-			To:   nodeID,
+			From: uint64(s.nodeID),
+			To:   uint64(nodeID),
 			Type: raftpb.MsgHeartbeat,
 		}
 		node.client.raftMessage(&RaftMessageRequest{
@@ -506,7 +506,7 @@ func (s *state) stop() {
 // addNode creates a node and registers the given groupIDs for that
 // node. If the node already exists and possible some of the groups
 // are already registered, only the missing groups will be added in.
-func (s *state) addNode(nodeID uint64, groupIDs ...uint64) error {
+func (s *state) addNode(nodeID NodeID, groupIDs ...uint64) error {
 	for _, groupID := range groupIDs {
 		if _, ok := s.groups[groupID]; !ok {
 			return util.Errorf("can not add invalid group %d to node %d",
@@ -555,7 +555,7 @@ func (s *state) createGroup(op *createGroupOp) {
 	}
 
 	for _, nodeID := range state.ConfState.Nodes {
-		s.addNode(nodeID, op.groupID)
+		s.addNode(NodeID(nodeID), op.groupID)
 	}
 
 	op.ch <- nil
@@ -569,7 +569,7 @@ func (s *state) removeGroup(op *removeGroupOp) {
 		op.ch <- err
 	}
 	for _, nodeID := range state.ConfState.Nodes {
-		s.nodes[nodeID].unregisterGroup(op.groupID)
+		s.nodes[NodeID(nodeID)].unregisterGroup(op.groupID)
 	}
 	delete(s.groups, op.groupID)
 	op.ch <- nil
@@ -615,7 +615,7 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 		term := g.committedTerm
 		if ready.SoftState != nil {
 			// Always save the leader whenever we get a SoftState.
-			g.leader = ready.SoftState.Lead
+			g.leader = NodeID(ready.SoftState.Lead)
 		}
 		if len(ready.CommittedEntries) > 0 {
 			term = ready.CommittedEntries[len(ready.CommittedEntries)-1].Term
@@ -688,7 +688,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					// TODO(bdarnell): support removing nodes; fix double-application of initial entries
 					continue
 				case raftpb.ConfChangeUpdateNode:
-					continue
+					// Updates don't concern multiraft, they are simply passed through.
 				}
 				if err != nil {
 					log.Errorf("error applying configuration change %v: %s", cc, err)
