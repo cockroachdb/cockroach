@@ -43,7 +43,7 @@ type allocator struct {
 func (a *allocator) allocate(required proto.Attributes, existingReplicas []proto.Replica) (
 	*StoreDescriptor, error) {
 	// Get a set of current nodes -- we never want to allocate on an existing node.
-	usedNodes := make(map[int32]struct{})
+	usedNodes := make(map[proto.NodeID]struct{})
 	for _, replica := range existingReplicas {
 		usedNodes[replica.NodeID] = struct{}{}
 	}

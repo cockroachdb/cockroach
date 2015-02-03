@@ -23,7 +23,7 @@ import "github.com/cockroachdb/cockroach/util/log"
 // an election. NodeID is zero when an election is in progress.
 type EventLeaderElection struct {
 	GroupID uint64
-	NodeID  uint64
+	NodeID  NodeID
 	Term    uint64
 }
 

@@ -146,7 +146,7 @@ func (e *NotBootstrappedError) Error() string {
 
 // NodeDescriptor holds details on node physical/network topology.
 type NodeDescriptor struct {
-	NodeID  int32
+	NodeID  proto.NodeID
 	Address net.Addr
 	Attrs   proto.Attributes // node specific attributes (e.g. datacenter, machine info)
 }
@@ -154,7 +154,7 @@ type NodeDescriptor struct {
 // StoreDescriptor holds store information including store attributes,
 // node descriptor and store capacity.
 type StoreDescriptor struct {
-	StoreID  int32
+	StoreID  proto.StoreID
 	Attrs    proto.Attributes // store specific attributes (e.g. ssd, hdd, mem)
 	Node     NodeDescriptor
 	Capacity engine.StoreCapacity
@@ -564,7 +564,7 @@ func (s *Store) BootstrapRange() error {
 func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 
 // StoreID accessor.
-func (s *Store) StoreID() int32 { return s.Ident.StoreID }
+func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
 
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.clock }

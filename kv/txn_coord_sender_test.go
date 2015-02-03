@@ -583,7 +583,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			t.Errorf("%d: expected orig timestamp to be %s + 1; got %s",
 				i, test.expOrigTS, reply.Txn.OrigTimestamp)
 		}
-		if nodes := reply.Txn.CertainNodes.GetNodes(); (len(nodes) != 0) != test.nodeSeen {
+		if nodes := reply.Txn.CertainNodes.Nodes; (len(nodes) != 0) != test.nodeSeen {
 			t.Errorf("%d: expected nodeSeen=%t, but list of hosts is %v",
 				i, test.nodeSeen, nodes)
 		}

@@ -28,6 +28,10 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
+// NodeID is a type alias for a raft node ID. Note that a raft node corresponds
+// to a cockroach node+store combination.
+type NodeID uint64
+
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
 	Storage   Storage
@@ -76,7 +80,7 @@ type MultiRaft struct {
 	Config
 	multiNode       raft.MultiNode
 	Events          chan interface{}
-	nodeID          uint64
+	nodeID          NodeID
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
 	proposalChan    chan proposal
@@ -88,7 +92,7 @@ type MultiRaft struct {
 type multiraftServer MultiRaft
 
 // NewMultiRaft creates a MultiRaft object.
-func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
+func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 	if nodeID == 0 {
 		return nil, util.Error("Invalid NodeID")
 	}
@@ -116,7 +120,7 @@ func NewMultiRaft(nodeID uint64, config *Config) (*MultiRaft, error) {
 
 	m := &MultiRaft{
 		Config: *config,
-		multiNode: raft.StartMultiNode(nodeID, config.ElectionTimeoutTicks,
+		multiNode: raft.StartMultiNode(uint64(nodeID), config.ElectionTimeoutTicks,
 			config.HeartbeatIntervalTicks),
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
@@ -216,7 +220,7 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			m.multiNode.Propose(context.Background(), groupID, encodeCommand(commandID, command))
+			m.multiNode.Propose(context.Background(), uint64(groupID), encodeCommand(commandID, command))
 		},
 		ch: ch,
 	}
@@ -225,17 +229,17 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
-	changeType raftpb.ConfChangeType, nodeID uint64) chan struct{} {
+	changeType raftpb.ConfChangeType, nodeID NodeID) chan struct{} {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})
 	m.proposalChan <- proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			m.multiNode.ProposeConfChange(context.Background(), groupID,
+			m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
 				raftpb.ConfChange{
 					Type:    changeType,
-					NodeID:  nodeID,
+					NodeID:  uint64(nodeID),
 					Context: encodeCommand(commandID, nil),
 				})
 		},
@@ -278,7 +282,7 @@ type removeGroupOp struct {
 
 // node represents a connection to a remote node.
 type node struct {
-	nodeID   uint64
+	nodeID   NodeID
 	refCount int
 	client   *asyncClient
 }
@@ -289,7 +293,7 @@ type node struct {
 type state struct {
 	*MultiRaft
 	groups        map[uint64]*group
-	nodes         map[uint64]*node
+	nodes         map[NodeID]*node
 	electionTimer *time.Timer
 	writeTask     *writeTask
 }
@@ -298,7 +302,7 @@ func newState(m *MultiRaft) *state {
 	return &state{
 		MultiRaft: m,
 		groups:    make(map[uint64]*group),
-		nodes:     make(map[uint64]*node),
+		nodes:     make(map[NodeID]*node),
 		writeTask: newWriteTask(m.Storage),
 	}
 }
@@ -385,7 +389,7 @@ func (s *state) stop() {
 }
 
 // addNode creates a node or increments the refcount on an existing node.
-func (s *state) addNode(nodeID uint64) error {
+func (s *state) addNode(nodeID NodeID) error {
 	if node, ok := s.nodes[nodeID]; ok {
 		node.refCount++
 		return nil
@@ -411,7 +415,7 @@ func (s *state) createGroup(op *createGroupOp) {
 		op.ch <- err
 	}
 	for _, nodeID := range state.ConfState.Nodes {
-		s.addNode(nodeID)
+		s.addNode(NodeID(nodeID))
 	}
 
 	s.multiNode.CreateGroup(op.groupID, nil, gs)
@@ -477,7 +481,7 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			// Whenever the committed term has advanced and we know our leader,
 			// emit an event.
 			g.committedTerm = term
-			s.sendEvent(&EventLeaderElection{groupID, g.leader, g.committedTerm})
+			s.sendEvent(&EventLeaderElection{groupID, NodeID(g.leader), g.committedTerm})
 
 			// Re-submit all pending proposals
 			for _, prop := range g.pending {
@@ -535,7 +539,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
 				// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 				// TODO(bdarnell): support removing nodes; fix double-application of initial entries
-				err = s.addNode(cc.NodeID)
+				err = s.addNode(NodeID(cc.NodeID))
 				if err != nil {
 					log.Errorf("error applying configuration change %v: %s", cc, err)
 				}
@@ -558,7 +562,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 		for _, msg := range ready.Messages {
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
 				raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
-			s.nodes[msg.To].client.raftMessage(&RaftMessageRequest{groupID, msg})
+			s.nodes[NodeID(msg.To)].client.raftMessage(&RaftMessageRequest{groupID, msg})
 		}
 	}
 }

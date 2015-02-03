@@ -57,7 +57,7 @@ func newTestCluster(size int, t *testing.T) *testCluster {
 			TickInterval:           time.Millisecond,
 			Strict:                 true,
 		}
-		mr, err := NewMultiRaft(uint64(i+1), config)
+		mr, err := NewMultiRaft(NodeID(i+1), config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,7 +89,7 @@ func (c *testCluster) stop() {
 func (c *testCluster) createGroup(groupID uint64, numReplicas int) {
 	var replicaIDs []uint64
 	for i := 0; i < numReplicas; i++ {
-		replicaIDs = append(replicaIDs, c.nodes[i].nodeID)
+		replicaIDs = append(replicaIDs, uint64(c.nodes[i].nodeID))
 	}
 	for i := 0; i < numReplicas; i++ {
 		gs := c.storages[i].GroupStorage(groupID)

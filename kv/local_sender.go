@@ -29,14 +29,14 @@ import (
 
 // A LocalSender provides methods to access a collection of local stores.
 type LocalSender struct {
-	mu       sync.RWMutex             // Protects storeMap and addrs
-	storeMap map[int32]*storage.Store // Map from StoreID to Store
+	mu       sync.RWMutex                     // Protects storeMap and addrs
+	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
 }
 
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
 func NewLocalSender() *LocalSender {
-	return &LocalSender{storeMap: map[int32]*storage.Store{}}
+	return &LocalSender{storeMap: map[proto.StoreID]*storage.Store{}}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
@@ -47,7 +47,7 @@ func (ls *LocalSender) GetStoreCount() int {
 }
 
 // HasStore returns true if the specified store is owned by this LocalSender.
-func (ls *LocalSender) HasStore(storeID int32) bool {
+func (ls *LocalSender) HasStore(storeID proto.StoreID) bool {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
 	_, ok := ls.storeMap[storeID]
@@ -56,7 +56,7 @@ func (ls *LocalSender) HasStore(storeID int32) bool {
 
 // GetStore looks up the store by store ID. Returns an error
 // if not found.
-func (ls *LocalSender) GetStore(storeID int32) (*storage.Store, error) {
+func (ls *LocalSender) GetStore(storeID proto.StoreID) (*storage.Store, error) {
 	ls.mu.RLock()
 	store, ok := ls.storeMap[storeID]
 	ls.mu.RUnlock()

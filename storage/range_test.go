@@ -155,7 +155,7 @@ func newTransaction(name string, baseKey proto.Key, userPriority int32,
 // CreateReplicaSets creates new proto.Replica protos based on an array of integers
 // to aid in testing. Note that this does not actualy produce any actual replicas, it
 // just creates the proto.
-func createReplicaSets(replicaNumbers []int32) []proto.Replica {
+func createReplicaSets(replicaNumbers []proto.StoreID) []proto.Replica {
 	result := []proto.Replica{}
 	for _, replicaNumber := range replicaNumbers {
 		result = append(result, proto.Replica{
@@ -393,7 +393,7 @@ func (be *blockingEngine) NewBatch() engine.Engine {
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
-func getArgs(key []byte, raftID int64, storeID int32) (*proto.GetRequest, *proto.GetResponse) {
+func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {
 	args := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -407,7 +407,7 @@ func getArgs(key []byte, raftID int64, storeID int32) (*proto.GetRequest, *proto
 
 // putArgs returns a PutRequest and PutResponse pair addressed to
 // the default replica for the specified key / value.
-func putArgs(key, value []byte, raftID int64, storeID int32) (*proto.PutRequest, *proto.PutResponse) {
+func putArgs(key, value []byte, raftID int64, storeID proto.StoreID) (*proto.PutRequest, *proto.PutResponse) {
 	args := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:       key,
@@ -424,7 +424,7 @@ func putArgs(key, value []byte, raftID int64, storeID int32) (*proto.PutRequest,
 }
 
 // deleteArgs returns a DeleteRequest and DeleteResponse pair.
-func deleteArgs(key proto.Key, raftID int64, storeID int32) (*proto.DeleteRequest, *proto.DeleteResponse) {
+func deleteArgs(key proto.Key, raftID int64, storeID proto.StoreID) (*proto.DeleteRequest, *proto.DeleteResponse) {
 	args := &proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -439,7 +439,7 @@ func deleteArgs(key proto.Key, raftID int64, storeID int32) (*proto.DeleteReques
 // readOrWriteArgs returns either get or put arguments depending on
 // value of "read". Get for true; Put for false. Returns method
 // selected and args & reply.
-func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID int32) (string, proto.Request, proto.Response) {
+func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID proto.StoreID) (string, proto.Request, proto.Response) {
 	if read {
 		gArgs, gReply := getArgs(key, raftID, storeID)
 		return proto.Get, gArgs, gReply
@@ -450,7 +450,7 @@ func readOrWriteArgs(key proto.Key, read bool, raftID int64, storeID int32) (str
 
 // incrementArgs returns an IncrementRequest and IncrementResponse pair
 // addressed to the default replica for the specified key / value.
-func incrementArgs(key []byte, inc int64, raftID int64, storeID int32) (*proto.IncrementRequest, *proto.IncrementResponse) {
+func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (*proto.IncrementRequest, *proto.IncrementResponse) {
 	args := &proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
@@ -463,7 +463,7 @@ func incrementArgs(key []byte, inc int64, raftID int64, storeID int32) (*proto.I
 	return args, reply
 }
 
-func scanArgs(start, end []byte, raftID int64, storeID int32) (*proto.ScanRequest, *proto.ScanResponse) {
+func scanArgs(start, end []byte, raftID int64, storeID proto.StoreID) (*proto.ScanRequest, *proto.ScanResponse) {
 	args := &proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     start,
@@ -478,7 +478,7 @@ func scanArgs(start, end []byte, raftID int64, storeID int32) (*proto.ScanReques
 
 // endTxnArgs returns request/response pair for EndTransaction RPC
 // addressed to the default replica for the specified key.
-func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID int32) (
+func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID proto.StoreID) (
 	*proto.EndTransactionRequest, *proto.EndTransactionResponse) {
 	args := &proto.EndTransactionRequest{
 		RequestHeader: proto.RequestHeader{
@@ -495,7 +495,7 @@ func endTxnArgs(txn *proto.Transaction, commit bool, raftID int64, storeID int32
 
 // pushTxnArgs returns request/response pair for InternalPushTxn RPC
 // addressed to the default replica for the specified key.
-func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, storeID int32) (
+func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, storeID proto.StoreID) (
 	*proto.InternalPushTxnRequest, *proto.InternalPushTxnResponse) {
 	args := &proto.InternalPushTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -513,7 +513,7 @@ func pushTxnArgs(pusher, pushee *proto.Transaction, abort bool, raftID int64, st
 }
 
 // heartbeatArgs returns request/response pair for InternalHeartbeatTxn RPC.
-func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID int32) (
+func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID proto.StoreID) (
 	*proto.InternalHeartbeatTxnRequest, *proto.InternalHeartbeatTxnResponse) {
 	args := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -530,7 +530,7 @@ func heartbeatArgs(txn *proto.Transaction, raftID int64, storeID int32) (
 // internalMergeArgs returns a InternalMergeRequest and InternalMergeResponse
 // pair addressed to the default replica for the specified key. The request will
 // contain the given proto.Value.
-func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID int32) (
+func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID proto.StoreID) (
 	*proto.InternalMergeRequest, *proto.InternalMergeResponse) {
 	args := &proto.InternalMergeRequest{
 		RequestHeader: proto.RequestHeader{
@@ -544,7 +544,7 @@ func internalMergeArgs(key []byte, value proto.Value, raftID int64, storeID int3
 	return args, reply
 }
 
-func internalTruncateLogArgs(index uint64, raftID int64, storeID int32) (
+func internalTruncateLogArgs(index uint64, raftID int64, storeID proto.StoreID) (
 	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
 	args := &proto.InternalTruncateLogRequest{
 		RequestHeader: proto.RequestHeader{
@@ -1640,17 +1640,17 @@ func TestReplicaSetsEqual(t *testing.T) {
 		b        []proto.Replica
 	}{
 		{true, []proto.Replica{}, []proto.Replica{}},
-		{true, createReplicaSets([]int32{1}), createReplicaSets([]int32{1})},
-		{true, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{1, 2})},
-		{true, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{2, 1})},
-		{false, createReplicaSets([]int32{1}), createReplicaSets([]int32{2})},
-		{false, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{2})},
-		{false, createReplicaSets([]int32{1, 2}), createReplicaSets([]int32{1})},
-		{false, createReplicaSets([]int32{}), createReplicaSets([]int32{1})},
-		{true, createReplicaSets([]int32{1, 2, 3}), createReplicaSets([]int32{2, 3, 1})},
-		{true, createReplicaSets([]int32{1, 1}), createReplicaSets([]int32{1, 1})},
-		{false, createReplicaSets([]int32{1, 1}), createReplicaSets([]int32{1, 1, 1})},
-		{true, createReplicaSets([]int32{1, 2, 3, 1, 2, 3}), createReplicaSets([]int32{1, 1, 2, 2, 3, 3})},
+		{true, createReplicaSets([]proto.StoreID{1}), createReplicaSets([]proto.StoreID{1})},
+		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{1, 2})},
+		{true, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{2, 1})},
+		{false, createReplicaSets([]proto.StoreID{1}), createReplicaSets([]proto.StoreID{2})},
+		{false, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{2})},
+		{false, createReplicaSets([]proto.StoreID{1, 2}), createReplicaSets([]proto.StoreID{1})},
+		{false, createReplicaSets([]proto.StoreID{}), createReplicaSets([]proto.StoreID{1})},
+		{true, createReplicaSets([]proto.StoreID{1, 2, 3}), createReplicaSets([]proto.StoreID{2, 3, 1})},
+		{true, createReplicaSets([]proto.StoreID{1, 1}), createReplicaSets([]proto.StoreID{1, 1})},
+		{false, createReplicaSets([]proto.StoreID{1, 1}), createReplicaSets([]proto.StoreID{1, 1, 1})},
+		{true, createReplicaSets([]proto.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]proto.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
 		if ReplicaSetsEqual(test.a, test.b) != test.expected {

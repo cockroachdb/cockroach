@@ -48,7 +48,7 @@ func TesLocalSendertGetStoreCount(t *testing.T) {
 
 	expectedCount := 10
 	for i := 0; i < expectedCount; i++ {
-		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
+		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: proto.StoreID(i)}})
 	}
 	if count := ls.GetStoreCount(); count != expectedCount {
 		t.Errorf("expected store count to be %d but was %d", expectedCount, count)
@@ -59,7 +59,7 @@ func TestLocalSenderVisitStores(t *testing.T) {
 	ls := NewLocalSender()
 	numStores := 10
 	for i := 0; i < numStores; i++ {
-		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: int32(i)}})
+		ls.AddStore(&storage.Store{Ident: proto.StoreIdent{StoreID: proto.StoreID(i)}})
 	}
 
 	visit := make([]bool, numStores)
@@ -147,7 +147,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	var e [2]engine.Engine
 	var s [2]*storage.Store
 	ranges := []struct {
-		storeID    int32
+		storeID    proto.StoreID
 		start, end proto.Key
 	}{
 		{2, proto.Key("a"), proto.Key("c")},
