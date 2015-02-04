@@ -15,6 +15,12 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
+// We mark this file as "build ignore" so that it won't be built as
+// part of the simulation package, but can still be run using "go run
+// gossip.go".
+
+// +build ignore
+
 /*
 Package simulation provides tools meant to visualize or test aspects
 of a Cockroach cluster on a single host.
@@ -30,7 +36,7 @@ simulation.
 
 To run:
 
-    go run simulation/gossip.go -size=(small|medium|large|huge|ginormous)
+    go run gossip.go -size=(small|medium|large|huge|ginormous)
 
 Log output includes instructions for displaying the graph output as a
 series of images to visualize the evolution of the network.
@@ -71,6 +77,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -140,7 +147,7 @@ func (em edgeMap) addEdge(addr string, e edge) {
 //        node5 -> node2
 //        node5 -> node3
 //   }
-func outputDotFile(dotFN string, cycle int, network *gossip.SimulationNetwork, edgeSet map[string]edge) string {
+func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet map[string]edge) string {
 	f, err := os.Create(dotFN)
 	if err != nil {
 		log.Fatalf("unable to create temp file: %s", err)
@@ -291,9 +298,9 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := gossip.NewSimulationNetwork(nodeCount, *networkType, gossipInterval)
+	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval)
 	n.SimulateNetwork(
-		func(cycle int, network *gossip.SimulationNetwork) bool {
+		func(cycle int, network *simulation.Network) bool {
 			if cycle == numCycles {
 				return false
 			}

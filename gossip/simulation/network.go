@@ -15,31 +15,32 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package gossip
+package simulation
 
 import (
 	"fmt"
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// SimulationNode represents a node used in a SimulationNetwork.
-// It includes information about the node's gossip instance,
-// network address, and underlying server.
-type SimulationNode struct {
-	Gossip *Gossip
+// Node represents a node used in a Network. It includes information
+// about the node's gossip instance, network address, and underlying
+// server.
+type Node struct {
+	Gossip *gossip.Gossip
 	Addr   net.Addr
 	Server *rpc.Server
 }
 
-// SimulationNetwork provides access to a test gossip network of nodes.
-type SimulationNetwork struct {
-	Nodes          []*SimulationNode
+// Network provides access to a test gossip network of nodes.
+type Network struct {
+	Nodes          []*Node
 	Addrs          []net.Addr
 	NetworkType    string        // "tcp" or "unix"
 	GossipInterval time.Duration // The length of a round of gossip
@@ -49,14 +50,14 @@ type SimulationNetwork struct {
 // on time scale for testing gossip networks.
 const DefaultTestGossipInterval = 10 * time.Millisecond
 
-// NewSimulationNetwork creates nodeCount gossip nodes. The networkType should
+// NewNetwork creates nodeCount gossip nodes. The networkType should
 // be set to either "tcp" or "unix". The gossipInterval should be set
 // to a compressed simulation timescale, though large enough to give
 // the concurrent goroutines enough time to pass data back and forth
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
-func NewSimulationNetwork(nodeCount int, networkType string,
-	gossipInterval time.Duration) *SimulationNetwork {
+func NewNetwork(nodeCount int, networkType string,
+	gossipInterval time.Duration) *Network {
 
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	clock := hlc.NewClock(hlc.UnixNano)
@@ -80,30 +81,30 @@ func NewSimulationNetwork(nodeCount int, networkType string,
 		bootstrap = addrs[:3]
 	}
 
-	nodes := make([]*SimulationNode, nodeCount)
+	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := New(rpcContext)
+		node := gossip.New(rpcContext)
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)
 		node.Start(servers[i])
 		// Node 0 gossips node count.
 		if i == 0 {
-			node.AddInfo(KeyNodeCount, int64(nodeCount), time.Hour)
+			node.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour)
 		}
-		nodes[i] = &SimulationNode{Gossip: node, Addr: addrs[i], Server: servers[i]}
+		nodes[i] = &Node{Gossip: node, Addr: addrs[i], Server: servers[i]}
 	}
 
-	return &SimulationNetwork{
+	return &Network{
 		Nodes:          nodes,
 		Addrs:          addrs,
 		NetworkType:    networkType,
 		GossipInterval: gossipInterval}
 }
 
-// GetNodeFromAddr returns the simulation node associated
-// with provided network address, or nil if there is no such node.
-func (n *SimulationNetwork) GetNodeFromAddr(addr string) (*SimulationNode, bool) {
+// GetNodeFromAddr returns the simulation node associated with
+// provided network address, or nil if there is no such node.
+func (n *Network) GetNodeFromAddr(addr string) (*Node, bool) {
 	for i := 0; i < len(n.Nodes); i++ {
 		if n.Nodes[i].Addr.String() == addr {
 			return n.Nodes[i], true
@@ -112,22 +113,22 @@ func (n *SimulationNetwork) GetNodeFromAddr(addr string) (*SimulationNode, bool)
 	return nil, false
 }
 
-// SimulateNetwork runs a number of gossipInterval periods within the given
-// SimulationNetwork. After each gossipInterval period, simCallback is invoked.
-// When it returns false, the simulation ends. If it returns true, the
-// simulation continues another cycle.
+// SimulateNetwork runs a number of gossipInterval periods within the
+// given Network. After each gossipInterval period, simCallback is
+// invoked.  When it returns false, the simulation ends. If it returns
+// true, the simulation continues another cycle.
 //
-// Node0 gossips the node count as well as the gossip sentinel. The gossip
-// bootstrap hosts are set to the first three nodes (or fewer if less than
-// three are available).
+// Node0 gossips the node count as well as the gossip sentinel. The
+// gossip bootstrap hosts are set to the first three nodes (or fewer
+// if less than three are available).
 //
-// At each cycle of the simulation, node 0 gossips the sentinel. If the
-// simulation requires other nodes to gossip, this should be done via
-// simCallback.
+// At each cycle of the simulation, node 0 gossips the sentinel. If
+// the simulation requires other nodes to gossip, this should be done
+// via simCallback.
 //
 // The simulation callback receives a map of nodes, keyed by node address.
-func (n *SimulationNetwork) SimulateNetwork(
-	simCallback func(cycle int, network *SimulationNetwork) bool) {
+func (n *Network) SimulateNetwork(
+	simCallback func(cycle int, network *Network) bool) {
 	gossipTimeout := time.Tick(n.GossipInterval)
 	nodes := n.Nodes
 	var complete bool
@@ -135,7 +136,7 @@ func (n *SimulationNetwork) SimulateNetwork(
 		select {
 		case <-gossipTimeout:
 			// Node 0 gossips sentinel every cycle.
-			nodes[0].Gossip.AddInfo(KeySentinel, int64(cycle), time.Hour)
+			nodes[0].Gossip.AddInfo(gossip.KeySentinel, int64(cycle), time.Hour)
 			if !simCallback(cycle, n) {
 				complete = true
 			}
@@ -144,19 +145,19 @@ func (n *SimulationNetwork) SimulateNetwork(
 }
 
 // Stop all servers and gossip nodes.
-func (n *SimulationNetwork) Stop() {
+func (n *Network) Stop() {
 	for i := 0; i < len(n.Nodes); i++ {
 		n.Nodes[i].Server.Close()
 		n.Nodes[i].Gossip.Stop()
 	}
 }
 
-// RunUntilFullyConnected blocks until the gossip network has received gossip
-// from every other node in the network. It returns the gossip cycle at which
-// the network became fully connected.
-func (n *SimulationNetwork) RunUntilFullyConnected() int {
+// RunUntilFullyConnected blocks until the gossip network has received
+// gossip from every other node in the network. It returns the gossip
+// cycle at which the network became fully connected.
+func (n *Network) RunUntilFullyConnected() int {
 	var connectedAtCycle int
-	n.SimulateNetwork(func(cycle int, network *SimulationNetwork) bool {
+	n.SimulateNetwork(func(cycle int, network *Network) bool {
 		nodes := network.Nodes
 		// Every node should gossip.
 		for i := 0; i < len(nodes); i++ {
@@ -171,9 +172,10 @@ func (n *SimulationNetwork) RunUntilFullyConnected() int {
 	return connectedAtCycle
 }
 
-// isNetworkConnected returns true if the network is fully connected with
-// no partitions (i.e. every node knows every other node's network address).
-func (n *SimulationNetwork) isNetworkConnected() bool {
+// isNetworkConnected returns true if the network is fully connected
+// with no partitions (i.e. every node knows every other node's
+// network address).
+func (n *Network) isNetworkConnected() bool {
 	for i := 0; i < len(n.Nodes); i++ {
 		for keyIdx := 0; keyIdx < len(n.Addrs); keyIdx++ {
 			_, err := n.Nodes[i].Gossip.GetInfo(n.Addrs[keyIdx].String())
