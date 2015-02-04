@@ -1,4 +1,4 @@
-FROM golang:1.4.0
+FROM golang:1.4.1
 
 MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 
@@ -30,13 +30,10 @@ RUN mkdir -p $ROACHPATH && \
 WORKDIR /cockroach
 
 # Get RocksDB, Etcd sources from github and build the vendored libs.
-# We will run 'git submodule update' later which will ensure we have
-# the correct version, but running an initial download here speeds
-# things up by baking the bulk of the download into a lower layer of
-# the image. This is mildly tricky in that we bake the SHA of the
-# rocksdb and etcd commits into the Dockerfile so that layer caching
-# works properly. Effectively we're doing the work of "git submodule
-# update" here even though we'll run it again later.
+# This is mildly tricky in that we bake the SHA of the rocksdb and
+# etcd commits into the Dockerfile so that layer caching works
+# properly. Effectively we're doing the work of "git submodule update"
+# here.
 RUN \
  cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git && \
  cd $ROCKSDBPATH/rocksdb && git checkout ROCKSDB_SHA && \
@@ -45,8 +42,7 @@ RUN \
 
 # Avoid adding the Dockerfile which gets "touched" on every build and
 # would this invalidate subsequent layer caching.
-ADD *.sh /cockroach/build/devbase/
-COPY md5sum.go /cockroach/build/devbase/
+ADD *.sh *.go /cockroach/build/devbase/
 RUN ["./build/devbase/godeps.sh"]
 RUN ["./build/devbase/vendor.sh"]
 

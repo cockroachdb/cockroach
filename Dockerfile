@@ -14,12 +14,10 @@ MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 ADD . /cockroach/
 RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 
-# Update to the correct version of our submodules and rebuild any changes
-# in RocksDB (in case the submodule revision is different from the current
-# master)
+# Update any submodules that were not already cloned in the
+# cockroach-devbase image.
+RUN cd -P /cockroach && git submodule update --init
 # Build the cockroach executable.
-RUN cd -P /cockroach && git submodule update --init && \
- cd -P /cockroach/_vendor/rocksdb && make static_lib
 RUN cd -P /cockroach && make build
 
 # Expose the http status port.
