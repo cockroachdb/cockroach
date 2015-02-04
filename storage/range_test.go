@@ -105,7 +105,7 @@ func (tc *testContext) Start(t *testing.T) {
 	if tc.store == nil {
 		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip)
 		if !tc.skipBootstrap {
-			if err := tc.store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+			if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 				t.Fatal(err)
 			}
 		}

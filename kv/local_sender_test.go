@@ -127,7 +127,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	ls := NewLocalSender()
 	db := client.NewKV(NewTxnCoordSender(ls, clock), nil)
 	store := storage.NewStore(clock, eng, db, nil)
-	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	ls.AddStore(store)
@@ -157,7 +157,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
 		s[i] = storage.NewStore(clock, e[i], db, nil)
 		s[i].Ident.StoreID = rng.storeID
-		if err := s[i].Bootstrap(proto.StoreIdent{StoreID: rng.storeID}); err != nil {
+		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}); err != nil {
 			t.Fatal(err)
 		}
 		if err := s[i].Start(); err != nil {

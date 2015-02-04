@@ -110,6 +110,24 @@ func verifyKeys(start, end proto.Key) error {
 	return nil
 }
 
+// makeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
+// Both values are int32s, but we only allocate 8 bits for StoreID so we have
+// the option of expanding proto.NodeID and being more "wasteful" of node IDs.
+func makeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
+	if n <= 0 || s <= 0 {
+		// Zeroes are likely the result of incomplete initialization.
+		panic("NodeID and StoreID must be > 0")
+	}
+	if s > 0xff {
+		panic("StoreID must be <= 0xff")
+	}
+	return multiraft.NodeID(n)<<8 | multiraft.NodeID(s)
+}
+
+func decodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
+	return proto.NodeID(n >> 8), proto.StoreID(n & 0xff)
+}
+
 type rangeAlreadyExists struct {
 	rng *Range
 }
@@ -299,7 +317,7 @@ func (s *Store) Start() error {
 	start := engine.RangeDescriptorKey(engine.KeyMin)
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
-	s.raft = newSingleNodeRaft(s)
+	s.raft = newRaft(s.RaftNodeID(), s, multiraft.NewLocalRPCTransport())
 	// Start Raft processing goroutine.
 	go s.processRaft(s.raft, s.closer)
 
@@ -565,6 +583,11 @@ func (s *Store) ClusterID() string { return s.Ident.ClusterID }
 
 // StoreID accessor.
 func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
+
+// RaftNodeID accessor.
+func (s *Store) RaftNodeID() multiraft.NodeID {
+	return makeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
+}
 
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.clock }

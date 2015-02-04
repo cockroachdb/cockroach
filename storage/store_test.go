@@ -31,6 +31,7 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -97,7 +98,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	store := NewStore(clock, eng, nil, g)
-	if err := store.Bootstrap(proto.StoreIdent{StoreID: 1}); err != nil {
+	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
 	store.db = client.NewKV(&testSender{store: store}, nil)
@@ -910,5 +911,50 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 	if _, ok := err.(*proto.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %s", err)
+	}
+}
+
+func TestRaftNodeID(t *testing.T) {
+	cases := []struct {
+		nodeID   proto.NodeID
+		storeID  proto.StoreID
+		expected multiraft.NodeID
+	}{
+		{1, 1, 257},
+		{2, 3, 515},
+		{math.MaxInt32, 0xff, 549755813887},
+	}
+	for _, c := range cases {
+		x := makeRaftNodeID(c.nodeID, c.storeID)
+		if x != c.expected {
+			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected %v",
+				c.nodeID, c.storeID, x, c.expected)
+		}
+		n, s := decodeRaftNodeID(x)
+		if n != c.nodeID || s != c.storeID {
+			t.Errorf("decodeRaftNodeID(%v) returned %v, %v; expected %v, %v",
+				x, n, s, c.nodeID, c.storeID)
+		}
+	}
+
+	panicCases := []struct {
+		nodeID  proto.NodeID
+		storeID proto.StoreID
+	}{
+		{0, 1},
+		{1, 0},
+		{1, 0x100},
+		{1, -1},
+		{-1, 1},
+	}
+	for _, c := range panicCases {
+		func() {
+			defer func() {
+				recover()
+			}()
+			x := makeRaftNodeID(c.nodeID, c.storeID)
+			t.Errorf("makeRaftNodeID(%v, %v) returned %v; expected panic",
+				c.nodeID, c.storeID, x)
+		}()
 	}
 }

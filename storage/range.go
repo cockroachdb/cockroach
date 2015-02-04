@@ -140,6 +140,7 @@ type RangeManager interface {
 	Engine() engine.Engine
 	Gossip() *gossip.Gossip
 	StoreID() proto.StoreID
+	RaftNodeID() multiraft.NodeID
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -1474,7 +1475,7 @@ func (r *Range) InitialState() (raft.InitialState, error) {
 		Commit: raftInitialLogIndex,
 	}
 	cs := raftpb.ConfState{
-		Nodes: []uint64{1},
+		Nodes: []uint64{uint64(r.rm.RaftNodeID())},
 	}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
