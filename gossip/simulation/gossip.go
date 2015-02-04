@@ -15,6 +15,10 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
+// We mark this file as "build ignore" so that it won't be built as
+// part of the simulation package, but can still be run using "go run
+// gossip.go".
+
 // +build ignore
 
 /*
