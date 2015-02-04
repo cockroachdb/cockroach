@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -49,11 +50,8 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	sender := NewTxnCoordSender(lSender, clock)
 	db = client.NewKV(sender, nil)
 	db.User = storage.UserRoot
-	store := storage.NewStore(clock, eng, db, g)
+	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport())
 	if err = store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
-		return
-	}
-	if err = store.Start(); err != nil {
 		return
 	}
 	lSender.AddStore(store)
