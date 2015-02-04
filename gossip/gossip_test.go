@@ -15,13 +15,15 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package gossip
+package gossip_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -32,7 +34,7 @@ import (
 // more cycles for a fully connected network on busy hardware. The clock
 // should be advanced manually instead (this requires some changes to gossip).
 func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
-	network := NewSimulationNetwork(numNodes, "unix", DefaultTestGossipInterval)
+	network := simulation.NewNetwork(numNodes, "unix", simulation.DefaultTestGossipInterval)
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
@@ -53,7 +55,7 @@ func TestConvergence(t *testing.T) {
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := New(rpcContext)
+	g := gossip.New(rpcContext)
 	g.AddInfo("i", int64(1), time.Hour)
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
@@ -81,10 +83,10 @@ func TestGossipInfoStore(t *testing.T) {
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := New(rpcContext)
+	g := gossip.New(rpcContext)
 
 	// For int64.
-	g.RegisterGroup("i", 3, MinGroup)
+	g.RegisterGroup("i", 3, gossip.MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("i.%d", i), int64(i), time.Hour)
 	}
@@ -105,7 +107,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For float64.
-	g.RegisterGroup("f", 3, MinGroup)
+	g.RegisterGroup("f", 3, gossip.MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("f.%d", i), float64(i), time.Hour)
 	}
@@ -123,7 +125,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For string.
-	g.RegisterGroup("s", 3, MinGroup)
+	g.RegisterGroup("s", 3, gossip.MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour)
 	}
