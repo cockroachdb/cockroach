@@ -25,6 +25,7 @@
 #include "rocksdb/env.h"
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/options.h"
+#include "rocksdb/table.h"
 #include "api.pb.h"
 #include "data.pb.h"
 #include "internal.pb.h"
@@ -624,13 +625,16 @@ class DBLogger : public rocksdb::Logger {
 }  // namespace
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
+  rocksdb::BlockBasedTableOptions table_options;
+  table_options.block_cache = rocksdb::NewLRUCache(db_opts.cache_size);
+
   rocksdb::Options options;
-  options.block_cache = rocksdb::NewLRUCache(db_opts.cache_size);
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logger));
   options.merge_operator.reset(new DBMergeOperator);
+  options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
   rocksdb::DB *db_ptr;
   rocksdb::Status status = rocksdb::DB::Open(options, ToString(dir), &db_ptr);
