@@ -29,8 +29,8 @@ dependencies:
 
 test:
   override:
-    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-logtostderr -timeout 15s -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/test.log"; test ${PIPESTATUS[0]} -eq 0
-    - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-logtostderr -timeout 1m -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/testrace.log"; test ${PIPESTATUS[0]} -eq 0
+    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-logtostderr -timeout 30s -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/test.log"; test ${PIPESTATUS[0]} -eq 0
+    - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-logtostderr -timeout 2m -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/testrace.log"; test ${PIPESTATUS[0]} -eq 0
       # Kill off the previous images since we don't care for them any more,
       # but we do want to save the logs for the following ones.
       # `docker rm` actually errors on CircleCI but still works, hence the ';'.
