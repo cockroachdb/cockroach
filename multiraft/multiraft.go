@@ -81,6 +81,7 @@ type MultiRaft struct {
 	multiNode       raft.MultiNode
 	Events          chan interface{}
 	nodeID          NodeID
+	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
 	proposalChan    chan proposal
@@ -124,6 +125,7 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 			config.HeartbeatIntervalTicks),
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
+		reqChan:         make(chan *RaftMessageRequest, 100),
 		createGroupChan: make(chan *createGroupOp, 100),
 		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan proposal, 100),
@@ -157,10 +159,8 @@ func (m *MultiRaft) Stop() {
 // when we receive a message.
 func (ms *multiraftServer) RaftMessage(req *RaftMessageRequest,
 	resp *RaftMessageResponse) error {
-	m := (*MultiRaft)(ms)
-	log.V(5).Infof("node %v: group %v got message %s", m.nodeID, req.GroupID,
-		raft.DescribeMessage(req.Message, ms.EntryFormatter))
-	return m.multiNode.Step(context.Background(), req.GroupID, req.Message)
+	ms.reqChan <- req
+	return nil
 }
 
 // strictErrorLog panics in strict mode and logs an error otherwise. Arguments are printf-style
@@ -344,6 +344,14 @@ func (s *state) start() {
 			log.V(6).Infof("node %v: stopping", s.nodeID)
 			s.stop()
 			return
+
+		case req := <-s.reqChan:
+			log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
+				raft.DescribeMessage(req.Message, s.EntryFormatter))
+			if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
+				log.Warningf("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
+					raft.DescribeMessage(req.Message, s.EntryFormatter))
+			}
 
 		case op := <-s.createGroupChan:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
