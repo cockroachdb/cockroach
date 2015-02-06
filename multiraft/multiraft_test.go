@@ -125,14 +125,20 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 	}
 }
 
-// Trigger an election on node i and wait for it to complete.
-// TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
-func (c *testCluster) waitForElection(i int) *EventLeaderElection {
+func (c *testCluster) triggerElection(i int) {
 	// Elections are currently triggered after ElectionTimeoutTicks+1 ticks.
 	c.tickers[i].Tick()
 	c.tickers[i].Tick()
+}
+
+// Trigger an election on node i and wait for it to complete.
+// TODO(bdarnell): once we have better leader discovery and forwarding/queuing, remove this.
+func (c *testCluster) waitForElection(i int) *EventLeaderElection {
 	for {
 		e := <-c.events[i].LeaderElection
+		if e == nil {
+			panic("got nil LeaderElection event, channel likely closed")
+		}
 		// Ignore events with NodeID 0; these mark elections that are in progress.
 		if e.NodeID != 0 {
 			return e
@@ -149,6 +155,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		groupID := uint64(1)
 		cluster.createGroup(groupID, 0, 3)
 
+		cluster.triggerElection(leaderIndex)
 		event := cluster.waitForElection(leaderIndex)
 		if event.GroupID != groupID {
 			t.Fatalf("election event had incorrect group id %v", event.GroupID)
@@ -219,6 +226,7 @@ func TestCommand(t *testing.T) {
 	defer cluster.stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
+	cluster.triggerElection(0)
 	cluster.waitForElection(0)
 
 	// Submit a command to the leader
@@ -240,6 +248,7 @@ func TestSlowStorage(t *testing.T) {
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 
+	cluster.triggerElection(0)
 	cluster.waitForElection(0)
 
 	// Block the storage on the last node.
@@ -286,6 +295,7 @@ func TestMembershipChange(t *testing.T) {
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 1)
+	cluster.triggerElection(0)
 	cluster.waitForElection(0)
 
 	// Add each of the other three nodes to the cluster.
