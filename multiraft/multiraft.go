@@ -84,7 +84,7 @@ type MultiRaft struct {
 	reqChan         chan *RaftMessageRequest
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
-	proposalChan    chan proposal
+	proposalChan    chan *proposal
 	stopper         *util.Stopper
 }
 
@@ -128,7 +128,7 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 		reqChan:         make(chan *RaftMessageRequest, 100),
 		createGroupChan: make(chan *createGroupOp, 100),
 		removeGroupChan: make(chan *removeGroupOp, 100),
-		proposalChan:    make(chan proposal, 100),
+		proposalChan:    make(chan *proposal, 100),
 		stopper:         util.NewStopper(1),
 	}
 
@@ -216,7 +216,7 @@ func (m *MultiRaft) RemoveGroup(groupID uint64) error {
 func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) chan struct{} {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})
-	m.proposalChan <- proposal{
+	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -232,7 +232,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 	changeType raftpb.ConfChangeType, nodeID NodeID) chan struct{} {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})
-	m.proposalChan <- proposal{
+	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
@@ -267,7 +267,7 @@ type group struct {
 	// pending contains all commands that have been proposed but not yet
 	// committed. When a proposal is committed, proposal.ch is closed
 	// and it is removed from this map.
-	pending map[string]proposal
+	pending map[string]*proposal
 }
 
 type createGroupOp struct {
@@ -428,7 +428,7 @@ func (s *state) createGroup(op *createGroupOp) {
 
 	s.multiNode.CreateGroup(op.groupID, nil, gs)
 	s.groups[op.groupID] = &group{
-		pending: map[string]proposal{},
+		pending: map[string]*proposal{},
 	}
 
 	op.ch <- nil
@@ -440,7 +440,7 @@ func (s *state) removeGroup(op *removeGroupOp) {
 	op.ch <- nil
 }
 
-func (s *state) propose(p proposal) {
+func (s *state) propose(p *proposal) {
 	g := s.groups[p.groupID]
 	g.pending[p.commandID] = p
 	p.fn()
