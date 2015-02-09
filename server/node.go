@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -116,7 +117,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock), nil)
-	s := storage.NewStore(clock, eng, localDB, nil)
+	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport())
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {
@@ -209,7 +210,8 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
 	for _, e := range engines {
-		s := storage.NewStore(clock, e, n.db, n.gossip)
+		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport
+		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport())
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(); err != nil {

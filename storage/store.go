@@ -238,12 +238,13 @@ type Store struct {
 	Ident       proto.StoreIdent
 	RetryOpts   util.RetryOptions
 	clock       *hlc.Clock
-	engine      engine.Engine  // The underlying key-value store
-	db          *client.KV     // Cockroach KV DB
-	allocator   *allocator     // Makes allocation decisions
-	gossip      *gossip.Gossip // Configs and store capacities
-	raftIDAlloc *IDAllocator   // Raft ID allocator
-	configMu    sync.Mutex     // Limit config update processing
+	engine      engine.Engine       // The underlying key-value store
+	db          *client.KV          // Cockroach KV DB
+	allocator   *allocator          // Makes allocation decisions
+	gossip      *gossip.Gossip      // Configs and store capacities
+	transport   multiraft.Transport // Log replication traffic
+	raftIDAlloc *IDAllocator        // Raft ID allocator
+	configMu    sync.Mutex          // Limit config update processing
 	raft        raftInterface
 	closer      chan struct{}
 
@@ -255,7 +256,8 @@ type Store struct {
 var _ multiraft.Storage = &Store{}
 
 // NewStore returns a new instance of a store.
-func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip) *Store {
+func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip,
+	transport multiraft.Transport) *Store {
 	s := &Store{
 		StoreFinder: &StoreFinder{gossip: gossip},
 		RetryOpts:   defaultRangeRetryOptions,
@@ -264,6 +266,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		db:          db,
 		allocator:   &allocator{},
 		gossip:      gossip,
+		transport:   transport,
 		closer:      make(chan struct{}),
 		ranges:      map[int64]*Range{},
 	}
@@ -317,7 +320,7 @@ func (s *Store) Start() error {
 	start := engine.RangeDescriptorKey(engine.KeyMin)
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
-	s.raft = newRaft(s.RaftNodeID(), s, multiraft.NewLocalRPCTransport())
+	s.raft = newRaft(s.RaftNodeID(), s, s.transport)
 	// Start Raft processing goroutine.
 	go s.processRaft(s.raft, s.closer)
 

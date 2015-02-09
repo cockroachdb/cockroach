@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -59,7 +60,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	sender := kv.NewTxnCoordSender(lSender, clock)
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
-	store := storage.NewStore(clock, eng, db, g)
+	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport())
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)

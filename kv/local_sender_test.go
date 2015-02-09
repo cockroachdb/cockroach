@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -126,7 +127,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()
 	db := client.NewKV(NewTxnCoordSender(ls, clock), nil)
-	store := storage.NewStore(clock, eng, db, nil)
+	store := storage.NewStore(clock, eng, db, nil, multiraft.NewLocalRPCTransport())
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +156,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
-		s[i] = storage.NewStore(clock, e[i], db, nil)
+		s[i] = storage.NewStore(clock, e[i], db, nil, multiraft.NewLocalRPCTransport())
 		s[i].Ident.StoreID = rng.storeID
 		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}); err != nil {
 			t.Fatal(err)

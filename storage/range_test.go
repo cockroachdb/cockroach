@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/multiraft/storagetest"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -103,7 +104,7 @@ func (tc *testContext) Start(t *testing.T) {
 	}
 
 	if tc.store == nil {
-		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip)
+		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, multiraft.NewLocalRPCTransport())
 		if !tc.skipBootstrap {
 			if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 				t.Fatal(err)
@@ -176,7 +177,7 @@ func TestRangeContains(t *testing.T) {
 
 	e := engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	clock := hlc.NewClock(hlc.UnixNano)
-	r, err := NewRange(desc, NewStore(clock, e, nil, nil))
+	r, err := NewRange(desc, NewStore(clock, e, nil, nil, multiraft.NewLocalRPCTransport()))
 	if err != nil {
 		t.Fatal(err)
 	}
