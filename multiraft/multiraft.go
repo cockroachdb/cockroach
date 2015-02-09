@@ -409,16 +409,15 @@ func (s *state) start() {
 			return
 
 		case req := <-s.reqChan:
-			_, groupOK := s.groups[req.GroupID]
-			_, nodeOK := s.nodes[NodeID(req.Message.From)]
-			groupOK = groupOK || req.Message.Type == raftpb.MsgHeartbeat
-			if !groupOK || !nodeOK || NodeID(req.Message.To) != s.nodeID {
-				log.V(4).Infof("node %v: discarding ill-addressed message %s", s.nodeID, req.GroupID,
-					raft.DescribeMessage(req.Message, s.EntryFormatter))
-				break
-			}
 			log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
 				raft.DescribeMessage(req.Message, s.EntryFormatter))
+			if _, ok := s.groups[req.GroupID]; !ok {
+				log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
+				if err := s.createGroup(req.GroupID); err != nil {
+					log.Warningf("Error creating group %d: %s", req.GroupID, err)
+					break
+				}
+			}
 
 			switch req.Message.Type {
 			case raftpb.MsgHeartbeat:
@@ -433,7 +432,7 @@ func (s *state) start() {
 			}
 		case op := <-s.createGroupChan:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
-			s.createGroup(op)
+			op.ch <- s.createGroup(op.groupID)
 
 		case op := <-s.removeGroupChan:
 			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
@@ -533,32 +532,31 @@ func (s *state) addNode(nodeID NodeID, groupIDs ...uint64) error {
 	return nil
 }
 
-func (s *state) createGroup(op *createGroupOp) {
-	if _, ok := s.groups[op.groupID]; ok {
-		op.ch <- util.Errorf("group %v already exists", op.groupID)
-		return
+func (s *state) createGroup(groupID uint64) error {
+	if _, ok := s.groups[groupID]; ok {
+		return util.Errorf("group %v already exists", groupID)
 	}
-	log.V(6).Infof("node %v creating group %v", s.nodeID, op.groupID)
+	log.V(6).Infof("node %v creating group %v", s.nodeID, groupID)
 
-	gs := s.Storage.GroupStorage(op.groupID)
+	gs := s.Storage.GroupStorage(groupID)
 	state, err := gs.InitialState()
 	if err != nil {
-		op.ch <- err
+		return err
 	}
 	for _, nodeID := range state.ConfState.Nodes {
 		s.addNode(NodeID(nodeID))
 	}
 
-	s.multiNode.CreateGroup(op.groupID, nil, gs)
-	s.groups[op.groupID] = &group{
+	s.multiNode.CreateGroup(groupID, nil, gs)
+	s.groups[groupID] = &group{
 		pending: map[string]*proposal{},
 	}
 
 	for _, nodeID := range state.ConfState.Nodes {
-		s.addNode(NodeID(nodeID), op.groupID)
+		s.addNode(NodeID(nodeID), groupID)
 	}
 
-	op.ch <- nil
+	return nil
 }
 
 func (s *state) removeGroup(op *removeGroupOp) {
@@ -641,6 +639,9 @@ func (s *state) handleWriteReady(readyGroups map[uint64]raft.Ready) {
 		gwr := &groupWriteRequest{}
 		if !raft.IsEmptyHardState(ready.HardState) {
 			gwr.state = ready.HardState
+		}
+		if !raft.IsEmptySnap(ready.Snapshot) {
+			gwr.snapshot = ready.Snapshot
 		}
 		if len(ready.Entries) > 0 {
 			gwr.entries = ready.Entries
@@ -728,7 +729,12 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 
 			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
 				raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
-			s.nodes[NodeID(msg.To)].client.raftMessage(&RaftMessageRequest{groupID, msg})
+			nodeID := NodeID(msg.To)
+			if _, ok := s.nodes[nodeID]; !ok {
+				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
+				s.addNode(nodeID)
+			}
+			s.nodes[nodeID].client.raftMessage(&RaftMessageRequest{groupID, msg})
 		}
 	}
 }

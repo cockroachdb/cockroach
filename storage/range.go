@@ -1604,6 +1604,11 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 	return nil
 }
 
+// ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
+func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
+	panic("TODO(bdarnell): implement Range.ApplySnapshot")
+}
+
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc.RaftID),

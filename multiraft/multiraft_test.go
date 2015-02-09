@@ -288,7 +288,6 @@ func TestSlowStorage(t *testing.T) {
 }
 
 func TestMembershipChange(t *testing.T) {
-	t.Skip("TODO(bdarnell): arrange for createGroup to be called on joining nodes")
 	cluster := newTestCluster(nil, 4, t)
 	defer cluster.stop()
 
