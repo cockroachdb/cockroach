@@ -64,4 +64,6 @@ func (e *eventDemux) start() {
 
 func (e *eventDemux) stop() {
 	close(e.stopper)
+	close(e.CommandCommitted)
+	close(e.LeaderElection)
 }

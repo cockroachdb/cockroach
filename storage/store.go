@@ -721,11 +721,13 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 // RemoveRange removes the range from the store's range map and from
 // the sorted rangesByKey slice.
 func (s *Store) RemoveRange(rng *Range) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// RemoveGroup needs to access the storage, which in turn needs the
+	// lock. Some care is needed to avoid deadlocks.
 	if err := s.raft.removeGroup(rng.Desc.RaftID); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	rng.stop()
 	delete(s.ranges, rng.Desc.RaftID)
 	// Find the range in rangesByKey slice and swap it to end of slice
