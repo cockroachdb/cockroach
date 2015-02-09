@@ -253,6 +253,8 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		}
 		// Request to #2, #3 but no response.
 		cluster.tickers[0].Tick()
+		// We don't tick node 2 to get some asymmetry.
+
 		// Request to #1, #3 but no response.
 		cluster.tickers[1].Tick()
 		// Request to #1, #2, #4, #5 with response.
@@ -270,6 +272,8 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		if el := cluster.waitForElection(3); el.NodeID != 4 {
 			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
 		}
+		// Requests to #2, #3 without responses.
+		cluster.tickers[0].Tick()
 		// Requests to #1, #2 with and #4, #5 without responses.
 		cluster.tickers[2].Tick()
 		// Requests to #3, #5 with responses.
@@ -300,9 +304,9 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	}
 	close(firstPhase)
 	expCntSecondPhase := heartbeatCountMap{
-		1: {reqOut: 0, reqIn: 1, respOut: 1, respIn: 0},
-		2: {reqOut: 0, reqIn: 1, respOut: 1, respIn: 0},
-		3: {reqOut: 4, reqIn: 4, respOut: 1, respIn: 2},
+		1: {reqOut: 2, reqIn: 1, respOut: 1, respIn: 0},
+		2: {reqOut: 0, reqIn: 2, respOut: 1, respIn: 0},
+		3: {reqOut: 4, reqIn: 5, respOut: 1, respIn: 2},
 		4: {reqOut: 6, reqIn: 2, respOut: 0, respIn: 2},
 		5: {reqOut: 2, reqIn: 4, respOut: 1, respIn: 0},
 	}
