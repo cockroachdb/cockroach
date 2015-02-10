@@ -44,12 +44,12 @@ function download_verify()
 }
 
 cd ${TMP}
-curl -L https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz | ${TAR} -xz
+curl -L -k https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz | ${TAR} -xz
 cd gflags-2.0
 ./configure --prefix ${USR} --disable-shared --enable-static && make && make install
 
 cd ${TMP}
-curl -L https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz | ${TAR} -xz
+curl -L -k https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz | ${TAR} -xz
 cd snappy-1.1.1
 ./configure --prefix ${USR} --disable-shared --enable-static && make && make install
 
@@ -70,7 +70,7 @@ cd bzip2-1.0.6
 make && make install PREFIX="${VENDOR}/usr"
 
 cd ${TMP}
-curl -L https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.bz2 | ${TAR} -xj
+curl -L -k https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.bz2 | ${TAR} -xj
 cd protobuf-2.6.1
 ./configure --prefix ${USR} --disable-shared --enable-static && make && make install
 
