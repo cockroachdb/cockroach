@@ -149,9 +149,9 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Rewrite a zone config with low max bytes.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{},
-			proto.Attributes{},
-			proto.Attributes{},
+			{},
+			{},
+			{},
 		},
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,

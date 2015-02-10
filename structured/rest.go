@@ -197,10 +197,10 @@ const (
 )
 
 var supportedMethods = map[string]struct{}{
-	methodGet:    struct{}{},
-	methodPut:    struct{}{},
-	methodPost:   struct{}{},
-	methodDelete: struct{}{},
+	methodGet:    {},
+	methodPut:    {},
+	methodPost:   {},
+	methodDelete: {},
 }
 
 // ServeHTTP arbitrates requests to the appropriate function

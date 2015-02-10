@@ -362,9 +362,9 @@ func TestStoreShouldSplit(t *testing.T) {
 	// Rewrite zone config with range max bytes set to 256K.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{},
-			proto.Attributes{},
-			proto.Attributes{},
+			{},
+			{},
+			{},
 		},
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,

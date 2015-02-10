@@ -87,19 +87,19 @@ func TestRocksDBCompaction(t *testing.T) {
 	// Write two transaction values and two response cache values such
 	// that exactly one of each should be GC'd based on our GC timeouts.
 	kvs := []proto.KeyValue{
-		proto.KeyValue{
+		{
 			Key:   ResponseCacheKey(1, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(2, 0), t)},
 		},
-		proto.KeyValue{
+		{
 			Key:   ResponseCacheKey(2, cmdID),
 			Value: proto.Value{Bytes: encodePutResponse(makeTS(3, 0), t)},
 		},
-		proto.KeyValue{
+		{
 			Key:   TransactionKey(proto.Key("a"), proto.Key(uuid.New())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(1, 0), t)},
 		},
-		proto.KeyValue{
+		{
 			Key:   TransactionKey(proto.Key("b"), proto.Key(uuid.New())),
 			Value: proto.Value{Bytes: encodeTransaction(makeTS(2, 0), t)},
 		},
