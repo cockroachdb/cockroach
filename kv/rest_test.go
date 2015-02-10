@@ -411,7 +411,7 @@ func TestSystemKeys(t *testing.T) {
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
-			proto.Replica{
+			{
 				NodeID:  1,
 				StoreID: 1,
 			},

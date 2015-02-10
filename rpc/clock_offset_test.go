@@ -118,10 +118,10 @@ func TestEndpointListSort(t *testing.T) {
 func TestBuildEndpointList(t *testing.T) {
 	// Build the offsets we will turn into an endpoint list.
 	offsets := map[string]proto.RemoteOffset{
-		"0": proto.RemoteOffset{Offset: 0, Error: 10},
-		"1": proto.RemoteOffset{Offset: 1, Error: 10},
-		"2": proto.RemoteOffset{Offset: 2, Error: 10},
-		"3": proto.RemoteOffset{Offset: 3, Error: 10},
+		"0": {Offset: 0, Error: 10},
+		"1": {Offset: 1, Error: 10},
+		"2": {Offset: 2, Error: 10},
+		"3": {Offset: 3, Error: 10},
 	}
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
@@ -162,10 +162,10 @@ func TestBuildEndpointList(t *testing.T) {
 // older offsets when we build an endpoint list.
 func TestBuildEndpointListRemoveStagnantClocks(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0":         proto.RemoteOffset{Offset: 0, Error: 10, MeasuredAt: 11},
-		"stagnant0": proto.RemoteOffset{Offset: 1, Error: 10, MeasuredAt: 0},
-		"1":         proto.RemoteOffset{Offset: 2, Error: 10, MeasuredAt: 20},
-		"stagnant1": proto.RemoteOffset{Offset: 3, Error: 10, MeasuredAt: 9},
+		"0":         {Offset: 0, Error: 10, MeasuredAt: 11},
+		"stagnant0": {Offset: 1, Error: 10, MeasuredAt: 0},
+		"1":         {Offset: 2, Error: 10, MeasuredAt: 20},
+		"stagnant1": {Offset: 3, Error: 10, MeasuredAt: 9},
 	}
 
 	// The stagnant offsets older than 10ns ago will be removed.
@@ -196,10 +196,10 @@ func TestFindOffsetInterval(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
-		"0": proto.RemoteOffset{Offset: 20, Error: 10},
-		"1": proto.RemoteOffset{Offset: 58, Error: 20},
-		"2": proto.RemoteOffset{Offset: 71, Error: 25},
-		"3": proto.RemoteOffset{Offset: 91, Error: 31},
+		"0": {Offset: 20, Error: 10},
+		"1": {Offset: 58, Error: 20},
+		"2": {Offset: 71, Error: 25},
+		"3": {Offset: 91, Error: 31},
 	}
 
 	manual := hlc.NewManualClock(0)
@@ -219,10 +219,10 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 	// Build the offsets. We will return the interval that the maximum number
 	// of remote clocks overlap.
 	offsets := map[string]proto.RemoteOffset{
-		"0": proto.RemoteOffset{Offset: 0, Error: 1},
-		"1": proto.RemoteOffset{Offset: 1, Error: 1},
-		"2": proto.RemoteOffset{Offset: 3, Error: 1},
-		"3": proto.RemoteOffset{Offset: 4, Error: 1},
+		"0": {Offset: 0, Error: 1},
+		"1": {Offset: 1, Error: 1},
+		"2": {Offset: 3, Error: 1},
+		"3": {Offset: 4, Error: 1},
 	}
 
 	manual := hlc.NewManualClock(0)
@@ -240,7 +240,7 @@ func TestFindOffsetIntervalNoMajorityOverlap(t *testing.T) {
 // interval for an infinite offset.
 func TestFindOffsetIntervalWithInfinites(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0": proto.RemoteOffset{Offset: 0, Error: 1},
+		"0": {Offset: 0, Error: 1},
 		"1": proto.InfiniteOffset,
 		"2": proto.InfiniteOffset,
 		"3": proto.InfiniteOffset,
@@ -279,7 +279,7 @@ func TestFindOffsetIntervalNoRemotes(t *testing.T) {
 // of the single remote clock.
 func TestFindOffsetIntervalOneClock(t *testing.T) {
 	offsets := map[string]proto.RemoteOffset{
-		"0": proto.RemoteOffset{Offset: 0, Error: 10},
+		"0": {Offset: 0, Error: 10},
 	}
 
 	manual := hlc.NewManualClock(0)

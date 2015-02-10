@@ -332,7 +332,7 @@ func enumeratePriorities(priorities []int32) [][]int32 {
 	for i := 0; i < len(priorities); i++ {
 		leftover := enumeratePriorities(append(append([]int32(nil), priorities[:i]...), priorities[i+1:]...))
 		if len(leftover) == 0 {
-			results = [][]int32{[]int32{priorities[i]}}
+			results = [][]int32{{priorities[i]}}
 		}
 		for j := 0; j < len(leftover); j++ {
 			results = append(results, append([]int32{priorities[i]}, leftover[j]...))
@@ -379,7 +379,7 @@ func enumerateHistories(txns [][]*cmd, symmetric bool) [][]*cmd {
 		cp[i] = append([]*cmd(nil), cp[i][1:]...)
 		leftover := enumerateHistories(cp, false)
 		if len(leftover) == 0 {
-			results = [][]*cmd{[]*cmd{txns[i][0]}}
+			results = [][]*cmd{{txns[i][0]}}
 		}
 		for j := 0; j < len(leftover); j++ {
 			results = append(results, append([]*cmd{txns[i][0]}, leftover[j]...))

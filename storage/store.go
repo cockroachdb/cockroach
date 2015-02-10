@@ -513,7 +513,7 @@ func (s *Store) BootstrapRange() error {
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
-			proto.Replica{
+			{
 				NodeID:  1,
 				StoreID: 1,
 			},
@@ -557,9 +557,9 @@ func (s *Store) BootstrapRange() error {
 	// Zone config.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{},
-			proto.Attributes{},
-			proto.Attributes{},
+			{},
+			{},
+			{},
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,
