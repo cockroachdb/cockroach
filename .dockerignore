@@ -1,6 +1,4 @@
 _vendor
-roachlib/*.o
-roachlib/*.a
 proto/*.pb.go
 proto/lib/*
 proto/lib/github.com/gogo/protobuf/gogoproto/*

@@ -4,5 +4,5 @@ Name: Cockroach
 Description: Cockroach Engine Dependencies
 Version: 0.1
 Requires: 
-Libs: -L${prefix}/_vendor/usr/lib -L${prefix}/_vendor/rocksdb  -L${prefix}/proto/lib -L${prefix}/roachlib -lroach -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroachproto -lprotobuf @LDEXTRA@
-Cflags: -I${prefix}/_vendor/usr/include -I${prefix}/_vendor/rocksdb/include -I${prefix}/proto/lib -I${prefix}/roachlib
+Libs: -L${prefix}/_vendor/usr/lib -L${prefix}/_vendor/rocksdb  -L${prefix}/proto/lib -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lroachproto -lprotobuf @LDEXTRA@
+Cflags: -I${prefix}/_vendor/usr/include -I${prefix}/_vendor/rocksdb/include -I${prefix}/proto/lib

@@ -20,6 +20,7 @@
 
 package engine
 
+// #cgo CXXFLAGS: -std=c++11
 // #cgo pkg-config: ./engine.pc
 // #include <stdlib.h>
 // #include "db.h"
