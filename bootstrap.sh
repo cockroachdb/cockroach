@@ -47,17 +47,5 @@ done && ls -al .git/hooks | grep githooks
 cat <<%%%
 ****************************************
 Bootstrapped successfully! You don't need to do anything else.
-
-If you want to invoke 'go build' directly, you will however
-need to
-* add ./_vendor/usr/bin to your PATH
-* add ./_vendor/usr/include to your CPLUS_INCLUDE_PATH
-* add ./_vendor/usr/lib to your LIBRARY_PATH
-
-In that case, you may want to run the following snippet for your shells:
-
-export PATH="$(cd $(dirname $0)/_vendor/usr/bin; pwd -P):\$PATH"
-export CPLUS_INCLUDE_PATH="$(cd $(dirname $0)/_vendor/usr/include; pwd -P):\$CPLUS_INCLUDE_PATH"
-export LIBRARY_PATH="$(cd $(dirname $0)/_vendor/usr/lib; pwd -P):\$LIBRARY_PATH"
 ****************************************
 %%%

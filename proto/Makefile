@@ -16,35 +16,22 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PROTO_LIB   := lib/libroachproto.a
-PROTOS      := api.proto config.proto data.proto errors.proto gossip.proto heartbeat.proto internal.proto
+PROTOC      := $(shell git rev-parse --show-cdup)_vendor/usr/bin/protoc
+PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
-SOURCES     := lib/api.pb.cc lib/config.pb.cc lib/data.pb.cc lib/errors.pb.cc lib/gossip.pb.cc lib/heartbeat.pb.cc lib/internal.pb.cc lib/github.com/gogo/protobuf/gogoproto/gogo.pb.cc
-HEADERS     := lib/api.pb.h lib/config.pb.h lib/data.pb.h lib/errors.pb.h lib/gossip.pb.h lib/heartbeat.pb.h lib/internal.pb.h lib/github.com/gogo/protobuf/gogoproto/gogo.pb.h
-LIBOBJECTS  := $(SOURCES:.cc=.o)
+SOURCES     := $(PROTOS:.proto=.pb.cc) github.com/gogo/protobuf/gogoproto/gogo.pb.cc
+HEADERS     := $(PROTOS:.proto=.pb.h) github.com/gogo/protobuf/gogoproto/gogo.pb.h
 
-CXXFLAGS += -Ilib
-
-PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf:../../../../github.com/gogo/protobuf/gogoproto
+PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf
 PROTOC_GEN_GOGO :=../../../../../bin/protoc-gen-gogo
 
-all: static_lib
-
-static_lib: $(PROTO_LIB)
-
-$(PROTO_LIB): $(PROTO_GO) $(SOURCES) $(LIBOBJECTS)
-	rm -f $@
-	ar -rsv $(PROTO_LIB) $(LIBOBJECTS)
-
-$(PROTO_GO): $(PROTOS)
-	protoc --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=lib --proto_path=.:$(PROTO_PATH) $(PROTOS)
-
-$(SOURCES): $(GOGO_PROTOS)
-	protoc --cpp_out=lib --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
-
-.cc.o:
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+all:
+	$(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=../storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS)
+	$(PROTOC) --cpp_out=../storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
+	ln -sf github.com/gogo/protobuf/gogoproto/gogo.pb.cc ../storage/engine/gogo.pb.cc
 
 clean:
-	rm -f $(LIBOBJECTS) $(PROTO_LIB) $(PROTO_GO) $(SOURCES) $(HEADERS)
+	rm -f $(PROTO_GO)
+	rm -f $(patsubst %,../storage/engine/%,$(SOURCES))
+	rm -f $(patsubst %,../storage/engine/%,$(HEADERS))

@@ -27,13 +27,6 @@ STATIC := $(STATIC)
 
 RUN  := run
 GOPATH  := $(CURDIR)/../../../..:$(CURDIR)/_vendor
-# Exposes protoc.
-PATH := $(CURDIR)/_vendor/usr/bin:$(PATH)
-# Expose protobuf.
-export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
-export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
-
-ROACH_PROTO := proto
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
@@ -53,7 +46,7 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto
+auxiliary: storage/engine/engine.pc
 
 build: auxiliary
 	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
@@ -61,9 +54,6 @@ build: auxiliary
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
 	sed -e "s,@PWD@,$(CURDIR),g" < $^ > $@
-
-roach_proto:
-	make -C $(ROACH_PROTO) static_lib
 
 test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
@@ -109,7 +99,6 @@ clean:
 	$(GO) clean -i -r ./...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
-	make -C $(ROACH_PROTO) clean
 
 # The gopath target outputs the GOPATH that should be used for building this
 # package. It is used by the emacs go-projectile package for automatic

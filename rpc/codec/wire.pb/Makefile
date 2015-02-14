@@ -15,7 +15,8 @@
 #
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-PROTOS      := wire.proto
+PROTOC      := $(shell git rev-parse --show-cdup)_vendor/usr/bin/protoc
+PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
 
@@ -24,7 +25,7 @@ PROTO_PATH := ../../../../../../:../../../../../../github.com/gogo/protobuf/prot
 all: $(PROTO_GO)
 
 $(PROTO_GO): $(PROTOS)
-	protoc --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)
+	$(PROTOC) --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)
 
 clean:
 	rm -f $(PROTO_GO)
