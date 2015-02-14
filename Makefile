@@ -34,7 +34,6 @@ export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
 export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
 
 ROACH_PROTO := proto
-SQL_PARSER  := sql/parser
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
@@ -54,7 +53,7 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto sqlparser
+auxiliary: storage/engine/engine.pc roach_proto
 
 build: auxiliary
 	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
@@ -65,9 +64,6 @@ storage/engine/engine.pc: storage/engine/engine.pc.in
 
 roach_proto:
 	make -C $(ROACH_PROTO) static_lib
-
-sqlparser:
-	make -C $(SQL_PARSER)
 
 test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
@@ -114,7 +110,6 @@ clean:
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
 	make -C $(ROACH_PROTO) clean
-	make -C $(SQL_PARSER) clean
 
 # The gopath target outputs the GOPATH that should be used for building this
 # package. It is used by the emacs go-projectile package for automatic
