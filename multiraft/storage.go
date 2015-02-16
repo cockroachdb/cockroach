@@ -31,6 +31,7 @@ import (
 type WriteableGroupStorage interface {
 	raft.Storage
 	Append(entries []raftpb.Entry) error
+	ApplySnapshot(snap raftpb.Snapshot) error
 	SetHardState(st raftpb.HardState) error
 }
 
@@ -158,8 +159,17 @@ func (w *writeTask) start() {
 				}
 				groupResp.state = groupReq.state
 			}
+			if !raft.IsEmptySnap(groupReq.snapshot) {
+				err := group.ApplySnapshot(groupReq.snapshot)
+				if err != nil {
+					panic(err) // TODO(bdarnell)
+				}
+			}
 			if len(groupReq.entries) > 0 {
-				group.Append(groupReq.entries)
+				err := group.Append(groupReq.entries)
+				if err != nil {
+					panic(err) // TODO(bdarnell)
+				}
 			}
 		}
 		w.out <- response

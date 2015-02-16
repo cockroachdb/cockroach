@@ -50,6 +50,11 @@ func (b *blockableGroupStorage) Append(entries []raftpb.Entry) error {
 	return b.s.Append(entries)
 }
 
+func (b *blockableGroupStorage) ApplySnapshot(snap raftpb.Snapshot) error {
+	b.b.wait()
+	return b.s.ApplySnapshot(snap)
+}
+
 func (b *blockableGroupStorage) SetHardState(st raftpb.HardState) error {
 	b.b.wait()
 	return b.s.SetHardState(st)
