@@ -91,6 +91,7 @@ func (c *testCluster) stop() {
 	for _, demux := range c.events {
 		demux.stop()
 	}
+	c.transport.Close()
 }
 
 // createGroup replicates a group consisting of numReplicas members,
