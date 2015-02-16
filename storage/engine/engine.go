@@ -101,8 +101,7 @@ type Engine interface {
 	// (stored as byte slices with a special tag on the proto.Value) are
 	// combined with specialized logic beyond that of simple byte slices.
 	//
-	// The logic for merges is written in our C++ "roachlib" library in order to
-	// be compatible with RocksDB.
+	// The logic for merges is written in db.cc in order to be compatible with RocksDB.
 	Merge(key proto.EncodedKey, value []byte) error
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (StoreCapacity, error)

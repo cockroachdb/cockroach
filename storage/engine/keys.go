@@ -345,7 +345,7 @@ var (
 	// command responses used to guarantee idempotency (see
 	// ResponseCache).
 	// NOTE: if this value changes, it must be updated in C++
-	// (roachlib/db.cc).
+	// (storage/engine/db.cc).
 	KeyLocalResponseCacheSuffix = proto.Key("res-")
 
 	// KeyLocalRangeKeyPrefix is the prefix identifying per-range data
@@ -364,7 +364,7 @@ var (
 	// KeyLocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++
-	// (roachlib/db.cc).
+	// (storage/engine/db.cc).
 	KeyLocalTransactionSuffix = proto.Key("txn-")
 
 	// KeyLocalMax is the end of the local key range.

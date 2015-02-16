@@ -34,7 +34,6 @@ export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
 export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
 
 ROACH_PROTO := proto
-ROACH_LIB   := roachlib
 SQL_PARSER  := sql/parser
 
 PKG        := "./..."
@@ -59,7 +58,7 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser
+auxiliary: storage/engine/engine.pc roach_proto sqlparser
 
 build: auxiliary
 	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
@@ -70,9 +69,6 @@ storage/engine/engine.pc: storage/engine/engine.pc.in
 
 roach_proto:
 	make -C $(ROACH_PROTO) static_lib
-
-roach_lib: roach_proto
-	make -C $(ROACH_LIB) static_lib
 
 sqlparser:
 	make -C $(SQL_PARSER)
@@ -117,11 +113,10 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	$(GO) clean
+	$(GO) clean -i -r ./...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
 	make -C $(ROACH_PROTO) clean
-	make -C $(ROACH_LIB) clean
 	make -C $(SQL_PARSER) clean
 
 # The gopath target outputs the GOPATH that should be used for building this
