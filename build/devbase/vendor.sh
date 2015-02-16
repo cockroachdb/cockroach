@@ -43,15 +43,28 @@ function download_verify()
     fi
 }
 
+# Parallelize the builds below based on the number of cpus.
+ncpus=1
+case $(uname) in
+    Linux)
+        ncpus=$(grep processor /proc/cpuinfo | wc -l)
+	;;
+    Darwin)
+	ncpus=$(sysctl -q -n hw.logicalcpu)
+	;;
+esac
+
+MAKE="make -j${ncpus}"
+
 cd ${TMP}
 curl -L https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz | ${TAR} -xz
 cd gflags-2.0
-./configure --prefix ${USR} --disable-shared --enable-static && make && make install
+./configure --prefix ${USR} --disable-shared --enable-static && ${MAKE} && ${MAKE} install
 
 cd ${TMP}
 curl -L https://snappy.googlecode.com/files/snappy-1.1.1.tar.gz | ${TAR} -xz
 cd snappy-1.1.1
-./configure --prefix ${USR} --disable-shared --enable-static && make && make install
+./configure --prefix ${USR} --disable-shared --enable-static && ${MAKE} && ${MAKE} install
 
 cd ${TMP}
 download_verify \
@@ -59,7 +72,7 @@ download_verify \
     44d667c142d7cda120332623eab69f40
 ${TAR} -xzf zlib-1.2.8.tar.gz
 cd zlib-1.2.8
-./configure --static && make test && make && make install prefix="${USR}"
+./configure --static && ${MAKE} test && ${MAKE} && ${MAKE} install prefix="${USR}"
 
 cd ${TMP}
 download_verify \
@@ -67,14 +80,14 @@ download_verify \
     00b516f4704d4a7cb50a1d97e6e8e15b
 ${TAR} -xzf bzip2-1.0.6.tar.gz
 cd bzip2-1.0.6
-make && make install PREFIX="${VENDOR}/usr"
+${MAKE} && ${MAKE} install PREFIX="${VENDOR}/usr"
 
 cd ${TMP}
 curl -L https://github.com/google/protobuf/releases/download/v2.6.1/protobuf-2.6.1.tar.bz2 | ${TAR} -xj
 cd protobuf-2.6.1
-./configure --prefix ${USR} --disable-shared --enable-static && make && make install
+./configure --prefix ${USR} --disable-shared --enable-static && ${MAKE} && ${MAKE} install
 
 cd ${ROCKSDB}
-LIBRARY_PATH="${LIB}" CPLUS_INCLUDE_PATH="${INCLUDE}" make static_lib
+LIBRARY_PATH="${LIB}" CPLUS_INCLUDE_PATH="${INCLUDE}" ${MAKE} static_lib
 
 rm -rf ${TMP}
