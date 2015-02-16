@@ -18,7 +18,6 @@
 package multiraft
 
 import (
-	"net/rpc"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -90,14 +89,12 @@ func (lt *localInterceptableTransport) Stop(id NodeID) {
 	lt.mu.Unlock()
 }
 
-func (lt *localInterceptableTransport) Connect(id NodeID) (ClientInterface, error) {
-	lt.mu.Lock()
-	defer lt.mu.Unlock()
-	_, ok := lt.listeners[id]
-	if !ok {
-		return nil, util.Errorf("unknown peer: %d", id)
+func (lt *localInterceptableTransport) Send(id NodeID, req *RaftMessageRequest) error {
+	select {
+	case lt.messages <- req:
+	case <-lt.stopper.ShouldStop():
 	}
-	return lt, nil
+	return nil
 }
 
 // an interceptMessage is sent by an interceptableClient when a message is to
@@ -107,18 +104,5 @@ type interceptMessage struct {
 	ack  chan<- struct{}
 }
 
-// Go implements ClientInterface.
-func (lt *localInterceptableTransport) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call {
-	select {
-	case lt.messages <- args.(*RaftMessageRequest):
-	case <-lt.stopper.ShouldStop():
-	}
-	if done != nil {
-		close(done)
-	}
-	return nil
-}
-
-func (lt *localInterceptableTransport) Close() error {
-	return nil
+func (lt *localInterceptableTransport) Close() {
 }
