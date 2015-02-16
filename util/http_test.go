@@ -31,10 +31,10 @@ import (
 
 var testConfig = proto.ZoneConfig{
 	ReplicaAttrs: []proto.Attributes{
-		proto.Attributes{Attrs: []string{"a", "ssd"}},
-		proto.Attributes{Attrs: []string{"a", "hdd"}},
-		proto.Attributes{Attrs: []string{"b", "ssd"}},
-		proto.Attributes{Attrs: []string{"b", "hdd"}},
+		{Attrs: []string{"a", "ssd"}},
+		{Attrs: []string{"a", "hdd"}},
+		{Attrs: []string{"b", "ssd"}},
+		{Attrs: []string{"b", "hdd"}},
 	},
 	RangeMinBytes: 1 << 20,
 	RangeMaxBytes: 64 << 20,

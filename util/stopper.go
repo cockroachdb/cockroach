@@ -35,8 +35,13 @@ func NewStopper(count int) *Stopper {
 	s := &Stopper{
 		stopper: make(chan struct{}),
 	}
-	s.wg.Add(count)
+	s.Add(count)
 	return s
+}
+
+// Add a new goroutine to the stopper.
+func (s *Stopper) Add(count int) {
+	s.wg.Add(count)
 }
 
 // Stop signals the waiting goroutine to stop and then waits
@@ -50,11 +55,17 @@ func (s *Stopper) Stop() {
 // ShouldStop returns a channel which will be closed when Stop() has
 // been invoked. SetStopped() should be called to confirm.
 func (s *Stopper) ShouldStop() <-chan struct{} {
+	if s == nil {
+		// A nil stopper will never signal ShouldStop, but will also never panic.
+		return nil
+	}
 	return s.stopper
 }
 
 // SetStopped should be called after the ShouldStop() channel has
 // been closed to confirm the goroutine has stopped.
 func (s *Stopper) SetStopped() {
-	s.wg.Done()
+	if s != nil {
+		s.wg.Done()
+	}
 }

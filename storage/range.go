@@ -99,19 +99,19 @@ var configDescriptors = []*configDescriptor{
 // tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
 var tsCacheMethods = map[string]struct{}{
-	proto.Contains:              struct{}{},
-	proto.Get:                   struct{}{},
-	proto.Put:                   struct{}{},
-	proto.ConditionalPut:        struct{}{},
-	proto.Increment:             struct{}{},
-	proto.Scan:                  struct{}{},
-	proto.Delete:                struct{}{},
-	proto.DeleteRange:           struct{}{},
-	proto.ReapQueue:             struct{}{},
-	proto.EnqueueUpdate:         struct{}{},
-	proto.EnqueueMessage:        struct{}{},
-	proto.InternalResolveIntent: struct{}{},
-	proto.InternalMerge:         struct{}{},
+	proto.Contains:              {},
+	proto.Get:                   {},
+	proto.Put:                   {},
+	proto.ConditionalPut:        {},
+	proto.Increment:             {},
+	proto.Scan:                  {},
+	proto.Delete:                {},
+	proto.DeleteRange:           {},
+	proto.ReapQueue:             {},
+	proto.EnqueueUpdate:         {},
+	proto.EnqueueMessage:        {},
+	proto.InternalResolveIntent: {},
+	proto.InternalMerge:         {},
 }
 
 // UsesTimestampCache returns true if the method affects or is

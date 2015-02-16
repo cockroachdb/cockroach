@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -41,8 +42,11 @@ type Transport interface {
 	// Stop undoes a previous Listen.
 	Stop(id NodeID)
 
-	// Connect looks up a node by id and returns a stub interface to submit RPCs to it.
-	Connect(id NodeID) (ClientInterface, error)
+	// Send a message to the given node.
+	Send(id NodeID, req *RaftMessageRequest) error
+
+	// Close all associated connections.
+	Close()
 }
 
 // RaftMessageRequest wraps a raft message.
@@ -65,28 +69,10 @@ var (
 	raftMessageName = "MultiRaft.RaftMessage"
 )
 
-// ClientInterface is the interface expected of the client provided by a transport.
-// It is satisfied by rpc.Client, but could be implemented in other ways (using
-// rpc.Call as a dumb data structure)
-type ClientInterface interface {
-	Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call
-	Close() error
-}
-
-// asyncClient bridges MultiRaft's channel-oriented interface with the synchronous RPC interface.
-// Outgoing requests are run in a non-blocking fire-and-forget fashion.
-type asyncClient struct {
-	nodeID NodeID
-	conn   ClientInterface
-}
-
-func (a *asyncClient) raftMessage(req *RaftMessageRequest) {
-	a.conn.Go(raftMessageName, req, &RaftMessageResponse{}, nil)
-}
-
 type localRPCTransport struct {
 	mu        sync.Mutex
 	listeners map[NodeID]net.Listener
+	clients   map[NodeID]*rpc.Client
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -97,6 +83,7 @@ type localRPCTransport struct {
 func NewLocalRPCTransport() Transport {
 	return &localRPCTransport{
 		listeners: make(map[NodeID]net.Listener),
+		clients:   make(map[NodeID]*rpc.Client),
 	}
 }
 
@@ -144,13 +131,39 @@ func (lt *localRPCTransport) Stop(id NodeID) {
 	delete(lt.listeners, id)
 }
 
-func (lt *localRPCTransport) Connect(id NodeID) (ClientInterface, error) {
+func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
 	lt.mu.Lock()
-	address := lt.listeners[id].Addr().String()
-	lt.mu.Unlock()
-	client, err := rpc.Dial("tcp", address)
-	if err != nil {
-		return nil, err
+	defer lt.mu.Unlock()
+
+	listener, ok := lt.listeners[id]
+	if !ok {
+		return nil, util.Errorf("unknown peer %v", id)
 	}
-	return client, nil
+	address := listener.Addr().String()
+	return rpc.Dial("tcp", address)
+}
+
+func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
+	client, err := lt.getClient(id)
+	if err != nil {
+		return err
+	}
+	call := client.Go(raftMessageName, req, &RaftMessageResponse{}, nil)
+	select {
+	case <-call.Done:
+		// If the call failed synchronously, report an error.
+		return call.Error
+	default:
+		// Otherwise, fire-and-forget.
+		return nil
+	}
+}
+
+func (lt *localRPCTransport) Close() {
+	for _, c := range lt.clients {
+		err := c.Close()
+		if err != nil {
+			log.Warningf("error stopping client: %s", err)
+		}
+	}
 }

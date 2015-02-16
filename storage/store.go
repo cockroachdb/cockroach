@@ -283,6 +283,9 @@ func (s *Store) Stop() {
 	if s.raft != nil {
 		s.raft.stop()
 	}
+	// TODO(bdarnell): we don't necessarily own the Transport here; probably need
+	// to move the Close up to a higher level once we have a real Transport.
+	s.transport.Close()
 }
 
 // String formats a store for debug output.
@@ -513,7 +516,7 @@ func (s *Store) BootstrapRange() error {
 		StartKey: engine.KeyMin,
 		EndKey:   engine.KeyMax,
 		Replicas: []proto.Replica{
-			proto.Replica{
+			{
 				NodeID:  1,
 				StoreID: 1,
 			},
@@ -557,9 +560,9 @@ func (s *Store) BootstrapRange() error {
 	// Zone config.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{},
-			proto.Attributes{},
-			proto.Attributes{},
+			{},
+			{},
+			{},
 		},
 		RangeMinBytes: 1048576,
 		RangeMaxBytes: 67108864,

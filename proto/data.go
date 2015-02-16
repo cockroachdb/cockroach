@@ -72,7 +72,7 @@ func bytesNext(b []byte) []byte {
 		panic(fmt.Sprint("cannot get the next bytes of KeyMax"))
 	}
 
-	return bytes.Join([][]byte{b, []byte{0}}, nil)
+	return bytes.Join([][]byte{b, {0}}, nil)
 }
 
 // Returns the previous byte bounded by the max key length.

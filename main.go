@@ -64,7 +64,7 @@ func main() {
 			server.CmdRmZone,
 			server.CmdSetZone,
 			server.CmdStart,
-			&commander.Command{
+			{
 				UsageLine: "listparams",
 				Short:     "list all available parameters and their default values",
 				Long: `

@@ -272,8 +272,8 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{Attrs: []string{"dc1", "mem"}},
-			proto.Attributes{Attrs: []string{"dc2", "mem"}},
+			{Attrs: []string{"dc1", "mem"}},
+			{Attrs: []string{"dc2", "mem"}},
 		},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
@@ -306,11 +306,11 @@ func TestKVClientGetAndPutGob(t *testing.T) {
 	kvClient.User = storage.UserRoot
 
 	obj := map[string]map[int]int{
-		"foo": map[int]int{
+		"foo": {
 			1: 100,
 			2: 101,
 		},
-		"bar": map[int]int{
+		"bar": {
 			3: 200,
 			4: 201,
 		},

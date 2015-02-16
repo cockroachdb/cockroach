@@ -163,7 +163,7 @@ message InternalTruncateLogResponse {
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
-// in roachlib/db.cc in GetResponseHeader().
+// in storage/engine/db.cc in GetResponseHeader().
 message ReadWriteCmdResponse {
   option (gogoproto.onlyone) = true;
   optional PutResponse put = 1;

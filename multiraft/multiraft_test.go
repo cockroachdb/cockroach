@@ -91,6 +91,7 @@ func (c *testCluster) stop() {
 	for _, demux := range c.events {
 		demux.stop()
 	}
+	c.transport.Close()
 }
 
 // createGroup replicates a group consisting of numReplicas members,
@@ -179,7 +180,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 	// Send a Ready with a new leader but no new commits.
 	// This happens while an election is in progress.
 	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
-		groupID: raft.Ready{
+		groupID: {
 			SoftState: &raft.SoftState{
 				Lead: 3,
 			},
@@ -200,7 +201,7 @@ func TestLeaderElectionEvent(t *testing.T) {
 		Term:  42,
 	}
 	cluster.nodes[1].handleRaftReady(map[uint64]raft.Ready{
-		groupID: raft.Ready{
+		groupID: {
 			Entries:          []raftpb.Entry{entry},
 			CommittedEntries: []raftpb.Entry{entry},
 		},

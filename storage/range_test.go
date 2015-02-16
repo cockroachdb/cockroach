@@ -61,8 +61,8 @@ var (
 	}
 	testDefaultZoneConfig = proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
-			proto.Attributes{Attrs: []string{"dc1", "mem"}},
-			proto.Attributes{Attrs: []string{"dc2", "mem"}},
+			{Attrs: []string{"dc1", "mem"}},
+			{Attrs: []string{"dc2", "mem"}},
 		},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
@@ -233,9 +233,9 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 		gossipKey string
 		configs   []*PrefixConfig
 	}{
-		{gossip.KeyConfigAccounting, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultAcctConfig}}},
-		{gossip.KeyConfigPermission, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig}}},
-		{gossip.KeyConfigZone, []*PrefixConfig{&PrefixConfig{engine.KeyMin, nil, &testDefaultZoneConfig}}},
+		{gossip.KeyConfigAccounting, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultAcctConfig}}},
+		{gossip.KeyConfigPermission, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultPermConfig}}},
+		{gossip.KeyConfigZone, []*PrefixConfig{{engine.KeyMin, nil, &testDefaultZoneConfig}}},
 	}
 	for _, test := range testData {
 		info, err := tc.gossip.GetInfo(test.gossipKey)
@@ -282,9 +282,9 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{proto.Key("/db1"), nil, db1Perm},
-		&PrefixConfig{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		{engine.KeyMin, nil, &testDefaultPermConfig},
+		{proto.Key("/db1"), nil, db1Perm},
+		{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
@@ -323,9 +323,9 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	configMap := info.(PrefixConfigMap)
 	expConfigs := []*PrefixConfig{
-		&PrefixConfig{engine.KeyMin, nil, &testDefaultPermConfig},
-		&PrefixConfig{proto.Key("/db1"), nil, db1Perm},
-		&PrefixConfig{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		{engine.KeyMin, nil, &testDefaultPermConfig},
+		{proto.Key("/db1"), nil, db1Perm},
+		{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
 	}
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)

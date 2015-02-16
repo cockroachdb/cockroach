@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http:#www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,8 +34,13 @@ export CPLUS_INCLUDE_PATH := $(CURDIR)/_vendor/usr/include:$(CPLUS_INCLUDE_PATH)
 export LIBRARY_PATH := $(CURDIR)/_vendor/usr/lib:$(LIBRARY_PATH)
 
 ROACH_PROTO := proto
-ROACH_LIB   := roachlib
 SQL_PARSER  := sql/parser
+
+# TODO(pmattis): Figure out where to clear the CGO_* variables when
+# building "release" binaries.
+export CGO_CFLAGS :=-g
+export CGO_CXXFLAGS :=-g
+export CGO_LDFLAGS :=-g
 
 PKG        := "./..."
 TESTS      := ".*"
@@ -43,36 +48,23 @@ TESTFLAGS  := -logtostderr -timeout 10s
 RACEFLAGS  := -logtostderr -timeout 1m
 BENCHFLAGS := -logtostderr -timeout 5m
 
-OS := $(shell uname -s)
-
-ifeq ($(OS),Darwin)
-LDEXTRA += -lc++
-endif
-
-ifeq ($(OS),Linux)
-LDEXTRA += -lrt
-endif
-
 ifeq ($(STATIC),1)
 GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
 endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc roach_proto roach_lib sqlparser
+auxiliary: storage/engine/engine.pc roach_proto sqlparser
 
 build: auxiliary
 	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
 	$(GO) build $(GOFLAGS) -o cockroach
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
-	sed -e "s,@PWD@,$(CURDIR),g" -e "s,@LDEXTRA@,$(LDEXTRA),g" < $^ > $@
+	sed -e "s,@PWD@,$(CURDIR),g" < $^ > $@
 
 roach_proto:
 	make -C $(ROACH_PROTO) static_lib
-
-roach_lib: roach_proto
-	make -C $(ROACH_LIB) static_lib
 
 sqlparser:
 	make -C $(SQL_PARSER)
@@ -117,11 +109,11 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	$(GO) clean
+	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) clean -i -r ./...
+	$(GO) clean -i -r ./...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
 	make -C $(ROACH_PROTO) clean
-	make -C $(ROACH_LIB) clean
 	make -C $(SQL_PARSER) clean
 
 # The gopath target outputs the GOPATH that should be used for building this

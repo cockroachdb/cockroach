@@ -664,9 +664,9 @@ func TestMVCCIterateCommitted(t *testing.T) {
 	}
 
 	expKVs := []proto.KeyValue{
-		proto.KeyValue{Key: testKey1, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
-		proto.KeyValue{Key: testKey2, Value: proto.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
-		proto.KeyValue{Key: testKey4, Value: proto.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
+		{Key: testKey1, Value: proto.Value{Bytes: value1.Bytes, Timestamp: &ts1}},
+		{Key: testKey2, Value: proto.Value{Bytes: value2.Bytes, Timestamp: &ts4}},
+		{Key: testKey4, Value: proto.Value{Bytes: value4.Bytes, Timestamp: &ts6}},
 	}
 	if !reflect.DeepEqual(kvs, expKVs) {
 		t.Errorf("expected key values equal %v != %v", kvs, expKVs)

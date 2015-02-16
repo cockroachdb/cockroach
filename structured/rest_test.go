@@ -155,8 +155,8 @@ func TestNewResourceRequest(t *testing.T) {
 			limit:     100,
 			offset:    50,
 			params: map[string][]string{
-				"owner": []string{"spencer"},
-				"name":  []string{"carl", "carlos"},
+				"owner": {"spencer"},
+				"name":  {"carl", "carlos"},
 			},
 		}, false},
 	}

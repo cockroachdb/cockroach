@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -30,7 +31,11 @@ import (
 // processEventsUntil reads and acknowledges messages from the given channel
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
-func processEventsUntil(ch <-chan *interceptMessage, f func(*RaftMessageRequest) bool) {
+func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper,
+	f func(*RaftMessageRequest) bool) {
+	if stopper != nil {
+		defer stopper.SetStopped()
+	}
 	t := time.After(500 * time.Millisecond)
 	for {
 		select {
@@ -44,6 +49,8 @@ func processEventsUntil(ch <-chan *interceptMessage, f func(*RaftMessageRequest)
 			}
 		case <-t:
 			log.Error("timeout when reading from intercept channel")
+			return
+		case <-stopper.ShouldStop():
 			return
 		}
 	}
@@ -105,7 +112,7 @@ func countHeartbeats(ch <-chan *interceptMessage,
 	cond heartbeatCondition) heartbeatCountMap {
 
 	cnt := make(heartbeatCountMap)
-	processEventsUntil(ch, func(req *RaftMessageRequest) bool {
+	processEventsUntil(ch, nil, func(req *RaftMessageRequest) bool {
 		from := cnt[req.Message.From]
 		to := cnt[req.Message.To]
 		switch req.Message.Type {
@@ -129,12 +136,13 @@ func countHeartbeats(ch <-chan *interceptMessage,
 
 // a blockingCluster is a cluster in which we intercept and acknowledge all
 // inter-node traffic.
-func blockingCluster(nodeCount int, t *testing.T) *testCluster {
-	transport := NewLocalInterceptableTransport()
+func blockingCluster(nodeCount int, t *testing.T) (*testCluster, *util.Stopper) {
+	stopper := util.NewStopper(0)
+	transport := NewLocalInterceptableTransport(stopper)
 	cluster := newTestCluster(transport, nodeCount, t)
 	// Outgoing messages block the client until we acknowledge them, and
 	// messages are sent synchronously.
-	return cluster
+	return cluster, stopper
 }
 
 // TestHeartbeatSingleGroup makes sure that in a single raft consensus group
@@ -173,7 +181,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ec + ltc + ftc, respOut: ltc, respIn: 0}
 	}
 
-	cluster := blockingCluster(nc, t)
+	cluster, stopper := blockingCluster(nc, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	blocker := make(chan struct{})
 	// Some more synchronization to prevent many heartbeat responses to be
@@ -218,18 +226,20 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 			return cnt.Sum() >= expCnt.Sum()
 		})
 	// Once done counting, simply process messages.
-	go processEventsUntil(transport.Events, alwaysFalse)
+	stopper.Add(1)
+	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-blocker
 	if !reflect.DeepEqual(actCnt, expCnt) {
 		t.Errorf("actual and expected heartbeat counts differ for %d nodes, "+
 			"%d leader ticks:\n%v\n%v",
 			nc, ltc, actCnt, expCnt)
 	}
+	stopper.Stop()
 	cluster.stop()
 }
 
 func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
-	cluster := blockingCluster(6, t)
+	cluster, stopper := blockingCluster(6, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	done := make(chan struct{})
 	firstPhase := make(chan struct{})
@@ -320,7 +330,9 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 			expCntSecondPhase, actCnt)
 	}
 	// Keep processing without inspection and shutdown cluster.
-	go processEventsUntil(transport.Events, alwaysFalse)
+	stopper.Add(1)
+	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
+	stopper.Stop()
 	cluster.stop()
 }

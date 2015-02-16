@@ -195,16 +195,16 @@ const (
 
 // Set containing all valid schema column types.
 var validTypes = map[string]struct{}{
-	columnTypeInteger:    struct{}{},
-	columnTypeFloat:      struct{}{},
-	columnTypeString:     struct{}{},
-	columnTypeBlob:       struct{}{},
-	columnTypeTime:       struct{}{},
-	columnTypeLatLong:    struct{}{},
-	columnTypeIntegerSet: struct{}{},
-	columnTypeStringSet:  struct{}{},
-	columnTypeIntegerMap: struct{}{},
-	columnTypeStringMap:  struct{}{},
+	columnTypeInteger:    {},
+	columnTypeFloat:      {},
+	columnTypeString:     {},
+	columnTypeBlob:       {},
+	columnTypeTime:       {},
+	columnTypeLatLong:    {},
+	columnTypeIntegerSet: {},
+	columnTypeStringSet:  {},
+	columnTypeIntegerMap: {},
+	columnTypeStringMap:  {},
 }
 
 // Valid index types.
@@ -217,10 +217,10 @@ const (
 
 // Set containing all valid index types.
 var validIndexTypes = map[string]struct{}{
-	indexTypeFullText:  struct{}{},
-	indexTypeLocation:  struct{}{},
-	indexTypeSecondary: struct{}{},
-	indexTypeUnique:    struct{}{},
+	indexTypeFullText:  {},
+	indexTypeLocation:  {},
+	indexTypeSecondary: {},
+	indexTypeUnique:    {},
 }
 
 // NewGoSchema returns a schema using name and key and a map from

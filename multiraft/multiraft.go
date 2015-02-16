@@ -337,7 +337,6 @@ type node struct {
 	nodeID   NodeID
 	refCount int
 	groupIDs map[uint64]struct{}
-	client   *asyncClient
 }
 
 func (n *node) registerGroup(groupID uint64) {
@@ -472,7 +471,7 @@ func (s *state) coalescedHeartbeat() {
 	// to be the case for many of our nodes. It could make sense though
 	// to space out the heartbeats over the heartbeat interval so that
 	// we don't try to send for all nodes at once.
-	for nodeID, node := range s.nodes {
+	for nodeID := range s.nodes {
 		// Don't heartbeat yourself.
 		if nodeID == s.nodeID {
 			continue
@@ -483,21 +482,16 @@ func (s *state) coalescedHeartbeat() {
 			To:   uint64(nodeID),
 			Type: raftpb.MsgHeartbeat,
 		}
-		node.client.raftMessage(&RaftMessageRequest{
-			GroupID: math.MaxUint64, // irrelevant
-			Message: msg,
-		})
+		s.Transport.Send(nodeID,
+			&RaftMessageRequest{
+				GroupID: math.MaxUint64, // irrelevant
+				Message: msg,
+			})
 	}
 }
 
 func (s *state) stop() {
 	log.V(6).Infof("node %v stopping", s.nodeID)
-	for _, n := range s.nodes {
-		err := n.client.conn.Close()
-		if err != nil {
-			log.Warning("error stopping client:", err)
-		}
-	}
 	s.writeTask.stop()
 	s.stopper.SetStopped()
 }
@@ -514,15 +508,10 @@ func (s *state) addNode(nodeID NodeID, groupIDs ...uint64) error {
 	}
 	newNode, ok := s.nodes[nodeID]
 	if !ok {
-		conn, err := s.Transport.Connect(nodeID)
-		if err != nil {
-			return err
-		}
 		s.nodes[nodeID] = &node{
 			nodeID:   nodeID,
 			refCount: 1,
 			groupIDs: make(map[uint64]struct{}),
-			client:   &asyncClient{nodeID, conn},
 		}
 		newNode = s.nodes[nodeID]
 	}
@@ -734,7 +723,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
 				s.addNode(nodeID)
 			}
-			s.nodes[nodeID].client.raftMessage(&RaftMessageRequest{groupID, msg})
+			s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
 		}
 	}
 }

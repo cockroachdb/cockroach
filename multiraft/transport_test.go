@@ -18,7 +18,6 @@
 package multiraft
 
 import (
-	"net/rpc"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -29,38 +28,51 @@ type localInterceptableTransport struct {
 	listeners map[NodeID]ServerInterface
 	messages  chan *RaftMessageRequest
 	Events    chan *interceptMessage
+	stopper   *util.Stopper
 }
 
 // NewLocalInterceptableTransport creates a Transport for local testing use.
 // MultiRaft instances sharing the same instance of this Transport can find and
 // communicate with each other by ID. Messages are transmitted in the order in
 // which they are queued, intercepted and blocked until acknowledged.
-func NewLocalInterceptableTransport() Transport {
+func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 	lt := &localInterceptableTransport{
 		listeners: make(map[NodeID]ServerInterface),
 		messages:  make(chan *RaftMessageRequest),
 		Events:    make(chan *interceptMessage),
+		stopper:   stopper,
 	}
+	stopper.Add(1)
 	go lt.start()
 	return lt
 }
 
 func (lt *localInterceptableTransport) start() {
-	for msg := range lt.messages {
-		ack := make(chan struct{})
-		iMsg := &interceptMessage{
-			args: msg,
-			ack:  ack,
+	defer lt.stopper.SetStopped()
+	for {
+		select {
+		case msg := <-lt.messages:
+			ack := make(chan struct{})
+			iMsg := &interceptMessage{
+				args: msg,
+				ack:  ack,
+			}
+			// The following channel ops are not protected by a select with ShouldStop
+			// since leaving things partially complete here could prevent other components
+			// from shutting down cleanly.
+			lt.Events <- iMsg
+			<-ack
+			lt.mu.Lock()
+			srv, ok := lt.listeners[NodeID(msg.Message.To)]
+			lt.mu.Unlock()
+			if !ok {
+				continue
+			}
+			srv.RaftMessage(msg, nil)
+
+		case <-lt.stopper.ShouldStop():
+			return
 		}
-		lt.Events <- iMsg
-		<-ack
-		lt.mu.Lock()
-		srv, ok := lt.listeners[NodeID(msg.Message.To)]
-		lt.mu.Unlock()
-		if !ok {
-			continue
-		}
-		srv.RaftMessage(msg, nil)
 	}
 }
 
@@ -77,14 +89,12 @@ func (lt *localInterceptableTransport) Stop(id NodeID) {
 	lt.mu.Unlock()
 }
 
-func (lt *localInterceptableTransport) Connect(id NodeID) (ClientInterface, error) {
-	lt.mu.Lock()
-	defer lt.mu.Unlock()
-	_, ok := lt.listeners[id]
-	if !ok {
-		return nil, util.Errorf("unknown peer: %d", id)
+func (lt *localInterceptableTransport) Send(id NodeID, req *RaftMessageRequest) error {
+	select {
+	case lt.messages <- req:
+	case <-lt.stopper.ShouldStop():
 	}
-	return lt, nil
+	return nil
 }
 
 // an interceptMessage is sent by an interceptableClient when a message is to
@@ -94,15 +104,5 @@ type interceptMessage struct {
 	ack  chan<- struct{}
 }
 
-// Go implements ClientInterface.
-func (lt *localInterceptableTransport) Go(serviceMethod string, args interface{}, reply interface{}, done chan *rpc.Call) *rpc.Call {
-	lt.messages <- args.(*RaftMessageRequest)
-	if done != nil {
-		close(done)
-	}
-	return nil
-}
-
-func (lt *localInterceptableTransport) Close() error {
-	return nil
+func (lt *localInterceptableTransport) Close() {
 }
