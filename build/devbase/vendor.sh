@@ -50,7 +50,7 @@ case $(uname) in
         ncpus=$(grep processor /proc/cpuinfo | wc -l)
 	;;
     Darwin)
-	ncpus=$(sysctl -q -n hw.logicalcpu)
+	ncpus=$(sysctl -n hw.logicalcpu)
 	;;
 esac
 
