@@ -523,7 +523,7 @@ func (s *state) addNode(nodeID NodeID, groupIDs ...uint64) error {
 
 func (s *state) createGroup(groupID uint64) error {
 	if _, ok := s.groups[groupID]; ok {
-		return util.Errorf("group %v already exists", groupID)
+		return nil
 	}
 	log.V(6).Infof("node %v creating group %v", s.nodeID, groupID)
 
