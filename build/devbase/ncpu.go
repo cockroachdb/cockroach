@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,35 +13,17 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: James Graves (james.c.graves.jr@gmail.com)
+// Author: Peter Mattis (petermattis@gmail.com)
 
 // +build ignore
 
-/*
-Compute MD5 sum from standard input.
-*/
 package main
 
 import (
-	"crypto/md5"
 	"fmt"
-	"os"
+	"runtime"
 )
 
 func main() {
-	maxlen := 5000000
-	buf := make([]byte, maxlen)
-	n, err := os.Stdin.Read(buf)
-	if err != nil {
-		os.Exit(1)
-	}
-	if n == maxlen {
-		os.Exit(2)
-	}
-
-	sum := md5.Sum(buf[:n])
-	for _, b := range sum {
-		fmt.Printf("%02x", b)
-	}
-	fmt.Println("")
+	fmt.Println(runtime.NumCPU())
 }

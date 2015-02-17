@@ -6,8 +6,9 @@ set -ex
 cd -P "$(dirname $0)/../.."
 
 # Build dependencies into our shadow environment.
-VENDOR="$(pwd -P)/_vendor"
-GO_MD5SUM="$(pwd -P)/build/devbase/md5sum.go"
+VENDOR="${PWD}/_vendor"
+MD5SUM="${PWD}/build/devbase/md5sum.go"
+NCPU="$(go run build/devbase/ncpu.go)"
 USR="${VENDOR}/usr"
 LIB="${USR}/lib"
 INCLUDE="${USR}/include"
@@ -32,7 +33,7 @@ function download_verify()
     curl -LOs ${1}
     filename=`echo ${1} | sed 's/.*\///'`
     if [ -f ${filename} ]; then
-        dl_md5sum=`go run ${GO_MD5SUM} < ${filename}`
+        dl_md5sum=`go run ${MD5SUM} < ${filename}`
         if [ ${dl_md5sum} != ${2} ]; then
             echo "$filename md5sum did not match."
             exit 1
@@ -44,17 +45,7 @@ function download_verify()
 }
 
 # Parallelize the builds below based on the number of cpus.
-ncpus=1
-case $(uname) in
-    Linux)
-        ncpus=$(grep processor /proc/cpuinfo | wc -l)
-	;;
-    Darwin)
-	ncpus=$(sysctl -q -n hw.logicalcpu)
-	;;
-esac
-
-MAKE="make -j${ncpus}"
+MAKE="make -j${NCPU}"
 
 cd ${TMP}
 curl -L https://gflags.googlecode.com/files/gflags-2.0-no-svn-files.tar.gz | ${TAR} -xz
