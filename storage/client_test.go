@@ -19,6 +19,9 @@
 functionality which depends on a fully-functional KV client. This
 cannot be done within the storage package because of circular
 dependencies.
+
+By convention, tests in package storage_test have names of the form
+client_*.go.
 */
 package storage_test
 
