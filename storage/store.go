@@ -245,8 +245,8 @@ type Store struct {
 	transport   multiraft.Transport // Log replication traffic
 	raftIDAlloc *IDAllocator        // Raft ID allocator
 	configMu    sync.Mutex          // Limit config update processing
-	raft        raftInterface
-	closer      chan struct{}
+	multiraft   *multiraft.MultiRaft
+	stopper     *util.Stopper
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
@@ -267,7 +267,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		allocator:   &allocator{},
 		gossip:      gossip,
 		transport:   transport,
-		closer:      make(chan struct{}),
+		stopper:     util.NewStopper(0),
 		ranges:      map[int64]*Range{},
 	}
 	s.allocator.storeFinder = s.findStores
@@ -276,13 +276,10 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 
 // Stop calls Range.Stop() on all active ranges.
 func (s *Store) Stop() {
-	close(s.closer)
 	for _, rng := range s.ranges {
 		rng.stop()
 	}
-	if s.raft != nil {
-		s.raft.stop()
-	}
+	s.stopper.Stop()
 	// TODO(bdarnell): we don't necessarily own the Transport here; probably need
 	// to move the Close up to a higher level once we have a real Transport.
 	s.transport.Close()
@@ -323,9 +320,23 @@ func (s *Store) Start() error {
 	start := engine.RangeDescriptorKey(engine.KeyMin)
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
-	s.raft = newRaft(s.RaftNodeID(), s, s.transport)
-	// Start Raft processing goroutine.
-	go s.processRaft(s.raft, s.closer)
+	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+		Transport:              s.transport,
+		Storage:                s,
+		TickInterval:           time.Millisecond,
+		ElectionTimeoutTicks:   5,
+		HeartbeatIntervalTicks: 1,
+		EntryFormatter:         raftEntryFormatter,
+	})
+	if err != nil {
+		return err
+	}
+	s.multiraft = mr
+
+	// Start Raft processing goroutines.
+	s.multiraft.Start()
+	s.stopper.Add(1)
+	go s.processRaft()
 
 	// Iterate over all range descriptors, using just committed
 	// versions. Uncommitted intents which have been abandoned due to a
@@ -351,7 +362,7 @@ func (s *Store) Start() error {
 		if err != nil {
 			return false, err
 		}
-		if err = s.raft.createGroup(rng.Desc.RaftID); err != nil {
+		if err = s.multiraft.CreateGroup(uint64(rng.Desc.RaftID)); err != nil {
 			return false, err
 		}
 		return false, nil
@@ -644,7 +655,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	if err != nil {
 		return err
 	}
-	if err := s.raft.createGroup(newRng.Desc.RaftID); err != nil {
+	if err := s.multiraft.CreateGroup(uint64(newRng.Desc.RaftID)); err != nil {
 		return err
 	}
 	return nil
@@ -694,7 +705,7 @@ func (s *Store) AddRange(rng *Range) error {
 	if err != nil {
 		return err
 	}
-	if err := s.raft.createGroup(rng.Desc.RaftID); err != nil {
+	if err := s.multiraft.CreateGroup(uint64(rng.Desc.RaftID)); err != nil {
 		return err
 	}
 	return nil
@@ -726,7 +737,7 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 func (s *Store) RemoveRange(rng *Range) error {
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks.
-	if err := s.raft.removeGroup(rng.Desc.RaftID); err != nil {
+	if err := s.multiraft.RemoveGroup(uint64(rng.Desc.RaftID)); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -925,16 +936,20 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 
 // ProposeRaftCommand submits a command to raft.
 func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) {
-	// s.raft should be constant throughout the life of the store, but
-	// the race detector reports a race between this method and s.Stop.
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.raft == nil {
-		log.Error("ignoring raft command proposed after shutdown")
-		return
+	if cmd.Cmd.GetValue() == nil {
+		panic("proposed a nil command")
 	}
-	s.raft.propose(idKey, cmd)
+	// Lazily create group. TODO(bdarnell): make this non-lazy
+	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
+	if err != nil {
+		log.Fatal(err)
+	}
+	data, err := gogoproto.Marshal(&cmd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
+
 }
 
 // processRaft processes read/write commands that have been committed
@@ -956,24 +971,31 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 //   the underlying state machine, might transit to the new leader
 //   and be able to access the new leader's state machine BEFORE
 //   the overlapping writes are applied.
-//
-// TODO(bdarnell): remove the closer argument and access s.closer directly
-// when we no longer reassign s.closer in s.Stop.
-func (s *Store) processRaft(r raftInterface, closer chan struct{}) {
+func (s *Store) processRaft() {
 	for {
 		select {
-		case raftCmd := <-r.committed():
-			s.mu.Lock()
-			r, ok := s.ranges[raftCmd.cmd.RaftID]
-			s.mu.Unlock()
-			if !ok {
-				log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-					raftCmd.cmd.RaftID, raftCmd)
-			} else {
-				r.processRaftCommand(raftCmd.cmdIDKey, raftCmd.cmd)
+		case e := <-s.multiraft.Events:
+			switch e := e.(type) {
+			case *multiraft.EventCommandCommitted:
+				var cmd proto.InternalRaftCommand
+				err := gogoproto.Unmarshal(e.Command, &cmd)
+				if err != nil {
+					log.Fatal(err)
+				}
+				s.mu.Lock()
+				r, ok := s.ranges[cmd.RaftID]
+				s.mu.Unlock()
+				if !ok {
+					log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+						cmd.RaftID, cmd)
+				} else {
+					r.processRaftCommand(cmdIDKey(e.CommandID), cmd)
+				}
 			}
 
-		case <-closer:
+		case <-s.stopper.ShouldStop():
+			s.multiraft.Stop()
+			s.stopper.SetStopped()
 			return
 		}
 	}
@@ -989,4 +1011,20 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 		return nil
 	}
 	return r
+}
+
+func raftEntryFormatter(data []byte) string {
+	if len(data) == 0 {
+		return "[empty]"
+	}
+	var cmd proto.InternalRaftCommand
+	if err := gogoproto.Unmarshal(data, &cmd); err != nil {
+		return fmt.Sprintf("[error parsing entry: %s]", err)
+	}
+	s := cmd.String()
+	maxLen := 300
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	return s
 }
