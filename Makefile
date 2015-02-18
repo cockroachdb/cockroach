@@ -48,9 +48,12 @@ all: build test
 
 auxiliary: storage/engine/engine.pc
 
+# "go build -i" explicitly does not rebuild dependent packages that
+# have a different root directory than the package being built, hence
+# the need for a separate build invocation for etcd/raft.
 build: auxiliary
-	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) install $(GOFLAGS)
-	$(GO) build $(GOFLAGS) -o cockroach
+	$(GO) build $(GOFLAGS) -i github.com/coreos/etcd/raft
+	$(GO) build $(GOFLAGS) -i -o cockroach
 
 storage/engine/engine.pc: storage/engine/engine.pc.in
 	sed -e "s,@PWD@,$(CURDIR),g" < $^ > $@
@@ -95,7 +98,6 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	cd _vendor/src/github.com/coreos/etcd/raft ; $(GO) clean -i -r ./...
 	$(GO) clean -i -r ./...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/engine.pc
