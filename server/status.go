@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Shawn Morel (shawn@strangemond.com)
+// Author: Shawn Morel (shawn@strangemonad.com)
 
 package server
 
