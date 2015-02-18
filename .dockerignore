@@ -1,7 +1,4 @@
 _vendor
-proto/*.pb.go
-proto/lib/*
-proto/lib/github.com/gogo/protobuf/gogoproto/*
 storage/engine/engine.pc
 cockroach
 build/deploy

@@ -23,6 +23,9 @@ cd cockroach
 
 Now you should be all set for `make build`, `make test` and everything else our Makefile has to offer.
 
+Note that if you edit a `.proto` file you will need to manually regenerate the associated
+`.pb.{go,cc,h}` files using `go generate`.
+
 ### Style guide
 We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
 
