@@ -15,7 +15,7 @@
 #
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-PROTOC      := $(shell git rev-parse --show-cdup)_vendor/usr/bin/protoc
+PROTOC      := ../../../_vendor/usr/bin/protoc
 PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
@@ -26,6 +26,3 @@ all: $(PROTO_GO)
 
 $(PROTO_GO): $(PROTOS)
 	$(PROTOC) --gogo_out=. --proto_path=.:$(PROTO_PATH) $(PROTOS)
-
-clean:
-	rm -f $(PROTO_GO)

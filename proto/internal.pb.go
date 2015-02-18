@@ -335,7 +335,7 @@ func (*InternalTruncateLogResponse) ProtoMessage()    {}
 
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
-// in roachlib/db.cc in GetResponseHeader().
+// in storage/engine/db.cc in GetResponseHeader().
 type ReadWriteCmdResponse struct {
 	Put                   *PutResponse                   `protobuf:"bytes,1,opt,name=put" json:"put,omitempty"`
 	ConditionalPut        *ConditionalPutResponse        `protobuf:"bytes,2,opt,name=conditional_put" json:"conditional_put,omitempty"`

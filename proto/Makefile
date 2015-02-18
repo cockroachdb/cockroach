@@ -16,7 +16,7 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PROTOC      := $(shell git rev-parse --show-cdup)_vendor/usr/bin/protoc
+PROTOC      := ../_vendor/usr/bin/protoc
 PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
@@ -30,8 +30,3 @@ all:
 	$(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=../storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS)
 	$(PROTOC) --cpp_out=../storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
 	ln -sf github.com/gogo/protobuf/gogoproto/gogo.pb.cc ../storage/engine/gogo.pb.cc
-
-clean:
-	rm -f $(PROTO_GO)
-	rm -f $(patsubst %,../storage/engine/%,$(SOURCES))
-	rm -f $(patsubst %,../storage/engine/%,$(HEADERS))
