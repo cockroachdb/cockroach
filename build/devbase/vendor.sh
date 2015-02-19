@@ -80,5 +80,6 @@ cd protobuf-2.6.1
 
 cd ${ROCKSDB}
 LIBRARY_PATH="${LIB}" CPLUS_INCLUDE_PATH="${INCLUDE}" ${MAKE} static_lib
+${MAKE} install INSTALL_PATH=${USR}
 
 rm -rf ${TMP}
