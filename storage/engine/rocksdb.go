@@ -21,7 +21,7 @@
 package engine
 
 // #cgo CXXFLAGS: -std=c++11
-// #cgo pkg-config: ./engine.pc
+// #cgo LDFLAGS: -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lprotobuf
 // #include <stdlib.h>
 // #include "db.h"
 import "C"
