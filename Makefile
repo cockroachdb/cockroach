@@ -28,11 +28,10 @@ STATIC := $(STATIC)
 RUN  := run
 GOPATH  := $(CURDIR)/../../../..:$(CURDIR)/_vendor
 
-# TODO(pmattis): Figure out where to clear the CGO_* variables when
+# TODO(pmattis): Figure out where to set different CGO_* variables when
 # building "release" binaries.
-export CGO_CFLAGS :=-g
-export CGO_CXXFLAGS :=-g
-export CGO_LDFLAGS :=-g
+export CGO_CPPFLAGS :=-g -I $(CURDIR)/_vendor/usr/include -I $(CURDIR)/_vendor/rocksdb/include
+export CGO_LDFLAGS :=-g -L $(CURDIR)/_vendor/usr/lib -L $(CURDIR)/_vendor/rocksdb
 
 PKG        := "./..."
 TESTS      := ".*"
@@ -46,25 +45,20 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc
-
 # "go build -i" explicitly does not rebuild dependent packages that
 # have a different root directory than the package being built, hence
 # the need for a separate build invocation for etcd/raft.
-build: auxiliary
+build:
 	$(GO) build $(GOFLAGS) -i github.com/coreos/etcd/raft
 	$(GO) build $(GOFLAGS) -i -o cockroach
 
-storage/engine/engine.pc: storage/engine/engine.pc.in
-	sed -e "s,@PWD@,$(CURDIR),g" < $^ > $@
-
-test: auxiliary
+test:
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-testrace: auxiliary
+testrace:
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
-bench: auxiliary
+bench:
 	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
@@ -74,7 +68,7 @@ bench: auxiliary
 # PKG=./storage/engine will generate ./storage/engine/engine.test.
 testbuild: TESTS := $(shell $(GO) list $(PKG))
 testbuild: GOFLAGS += -c
-testbuild: auxiliary
+testbuild:
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
