@@ -1,8 +1,0 @@
-prefix=@PWD@
-
-Name: Cockroach
-Description: Cockroach Engine Dependencies
-Version: 0.1
-Requires: 
-Libs: -L${prefix}/_vendor/usr/lib -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lprotobuf
-Cflags: -I${prefix}/_vendor/usr/include

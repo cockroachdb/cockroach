@@ -1,0 +1,10 @@
+package engine
+
+// This file is generated because in go 1.4, there is no way to
+// include a relative path in cgo's LDFLAGS. (go 1.5 will include
+// variable expansion in these flags).
+
+// #cgo CXXFLAGS: -std=c++11
+// #cgo CPPFLAGS: -I ../../_vendor/usr/include
+// #cgo LDFLAGS: -L @ROOT@/_vendor/usr/lib -lrocksdb -lstdc++ -lm -lz -lbz2 -lsnappy -lprotobuf
+import "C"

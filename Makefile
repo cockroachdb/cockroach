@@ -46,7 +46,7 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/engine.pc
+auxiliary: storage/engine/cgo_flags.go
 
 # "go build -i" explicitly does not rebuild dependent packages that
 # have a different root directory than the package being built, hence
@@ -55,8 +55,8 @@ build: auxiliary
 	$(GO) build $(GOFLAGS) -i github.com/coreos/etcd/raft
 	$(GO) build $(GOFLAGS) -i -o cockroach
 
-storage/engine/engine.pc: storage/engine/engine.pc.in
-	sed -e "s,@PWD@,$(CURDIR),g" < $^ > $@
+storage/engine/cgo_flags.go: storage/engine/cgo_flags.go.in
+	sed -e "s,@ROOT@,$(CURDIR),g" < $^ > $@
 
 test: auxiliary
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
@@ -100,7 +100,7 @@ acceptance:
 clean:
 	$(GO) clean -i -r ./...
 	find . -name '*.test' -type f -exec rm -f {} \;
-	rm -f storage/engine/engine.pc
+	rm -f storage/engine/cgo_flags.go
 
 # The gopath target outputs the GOPATH that should be used for building this
 # package. It is used by the emacs go-projectile package for automatic
