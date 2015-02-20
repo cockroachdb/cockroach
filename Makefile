@@ -26,7 +26,7 @@ GOFLAGS :=
 STATIC := $(STATIC)
 
 RUN  := run
-GOPATH  := $(CURDIR)/../../../..:$(CURDIR)/_vendor
+GOPATH  := $(CURDIR)/_vendor:$(CURDIR)/../../../..
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
