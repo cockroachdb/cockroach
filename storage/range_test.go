@@ -77,6 +77,7 @@ var (
 // testContext{}. Any fields which are initialized to non-nil values
 // will be used as-is.
 type testContext struct {
+	transport     multiraft.Transport
 	store         *Store
 	rng           *Range
 	gossip        *gossip.Gossip
@@ -103,8 +104,12 @@ func (tc *testContext) Start(t *testing.T) {
 		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	}
 
+	if tc.transport == nil {
+		tc.transport = multiraft.NewLocalRPCTransport()
+	}
+
 	if tc.store == nil {
-		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, multiraft.NewLocalRPCTransport())
+		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport)
 		if !tc.skipBootstrap {
 			if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 				t.Fatal(err)

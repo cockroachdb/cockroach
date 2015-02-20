@@ -87,27 +87,28 @@ func (s stringSet) keys() []string {
 
 // AllMethods specifies the complete set of methods.
 var AllMethods = stringSet{
-	Contains:              struct{}{},
-	Get:                   struct{}{},
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	Scan:                  struct{}{},
-	EndTransaction:        struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	AdminSplit:            struct{}{},
-	AdminMerge:            struct{}{},
-	Batch:                 struct{}{},
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	Contains:               struct{}{},
+	Get:                    struct{}{},
+	Put:                    struct{}{},
+	ConditionalPut:         struct{}{},
+	Increment:              struct{}{},
+	Delete:                 struct{}{},
+	DeleteRange:            struct{}{},
+	Scan:                   struct{}{},
+	EndTransaction:         struct{}{},
+	ReapQueue:              struct{}{},
+	EnqueueUpdate:          struct{}{},
+	EnqueueMessage:         struct{}{},
+	AdminSplit:             struct{}{},
+	AdminMerge:             struct{}{},
+	Batch:                  struct{}{},
+	InternalHeartbeatTxn:   struct{}{},
+	InternalGC:             struct{}{},
+	InternalPushTxn:        struct{}{},
+	InternalResolveIntent:  struct{}{},
+	InternalMerge:          struct{}{},
+	InternalTruncateLog:    struct{}{},
+	InternalChangeReplicas: struct{}{},
 }
 
 // PublicMethods specifies the set of methods accessible via the
@@ -132,12 +133,13 @@ var PublicMethods = stringSet{
 // InternalMethods specifies the set of methods accessible only
 // via the internal node RPC API.
 var InternalMethods = stringSet{
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	InternalHeartbeatTxn:   struct{}{},
+	InternalGC:             struct{}{},
+	InternalPushTxn:        struct{}{},
+	InternalResolveIntent:  struct{}{},
+	InternalMerge:          struct{}{},
+	InternalTruncateLog:    struct{}{},
+	InternalChangeReplicas: struct{}{},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
@@ -153,22 +155,23 @@ var ReadMethods = stringSet{
 
 // WriteMethods specifies the set of methods which write data.
 var WriteMethods = stringSet{
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	EndTransaction:        struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	Batch:                 struct{}{},
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	Put:                    struct{}{},
+	ConditionalPut:         struct{}{},
+	Increment:              struct{}{},
+	Delete:                 struct{}{},
+	DeleteRange:            struct{}{},
+	EndTransaction:         struct{}{},
+	ReapQueue:              struct{}{},
+	EnqueueUpdate:          struct{}{},
+	EnqueueMessage:         struct{}{},
+	Batch:                  struct{}{},
+	InternalHeartbeatTxn:   struct{}{},
+	InternalGC:             struct{}{},
+	InternalPushTxn:        struct{}{},
+	InternalResolveIntent:  struct{}{},
+	InternalMerge:          struct{}{},
+	InternalTruncateLog:    struct{}{},
+	InternalChangeReplicas: struct{}{},
 }
 
 // TxnMethods specifies the set of methods which leave key intents
@@ -362,6 +365,8 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalMerge, nil
 	case *InternalTruncateLogRequest:
 		return InternalTruncateLog, nil
+	case *InternalChangeReplicasRequest:
+		return InternalChangeReplicas, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -421,6 +426,8 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalMergeRequest{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogRequest{}, nil
+	case InternalChangeReplicas:
+		return &InternalChangeReplicasRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -470,6 +477,8 @@ func CreateReply(method string) (Response, error) {
 		return &InternalMergeResponse{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogResponse{}, nil
+	case InternalChangeReplicas:
+		return &InternalChangeReplicasResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }

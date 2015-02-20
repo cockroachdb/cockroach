@@ -53,6 +53,8 @@ class InternalMergeRequest;
 class InternalMergeResponse;
 class InternalTruncateLogRequest;
 class InternalTruncateLogResponse;
+class InternalChangeReplicasRequest;
+class InternalChangeReplicasResponse;
 class ReadWriteCmdResponse;
 class InternalRaftCommandUnion;
 class InternalRaftCommand;
@@ -1415,6 +1417,198 @@ class InternalTruncateLogResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class InternalChangeReplicasRequest : public ::google::protobuf::Message {
+ public:
+  InternalChangeReplicasRequest();
+  virtual ~InternalChangeReplicasRequest();
+
+  InternalChangeReplicasRequest(const InternalChangeReplicasRequest& from);
+
+  inline InternalChangeReplicasRequest& operator=(const InternalChangeReplicasRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalChangeReplicasRequest& default_instance();
+
+  void Swap(InternalChangeReplicasRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalChangeReplicasRequest* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalChangeReplicasRequest& from);
+  void MergeFrom(const InternalChangeReplicasRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .proto.RequestHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::proto::RequestHeader& header() const;
+  inline ::proto::RequestHeader* mutable_header();
+  inline ::proto::RequestHeader* release_header();
+  inline void set_allocated_header(::proto::RequestHeader* header);
+
+  // optional int32 node_id = 2;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 2;
+  inline ::google::protobuf::int32 node_id() const;
+  inline void set_node_id(::google::protobuf::int32 value);
+
+  // optional int32 store_id = 3;
+  inline bool has_store_id() const;
+  inline void clear_store_id();
+  static const int kStoreIdFieldNumber = 3;
+  inline ::google::protobuf::int32 store_id() const;
+  inline void set_store_id(::google::protobuf::int32 value);
+
+  // optional bool remove = 4;
+  inline bool has_remove() const;
+  inline void clear_remove();
+  static const int kRemoveFieldNumber = 4;
+  inline bool remove() const;
+  inline void set_remove(bool value);
+
+  // @@protoc_insertion_point(class_scope:proto.InternalChangeReplicasRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_store_id();
+  inline void clear_has_store_id();
+  inline void set_has_remove();
+  inline void clear_has_remove();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::proto::RequestHeader* header_;
+  ::google::protobuf::int32 node_id_;
+  ::google::protobuf::int32 store_id_;
+  bool remove_;
+  friend void  protobuf_AddDesc_internal_2eproto();
+  friend void protobuf_AssignDesc_internal_2eproto();
+  friend void protobuf_ShutdownFile_internal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalChangeReplicasRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalChangeReplicasResponse : public ::google::protobuf::Message {
+ public:
+  InternalChangeReplicasResponse();
+  virtual ~InternalChangeReplicasResponse();
+
+  InternalChangeReplicasResponse(const InternalChangeReplicasResponse& from);
+
+  inline InternalChangeReplicasResponse& operator=(const InternalChangeReplicasResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalChangeReplicasResponse& default_instance();
+
+  void Swap(InternalChangeReplicasResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalChangeReplicasResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalChangeReplicasResponse& from);
+  void MergeFrom(const InternalChangeReplicasResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .proto.ResponseHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::proto::ResponseHeader& header() const;
+  inline ::proto::ResponseHeader* mutable_header();
+  inline ::proto::ResponseHeader* release_header();
+  inline void set_allocated_header(::proto::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:proto.InternalChangeReplicasResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::proto::ResponseHeader* header_;
+  friend void  protobuf_AddDesc_internal_2eproto();
+  friend void protobuf_AssignDesc_internal_2eproto();
+  friend void protobuf_ShutdownFile_internal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalChangeReplicasResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ReadWriteCmdResponse : public ::google::protobuf::Message {
  public:
   ReadWriteCmdResponse();
@@ -1897,6 +2091,15 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline ::proto::InternalGCRequest* release_internal_gc();
   inline void set_allocated_internal_gc(::proto::InternalGCRequest* internal_gc);
 
+  // optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
+  inline bool has_internal_change_replicas() const;
+  inline void clear_internal_change_replicas();
+  static const int kInternalChangeReplicasFieldNumber = 38;
+  inline const ::proto::InternalChangeReplicasRequest& internal_change_replicas() const;
+  inline ::proto::InternalChangeReplicasRequest* mutable_internal_change_replicas();
+  inline ::proto::InternalChangeReplicasRequest* release_internal_change_replicas();
+  inline void set_allocated_internal_change_replicas(::proto::InternalChangeReplicasRequest* internal_change_replicas);
+
   // @@protoc_insertion_point(class_scope:proto.InternalRaftCommandUnion)
  private:
   inline void set_has_contains();
@@ -1939,6 +2142,8 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline void clear_has_internal_truncate_log();
   inline void set_has_internal_gc();
   inline void clear_has_internal_gc();
+  inline void set_has_internal_change_replicas();
+  inline void clear_has_internal_change_replicas();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1964,6 +2169,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   ::proto::InternalMergeRequest* internal_merge_response_;
   ::proto::InternalTruncateLogRequest* internal_truncate_log_;
   ::proto::InternalGCRequest* internal_gc_;
+  ::proto::InternalChangeReplicasRequest* internal_change_replicas_;
   friend void  protobuf_AddDesc_internal_2eproto();
   friend void protobuf_AssignDesc_internal_2eproto();
   friend void protobuf_ShutdownFile_internal_2eproto();
@@ -3371,6 +3577,168 @@ inline void InternalTruncateLogResponse::set_allocated_header(::proto::ResponseH
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:proto.InternalTruncateLogResponse.header)
+}
+
+// -------------------------------------------------------------------
+
+// InternalChangeReplicasRequest
+
+// optional .proto.RequestHeader header = 1;
+inline bool InternalChangeReplicasRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalChangeReplicasRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalChangeReplicasRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalChangeReplicasRequest::clear_header() {
+  if (header_ != NULL) header_->::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::proto::RequestHeader& InternalChangeReplicasRequest::header() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::proto::RequestHeader* InternalChangeReplicasRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::proto::RequestHeader;
+  // @@protoc_insertion_point(field_mutable:proto.InternalChangeReplicasRequest.header)
+  return header_;
+}
+inline ::proto::RequestHeader* InternalChangeReplicasRequest::release_header() {
+  clear_has_header();
+  ::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalChangeReplicasRequest::set_allocated_header(::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalChangeReplicasRequest.header)
+}
+
+// optional int32 node_id = 2;
+inline bool InternalChangeReplicasRequest::has_node_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void InternalChangeReplicasRequest::set_has_node_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void InternalChangeReplicasRequest::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void InternalChangeReplicasRequest::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 InternalChangeReplicasRequest::node_id() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.node_id)
+  return node_id_;
+}
+inline void InternalChangeReplicasRequest::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.node_id)
+}
+
+// optional int32 store_id = 3;
+inline bool InternalChangeReplicasRequest::has_store_id() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalChangeReplicasRequest::set_has_store_id() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalChangeReplicasRequest::clear_has_store_id() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void InternalChangeReplicasRequest::clear_store_id() {
+  store_id_ = 0;
+  clear_has_store_id();
+}
+inline ::google::protobuf::int32 InternalChangeReplicasRequest::store_id() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.store_id)
+  return store_id_;
+}
+inline void InternalChangeReplicasRequest::set_store_id(::google::protobuf::int32 value) {
+  set_has_store_id();
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.store_id)
+}
+
+// optional bool remove = 4;
+inline bool InternalChangeReplicasRequest::has_remove() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void InternalChangeReplicasRequest::set_has_remove() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void InternalChangeReplicasRequest::clear_has_remove() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void InternalChangeReplicasRequest::clear_remove() {
+  remove_ = false;
+  clear_has_remove();
+}
+inline bool InternalChangeReplicasRequest::remove() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.remove)
+  return remove_;
+}
+inline void InternalChangeReplicasRequest::set_remove(bool value) {
+  set_has_remove();
+  remove_ = value;
+  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.remove)
+}
+
+// -------------------------------------------------------------------
+
+// InternalChangeReplicasResponse
+
+// optional .proto.ResponseHeader header = 1;
+inline bool InternalChangeReplicasResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalChangeReplicasResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalChangeReplicasResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalChangeReplicasResponse::clear_header() {
+  if (header_ != NULL) header_->::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::proto::ResponseHeader& InternalChangeReplicasResponse::header() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::proto::ResponseHeader* InternalChangeReplicasResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::proto::ResponseHeader;
+  // @@protoc_insertion_point(field_mutable:proto.InternalChangeReplicasResponse.header)
+  return header_;
+}
+inline ::proto::ResponseHeader* InternalChangeReplicasResponse::release_header() {
+  clear_has_header();
+  ::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalChangeReplicasResponse::set_allocated_header(::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalChangeReplicasResponse.header)
 }
 
 // -------------------------------------------------------------------
@@ -4814,6 +5182,47 @@ inline void InternalRaftCommandUnion::set_allocated_internal_gc(::proto::Interna
     clear_has_internal_gc();
   }
   // @@protoc_insertion_point(field_set_allocated:proto.InternalRaftCommandUnion.internal_gc)
+}
+
+// optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
+inline bool InternalRaftCommandUnion::has_internal_change_replicas() const {
+  return (_has_bits_[0] & 0x00100000u) != 0;
+}
+inline void InternalRaftCommandUnion::set_has_internal_change_replicas() {
+  _has_bits_[0] |= 0x00100000u;
+}
+inline void InternalRaftCommandUnion::clear_has_internal_change_replicas() {
+  _has_bits_[0] &= ~0x00100000u;
+}
+inline void InternalRaftCommandUnion::clear_internal_change_replicas() {
+  if (internal_change_replicas_ != NULL) internal_change_replicas_->::proto::InternalChangeReplicasRequest::Clear();
+  clear_has_internal_change_replicas();
+}
+inline const ::proto::InternalChangeReplicasRequest& InternalRaftCommandUnion::internal_change_replicas() const {
+  // @@protoc_insertion_point(field_get:proto.InternalRaftCommandUnion.internal_change_replicas)
+  return internal_change_replicas_ != NULL ? *internal_change_replicas_ : *default_instance_->internal_change_replicas_;
+}
+inline ::proto::InternalChangeReplicasRequest* InternalRaftCommandUnion::mutable_internal_change_replicas() {
+  set_has_internal_change_replicas();
+  if (internal_change_replicas_ == NULL) internal_change_replicas_ = new ::proto::InternalChangeReplicasRequest;
+  // @@protoc_insertion_point(field_mutable:proto.InternalRaftCommandUnion.internal_change_replicas)
+  return internal_change_replicas_;
+}
+inline ::proto::InternalChangeReplicasRequest* InternalRaftCommandUnion::release_internal_change_replicas() {
+  clear_has_internal_change_replicas();
+  ::proto::InternalChangeReplicasRequest* temp = internal_change_replicas_;
+  internal_change_replicas_ = NULL;
+  return temp;
+}
+inline void InternalRaftCommandUnion::set_allocated_internal_change_replicas(::proto::InternalChangeReplicasRequest* internal_change_replicas) {
+  delete internal_change_replicas_;
+  internal_change_replicas_ = internal_change_replicas;
+  if (internal_change_replicas) {
+    set_has_internal_change_replicas();
+  } else {
+    clear_has_internal_change_replicas();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalRaftCommandUnion.internal_change_replicas)
 }
 
 // -------------------------------------------------------------------

@@ -333,6 +333,34 @@ func (m *InternalTruncateLogResponse) Reset()         { *m = InternalTruncateLog
 func (m *InternalTruncateLogResponse) String() string { return proto1.CompactTextString(m) }
 func (*InternalTruncateLogResponse) ProtoMessage()    {}
 
+type InternalChangeReplicasRequest struct {
+	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	Remove           bool    `protobuf:"varint,4,opt,name=remove" json:"remove"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *InternalChangeReplicasRequest) Reset()         { *m = InternalChangeReplicasRequest{} }
+func (m *InternalChangeReplicasRequest) String() string { return proto1.CompactTextString(m) }
+func (*InternalChangeReplicasRequest) ProtoMessage()    {}
+
+func (m *InternalChangeReplicasRequest) GetRemove() bool {
+	if m != nil {
+		return m.Remove
+	}
+	return false
+}
+
+type InternalChangeReplicasResponse struct {
+	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *InternalChangeReplicasResponse) Reset()         { *m = InternalChangeReplicasResponse{} }
+func (m *InternalChangeReplicasResponse) String() string { return proto1.CompactTextString(m) }
+func (*InternalChangeReplicasResponse) ProtoMessage()    {}
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in storage/engine/db.cc in GetResponseHeader().
@@ -482,15 +510,16 @@ type InternalRaftCommandUnion struct {
 	EnqueueMessage *EnqueueMessageRequest `protobuf:"bytes,12,opt,name=enqueue_message" json:"enqueue_message,omitempty"`
 	// Other requests. Allow a gap in tag numbers so the previous list can
 	// be copy/pasted from RequestUnion.
-	Batch                 *BatchRequest                 `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
-	InternalRangeLookup   *InternalRangeLookupRequest   `protobuf:"bytes,31,opt,name=internal_range_lookup" json:"internal_range_lookup,omitempty"`
-	InternalHeartbeatTxn  *InternalHeartbeatTxnRequest  `protobuf:"bytes,32,opt,name=internal_heartbeat_txn" json:"internal_heartbeat_txn,omitempty"`
-	InternalPushTxn       *InternalPushTxnRequest       `protobuf:"bytes,33,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
-	InternalResolveIntent *InternalResolveIntentRequest `protobuf:"bytes,34,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
-	InternalMergeResponse *InternalMergeRequest         `protobuf:"bytes,35,opt,name=internal_merge_response" json:"internal_merge_response,omitempty"`
-	InternalTruncateLog   *InternalTruncateLogRequest   `protobuf:"bytes,36,opt,name=internal_truncate_log" json:"internal_truncate_log,omitempty"`
-	InternalGc            *InternalGCRequest            `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
-	XXX_unrecognized      []byte                        `json:"-"`
+	Batch                  *BatchRequest                  `protobuf:"bytes,30,opt,name=batch" json:"batch,omitempty"`
+	InternalRangeLookup    *InternalRangeLookupRequest    `protobuf:"bytes,31,opt,name=internal_range_lookup" json:"internal_range_lookup,omitempty"`
+	InternalHeartbeatTxn   *InternalHeartbeatTxnRequest   `protobuf:"bytes,32,opt,name=internal_heartbeat_txn" json:"internal_heartbeat_txn,omitempty"`
+	InternalPushTxn        *InternalPushTxnRequest        `protobuf:"bytes,33,opt,name=internal_push_txn" json:"internal_push_txn,omitempty"`
+	InternalResolveIntent  *InternalResolveIntentRequest  `protobuf:"bytes,34,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
+	InternalMergeResponse  *InternalMergeRequest          `protobuf:"bytes,35,opt,name=internal_merge_response" json:"internal_merge_response,omitempty"`
+	InternalTruncateLog    *InternalTruncateLogRequest    `protobuf:"bytes,36,opt,name=internal_truncate_log" json:"internal_truncate_log,omitempty"`
+	InternalGc             *InternalGCRequest             `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
+	InternalChangeReplicas *InternalChangeReplicasRequest `protobuf:"bytes,38,opt,name=internal_change_replicas" json:"internal_change_replicas,omitempty"`
+	XXX_unrecognized       []byte                         `json:"-"`
 }
 
 func (m *InternalRaftCommandUnion) Reset()         { *m = InternalRaftCommandUnion{} }
@@ -633,6 +662,13 @@ func (m *InternalRaftCommandUnion) GetInternalTruncateLog() *InternalTruncateLog
 func (m *InternalRaftCommandUnion) GetInternalGc() *InternalGCRequest {
 	if m != nil {
 		return m.InternalGc
+	}
+	return nil
+}
+
+func (m *InternalRaftCommandUnion) GetInternalChangeReplicas() *InternalChangeReplicasRequest {
+	if m != nil {
+		return m.InternalChangeReplicas
 	}
 	return nil
 }
@@ -986,6 +1022,9 @@ func (this *InternalRaftCommandUnion) GetValue() interface{} {
 	if this.InternalGc != nil {
 		return this.InternalGc
 	}
+	if this.InternalChangeReplicas != nil {
+		return this.InternalChangeReplicas
+	}
 	return nil
 }
 
@@ -1031,6 +1070,8 @@ func (this *InternalRaftCommandUnion) SetValue(value interface{}) bool {
 		this.InternalTruncateLog = vt
 	case *InternalGCRequest:
 		this.InternalGc = vt
+	case *InternalChangeReplicasRequest:
+		this.InternalChangeReplicas = vt
 	default:
 		return false
 	}

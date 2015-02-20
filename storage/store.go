@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft/raftpb"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -321,8 +322,9 @@ func (s *Store) Start() error {
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
 	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
-		Transport:              s.transport,
-		Storage:                s,
+		Transport: s.transport,
+		Storage:   s,
+		// TODO(bdarnell): parameterize TickInterval and Timeouts.
 		TickInterval:           time.Millisecond,
 		ElectionTimeoutTicks:   5,
 		HeartbeatIntervalTicks: 1,
@@ -936,7 +938,8 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 
 // ProposeRaftCommand submits a command to raft.
 func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) {
-	if cmd.Cmd.GetValue() == nil {
+	value := cmd.Cmd.GetValue()
+	if value == nil {
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
@@ -944,12 +947,20 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	if err != nil {
 		log.Fatal(err)
 	}
-	data, err := gogoproto.Marshal(&cmd)
-	if err != nil {
-		log.Fatal(err)
-	}
-	s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 
+	if cr, ok := value.(*proto.InternalChangeReplicasRequest); ok {
+		// InternalChangeReplicasRequest is special because raft needs to
+		// understand it; it cannot simply be an opaque command.
+		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
+			raftpb.ConfChangeAddNode,
+			makeRaftNodeID(cr.NodeID, cr.StoreID))
+	} else {
+		data, err := gogoproto.Marshal(&cmd)
+		if err != nil {
+			log.Fatal(err)
+		}
+		s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
+	}
 }
 
 // processRaft processes read/write commands that have been committed
@@ -975,22 +986,49 @@ func (s *Store) processRaft() {
 	for {
 		select {
 		case e := <-s.multiraft.Events:
+			var cmd proto.InternalRaftCommand
+			var groupID int64
+			var commandID string
+
 			switch e := e.(type) {
 			case *multiraft.EventCommandCommitted:
-				var cmd proto.InternalRaftCommand
+				groupID = int64(e.GroupID)
+				commandID = e.CommandID
 				err := gogoproto.Unmarshal(e.Command, &cmd)
 				if err != nil {
 					log.Fatal(err)
 				}
-				s.mu.Lock()
-				r, ok := s.ranges[cmd.RaftID]
-				s.mu.Unlock()
+
+			case *multiraft.EventMembershipChangeCommitted:
+				groupID = int64(e.GroupID)
+				commandID = e.CommandID
+				nodeID, storeID := decodeRaftNodeID(e.NodeID)
+				cmd.RaftID = groupID
+				ok := cmd.Cmd.SetValue(&proto.InternalChangeReplicasRequest{
+					NodeID:  nodeID,
+					StoreID: storeID,
+					Remove:  false,
+				})
 				if !ok {
-					log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-						cmd.RaftID, cmd)
-				} else {
-					r.processRaftCommand(cmdIDKey(e.CommandID), cmd)
+					log.Fatal("failed to set cmd value")
 				}
+
+			default:
+				continue
+			}
+
+			if groupID != cmd.RaftID {
+				log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RaftID)
+			}
+
+			s.mu.Lock()
+			r, ok := s.ranges[groupID]
+			s.mu.Unlock()
+			if !ok {
+				log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+					groupID, cmd)
+			} else {
+				r.processRaftCommand(cmdIDKey(commandID), cmd)
 			}
 
 		case <-s.stopper.ShouldStop():
@@ -1007,8 +1045,19 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 	defer s.mu.RUnlock()
 	r, ok := s.ranges[int64(groupID)]
 	if !ok {
-		log.Warningf("%p requested nonexistent range with raft ID %d", s, groupID)
-		return nil
+		var err error
+		r, err = NewRange(&proto.RangeDescriptor{
+			RaftID: int64(groupID),
+			// TODO(bdarnell): other fields are unknown; need to populate them from
+			// snapshot.
+		}, s)
+		if err != nil {
+			panic(err) // TODO(bdarnell)
+		}
+		err = s.addRangeInternal(r, true)
+		if err != nil {
+			panic(err) // TODO(bdarnell)
+		}
 	}
 	return r
 }

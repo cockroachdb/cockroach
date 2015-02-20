@@ -305,4 +305,26 @@ func TestMembershipChange(t *testing.T) {
 			cluster.nodes[i].nodeID)
 		<-ch
 	}
+
+	// TODO(bdarnell): verify that the channel events are sent out correctly.
+	/*
+		for i := 0; i < 10; i++ {
+			log.Infof("tick %d", i)
+			cluster.tickers[0].Tick()
+			time.Sleep(5 * time.Millisecond)
+		}
+
+		// Each node is notified of each other node's joining.
+		for i := 0; i < 4; i++ {
+			for j := 1; j < 4; j++ {
+				select {
+				case e := <-cluster.events[i].MembershipChangeCommitted:
+					if e.NodeID != cluster.nodes[j].nodeID {
+						t.Errorf("node %d expected event for %d, got %d", i, j, e.NodeID)
+					}
+				default:
+					t.Errorf("node %d did not get expected event for %d", i, j)
+				}
+			}
+		}*/
 }

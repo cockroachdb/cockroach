@@ -735,6 +735,8 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	case proto.InternalTruncateLog:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
+	case proto.InternalChangeReplicas:
+		r.InternalChangeReplicas(args.(*proto.InternalChangeReplicasRequest), reply.(*proto.InternalChangeReplicasResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -1713,4 +1715,10 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
 			subsumedDesc.RaftID, r.Desc.RaftID, err))
 	}
+}
+
+// InternalChangeReplicas is called after a raft configuration change has committed.
+func (r *Range) InternalChangeReplicas(req *proto.InternalChangeReplicasRequest,
+	resp *proto.InternalChangeReplicasResponse) {
+	// TODO(bdarnell): apply the change to r.Desc.
 }

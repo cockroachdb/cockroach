@@ -135,12 +135,24 @@ func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
+	client, ok := lt.clients[id]
+	if ok {
+		return client, nil
+	}
+
 	listener, ok := lt.listeners[id]
 	if !ok {
 		return nil, util.Errorf("unknown peer %v", id)
 	}
 	address := listener.Addr().String()
-	return rpc.Dial("tcp", address)
+
+	// If this wasn't test code we wouldn't want to call Dial while holding the lock.
+	client, err := rpc.Dial("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	lt.clients[id] = client
+	return client, err
 }
 
 func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
