@@ -52,8 +52,8 @@ auxiliary: storage/engine/cgo_flags.go
 # have a different root directory than the package being built, hence
 # the need for a separate build invocation for etcd/raft.
 build: auxiliary
-	$(GO) build $(GOFLAGS) -i github.com/coreos/etcd/raft
-	$(GO) build $(GOFLAGS) -i -o cockroach
+	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
+	$(GO) build $(GOFLAGS) -v -i -o cockroach
 
 storage/engine/cgo_flags.go: storage/engine/cgo_flags.go.in
 	sed -e "s,@ROOT@,$(CURDIR),g" < $^ > $@
@@ -98,7 +98,7 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	$(GO) clean -i -r ./...
+	$(GO) clean -i ./... github.com/coreos/etcd/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/cgo_flags.go
 
