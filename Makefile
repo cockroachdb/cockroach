@@ -24,6 +24,10 @@ GO ?= go
 GOFLAGS := 
 # Set to 1 to use static linking for all builds (including tests).
 STATIC := $(STATIC)
+# The cockroach image to be used for starting Docker containers
+# during acceptance tests. Usually cockroachdb/cockroach{,-dev}
+# depending on the context.
+COCKROACH_IMAGE :=
 
 RUN  := run
 GOPATH  := $(CURDIR)/_vendor:$(CURDIR)/../../../..
@@ -91,7 +95,7 @@ coverage: build
 
 acceptance:
 # The first `stop` stops and cleans up any containers from previous runs.
-	(cd $(RUN); \
+	(cd $(RUN) && export COCKROACH_IMAGE="$(COCKROACH_IMAGE)" && \
 	  ../build/build-docker-dev.sh && \
 	  ./local-cluster.sh stop && \
 	  ./local-cluster.sh start && \

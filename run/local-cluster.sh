@@ -46,7 +46,7 @@ $0 stop
 # Doing this here only so that after a cluster has been started and stopped,
 # the containers are still available for debugging.
 echo "Removing any old containers..."
-docker rm $CONTAINERS > /dev/null
+docker rm -f $CONTAINERS &> /dev/null
 
 # Default number of nodes.
 NODES=${NODES:-3}
