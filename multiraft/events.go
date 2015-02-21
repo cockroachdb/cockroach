@@ -17,7 +17,10 @@
 
 package multiraft
 
-import "github.com/cockroachdb/cockroach/util/log"
+import (
+	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/raft/raftpb"
+)
 
 // An EventLeaderElection is broadcast when a group starts or completes
 // an election. NodeID is zero when an election is in progress.
@@ -29,8 +32,18 @@ type EventLeaderElection struct {
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
 type EventCommandCommitted struct {
+	GroupID   uint64
 	CommandID string
 	Command   []byte
+}
+
+// An EventMembershipChangeCommitted is broadcast whenever a membership change
+// has been committed.
+type EventMembershipChangeCommitted struct {
+	GroupID    uint64
+	CommandID  string
+	NodeID     NodeID
+	ChangeType raftpb.ConfChangeType
 }
 
 // Commands are encoded with a 1-byte version (currently 0), a 16-byte ID,

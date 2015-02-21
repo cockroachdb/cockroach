@@ -191,7 +191,23 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 	// A heartbeat message is expanded into a heartbeat for each group
 	// that the remote node is a part of.
 	fromID := NodeID(req.Message.From)
-	originNode, _ := s.nodes[fromID]
+	originNode, ok := s.nodes[fromID]
+	if !ok {
+		// When a leader considers a follower to be down, it doesn't begin recovery
+		// until the follower has successfully responded to a heartbeat. If we get a
+		// heartbeat from a node we don't know, it must think we are a follower of
+		// some group, so we need to respond so it can activate the recovery process.
+		log.Warningf("node %v: not fanning out heartbeat from unknown node %v (but responding anyway)",
+			s.nodeID, fromID)
+		s.Transport.Send(fromID, &RaftMessageRequest{
+			GroupID: math.MaxUint64,
+			Message: raftpb.Message{
+				From: uint64(s.nodeID),
+				Type: raftpb.MsgHeartbeatResp,
+			},
+		})
+		return
+	}
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the sending node is leading that group, don't
@@ -216,7 +232,12 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 // which overlap with the sender's groups and consider themselves leader.
 func (s *state) fanoutHeartbeatResponse(req *RaftMessageRequest) {
 	fromID := NodeID(req.Message.From)
-	originNode, _ := s.nodes[fromID]
+	originNode, ok := s.nodes[fromID]
+	if !ok {
+		log.Warningf("node %v: not fanning out heartbeat response from unknown node %v",
+			s.nodeID, fromID)
+		return
+	}
 	cnt := 0
 	for groupID := range originNode.groupIDs {
 		// If we don't think that the local node is leader, don't propagate.
@@ -410,20 +431,20 @@ func (s *state) start() {
 		case req := <-s.reqChan:
 			log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
 				raft.DescribeMessage(req.Message, s.EntryFormatter))
-			if _, ok := s.groups[req.GroupID]; !ok {
-				log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
-				if err := s.createGroup(req.GroupID); err != nil {
-					log.Warningf("Error creating group %d: %s", req.GroupID, err)
-					break
-				}
-			}
-
 			switch req.Message.Type {
 			case raftpb.MsgHeartbeat:
 				s.fanoutHeartbeat(req)
 			case raftpb.MsgHeartbeatResp:
 				s.fanoutHeartbeatResponse(req)
 			default:
+				if _, ok := s.groups[req.GroupID]; !ok {
+					log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
+					if err := s.createGroup(req.GroupID); err != nil {
+						log.Warningf("Error creating group %d: %s", req.GroupID, err)
+						break
+					}
+				}
+
 				if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
 					log.V(4).Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
 						raft.DescribeMessage(req.Message, s.EntryFormatter))
@@ -533,7 +554,7 @@ func (s *state) createGroup(groupID uint64) error {
 		return err
 	}
 	for _, nodeID := range state.ConfState.Nodes {
-		s.addNode(NodeID(nodeID))
+		s.addNode(NodeID(nodeID), groupID)
 	}
 
 	s.multiNode.CreateGroup(groupID, nil, gs)
@@ -611,7 +632,11 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			// Whenever the committed term has advanced and we know our leader,
 			// emit an event.
 			g.committedTerm = term
-			s.sendEvent(&EventLeaderElection{groupID, NodeID(g.leader), g.committedTerm})
+			s.sendEvent(&EventLeaderElection{
+				GroupID: groupID,
+				NodeID:  NodeID(g.leader),
+				Term:    g.committedTerm,
+			})
 
 			// Re-submit all pending proposals
 			for _, prop := range g.pending {
@@ -658,8 +683,13 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if entry.Data != nil {
 					var command []byte
 					commandID, command = decodeCommand(entry.Data)
-					s.sendEvent(&EventCommandCommitted{commandID, command})
+					s.sendEvent(&EventCommandCommitted{
+						GroupID:   groupID,
+						CommandID: commandID,
+						Command:   command,
+					})
 				}
+
 			case raftpb.EntryConfChange:
 				cc := raftpb.ConfChange{}
 				err := cc.Unmarshal(entry.Data)
@@ -673,7 +703,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
 				switch cc.Type {
 				case raftpb.ConfChangeAddNode:
-					err = s.addNode(NodeID(cc.NodeID))
+					err = s.addNode(NodeID(cc.NodeID), groupID)
 				case raftpb.ConfChangeRemoveNode:
 					// TODO(bdarnell): support removing nodes; fix double-application of initial entries
 					continue
@@ -684,6 +714,12 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					log.Errorf("error applying configuration change %v: %s", cc, err)
 				}
 				s.multiNode.ApplyConfChange(groupID, cc)
+				s.sendEvent(&EventMembershipChangeCommitted{
+					GroupID:    groupID,
+					CommandID:  commandID,
+					NodeID:     NodeID(cc.NodeID),
+					ChangeType: cc.Type,
+				})
 			}
 			if p, ok := g.pending[commandID]; ok {
 				// TODO(bdarnell): the command is now committed, but not applied until the
@@ -721,7 +757,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			nodeID := NodeID(msg.To)
 			if _, ok := s.nodes[nodeID]; !ok {
 				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
-				s.addNode(nodeID)
+				s.addNode(nodeID, groupID)
 			}
 			s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
 		}

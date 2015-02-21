@@ -87,109 +87,112 @@ func (s stringSet) keys() []string {
 
 // AllMethods specifies the complete set of methods.
 var AllMethods = stringSet{
-	Contains:              struct{}{},
-	Get:                   struct{}{},
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	Scan:                  struct{}{},
-	EndTransaction:        struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	AdminSplit:            struct{}{},
-	AdminMerge:            struct{}{},
-	Batch:                 struct{}{},
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	Contains:               {},
+	Get:                    {},
+	Put:                    {},
+	ConditionalPut:         {},
+	Increment:              {},
+	Delete:                 {},
+	DeleteRange:            {},
+	Scan:                   {},
+	EndTransaction:         {},
+	ReapQueue:              {},
+	EnqueueUpdate:          {},
+	EnqueueMessage:         {},
+	AdminSplit:             {},
+	AdminMerge:             {},
+	Batch:                  {},
+	InternalHeartbeatTxn:   {},
+	InternalGC:             {},
+	InternalPushTxn:        {},
+	InternalResolveIntent:  {},
+	InternalMerge:          {},
+	InternalTruncateLog:    {},
+	InternalChangeReplicas: {},
 }
 
 // PublicMethods specifies the set of methods accessible via the
 // public key-value API.
 var PublicMethods = stringSet{
-	Contains:       struct{}{},
-	Get:            struct{}{},
-	Put:            struct{}{},
-	ConditionalPut: struct{}{},
-	Increment:      struct{}{},
-	Delete:         struct{}{},
-	DeleteRange:    struct{}{},
-	Scan:           struct{}{},
-	EndTransaction: struct{}{},
-	ReapQueue:      struct{}{},
-	EnqueueUpdate:  struct{}{},
-	EnqueueMessage: struct{}{},
-	Batch:          struct{}{},
-	AdminSplit:     struct{}{},
+	Contains:       {},
+	Get:            {},
+	Put:            {},
+	ConditionalPut: {},
+	Increment:      {},
+	Delete:         {},
+	DeleteRange:    {},
+	Scan:           {},
+	EndTransaction: {},
+	ReapQueue:      {},
+	EnqueueUpdate:  {},
+	EnqueueMessage: {},
+	Batch:          {},
+	AdminSplit:     {},
 }
 
 // InternalMethods specifies the set of methods accessible only
 // via the internal node RPC API.
 var InternalMethods = stringSet{
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	InternalHeartbeatTxn:   {},
+	InternalGC:             {},
+	InternalPushTxn:        {},
+	InternalResolveIntent:  {},
+	InternalMerge:          {},
+	InternalTruncateLog:    {},
+	InternalChangeReplicas: {},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
 var ReadMethods = stringSet{
-	Contains:            struct{}{},
-	Get:                 struct{}{},
-	ConditionalPut:      struct{}{},
-	Increment:           struct{}{},
-	Scan:                struct{}{},
-	ReapQueue:           struct{}{},
-	InternalRangeLookup: struct{}{},
+	Contains:            {},
+	Get:                 {},
+	ConditionalPut:      {},
+	Increment:           {},
+	Scan:                {},
+	ReapQueue:           {},
+	InternalRangeLookup: {},
 }
 
 // WriteMethods specifies the set of methods which write data.
 var WriteMethods = stringSet{
-	Put:                   struct{}{},
-	ConditionalPut:        struct{}{},
-	Increment:             struct{}{},
-	Delete:                struct{}{},
-	DeleteRange:           struct{}{},
-	EndTransaction:        struct{}{},
-	ReapQueue:             struct{}{},
-	EnqueueUpdate:         struct{}{},
-	EnqueueMessage:        struct{}{},
-	Batch:                 struct{}{},
-	InternalHeartbeatTxn:  struct{}{},
-	InternalGC:            struct{}{},
-	InternalPushTxn:       struct{}{},
-	InternalResolveIntent: struct{}{},
-	InternalMerge:         struct{}{},
-	InternalTruncateLog:   struct{}{},
+	Put:                    {},
+	ConditionalPut:         {},
+	Increment:              {},
+	Delete:                 {},
+	DeleteRange:            {},
+	EndTransaction:         {},
+	ReapQueue:              {},
+	EnqueueUpdate:          {},
+	EnqueueMessage:         {},
+	Batch:                  {},
+	InternalHeartbeatTxn:   {},
+	InternalGC:             {},
+	InternalPushTxn:        {},
+	InternalResolveIntent:  {},
+	InternalMerge:          {},
+	InternalTruncateLog:    {},
+	InternalChangeReplicas: {},
 }
 
 // TxnMethods specifies the set of methods which leave key intents
 // during transactions.
 var TxnMethods = stringSet{
-	Put:            struct{}{},
-	ConditionalPut: struct{}{},
-	Increment:      struct{}{},
-	Delete:         struct{}{},
-	DeleteRange:    struct{}{},
-	ReapQueue:      struct{}{},
-	EnqueueUpdate:  struct{}{},
-	EnqueueMessage: struct{}{},
+	Put:            {},
+	ConditionalPut: {},
+	Increment:      {},
+	Delete:         {},
+	DeleteRange:    {},
+	ReapQueue:      {},
+	EnqueueUpdate:  {},
+	EnqueueMessage: {},
 }
 
 // adminMethods specifies the set of methods which are neither
 // read-only nor read-write commands but instead execute directly on
 // the Raft leader.
 var adminMethods = stringSet{
-	AdminSplit: struct{}{},
-	AdminMerge: struct{}{},
+	AdminSplit: {},
+	AdminMerge: {},
 }
 
 // NeedReadPerm returns true if the specified method requires read permissions.
@@ -362,6 +365,8 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalMerge, nil
 	case *InternalTruncateLogRequest:
 		return InternalTruncateLog, nil
+	case *InternalChangeReplicasRequest:
+		return InternalChangeReplicas, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -421,6 +426,8 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalMergeRequest{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogRequest{}, nil
+	case InternalChangeReplicas:
+		return &InternalChangeReplicasRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -470,6 +477,8 @@ func CreateReply(method string) (Response, error) {
 		return &InternalMergeResponse{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogResponse{}, nil
+	case InternalChangeReplicas:
+		return &InternalChangeReplicasResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
