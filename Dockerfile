@@ -14,9 +14,6 @@ MAINTAINER Tobias Schottdorf <tobias.schottdorf@gmail.com>
 ADD . /cockroach/
 RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 
-# Update any submodules that were not already cloned in the
-# cockroach-devbase image.
-RUN cd -P /cockroach && git submodule update --init
 # Build the cockroach executable.
 RUN cd -P /cockroach && make build
 
