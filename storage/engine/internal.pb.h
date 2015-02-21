@@ -61,6 +61,25 @@ class InternalRaftCommand;
 class InternalTimeSeriesData;
 class InternalTimeSeriesSample;
 
+enum ReplicaChangeType {
+  ADD_REPLICA = 0,
+  REMOVE_REPLICA = 1
+};
+bool ReplicaChangeType_IsValid(int value);
+const ReplicaChangeType ReplicaChangeType_MIN = ADD_REPLICA;
+const ReplicaChangeType ReplicaChangeType_MAX = REMOVE_REPLICA;
+const int ReplicaChangeType_ARRAYSIZE = ReplicaChangeType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor();
+inline const ::std::string& ReplicaChangeType_Name(ReplicaChangeType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ReplicaChangeType_descriptor(), value);
+}
+inline bool ReplicaChangeType_Parse(
+    const ::std::string& name, ReplicaChangeType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ReplicaChangeType>(
+    ReplicaChangeType_descriptor(), name, value);
+}
 enum InternalValueType {
   _CR_TS = 1
 };
@@ -1493,12 +1512,12 @@ class InternalChangeReplicasRequest : public ::google::protobuf::Message {
   inline ::google::protobuf::int32 store_id() const;
   inline void set_store_id(::google::protobuf::int32 value);
 
-  // optional bool remove = 4;
-  inline bool has_remove() const;
-  inline void clear_remove();
-  static const int kRemoveFieldNumber = 4;
-  inline bool remove() const;
-  inline void set_remove(bool value);
+  // optional .proto.ReplicaChangeType change_type = 4;
+  inline bool has_change_type() const;
+  inline void clear_change_type();
+  static const int kChangeTypeFieldNumber = 4;
+  inline ::proto::ReplicaChangeType change_type() const;
+  inline void set_change_type(::proto::ReplicaChangeType value);
 
   // @@protoc_insertion_point(class_scope:proto.InternalChangeReplicasRequest)
  private:
@@ -1508,8 +1527,8 @@ class InternalChangeReplicasRequest : public ::google::protobuf::Message {
   inline void clear_has_node_id();
   inline void set_has_store_id();
   inline void clear_has_store_id();
-  inline void set_has_remove();
-  inline void clear_has_remove();
+  inline void set_has_change_type();
+  inline void clear_has_change_type();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1518,7 +1537,7 @@ class InternalChangeReplicasRequest : public ::google::protobuf::Message {
   ::proto::RequestHeader* header_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
-  bool remove_;
+  int change_type_;
   friend void  protobuf_AddDesc_internal_2eproto();
   friend void protobuf_AssignDesc_internal_2eproto();
   friend void protobuf_ShutdownFile_internal_2eproto();
@@ -3672,28 +3691,29 @@ inline void InternalChangeReplicasRequest::set_store_id(::google::protobuf::int3
   // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.store_id)
 }
 
-// optional bool remove = 4;
-inline bool InternalChangeReplicasRequest::has_remove() const {
+// optional .proto.ReplicaChangeType change_type = 4;
+inline bool InternalChangeReplicasRequest::has_change_type() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
-inline void InternalChangeReplicasRequest::set_has_remove() {
+inline void InternalChangeReplicasRequest::set_has_change_type() {
   _has_bits_[0] |= 0x00000008u;
 }
-inline void InternalChangeReplicasRequest::clear_has_remove() {
+inline void InternalChangeReplicasRequest::clear_has_change_type() {
   _has_bits_[0] &= ~0x00000008u;
 }
-inline void InternalChangeReplicasRequest::clear_remove() {
-  remove_ = false;
-  clear_has_remove();
+inline void InternalChangeReplicasRequest::clear_change_type() {
+  change_type_ = 0;
+  clear_has_change_type();
 }
-inline bool InternalChangeReplicasRequest::remove() const {
-  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.remove)
-  return remove_;
+inline ::proto::ReplicaChangeType InternalChangeReplicasRequest::change_type() const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.change_type)
+  return static_cast< ::proto::ReplicaChangeType >(change_type_);
 }
-inline void InternalChangeReplicasRequest::set_remove(bool value) {
-  set_has_remove();
-  remove_ = value;
-  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.remove)
+inline void InternalChangeReplicasRequest::set_change_type(::proto::ReplicaChangeType value) {
+  assert(::proto::ReplicaChangeType_IsValid(value));
+  set_has_change_type();
+  change_type_ = value;
+  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.change_type)
 }
 
 // -------------------------------------------------------------------
@@ -5605,6 +5625,11 @@ inline void InternalTimeSeriesSample::set_float_min(float value) {
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::proto::ReplicaChangeType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::proto::ReplicaChangeType>() {
+  return ::proto::ReplicaChangeType_descriptor();
+}
 template <> struct is_proto_enum< ::proto::InternalValueType> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::proto::InternalValueType>() {

@@ -13,6 +13,40 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// ReplicaChangeType is a parameter of InternalChangeReplicasRequest.
+type ReplicaChangeType int32
+
+const (
+	ADD_REPLICA    ReplicaChangeType = 0
+	REMOVE_REPLICA ReplicaChangeType = 1
+)
+
+var ReplicaChangeType_name = map[int32]string{
+	0: "ADD_REPLICA",
+	1: "REMOVE_REPLICA",
+}
+var ReplicaChangeType_value = map[string]int32{
+	"ADD_REPLICA":    0,
+	"REMOVE_REPLICA": 1,
+}
+
+func (x ReplicaChangeType) Enum() *ReplicaChangeType {
+	p := new(ReplicaChangeType)
+	*p = x
+	return p
+}
+func (x ReplicaChangeType) String() string {
+	return proto1.EnumName(ReplicaChangeType_name, int32(x))
+}
+func (x *ReplicaChangeType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(ReplicaChangeType_value, data, "ReplicaChangeType")
+	if err != nil {
+		return err
+	}
+	*x = ReplicaChangeType(value)
+	return nil
+}
+
 // InternalValueType defines a set of string constants placed in the "tag" field
 // of Value messages which are created internally. These are defined as a
 // protocol buffer enumeration so that they can be used portably between our Go
@@ -333,23 +367,26 @@ func (m *InternalTruncateLogResponse) Reset()         { *m = InternalTruncateLog
 func (m *InternalTruncateLogResponse) String() string { return proto1.CompactTextString(m) }
 func (*InternalTruncateLogResponse) ProtoMessage()    {}
 
+// InternalChangeReplicasRequest is used to add or remove a replica from a raft group.
+// Only one ChangeReplicas operation can be in progress at a time; a proposed
+// change will fail if the previous change has not yet completed.
 type InternalChangeReplicasRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	NodeID           NodeID  `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID          StoreID `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
-	Remove           bool    `protobuf:"varint,4,opt,name=remove" json:"remove"`
-	XXX_unrecognized []byte  `json:"-"`
+	NodeID           NodeID            `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	StoreID          StoreID           `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	ChangeType       ReplicaChangeType `protobuf:"varint,4,opt,name=change_type,enum=proto.ReplicaChangeType" json:"change_type"`
+	XXX_unrecognized []byte            `json:"-"`
 }
 
 func (m *InternalChangeReplicasRequest) Reset()         { *m = InternalChangeReplicasRequest{} }
 func (m *InternalChangeReplicasRequest) String() string { return proto1.CompactTextString(m) }
 func (*InternalChangeReplicasRequest) ProtoMessage()    {}
 
-func (m *InternalChangeReplicasRequest) GetRemove() bool {
+func (m *InternalChangeReplicasRequest) GetChangeType() ReplicaChangeType {
 	if m != nil {
-		return m.Remove
+		return m.ChangeType
 	}
-	return false
+	return ADD_REPLICA
 }
 
 type InternalChangeReplicasResponse struct {
@@ -873,6 +910,7 @@ func (m *InternalTimeSeriesSample) GetFloatMin() float32 {
 }
 
 func init() {
+	proto1.RegisterEnum("proto.ReplicaChangeType", ReplicaChangeType_name, ReplicaChangeType_value)
 	proto1.RegisterEnum("proto.InternalValueType", InternalValueType_name, InternalValueType_value)
 }
 func (this *ReadWriteCmdResponse) GetValue() interface{} {

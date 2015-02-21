@@ -68,6 +68,17 @@ var (
 		"achieve this duration.")
 )
 
+var (
+	changeTypeRaftToInternal = map[raftpb.ConfChangeType]proto.ReplicaChangeType{
+		raftpb.ConfChangeAddNode:    proto.ADD_REPLICA,
+		raftpb.ConfChangeRemoveNode: proto.REMOVE_REPLICA,
+	}
+	changeTypeInternalToRaft = map[proto.ReplicaChangeType]raftpb.ConfChangeType{
+		proto.ADD_REPLICA:    raftpb.ConfChangeAddNode,
+		proto.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
+	}
+)
+
 // verifyKeyLength verifies key length. Extra key length is allowed for
 // the local key prefix (for example, a transaction record), and also for
 // keys prefixed with the meta1 or meta2 addressing prefixes. There is a
@@ -952,7 +963,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		// InternalChangeReplicasRequest is special because raft needs to
 		// understand it; it cannot simply be an opaque command.
 		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
-			raftpb.ConfChangeAddNode,
+			changeTypeInternalToRaft[cr.ChangeType],
 			makeRaftNodeID(cr.NodeID, cr.StoreID))
 	} else {
 		data, err := gogoproto.Marshal(&cmd)
@@ -1005,9 +1016,9 @@ func (s *Store) processRaft() {
 				nodeID, storeID := decodeRaftNodeID(e.NodeID)
 				cmd.RaftID = groupID
 				ok := cmd.Cmd.SetValue(&proto.InternalChangeReplicasRequest{
-					NodeID:  nodeID,
-					StoreID: storeID,
-					Remove:  false,
+					NodeID:     nodeID,
+					StoreID:    storeID,
+					ChangeType: changeTypeRaftToInternal[e.ChangeType],
 				})
 				if !ok {
 					log.Fatal("failed to set cmd value")

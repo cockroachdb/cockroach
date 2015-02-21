@@ -161,13 +161,23 @@ message InternalTruncateLogResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ReplicaChangeType is a parameter of InternalChangeReplicasRequest.
+enum ReplicaChangeType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  ADD_REPLICA = 0;
+  REMOVE_REPLICA = 1;
+}
+
+// InternalChangeReplicasRequest is used to add or remove a replica from a raft group.
+// Only one ChangeReplicas operation can be in progress at a time; a proposed
+// change will fail if the previous change has not yet completed.
 message InternalChangeReplicasRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int32 node_id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
   optional int32 store_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
-  optional bool remove = 4 [(gogoproto.nullable) = false];
+  optional ReplicaChangeType change_type = 4 [(gogoproto.nullable) = false];
 }
 
 message InternalChangeReplicasResponse {

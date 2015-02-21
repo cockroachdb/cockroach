@@ -26,16 +26,16 @@ import (
 )
 
 func internalChangeReplicasArgs(newNodeID proto.NodeID, newStoreID proto.StoreID,
-	remove bool, raftID int64, storeID proto.StoreID) (
+	changeType proto.ReplicaChangeType, raftID int64, storeID proto.StoreID) (
 	*proto.InternalChangeReplicasRequest, *proto.InternalChangeReplicasResponse) {
 	args := &proto.InternalChangeReplicasRequest{
 		RequestHeader: proto.RequestHeader{
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
-		NodeID:  newNodeID,
-		StoreID: newStoreID,
-		Remove:  remove,
+		NodeID:     newNodeID,
+		StoreID:    newStoreID,
+		ChangeType: changeType,
 	}
 	reply := &proto.InternalChangeReplicasResponse{}
 	return args, reply
@@ -79,8 +79,8 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args, resp := internalChangeReplicasArgs(nodeID2, storeID2, false, rangeID,
-		tc.store.StoreID())
+	args, resp := internalChangeReplicasArgs(nodeID2, storeID2, proto.ADD_REPLICA,
+		rangeID, tc.store.StoreID())
 	if err := tc.rng.AddCmd(proto.InternalChangeReplicas, args, resp, true); err != nil {
 		t.Fatal(err)
 	}

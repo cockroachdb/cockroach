@@ -86,6 +86,7 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* InternalTimeSeriesSample_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalTimeSeriesSample_reflection_ = NULL;
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor_ = NULL;
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor_ = NULL;
 
 }  // namespace
@@ -337,7 +338,7 @@ void protobuf_AssignDesc_internal_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, store_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, remove_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, change_type_),
   };
   InternalChangeReplicasRequest_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -485,7 +486,8 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalTimeSeriesSample));
-  InternalValueType_descriptor_ = file->enum_type(0);
+  ReplicaChangeType_descriptor_ = file->enum_type(0);
+  InternalValueType_descriptor_ = file->enum_type(1);
 }
 
 namespace {
@@ -643,76 +645,78 @@ void protobuf_AddDesc_internal_2eproto() {
     "quest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHea"
     "derB\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"N\n\033In"
     "ternalTruncateLogResponse\022/\n\006header\030\001 \001("
-    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\276\001\n\035I"
+    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\335\001\n\035I"
     "nternalChangeReplicasRequest\022.\n\006header\030\001"
     " \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022)\n\007"
     "node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022"
     ",\n\010store_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007St"
-    "oreID\022\024\n\006remove\030\004 \001(\010B\004\310\336\037\000\"Q\n\036InternalC"
-    "hangeReplicasResponse\022/\n\006header\030\001 \001(\0132\025."
-    "proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\277\006\n\024ReadW"
-    "riteCmdResponse\022\037\n\003put\030\001 \001(\0132\022.proto.Put"
-    "Response\0226\n\017conditional_put\030\002 \001(\0132\035.prot"
-    "o.ConditionalPutResponse\022+\n\tincrement\030\003 "
-    "\001(\0132\030.proto.IncrementResponse\022%\n\006delete\030"
-    "\004 \001(\0132\025.proto.DeleteResponse\0220\n\014delete_r"
-    "ange\030\005 \001(\0132\032.proto.DeleteRangeResponse\0226"
-    "\n\017end_transaction\030\006 \001(\0132\035.proto.EndTrans"
-    "actionResponse\022,\n\nreap_queue\030\007 \001(\0132\030.pro"
-    "to.ReapQueueResponse\0224\n\016enqueue_update\030\010"
-    " \001(\0132\034.proto.EnqueueUpdateResponse\0226\n\017en"
-    "queue_message\030\t \001(\0132\035.proto.EnqueueMessa"
-    "geResponse\022C\n\026internal_heartbeat_txn\030\n \001"
-    "(\0132#.proto.InternalHeartbeatTxnResponse\022"
-    "9\n\021internal_push_txn\030\013 \001(\0132\036.proto.Inter"
-    "nalPushTxnResponse\022E\n\027internal_resolve_i"
-    "ntent\030\014 \001(\0132$.proto.InternalResolveInten"
-    "tResponse\0224\n\016internal_merge\030\r \001(\0132\034.prot"
-    "o.InternalMergeResponse\022A\n\025internal_trun"
-    "cate_log\030\016 \001(\0132\".proto.InternalTruncateL"
-    "ogResponse\022.\n\013internal_gc\030\017 \001(\0132\031.proto."
-    "InternalGCResponse:\004\310\240\037\001\"\327\010\n\030InternalRaf"
-    "tCommandUnion\022(\n\010contains\030\001 \001(\0132\026.proto."
-    "ContainsRequest\022\036\n\003get\030\002 \001(\0132\021.proto.Get"
-    "Request\022\036\n\003put\030\003 \001(\0132\021.proto.PutRequest\022"
-    "5\n\017conditional_put\030\004 \001(\0132\034.proto.Conditi"
-    "onalPutRequest\022*\n\tincrement\030\005 \001(\0132\027.prot"
-    "o.IncrementRequest\022$\n\006delete\030\006 \001(\0132\024.pro"
-    "to.DeleteRequest\022/\n\014delete_range\030\007 \001(\0132\031"
-    ".proto.DeleteRangeRequest\022 \n\004scan\030\010 \001(\0132"
-    "\022.proto.ScanRequest\0225\n\017end_transaction\030\t"
-    " \001(\0132\034.proto.EndTransactionRequest\022+\n\nre"
-    "ap_queue\030\n \001(\0132\027.proto.ReapQueueRequest\022"
-    "3\n\016enqueue_update\030\013 \001(\0132\033.proto.EnqueueU"
-    "pdateRequest\0225\n\017enqueue_message\030\014 \001(\0132\034."
-    "proto.EnqueueMessageRequest\022\"\n\005batch\030\036 \001"
-    "(\0132\023.proto.BatchRequest\022@\n\025internal_rang"
-    "e_lookup\030\037 \001(\0132!.proto.InternalRangeLook"
-    "upRequest\022B\n\026internal_heartbeat_txn\030  \001("
-    "\0132\".proto.InternalHeartbeatTxnRequest\0228\n"
-    "\021internal_push_txn\030! \001(\0132\035.proto.Interna"
-    "lPushTxnRequest\022D\n\027internal_resolve_inte"
-    "nt\030\" \001(\0132#.proto.InternalResolveIntentRe"
-    "quest\022<\n\027internal_merge_response\030# \001(\0132\033"
-    ".proto.InternalMergeRequest\022@\n\025internal_"
-    "truncate_log\030$ \001(\0132!.proto.InternalTrunc"
-    "ateLogRequest\022-\n\013internal_gc\030% \001(\0132\030.pro"
-    "to.InternalGCRequest\022F\n\030internal_change_"
-    "replicas\030& \001(\0132$.proto.InternalChangeRep"
-    "licasRequest:\004\310\240\037\001\"j\n\023InternalRaftComman"
-    "d\022\037\n\007raft_id\030\002 \001(\003B\016\310\336\037\000\342\336\037\006RaftID\0222\n\003cm"
-    "d\030\003 \001(\0132\037.proto.InternalRaftCommandUnion"
-    "B\004\310\336\037\000\"\224\001\n\026InternalTimeSeriesData\022#\n\025sta"
-    "rt_timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample"
-    "_duration_nanos\030\002 \001(\003B\004\310\336\037\000\0220\n\007samples\030\003"
-    " \003(\0132\037.proto.InternalTimeSeriesSample\"\320\001"
-    "\n\030InternalTimeSeriesSample\022\024\n\006offset\030\001 \001"
-    "(\005B\004\310\336\037\000\022\027\n\tint_count\030\002 \001(\rB\004\310\336\037\000\022\017\n\007int"
-    "_sum\030\003 \001(\003\022\017\n\007int_max\030\004 \001(\003\022\017\n\007int_min\030\005"
-    " \001(\003\022\031\n\013float_count\030\006 \001(\rB\004\310\336\037\000\022\021\n\tfloat"
-    "_sum\030\007 \001(\002\022\021\n\tfloat_max\030\010 \001(\002\022\021\n\tfloat_m"
-    "in\030\t \001(\002*%\n\021InternalValueType\022\n\n\006_CR_TS\020"
-    "\001\032\004\210\243\036\000", 4327);
+    "oreID\0223\n\013change_type\030\004 \001(\0162\030.proto.Repli"
+    "caChangeTypeB\004\310\336\037\000\"Q\n\036InternalChangeRepl"
+    "icasResponse\022/\n\006header\030\001 \001(\0132\025.proto.Res"
+    "ponseHeaderB\010\310\336\037\000\320\336\037\001\"\277\006\n\024ReadWriteCmdRe"
+    "sponse\022\037\n\003put\030\001 \001(\0132\022.proto.PutResponse\022"
+    "6\n\017conditional_put\030\002 \001(\0132\035.proto.Conditi"
+    "onalPutResponse\022+\n\tincrement\030\003 \001(\0132\030.pro"
+    "to.IncrementResponse\022%\n\006delete\030\004 \001(\0132\025.p"
+    "roto.DeleteResponse\0220\n\014delete_range\030\005 \001("
+    "\0132\032.proto.DeleteRangeResponse\0226\n\017end_tra"
+    "nsaction\030\006 \001(\0132\035.proto.EndTransactionRes"
+    "ponse\022,\n\nreap_queue\030\007 \001(\0132\030.proto.ReapQu"
+    "eueResponse\0224\n\016enqueue_update\030\010 \001(\0132\034.pr"
+    "oto.EnqueueUpdateResponse\0226\n\017enqueue_mes"
+    "sage\030\t \001(\0132\035.proto.EnqueueMessageRespons"
+    "e\022C\n\026internal_heartbeat_txn\030\n \001(\0132#.prot"
+    "o.InternalHeartbeatTxnResponse\0229\n\021intern"
+    "al_push_txn\030\013 \001(\0132\036.proto.InternalPushTx"
+    "nResponse\022E\n\027internal_resolve_intent\030\014 \001"
+    "(\0132$.proto.InternalResolveIntentResponse"
+    "\0224\n\016internal_merge\030\r \001(\0132\034.proto.Interna"
+    "lMergeResponse\022A\n\025internal_truncate_log\030"
+    "\016 \001(\0132\".proto.InternalTruncateLogRespons"
+    "e\022.\n\013internal_gc\030\017 \001(\0132\031.proto.InternalG"
+    "CResponse:\004\310\240\037\001\"\327\010\n\030InternalRaftCommandU"
+    "nion\022(\n\010contains\030\001 \001(\0132\026.proto.ContainsR"
+    "equest\022\036\n\003get\030\002 \001(\0132\021.proto.GetRequest\022\036"
+    "\n\003put\030\003 \001(\0132\021.proto.PutRequest\0225\n\017condit"
+    "ional_put\030\004 \001(\0132\034.proto.ConditionalPutRe"
+    "quest\022*\n\tincrement\030\005 \001(\0132\027.proto.Increme"
+    "ntRequest\022$\n\006delete\030\006 \001(\0132\024.proto.Delete"
+    "Request\022/\n\014delete_range\030\007 \001(\0132\031.proto.De"
+    "leteRangeRequest\022 \n\004scan\030\010 \001(\0132\022.proto.S"
+    "canRequest\0225\n\017end_transaction\030\t \001(\0132\034.pr"
+    "oto.EndTransactionRequest\022+\n\nreap_queue\030"
+    "\n \001(\0132\027.proto.ReapQueueRequest\0223\n\016enqueu"
+    "e_update\030\013 \001(\0132\033.proto.EnqueueUpdateRequ"
+    "est\0225\n\017enqueue_message\030\014 \001(\0132\034.proto.Enq"
+    "ueueMessageRequest\022\"\n\005batch\030\036 \001(\0132\023.prot"
+    "o.BatchRequest\022@\n\025internal_range_lookup\030"
+    "\037 \001(\0132!.proto.InternalRangeLookupRequest"
+    "\022B\n\026internal_heartbeat_txn\030  \001(\0132\".proto"
+    ".InternalHeartbeatTxnRequest\0228\n\021internal"
+    "_push_txn\030! \001(\0132\035.proto.InternalPushTxnR"
+    "equest\022D\n\027internal_resolve_intent\030\" \001(\0132"
+    "#.proto.InternalResolveIntentRequest\022<\n\027"
+    "internal_merge_response\030# \001(\0132\033.proto.In"
+    "ternalMergeRequest\022@\n\025internal_truncate_"
+    "log\030$ \001(\0132!.proto.InternalTruncateLogReq"
+    "uest\022-\n\013internal_gc\030% \001(\0132\030.proto.Intern"
+    "alGCRequest\022F\n\030internal_change_replicas\030"
+    "& \001(\0132$.proto.InternalChangeReplicasRequ"
+    "est:\004\310\240\037\001\"j\n\023InternalRaftCommand\022\037\n\007raft"
+    "_id\030\002 \001(\003B\016\310\336\037\000\342\336\037\006RaftID\0222\n\003cmd\030\003 \001(\0132\037"
+    ".proto.InternalRaftCommandUnionB\004\310\336\037\000\"\224\001"
+    "\n\026InternalTimeSeriesData\022#\n\025start_timest"
+    "amp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025sample_duration"
+    "_nanos\030\002 \001(\003B\004\310\336\037\000\0220\n\007samples\030\003 \003(\0132\037.pr"
+    "oto.InternalTimeSeriesSample\"\320\001\n\030Interna"
+    "lTimeSeriesSample\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022"
+    "\027\n\tint_count\030\002 \001(\rB\004\310\336\037\000\022\017\n\007int_sum\030\003 \001("
+    "\003\022\017\n\007int_max\030\004 \001(\003\022\017\n\007int_min\030\005 \001(\003\022\031\n\013f"
+    "loat_count\030\006 \001(\rB\004\310\336\037\000\022\021\n\tfloat_sum\030\007 \001("
+    "\002\022\021\n\tfloat_max\030\010 \001(\002\022\021\n\tfloat_min\030\t \001(\002*"
+    ">\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n"
+    "\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*%\n\021InternalValue"
+    "Type\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000", 4422);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -768,6 +772,20 @@ struct StaticDescriptorInitializer_internal_2eproto {
     protobuf_AddDesc_internal_2eproto();
   }
 } static_descriptor_initializer_internal_2eproto_;
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ReplicaChangeType_descriptor_;
+}
+bool ReplicaChangeType_IsValid(int value) {
+  switch(value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor() {
   protobuf_AssignDescriptorsOnce();
   return InternalValueType_descriptor_;
@@ -4624,7 +4642,7 @@ void InternalTruncateLogResponse::Swap(InternalTruncateLogResponse* other) {
 const int InternalChangeReplicasRequest::kHeaderFieldNumber;
 const int InternalChangeReplicasRequest::kNodeIdFieldNumber;
 const int InternalChangeReplicasRequest::kStoreIdFieldNumber;
-const int InternalChangeReplicasRequest::kRemoveFieldNumber;
+const int InternalChangeReplicasRequest::kChangeTypeFieldNumber;
 #endif  // !_MSC_VER
 
 InternalChangeReplicasRequest::InternalChangeReplicasRequest()
@@ -4649,7 +4667,7 @@ void InternalChangeReplicasRequest::SharedCtor() {
   header_ = NULL;
   node_id_ = 0;
   store_id_ = 0;
-  remove_ = false;
+  change_type_ = 0;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -4697,7 +4715,7 @@ void InternalChangeReplicasRequest::Clear() {
   } while (0)
 
   if (_has_bits_[0 / 32] & 15) {
-    ZR_(node_id_, remove_);
+    ZR_(node_id_, change_type_);
     if (has_header()) {
       if (header_ != NULL) header_->::proto::RequestHeader::Clear();
     }
@@ -4758,18 +4776,23 @@ bool InternalChangeReplicasRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(32)) goto parse_remove;
+        if (input->ExpectTag(32)) goto parse_change_type;
         break;
       }
 
-      // optional bool remove = 4;
+      // optional .proto.ReplicaChangeType change_type = 4;
       case 4: {
         if (tag == 32) {
-         parse_remove:
+         parse_change_type:
+          int value;
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &remove_)));
-          set_has_remove();
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          if (::proto::ReplicaChangeType_IsValid(value)) {
+            set_change_type(static_cast< ::proto::ReplicaChangeType >(value));
+          } else {
+            mutable_unknown_fields()->AddVarint(4, value);
+          }
         } else {
           goto handle_unusual;
         }
@@ -4818,9 +4841,10 @@ void InternalChangeReplicasRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->store_id(), output);
   }
 
-  // optional bool remove = 4;
-  if (has_remove()) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->remove(), output);
+  // optional .proto.ReplicaChangeType change_type = 4;
+  if (has_change_type()) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      4, this->change_type(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -4850,9 +4874,10 @@ void InternalChangeReplicasRequest::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->store_id(), target);
   }
 
-  // optional bool remove = 4;
-  if (has_remove()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(4, this->remove(), target);
+  // optional .proto.ReplicaChangeType change_type = 4;
+  if (has_change_type()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
+      4, this->change_type(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -4888,9 +4913,10 @@ int InternalChangeReplicasRequest::ByteSize() const {
           this->store_id());
     }
 
-    // optional bool remove = 4;
-    if (has_remove()) {
-      total_size += 1 + 1;
+    // optional .proto.ReplicaChangeType change_type = 4;
+    if (has_change_type()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
     }
 
   }
@@ -4929,8 +4955,8 @@ void InternalChangeReplicasRequest::MergeFrom(const InternalChangeReplicasReques
     if (from.has_store_id()) {
       set_store_id(from.store_id());
     }
-    if (from.has_remove()) {
-      set_remove(from.remove());
+    if (from.has_change_type()) {
+      set_change_type(from.change_type());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -4958,7 +4984,7 @@ void InternalChangeReplicasRequest::Swap(InternalChangeReplicasRequest* other) {
     std::swap(header_, other->header_);
     std::swap(node_id_, other->node_id_);
     std::swap(store_id_, other->store_id_);
-    std::swap(remove_, other->remove_);
+    std::swap(change_type_, other->change_type_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
