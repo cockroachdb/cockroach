@@ -632,7 +632,11 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 			// Whenever the committed term has advanced and we know our leader,
 			// emit an event.
 			g.committedTerm = term
-			s.sendEvent(&EventLeaderElection{groupID, NodeID(g.leader), g.committedTerm})
+			s.sendEvent(&EventLeaderElection{
+				GroupID: groupID,
+				NodeID:  NodeID(g.leader),
+				Term:    g.committedTerm,
+			})
 
 			// Re-submit all pending proposals
 			for _, prop := range g.pending {
@@ -679,7 +683,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if entry.Data != nil {
 					var command []byte
 					commandID, command = decodeCommand(entry.Data)
-					s.sendEvent(&EventCommandCommitted{groupID, commandID, command})
+					s.sendEvent(&EventCommandCommitted{
+						GroupID:   groupID,
+						CommandID: commandID,
+						Command:   command,
+					})
 				}
 
 			case raftpb.EntryConfChange:
@@ -706,8 +714,12 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					log.Errorf("error applying configuration change %v: %s", cc, err)
 				}
 				s.multiNode.ApplyConfChange(groupID, cc)
-				s.sendEvent(&EventMembershipChangeCommitted{groupID, commandID,
-					NodeID(cc.NodeID), cc.Type})
+				s.sendEvent(&EventMembershipChangeCommitted{
+					GroupID:    groupID,
+					CommandID:  commandID,
+					NodeID:     NodeID(cc.NodeID),
+					ChangeType: cc.Type,
+				})
 			}
 			if p, ok := g.pending[commandID]; ok {
 				// TODO(bdarnell): the command is now committed, but not applied until the
