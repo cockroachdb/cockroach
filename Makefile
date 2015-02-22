@@ -105,6 +105,7 @@ clean:
 	$(GO) clean -i ./... github.com/coreos/etcd/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -f storage/engine/cgo_flags.go
+	rm -rf build/deploy/build
 
 # The gopath target outputs the GOPATH that should be used for building this
 # package. It is used by the emacs go-projectile package for automatic
