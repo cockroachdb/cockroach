@@ -306,22 +306,28 @@ func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 	// Verify that the range doesn't cross over the zone config prefix.
 	// This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
-	prefixConfigs := configMap.MatchesByPrefix(rng.Desc.StartKey)
-	var zone *proto.ZoneConfig
-	for _, prefixConfig := range prefixConfigs {
-		zone = prefixConfig.Config.(*proto.ZoneConfig)
+	var gc *proto.GCPolicy
+	if err = configMap.VisitPrefixesHierarchically(rng.Desc.StartKey, func(start, end proto.Key, config interface{}) (bool, error) {
+		zone := config.(*proto.ZoneConfig)
 		if zone.GC != nil {
 			rng.RLock()
-			isCovered := !prefixConfig.Prefix.PrefixEnd().Less(rng.Desc.EndKey)
+			isCovered := !end.Less(rng.Desc.EndKey)
 			rng.RUnlock()
 			if !isCovered {
-				return proto.GCPolicy{}, util.Errorf("range is only partially covered by zone %s; must wait for range split", prefixConfig)
+				return false, util.Errorf("range is only partially covered by zone %s (%q-%q); must wait for range split", config, start, end)
 			}
-			return *zone.GC, nil
+			gc = zone.GC
+			return true, nil
 		}
 		log.V(1).Infof("skipping zone config %+v, because no GC policy is set", zone)
+		return false, nil
+	}); err != nil {
+		return proto.GCPolicy{}, err
 	}
 
-	// We should always match the default GC.
-	return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc.StartKey)
+	// We should always match _at least_ the default GC.
+	if gc == nil {
+		return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc.StartKey)
+	}
+	return *gc, nil
 }

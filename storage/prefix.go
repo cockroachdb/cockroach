@@ -204,10 +204,27 @@ func (p PrefixConfigMap) MatchesByPrefix(key proto.Key) []*PrefixConfig {
 	}
 }
 
+// VisitPrefixesHierarchically invokes the visitor function for each
+// prefix matching the key argument, from longest matching prefix to
+// shortest. If visitor returns done=true or an error, the visitation
+// is halted.
+func (p PrefixConfigMap) VisitPrefixesHierarchically(key proto.Key,
+	visitor func(start, end proto.Key, config interface{}) (bool, error)) error {
+	prefixConfigs := p.MatchesByPrefix(key)
+	for _, pc := range prefixConfigs {
+		done, err := visitor(pc.Prefix, pc.Prefix.PrefixEnd(), pc.Config)
+		if done || err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // VisitPrefixes invokes the visitor function for each prefix overlapped
-// by the specified key range [start, end).
+// by the specified key range [start, end). If visitor returns done=true
+// or an error, the visitation is halted.
 func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
-	visitor func(start, end proto.Key, config interface{}) error) error {
+	visitor func(start, end proto.Key, config interface{}) (bool, error)) error {
 	comp := start.Compare(end)
 	if comp > 0 {
 		return util.Errorf("start key %q not less than or equal to end key %q", start, end)
@@ -229,10 +246,12 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 	}
 
 	if startIdx == endIdx {
-		return visitor(start, end, p[startIdx-1].Config)
+		_, err := visitor(start, end, p[startIdx-1].Config)
+		return err
 	}
 	for i := startIdx; i < endIdx; i++ {
-		if err := visitor(start, p[i].Prefix, p[i-1].Config); err != nil {
+		done, err := visitor(start, p[i].Prefix, p[i-1].Config)
+		if done || err != nil {
 			return err
 		}
 		if p[i].Prefix.Equal(end) {
@@ -240,7 +259,8 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 		}
 		start = p[i].Prefix
 	}
-	if err := visitor(start, end, p[endIdx-1].Config); err != nil {
+	done, err := visitor(start, end, p[endIdx-1].Config)
+	if done || err != nil {
 		return err
 	}
 
@@ -275,9 +295,9 @@ func (p PrefixConfigMap) VisitPrefixes(start, end proto.Key,
 // PrefixConfig records and create a RangeResult for each.
 func (p PrefixConfigMap) SplitRangeByPrefixes(start, end proto.Key) ([]*RangeResult, error) {
 	var results []*RangeResult
-	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config interface{}) error {
+	err := p.VisitPrefixes(start, end, func(start, end proto.Key, config interface{}) (bool, error) {
 		results = append(results, &RangeResult{start: start, end: end, config: config})
-		return nil
+		return false, nil
 	})
 	if err != nil {
 		return nil, err
