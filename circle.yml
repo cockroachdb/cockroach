@@ -11,6 +11,8 @@ checkout:
     # committed change.
     - find . -exec touch -t 201401010000 {} \;
     - for x in $(git ls-tree --full-tree --name-only -r HEAD); do touch -t $(date -d "$(git log -1 --format=%ci "${x}")" +%y%m%d%H%M.%S) "${x}"; done
+    - git fetch --unshallow 2>/dev/null || true
+    - git fetch --tags
 
 dependencies:
   cache_directories:
@@ -30,7 +32,7 @@ dependencies:
 test:
   override:
     - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-logtostderr -timeout 30s -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/test.log"; test ${PIPESTATUS[0]} -eq 0
-    - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-logtostderr -timeout 2m -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/testrace.log"; test ${PIPESTATUS[0]} -eq 0
+    - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-logtostderr -timeout 5m -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/testrace.log"; test ${PIPESTATUS[0]} -eq 0
       # Kill off the previous images since we don't care for them any more,
       # but we do want to save the logs for the following ones.
       # `docker rm` actually errors on CircleCI but still works, hence the ';'.
@@ -44,11 +46,17 @@ deployment:
   docker:
     branch: master
     commands:
-      # Build small deploy container for master branch.
       - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
       - |
+          VERSION=$(git describe 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+          echo "Deploying ${VERSION}..."
           if [ -n "$DOCKER_EMAIL" ]; then
             ./build/build-docker-deploy.sh && \
             make COCKROACH_IMAGE="cockroachdb/cockroach" acceptance && \
-            docker push cockroachdb/cockroach
+            docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION} && \
+            docker tag cockroachdb/cockroach-dev:latest cockroachdb/cockroach-dev:${VERSION} && \
+            docker push cockroachdb/cockroach:latest && \
+            docker push cockroachdb/cockroach:${VERSION} && \
+            docker push cockroachdb/cockroach-dev:latest && \
+            docker push cockroachdb/cockroach-dev:${VERSION}
           fi
