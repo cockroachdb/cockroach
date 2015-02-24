@@ -142,6 +142,10 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 	//   - Verify the permissions hierarchically; that is, if permissions aren't
 	//     granted at the longest prefix, try next longest, then next, etc., up
 	//     to and including the default prefix.
+	//
+	// TODO(spencer): it might make sense to visit prefixes from the
+	//   shortest to longest instead for performance. Keep an eye on profiling
+	//   for this code path as permission sets grow large.
 	return permMap.VisitPrefixes(header.Key, headerEnd,
 		func(start, end proto.Key, config interface{}) (bool, error) {
 			hasPerm := false
