@@ -19,8 +19,7 @@
 
 # Cockroach build rules.
 GO ?= go
-# Allow setting of go build flags from the command line (see
-# .travis.yml).
+# Allow setting of go build flags from the command line.
 GOFLAGS := 
 # Set to 1 to use static linking for all builds (including tests).
 STATIC := $(STATIC)
