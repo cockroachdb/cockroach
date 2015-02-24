@@ -30,6 +30,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -58,9 +59,9 @@ func createTestStore(t *testing.T) *storage.Store {
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool) *storage.Store {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext)
+	g := gossip.New(rpcContext, 10*time.Millisecond, "")
 	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, clock)
+	sender := kv.NewTxnCoordSender(lSender, clock, false)
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport())

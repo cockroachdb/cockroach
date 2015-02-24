@@ -15,12 +15,13 @@
 //
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
 
-package server
+package cli
 
 import (
 	"flag"
 
 	commander "code.google.com/p/go-commander"
+	"github.com/cockroachdb/cockroach/server"
 )
 
 // A CmdGetPerms command displays the perm config for the specified
@@ -39,7 +40,11 @@ non-ascii bytes or spaces.
 
 // runGetPerms invokes the REST API with GET action and key prefix as path.
 func runGetPerms(cmd *commander.Command, args []string) {
-	runGetConfig(permPathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunGetPerm(Context, args[0])
 }
 
 // A CmdLsPerms command displays a list of perm configs by prefix.
@@ -61,7 +66,15 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsPerms(cmd *commander.Command, args []string) {
-	runLsConfigs(permPathPrefix, cmd, args)
+	if len(args) > 1 {
+		cmd.Usage()
+		return
+	}
+	pattern := ""
+	if len(args) == 1 {
+		pattern = args[0]
+	}
+	server.RunLsPerm(Context, pattern)
 
 }
 
@@ -83,7 +96,11 @@ contains non-ascii bytes or spaces.
 // runRmPerms invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmPerms(cmd *commander.Command, args []string) {
-	runRmConfig(permPathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunRmPerm(Context, args[0])
 }
 
 // A CmdSetPerms command creates a new or updates an existing perm
@@ -129,7 +146,12 @@ this key prefix and all sub prefixes of the one that is set
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetPerms(cmd *commander.Command, args []string) {
-	runSetConfig(permPathPrefix, cmd, args)
+	if len(args) != 2 {
+		cmd.Usage()
+		return
+	}
+
+	server.RunSetPerm(Context, args[0], args[1])
 }
 
 // TODO:(bram) Add inline json for setting

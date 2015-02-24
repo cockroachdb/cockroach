@@ -19,7 +19,6 @@
 package kv
 
 import (
-	"flag"
 	"sync"
 	"time"
 
@@ -32,10 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
-
-var linearizable = flag.Bool("linearizable", false, "enables linearizable behaviour "+
-	"of operations on this node by making sure that no commit timestamp is reported "+
-	"back to the client until all other node clocks have necessarily passed it.")
 
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
@@ -161,18 +156,20 @@ type TxnCoordSender struct {
 	clientTimeout     time.Duration
 	sync.Mutex                                // Protects the txns map.
 	txns              map[string]*txnMetadata // txn key to metadata
+	linearizable      bool                    // Enables linearizable behaviour.
 }
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance. TxnCoordSenders should be closed when no
 // longer in use via Close().
-func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable bool) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
 		heartbeatInterval: storage.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[string]*txnMetadata{},
+		linearizable:      linearizable,
 	}
 	return tc
 }
@@ -335,7 +332,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 			}
 			sleepNS := tc.clock.MaxOffset() -
 				time.Duration(tc.clock.PhysicalNow()-startNS)
-			if *linearizable && sleepNS > 0 {
+			if tc.linearizable && sleepNS > 0 {
 				defer func() {
 					log.V(1).Infof("%v: waiting %dms on EndTransaction for linearizability", txn.ID, sleepNS/1000000)
 					time.Sleep(sleepNS)

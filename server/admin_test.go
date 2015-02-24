@@ -36,7 +36,7 @@ import (
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
 func startAdminServer() *httptest.Server {
-	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20))
+	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20), testContext)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,9 +45,9 @@ func startAdminServer() *httptest.Server {
 	admin.RegisterHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	if strings.HasPrefix(httpServer.URL, "http://") {
-		*addr = strings.TrimPrefix(httpServer.URL, "http://")
+		testContext.Addr = strings.TrimPrefix(httpServer.URL, "http://")
 	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		*addr = strings.TrimPrefix(httpServer.URL, "https://")
+		testContext.Addr = strings.TrimPrefix(httpServer.URL, "https://")
 	}
 	return httpServer
 }

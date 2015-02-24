@@ -62,7 +62,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	inMem := NewInMem(inMemAttrs, 10<<20)
 
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
-	rocksdb := NewRocksDB(rocksDBAttrs, loc)
+	rocksdb := NewRocksDB(rocksDBAttrs, loc, testCacheSize)
 	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)

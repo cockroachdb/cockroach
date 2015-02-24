@@ -126,7 +126,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	clock := hlc.NewClock(manualClock.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()
-	db := client.NewKV(NewTxnCoordSender(ls, clock), nil)
+	db := client.NewKV(NewTxnCoordSender(ls, clock, false), nil)
 	store := storage.NewStore(clock, eng, db, nil, multiraft.NewLocalRPCTransport())
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)

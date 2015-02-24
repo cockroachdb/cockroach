@@ -54,7 +54,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(rpcContext)
+	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrap)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
@@ -83,7 +83,7 @@ func formatKeys(keys []proto.Key) string {
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	localDB, err := BootstrapCluster("cluster-1", e, testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added.
 func TestBootstrapNewStore(t *testing.T) {
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	localDB, err := BootstrapCluster("cluster-1", e, testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,14 +154,14 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	db, err := BootstrapCluster("cluster-1", e)
+	db, err := BootstrapCluster("cluster-1", e, testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
 
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
-	*gossip.GossipInterval = 10 * time.Millisecond
+	testContext.GossipInterval = 10 * time.Millisecond
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")

@@ -33,7 +33,7 @@ import (
 // callback holds regexp pattern match and GossipCallback method.
 type callback struct {
 	pattern *regexp.Regexp
-	method  GossipCallback
+	method  Callback
 }
 
 // infoStore objects manage maps of Info and maps of Info Group
@@ -253,7 +253,7 @@ func (is *infoStore) maxHops() uint32 {
 
 // registerCallback compiles a regexp for pattern and adds it to
 // the callbacks slice.
-func (is *infoStore) registerCallback(pattern string, method GossipCallback) {
+func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
 }

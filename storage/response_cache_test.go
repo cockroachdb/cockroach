@@ -258,7 +258,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 // garbage collected periodically.
 func TestResponseCacheGC(t *testing.T) {
 	loc := util.CreateTempDirectory()
-	rocksdb := engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	rocksdb := engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, 1<<30)
 	if err := rocksdb.Start(); err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}

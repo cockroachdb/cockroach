@@ -59,8 +59,8 @@ func ExampleSetAndGetZone() {
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		runSetZone(CmdSetZone, []string{prefix, testConfigFn})
-		runGetZone(CmdGetZone, []string{prefix})
+		RunSetZone(testContext, prefix, testConfigFn)
+		RunGetZone(testContext, prefix)
 	}
 	// Output:
 	// set zone config for key prefix ""
@@ -125,15 +125,15 @@ func ExampleLsZones() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetZone(CmdSetZone, []string{prefix, testConfigFn})
+		RunSetZone(testContext, prefix, testConfigFn)
 	}
 
 	for i, regexp := range regexps {
 		fmt.Fprintf(os.Stdout, "test case %d: %q\n", i, regexp)
 		if regexp == "" {
-			runLsZones(CmdLsZones, []string{})
+			RunLsZone(testContext, "")
 		} else {
-			runLsZones(CmdLsZones, []string{regexp})
+			RunLsZone(testContext, regexp)
 		}
 	}
 	// Output:
@@ -174,13 +174,13 @@ func ExampleRmZones() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetZone(CmdSetZone, []string{prefix, testConfigFn})
+		RunSetZone(testContext, prefix, testConfigFn)
 	}
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runRmZone(CmdRmZone, []string{prefix})
-		runLsZones(CmdLsZones, []string{})
+		RunRmZone(testContext, prefix)
+		RunLsZone(testContext, "")
 	}
 	// Output:
 	// set zone config for key prefix ""
@@ -224,13 +224,13 @@ func ExampleZoneContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, zonePathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, zonePathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, zonePathPrefix, key), nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, zonePathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)

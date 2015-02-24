@@ -33,6 +33,8 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+const testCacheSize = 1 << 30 // GB.
+
 // encodePutResponse creates a put response using the specified
 // timestamp and encodes it using gogoprotobuf.
 func encodePutResponse(timestamp proto.Timestamp, t *testing.T) []byte {
@@ -69,7 +71,7 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 func TestRocksDBCompaction(t *testing.T) {
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, testCacheSize)
 	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
@@ -184,7 +186,7 @@ func setupMVCCData(rocksdb *RocksDB, numVersions, numKeys int, b *testing.B) map
 // necessary.
 func runMVCCScan(numVersions, numKeys int, b *testing.B) {
 	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, testCacheSize)
 	if err := rocksdb.Start(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
@@ -234,7 +236,7 @@ func BenchmarkMVCCScan1Version(b *testing.B) {
 // runMVCCMerge merges value numMerges times into numKeys separate keys.
 func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
 	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc)
+	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, testCacheSize)
 	if err := rocksdb.Start(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}

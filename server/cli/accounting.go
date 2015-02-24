@@ -15,12 +15,13 @@
 //
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
 
-package server
+package cli
 
 import (
 	"flag"
 
 	commander "code.google.com/p/go-commander"
+	"github.com/cockroachdb/cockroach/server"
 )
 
 // TODO:(bram) change this api to not require a file, just set (no file),
@@ -42,7 +43,11 @@ non-ascii bytes or spaces.
 
 // runGetAcct invokes the REST API with GET action and key prefix as path.
 func runGetAcct(cmd *commander.Command, args []string) {
-	runGetConfig(acctPathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunGetAcct(Context, args[0])
 }
 
 // A CmdLsAccts command displays a list of acct configs by prefix.
@@ -64,7 +69,15 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsAccts(cmd *commander.Command, args []string) {
-	runLsConfigs(acctPathPrefix, cmd, args)
+	if len(args) > 1 {
+		cmd.Usage()
+		return
+	}
+	pattern := ""
+	if len(args) == 1 {
+		pattern = args[0]
+	}
+	server.RunLsAcct(Context, pattern)
 
 }
 
@@ -86,7 +99,11 @@ contains non-ascii bytes or spaces.
 // runRmAcct invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmAcct(cmd *commander.Command, args []string) {
-	runRmConfig(acctPathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunRmAcct(Context, args[0])
 }
 
 // A CmdSetAcct command creates a new or updates an existing acct
@@ -117,7 +134,11 @@ For example:
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetAcct(cmd *commander.Command, args []string) {
-	runSetConfig(acctPathPrefix, cmd, args)
+	if len(args) != 2 {
+		cmd.Usage()
+		return
+	}
+	server.RunSetAcct(Context, args[0], args[1])
 }
 
 // TODO:(bram) Add inline json for setting

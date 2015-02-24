@@ -16,12 +16,13 @@
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
 
-package server
+package cli
 
 import (
 	"flag"
 
 	commander "code.google.com/p/go-commander"
+	"github.com/cockroachdb/cockroach/server"
 )
 
 // A CmdGetZone command displays the zone config for the specified
@@ -40,7 +41,11 @@ non-ascii bytes or spaces.
 
 // runGetZone invokes the REST API with GET action and key prefix as path.
 func runGetZone(cmd *commander.Command, args []string) {
-	runGetConfig(zonePathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunGetZone(Context, args[0])
 }
 
 // A CmdLsZones command displays a list of zone configs by prefix.
@@ -62,7 +67,15 @@ non-ascii bytes or spaces.
 // regexp is applied to the complete list and matching prefixes
 // displayed.
 func runLsZones(cmd *commander.Command, args []string) {
-	runLsConfigs(zonePathPrefix, cmd, args)
+	if len(args) > 1 {
+		cmd.Usage()
+		return
+	}
+	pattern := ""
+	if len(args) == 1 {
+		pattern = args[0]
+	}
+	server.RunLsZone(Context, pattern)
 }
 
 // A CmdRmZone command removes a zone config by prefix.
@@ -83,7 +96,11 @@ contains non-ascii bytes or spaces.
 // runRmZone invokes the REST API with DELETE action and key prefix as
 // path.
 func runRmZone(cmd *commander.Command, args []string) {
-	runRmConfig(zonePathPrefix, cmd, args)
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+	server.RunRmZone(Context, args[0])
 }
 
 // A CmdSetZone command creates a new or updates an existing zone
@@ -127,5 +144,9 @@ This feature can be taken advantage of to pre-split ranges.
 // path. The specified configuration file is read from disk and sent
 // as the POST body.
 func runSetZone(cmd *commander.Command, args []string) {
-	runSetConfig(zonePathPrefix, cmd, args)
+	if len(args) != 2 {
+		cmd.Usage()
+		return
+	}
+	server.RunSetZone(Context, args[0], args[1])
 }

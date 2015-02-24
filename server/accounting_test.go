@@ -52,8 +52,8 @@ func ExampleSetAndGetAccts() {
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
-		runGetAcct(CmdGetAcct, []string{prefix})
+		RunSetAcct(testContext, prefix, testConfigFn)
+		RunGetAcct(testContext, prefix)
 	}
 	// Output:
 	// set accounting config for key prefix ""
@@ -98,15 +98,15 @@ func ExampleLsAccts() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
+		RunSetAcct(testContext, prefix, testConfigFn)
 	}
 
 	for i, regexp := range regexps {
 		fmt.Fprintf(os.Stdout, "test case %d: %q\n", i, regexp)
 		if regexp == "" {
-			runLsAccts(CmdLsAccts, []string{})
+			RunLsAcct(testContext, "")
 		} else {
-			runLsAccts(CmdLsAccts, []string{regexp})
+			RunLsAcct(testContext, regexp)
 		}
 	}
 	// Output:
@@ -147,13 +147,13 @@ func ExampleRmAccts() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetAcct(CmdSetAcct, []string{prefix, testConfigFn})
+		RunSetAcct(testContext, prefix, testConfigFn)
 	}
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runRmAcct(CmdRmAcct, []string{prefix})
-		runLsAccts(CmdLsAccts, []string{})
+		RunRmAcct(testContext, prefix)
+		RunLsAcct(testContext, "")
 	}
 	// Output:
 	// set accounting config for key prefix ""
@@ -197,13 +197,13 @@ func ExampleAcctContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, acctPathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, acctPathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, acctPathPrefix, key), nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, acctPathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)

@@ -55,8 +55,8 @@ func ExampleSetAndGetPerms() {
 
 	for _, test := range testData {
 		prefix := url.QueryEscape(string(test.prefix))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
-		runGetPerms(CmdGetPerms, []string{prefix})
+		RunSetPerm(testContext, prefix, testConfigFn)
+		RunGetPerm(testContext, prefix)
 	}
 	// Output:
 	// set permission config for key prefix ""
@@ -121,15 +121,15 @@ func ExampleLsPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
+		RunSetPerm(testContext, prefix, testConfigFn)
 	}
 
 	for i, regexp := range regexps {
 		fmt.Fprintf(os.Stdout, "test case %d: %q\n", i, regexp)
 		if regexp == "" {
-			runLsPerms(CmdLsPerms, []string{})
+			RunLsPerm(testContext, "")
 		} else {
-			runLsPerms(CmdLsPerms, []string{regexp})
+			RunLsPerm(testContext, regexp)
 		}
 	}
 	// Output:
@@ -170,13 +170,13 @@ func ExampleRmPerms() {
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runSetPerms(CmdSetPerms, []string{prefix, testConfigFn})
+		RunSetPerm(testContext, prefix, testConfigFn)
 	}
 
 	for _, key := range keys {
 		prefix := url.QueryEscape(string(key))
-		runRmPerms(CmdRmPerms, []string{prefix})
-		runLsPerms(CmdLsPerms, []string{})
+		RunRmPerm(testContext, prefix)
+		RunLsPerm(testContext, "")
 	}
 	// Output:
 	// set permission config for key prefix ""
@@ -220,13 +220,13 @@ func ExamplePermContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, permPathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, permPathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, *addr, permPathPrefix, key), nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, permPathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(req); err != nil {
 			fmt.Println(err)

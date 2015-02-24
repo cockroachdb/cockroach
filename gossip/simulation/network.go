@@ -50,6 +50,9 @@ type Network struct {
 // on time scale for testing gossip networks.
 const DefaultTestGossipInterval = 10 * time.Millisecond
 
+// DefaultTestGossipBootstrap lists a default bootstrap for simulation.
+const DefaultTestGossipBootstrap = ""
+
 // NewNetwork creates nodeCount gossip nodes. The networkType should
 // be set to either "tcp" or "unix". The gossipInterval should be set
 // to a compressed simulation timescale, though large enough to give
@@ -57,7 +60,7 @@ const DefaultTestGossipInterval = 10 * time.Millisecond
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
 func NewNetwork(nodeCount int, networkType string,
-	gossipInterval time.Duration) *Network {
+	gossipInterval time.Duration, gossipBootstrap string) *Network {
 
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	clock := hlc.NewClock(hlc.UnixNano)
@@ -83,7 +86,7 @@ func NewNetwork(nodeCount int, networkType string,
 
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := gossip.New(rpcContext)
+		node := gossip.New(rpcContext, gossipInterval, gossipBootstrap)
 		node.Name = fmt.Sprintf("Node%d", i)
 		node.SetBootstrap(bootstrap)
 		node.SetInterval(gossipInterval)

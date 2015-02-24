@@ -32,7 +32,7 @@ func TestPutGetDeleteSchema(t *testing.T) {
 		t.Fatalf("could not create test schema: %v", err)
 	}
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := server.BootstrapCluster("test-cluster", e)
+	localDB, err := server.BootstrapCluster("test-cluster", e, server.NewContext())
 	if err != nil {
 		t.Fatalf("unable to boostrap cluster: %v", err)
 	}
