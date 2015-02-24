@@ -19,10 +19,12 @@ package storage
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func internalChangeReplicasArgs(newNodeID proto.NodeID, newStoreID proto.StoreID,
@@ -85,6 +87,14 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// TODO(bdarnell): once we're hooking up the range metadata correctly,
-	// verify that the same data is on both replicas
+	// Verify that the same data is available on the replica.
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs([]byte("a"), rangeID, store2.StoreID())
+		if err := store2.ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+			return false
+		}
+		return getResp.Value.GetInteger() == 5
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
 }

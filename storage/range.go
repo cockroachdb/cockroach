@@ -182,13 +182,8 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 // NewRange initializes the range using the given metadata.
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
-		Desc: desc,
-		rm:   rm,
-		// firstIndex and lastIndex are both inclusive, so when the log is empty
-		// firstIndex == lastIndex + 1. raftInitialLogIndex is the dummy term-only
-		// entry; raftInitialLogIndex+1 is the first regular entry.
-		firstIndex:  raftInitialLogIndex + 1,
-		lastIndex:   raftInitialLogIndex,
+		Desc:        desc,
+		rm:          rm,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
@@ -1470,19 +1465,34 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raft.InitialState, error) {
-	// Set up the defaults if there is no stored HardState.
-	hs := raftpb.HardState{
-		Term:   raftInitialLogTerm,
-		Vote:   raft.None,
-		Commit: raftInitialLogIndex,
-	}
-	cs := raftpb.ConfState{
-		Nodes: []uint64{uint64(r.rm.RaftNodeID())},
-	}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
+	var hs raftpb.HardState
+	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return raft.InitialState{}, err
+	}
+	if !found {
+		// We don't have a saved HardState, so set up the defaults.
+		if len(r.Desc.EndKey) > 0 {
+			// If we created this range (and know its start/end keys, set the initial log term.
+			hs.Term = raftInitialLogTerm
+			hs.Commit = raftInitialLogIndex
+			// firstIndex and lastIndex are both inclusive, so when the log is empty
+			// firstIndex == lastIndex + 1. raftInitialLogIndex is the dummy term-only
+			// entry; raftInitialLogIndex+1 is the first regular entry.
+			atomic.StoreUint64(&r.firstIndex, raftInitialLogIndex+1)
+			atomic.StoreUint64(&r.lastIndex, raftInitialLogIndex)
+		} else {
+			// If we don't know the start/end keys, this is a new range we are receiving from
+			// another node. Start from zero so we will receive a snapshot.
+			atomic.StoreUint64(&r.firstIndex, 1)
+			atomic.StoreUint64(&r.lastIndex, 0)
+		}
+	}
+
+	// TODO(bdarnell): synchronize ConfState with Desc.Replicas
+	cs := raftpb.ConfState{
+		Nodes: []uint64{uint64(r.rm.RaftNodeID())},
 	}
 
 	return raft.InitialState{
@@ -1558,7 +1568,9 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 
 // Term implements the raft.Storage interface.
 func (r *Range) Term(i uint64) (uint64, error) {
-	if i == raftInitialLogIndex {
+	if i == 0 {
+		return 0, nil
+	} else if i == raftInitialLogIndex {
 		// TODO(bdarnell): handle the pre-snapshot dummy entry
 		return raftInitialLogTerm, nil
 	}
@@ -1584,7 +1596,23 @@ func (r *Range) FirstIndex() (uint64, error) {
 
 // Snapshot implements the raft.Storage interface.
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
-	panic("TODO(bdarnell): implement raft.Storage.snapshot")
+	r.RLock()
+	defer r.RUnlock()
+
+	// TODO(bdarnell): package up all the data in the range, not just
+	// the descriptor (and send the appropriate log index).
+	data, err := gogoproto.Marshal(r.Desc)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
+	return raftpb.Snapshot{
+		Data: data,
+		Metadata: raftpb.SnapshotMetadata{
+			// TODO(bdarnell): fill in ConfState too.
+			Index: raftInitialLogIndex,
+			Term:  raftInitialLogTerm,
+		},
+	}, nil
 }
 
 // Append implements the multiraft.WriteableGroupStorage interface.
@@ -1608,7 +1636,14 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
-	panic("TODO(bdarnell): implement Range.ApplySnapshot")
+	r.Lock()
+	defer r.Unlock()
+
+	// TODO(bdarnell): discard any existing log that is obsoleted by this snapshot.
+	err := gogoproto.Unmarshal(snap.Data, r.Desc)
+	atomic.StoreUint64(&r.firstIndex, snap.Metadata.Index+1)
+	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
+	return err
 }
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.

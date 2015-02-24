@@ -429,7 +429,7 @@ func (s *state) start() {
 			return
 
 		case req := <-s.reqChan:
-			log.V(5).Infof("node %v: group %v got message %s", s.nodeID, req.GroupID,
+			log.V(5).Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
 				raft.DescribeMessage(req.Message, s.EntryFormatter))
 			switch req.Message.Type {
 			case raftpb.MsgHeartbeat:
@@ -601,16 +601,16 @@ func (s *state) handleRaftReady(readyGroups map[uint64]raft.Ready) {
 				log.Infof("HardState updated: %+v", ready.HardState)
 			}
 			for i, e := range ready.Entries {
-				log.Infof("New Entry[%d]: %s", i, raft.DescribeEntry(e, s.EntryFormatter))
+				log.Infof("New Entry[%d]: %.200s", i, raft.DescribeEntry(e, s.EntryFormatter))
 			}
 			for i, e := range ready.CommittedEntries {
-				log.Infof("Committed Entry[%d]: %s", i, raft.DescribeEntry(e, s.EntryFormatter))
+				log.Infof("Committed Entry[%d]: %.200s", i, raft.DescribeEntry(e, s.EntryFormatter))
 			}
 			if !raft.IsEmptySnap(ready.Snapshot) {
-				log.Infof("Snapshot updated: %s", ready.Snapshot)
+				log.Infof("Snapshot updated: %.200s", ready.Snapshot.String())
 			}
 			for i, m := range ready.Messages {
-				log.Infof("Outgoing Message[%d]: %s", i, raft.DescribeMessage(m, s.EntryFormatter))
+				log.Infof("Outgoing Message[%d]: %.200s", i, raft.DescribeMessage(m, s.EntryFormatter))
 			}
 		}
 
@@ -752,7 +752,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				noMoreHeartbeats[msg.To] = struct{}{}
 			}
 
-			log.V(6).Infof("node %v sending message %s to %v", s.nodeID,
+			log.V(6).Infof("node %v sending message %.200s to %v", s.nodeID,
 				raft.DescribeMessage(msg, s.EntryFormatter), msg.To)
 			nodeID := NodeID(msg.To)
 			if _, ok := s.nodes[nodeID]; !ok {
