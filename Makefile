@@ -48,14 +48,6 @@ ifeq ($(STATIC),1)
 GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
 endif
 
-LDFLAGS := 
-ifeq ($(RELEASE),1)
-LDFLAGS := -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git rev-parse HEAD)"
-LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe)"
-LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
-LDFLAGS := -ldflags '$(LDFLAGS)'
-endif
-
 all: build test
 
 auxiliary: storage/engine/cgo_flags.go
@@ -63,9 +55,12 @@ auxiliary: storage/engine/cgo_flags.go
 # "go build -i" explicitly does not rebuild dependent packages that
 # have a different root directory than the package being built, hence
 # the need for a separate build invocation for etcd/raft.
+build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git rev-parse HEAD)"
+build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
+build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: auxiliary
 	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
-	$(GO) build $(GOFLAGS) $(LDFLAGS) -v -i -o cockroach
+	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
 storage/engine/cgo_flags.go: storage/engine/cgo_flags.go.in
 	sed -e "s,@ROOT@,$(CURDIR),g" < $^ > $@
