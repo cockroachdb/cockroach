@@ -33,6 +33,8 @@ import (
 const (
 	// The size of the reservoir used by FindSplitKey.
 	splitReservoirSize = 100
+	// The size of the timestamp portion of MVCC version keys (used to update stats).
+	mvccVersionTimestampSize int64 = 12
 )
 
 // MVCCStats tracks byte and instance counts for:
@@ -662,13 +664,13 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	valueKeySize, valueSize, err := PutProto(engine, MVCCEncodeVersionKey(key, timestamp), &value)
+	_, valueSize, err := PutProto(engine, MVCCEncodeVersionKey(key, timestamp), &value)
 	if err != nil {
 		return err
 	}
 
 	// Write the mvcc metadata now that we have sizes for the latest versioned value.
-	newMeta.KeyBytes = valueKeySize
+	newMeta.KeyBytes = mvccVersionTimestampSize
 	newMeta.ValBytes = valueSize
 	newMeta.Deleted = value.Deleted
 	metaKeySize, metaValSize, err := PutProto(engine, metaKey, newMeta)
@@ -1027,7 +1029,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		}
 		// Get the bytes for the next version so we have size for stat counts.
 		value := proto.MVCCValue{}
-		ok, valueKeySize, valueSize, err := GetProto(engine, kvs[0].Key, &value)
+		ok, _, valueSize, err := GetProto(engine, kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}
@@ -1035,7 +1037,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		newMeta := &proto.MVCCMetadata{
 			Timestamp: ts,
 			Deleted:   value.Deleted,
-			KeyBytes:  valueKeySize,
+			KeyBytes:  mvccVersionTimestampSize,
 			ValBytes:  valueSize,
 		}
 		metaKeySize, metaValSize, err := PutProto(engine, metaKey, newMeta)
@@ -1138,7 +1140,7 @@ func MVCCGarbageCollect(engine Engine, ms *MVCCStats, keys []proto.InternalGCReq
 			}
 			if !gcKey.Timestamp.Less(ts) {
 				ageSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
-				ms.updateStatsOnGC(gcKey.Key, int64(len(iter.Key())), int64(len(iter.Value())), nil, ageSeconds)
+				ms.updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
 				engine.Clear(iter.Key())
 			}
 		}
@@ -1236,7 +1238,12 @@ func MVCCFindSplitKey(engine Engine, raftID int64, key, endKey proto.Key) (proto
 		done := !bestSplitKey.Equal(encStartKey) && diff > bestSplitDiff
 
 		// Add this key/value to the size scanned so far.
-		sizeSoFar += int64(len(kv.Key) + len(kv.Value))
+		_, _, isValue := MVCCDecodeKey(kv.Key)
+		if isValue {
+			sizeSoFar += mvccVersionTimestampSize + int64(len(kv.Value))
+		} else {
+			sizeSoFar += int64(len(kv.Key) + len(kv.Value))
+		}
 
 		return done, nil
 	}); err != nil {
@@ -1273,8 +1280,8 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 	meta := &proto.MVCCMetadata{}
 	err := engine.Iterate(encStartKey, encEndKey, func(kv proto.RawKeyValue) (bool, error) {
 		_, ts, isValue := MVCCDecodeKey(kv.Key)
-		totalBytes := int64(len(kv.Value)) + int64(len(kv.Key))
 		if !isValue {
+			totalBytes := int64(len(kv.Value)) + int64(len(kv.Key))
 			first = true
 			if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
 				return false, util.Errorf("unable to unmarshal MVCC metadata %q: %s", kv.Value, err)
@@ -1293,6 +1300,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 				ms.ValCount++
 			}
 		} else {
+			totalBytes := int64(len(kv.Value)) + mvccVersionTimestampSize
 			if first {
 				first = false
 				if !meta.Deleted {
@@ -1306,8 +1314,8 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 					ms.IntentCount++
 					ms.IntentAge += nowNanos/1E9 - meta.Timestamp.WallTime/1E9
 				}
-				if meta.KeyBytes != int64(len(kv.Key)) {
-					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", len(kv.Key), meta.KeyBytes)
+				if meta.KeyBytes != mvccVersionTimestampSize {
+					return false, util.Errorf("expected mvcc metadata key bytes to equal %d; got %d", mvccVersionTimestampSize, meta.KeyBytes)
 				}
 				if meta.ValBytes != int64(len(kv.Value)) {
 					return false, util.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(kv.Value), meta.ValBytes)
@@ -1316,7 +1324,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 				// Overwritten value; add value bytes to the GC'able bytes age stat.
 				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - ts.WallTime/1E9)
 			}
-			ms.KeyBytes += int64(len(kv.Key))
+			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(kv.Value))
 			ms.ValCount++
 		}

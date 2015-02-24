@@ -1459,7 +1459,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS := engine.MVCCStats{LiveBytes: 44, KeyBytes: 20, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
+	expMS := engine.MVCCStats{LiveBytes: 40, KeyBytes: 16, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -1469,7 +1469,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(proto.Put, pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 124 + 2, KeyBytes: 40, ValBytes: 84 + 2, IntentBytes: 28, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	expMS = engine.MVCCStats{LiveBytes: 116 + 2, KeyBytes: 32, ValBytes: 84 + 2, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -1487,7 +1487,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(proto.InternalResolveIntent, rArgs, rReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 88, KeyBytes: 40, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
+	expMS = engine.MVCCStats{LiveBytes: 80, KeyBytes: 32, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
 
 	// Delete the 1st value.
@@ -1496,7 +1496,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(proto.Delete, dArgs, dReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = engine.MVCCStats{LiveBytes: 44, KeyBytes: 56, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
+	expMS = engine.MVCCStats{LiveBytes: 40, KeyBytes: 44, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
 }
 
