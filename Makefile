@@ -29,8 +29,8 @@ STATIC := $(STATIC)
 # depending on the context.
 COCKROACH_IMAGE :=
 
-RUN  := run
-GOPATH  := $(CURDIR)/_vendor:$(CURDIR)/../../../..
+RUN := run
+export GOPATH := $(CURDIR)/_vendor:$(CURDIR)/../../../..
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
