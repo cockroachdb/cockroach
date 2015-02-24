@@ -1375,7 +1375,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		},
 		// Bigger keys on left side.
 		{
-			keySizes: []int{1000, 100, 500, 10, 10},
+			keySizes: []int{1000, 500, 500, 10, 10},
 			valSizes: []int{1, 1, 1, 1, 1},
 			expSplit: 1,
 		},
@@ -1483,16 +1483,22 @@ func TestMVCCStatsBasic(t *testing.T) {
 	engine := createTestEngine()
 	ms := &MVCCStats{}
 
-	// Put a value.
+	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
 	key := proto.Key("a")
+	keySize := int64(len(MVCCEncodeVersionKey(key, ts)) - len(MVCCEncodeKey(key)))
+	if keySize != mvccVersionTimestampSize {
+		t.Errorf("expected version timestamp size %d; got %d", mvccVersionTimestampSize, keySize)
+	}
+
+	// Put a value.
 	value := proto.Value{Bytes: []byte("value")}
 	if err := MVCCPut(engine, ms, key, ts, value, nil); err != nil {
 		t.Fatal(err)
 	}
 	mKeySize := int64(len(MVCCEncodeKey(key)))
 	mValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts}, t)
-	vKeySize := int64(len(MVCCEncodeVersionKey(key, ts)))
+	vKeySize := mvccVersionTimestampSize
 	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
 
 	expMS := &MVCCStats{
@@ -1512,7 +1518,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
-	v2KeySize := int64(len(MVCCEncodeVersionKey(key, ts2)))
+	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
 	expMS2 := &MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
@@ -1554,7 +1560,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	mKey2Size := int64(len(MVCCEncodeKey(key2)))
 	mVal2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
-	vKey2Size := int64(len(MVCCEncodeVersionKey(key2, ts4)))
+	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := encodedSize(&proto.MVCCValue{Value: &value2}, t)
 	expMS3 := &MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
