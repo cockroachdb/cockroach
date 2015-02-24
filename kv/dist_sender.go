@@ -124,31 +124,47 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 		return nil
 	}
 	// Get permissions map from gossip.
-	permMap, err := ds.gossip.GetInfo(gossip.KeyConfigPermission)
+	configMap, err := ds.gossip.GetInfo(gossip.KeyConfigPermission)
 	if err != nil {
 		return util.Errorf("permissions not available via gossip")
 	}
-	if permMap == nil {
+	if configMap == nil {
 		return util.Errorf("perm configs not available; cannot execute %s", method)
 	}
-	// Visit PermConfig(s) which apply to the method's key range.
-	//   - For each, verify each PermConfig allows reads or writes as method requires.
-	end := header.EndKey
-	if end == nil {
-		end = header.Key
+	permMap := configMap.(storage.PrefixConfigMap)
+	headerEnd := header.EndKey
+	if headerEnd == nil {
+		headerEnd = header.Key
 	}
-	return permMap.(storage.PrefixConfigMap).VisitPrefixes(
-		header.Key, end, func(start, end proto.Key, config interface{}) error {
-			perm := config.(*proto.PermConfig)
-			if proto.NeedReadPerm(method) && !perm.CanRead(header.User) {
-				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
-					header.User, method, string(start), perm)
+	// Visit PermConfig(s) which apply to the method's key range.
+	//   - For each perm config which the range covers, verify read or writes
+	//     are allowed as method requires.
+	//   - Verify the permissions hierarchically; that is, if permissions aren't
+	//     granted at the longest prefix, try next longest, then next, etc., up
+	//     to and including the default prefix.
+	//
+	// TODO(spencer): it might make sense to visit prefixes from the
+	//   shortest to longest instead for performance. Keep an eye on profiling
+	//   for this code path as permission sets grow large.
+	return permMap.VisitPrefixes(header.Key, headerEnd,
+		func(start, end proto.Key, config interface{}) (bool, error) {
+			hasPerm := false
+			permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config interface{}) (bool, error) {
+				perm := config.(*proto.PermConfig)
+				if proto.NeedReadPerm(method) && !perm.CanRead(header.User) {
+					return false, nil
+				}
+				if proto.NeedWritePerm(method) && !perm.CanWrite(header.User) {
+					return false, nil
+				}
+				// Return done = true, as permissions have been granted by this config.
+				hasPerm = true
+				return true, nil
+			})
+			if !hasPerm {
+				return false, util.Errorf("user %q cannot invoke %s at %q-%q", header.User, method, start, end)
 			}
-			if proto.NeedWritePerm(method) && !perm.CanWrite(header.User) {
-				return util.Errorf("user %q cannot invoke %s at %q; permissions: %+v",
-					header.User, method, string(start), perm)
-			}
-			return nil
+			return false, nil
 		})
 }
 

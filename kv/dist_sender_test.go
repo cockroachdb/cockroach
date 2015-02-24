@@ -65,12 +65,15 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	n.Stop()
 }
 
+// TestVerifyPermissions verifies permissions are checked for single
+// zones and across multiple zones. It also verifies that permissions
+// are checked hierarchically.
 func TestVerifyPermissions(t *testing.T) {
 	n := simulation.NewNetwork(1, "unix", simulation.DefaultTestGossipInterval)
 	ds := NewDistSender(n.Nodes[0].Gossip)
 	config1 := &proto.PermConfig{
-		Read:  []string{"read1", "readAll", "rw", "rwAll"},
-		Write: []string{"write1", "writeAll", "rw", "rwAll"}}
+		Read:  []string{"read1", "readAll", "rw1", "rwAll"},
+		Write: []string{"write1", "writeAll", "rw1", "rwAll"}}
 	config2 := &proto.PermConfig{
 		Read:  []string{"read2", "readAll", "rw2", "rwAll"},
 		Write: []string{"write2", "writeAll", "rw2", "rwAll"}}
@@ -109,26 +112,30 @@ func TestVerifyPermissions(t *testing.T) {
 	}{
 		// Test permissions within a single range
 		{readOnlyMethods, "read1", engine.KeyMin, engine.KeyMin, true},
-		{readOnlyMethods, "rw", engine.KeyMin, engine.KeyMin, true},
+		{readOnlyMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
 		{readOnlyMethods, "write1", engine.KeyMin, engine.KeyMin, false},
 		{readOnlyMethods, "random", engine.KeyMin, engine.KeyMin, false},
-		{readWriteMethods, "rw", engine.KeyMin, engine.KeyMin, true},
+		{readWriteMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
 		{readWriteMethods, "read1", engine.KeyMin, engine.KeyMin, false},
 		{readWriteMethods, "write1", engine.KeyMin, engine.KeyMin, false},
 		{writeOnlyMethods, "write1", engine.KeyMin, engine.KeyMin, true},
-		{writeOnlyMethods, "rw", engine.KeyMin, engine.KeyMin, true},
+		{writeOnlyMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
 		{writeOnlyMethods, "read1", engine.KeyMin, engine.KeyMin, false},
 		{writeOnlyMethods, "random", engine.KeyMin, engine.KeyMin, false},
-		// Test permissions across both ranges
+		// Test permissions hierarchically.
+		{readOnlyMethods, "read1", proto.Key("a"), proto.Key("a1"), true},
+		{readWriteMethods, "rw1", proto.Key("a"), proto.Key("a1"), true},
+		{writeOnlyMethods, "write1", proto.Key("a"), proto.Key("a1"), true},
+		// Test permissions across both ranges.
 		{readOnlyMethods, "readAll", engine.KeyMin, proto.Key("b"), true},
-		{readOnlyMethods, "read1", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyMethods, "read1", engine.KeyMin, proto.Key("b"), true},
 		{readOnlyMethods, "read2", engine.KeyMin, proto.Key("b"), false},
 		{readOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
 		{readWriteMethods, "rwAll", engine.KeyMin, proto.Key("b"), true},
-		{readWriteMethods, "rw", engine.KeyMin, proto.Key("b"), false},
+		{readWriteMethods, "rw1", engine.KeyMin, proto.Key("b"), true},
 		{readWriteMethods, "random", engine.KeyMin, proto.Key("b"), false},
 		{writeOnlyMethods, "writeAll", engine.KeyMin, proto.Key("b"), true},
-		{writeOnlyMethods, "write1", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyMethods, "write1", engine.KeyMin, proto.Key("b"), true},
 		{writeOnlyMethods, "write2", engine.KeyMin, proto.Key("b"), false},
 		{writeOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
 		// Test permissions within and around the boundaries of a range,
@@ -142,18 +149,20 @@ func TestVerifyPermissions(t *testing.T) {
 		{readWriteMethods, "rw2", proto.Key("a3"), proto.Key("b1"), false},
 	}
 
-	for _, test := range testData {
+	for i, test := range testData {
 		for _, method := range test.methods {
 			err := ds.verifyPermissions(
 				method,
 				&proto.RequestHeader{
 					User: test.user, Key: test.startKey, EndKey: test.endKey})
 			if err != nil && test.hasPermission {
-				t.Errorf("user: %s should have had permission to %s, err: %s",
-					test.user, method, err.Error())
+				t.Errorf("test %d: user %s should have had permission to %s, err: %s",
+					i, test.user, method, err.Error())
+				break
 			} else if err == nil && !test.hasPermission {
-				t.Errorf("user: %s should not have had permission to %s",
-					test.user, method)
+				t.Errorf("test %d: user %s should not have had permission to %s",
+					i, test.user, method)
+				break
 			}
 		}
 	}

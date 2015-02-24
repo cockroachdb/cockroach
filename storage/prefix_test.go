@@ -19,11 +19,13 @@ package storage
 
 import (
 	"bytes"
+	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -325,5 +327,116 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 				t.Errorf("%d: expected \"%d\"th range config %v, got %v", i, j, test.expRanges[j].config, r.config)
 			}
 		}
+	}
+}
+
+// TestVisitPrefixesHierarchically verifies visitor pattern on a hierarchically
+// matching set of prefixes from longest to shortest.
+func TestVisitPrefixesHierarchically(t *testing.T) {
+	pcc := buildTestPrefixConfigMap()
+	var configs []interface{}
+	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+		configs = append(configs, config)
+		return false, nil
+	})
+	expConfigs := []interface{}{config3, config2, config1}
+	if !reflect.DeepEqual(expConfigs, configs) {
+		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+	}
+
+	// Now, stop partway through by returning done=true.
+	configs = []interface{}{}
+	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+		configs = append(configs, config)
+		if len(configs) == 2 {
+			return true, nil
+		}
+		return false, nil
+	})
+	expConfigs = []interface{}{config3, config2}
+	if !reflect.DeepEqual(expConfigs, configs) {
+		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+	}
+
+	// Now, stop partway through by returning an error.
+	configs = []interface{}{}
+	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
+		configs = append(configs, config)
+		if len(configs) == 2 {
+			return false, util.Errorf("foo")
+		}
+		return false, nil
+	})
+	if !reflect.DeepEqual(expConfigs, configs) {
+		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+	}
+}
+
+// TestVisitPrefixes verifies visitor pattern across matching prefixes.
+func TestVisitPrefixes(t *testing.T) {
+	pcc := buildTestPrefixConfigMap()
+	testData := []struct {
+		start, end proto.Key
+		expRanges  [][2]proto.Key
+		expConfigs []interface{}
+	}{
+		{engine.KeyMin, engine.KeyMax,
+			[][2]proto.Key{
+				{engine.KeyMin, proto.Key("/db1")},
+				{proto.Key("/db1"), proto.Key("/db1/table")},
+				{proto.Key("/db1/table"), proto.Key("/db1/tablf")},
+				{proto.Key("/db1/tablf"), proto.Key("/db2")},
+				{proto.Key("/db2"), proto.Key("/db3")},
+				{proto.Key("/db3"), proto.Key("/db4")},
+				{proto.Key("/db4"), engine.KeyMax},
+			}, []interface{}{config1, config2, config3, config2, config1, config4, config1}},
+		{proto.Key("/db0"), proto.Key("/db1/table/foo"),
+			[][2]proto.Key{
+				{proto.Key("/db0"), proto.Key("/db1")},
+				{proto.Key("/db1"), proto.Key("/db1/table")},
+				{proto.Key("/db1/table"), proto.Key("/db1/table/foo")},
+			}, []interface{}{config1, config2, config3}},
+	}
+	for i, test := range testData {
+		ranges := [][2]proto.Key{}
+		configs := []interface{}{}
+		pcc.VisitPrefixes(test.start, test.end, func(start, end proto.Key, config interface{}) (bool, error) {
+			ranges = append(ranges, [2]proto.Key{start, end})
+			configs = append(configs, config)
+			return false, nil
+		})
+		if !reflect.DeepEqual(test.expRanges, ranges) {
+			t.Errorf("%d: expected ranges %+v; got %+v", i, test.expRanges, ranges)
+		}
+		if !reflect.DeepEqual(test.expConfigs, configs) {
+			t.Errorf("%d: expected configs %+v; got %+v", i, test.expConfigs, configs)
+		}
+	}
+
+	// Now, stop partway through by returning done=true.
+	configs := []interface{}{}
+	pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+		configs = append(configs, config)
+		if len(configs) == 2 {
+			return true, nil
+		}
+		return false, nil
+	})
+	expConfigs := []interface{}{config1, config4}
+	if !reflect.DeepEqual(expConfigs, configs) {
+		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
+	}
+
+	// Now, stop partway through by returning an error.
+	configs = []interface{}{}
+	pcc.VisitPrefixes(proto.Key("/db2"), proto.Key("/db4"), func(start, end proto.Key, config interface{}) (bool, error) {
+		configs = append(configs, config)
+		if len(configs) == 2 {
+			return false, util.Errorf("foo")
+		}
+		return false, nil
+	})
+	if !reflect.DeepEqual(expConfigs, configs) {
+		t.Errorf("expected configs %+v; got %+v", expConfigs, configs)
 	}
 }
