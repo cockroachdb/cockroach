@@ -24,3 +24,5 @@ go_get github.com/gogo/protobuf/{proto,protoc-gen-gogo,gogoproto}
 go_get code.google.com/p/snappy-go/snappy
 go_get github.com/golang/glog
 go_get gopkg.in/yaml.v1
+go_get github.com/cockroachdb/c-protobuf
+go_get github.com/cockroachdb/c-rocksdb

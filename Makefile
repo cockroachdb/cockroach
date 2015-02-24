@@ -49,8 +49,6 @@ endif
 
 all: build test
 
-auxiliary: storage/engine/cgo_flags.go
-
 # "go build -i" explicitly does not rebuild dependent packages that
 # have a different root directory than the package being built, hence
 # the need for a separate build invocation for etcd/raft.
@@ -58,20 +56,17 @@ build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell make depvers | sort)"
-build: auxiliary
+build:
 	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
 	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
-storage/engine/cgo_flags.go: storage/engine/cgo_flags.go.in
-	sed -e "s,@ROOT@,$(CURDIR),g" < $^ > $@
-
-test: auxiliary
+test:
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
-testrace: auxiliary
+testrace:
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
-bench: auxiliary
+bench:
 	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
@@ -81,7 +76,7 @@ bench: auxiliary
 # PKG=./storage/engine will generate ./storage/engine/engine.test.
 testbuild: TESTS := $(shell $(GO) list $(PKG))
 testbuild: GOFLAGS += -c
-testbuild: auxiliary
+testbuild:
 	for p in $(TESTS); do \
 	  NAME=$$(basename "$$p"); \
 	  OUT="$$NAME.test"; \
@@ -105,9 +100,8 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	$(GO) clean -i ./... github.com/coreos/etcd/...
+	$(GO) clean -i github.com/cockroachdb/... github.com/coreos/etcd/...
 	find . -name '*.test' -type f -exec rm -f {} \;
-	rm -f storage/engine/cgo_flags.go
 	rm -rf build/deploy/build
 
 # The gopath target outputs the GOPATH that should be used for building this

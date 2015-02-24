@@ -8,10 +8,6 @@
 # 2) Update go dependencies
 # 3) Build a shadow toolchain containing our dependencies in _vendor/build
 
-# TODO(shawn) make rocksdb build less magic
-# TODO(shawn) make sure rocksdb still links against jemalloc (and that it makes sense when embedding in go)
-# TODO(pmattis): check for pkg-config and curl.
-
 cd -P "$(dirname $0)"
 
 set -e -x
@@ -40,9 +36,6 @@ for f in $(ls -d githooks/*); do
   rm .git/hooks/$(basename $f)
   ln -s ../../$f .git/hooks/$(basename $f)
 done && ls -al .git/hooks | grep githooks
-
-# Build the required libraries.
-./build/devbase/vendor.sh
 
 cat <<%%%
 ****************************************

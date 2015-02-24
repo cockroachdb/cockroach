@@ -16,7 +16,7 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PROTOC      := ../_vendor/usr/bin/protoc
+PROTOC      := protoc
 PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
