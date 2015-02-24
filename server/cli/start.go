@@ -97,7 +97,7 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	localDB, err := server.BootstrapCluster(clusterID, e, Context)
+	localDB, err := server.BootstrapCluster(clusterID, e)
 	if err != nil {
 		log.Errorf("Failed to bootstrap cluster: %v", err)
 		return

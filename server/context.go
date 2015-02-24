@@ -29,7 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+// Context defaults.
+const (
+	defaultRPC            = ":0"
+	defaultHTTP           = ":8080"
+	defaultAddr           = "127.0.0.1:8080"
+	defaultMaxOffset      = 250 * time.Millisecond
+	defaultGossipInterval = 2 * time.Second
+	defaultCacheSize      = 1 << 30 // GB
+)
+
 // Context holds parameters needed to setup a server.
+// Calling "server/cli".InitFlags(ctx *Context) will initialize Context using
+// command flags. Keep in sync with "server/cli/flags.go".
 type Context struct {
 	// RPC is the "host:port" to bind for RPC traffic.
 	RPC string
@@ -95,20 +107,20 @@ type Context struct {
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	return &Context{
-		RPC:  ":0",
-		HTTP: ":8080",
-		Addr: "127.0.0.1:8080",
+		RPC:  defaultRPC,
+		HTTP: defaultHTTP,
+		Addr: defaultAddr,
 
-		MaxOffset: 250 * time.Millisecond,
+		MaxOffset: defaultMaxOffset,
 
-		GossipInterval: 2 * time.Second,
+		GossipInterval: defaultGossipInterval,
 
-		CacheSize: 1 << 30, // GB
+		CacheSize: defaultCacheSize,
 	}
 }
 
 // Init interprets the stores parameter to initialize a slice of
-// engine.Engine objects.
+// engine.Engine objects and parses node attributes.
 func (ctx *Context) Init() error {
 	// Error if regexp doesn't match.
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)

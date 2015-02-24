@@ -19,7 +19,6 @@ package server
 
 import (
 	"container/list"
-	"errors"
 	"net"
 	"strconv"
 	"time"
@@ -108,7 +107,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 //
 // Returns a KV client for unittest purposes. Caller should close
 // the returned client.
-func BootstrapCluster(clusterID string, eng engine.Engine, ctx *Context) (*client.KV, error) {
+func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	sIdent := proto.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
@@ -117,7 +116,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine, ctx *Context) (*clien
 	clock := hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, ctx.Linearizable), nil)
+	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, false), nil)
 	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport())
 
 	// Verify the store isn't already part of a cluster.
@@ -211,7 +210,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
 	if len(engines) == 0 {
-		return errors.New("Node.initStores: No engines.")
+		return util.Error("no engines")
 	}
 	for _, e := range engines {
 		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport
@@ -324,7 +323,8 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 // node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip() {
 	log.Infof("connecting to gossip network to verify cluster ID...")
-	// TODO(DT): Should this receive with a timeout and node stop in a select statement?
+	// No timeout or stop condition is needed here. Log statements should be
+	// sufficient for diagnosing this type of condition.
 	<-n.gossip.Connected
 
 	val, err := n.gossip.GetInfo(gossip.KeyClusterID)

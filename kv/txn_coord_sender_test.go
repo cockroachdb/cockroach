@@ -558,7 +558,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	for i, test := range testCases {
 		ts := NewTxnCoordSender(newTestSender(func(call *client.Call) {
 			call.Reply.Header().SetGoError(test.err)
-		}), clock, true)
+		}), clock, false)
 		reply := &proto.PutResponse{}
 		ts.Send(&client.Call{Method: proto.Put, Args: testPutReq, Reply: reply})
 

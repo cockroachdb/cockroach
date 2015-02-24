@@ -34,7 +34,7 @@ import (
 // more cycles for a fully connected network on busy hardware. The clock
 // should be advanced manually instead (this requires some changes to gossip).
 func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "unix", simulation.DefaultTestGossipInterval, simulation.DefaultTestGossipBootstrap)
+	network := simulation.NewNetwork(numNodes, "unix", gossip.TestInterval, gossip.TestBootstrap)
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
@@ -52,13 +52,10 @@ func TestConvergence(t *testing.T) {
 	verifyConvergence(10, 15, t)
 }
 
-var gossipInterval = 20 * time.Millisecond
-var gossipBootstrap = ""
-
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossipInterval, gossipBootstrap)
+	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	g.AddInfo("i", int64(1), time.Hour)
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
@@ -86,7 +83,7 @@ func TestGossipInfoStore(t *testing.T) {
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossipInterval, gossipBootstrap)
+	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// For int64.
 	g.RegisterGroup("i", 3, gossip.MinGroup)

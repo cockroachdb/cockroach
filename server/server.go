@@ -20,7 +20,6 @@ package server
 
 import (
 	"compress/gzip"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -73,7 +72,7 @@ type Server struct {
 // NewServer creates a Server from a server.Context.
 func NewServer(ctx *Context) (*Server, error) {
 	if ctx == nil {
-		return nil, errors.New("NewServer: ctx must not be null.")
+		return nil, util.Error("ctx must not be null")
 	}
 	// Determine hostname in case it hasn't been specified in -rpc or -http.
 	host, err := os.Hostname()

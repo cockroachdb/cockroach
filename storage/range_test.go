@@ -92,7 +92,7 @@ type testContext struct {
 func (tc *testContext) Start(t *testing.T) {
 	if tc.gossip == nil {
 		rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-		tc.gossip = gossip.New(rpcContext, 10*time.Millisecond, "")
+		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, "")
 	}
 	if tc.manualClock == nil {
 		tc.manualClock = hlc.NewManualClock(0)

@@ -27,14 +27,16 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	// With the default gossip interval, some tests
+	// may take longer than they need.
+	gossipInterval  = 20 * time.Millisecond
+	gossipBootstrap = ""
+)
+
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
-	// With the default gossip interval, some tests
-	// may take longer than they need.
-	gossipInterval := 20 * time.Millisecond
-	gossipBootstrap := ""
-
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	lclock := hlc.NewClock(hlc.UnixNano)
 	lRPCContext := rpc.NewContext(lclock, tlsConfig)

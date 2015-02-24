@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 )
 
-// InitFlag sets the server.Context values to flag values.
-func InitFlag(ctx *server.Context) {
+// InitFlags sets the server.Context values to flag values.
+// Keep in sync with "server/context.go". Values in Context should be
+// settable here.
+func InitFlags(ctx *server.Context) {
 	// Server flags.
 	flag.StringVar(&ctx.RPC, "rpc", ctx.RPC, "host:port to bind for RPC traffic; 0 to pick unused port")
 	flag.StringVar(&ctx.HTTP, "http", ctx.HTTP, "host:port to bind for HTTP traffic; 0 to pick unused port")

@@ -46,13 +46,6 @@ type Network struct {
 	GossipInterval time.Duration // The length of a round of gossip
 }
 
-// DefaultTestGossipInterval is one possible compressed simulation
-// on time scale for testing gossip networks.
-const DefaultTestGossipInterval = 10 * time.Millisecond
-
-// DefaultTestGossipBootstrap lists a default bootstrap for simulation.
-const DefaultTestGossipBootstrap = ""
-
 // NewNetwork creates nodeCount gossip nodes. The networkType should
 // be set to either "tcp" or "unix". The gossipInterval should be set
 // to a compressed simulation timescale, though large enough to give

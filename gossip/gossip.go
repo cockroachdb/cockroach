@@ -85,6 +85,12 @@ const (
 	// Once we receive the gossip with actual count, the default count
 	// is replaced.
 	defaultNodeCount = 1000
+
+	// TestInterval is the default gossip interval used for running tests.
+	TestInterval = 10 * time.Millisecond
+
+	// TestBootstrap is the default gossip bootstrap used for running tests.
+	TestBootstrap = ""
 )
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.

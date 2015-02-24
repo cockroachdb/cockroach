@@ -34,14 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var (
-	s           *TestServer
-	testContext = NewContext()
-)
+var testContext = NewContext()
 
-// Start a test server. The server will be initialized with an
-// in-memory engine and will execute a split at key "m" so that
-// it will end up having two logical ranges.
+// TODO(DT): Don't use TestMain, in each test start and stop a TestServer.
+
+/*
 func TestMain(m *testing.M) {
 	s = &TestServer{}
 	if err := s.Start(); err != nil {
@@ -50,6 +47,19 @@ func TestMain(m *testing.M) {
 	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
 	defer s.Stop()
 	os.Exit(m.Run())
+}
+*/
+
+// startTestServer starts a test server. The server will be initialized with an
+// in-memory engine and will execute a split at key "m" so that
+// it will end up having two logical ranges.
+func startTestServer(t *testing.T) *TestServer {
+	s := &TestServer{}
+	if err := s.Start(); err != nil {
+		t.Fatalf("Could not start server: %v", err)
+	}
+	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
+	return s
 }
 
 // createTestConfigFile creates a temporary file and writes the
@@ -177,6 +187,8 @@ func TestInitEngines(t *testing.T) {
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
+	s := startTestServer(t)
+	defer s.Stop()
 	url := "http://" + s.HTTPAddr + "/_admin/healthz"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -197,6 +209,8 @@ func TestHealthz(t *testing.T) {
 // decompression on a custom client's Transport and setting it
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
+	s := startTestServer(t)
+	defer s.Stop()
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
@@ -243,6 +257,8 @@ func TestGzip(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands that commands which access
 // multiple ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
+	s := startTestServer(t)
+	defer s.Stop()
 	tds := kv.NewTxnCoordSender(kv.NewDistSender(s.Gossip()), s.Clock(), testContext.Linearizable)
 	defer tds.Close()
 

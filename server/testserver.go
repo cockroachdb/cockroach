@@ -101,7 +101,7 @@ func (ts *TestServer) Start() error {
 	}
 
 	ctx.Engines = []engine.Engine{engine.NewInMem(proto.Attributes{}, 100<<20)}
-	if _, err := BootstrapCluster("cluster-1", ctx.Engines[0], ctx); err != nil {
+	if _, err := BootstrapCluster("cluster-1", ctx.Engines[0]); err != nil {
 		return util.Errorf("could not bootstrap cluster: %s", err)
 	}
 	err = ts.Server.Start(true) // TODO(spencer): should shutdown server.
@@ -123,7 +123,7 @@ func (ts *TestServer) Stop() {
 
 // SetRangeRetryOptions sets the retry options for stores in TestServer.
 func (ts *TestServer) SetRangeRetryOptions(ro util.RetryOptions) {
-	ts.Server.node.lSender.VisitStores(func(s *storage.Store) error {
+	ts.node.lSender.VisitStores(func(s *storage.Store) error {
 		s.RetryOpts = ro
 		return nil
 	})
