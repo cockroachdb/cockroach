@@ -19,6 +19,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"math/rand"
 	"os"
 	"runtime"
@@ -76,6 +77,19 @@ to precede any additional arguments,
   cockroach <command> [options] [arguments].`,
 				Run: func(cmd *commander.Command, args []string) {
 					flag.CommandLine.PrintDefaults()
+				},
+			},
+			{
+				UsageLine: "version",
+				Short:     "output version information",
+				Long: `
+Output build version information.
+`,
+				Run: func(cmd *commander.Command, args []string) {
+					info := util.GetBuildInfo()
+					fmt.Printf("Build SHA:  %s\n", info.SHA)
+					fmt.Printf("Build Tag:  %s\n", info.Tag)
+					fmt.Printf("Build Time: %s\n", info.Time)
 				},
 			},
 		},

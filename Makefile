@@ -48,6 +48,14 @@ ifeq ($(STATIC),1)
 GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
 endif
 
+LDFLAGS := 
+ifeq ($(RELEASE),1)
+LDFLAGS := -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git rev-parse HEAD)"
+LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe)"
+LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
+LDFLAGS := -ldflags '$(LDFLAGS)'
+endif
+
 all: build test
 
 auxiliary: storage/engine/cgo_flags.go
@@ -57,7 +65,7 @@ auxiliary: storage/engine/cgo_flags.go
 # the need for a separate build invocation for etcd/raft.
 build: auxiliary
 	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
-	$(GO) build $(GOFLAGS) -v -i -o cockroach
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -v -i -o cockroach
 
 storage/engine/cgo_flags.go: storage/engine/cgo_flags.go.in
 	sed -e "s,@ROOT@,$(CURDIR),g" < $^ > $@

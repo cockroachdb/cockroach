@@ -15,7 +15,7 @@ ADD . /cockroach/
 RUN ln -s /cockroach/build/devbase/cockroach.sh /cockroach/cockroach.sh
 
 # Build the cockroach executable.
-RUN cd -P /cockroach && make build
+RUN cd -P /cockroach && make RELEASE=1 build
 
 # Expose the http status port.
 EXPOSE 8080
