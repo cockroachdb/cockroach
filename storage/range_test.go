@@ -72,6 +72,19 @@ var (
 	}
 )
 
+// boostrapMode controls how the first range is created in testContext.
+type bootstrapMode int
+
+const (
+	// Use Store.BootstrapRange, which writes the range descriptor and other metadata.
+	// Most tests should use this mode because it more closely resembles the real world.
+	bootstrapRangeWithMetadata bootstrapMode = iota
+	// Create a range with NewRange and Store.AddRange. The store's data will
+	// be persisted but metadata will not. This mode is provided for backwards compatiblity
+	// for tests that expect the store to initially be empty.
+	bootstrapRangeOnly
+)
+
 // testContext contains all the objects necessary to test a Range.
 // In most cases, simply call Start(t) (and later Stop()) on a zero-initialized
 // testContext{}. Any fields which are initialized to non-nil values
@@ -84,7 +97,7 @@ type testContext struct {
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
 	clock         *hlc.Clock
-	skipBootstrap bool
+	bootstrapMode bootstrapMode
 }
 
 // testContext.Start initializes the test context with a single range covering the
@@ -110,8 +123,12 @@ func (tc *testContext) Start(t *testing.T) {
 
 	if tc.store == nil {
 		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport)
-		if !tc.skipBootstrap {
-			if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+			t.Fatal(err)
+		}
+
+		if tc.rng == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
+			if err := tc.store.BootstrapRange(); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -124,12 +141,18 @@ func (tc *testContext) Start(t *testing.T) {
 	initConfigs(tc.engine, t)
 
 	if tc.rng == nil {
-		var err error
-		tc.rng, err = NewRange(&testRangeDescriptor, tc.store)
-		if err != nil {
-			t.Fatal(err)
+		if tc.bootstrapMode == bootstrapRangeOnly {
+			rng, err := NewRange(&testRangeDescriptor, tc.store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.store.AddRange(rng); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err = tc.store.AddRange(tc.rng); err != nil {
+		var err error
+		tc.rng, err = tc.store.GetRange(1)
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -204,7 +227,9 @@ func TestRangeContains(t *testing.T) {
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 	if err := util.IsTrueWithin(func() bool {
@@ -231,7 +256,9 @@ func TestRangeGossipFirstRange(t *testing.T) {
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossiped.
 func TestRangeGossipAllConfigs(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 	testData := []struct {
@@ -1449,7 +1476,9 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
 func TestRangeStatsComputation(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 

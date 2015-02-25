@@ -66,7 +66,9 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 // TestRangeDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
 func TestRangeDataIteratorEmptyRange(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -94,7 +96,9 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 // and verifies it's empty. Finally, it verifies the pre and post
 // ranges still contain the expected data.
 func TestRangeDataIterator(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
