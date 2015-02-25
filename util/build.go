@@ -23,13 +23,15 @@ var (
 	buildSHA  string // Git SHA
 	buildTag  string // Tag of this build (git describe)
 	buildTime string // Build time in UTC (year/month/day hour:min:sec)
+	buildDeps string // Git SHAs of dependencies
 )
 
 // BuildInfo ...
 type BuildInfo struct {
-	SHA  string `json:"sha"`
-	Tag  string `json:"tag"`
-	Time string `json:"time"`
+	SHA  string
+	Tag  string
+	Time string
+	Deps string
 }
 
 // GetBuildInfo ...
@@ -38,5 +40,6 @@ func GetBuildInfo() BuildInfo {
 		SHA:  buildSHA,
 		Tag:  buildTag,
 		Time: buildTime,
+		Deps: buildDeps,
 	}
 }

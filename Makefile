@@ -57,6 +57,7 @@ auxiliary: storage/engine/cgo_flags.go
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git rev-parse HEAD)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
+build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell make depvers | sort)"
 build: auxiliary
 	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
 	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
@@ -114,3 +115,16 @@ clean:
 # configuration.
 gopath:
 	@echo -n $(GOPATH)
+
+depvers:
+	@SRCDIR=../../..; \
+	  PKGS=$$(go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
+	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
+	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)' | \
+	  egrep -v 'code.google.com/p/(go-uuid/uuid|snappy-go/snappy)'); \
+	  echo github.com/coreos/etcd:$$(git -C _vendor/src/github.com/coreos/etcd rev-parse HEAD); \
+	  for pkg in $${PKGS}; do \
+	    echo $${pkg}:$$(git -C "$${SRCDIR}/$${pkg}" rev-parse HEAD); \
+	  done
+
+.PHONY: build test testrace bench testbuild coverage acceptance clean gopath depvers

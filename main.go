@@ -23,6 +23,8 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"strings"
+	"text/tabwriter"
 
 	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server/cli"
@@ -87,9 +89,14 @@ Output build version information.
 `,
 				Run: func(cmd *commander.Command, args []string) {
 					info := util.GetBuildInfo()
-					fmt.Printf("Build SHA:  %s\n", info.SHA)
-					fmt.Printf("Build Tag:  %s\n", info.Tag)
-					fmt.Printf("Build Time: %s\n", info.Time)
+					w := &tabwriter.Writer{}
+					w.Init(os.Stdout, 2, 1, 2, ' ', 0)
+					fmt.Fprintf(w, "Build SHA:   %s\n", info.SHA)
+					fmt.Fprintf(w, "Build Tag:   %s\n", info.Tag)
+					fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
+					fmt.Fprintf(w, "Build Deps:\n\t%s\n",
+						strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+					w.Flush()
 				},
 			},
 		},
