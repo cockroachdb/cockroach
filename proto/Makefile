@@ -16,7 +16,7 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PROTOC      := protoc
+PROTOC      := ../../../../../bin/protoc
 PROTOS      := $(wildcard *.proto)
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
@@ -24,7 +24,7 @@ SOURCES     := $(PROTOS:.proto=.pb.cc) github.com/gogo/protobuf/gogoproto/gogo.p
 HEADERS     := $(PROTOS:.proto=.pb.h) github.com/gogo/protobuf/gogoproto/gogo.pb.h
 
 PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf
-PROTOC_GEN_GOGO :=../../../../../bin/protoc-gen-gogo
+PROTOC_GEN_GOGO := ../../../../../bin/protoc-gen-gogo
 
 all:
 	$(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=../storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS)
