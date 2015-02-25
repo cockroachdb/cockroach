@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -35,19 +34,31 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var (
-	s              *TestServer
-	serverTestOnce sync.Once
-)
+var testContext = NewContext()
 
-// Start a test server. The server will be initialized with an
+// TODO(DT): Don't use TestMain, in each test start and stop a TestServer.
+
+/*
+func TestMain(m *testing.M) {
+	s = &TestServer{}
+	if err := s.Start(); err != nil {
+		log.Fatalf("Could not start server: %v", err)
+	}
+	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
+	defer s.Stop()
+	os.Exit(m.Run())
+}
+*/
+
+// startTestServer starts a test server. The server will be initialized with an
 // in-memory engine and will execute a split at key "m" so that
 // it will end up having two logical ranges.
-func startServer(t *testing.T) *TestServer {
-	serverTestOnce.Do(func() {
-		s = StartTestServer(t)
-		log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
-	})
+func startTestServer(t *testing.T) *TestServer {
+	s := &TestServer{}
+	if err := s.Start(); err != nil {
+		t.Fatalf("Could not start server: %v", err)
+	}
+	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
 	return s
 }
 
@@ -112,7 +123,9 @@ func TestInitEngine(t *testing.T) {
 		{"hdd=", proto.Attributes{}, true, false},
 	}
 	for _, spec := range testCases {
-		engines, err := initEngines(spec.key)
+		ctx := &Context{Stores: spec.key}
+		err := ctx.Init()
+		engines := ctx.Engines
 		if err == nil {
 			if spec.wantError {
 				t.Fatalf("invalid engine spec '%v' erroneously accepted: %+v", spec.key, spec)
@@ -140,7 +153,8 @@ func TestInitEngines(t *testing.T) {
 	tmp := createTempDirs(2, t)
 	defer resetTestData(tmp)
 
-	stores := fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
+	ctx := NewContext()
+	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])
 	expEngines := []struct {
 		attrs proto.Attributes
 		isMem bool
@@ -151,7 +165,8 @@ func TestInitEngines(t *testing.T) {
 		{proto.Attributes{Attrs: []string{"hdd", "7200rpm"}}, false},
 	}
 
-	engines, err := initEngines(stores)
+	err := ctx.Init()
+	engines := ctx.Engines
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +187,8 @@ func TestInitEngines(t *testing.T) {
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
-	startServer(t)
+	s := startTestServer(t)
+	defer s.Stop()
 	url := "http://" + s.HTTPAddr + "/_admin/healthz"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -193,7 +209,8 @@ func TestHealthz(t *testing.T) {
 // decompression on a custom client's Transport and setting it
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
-	startServer(t)
+	s := startTestServer(t)
+	defer s.Stop()
 	client := http.Client{
 		Transport: &http.Transport{
 			Proxy:              http.ProxyFromEnvironment,
@@ -240,11 +257,12 @@ func TestGzip(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands that commands which access
 // multiple ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
-	ts := StartTestServer(t)
-	tds := kv.NewTxnCoordSender(kv.NewDistSender(ts.Gossip()), ts.Clock())
+	s := startTestServer(t)
+	defer s.Stop()
+	tds := kv.NewTxnCoordSender(kv.NewDistSender(s.Gossip()), s.Clock(), testContext.Linearizable)
 	defer tds.Close()
 
-	if err := ts.node.db.Call(proto.AdminSplit,
+	if err := s.node.db.Call(proto.AdminSplit,
 		&proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("m"),

@@ -25,7 +25,7 @@ import (
 	"runtime"
 
 	commander "code.google.com/p/go-commander"
-	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/server/cli"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -59,12 +59,12 @@ func main() {
 	c := commander.Commander{
 		Name: "cockroach",
 		Commands: []*commander.Command{
-			server.CmdInit,
-			server.CmdGetZone,
-			server.CmdLsZones,
-			server.CmdRmZone,
-			server.CmdSetZone,
-			server.CmdStart,
+			cli.CmdInit,
+			cli.CmdGetZone,
+			cli.CmdLsZones,
+			cli.CmdRmZone,
+			cli.CmdSetZone,
+			cli.CmdStart,
 			{
 				UsageLine: "listparams",
 				Short:     "list all available parameters and their default values",
@@ -94,6 +94,8 @@ Output build version information.
 			},
 		},
 	}
+
+	cli.InitFlags(cli.Context)
 
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")

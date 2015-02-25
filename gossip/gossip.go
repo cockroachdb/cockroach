@@ -57,7 +57,6 @@ package gossip
 
 import (
 	"encoding/json"
-	"flag"
 	"math"
 	"net"
 	"strings"
@@ -68,19 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
-)
-
-var (
-	// GossipBootstrap is a comma-separated list of node addresses that
-	// act as bootstrap hosts for connecting to the gossip network.
-	GossipBootstrap = flag.String(
-		"gossip", "",
-		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")
-	// GossipInterval is a time interval specifying how often gossip is
-	// communicated between hosts on the gossip network.
-	GossipInterval = flag.Duration(
-		"gossip_interval", 2*time.Second,
-		"approximate interval (time.Duration) for gossiping new information to peers")
 )
 
 const (
@@ -99,6 +85,12 @@ const (
 	// Once we receive the gossip with actual count, the default count
 	// is replaced.
 	defaultNodeCount = 1000
+
+	// TestInterval is the default gossip interval used for running tests.
+	TestInterval = 10 * time.Millisecond
+
+	// TestBootstrap is the default gossip bootstrap used for running tests.
+	TestBootstrap = ""
 )
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -119,18 +111,29 @@ type Gossip struct {
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
 	clock        *hlc.Clock         // The server hlc clock.
+
+	// GossipInterval is a time interval specifying how often gossip is
+	// communicated between hosts on the gossip network.
+	gossipInterval time.Duration
+
+	// GossipBootstrap is a comma-separated list of node addresses that
+	// act as bootstrap hosts for connecting to the gossip network.
+	gossipBootstrap string
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context) *Gossip {
+func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap string) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
 		RPCContext:   rpcContext,
-		server:       newServer(*GossipInterval),
+		server:       newServer(gossipInterval),
 		bootstraps:   newAddrSet(MaxPeers),
 		outgoing:     newAddrSet(MaxPeers),
 		clients:      map[string]*client{},
 		disconnected: make(chan *client, MaxPeers),
+
+		gossipInterval:  gossipInterval,
+		gossipBootstrap: gossipBootstrap,
 	}
 	g.stalled = sync.NewCond(&g.mu)
 	return g
@@ -209,17 +212,17 @@ func (g *Gossip) RegisterGroup(prefix string, limit int, typeOf GroupType) error
 	return g.is.registerGroup(newGroup(prefix, limit, typeOf))
 }
 
-// GossipCallback is a callback method to be invoked on gossip update
+// Callback is a callback method to be invoked on gossip update
 // of info denoted by key. The contentsChanged bool indicates whether
 // the info contents were updated. False indicates the info timestamp
 // was refreshed, but its contents remained unchanged.
-type GossipCallback func(key string, contentsChanged bool)
+type Callback func(key string, contentsChanged bool)
 
 // RegisterCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
 // matched pattern.
-func (g *Gossip) RegisterCallback(pattern string, method GossipCallback) {
+func (g *Gossip) RegisterCallback(pattern string, method Callback) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.is.registerCallback(pattern, method)
@@ -307,7 +310,7 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 // parseBootstrapAddresses parses the gossip bootstrap addresses
 // passed via -gossip command line flag.
 func (g *Gossip) parseBootstrapAddresses() {
-	addresses := strings.Split(*GossipBootstrap, ",")
+	addresses := strings.Split(g.gossipBootstrap, ",")
 	for _, addr := range addresses {
 		addr = strings.TrimSpace(addr)
 		if len(addr) == 0 {
@@ -435,7 +438,7 @@ func (g *Gossip) manage() {
 		// and there are still unused bootstrap hosts, signal bootstrapper
 		// to try another.
 		hasSentinel := g.is.getInfo(KeySentinel) != nil
-		if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(*GossipBootstrap) > 0) {
+		if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(g.gossipBootstrap) > 0) {
 			if g.outgoing.len()+g.incoming.len() == 0 {
 				log.Infof("no connections; signaling bootstrap")
 				g.stalled.Signal()

@@ -18,7 +18,6 @@
 package server
 
 import (
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -56,17 +55,7 @@ type TestServer struct {
 	// at time of call to Start() to an available port.
 	HTTPAddr, RPCAddr string
 	// server is the embedded Cockroach server struct.
-	*server
-}
-
-// StartTestServer creates a TestServer instance; on failure, causes
-// a fatal testing error. The new TestServer is returned on success.
-func StartTestServer(t *testing.T) *TestServer {
-	s := &TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
-	return s
+	*Server
 }
 
 // Gossip returns the gossip instance used by the TestServer.
@@ -98,16 +87,24 @@ func (ts *TestServer) Start() error {
 	if ts.HTTPAddr == "" {
 		ts.HTTPAddr = defaultHTTPAddr
 	}
+
+	ctx := NewContext()
+	ctx.RPC = ts.RPCAddr
+	ctx.HTTP = ts.HTTPAddr
+	ctx.Certs = ts.CertDir
+	ctx.MaxOffset = ts.MaxOffset
+
 	var err error
-	ts.server, err = newServer(ts.RPCAddr, ts.CertDir, ts.MaxOffset)
+	ts.Server, err = NewServer(ctx)
 	if err != nil {
 		return util.Errorf("could not init server: %s", err)
 	}
-	engines := []engine.Engine{engine.NewInMem(proto.Attributes{}, 100<<20)}
-	if _, err := BootstrapCluster("cluster-1", engines[0]); err != nil {
+
+	ctx.Engines = []engine.Engine{engine.NewInMem(proto.Attributes{}, 100<<20)}
+	if _, err := BootstrapCluster("cluster-1", ctx.Engines[0]); err != nil {
 		return util.Errorf("could not bootstrap cluster: %s", err)
 	}
-	err = ts.start(engines, "", ts.HTTPAddr, true) // TODO(spencer): should shutdown server.
+	err = ts.Server.Start(true) // TODO(spencer): should shutdown server.
 	if err != nil {
 		return util.Errorf("could not start server: %s", err)
 	}
@@ -121,12 +118,12 @@ func (ts *TestServer) Start() error {
 
 // Stop stops the TestServer.
 func (ts *TestServer) Stop() {
-	ts.stop()
+	ts.Server.Stop()
 }
 
-// Sets the retry options for stores in TestServer.
+// SetRangeRetryOptions sets the retry options for stores in TestServer.
 func (ts *TestServer) SetRangeRetryOptions(ro util.RetryOptions) {
-	ts.server.node.lSender.VisitStores(func(s *storage.Store) error {
+	ts.node.lSender.VisitStores(func(s *storage.Store) error {
 		s.RetryOpts = ro
 		return nil
 	})

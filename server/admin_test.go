@@ -45,9 +45,9 @@ func startAdminServer() *httptest.Server {
 	admin.RegisterHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	if strings.HasPrefix(httpServer.URL, "http://") {
-		*addr = strings.TrimPrefix(httpServer.URL, "http://")
+		testContext.Addr = strings.TrimPrefix(httpServer.URL, "http://")
 	} else if strings.HasPrefix(httpServer.URL, "https://") {
-		*addr = strings.TrimPrefix(httpServer.URL, "https://")
+		testContext.Addr = strings.TrimPrefix(httpServer.URL, "https://")
 	}
 	return httpServer
 }

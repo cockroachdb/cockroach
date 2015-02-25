@@ -139,8 +139,8 @@ func (c *client) gossip(g *Gossip) error {
 			return util.Error("client closed")
 		case <-c.closer:
 			return nil
-		case <-time.After(*GossipInterval * 10):
-			return util.Errorf("timeout after: %s", *GossipInterval*10)
+		case <-time.After(g.gossipInterval * 10):
+			return util.Errorf("timeout after: %s", g.gossipInterval*10)
 		}
 
 		// Handle remote forwarding.

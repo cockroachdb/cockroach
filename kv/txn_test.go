@@ -205,7 +205,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(lSender, txnClock)
+			sender := NewTxnCoordSender(lSender, txnClock, false)
 			txnDB := client.NewKV(sender, nil)
 			txnDB.User = storage.UserRoot
 

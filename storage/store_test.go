@@ -93,7 +93,7 @@ func (db *testSender) Close() {}
 // store. The caller is responsible for closing the store on exit.
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext)
+	g := gossip.New(rpcContext, gossip.TestInterval, "")
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)

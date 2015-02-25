@@ -54,7 +54,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(rpcContext)
+	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrap)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
@@ -161,7 +161,7 @@ func TestNodeJoin(t *testing.T) {
 	db.Close()
 
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
-	*gossip.GossipInterval = 10 * time.Millisecond
+	testContext.GossipInterval = gossip.TestInterval
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")

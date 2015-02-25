@@ -40,6 +40,15 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+func StartTestServer(t *testing.T) *server.TestServer {
+	s := &server.TestServer{}
+	if err := s.Start(); err != nil {
+		t.Fatalf("Could not start server: %v", err)
+	}
+	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
+	return s
+}
+
 // notifyingSender is a sender which can set up a notification channel
 // (on call to reset()) for clients which need to wait on a command
 // being sent.
@@ -87,7 +96,7 @@ func createTestClient(addr string) *client.KV {
 // where the non-transactional put can push the txn, we expect the
 // transaction's value to be written after all retries are complete.
 func TestKVClientRetryNonTxn(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	s.SetRangeRetryOptions(util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
@@ -205,7 +214,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 func TestKVClientRunTransaction(t *testing.T) {
 	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -265,7 +274,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 // TestKVClientGetAndPutProto verifies gets and puts of protobufs using the
 // KV client's convenience methods.
 func TestKVClientGetAndPutProto(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -300,7 +309,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 // TestKVClientGetAndPutGob verifies gets and puts of Go objects using the
 // KV client's convenience methods.
 func TestKVClientGetAndPutGob(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -340,7 +349,7 @@ func TestKVClientGetAndPutGob(t *testing.T) {
 // gob codec because gob treats pointer values and non-pointer values
 // as equivalent and elides zero-valued defaults on decode.
 func TestKVClientEmptyValues(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -369,7 +378,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 // TestKVClientPrepareAndFlush prepares a sequence of increment
 // calls and then flushes them and verifies the results.
 func TestKVClientPrepareAndFlush(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot
@@ -429,7 +438,7 @@ func TestKVClientPrepareAndFlush(t *testing.T) {
 // a value for a given key.
 func ExampleKV_Call() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer(nil)
+	serv := StartTestServer(nil)
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
@@ -475,7 +484,7 @@ func ExampleKV_Call() {
 // then used to begin execution of all the prepared operations.
 func ExampleKV_Prepare() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer(nil)
+	serv := StartTestServer(nil)
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
@@ -546,7 +555,7 @@ func ExampleKV_Prepare() {
 // multiple Key Value API operations inside a transaction.
 func ExampleKV_RunTransaction() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer(nil)
+	serv := StartTestServer(nil)
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
@@ -695,7 +704,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 // for the concrete situation described in:
 // https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
 func TestConcurrentIncrements(t *testing.T) {
-	s := server.StartTestServer(t)
+	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
 	kvClient.User = storage.UserRoot

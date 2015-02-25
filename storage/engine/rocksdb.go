@@ -26,7 +26,6 @@ import "C"
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"syscall"
 	"unsafe"
@@ -36,26 +35,20 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// defaultCacheSize is the default value for the cacheSize command line flag.
-const defaultCacheSize = 1 << 30 // GB
-
-// cacheSize is the amount of memory in bytes to use for caching data.
-// The value is split evenly between the stores if there are more than one.
-var cacheSize = flag.Int64("cache_size", defaultCacheSize, "total size in bytes for "+
-	"caches, shared evenly if there are multiple storage devices")
-
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
-	rdb   *C.DBEngine
-	attrs proto.Attributes // Attributes for this engine
-	dir   string           // The data directory
+	rdb       *C.DBEngine
+	attrs     proto.Attributes // Attributes for this engine
+	dir       string           // The data directory
+	cacheSize int64            // Memory to use to cache values.
 }
 
 // NewRocksDB allocates and returns a new RocksDB object.
-func NewRocksDB(attrs proto.Attributes, dir string) *RocksDB {
+func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64) *RocksDB {
 	return &RocksDB{
-		attrs: attrs,
-		dir:   dir,
+		attrs:     attrs,
+		dir:       dir,
+		cacheSize: cacheSize,
 	}
 }
 
@@ -74,7 +67,7 @@ func (r *RocksDB) Start() error {
 
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
-			cache_size:      C.int64_t(*cacheSize),
+			cache_size:      C.int64_t(r.cacheSize),
 			allow_os_buffer: C.int(1),
 			logger:          C.DBLoggerFunc(nil),
 		})

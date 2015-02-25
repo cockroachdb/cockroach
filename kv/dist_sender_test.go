@@ -31,7 +31,7 @@ import (
 )
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
-	n := simulation.NewNetwork(3, "unix", simulation.DefaultTestGossipInterval)
+	n := simulation.NewNetwork(3, "unix", gossip.TestInterval, gossip.TestBootstrap)
 	ds := NewDistSender(n.Nodes[0].Gossip)
 	if _, err := ds.getFirstRangeDescriptor(); err == nil {
 		t.Errorf("expected not to find first range descriptor")
@@ -69,7 +69,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 // zones and across multiple zones. It also verifies that permissions
 // are checked hierarchically.
 func TestVerifyPermissions(t *testing.T) {
-	n := simulation.NewNetwork(1, "unix", simulation.DefaultTestGossipInterval)
+	n := simulation.NewNetwork(1, "unix", gossip.TestInterval, gossip.TestBootstrap)
 	ds := NewDistSender(n.Nodes[0].Gossip)
 	config1 := &proto.PermConfig{
 		Read:  []string{"read1", "readAll", "rw1", "rwAll"},

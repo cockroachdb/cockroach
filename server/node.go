@@ -116,7 +116,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock), nil)
+	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, false), nil)
 	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport())
 
 	// Verify the store isn't already part of a cluster.
@@ -209,6 +209,9 @@ func (n *Node) stop() {
 func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	bootstraps := list.New()
 
+	if len(engines) == 0 {
+		return util.Error("no engines")
+	}
 	for _, e := range engines {
 		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport
 		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport())
@@ -320,6 +323,8 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 // node's address is gossiped with node ID as the gossip key.
 func (n *Node) connectGossip() {
 	log.Infof("connecting to gossip network to verify cluster ID...")
+	// No timeout or stop condition is needed here. Log statements should be
+	// sufficient for diagnosing this type of condition.
 	<-n.gossip.Connected
 
 	val, err := n.gossip.GetInfo(gossip.KeyClusterID)

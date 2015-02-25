@@ -42,12 +42,12 @@ import (
 func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	manual *hlc.ManualClock, lSender *LocalSender, err error) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext)
+	g := gossip.New(rpcContext, 250*time.Millisecond, "")
 	manual = hlc.NewManualClock(0)
 	clock = hlc.NewClock(manual.UnixNano)
 	eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	lSender = NewLocalSender()
-	sender := NewTxnCoordSender(lSender, clock)
+	sender := NewTxnCoordSender(lSender, clock, false)
 	db = client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport())
@@ -558,7 +558,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	for i, test := range testCases {
 		ts := NewTxnCoordSender(newTestSender(func(call *client.Call) {
 			call.Reply.Header().SetGoError(test.err)
-		}), clock)
+		}), clock, false)
 		reply := &proto.PutResponse{}
 		ts.Send(&client.Call{Method: proto.Put, Args: testPutReq, Reply: reply})
 
