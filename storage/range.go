@@ -1477,6 +1477,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 			// If we created this range (and know its start/end keys, set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
+
 			// firstIndex and lastIndex are both inclusive, so when the log is empty
 			// firstIndex == lastIndex + 1. raftInitialLogIndex is the dummy term-only
 			// entry; raftInitialLogIndex+1 is the first regular entry.
@@ -1490,9 +1491,9 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 		}
 	}
 
-	// TODO(bdarnell): synchronize ConfState with Desc.Replicas
-	cs := raftpb.ConfState{
-		Nodes: []uint64{uint64(r.rm.RaftNodeID())},
+	var cs raftpb.ConfState
+	for _, rep := range r.Desc.Replicas {
+		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
 	}
 
 	return hs, cs, nil
@@ -1600,12 +1601,23 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
+
+	// Synthesize our raftpb.ConfState from Desc.
+	var cs raftpb.ConfState
+	cs.Nodes = []uint64{uint64(r.rm.RaftNodeID())}
+	// TODO(bdarnell): cs.Nodes must give the replicas as of the log index we
+	// put in the SnapshotMetadata. When we produce a snapshot of the current
+	// time, replace the previous line with the following block.
+	/*for _, rep := range r.Desc.Replicas {
+		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
+	}*/
+
 	return raftpb.Snapshot{
 		Data: data,
 		Metadata: raftpb.SnapshotMetadata{
-			// TODO(bdarnell): fill in ConfState too.
-			Index: raftInitialLogIndex,
-			Term:  raftInitialLogTerm,
+			Index:     raftInitialLogIndex,
+			Term:      raftInitialLogTerm,
+			ConfState: cs,
 		},
 	}, nil
 }
@@ -1750,5 +1762,18 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 // InternalChangeReplicas is called after a raft configuration change has committed.
 func (r *Range) InternalChangeReplicas(req *proto.InternalChangeReplicasRequest,
 	resp *proto.InternalChangeReplicasResponse) {
-	// TODO(bdarnell): apply the change to r.Desc.
+	r.Lock()
+	defer r.Unlock()
+	// Apply the committed membership change to r.Desc.
+	// TODO(bdarnell): does this need special atomicity consideration, or will it be
+	// covered by whatever we do for "skew between Commit and Applied" above?
+	r.Desc.Replicas = r.Desc.Replicas[:0]
+	for _, n := range req.Nodes {
+		nodeID, storeID := decodeRaftNodeID(multiraft.NodeID(n))
+		r.Desc.Replicas = append(r.Desc.Replicas, proto.Replica{
+			NodeID:  nodeID,
+			StoreID: storeID,
+			// TODO(bdarnell): Set attributes. Copy from gossip or pass through request?
+		})
+	}
 }

@@ -713,12 +713,13 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if err != nil {
 					log.Errorf("error applying configuration change %v: %s", cc, err)
 				}
-				s.multiNode.ApplyConfChange(groupID, cc)
+				cs := s.multiNode.ApplyConfChange(groupID, cc)
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
 					NodeID:     NodeID(cc.NodeID),
 					ChangeType: cc.Type,
+					ConfState:  *cs,
 				})
 			}
 			if p, ok := g.pending[commandID]; ok {

@@ -1519,6 +1519,18 @@ class InternalChangeReplicasRequest : public ::google::protobuf::Message {
   inline ::proto::ReplicaChangeType change_type() const;
   inline void set_change_type(::proto::ReplicaChangeType value);
 
+  // repeated uint64 nodes = 5;
+  inline int nodes_size() const;
+  inline void clear_nodes();
+  static const int kNodesFieldNumber = 5;
+  inline ::google::protobuf::uint64 nodes(int index) const;
+  inline void set_nodes(int index, ::google::protobuf::uint64 value);
+  inline void add_nodes(::google::protobuf::uint64 value);
+  inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+      nodes() const;
+  inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+      mutable_nodes();
+
   // @@protoc_insertion_point(class_scope:proto.InternalChangeReplicasRequest)
  private:
   inline void set_has_header();
@@ -1537,6 +1549,7 @@ class InternalChangeReplicasRequest : public ::google::protobuf::Message {
   ::proto::RequestHeader* header_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > nodes_;
   int change_type_;
   friend void  protobuf_AddDesc_internal_2eproto();
   friend void protobuf_AssignDesc_internal_2eproto();
@@ -3714,6 +3727,36 @@ inline void InternalChangeReplicasRequest::set_change_type(::proto::ReplicaChang
   set_has_change_type();
   change_type_ = value;
   // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.change_type)
+}
+
+// repeated uint64 nodes = 5;
+inline int InternalChangeReplicasRequest::nodes_size() const {
+  return nodes_.size();
+}
+inline void InternalChangeReplicasRequest::clear_nodes() {
+  nodes_.Clear();
+}
+inline ::google::protobuf::uint64 InternalChangeReplicasRequest::nodes(int index) const {
+  // @@protoc_insertion_point(field_get:proto.InternalChangeReplicasRequest.nodes)
+  return nodes_.Get(index);
+}
+inline void InternalChangeReplicasRequest::set_nodes(int index, ::google::protobuf::uint64 value) {
+  nodes_.Set(index, value);
+  // @@protoc_insertion_point(field_set:proto.InternalChangeReplicasRequest.nodes)
+}
+inline void InternalChangeReplicasRequest::add_nodes(::google::protobuf::uint64 value) {
+  nodes_.Add(value);
+  // @@protoc_insertion_point(field_add:proto.InternalChangeReplicasRequest.nodes)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+InternalChangeReplicasRequest::nodes() const {
+  // @@protoc_insertion_point(field_list:proto.InternalChangeReplicasRequest.nodes)
+  return nodes_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+InternalChangeReplicasRequest::mutable_nodes() {
+  // @@protoc_insertion_point(field_mutable_list:proto.InternalChangeReplicasRequest.nodes)
+  return &nodes_;
 }
 
 // -------------------------------------------------------------------

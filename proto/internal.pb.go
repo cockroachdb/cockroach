@@ -371,11 +371,15 @@ func (*InternalTruncateLogResponse) ProtoMessage()    {}
 // Only one ChangeReplicas operation can be in progress at a time; a proposed
 // change will fail if the previous change has not yet completed.
 type InternalChangeReplicasRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	NodeID           NodeID            `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
-	StoreID          StoreID           `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
-	ChangeType       ReplicaChangeType `protobuf:"varint,4,opt,name=change_type,enum=proto.ReplicaChangeType" json:"change_type"`
-	XXX_unrecognized []byte            `json:"-"`
+	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	NodeID        NodeID            `protobuf:"varint,2,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	StoreID       StoreID           `protobuf:"varint,3,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	ChangeType    ReplicaChangeType `protobuf:"varint,4,opt,name=change_type,enum=proto.ReplicaChangeType" json:"change_type"`
+	// This field gets filled in as the request passes through raft.
+	// It contains the current committed members of the group (equivalent to ConfState.Nodes)
+	// to guard against any drift from incremental processing of changes.
+	Nodes            []uint64 `protobuf:"varint,5,rep,name=nodes" json:"nodes,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *InternalChangeReplicasRequest) Reset()         { *m = InternalChangeReplicasRequest{} }
@@ -387,6 +391,13 @@ func (m *InternalChangeReplicasRequest) GetChangeType() ReplicaChangeType {
 		return m.ChangeType
 	}
 	return ADD_REPLICA
+}
+
+func (m *InternalChangeReplicasRequest) GetNodes() []uint64 {
+	if m != nil {
+		return m.Nodes
+	}
+	return nil
 }
 
 type InternalChangeReplicasResponse struct {

@@ -126,9 +126,11 @@ func verifyKeys(start, end proto.Key) error {
 // Both values are int32s, but we only allocate 8 bits for StoreID so we have
 // the option of expanding proto.NodeID and being more "wasteful" of node IDs.
 func makeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
-	if n <= 0 || s <= 0 {
+	if n < 0 || s <= 0 {
 		// Zeroes are likely the result of incomplete initialization.
-		panic("NodeID and StoreID must be > 0")
+		// TODO(bdarnell): should we disallow NodeID==0? It should never occur in
+		// production but many tests use it.
+		panic("NodeID must be >= 0 and StoreID must be > 0")
 	}
 	if s > 0xff {
 		panic("StoreID must be <= 0xff")
@@ -1019,6 +1021,7 @@ func (s *Store) processRaft() {
 					NodeID:     nodeID,
 					StoreID:    storeID,
 					ChangeType: changeTypeRaftToInternal[e.ChangeType],
+					Nodes:      e.ConfState.Nodes,
 				})
 				if !ok {
 					log.Fatal("failed to set cmd value")
@@ -1052,8 +1055,8 @@ func (s *Store) processRaft() {
 
 // GroupStorage implements the multiraft.Storage interface.
 func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	r, ok := s.ranges[int64(groupID)]
 	if !ok {
 		var err error

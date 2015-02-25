@@ -42,18 +42,6 @@ import (
 )
 
 var (
-	testRangeDescriptor = proto.RangeDescriptor{
-		RaftID:   1,
-		StartKey: engine.KeyMin,
-		EndKey:   engine.KeyMax,
-		Replicas: []proto.Replica{
-			{
-				NodeID:  1,
-				StoreID: 1,
-				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
-			},
-		},
-	}
 	testDefaultAcctConfig = proto.AcctConfig{}
 	testDefaultPermConfig = proto.PermConfig{
 		Read:  []string{"root"},
@@ -71,6 +59,21 @@ var (
 		},
 	}
 )
+
+func testRangeDescriptor() *proto.RangeDescriptor {
+	return &proto.RangeDescriptor{
+		RaftID:   1,
+		StartKey: engine.KeyMin,
+		EndKey:   engine.KeyMax,
+		Replicas: []proto.Replica{
+			{
+				NodeID:  1,
+				StoreID: 1,
+				Attrs:   proto.Attributes{Attrs: []string{"dc1", "mem"}},
+			},
+		},
+	}
+}
 
 // boostrapMode controls how the first range is created in testContext.
 type bootstrapMode int
@@ -142,7 +145,7 @@ func (tc *testContext) Start(t *testing.T) {
 
 	if tc.rng == nil {
 		if tc.bootstrapMode == bootstrapRangeOnly {
-			rng, err := NewRange(&testRangeDescriptor, tc.store)
+			rng, err := NewRange(testRangeDescriptor(), tc.store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -240,8 +243,8 @@ func TestRangeGossipFirstRange(t *testing.T) {
 				return false
 			}
 			if key == gossip.KeyFirstRangeDescriptor &&
-				!reflect.DeepEqual(info.(proto.RangeDescriptor), testRangeDescriptor) {
-				t.Errorf("expected gossiped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), testRangeDescriptor)
+				!reflect.DeepEqual(info.(proto.RangeDescriptor), *testRangeDescriptor()) {
+				t.Errorf("expected gossiped range locations to be equal: %+v vs %+v", info.(proto.RangeDescriptor), *testRangeDescriptor())
 			}
 			if key == gossip.KeyClusterID && info.(string) != tc.store.Ident.ClusterID {
 				t.Errorf("expected gossiped cluster ID %s; got %s", tc.store.Ident.ClusterID, info.(string))
