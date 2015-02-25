@@ -731,7 +731,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	case proto.InternalTruncateLog:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
 	case proto.InternalChangeReplicas:
-		r.InternalChangeReplicas(args.(*proto.InternalChangeReplicasRequest), reply.(*proto.InternalChangeReplicasResponse))
+		r.InternalChangeReplicas(batch, args.(*proto.InternalChangeReplicasRequest), reply.(*proto.InternalChangeReplicasResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -1760,8 +1760,9 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 }
 
 // InternalChangeReplicas is called after a raft configuration change has committed.
-func (r *Range) InternalChangeReplicas(req *proto.InternalChangeReplicasRequest,
-	resp *proto.InternalChangeReplicasResponse) {
+func (r *Range) InternalChangeReplicas(batch engine.Engine,
+	req *proto.InternalChangeReplicasRequest,
+	reply *proto.InternalChangeReplicasResponse) {
 	r.Lock()
 	defer r.Unlock()
 	// Apply the committed membership change to r.Desc.
@@ -1775,5 +1776,9 @@ func (r *Range) InternalChangeReplicas(req *proto.InternalChangeReplicasRequest,
 			StoreID: storeID,
 			// TODO(bdarnell): Set attributes. Copy from gossip or pass through request?
 		})
+	}
+
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeDescriptorKey(r.Desc.StartKey), req.Header().Timestamp, nil, r.Desc); err != nil {
+		reply.SetGoError(util.Errorf("change replicas of range %d failed: %s", r.Desc.RaftID, err))
 	}
 }

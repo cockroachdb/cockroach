@@ -1018,10 +1018,12 @@ func (s *Store) processRaft() {
 				nodeID, storeID := decodeRaftNodeID(e.NodeID)
 				cmd.RaftID = groupID
 				ok := cmd.Cmd.SetValue(&proto.InternalChangeReplicasRequest{
-					NodeID:     nodeID,
-					StoreID:    storeID,
-					ChangeType: changeTypeRaftToInternal[e.ChangeType],
-					Nodes:      e.ConfState.Nodes,
+					// TODO(bdarnell): do we need to smuggle the original timestamp through raft?
+					RequestHeader: proto.RequestHeader{Timestamp: s.clock.Now()},
+					NodeID:        nodeID,
+					StoreID:       storeID,
+					ChangeType:    changeTypeRaftToInternal[e.ChangeType],
+					Nodes:         e.ConfState.Nodes,
 				})
 				if !ok {
 					log.Fatal("failed to set cmd value")

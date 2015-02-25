@@ -129,6 +129,7 @@ func (lt *localRPCTransport) Stop(id NodeID) {
 	defer lt.mu.Unlock()
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
+	delete(lt.clients, id)
 }
 
 func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
@@ -167,6 +168,12 @@ func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
 		return call.Error
 	default:
 		// Otherwise, fire-and-forget.
+		go func() {
+			<-call.Done
+			if call.Error != nil {
+				log.Errorf("sending rpc failed: %s", call.Error)
+			}
+		}()
 		return nil
 	}
 }

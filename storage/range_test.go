@@ -96,6 +96,7 @@ type testContext struct {
 	transport     multiraft.Transport
 	store         *Store
 	rng           *Range
+	rangeID       int64
 	gossip        *gossip.Gossip
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
@@ -158,6 +159,7 @@ func (tc *testContext) Start(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tc.rangeID = tc.rng.Desc.RaftID
 	}
 }
 
