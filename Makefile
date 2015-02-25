@@ -110,6 +110,13 @@ clean:
 gopath:
 	@echo -n $(GOPATH)
 
+# List all of the dependencies which are not part of the standard
+# library, cockroachdb/cockroach or coreos/etcd.
+godeps:
+	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
+	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
+	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)'
+
 depvers:
 	@SRCDIR=../../..; \
 	  PKGS=$$(go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
@@ -121,4 +128,4 @@ depvers:
 	    echo $${pkg}:$$(git -C "$${SRCDIR}/$${pkg}" rev-parse HEAD); \
 	  done
 
-.PHONY: build test testrace bench testbuild coverage acceptance clean gopath depvers
+.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers

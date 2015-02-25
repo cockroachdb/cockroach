@@ -10,26 +10,33 @@
 
 cd -P "$(dirname $0)"
 
-set -e -x
+PKGS="github.com/golang/lint/golint"
+PKGS="${PKGS} golang.org/x/tools/cmd/goimports"
 
-# Update submodules
-git submodule update --init
-
-function go_get() {
-  go get -u -v "$@"
-}
-
-# Grab binaries required by git hooks.
-go_get github.com/golang/lint/golint
-go_get golang.org/x/tools/cmd/goimports
 # go vet is special: it installs into $GOROOT (which $USER may not have
 # write access to) instead of $GOPATH. It is usually but not always
 # installed along with the rest of the go toolchain. Don't try to
 # install it if it's already there.
-go vet -n 2>/dev/null || go_get golang.org/x/tools/cmd/vet
+if ! go vet 2>/dev/null; then
+    PKGS="${PKGS} golang.org/x/tools/cmd/vet"
+fi
+
+set -ex
+
+# Update submodules
+git submodule update --init
+
+# Grab binaries required by git hooks.
+go get -u ${PKGS}
 
 # Grab the go dependencies required for building.
 ./build/devbase/godeps.sh
+
+go install -v \
+   github.com/cockroachdb/c-protobuf/cmd/protoc \
+   github.com/gogo/protobuf/protoc-gen-gogo
+
+set +x
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do
