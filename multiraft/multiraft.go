@@ -549,11 +549,11 @@ func (s *state) createGroup(groupID uint64) error {
 	log.V(6).Infof("node %v creating group %v", s.nodeID, groupID)
 
 	gs := s.Storage.GroupStorage(groupID)
-	state, err := gs.InitialState()
+	_, cs, err := gs.InitialState()
 	if err != nil {
 		return err
 	}
-	for _, nodeID := range state.ConfState.Nodes {
+	for _, nodeID := range cs.Nodes {
 		s.addNode(NodeID(nodeID), groupID)
 	}
 
@@ -562,7 +562,7 @@ func (s *state) createGroup(groupID uint64) error {
 		pending: map[string]*proposal{},
 	}
 
-	for _, nodeID := range state.ConfState.Nodes {
+	for _, nodeID := range cs.Nodes {
 		s.addNode(NodeID(nodeID), groupID)
 	}
 
@@ -572,11 +572,11 @@ func (s *state) createGroup(groupID uint64) error {
 func (s *state) removeGroup(op *removeGroupOp) {
 	s.multiNode.RemoveGroup(op.groupID)
 	gs := s.Storage.GroupStorage(op.groupID)
-	state, err := gs.InitialState()
+	_, cs, err := gs.InitialState()
 	if err != nil {
 		op.ch <- err
 	}
-	for _, nodeID := range state.ConfState.Nodes {
+	for _, nodeID := range cs.Nodes {
 		s.nodes[NodeID(nodeID)].unregisterGroup(op.groupID)
 	}
 	delete(s.groups, op.groupID)

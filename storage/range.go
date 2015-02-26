@@ -1464,12 +1464,12 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 }
 
 // InitialState implements the raft.Storage interface.
-func (r *Range) InitialState() (raft.InitialState, error) {
+func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
-		return raft.InitialState{}, err
+		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
@@ -1495,12 +1495,7 @@ func (r *Range) InitialState() (raft.InitialState, error) {
 		Nodes: []uint64{uint64(r.rm.RaftNodeID())},
 	}
 
-	return raft.InitialState{
-		HardState: hs,
-		ConfState: cs,
-		// TODO(bdarnell): account for skew between Commit and Applied.
-		AppliedIndex: hs.Commit,
-	}, nil
+	return hs, cs, nil
 }
 
 // loadFirstAndLastIndex looks in the engine to find the first and last log index.
