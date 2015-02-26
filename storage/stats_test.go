@@ -25,7 +25,9 @@ import (
 )
 
 func TestRangeStatsEmpty(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 
@@ -64,7 +66,9 @@ func TestRangeStatsInit(t *testing.T) {
 }
 
 func TestRangeStatsMerge(t *testing.T) {
-	tc := testContext{}
+	tc := testContext{
+		bootstrapMode: bootstrapRangeOnly,
+	}
 	tc.Start(t)
 	defer tc.Stop()
 	ms := engine.MVCCStats{
