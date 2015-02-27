@@ -6,7 +6,6 @@ package multiraft
 import (
 	"sync"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -60,7 +59,7 @@ func (b *blockableGroupStorage) SetHardState(st raftpb.HardState) error {
 	return b.s.SetHardState(st)
 }
 
-func (b *blockableGroupStorage) InitialState() (raft.InitialState, error) {
+func (b *blockableGroupStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	b.b.wait()
 	return b.s.InitialState()
 }
