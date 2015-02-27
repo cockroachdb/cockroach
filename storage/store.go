@@ -1018,7 +1018,8 @@ func (s *Store) processRaft() {
 				nodeID, storeID := decodeRaftNodeID(e.NodeID)
 				cmd.RaftID = groupID
 				ok := cmd.Cmd.SetValue(&proto.InternalChangeReplicasRequest{
-					// TODO(bdarnell): do we need to smuggle the original timestamp through raft?
+					// Note that the original timestamp was lost in the transition through raft,
+					// so we use the current time of the commit.
 					RequestHeader: proto.RequestHeader{Timestamp: s.clock.Now()},
 					NodeID:        nodeID,
 					StoreID:       storeID,

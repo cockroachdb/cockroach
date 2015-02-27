@@ -130,6 +130,10 @@ func TestReplicateRange(t *testing.T) {
 	}
 
 	// Verify that the same data is available on the replica.
+	// TODO(bdarnell): relies on the fact that we allow reads from followers.
+	// When we enforce reads from leader/quorum leases, we'll need to introduce a
+	// non-transactional local read for tests like this.
+	// Also applies to other tests in this file.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), mtc.rangeID, mtc.stores[1].StoreID())
 		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {

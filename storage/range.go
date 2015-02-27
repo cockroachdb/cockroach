@@ -1766,8 +1766,9 @@ func (r *Range) InternalChangeReplicas(batch engine.Engine,
 	r.Lock()
 	defer r.Unlock()
 	// Apply the committed membership change to r.Desc.
-	// TODO(bdarnell): does this need special atomicity consideration, or will it be
-	// covered by whatever we do for "skew between Commit and Applied" above?
+	// TODO(bdarnell): update the range addressing records too (atomically).
+	// Need to either combine this with EndTransaction or queue up a transaction on
+	// the meta records.
 	r.Desc.Replicas = r.Desc.Replicas[:0]
 	for _, n := range req.Nodes {
 		nodeID, storeID := decodeRaftNodeID(multiraft.NodeID(n))
