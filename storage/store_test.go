@@ -917,6 +917,7 @@ func TestRaftNodeID(t *testing.T) {
 		storeID  proto.StoreID
 		expected multiraft.NodeID
 	}{
+		{0, 1, 1},
 		{1, 1, 257},
 		{2, 3, 515},
 		{math.MaxInt32, 0xff, 549755813887},
@@ -938,7 +939,6 @@ func TestRaftNodeID(t *testing.T) {
 		nodeID  proto.NodeID
 		storeID proto.StoreID
 	}{
-		{0, 1},
 		{1, 0},
 		{1, 0x100},
 		{1, -1},

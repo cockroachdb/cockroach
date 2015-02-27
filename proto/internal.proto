@@ -178,6 +178,11 @@ message InternalChangeReplicasRequest {
   optional int32 store_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
   optional ReplicaChangeType change_type = 4 [(gogoproto.nullable) = false];
+
+  // This field gets filled in as the request passes through raft.
+  // It contains the current committed members of the group (equivalent to ConfState.Nodes)
+  // to guard against any drift from incremental processing of changes.
+  repeated uint64 nodes = 5;
 }
 
 message InternalChangeReplicasResponse {
