@@ -10,40 +10,27 @@ RUN apt-get update -y && apt-get dist-upgrade -y && \
 ENV GOPATH /go
 ENV ROACHPATH $GOPATH/src/github.com/cockroachdb
 ENV VENDORPATH $ROACHPATH/cockroach/_vendor
-ENV ROCKSDBPATH $VENDORPATH
 ENV VENDORGOPATH $VENDORPATH/src
 ENV COREOSPATH $VENDORGOPATH/github.com/coreos
-ENV VENDOR_LIB $VENDORPATH/usr/lib
-ENV VENDOR_INCLUDE $VENDORPATH/usr/include
-
-# Make our vendored libraries visible everywhere.
-ENV LIBRARY_PATH $VENDOR_LIB
-ENV CPLUS_INCLUDE_PATH $VENDOR_INCLUDE
-ENV PATH $VENDORPATH/usr/bin:$PATH
 
 # Create required directories and a convenience symlink.
 RUN mkdir -p $ROACHPATH && \
- mkdir -p $ROCKSDBPATH && \
  mkdir -p $COREOSPATH && \
  ln -s "${ROACHPATH}/cockroach" /cockroach 
 
 WORKDIR /cockroach
 
-# Get RocksDB, Etcd sources from github and build the vendored libs.
-# This is mildly tricky in that we bake the SHA of the rocksdb and
-# etcd commits into the Dockerfile so that layer caching works
-# properly. Effectively we're doing the work of "git submodule update"
-# here.
+# Get the Etcd sources from github. This is mildly tricky in that we
+# bake the SHA of the etcd commit into the Dockerfile so that layer
+# caching works properly. Effectively we're doing the work of "git
+# submodule update" here.
 RUN \
- cd $ROCKSDBPATH && git clone https://github.com/cockroachdb/rocksdb.git && \
- cd $ROCKSDBPATH/rocksdb && git checkout ROCKSDB_SHA && \
  cd $COREOSPATH && git clone https://github.com/cockroachdb/etcd.git && \
  cd $COREOSPATH/etcd && git checkout ETCD_SHA
 
 # Avoid adding the Dockerfile which gets "touched" on every build and
-# would this invalidate subsequent layer caching.
-ADD *.sh *.go /cockroach/build/devbase/
+# would thus invalidate subsequent layer caching.
+ADD *.sh /cockroach/build/devbase/
 RUN ["./build/devbase/godeps.sh"]
-RUN ["./build/devbase/vendor.sh"]
 
 CMD ["/bin/bash"]

@@ -13,14 +13,19 @@
 # an absolute path.
 export GOPATH=$(cd $(dirname $0)/../../../../../.. && pwd)
 
-function go_get() {
-  go get -u -v "$@"
-}
+set -ex
 
-go_get code.google.com/p/biogo.store/llrb
-go_get code.google.com/p/go-commander
-go_get code.google.com/p/go-uuid/uuid
-go_get github.com/gogo/protobuf/{proto,protoc-gen-gogo,gogoproto}
-go_get code.google.com/p/snappy-go/snappy
-go_get github.com/golang/glog
-go_get gopkg.in/yaml.v1
+# NOTE: Use "make godeps" to update this list. We can't just use "go
+# list" here because this script is run during docker container builds
+# before the cockroach code is present.
+go get -u \
+   code.google.com/p/biogo.store/interval \
+   code.google.com/p/biogo.store/llrb  \
+   code.google.com/p/go-commander \
+   code.google.com/p/go-uuid/uuid \
+   code.google.com/p/snappy-go/snappy \
+   github.com/cockroachdb/c-protobuf \
+   github.com/cockroachdb/c-rocksdb \
+   github.com/gogo/protobuf/proto \
+   github.com/golang/glog \
+   gopkg.in/yaml.v1
