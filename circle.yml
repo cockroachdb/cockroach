@@ -7,7 +7,7 @@ checkout:
     - git fetch --unshallow 2>/dev/null || true
     - git submodule update --init --recursive
     - git fetch --tags
-    # Nasty hack: Because we get a freshly restored repo, timestamps don't
+    # Nasty hack: Because we get a freshly restored repo, timestamps do not
     # correspond any more to when the file was last changed. To rectify this,
     # first set everything to a timestamp in the past and then update the
     # timestamp for all git-tracked files based on their last committed change.
