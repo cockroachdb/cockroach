@@ -1,5 +1,4 @@
 _vendor
-storage/engine/engine.pc
 cockroach
 build/deploy
 .git/FETCH_HEAD
