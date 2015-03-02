@@ -665,6 +665,7 @@ func TestSnapshotMethods(t *testing.T) {
 		if iter.Valid() {
 			t.Error("expected invalid iterator when seeking to element which shouldn't be visible to snapshot")
 		}
+		iter.Close()
 
 		// Verify Commit is error.
 		if err := snap.Commit(); err == nil {
