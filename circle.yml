@@ -4,15 +4,15 @@ machine:
 
 checkout:
   post:
-    # Nasty hack: Because we get a new clone of the repo, timestamps don't
-    # correspond any more to when the file was last changed.
-    # To rectify this, first set everything to a timestamp in the past and then
-    # update the timestamp for all git-tracked files based on their last
-    # committed change.
+    - git fetch --unshallow 2>/dev/null || true
+    - git submodule update --init --recursive
+    - git fetch --tags
+    # Nasty hack: Because we get a freshly restored repo, timestamps do not
+    # correspond any more to when the file was last changed. To rectify this,
+    # first set everything to a timestamp in the past and then update the
+    # timestamp for all git-tracked files based on their last committed change.
     - find . -exec touch -t 201401010000 {} \;
     - for x in $(git ls-tree --full-tree --name-only -r HEAD); do touch -t $(date -d "$(git log -1 --format=%ci "${x}")" +%y%m%d%H%M.%S) "${x}"; done
-    - git fetch --unshallow 2>/dev/null || true
-    - git fetch --tags
 
 dependencies:
   cache_directories:
