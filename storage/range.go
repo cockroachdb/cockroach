@@ -159,10 +159,11 @@ type RangeManager interface {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	Desc      *proto.RangeDescriptor
-	rm        RangeManager // Makes some store methods available
-	stats     *rangeStats  // Range statistics
-	splitting int32        // 1 if a split is underway; updated atomically
+	Desc  *proto.RangeDescriptor
+	rm    RangeManager // Makes some store methods available
+	stats *rangeStats  // Range statistics
+	// 1 if a split, merge, or replica change is underway; updated atomically
+	metaLock int32
 	// First non-truncated entry in the raft log. Updated atomically.
 	firstIndex uint64
 	// Last index persisted to the raft log (not necessarily committed).
@@ -652,7 +653,7 @@ func (r *Range) ShouldSplit() bool {
 // successful execution of a read/write command.
 func (r *Range) maybeSplit() {
 	// If we're already splitting, ignore.
-	if atomic.LoadInt32(&r.splitting) == int32(1) {
+	if atomic.LoadInt32(&r.metaLock) == int32(1) {
 		return
 	}
 	// If this zone's total bytes are in excess, split the range. We omit
@@ -730,8 +731,6 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	case proto.InternalTruncateLog:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
-	case proto.InternalChangeReplicas:
-		r.InternalChangeReplicas(batch, args.(*proto.InternalChangeReplicasRequest), reply.(*proto.InternalChangeReplicasResponse))
 	default:
 		return util.Errorf("unrecognized command %q", method)
 	}
@@ -940,6 +939,8 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
 		} else if args.MergeTrigger != nil {
 			reply.SetGoError(r.mergeTrigger(batch, args.MergeTrigger))
+		} else if args.ChangeReplicasTrigger != nil {
+			// ChangeReplicasTrigger is processed on input, not output.
 		}
 	}
 }
@@ -1382,11 +1383,11 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 // carried out as part of the commit of that transaction.
 func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
 	// Only allow a single split per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("already splitting range %d", r.Desc.RaftID))
+	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
+		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc.RaftID))
 		return
 	}
-	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
+	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -1696,11 +1697,11 @@ func ReplicaSetsEqual(a, b []proto.Replica) bool {
 // A merge requires that the two ranges are collocate on the same set of replicas.
 func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) {
 	// Only allow a single split/merge per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.splitting, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("already splitting/merging range %d", r.Desc.RaftID))
+	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
+		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc.RaftID))
 		return
 	}
-	defer func() { atomic.StoreInt32(&r.splitting, int32(0)) }()
+	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
 
 	subsumedDesc := args.SubsumedRange
 
@@ -1759,27 +1760,64 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	}
 }
 
-// InternalChangeReplicas is called after a raft configuration change has committed.
-func (r *Range) InternalChangeReplicas(batch engine.Engine,
-	req *proto.InternalChangeReplicasRequest,
-	reply *proto.InternalChangeReplicasResponse) {
-	r.Lock()
-	defer r.Unlock()
-	// Apply the committed membership change to r.Desc.
-	// TODO(bdarnell): update the range addressing records too (atomically).
-	// Need to either combine this with EndTransaction or queue up a transaction on
-	// the meta records.
-	r.Desc.Replicas = r.Desc.Replicas[:0]
-	for _, n := range req.Nodes {
-		nodeID, storeID := decodeRaftNodeID(multiraft.NodeID(n))
-		r.Desc.Replicas = append(r.Desc.Replicas, proto.Replica{
-			NodeID:  nodeID,
-			StoreID: storeID,
-			// TODO(bdarnell): Set attributes. Copy from gossip or pass through request?
-		})
+// ChangeReplicas adds or removes a replica of a range. The change is performed
+// in a distributed transaction and takes effect when that transaction is committed.
+// When removing a replica, only the NodeID and StoreID fields of the Replica are used.
+func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
+	// Only allow a single change per range at a time.
+	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
+		return util.Errorf("range %d metadata locked", r.Desc.RaftID)
+	}
+	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
+
+	// Validate the request and prepare the new descriptor.
+	updatedDesc := *r.Desc
+	found := -1
+	for i, existingRep := range r.Desc.Replicas {
+		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
+			found = i
+			break
+		}
+	}
+	if changeType == proto.ADD_REPLICA {
+		if found != -1 {
+			return util.Errorf("adding replica %v which is already present in range %d",
+				replica, r.Desc.RaftID)
+		}
+		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
+	} else if changeType == proto.REMOVE_REPLICA {
+		if found == -1 {
+			return util.Errorf("removing replica %v which is not present in range %d",
+				replica, r.Desc.RaftID)
+		}
+		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
+		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
 
-	if err := engine.MVCCPutProto(batch, nil, engine.RangeDescriptorKey(r.Desc.StartKey), req.Header().Timestamp, nil, r.Desc); err != nil {
-		reply.SetGoError(util.Errorf("change replicas of range %d failed: %s", r.Desc.RaftID, err))
+	txnOpts := &client.TransactionOptions{
+		Name: fmt.Sprintf("change replicas of %d", r.Desc.RaftID),
 	}
+	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+		// Important: the range descriptor must be the first thing touched in the transaction
+		// so the transaction record lives there.
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+			return err
+		}
+
+		// End the transaction manually instead of letting RunTransaction
+		// loop do it, in order to provide a commit trigger.
+		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
+			Commit:        true,
+			ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+				NodeID:     replica.NodeID,
+				StoreID:    replica.StoreID,
+				ChangeType: changeType,
+			},
+		}, &proto.EndTransactionResponse{})
+	})
+	if err != nil {
+		return util.Errorf("change replicas of %d failed: %s", r.Desc.RaftID, err)
+	}
+	return nil
 }

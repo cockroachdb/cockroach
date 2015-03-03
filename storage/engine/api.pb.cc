@@ -443,11 +443,12 @@ void protobuf_AssignDesc_api_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ScanResponse));
   EndTransactionRequest_descriptor_ = file->message_type(19);
-  static const int EndTransactionRequest_offsets_[4] = {
+  static const int EndTransactionRequest_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, commit_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, split_trigger_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, merge_trigger_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, change_replicas_trigger_),
   };
   EndTransactionRequest_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -935,70 +936,72 @@ void protobuf_AddDesc_api_2eproto() {
     "\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000\"d\n\014"
     "ScanResponse\022/\n\006header\030\001 \001(\0132\025.proto.Res"
     "ponseHeaderB\010\310\336\037\000\320\336\037\001\022#\n\004rows\030\002 \003(\0132\017.pr"
-    "oto.KeyValueB\004\310\336\037\000\"\265\001\n\025EndTransactionReq"
+    "oto.KeyValueB\004\310\336\037\000\"\364\001\n\025EndTransactionReq"
     "uest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHead"
     "erB\010\310\336\037\000\320\336\037\001\022\024\n\006commit\030\002 \001(\010B\004\310\336\037\000\022*\n\rsp"
     "lit_trigger\030\003 \001(\0132\023.proto.SplitTrigger\022*"
     "\n\rmerge_trigger\030\004 \001(\0132\023.proto.MergeTrigg"
-    "er\"d\n\026EndTransactionResponse\022/\n\006header\030\001"
-    " \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n"
-    "\013commit_wait\030\002 \001(\003B\004\310\336\037\000\"]\n\020ReapQueueReq"
-    "uest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHead"
-    "erB\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000\""
-    "j\n\021ReapQueueResponse\022/\n\006header\030\001 \001(\0132\025.p"
-    "roto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022$\n\010message"
-    "s\030\002 \003(\0132\014.proto.ValueB\004\310\336\037\000\"F\n\024EnqueueUp"
-    "dateRequest\022.\n\006header\030\001 \001(\0132\024.proto.Requ"
-    "estHeaderB\010\310\336\037\000\320\336\037\001\"H\n\025EnqueueUpdateResp"
-    "onse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHea"
-    "derB\010\310\336\037\000\320\336\037\001\"h\n\025EnqueueMessageRequest\022."
-    "\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336"
-    "\037\000\320\336\037\001\022\037\n\003msg\030\002 \001(\0132\014.proto.ValueB\004\310\336\037\000\""
-    "I\n\026EnqueueMessageResponse\022/\n\006header\030\001 \001("
-    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\252\004\n\014R"
-    "equestUnion\022(\n\010contains\030\001 \001(\0132\026.proto.Co"
-    "ntainsRequest\022\036\n\003get\030\002 \001(\0132\021.proto.GetRe"
-    "quest\022\036\n\003put\030\003 \001(\0132\021.proto.PutRequest\0225\n"
-    "\017conditional_put\030\004 \001(\0132\034.proto.Condition"
-    "alPutRequest\022*\n\tincrement\030\005 \001(\0132\027.proto."
-    "IncrementRequest\022$\n\006delete\030\006 \001(\0132\024.proto"
-    ".DeleteRequest\022/\n\014delete_range\030\007 \001(\0132\031.p"
-    "roto.DeleteRangeRequest\022 \n\004scan\030\010 \001(\0132\022."
-    "proto.ScanRequest\0225\n\017end_transaction\030\t \001"
-    "(\0132\034.proto.EndTransactionRequest\022+\n\nreap"
-    "_queue\030\n \001(\0132\027.proto.ReapQueueRequest\0223\n"
-    "\016enqueue_update\030\013 \001(\0132\033.proto.EnqueueUpd"
-    "ateRequest\0225\n\017enqueue_message\030\014 \001(\0132\034.pr"
-    "oto.EnqueueMessageRequest:\004\310\240\037\001\"\267\004\n\rResp"
-    "onseUnion\022)\n\010contains\030\001 \001(\0132\027.proto.Cont"
-    "ainsResponse\022\037\n\003get\030\002 \001(\0132\022.proto.GetRes"
-    "ponse\022\037\n\003put\030\003 \001(\0132\022.proto.PutResponse\0226"
-    "\n\017conditional_put\030\004 \001(\0132\035.proto.Conditio"
-    "nalPutResponse\022+\n\tincrement\030\005 \001(\0132\030.prot"
-    "o.IncrementResponse\022%\n\006delete\030\006 \001(\0132\025.pr"
-    "oto.DeleteResponse\0220\n\014delete_range\030\007 \001(\013"
-    "2\032.proto.DeleteRangeResponse\022!\n\004scan\030\010 \001"
-    "(\0132\023.proto.ScanResponse\0226\n\017end_transacti"
-    "on\030\t \001(\0132\035.proto.EndTransactionResponse\022"
-    ",\n\nreap_queue\030\n \001(\0132\030.proto.ReapQueueRes"
-    "ponse\0224\n\016enqueue_update\030\013 \001(\0132\034.proto.En"
-    "queueUpdateResponse\0226\n\017enqueue_message\030\014"
-    " \001(\0132\035.proto.EnqueueMessageResponse:\004\310\240\037"
-    "\001\"k\n\014BatchRequest\022.\n\006header\030\001 \001(\0132\024.prot"
-    "o.RequestHeaderB\010\310\336\037\000\320\336\037\001\022+\n\010requests\030\002 "
-    "\003(\0132\023.proto.RequestUnionB\004\310\336\037\000\"o\n\rBatchR"
-    "esponse\022/\n\006header\030\001 \001(\0132\025.proto.Response"
-    "HeaderB\010\310\336\037\000\320\336\037\001\022-\n\tresponses\030\002 \003(\0132\024.pr"
-    "oto.ResponseUnionB\004\310\336\037\000\"c\n\021AdminSplitReq"
-    "uest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHead"
-    "erB\010\310\336\037\000\320\336\037\001\022\036\n\tsplit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037"
-    "\003Key\"E\n\022AdminSplitResponse\022/\n\006header\030\001 \001"
-    "(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"y\n\021A"
-    "dminMergeRequest\022.\n\006header\030\001 \001(\0132\024.proto"
-    ".RequestHeaderB\010\310\336\037\000\320\336\037\001\0224\n\016subsumed_ran"
-    "ge\030\002 \001(\0132\026.proto.RangeDescriptorB\004\310\336\037\000\"E"
-    "\n\022AdminMergeResponse\022/\n\006header\030\001 \001(\0132\025.p"
-    "roto.ResponseHeaderB\010\310\336\037\000\320\336\037\001", 4549);
+    "er\022=\n\027change_replicas_trigger\030\005 \001(\0132\034.pr"
+    "oto.ChangeReplicasTrigger\"d\n\026EndTransact"
+    "ionResponse\022/\n\006header\030\001 \001(\0132\025.proto.Resp"
+    "onseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wait\030\002 \001("
+    "\003B\004\310\336\037\000\"]\n\020ReapQueueRequest\022.\n\006header\030\001 "
+    "\001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013m"
+    "ax_results\030\002 \001(\003B\004\310\336\037\000\"j\n\021ReapQueueRespo"
+    "nse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHead"
+    "erB\010\310\336\037\000\320\336\037\001\022$\n\010messages\030\002 \003(\0132\014.proto.V"
+    "alueB\004\310\336\037\000\"F\n\024EnqueueUpdateRequest\022.\n\006he"
+    "ader\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336"
+    "\037\001\"H\n\025EnqueueUpdateResponse\022/\n\006header\030\001 "
+    "\001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"h\n\025"
+    "EnqueueMessageRequest\022.\n\006header\030\001 \001(\0132\024."
+    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\037\n\003msg\030\002 \001"
+    "(\0132\014.proto.ValueB\004\310\336\037\000\"I\n\026EnqueueMessage"
+    "Response\022/\n\006header\030\001 \001(\0132\025.proto.Respons"
+    "eHeaderB\010\310\336\037\000\320\336\037\001\"\252\004\n\014RequestUnion\022(\n\010co"
+    "ntains\030\001 \001(\0132\026.proto.ContainsRequest\022\036\n\003"
+    "get\030\002 \001(\0132\021.proto.GetRequest\022\036\n\003put\030\003 \001("
+    "\0132\021.proto.PutRequest\0225\n\017conditional_put\030"
+    "\004 \001(\0132\034.proto.ConditionalPutRequest\022*\n\ti"
+    "ncrement\030\005 \001(\0132\027.proto.IncrementRequest\022"
+    "$\n\006delete\030\006 \001(\0132\024.proto.DeleteRequest\022/\n"
+    "\014delete_range\030\007 \001(\0132\031.proto.DeleteRangeR"
+    "equest\022 \n\004scan\030\010 \001(\0132\022.proto.ScanRequest"
+    "\0225\n\017end_transaction\030\t \001(\0132\034.proto.EndTra"
+    "nsactionRequest\022+\n\nreap_queue\030\n \001(\0132\027.pr"
+    "oto.ReapQueueRequest\0223\n\016enqueue_update\030\013"
+    " \001(\0132\033.proto.EnqueueUpdateRequest\0225\n\017enq"
+    "ueue_message\030\014 \001(\0132\034.proto.EnqueueMessag"
+    "eRequest:\004\310\240\037\001\"\267\004\n\rResponseUnion\022)\n\010cont"
+    "ains\030\001 \001(\0132\027.proto.ContainsResponse\022\037\n\003g"
+    "et\030\002 \001(\0132\022.proto.GetResponse\022\037\n\003put\030\003 \001("
+    "\0132\022.proto.PutResponse\0226\n\017conditional_put"
+    "\030\004 \001(\0132\035.proto.ConditionalPutResponse\022+\n"
+    "\tincrement\030\005 \001(\0132\030.proto.IncrementRespon"
+    "se\022%\n\006delete\030\006 \001(\0132\025.proto.DeleteRespons"
+    "e\0220\n\014delete_range\030\007 \001(\0132\032.proto.DeleteRa"
+    "ngeResponse\022!\n\004scan\030\010 \001(\0132\023.proto.ScanRe"
+    "sponse\0226\n\017end_transaction\030\t \001(\0132\035.proto."
+    "EndTransactionResponse\022,\n\nreap_queue\030\n \001"
+    "(\0132\030.proto.ReapQueueResponse\0224\n\016enqueue_"
+    "update\030\013 \001(\0132\034.proto.EnqueueUpdateRespon"
+    "se\0226\n\017enqueue_message\030\014 \001(\0132\035.proto.Enqu"
+    "eueMessageResponse:\004\310\240\037\001\"k\n\014BatchRequest"
+    "\022.\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010"
+    "\310\336\037\000\320\336\037\001\022+\n\010requests\030\002 \003(\0132\023.proto.Reque"
+    "stUnionB\004\310\336\037\000\"o\n\rBatchResponse\022/\n\006header"
+    "\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022"
+    "-\n\tresponses\030\002 \003(\0132\024.proto.ResponseUnion"
+    "B\004\310\336\037\000\"c\n\021AdminSplitRequest\022.\n\006header\030\001 "
+    "\001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\036\n\ts"
+    "plit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\"E\n\022AdminSpli"
+    "tResponse\022/\n\006header\030\001 \001(\0132\025.proto.Respon"
+    "seHeaderB\010\310\336\037\000\320\336\037\001\"y\n\021AdminMergeRequest\022"
+    ".\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010\310"
+    "\336\037\000\320\336\037\001\0224\n\016subsumed_range\030\002 \001(\0132\026.proto."
+    "RangeDescriptorB\004\310\336\037\000\"E\n\022AdminMergeRespo"
+    "nse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHead"
+    "erB\010\310\336\037\000\320\336\037\001", 4612);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -6373,6 +6376,7 @@ const int EndTransactionRequest::kHeaderFieldNumber;
 const int EndTransactionRequest::kCommitFieldNumber;
 const int EndTransactionRequest::kSplitTriggerFieldNumber;
 const int EndTransactionRequest::kMergeTriggerFieldNumber;
+const int EndTransactionRequest::kChangeReplicasTriggerFieldNumber;
 #endif  // !_MSC_VER
 
 EndTransactionRequest::EndTransactionRequest()
@@ -6385,6 +6389,7 @@ void EndTransactionRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::proto::RequestHeader*>(&::proto::RequestHeader::default_instance());
   split_trigger_ = const_cast< ::proto::SplitTrigger*>(&::proto::SplitTrigger::default_instance());
   merge_trigger_ = const_cast< ::proto::MergeTrigger*>(&::proto::MergeTrigger::default_instance());
+  change_replicas_trigger_ = const_cast< ::proto::ChangeReplicasTrigger*>(&::proto::ChangeReplicasTrigger::default_instance());
 }
 
 EndTransactionRequest::EndTransactionRequest(const EndTransactionRequest& from)
@@ -6400,6 +6405,7 @@ void EndTransactionRequest::SharedCtor() {
   commit_ = false;
   split_trigger_ = NULL;
   merge_trigger_ = NULL;
+  change_replicas_trigger_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6413,6 +6419,7 @@ void EndTransactionRequest::SharedDtor() {
     delete header_;
     delete split_trigger_;
     delete merge_trigger_;
+    delete change_replicas_trigger_;
   }
 }
 
@@ -6438,7 +6445,7 @@ EndTransactionRequest* EndTransactionRequest::New() const {
 }
 
 void EndTransactionRequest::Clear() {
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 31) {
     if (has_header()) {
       if (header_ != NULL) header_->::proto::RequestHeader::Clear();
     }
@@ -6448,6 +6455,9 @@ void EndTransactionRequest::Clear() {
     }
     if (has_merge_trigger()) {
       if (merge_trigger_ != NULL) merge_trigger_->::proto::MergeTrigger::Clear();
+    }
+    if (has_change_replicas_trigger()) {
+      if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::proto::ChangeReplicasTrigger::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -6513,6 +6523,19 @@ bool EndTransactionRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(42)) goto parse_change_replicas_trigger;
+        break;
+      }
+
+      // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+      case 5: {
+        if (tag == 42) {
+         parse_change_replicas_trigger:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_change_replicas_trigger()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -6565,6 +6588,12 @@ void EndTransactionRequest::SerializeWithCachedSizes(
       4, this->merge_trigger(), output);
   }
 
+  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+  if (has_change_replicas_trigger()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      5, this->change_replicas_trigger(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -6599,6 +6628,13 @@ void EndTransactionRequest::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         4, this->merge_trigger(), target);
+  }
+
+  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+  if (has_change_replicas_trigger()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        5, this->change_replicas_trigger(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6637,6 +6673,13 @@ int EndTransactionRequest::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->merge_trigger());
+    }
+
+    // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+    if (has_change_replicas_trigger()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->change_replicas_trigger());
     }
 
   }
@@ -6678,6 +6721,9 @@ void EndTransactionRequest::MergeFrom(const EndTransactionRequest& from) {
     if (from.has_merge_trigger()) {
       mutable_merge_trigger()->::proto::MergeTrigger::MergeFrom(from.merge_trigger());
     }
+    if (from.has_change_replicas_trigger()) {
+      mutable_change_replicas_trigger()->::proto::ChangeReplicasTrigger::MergeFrom(from.change_replicas_trigger());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -6705,6 +6751,7 @@ void EndTransactionRequest::Swap(EndTransactionRequest* other) {
     std::swap(commit_, other->commit_);
     std::swap(split_trigger_, other->split_trigger_);
     std::swap(merge_trigger_, other->merge_trigger_);
+    std::swap(change_replicas_trigger_, other->change_replicas_trigger_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

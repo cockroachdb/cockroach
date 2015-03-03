@@ -44,6 +44,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* MergeTrigger_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   MergeTrigger_reflection_ = NULL;
+const ::google::protobuf::Descriptor* ChangeReplicasTrigger_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  ChangeReplicasTrigger_reflection_ = NULL;
 const ::google::protobuf::Descriptor* NodeList_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   NodeList_reflection_ = NULL;
@@ -62,6 +65,7 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* TimeSeriesData_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   TimeSeriesData_reflection_ = NULL;
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor_ = NULL;
 const ::google::protobuf::EnumDescriptor* IsolationType_descriptor_ = NULL;
 const ::google::protobuf::EnumDescriptor* TransactionStatus_descriptor_ = NULL;
 
@@ -206,7 +210,24 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(MergeTrigger));
-  NodeList_descriptor_ = file->message_type(8);
+  ChangeReplicasTrigger_descriptor_ = file->message_type(8);
+  static const int ChangeReplicasTrigger_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, store_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, change_type_),
+  };
+  ChangeReplicasTrigger_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      ChangeReplicasTrigger_descriptor_,
+      ChangeReplicasTrigger::default_instance_,
+      ChangeReplicasTrigger_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(ChangeReplicasTrigger));
+  NodeList_descriptor_ = file->message_type(9);
   static const int NodeList_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(NodeList, nodes_),
   };
@@ -221,7 +242,7 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(NodeList));
-  Transaction_descriptor_ = file->message_type(9);
+  Transaction_descriptor_ = file->message_type(10);
   static const int Transaction_offsets_[12] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Transaction, key_),
@@ -247,7 +268,7 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Transaction));
-  MVCCMetadata_descriptor_ = file->message_type(10);
+  MVCCMetadata_descriptor_ = file->message_type(11);
   static const int MVCCMetadata_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, timestamp_),
@@ -267,7 +288,7 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(MVCCMetadata));
-  ScanMetadata_descriptor_ = file->message_type(11);
+  ScanMetadata_descriptor_ = file->message_type(12);
   static const int ScanMetadata_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, last_scan_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, oldest_intent_nanos_),
@@ -283,7 +304,7 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ScanMetadata));
-  TimeSeriesDatapoint_descriptor_ = file->message_type(12);
+  TimeSeriesDatapoint_descriptor_ = file->message_type(13);
   static const int TimeSeriesDatapoint_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, timestamp_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, int_value_),
@@ -300,7 +321,7 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesDatapoint));
-  TimeSeriesData_descriptor_ = file->message_type(13);
+  TimeSeriesData_descriptor_ = file->message_type(14);
   static const int TimeSeriesData_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, datapoints_),
@@ -316,8 +337,9 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesData));
-  IsolationType_descriptor_ = file->enum_type(0);
-  TransactionStatus_descriptor_ = file->enum_type(1);
+  ReplicaChangeType_descriptor_ = file->enum_type(0);
+  IsolationType_descriptor_ = file->enum_type(1);
+  TransactionStatus_descriptor_ = file->enum_type(2);
 }
 
 namespace {
@@ -346,6 +368,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
     SplitTrigger_descriptor_, &SplitTrigger::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     MergeTrigger_descriptor_, &MergeTrigger::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    ChangeReplicasTrigger_descriptor_, &ChangeReplicasTrigger::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     NodeList_descriptor_, &NodeList::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -379,6 +403,8 @@ void protobuf_ShutdownFile_data_2eproto() {
   delete SplitTrigger_reflection_;
   delete MergeTrigger::default_instance_;
   delete MergeTrigger_reflection_;
+  delete ChangeReplicasTrigger::default_instance_;
+  delete ChangeReplicasTrigger_reflection_;
   delete NodeList::default_instance_;
   delete NodeList_reflection_;
   delete Transaction::default_instance_;
@@ -423,33 +449,39 @@ void protobuf_AddDesc_data_2eproto() {
     "\037\000\"t\n\014MergeTrigger\0222\n\014updated_desc\030\001 \001(\013"
     "2\026.proto.RangeDescriptorB\004\310\336\037\000\0220\n\020subsum"
     "ed_raft_id\030\002 \001(\003B\026\310\336\037\000\342\336\037\016SubsumedRaftID"
-    "\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\"\307\003\n\013Tran"
-    "saction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\030\n\003key\030\002 \001(\014"
-    "B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030\003 \001(\014B\n\310\336\037\000\342\336\037\002ID\022\026\n"
-    "\010priority\030\004 \001(\005B\004\310\336\037\000\022-\n\tisolation\030\005 \001(\016"
-    "2\024.proto.IsolationTypeB\004\310\336\037\000\022.\n\006status\030\006"
-    " \001(\0162\030.proto.TransactionStatusB\004\310\336\037\000\022\023\n\005"
-    "epoch\030\007 \001(\005B\004\310\336\037\000\022(\n\016last_heartbeat\030\010 \001("
-    "\0132\020.proto.Timestamp\022)\n\ttimestamp\030\t \001(\0132\020"
-    ".proto.TimestampB\004\310\336\037\000\022.\n\016orig_timestamp"
-    "\030\n \001(\0132\020.proto.TimestampB\004\310\336\037\000\022-\n\rmax_ti"
-    "mestamp\030\013 \001(\0132\020.proto.TimestampB\004\310\336\037\000\022,\n"
-    "\rcertain_nodes\030\014 \001(\0132\017.proto.NodeListB\004\310"
-    "\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMetadata\022\037\n\003txn\030\001 \001(\0132"
-    "\022.proto.Transaction\022)\n\ttimestamp\030\002 \001(\0132\020"
-    ".proto.TimestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B"
-    "\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_by"
-    "tes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005value\030\006 \001(\0132\014.proto.V"
-    "alue\"J\n\014ScanMetadata\022\035\n\017last_scan_nanos\030"
-    "\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003"
-    "\"\\\n\023TimeSeriesDatapoint\022\035\n\017timestamp_nan"
-    "os\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022\023\n\013flo"
-    "at_value\030\003 \001(\002\"T\n\016TimeSeriesData\022\022\n\004name"
-    "\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoints\030\002 \003(\0132\032.proto"
-    ".TimeSeriesDatapoint*5\n\rIsolationType\022\020\n"
-    "\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021T"
-    "ransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITT"
-    "ED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 1903);
+    "\"\245\001\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001 "
+    "\001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022,\n\010store_i"
+    "d\030\002 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\0223\n\013c"
+    "hange_type\030\003 \001(\0162\030.proto.ReplicaChangeTy"
+    "peB\004\310\336\037\000\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\""
+    "\307\003\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\030\n\003k"
+    "ey\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030\003 \001(\014B\n\310\336\037\000\342"
+    "\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\022-\n\tisolati"
+    "on\030\005 \001(\0162\024.proto.IsolationTypeB\004\310\336\037\000\022.\n\006"
+    "status\030\006 \001(\0162\030.proto.TransactionStatusB\004"
+    "\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022(\n\016last_heartb"
+    "eat\030\010 \001(\0132\020.proto.Timestamp\022)\n\ttimestamp"
+    "\030\t \001(\0132\020.proto.TimestampB\004\310\336\037\000\022.\n\016orig_t"
+    "imestamp\030\n \001(\0132\020.proto.TimestampB\004\310\336\037\000\022-"
+    "\n\rmax_timestamp\030\013 \001(\0132\020.proto.TimestampB"
+    "\004\310\336\037\000\022,\n\rcertain_nodes\030\014 \001(\0132\017.proto.Nod"
+    "eListB\004\310\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMetadata\022\037\n\003tx"
+    "n\030\001 \001(\0132\022.proto.Transaction\022)\n\ttimestamp"
+    "\030\002 \001(\0132\020.proto.TimestampB\004\310\336\037\000\022\025\n\007delete"
+    "d\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027"
+    "\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005value\030\006 \001(\0132\014"
+    ".proto.Value\"J\n\014ScanMetadata\022\035\n\017last_sca"
+    "n_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nan"
+    "os\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017times"
+    "tamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001("
+    "\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016TimeSeriesData"
+    "\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoints\030\002 \003(\013"
+    "2\032.proto.TimeSeriesDatapoint*>\n\021ReplicaC"
+    "hangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REP"
+    "LICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALI"
+    "ZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transacti"
+    "onStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007"
+    "ABORTED\020\002\032\004\210\243\036\000", 2135);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -460,6 +492,7 @@ void protobuf_AddDesc_data_2eproto() {
   StoreIdent::default_instance_ = new StoreIdent();
   SplitTrigger::default_instance_ = new SplitTrigger();
   MergeTrigger::default_instance_ = new MergeTrigger();
+  ChangeReplicasTrigger::default_instance_ = new ChangeReplicasTrigger();
   NodeList::default_instance_ = new NodeList();
   Transaction::default_instance_ = new Transaction();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
@@ -474,6 +507,7 @@ void protobuf_AddDesc_data_2eproto() {
   StoreIdent::default_instance_->InitAsDefaultInstance();
   SplitTrigger::default_instance_->InitAsDefaultInstance();
   MergeTrigger::default_instance_->InitAsDefaultInstance();
+  ChangeReplicasTrigger::default_instance_->InitAsDefaultInstance();
   NodeList::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
   MVCCMetadata::default_instance_->InitAsDefaultInstance();
@@ -489,6 +523,20 @@ struct StaticDescriptorInitializer_data_2eproto {
     protobuf_AddDesc_data_2eproto();
   }
 } static_descriptor_initializer_data_2eproto_;
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ReplicaChangeType_descriptor_;
+}
+bool ReplicaChangeType_IsValid(int value) {
+  switch(value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+
 const ::google::protobuf::EnumDescriptor* IsolationType_descriptor() {
   protobuf_AssignDescriptorsOnce();
   return IsolationType_descriptor_;
@@ -2901,6 +2949,324 @@ void MergeTrigger::Swap(MergeTrigger* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = MergeTrigger_descriptor_;
   metadata.reflection = MergeTrigger_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int ChangeReplicasTrigger::kNodeIdFieldNumber;
+const int ChangeReplicasTrigger::kStoreIdFieldNumber;
+const int ChangeReplicasTrigger::kChangeTypeFieldNumber;
+#endif  // !_MSC_VER
+
+ChangeReplicasTrigger::ChangeReplicasTrigger()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:proto.ChangeReplicasTrigger)
+}
+
+void ChangeReplicasTrigger::InitAsDefaultInstance() {
+}
+
+ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:proto.ChangeReplicasTrigger)
+}
+
+void ChangeReplicasTrigger::SharedCtor() {
+  _cached_size_ = 0;
+  node_id_ = 0;
+  store_id_ = 0;
+  change_type_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+ChangeReplicasTrigger::~ChangeReplicasTrigger() {
+  // @@protoc_insertion_point(destructor:proto.ChangeReplicasTrigger)
+  SharedDtor();
+}
+
+void ChangeReplicasTrigger::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void ChangeReplicasTrigger::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* ChangeReplicasTrigger::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return ChangeReplicasTrigger_descriptor_;
+}
+
+const ChangeReplicasTrigger& ChangeReplicasTrigger::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_data_2eproto();
+  return *default_instance_;
+}
+
+ChangeReplicasTrigger* ChangeReplicasTrigger::default_instance_ = NULL;
+
+ChangeReplicasTrigger* ChangeReplicasTrigger::New() const {
+  return new ChangeReplicasTrigger;
+}
+
+void ChangeReplicasTrigger::Clear() {
+#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
+  &reinterpret_cast<ChangeReplicasTrigger*>(16)->f) - \
+   reinterpret_cast<char*>(16))
+
+#define ZR_(first, last) do {                              \
+    size_t f = OFFSET_OF_FIELD_(first);                    \
+    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
+    ::memset(&first, 0, n);                                \
+  } while (0)
+
+  ZR_(node_id_, change_type_);
+
+#undef OFFSET_OF_FIELD_
+#undef ZR_
+
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool ChangeReplicasTrigger::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:proto.ChangeReplicasTrigger)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int32 node_id = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &node_id_)));
+          set_has_node_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(16)) goto parse_store_id;
+        break;
+      }
+
+      // optional int32 store_id = 2;
+      case 2: {
+        if (tag == 16) {
+         parse_store_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &store_id_)));
+          set_has_store_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_change_type;
+        break;
+      }
+
+      // optional .proto.ReplicaChangeType change_type = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_change_type:
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          if (::proto::ReplicaChangeType_IsValid(value)) {
+            set_change_type(static_cast< ::proto::ReplicaChangeType >(value));
+          } else {
+            mutable_unknown_fields()->AddVarint(3, value);
+          }
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:proto.ChangeReplicasTrigger)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:proto.ChangeReplicasTrigger)
+  return false;
+#undef DO_
+}
+
+void ChangeReplicasTrigger::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:proto.ChangeReplicasTrigger)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
+  }
+
+  // optional int32 store_id = 2;
+  if (has_store_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->store_id(), output);
+  }
+
+  // optional .proto.ReplicaChangeType change_type = 3;
+  if (has_change_type()) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      3, this->change_type(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:proto.ChangeReplicasTrigger)
+}
+
+::google::protobuf::uint8* ChangeReplicasTrigger::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:proto.ChangeReplicasTrigger)
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->node_id(), target);
+  }
+
+  // optional int32 store_id = 2;
+  if (has_store_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->store_id(), target);
+  }
+
+  // optional .proto.ReplicaChangeType change_type = 3;
+  if (has_change_type()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
+      3, this->change_type(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:proto.ChangeReplicasTrigger)
+  return target;
+}
+
+int ChangeReplicasTrigger::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional int32 node_id = 1;
+    if (has_node_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
+    }
+
+    // optional int32 store_id = 2;
+    if (has_store_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->store_id());
+    }
+
+    // optional .proto.ReplicaChangeType change_type = 3;
+    if (has_change_type()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void ChangeReplicasTrigger::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const ChangeReplicasTrigger* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const ChangeReplicasTrigger*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_node_id()) {
+      set_node_id(from.node_id());
+    }
+    if (from.has_store_id()) {
+      set_store_id(from.store_id());
+    }
+    if (from.has_change_type()) {
+      set_change_type(from.change_type());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void ChangeReplicasTrigger::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void ChangeReplicasTrigger::CopyFrom(const ChangeReplicasTrigger& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ChangeReplicasTrigger::IsInitialized() const {
+
+  return true;
+}
+
+void ChangeReplicasTrigger::Swap(ChangeReplicasTrigger* other) {
+  if (other != this) {
+    std::swap(node_id_, other->node_id_);
+    std::swap(store_id_, other->store_id_);
+    std::swap(change_type_, other->change_type_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata ChangeReplicasTrigger::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = ChangeReplicasTrigger_descriptor_;
+  metadata.reflection = ChangeReplicasTrigger_reflection_;
   return metadata;
 }
 

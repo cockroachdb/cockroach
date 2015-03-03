@@ -234,6 +234,7 @@ message EndTransactionRequest {
   // public-facing KV API.
   optional SplitTrigger split_trigger = 3;
   optional MergeTrigger merge_trigger = 4;
+  optional ChangeReplicasTrigger change_replicas_trigger = 5;
 }
 
 // An EndTransactionResponse is the return value from the

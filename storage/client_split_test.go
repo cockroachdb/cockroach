@@ -118,7 +118,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(proto.AdminSplit, args, reply)
 			if err != nil {
-				if matched, regexpErr := regexp.MatchString(".*already splitting range 1", err.Error()); !matched || regexpErr != nil {
+				if matched, regexpErr := regexp.MatchString(".*range 1 metadata locked", err.Error()); !matched || regexpErr != nil {
 					t.Errorf("error %s didn't match: %s", err, regexpErr)
 				} else {
 					atomic.AddInt32(&failureCount, 1)

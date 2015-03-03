@@ -45,6 +45,7 @@ type EventMembershipChangeCommitted struct {
 	NodeID     NodeID
 	ChangeType raftpb.ConfChangeType
 	ConfState  raftpb.ConfState
+	Payload    []byte
 }
 
 // Commands are encoded with a 1-byte version (currently 0), a 16-byte ID,

@@ -13,6 +13,40 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// ReplicaChangeType is a parameter of ChangeReplicasTrigger.
+type ReplicaChangeType int32
+
+const (
+	ADD_REPLICA    ReplicaChangeType = 0
+	REMOVE_REPLICA ReplicaChangeType = 1
+)
+
+var ReplicaChangeType_name = map[int32]string{
+	0: "ADD_REPLICA",
+	1: "REMOVE_REPLICA",
+}
+var ReplicaChangeType_value = map[string]int32{
+	"ADD_REPLICA":    0,
+	"REMOVE_REPLICA": 1,
+}
+
+func (x ReplicaChangeType) Enum() *ReplicaChangeType {
+	p := new(ReplicaChangeType)
+	*p = x
+	return p
+}
+func (x ReplicaChangeType) String() string {
+	return proto1.EnumName(ReplicaChangeType_name, int32(x))
+}
+func (x *ReplicaChangeType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(ReplicaChangeType_value, data, "ReplicaChangeType")
+	if err != nil {
+		return err
+	}
+	*x = ReplicaChangeType(value)
+	return nil
+}
+
 // IsolationType TODO(jiajia) Needs documentation.
 type IsolationType int32
 
@@ -340,6 +374,24 @@ func (m *MergeTrigger) GetSubsumedRaftID() int64 {
 	return 0
 }
 
+type ChangeReplicasTrigger struct {
+	NodeID           NodeID            `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
+	StoreID          StoreID           `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
+	ChangeType       ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=proto.ReplicaChangeType" json:"change_type"`
+	XXX_unrecognized []byte            `json:"-"`
+}
+
+func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
+func (m *ChangeReplicasTrigger) String() string { return proto1.CompactTextString(m) }
+func (*ChangeReplicasTrigger) ProtoMessage()    {}
+
+func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
+	if m != nil {
+		return m.ChangeType
+	}
+	return ADD_REPLICA
+}
+
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 type NodeList struct {
@@ -665,6 +717,7 @@ func (m *TimeSeriesData) GetDatapoints() []*TimeSeriesDatapoint {
 }
 
 func init() {
+	proto1.RegisterEnum("proto.ReplicaChangeType", ReplicaChangeType_name, ReplicaChangeType_value)
 	proto1.RegisterEnum("proto.IsolationType", IsolationType_name, IsolationType_value)
 	proto1.RegisterEnum("proto.TransactionStatus", TransactionStatus_name, TransactionStatus_value)
 }

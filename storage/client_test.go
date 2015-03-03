@@ -81,6 +81,92 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	return store
 }
 
+type multiTestContext struct {
+	manualClock *hlc.ManualClock
+	clock       *hlc.Clock
+	gossip      *gossip.Gossip
+	sender      *kv.LocalSender
+	transport   multiraft.Transport
+	db          *client.KV
+	engines     []engine.Engine
+	stores      []*storage.Store
+}
+
+func (m *multiTestContext) Start(t *testing.T, numStores int) {
+	if m.manualClock == nil {
+		m.manualClock = hlc.NewManualClock(0)
+	}
+	if m.clock == nil {
+		m.clock = hlc.NewClock(m.manualClock.UnixNano)
+	}
+	if m.gossip == nil {
+		rpcContext := rpc.NewContext(m.clock, rpc.LoadInsecureTLSConfig())
+		m.gossip = gossip.New(rpcContext, gossip.TestInterval, "")
+	}
+	if m.transport == nil {
+		m.transport = multiraft.NewLocalRPCTransport()
+	}
+	if m.sender == nil {
+		m.sender = kv.NewLocalSender()
+	}
+	if m.db == nil {
+		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false)
+		m.db = client.NewKV(txnSender, nil)
+		m.db.User = storage.UserRoot
+	}
+
+	for i := 0; i < numStores; i++ {
+		m.addStore(t)
+	}
+}
+
+func (m *multiTestContext) Stop() {
+	for _, store := range m.stores {
+		store.Stop()
+	}
+}
+
+// AddStore creates a new store on the same Transport but doesn't create any ranges.
+func (m *multiTestContext) addStore(t *testing.T) {
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport)
+	err := store.Bootstrap(proto.StoreIdent{
+		NodeID:  proto.NodeID(len(m.stores) + 1),
+		StoreID: proto.StoreID(len(m.stores) + 1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(m.stores) == 0 {
+		// Bootstrap the initial range on the first store
+		if err := store.BootstrapRange(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Start(); err != nil {
+		t.Fatal(err)
+	}
+	m.engines = append(m.engines, eng)
+	m.stores = append(m.stores, store)
+	m.sender.AddStore(store)
+}
+
+// StopStore stops a store but leaves the engine intact.
+// All stopped stores must be restarted before multiTestContext.Stop is called.
+func (m *multiTestContext) StopStore(i int) {
+	m.stores[i].Stop()
+	m.stores[i] = nil
+}
+
+// RetartStore restarts a store previously stopped with StopStore.
+func (m *multiTestContext) RestartStore(i int, t *testing.T) {
+	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport)
+	if err := m.stores[i].Start(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // getArgs returns a GetRequest and GetResponse pair addressed to
 // the default replica for the specified key.
 func getArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.GetRequest, *proto.GetResponse) {

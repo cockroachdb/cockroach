@@ -302,7 +302,7 @@ func TestMembershipChange(t *testing.T) {
 	for i := 1; i < 4; i++ {
 		ch := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),
 			raftpb.ConfChangeAddNode,
-			cluster.nodes[i].nodeID)
+			cluster.nodes[i].nodeID, nil)
 		<-ch
 	}
 

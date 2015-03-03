@@ -301,8 +301,9 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 }
 
 // ChangeGroupMembership submits a proposed membership change to the cluster.
+// Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
-	changeType raftpb.ConfChangeType, nodeID NodeID) chan struct{} {
+	changeType raftpb.ConfChangeType, nodeID NodeID, payload []byte) chan struct{} {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
 	ch := make(chan struct{})
 	m.proposalChan <- &proposal{
@@ -313,7 +314,7 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 				raftpb.ConfChange{
 					Type:    changeType,
 					NodeID:  uint64(nodeID),
-					Context: encodeCommand(commandID, nil),
+					Context: encodeCommand(commandID, payload),
 				})
 		},
 		ch: ch,
@@ -696,8 +697,9 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if err != nil {
 					log.Fatalf("invalid ConfChange data: %s", err)
 				}
+				var payload []byte
 				if len(cc.Context) > 0 {
-					commandID, _ = decodeCommand(cc.Context)
+					commandID, payload = decodeCommand(cc.Context)
 				}
 				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
 				// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
@@ -720,6 +722,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					NodeID:     NodeID(cc.NodeID),
 					ChangeType: cc.Type,
 					ConfState:  *cs,
+					Payload:    payload,
 				})
 			}
 			if p, ok := g.pending[commandID]; ok {

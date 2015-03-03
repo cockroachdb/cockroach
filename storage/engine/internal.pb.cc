@@ -65,12 +65,6 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* InternalTruncateLogResponse_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalTruncateLogResponse_reflection_ = NULL;
-const ::google::protobuf::Descriptor* InternalChangeReplicasRequest_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  InternalChangeReplicasRequest_reflection_ = NULL;
-const ::google::protobuf::Descriptor* InternalChangeReplicasResponse_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  InternalChangeReplicasResponse_reflection_ = NULL;
 const ::google::protobuf::Descriptor* ReadWriteCmdResponse_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   ReadWriteCmdResponse_reflection_ = NULL;
@@ -86,7 +80,6 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* InternalTimeSeriesSample_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   InternalTimeSeriesSample_reflection_ = NULL;
-const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor_ = NULL;
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor_ = NULL;
 
 }  // namespace
@@ -333,41 +326,7 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalTruncateLogResponse));
-  InternalChangeReplicasRequest_descriptor_ = file->message_type(14);
-  static const int InternalChangeReplicasRequest_offsets_[5] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, node_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, store_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, change_type_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, nodes_),
-  };
-  InternalChangeReplicasRequest_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      InternalChangeReplicasRequest_descriptor_,
-      InternalChangeReplicasRequest::default_instance_,
-      InternalChangeReplicasRequest_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasRequest, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(InternalChangeReplicasRequest));
-  InternalChangeReplicasResponse_descriptor_ = file->message_type(15);
-  static const int InternalChangeReplicasResponse_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasResponse, header_),
-  };
-  InternalChangeReplicasResponse_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      InternalChangeReplicasResponse_descriptor_,
-      InternalChangeReplicasResponse::default_instance_,
-      InternalChangeReplicasResponse_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasResponse, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalChangeReplicasResponse, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(InternalChangeReplicasResponse));
-  ReadWriteCmdResponse_descriptor_ = file->message_type(16);
+  ReadWriteCmdResponse_descriptor_ = file->message_type(14);
   static const int ReadWriteCmdResponse_offsets_[15] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReadWriteCmdResponse, put_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReadWriteCmdResponse, conditional_put_),
@@ -396,8 +355,8 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ReadWriteCmdResponse));
-  InternalRaftCommandUnion_descriptor_ = file->message_type(17);
-  static const int InternalRaftCommandUnion_offsets_[21] = {
+  InternalRaftCommandUnion_descriptor_ = file->message_type(15);
+  static const int InternalRaftCommandUnion_offsets_[20] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, contains_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, get_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, put_),
@@ -418,7 +377,6 @@ void protobuf_AssignDesc_internal_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, internal_merge_response_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, internal_truncate_log_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, internal_gc_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommandUnion, internal_change_replicas_),
   };
   InternalRaftCommandUnion_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -431,7 +389,7 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalRaftCommandUnion));
-  InternalRaftCommand_descriptor_ = file->message_type(18);
+  InternalRaftCommand_descriptor_ = file->message_type(16);
   static const int InternalRaftCommand_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommand, raft_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalRaftCommand, cmd_),
@@ -447,7 +405,7 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalRaftCommand));
-  InternalTimeSeriesData_descriptor_ = file->message_type(19);
+  InternalTimeSeriesData_descriptor_ = file->message_type(17);
   static const int InternalTimeSeriesData_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesData, start_timestamp_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesData, sample_duration_nanos_),
@@ -464,7 +422,7 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalTimeSeriesData));
-  InternalTimeSeriesSample_descriptor_ = file->message_type(20);
+  InternalTimeSeriesSample_descriptor_ = file->message_type(18);
   static const int InternalTimeSeriesSample_offsets_[9] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, offset_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalTimeSeriesSample, int_count_),
@@ -487,8 +445,7 @@ void protobuf_AssignDesc_internal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(InternalTimeSeriesSample));
-  ReplicaChangeType_descriptor_ = file->enum_type(0);
-  InternalValueType_descriptor_ = file->enum_type(1);
+  InternalValueType_descriptor_ = file->enum_type(0);
 }
 
 namespace {
@@ -531,10 +488,6 @@ void protobuf_RegisterTypes(const ::std::string&) {
     InternalTruncateLogRequest_descriptor_, &InternalTruncateLogRequest::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     InternalTruncateLogResponse_descriptor_, &InternalTruncateLogResponse::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    InternalChangeReplicasRequest_descriptor_, &InternalChangeReplicasRequest::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    InternalChangeReplicasResponse_descriptor_, &InternalChangeReplicasResponse::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     ReadWriteCmdResponse_descriptor_, &ReadWriteCmdResponse::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -580,10 +533,6 @@ void protobuf_ShutdownFile_internal_2eproto() {
   delete InternalTruncateLogRequest_reflection_;
   delete InternalTruncateLogResponse::default_instance_;
   delete InternalTruncateLogResponse_reflection_;
-  delete InternalChangeReplicasRequest::default_instance_;
-  delete InternalChangeReplicasRequest_reflection_;
-  delete InternalChangeReplicasResponse::default_instance_;
-  delete InternalChangeReplicasResponse_reflection_;
   delete ReadWriteCmdResponse::default_instance_;
   delete ReadWriteCmdResponse_reflection_;
   delete InternalRaftCommandUnion::default_instance_;
@@ -646,78 +595,67 @@ void protobuf_AddDesc_internal_2eproto() {
     "quest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHea"
     "derB\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"N\n\033In"
     "ternalTruncateLogResponse\022/\n\006header\030\001 \001("
-    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\354\001\n\035I"
-    "nternalChangeReplicasRequest\022.\n\006header\030\001"
-    " \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022)\n\007"
-    "node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022"
-    ",\n\010store_id\030\003 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007St"
-    "oreID\0223\n\013change_type\030\004 \001(\0162\030.proto.Repli"
-    "caChangeTypeB\004\310\336\037\000\022\r\n\005nodes\030\005 \003(\004\"Q\n\036Int"
-    "ernalChangeReplicasResponse\022/\n\006header\030\001 "
-    "\001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\277\006\n"
-    "\024ReadWriteCmdResponse\022\037\n\003put\030\001 \001(\0132\022.pro"
-    "to.PutResponse\0226\n\017conditional_put\030\002 \001(\0132"
-    "\035.proto.ConditionalPutResponse\022+\n\tincrem"
-    "ent\030\003 \001(\0132\030.proto.IncrementResponse\022%\n\006d"
-    "elete\030\004 \001(\0132\025.proto.DeleteResponse\0220\n\014de"
-    "lete_range\030\005 \001(\0132\032.proto.DeleteRangeResp"
-    "onse\0226\n\017end_transaction\030\006 \001(\0132\035.proto.En"
-    "dTransactionResponse\022,\n\nreap_queue\030\007 \001(\013"
-    "2\030.proto.ReapQueueResponse\0224\n\016enqueue_up"
-    "date\030\010 \001(\0132\034.proto.EnqueueUpdateResponse"
-    "\0226\n\017enqueue_message\030\t \001(\0132\035.proto.Enqueu"
-    "eMessageResponse\022C\n\026internal_heartbeat_t"
-    "xn\030\n \001(\0132#.proto.InternalHeartbeatTxnRes"
-    "ponse\0229\n\021internal_push_txn\030\013 \001(\0132\036.proto"
-    ".InternalPushTxnResponse\022E\n\027internal_res"
-    "olve_intent\030\014 \001(\0132$.proto.InternalResolv"
-    "eIntentResponse\0224\n\016internal_merge\030\r \001(\0132"
-    "\034.proto.InternalMergeResponse\022A\n\025interna"
-    "l_truncate_log\030\016 \001(\0132\".proto.InternalTru"
-    "ncateLogResponse\022.\n\013internal_gc\030\017 \001(\0132\031."
-    "proto.InternalGCResponse:\004\310\240\037\001\"\327\010\n\030Inter"
-    "nalRaftCommandUnion\022(\n\010contains\030\001 \001(\0132\026."
-    "proto.ContainsRequest\022\036\n\003get\030\002 \001(\0132\021.pro"
-    "to.GetRequest\022\036\n\003put\030\003 \001(\0132\021.proto.PutRe"
-    "quest\0225\n\017conditional_put\030\004 \001(\0132\034.proto.C"
-    "onditionalPutRequest\022*\n\tincrement\030\005 \001(\0132"
-    "\027.proto.IncrementRequest\022$\n\006delete\030\006 \001(\013"
-    "2\024.proto.DeleteRequest\022/\n\014delete_range\030\007"
-    " \001(\0132\031.proto.DeleteRangeRequest\022 \n\004scan\030"
-    "\010 \001(\0132\022.proto.ScanRequest\0225\n\017end_transac"
-    "tion\030\t \001(\0132\034.proto.EndTransactionRequest"
-    "\022+\n\nreap_queue\030\n \001(\0132\027.proto.ReapQueueRe"
-    "quest\0223\n\016enqueue_update\030\013 \001(\0132\033.proto.En"
-    "queueUpdateRequest\0225\n\017enqueue_message\030\014 "
-    "\001(\0132\034.proto.EnqueueMessageRequest\022\"\n\005bat"
-    "ch\030\036 \001(\0132\023.proto.BatchRequest\022@\n\025interna"
-    "l_range_lookup\030\037 \001(\0132!.proto.InternalRan"
-    "geLookupRequest\022B\n\026internal_heartbeat_tx"
-    "n\030  \001(\0132\".proto.InternalHeartbeatTxnRequ"
-    "est\0228\n\021internal_push_txn\030! \001(\0132\035.proto.I"
-    "nternalPushTxnRequest\022D\n\027internal_resolv"
-    "e_intent\030\" \001(\0132#.proto.InternalResolveIn"
-    "tentRequest\022<\n\027internal_merge_response\030#"
-    " \001(\0132\033.proto.InternalMergeRequest\022@\n\025int"
-    "ernal_truncate_log\030$ \001(\0132!.proto.Interna"
-    "lTruncateLogRequest\022-\n\013internal_gc\030% \001(\013"
-    "2\030.proto.InternalGCRequest\022F\n\030internal_c"
-    "hange_replicas\030& \001(\0132$.proto.InternalCha"
-    "ngeReplicasRequest:\004\310\240\037\001\"j\n\023InternalRaft"
-    "Command\022\037\n\007raft_id\030\002 \001(\003B\016\310\336\037\000\342\336\037\006RaftID"
-    "\0222\n\003cmd\030\003 \001(\0132\037.proto.InternalRaftComman"
-    "dUnionB\004\310\336\037\000\"\224\001\n\026InternalTimeSeriesData\022"
-    "#\n\025start_timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022#\n\025"
-    "sample_duration_nanos\030\002 \001(\003B\004\310\336\037\000\0220\n\007sam"
-    "ples\030\003 \003(\0132\037.proto.InternalTimeSeriesSam"
-    "ple\"\320\001\n\030InternalTimeSeriesSample\022\024\n\006offs"
-    "et\030\001 \001(\005B\004\310\336\037\000\022\027\n\tint_count\030\002 \001(\rB\004\310\336\037\000\022"
-    "\017\n\007int_sum\030\003 \001(\003\022\017\n\007int_max\030\004 \001(\003\022\017\n\007int"
-    "_min\030\005 \001(\003\022\031\n\013float_count\030\006 \001(\rB\004\310\336\037\000\022\021\n"
-    "\tfloat_sum\030\007 \001(\002\022\021\n\tfloat_max\030\010 \001(\002\022\021\n\tf"
-    "loat_min\030\t \001(\002*>\n\021ReplicaChangeType\022\017\n\013A"
-    "DD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*%"
-    "\n\021InternalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000", 4437);
+    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\277\006\n\024R"
+    "eadWriteCmdResponse\022\037\n\003put\030\001 \001(\0132\022.proto"
+    ".PutResponse\0226\n\017conditional_put\030\002 \001(\0132\035."
+    "proto.ConditionalPutResponse\022+\n\tincremen"
+    "t\030\003 \001(\0132\030.proto.IncrementResponse\022%\n\006del"
+    "ete\030\004 \001(\0132\025.proto.DeleteResponse\0220\n\014dele"
+    "te_range\030\005 \001(\0132\032.proto.DeleteRangeRespon"
+    "se\0226\n\017end_transaction\030\006 \001(\0132\035.proto.EndT"
+    "ransactionResponse\022,\n\nreap_queue\030\007 \001(\0132\030"
+    ".proto.ReapQueueResponse\0224\n\016enqueue_upda"
+    "te\030\010 \001(\0132\034.proto.EnqueueUpdateResponse\0226"
+    "\n\017enqueue_message\030\t \001(\0132\035.proto.EnqueueM"
+    "essageResponse\022C\n\026internal_heartbeat_txn"
+    "\030\n \001(\0132#.proto.InternalHeartbeatTxnRespo"
+    "nse\0229\n\021internal_push_txn\030\013 \001(\0132\036.proto.I"
+    "nternalPushTxnResponse\022E\n\027internal_resol"
+    "ve_intent\030\014 \001(\0132$.proto.InternalResolveI"
+    "ntentResponse\0224\n\016internal_merge\030\r \001(\0132\034."
+    "proto.InternalMergeResponse\022A\n\025internal_"
+    "truncate_log\030\016 \001(\0132\".proto.InternalTrunc"
+    "ateLogResponse\022.\n\013internal_gc\030\017 \001(\0132\031.pr"
+    "oto.InternalGCResponse:\004\310\240\037\001\"\217\010\n\030Interna"
+    "lRaftCommandUnion\022(\n\010contains\030\001 \001(\0132\026.pr"
+    "oto.ContainsRequest\022\036\n\003get\030\002 \001(\0132\021.proto"
+    ".GetRequest\022\036\n\003put\030\003 \001(\0132\021.proto.PutRequ"
+    "est\0225\n\017conditional_put\030\004 \001(\0132\034.proto.Con"
+    "ditionalPutRequest\022*\n\tincrement\030\005 \001(\0132\027."
+    "proto.IncrementRequest\022$\n\006delete\030\006 \001(\0132\024"
+    ".proto.DeleteRequest\022/\n\014delete_range\030\007 \001"
+    "(\0132\031.proto.DeleteRangeRequest\022 \n\004scan\030\010 "
+    "\001(\0132\022.proto.ScanRequest\0225\n\017end_transacti"
+    "on\030\t \001(\0132\034.proto.EndTransactionRequest\022+"
+    "\n\nreap_queue\030\n \001(\0132\027.proto.ReapQueueRequ"
+    "est\0223\n\016enqueue_update\030\013 \001(\0132\033.proto.Enqu"
+    "eueUpdateRequest\0225\n\017enqueue_message\030\014 \001("
+    "\0132\034.proto.EnqueueMessageRequest\022\"\n\005batch"
+    "\030\036 \001(\0132\023.proto.BatchRequest\022@\n\025internal_"
+    "range_lookup\030\037 \001(\0132!.proto.InternalRange"
+    "LookupRequest\022B\n\026internal_heartbeat_txn\030"
+    "  \001(\0132\".proto.InternalHeartbeatTxnReques"
+    "t\0228\n\021internal_push_txn\030! \001(\0132\035.proto.Int"
+    "ernalPushTxnRequest\022D\n\027internal_resolve_"
+    "intent\030\" \001(\0132#.proto.InternalResolveInte"
+    "ntRequest\022<\n\027internal_merge_response\030# \001"
+    "(\0132\033.proto.InternalMergeRequest\022@\n\025inter"
+    "nal_truncate_log\030$ \001(\0132!.proto.InternalT"
+    "runcateLogRequest\022-\n\013internal_gc\030% \001(\0132\030"
+    ".proto.InternalGCRequest:\004\310\240\037\001\"j\n\023Intern"
+    "alRaftCommand\022\037\n\007raft_id\030\002 \001(\003B\016\310\336\037\000\342\336\037\006"
+    "RaftID\0222\n\003cmd\030\003 \001(\0132\037.proto.InternalRaft"
+    "CommandUnionB\004\310\336\037\000\"\224\001\n\026InternalTimeSerie"
+    "sData\022#\n\025start_timestamp_nanos\030\001 \001(\003B\004\310\336"
+    "\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B\004\310\336\037\000\022"
+    "0\n\007samples\030\003 \003(\0132\037.proto.InternalTimeSer"
+    "iesSample\"\320\001\n\030InternalTimeSeriesSample\022\024"
+    "\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\027\n\tint_count\030\002 \001(\rB"
+    "\004\310\336\037\000\022\017\n\007int_sum\030\003 \001(\003\022\017\n\007int_max\030\004 \001(\003\022"
+    "\017\n\007int_min\030\005 \001(\003\022\031\n\013float_count\030\006 \001(\rB\004\310"
+    "\336\037\000\022\021\n\tfloat_sum\030\007 \001(\002\022\021\n\tfloat_max\030\010 \001("
+    "\002\022\021\n\tfloat_min\030\t \001(\002*%\n\021InternalValueTyp"
+    "e\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000", 3979);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -735,8 +673,6 @@ void protobuf_AddDesc_internal_2eproto() {
   InternalMergeResponse::default_instance_ = new InternalMergeResponse();
   InternalTruncateLogRequest::default_instance_ = new InternalTruncateLogRequest();
   InternalTruncateLogResponse::default_instance_ = new InternalTruncateLogResponse();
-  InternalChangeReplicasRequest::default_instance_ = new InternalChangeReplicasRequest();
-  InternalChangeReplicasResponse::default_instance_ = new InternalChangeReplicasResponse();
   ReadWriteCmdResponse::default_instance_ = new ReadWriteCmdResponse();
   InternalRaftCommandUnion::default_instance_ = new InternalRaftCommandUnion();
   InternalRaftCommand::default_instance_ = new InternalRaftCommand();
@@ -757,8 +693,6 @@ void protobuf_AddDesc_internal_2eproto() {
   InternalMergeResponse::default_instance_->InitAsDefaultInstance();
   InternalTruncateLogRequest::default_instance_->InitAsDefaultInstance();
   InternalTruncateLogResponse::default_instance_->InitAsDefaultInstance();
-  InternalChangeReplicasRequest::default_instance_->InitAsDefaultInstance();
-  InternalChangeReplicasResponse::default_instance_->InitAsDefaultInstance();
   ReadWriteCmdResponse::default_instance_->InitAsDefaultInstance();
   InternalRaftCommandUnion::default_instance_->InitAsDefaultInstance();
   InternalRaftCommand::default_instance_->InitAsDefaultInstance();
@@ -773,20 +707,6 @@ struct StaticDescriptorInitializer_internal_2eproto {
     protobuf_AddDesc_internal_2eproto();
   }
 } static_descriptor_initializer_internal_2eproto_;
-const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return ReplicaChangeType_descriptor_;
-}
-bool ReplicaChangeType_IsValid(int value) {
-  switch(value) {
-    case 0:
-    case 1:
-      return true;
-    default:
-      return false;
-  }
-}
-
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor() {
   protobuf_AssignDescriptorsOnce();
   return InternalValueType_descriptor_;
@@ -4640,643 +4560,6 @@ void InternalTruncateLogResponse::Swap(InternalTruncateLogResponse* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int InternalChangeReplicasRequest::kHeaderFieldNumber;
-const int InternalChangeReplicasRequest::kNodeIdFieldNumber;
-const int InternalChangeReplicasRequest::kStoreIdFieldNumber;
-const int InternalChangeReplicasRequest::kChangeTypeFieldNumber;
-const int InternalChangeReplicasRequest::kNodesFieldNumber;
-#endif  // !_MSC_VER
-
-InternalChangeReplicasRequest::InternalChangeReplicasRequest()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:proto.InternalChangeReplicasRequest)
-}
-
-void InternalChangeReplicasRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::proto::RequestHeader*>(&::proto::RequestHeader::default_instance());
-}
-
-InternalChangeReplicasRequest::InternalChangeReplicasRequest(const InternalChangeReplicasRequest& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:proto.InternalChangeReplicasRequest)
-}
-
-void InternalChangeReplicasRequest::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  node_id_ = 0;
-  store_id_ = 0;
-  change_type_ = 0;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-InternalChangeReplicasRequest::~InternalChangeReplicasRequest() {
-  // @@protoc_insertion_point(destructor:proto.InternalChangeReplicasRequest)
-  SharedDtor();
-}
-
-void InternalChangeReplicasRequest::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void InternalChangeReplicasRequest::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* InternalChangeReplicasRequest::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return InternalChangeReplicasRequest_descriptor_;
-}
-
-const InternalChangeReplicasRequest& InternalChangeReplicasRequest::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_internal_2eproto();
-  return *default_instance_;
-}
-
-InternalChangeReplicasRequest* InternalChangeReplicasRequest::default_instance_ = NULL;
-
-InternalChangeReplicasRequest* InternalChangeReplicasRequest::New() const {
-  return new InternalChangeReplicasRequest;
-}
-
-void InternalChangeReplicasRequest::Clear() {
-#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
-  &reinterpret_cast<InternalChangeReplicasRequest*>(16)->f) - \
-   reinterpret_cast<char*>(16))
-
-#define ZR_(first, last) do {                              \
-    size_t f = OFFSET_OF_FIELD_(first);                    \
-    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
-    ::memset(&first, 0, n);                                \
-  } while (0)
-
-  if (_has_bits_[0 / 32] & 15) {
-    ZR_(node_id_, store_id_);
-    if (has_header()) {
-      if (header_ != NULL) header_->::proto::RequestHeader::Clear();
-    }
-    change_type_ = 0;
-  }
-
-#undef OFFSET_OF_FIELD_
-#undef ZR_
-
-  nodes_.Clear();
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool InternalChangeReplicasRequest::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:proto.InternalChangeReplicasRequest)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .proto.RequestHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(16)) goto parse_node_id;
-        break;
-      }
-
-      // optional int32 node_id = 2;
-      case 2: {
-        if (tag == 16) {
-         parse_node_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &node_id_)));
-          set_has_node_id();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(24)) goto parse_store_id;
-        break;
-      }
-
-      // optional int32 store_id = 3;
-      case 3: {
-        if (tag == 24) {
-         parse_store_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &store_id_)));
-          set_has_store_id();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(32)) goto parse_change_type;
-        break;
-      }
-
-      // optional .proto.ReplicaChangeType change_type = 4;
-      case 4: {
-        if (tag == 32) {
-         parse_change_type:
-          int value;
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
-                 input, &value)));
-          if (::proto::ReplicaChangeType_IsValid(value)) {
-            set_change_type(static_cast< ::proto::ReplicaChangeType >(value));
-          } else {
-            mutable_unknown_fields()->AddVarint(4, value);
-          }
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(40)) goto parse_nodes;
-        break;
-      }
-
-      // repeated uint64 nodes = 5;
-      case 5: {
-        if (tag == 40) {
-         parse_nodes:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitive<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 1, 40, input, this->mutable_nodes())));
-        } else if (tag == 42) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitiveNoInline<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, this->mutable_nodes())));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(40)) goto parse_nodes;
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:proto.InternalChangeReplicasRequest)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:proto.InternalChangeReplicasRequest)
-  return false;
-#undef DO_
-}
-
-void InternalChangeReplicasRequest::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:proto.InternalChangeReplicasRequest)
-  // optional .proto.RequestHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  // optional int32 node_id = 2;
-  if (has_node_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->node_id(), output);
-  }
-
-  // optional int32 store_id = 3;
-  if (has_store_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->store_id(), output);
-  }
-
-  // optional .proto.ReplicaChangeType change_type = 4;
-  if (has_change_type()) {
-    ::google::protobuf::internal::WireFormatLite::WriteEnum(
-      4, this->change_type(), output);
-  }
-
-  // repeated uint64 nodes = 5;
-  for (int i = 0; i < this->nodes_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(
-      5, this->nodes(i), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:proto.InternalChangeReplicasRequest)
-}
-
-::google::protobuf::uint8* InternalChangeReplicasRequest::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:proto.InternalChangeReplicasRequest)
-  // optional .proto.RequestHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  // optional int32 node_id = 2;
-  if (has_node_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->node_id(), target);
-  }
-
-  // optional int32 store_id = 3;
-  if (has_store_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->store_id(), target);
-  }
-
-  // optional .proto.ReplicaChangeType change_type = 4;
-  if (has_change_type()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
-      4, this->change_type(), target);
-  }
-
-  // repeated uint64 nodes = 5;
-  for (int i = 0; i < this->nodes_size(); i++) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteUInt64ToArray(5, this->nodes(i), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:proto.InternalChangeReplicasRequest)
-  return target;
-}
-
-int InternalChangeReplicasRequest::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .proto.RequestHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-    // optional int32 node_id = 2;
-    if (has_node_id()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->node_id());
-    }
-
-    // optional int32 store_id = 3;
-    if (has_store_id()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->store_id());
-    }
-
-    // optional .proto.ReplicaChangeType change_type = 4;
-    if (has_change_type()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
-    }
-
-  }
-  // repeated uint64 nodes = 5;
-  {
-    int data_size = 0;
-    for (int i = 0; i < this->nodes_size(); i++) {
-      data_size += ::google::protobuf::internal::WireFormatLite::
-        UInt64Size(this->nodes(i));
-    }
-    total_size += 1 * this->nodes_size() + data_size;
-  }
-
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void InternalChangeReplicasRequest::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const InternalChangeReplicasRequest* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const InternalChangeReplicasRequest*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void InternalChangeReplicasRequest::MergeFrom(const InternalChangeReplicasRequest& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  nodes_.MergeFrom(from.nodes_);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::proto::RequestHeader::MergeFrom(from.header());
-    }
-    if (from.has_node_id()) {
-      set_node_id(from.node_id());
-    }
-    if (from.has_store_id()) {
-      set_store_id(from.store_id());
-    }
-    if (from.has_change_type()) {
-      set_change_type(from.change_type());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void InternalChangeReplicasRequest::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void InternalChangeReplicasRequest::CopyFrom(const InternalChangeReplicasRequest& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool InternalChangeReplicasRequest::IsInitialized() const {
-
-  return true;
-}
-
-void InternalChangeReplicasRequest::Swap(InternalChangeReplicasRequest* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(node_id_, other->node_id_);
-    std::swap(store_id_, other->store_id_);
-    std::swap(change_type_, other->change_type_);
-    nodes_.Swap(&other->nodes_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata InternalChangeReplicasRequest::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = InternalChangeReplicasRequest_descriptor_;
-  metadata.reflection = InternalChangeReplicasRequest_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int InternalChangeReplicasResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
-
-InternalChangeReplicasResponse::InternalChangeReplicasResponse()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:proto.InternalChangeReplicasResponse)
-}
-
-void InternalChangeReplicasResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::proto::ResponseHeader*>(&::proto::ResponseHeader::default_instance());
-}
-
-InternalChangeReplicasResponse::InternalChangeReplicasResponse(const InternalChangeReplicasResponse& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:proto.InternalChangeReplicasResponse)
-}
-
-void InternalChangeReplicasResponse::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-InternalChangeReplicasResponse::~InternalChangeReplicasResponse() {
-  // @@protoc_insertion_point(destructor:proto.InternalChangeReplicasResponse)
-  SharedDtor();
-}
-
-void InternalChangeReplicasResponse::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void InternalChangeReplicasResponse::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* InternalChangeReplicasResponse::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return InternalChangeReplicasResponse_descriptor_;
-}
-
-const InternalChangeReplicasResponse& InternalChangeReplicasResponse::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_internal_2eproto();
-  return *default_instance_;
-}
-
-InternalChangeReplicasResponse* InternalChangeReplicasResponse::default_instance_ = NULL;
-
-InternalChangeReplicasResponse* InternalChangeReplicasResponse::New() const {
-  return new InternalChangeReplicasResponse;
-}
-
-void InternalChangeReplicasResponse::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::proto::ResponseHeader::Clear();
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool InternalChangeReplicasResponse::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:proto.InternalChangeReplicasResponse)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .proto.ResponseHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:proto.InternalChangeReplicasResponse)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:proto.InternalChangeReplicasResponse)
-  return false;
-#undef DO_
-}
-
-void InternalChangeReplicasResponse::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:proto.InternalChangeReplicasResponse)
-  // optional .proto.ResponseHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:proto.InternalChangeReplicasResponse)
-}
-
-::google::protobuf::uint8* InternalChangeReplicasResponse::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:proto.InternalChangeReplicasResponse)
-  // optional .proto.ResponseHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:proto.InternalChangeReplicasResponse)
-  return target;
-}
-
-int InternalChangeReplicasResponse::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .proto.ResponseHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void InternalChangeReplicasResponse::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const InternalChangeReplicasResponse* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const InternalChangeReplicasResponse*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void InternalChangeReplicasResponse::MergeFrom(const InternalChangeReplicasResponse& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::proto::ResponseHeader::MergeFrom(from.header());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void InternalChangeReplicasResponse::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void InternalChangeReplicasResponse::CopyFrom(const InternalChangeReplicasResponse& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool InternalChangeReplicasResponse::IsInitialized() const {
-
-  return true;
-}
-
-void InternalChangeReplicasResponse::Swap(InternalChangeReplicasResponse* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata InternalChangeReplicasResponse::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = InternalChangeReplicasResponse_descriptor_;
-  metadata.reflection = InternalChangeReplicasResponse_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
 const int ReadWriteCmdResponse::kPutFieldNumber;
 const int ReadWriteCmdResponse::kConditionalPutFieldNumber;
 const int ReadWriteCmdResponse::kIncrementFieldNumber;
@@ -6148,7 +5431,6 @@ const int InternalRaftCommandUnion::kInternalResolveIntentFieldNumber;
 const int InternalRaftCommandUnion::kInternalMergeResponseFieldNumber;
 const int InternalRaftCommandUnion::kInternalTruncateLogFieldNumber;
 const int InternalRaftCommandUnion::kInternalGcFieldNumber;
-const int InternalRaftCommandUnion::kInternalChangeReplicasFieldNumber;
 #endif  // !_MSC_VER
 
 InternalRaftCommandUnion::InternalRaftCommandUnion()
@@ -6178,7 +5460,6 @@ void InternalRaftCommandUnion::InitAsDefaultInstance() {
   internal_merge_response_ = const_cast< ::proto::InternalMergeRequest*>(&::proto::InternalMergeRequest::default_instance());
   internal_truncate_log_ = const_cast< ::proto::InternalTruncateLogRequest*>(&::proto::InternalTruncateLogRequest::default_instance());
   internal_gc_ = const_cast< ::proto::InternalGCRequest*>(&::proto::InternalGCRequest::default_instance());
-  internal_change_replicas_ = const_cast< ::proto::InternalChangeReplicasRequest*>(&::proto::InternalChangeReplicasRequest::default_instance());
 }
 
 InternalRaftCommandUnion::InternalRaftCommandUnion(const InternalRaftCommandUnion& from)
@@ -6210,7 +5491,6 @@ void InternalRaftCommandUnion::SharedCtor() {
   internal_merge_response_ = NULL;
   internal_truncate_log_ = NULL;
   internal_gc_ = NULL;
-  internal_change_replicas_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6241,7 +5521,6 @@ void InternalRaftCommandUnion::SharedDtor() {
     delete internal_merge_response_;
     delete internal_truncate_log_;
     delete internal_gc_;
-    delete internal_change_replicas_;
   }
 }
 
@@ -6319,7 +5598,7 @@ void InternalRaftCommandUnion::Clear() {
       if (internal_push_txn_ != NULL) internal_push_txn_->::proto::InternalPushTxnRequest::Clear();
     }
   }
-  if (_has_bits_[16 / 32] & 2031616) {
+  if (_has_bits_[16 / 32] & 983040) {
     if (has_internal_resolve_intent()) {
       if (internal_resolve_intent_ != NULL) internal_resolve_intent_->::proto::InternalResolveIntentRequest::Clear();
     }
@@ -6331,9 +5610,6 @@ void InternalRaftCommandUnion::Clear() {
     }
     if (has_internal_gc()) {
       if (internal_gc_ != NULL) internal_gc_->::proto::InternalGCRequest::Clear();
-    }
-    if (has_internal_change_replicas()) {
-      if (internal_change_replicas_ != NULL) internal_change_replicas_->::proto::InternalChangeReplicasRequest::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -6605,19 +5881,6 @@ bool InternalRaftCommandUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(306)) goto parse_internal_change_replicas;
-        break;
-      }
-
-      // optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
-      case 38: {
-        if (tag == 306) {
-         parse_internal_change_replicas:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_internal_change_replicas()));
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -6765,12 +6028,6 @@ void InternalRaftCommandUnion::SerializeWithCachedSizes(
   if (has_internal_gc()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       37, this->internal_gc(), output);
-  }
-
-  // optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
-  if (has_internal_change_replicas()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      38, this->internal_change_replicas(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -6921,13 +6178,6 @@ void InternalRaftCommandUnion::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         37, this->internal_gc(), target);
-  }
-
-  // optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
-  if (has_internal_change_replicas()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        38, this->internal_change_replicas(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -7086,13 +6336,6 @@ int InternalRaftCommandUnion::ByteSize() const {
           this->internal_gc());
     }
 
-    // optional .proto.InternalChangeReplicasRequest internal_change_replicas = 38;
-    if (has_internal_change_replicas()) {
-      total_size += 2 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->internal_change_replicas());
-    }
-
   }
   if (!unknown_fields().empty()) {
     total_size +=
@@ -7184,9 +6427,6 @@ void InternalRaftCommandUnion::MergeFrom(const InternalRaftCommandUnion& from) {
     if (from.has_internal_gc()) {
       mutable_internal_gc()->::proto::InternalGCRequest::MergeFrom(from.internal_gc());
     }
-    if (from.has_internal_change_replicas()) {
-      mutable_internal_change_replicas()->::proto::InternalChangeReplicasRequest::MergeFrom(from.internal_change_replicas());
-    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -7230,7 +6470,6 @@ void InternalRaftCommandUnion::Swap(InternalRaftCommandUnion* other) {
     std::swap(internal_merge_response_, other->internal_merge_response_);
     std::swap(internal_truncate_log_, other->internal_truncate_log_);
     std::swap(internal_gc_, other->internal_gc_);
-    std::swap(internal_change_replicas_, other->internal_change_replicas_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

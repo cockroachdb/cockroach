@@ -1955,6 +1955,15 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   inline ::proto::MergeTrigger* release_merge_trigger();
   inline void set_allocated_merge_trigger(::proto::MergeTrigger* merge_trigger);
 
+  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+  inline bool has_change_replicas_trigger() const;
+  inline void clear_change_replicas_trigger();
+  static const int kChangeReplicasTriggerFieldNumber = 5;
+  inline const ::proto::ChangeReplicasTrigger& change_replicas_trigger() const;
+  inline ::proto::ChangeReplicasTrigger* mutable_change_replicas_trigger();
+  inline ::proto::ChangeReplicasTrigger* release_change_replicas_trigger();
+  inline void set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger);
+
   // @@protoc_insertion_point(class_scope:proto.EndTransactionRequest)
  private:
   inline void set_has_header();
@@ -1965,6 +1974,8 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   inline void clear_has_split_trigger();
   inline void set_has_merge_trigger();
   inline void clear_has_merge_trigger();
+  inline void set_has_change_replicas_trigger();
+  inline void clear_has_change_replicas_trigger();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1973,6 +1984,7 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   ::proto::RequestHeader* header_;
   ::proto::SplitTrigger* split_trigger_;
   ::proto::MergeTrigger* merge_trigger_;
+  ::proto::ChangeReplicasTrigger* change_replicas_trigger_;
   bool commit_;
   friend void  protobuf_AddDesc_api_2eproto();
   friend void protobuf_AssignDesc_api_2eproto();
@@ -5391,6 +5403,47 @@ inline void EndTransactionRequest::set_allocated_merge_trigger(::proto::MergeTri
     clear_has_merge_trigger();
   }
   // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.merge_trigger)
+}
+
+// optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
+inline bool EndTransactionRequest::has_change_replicas_trigger() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void EndTransactionRequest::set_has_change_replicas_trigger() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void EndTransactionRequest::clear_has_change_replicas_trigger() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void EndTransactionRequest::clear_change_replicas_trigger() {
+  if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::proto::ChangeReplicasTrigger::Clear();
+  clear_has_change_replicas_trigger();
+}
+inline const ::proto::ChangeReplicasTrigger& EndTransactionRequest::change_replicas_trigger() const {
+  // @@protoc_insertion_point(field_get:proto.EndTransactionRequest.change_replicas_trigger)
+  return change_replicas_trigger_ != NULL ? *change_replicas_trigger_ : *default_instance_->change_replicas_trigger_;
+}
+inline ::proto::ChangeReplicasTrigger* EndTransactionRequest::mutable_change_replicas_trigger() {
+  set_has_change_replicas_trigger();
+  if (change_replicas_trigger_ == NULL) change_replicas_trigger_ = new ::proto::ChangeReplicasTrigger;
+  // @@protoc_insertion_point(field_mutable:proto.EndTransactionRequest.change_replicas_trigger)
+  return change_replicas_trigger_;
+}
+inline ::proto::ChangeReplicasTrigger* EndTransactionRequest::release_change_replicas_trigger() {
+  clear_has_change_replicas_trigger();
+  ::proto::ChangeReplicasTrigger* temp = change_replicas_trigger_;
+  change_replicas_trigger_ = NULL;
+  return temp;
+}
+inline void EndTransactionRequest::set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger) {
+  delete change_replicas_trigger_;
+  change_replicas_trigger_ = change_replicas_trigger;
+  if (change_replicas_trigger) {
+    set_has_change_replicas_trigger();
+  } else {
+    clear_has_change_replicas_trigger();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.change_replicas_trigger)
 }
 
 // -------------------------------------------------------------------
