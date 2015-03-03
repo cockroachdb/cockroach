@@ -63,7 +63,12 @@ build:
 test:
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
 
+# "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
+# tests. Run it as a part of "testrace" since race-enabled builds are not covered by
+# "make build", and so they would be built from scratch every time (including the
+# slow-to-compile cgo packages).
 testrace:
+	$(GO) test $(GOFLAGS) -race -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
 bench:
