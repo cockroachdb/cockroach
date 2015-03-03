@@ -400,6 +400,12 @@ func DecodeFloat(buf []byte) ([]byte, float64) {
 	}
 	idx := bytes.Index(buf, []byte{orderedEncodingTerminator})
 	switch {
+	case buf[0] == orderedEncodingNaN:
+		return buf[1:], math.NaN()
+	case buf[0] == orderedEncodingInfinity:
+		return buf[1:], math.Inf(1)
+	case buf[0] == orderedEncodingNegativeInfinity:
+		return buf[1:], math.Inf(-1)
 	case buf[0] == 0x08:
 		// Negative large.
 		e, m := decodeLargeNumber(true, buf[:idx+1])
@@ -460,13 +466,17 @@ func floatMandE(f float64) (int, []byte) {
 	}
 
 	// Parse the exponent.
-	e10 := 10*int(b[len(b)-2]-'0') + int(b[len(b)-1]-'0')
-	if b[len(b)-3] == '-' {
+	e := bytes.IndexByte(b, 'e')
+	e10 := 0
+	for i := e + 2; i < len(b); i++ {
+		e10 = e10*10 + int(b[i]-'0')
+	}
+	if b[e+1] == '-' {
 		e10 = -e10
 	}
 
 	// Strip off the exponent.
-	b = b[:len(b)-4]
+	b = b[:e]
 
 	// Move all of the digits after the decimal and prepend a leading 0.
 	if len(b) > 1 {
@@ -540,9 +550,22 @@ func makeFloatFromMandE(negative bool, e int, m []byte) float64 {
 	} else {
 		b = append(b, '+')
 	}
-	b = append(b, byte(e/10)+'0')
-	b = append(b, byte(e%10)+'0')
-	f, _ := strconv.ParseFloat(string(b), 64)
+
+	var buf [3]byte
+	i := len(buf)
+	for e >= 10 {
+		i--
+		buf[i] = byte(e%10 + '0')
+		e /= 10
+	}
+	i--
+	buf[i] = byte(e + '0')
+
+	b = append(b, buf[i:]...)
+	f, err := strconv.ParseFloat(string(b), 64)
+	if err != nil {
+		panic(err)
+	}
 	return f
 }
 
@@ -559,10 +582,10 @@ func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	l := 1 + n + len(m)
 	if negative {
 		buf[0] = 0x14
-		onesComplement(buf, n, l) // ones complement of mantissa
+		onesComplement(buf, 1+n, l) // ones complement of mantissa
 	} else {
 		buf[0] = 0x16
-		onesComplement(buf, 1, n) // ones complement of exponent
+		onesComplement(buf, 1, 1+n) // ones complement of exponent
 	}
 	buf[l] = orderedEncodingTerminator
 	return buf[:l+1]
@@ -599,10 +622,10 @@ func decodeSmallNumber(negative bool, buf []byte) (int, []byte) {
 	var e uint64
 	var n int
 	if negative {
+		e, n = GetUVarint(buf[1:])
+	} else {
 		tmp := []byte{^buf[1]}
 		e, n = GetUVarint(tmp)
-	} else {
-		e, n = GetUVarint(buf[1:])
 	}
 
 	// We don't need the prefix and last terminator.

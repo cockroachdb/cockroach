@@ -20,6 +20,7 @@ package encoding
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"testing"
 )
@@ -294,9 +295,10 @@ func TestFloatMandE(t *testing.T) {
 		{1234.5, 2, []byte{0x19, 0x45, 0x64}},
 		{12.345, 1, []byte{0x19, 0x45, 0x64}},
 		{0.123, 0, []byte{0x19, 0x3c}},
-		{-0.123, 0, []byte{0x19, 0x3c}},
 		{0.0123, 0, []byte{0x03, 0x2e}},
 		{0.00123, -1, []byte{0x19, 0x3c}},
+		{1e-307, -153, []byte{0x14}},
+		{1e308, 155, []byte{0x2}},
 		// The following value cannot be precisely represented as a float.
 		// {9223372036854775807, 10, []byte{0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e}},
 	}
@@ -313,14 +315,19 @@ func TestEncodeFloat(t *testing.T) {
 		Value    float64
 		Encoding []byte
 	}{
+		{math.NaN(), []byte{0x06}},
+		{math.Inf(-1), []byte{0x07}},
+		{-1e308, []byte{0x08, 0x64, 0xfd, 0x0}},
 		{-10000.0, []byte{0x10, 0xfd, 0x0}},
 		{-9999.0, []byte{0x11, 0x38, 0x39, 0x00}},
 		{-100.0, []byte{0x11, 0xfd, 0x00}},
 		{-99.0, []byte{0x12, 0x39, 0x00}},
 		{-1.0, []byte{0x12, 0xfd, 0x0}},
-		{-0.00123, []byte{0x14, 0xfe, 0xe6, 0xc3, 0x0}},
+		{-0.00123, []byte{0x14, 0x1, 0xe6, 0xc3, 0x0}},
+		{-1e-307, []byte{0x14, 0x99, 0xeb, 0x0}},
 		{0, []byte{0x15}},
-		{0.00123, []byte{0x16, 0x1, 0x19, 0x3c, 0x0}},
+		{1e-307, []byte{0x16, 0x66, 0x14, 0x0}},
+		{0.00123, []byte{0x16, 0xfe, 0x19, 0x3c, 0x0}},
 		{0.0123, []byte{0x17, 0x03, 0x2e, 0x0}},
 		{0.123, []byte{0x17, 0x19, 0x3c, 0x0}},
 		{1.0, []byte{0x18, 0x02, 0x0}},
@@ -348,6 +355,8 @@ func TestEncodeFloat(t *testing.T) {
 		{10001, []byte{0x1a, 0x03, 0x01, 0x02, 0x0}},
 		{12345, []byte{0x1a, 0x03, 0x2f, 0x5a, 0x0}},
 		{123450, []byte{0x1a, 0x19, 0x45, 0x64, 0x0}},
+		{1e308, []byte{0x22, 0x9b, 0x2, 0x0}},
+		{math.Inf(1), []byte{0x23}},
 	}
 	for i, c := range testCases {
 		enc := EncodeFloat([]byte{}, c.Value)
@@ -362,7 +371,11 @@ func TestEncodeFloat(t *testing.T) {
 			}
 		}
 		_, dec := DecodeFloat(enc)
-		if dec != c.Value {
+		if math.IsNaN(c.Value) {
+			if !math.IsNaN(dec) {
+				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
+			}
+		} else if dec != c.Value {
 			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 		}
 	}
