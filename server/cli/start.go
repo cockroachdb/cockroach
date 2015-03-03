@@ -132,7 +132,7 @@ var CmdStart = &commander.Command{
 // cluster via the gossip network.
 func runStart(cmd *commander.Command, args []string) {
 	info := util.GetBuildInfo()
-	log.Infof("Build SHA:  %s", info.SHA)
+	log.Infof("Build Vers: %s", info.Vers)
 	log.Infof("Build Tag:  %s", info.Tag)
 	log.Infof("Build Time: %s", info.Time)
 	log.Infof("Build Deps: %s", info.Deps)
