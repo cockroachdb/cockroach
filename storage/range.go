@@ -1799,10 +1799,12 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	}
 	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
-		// so the transaction record lives there.
+		// so the transaction record is co-located with the range being modified.
 		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
 			return err
 		}
+
+		// TODO(bdarnell): call UpdateRangeAddressing
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
