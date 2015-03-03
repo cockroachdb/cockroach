@@ -581,7 +581,7 @@ func onesComplement(buf []byte, start, end int) {
 }
 
 func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
-	n := PutUvarint(buf[1:], uint64(-e))
+	n := putUvarint(buf[1:], uint64(-e))
 	copy(buf[n+1:], m)
 	l := 1 + n + len(m)
 	if negative {
@@ -609,7 +609,7 @@ func encodeMediumNumber(negative bool, e int, m []byte, buf []byte) []byte {
 }
 
 func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
-	n := PutUvarint(buf[1:], uint64(e))
+	n := putUvarint(buf[1:], uint64(e))
 	copy(buf[n+1:], m)
 	l := 1 + n + len(m)
 	if negative {
@@ -626,10 +626,10 @@ func decodeSmallNumber(negative bool, buf []byte) (int, []byte) {
 	var e uint64
 	var n int
 	if negative {
-		e, n = GetUvarint(buf[1:])
+		e, n = getUvarint(buf[1:])
 	} else {
 		tmp := []byte{^buf[1]}
-		e, n = GetUvarint(tmp)
+		e, n = getUvarint(tmp)
 	}
 
 	// We don't need the prefix and last terminator.
@@ -663,7 +663,7 @@ func decodeLargeNumber(negative bool, buf []byte) (int, []byte) {
 	if negative {
 		onesComplement(m, 1, len(m))
 	}
-	e, l := GetUvarint(m[1:])
+	e, l := getUvarint(m[1:])
 
 	// We don't need the prefix and last terminator.
 	return int(e), m[l+1 : len(m)-1]

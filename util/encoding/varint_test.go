@@ -47,14 +47,14 @@ func TestVarint(t *testing.T) {
 	}
 	for _, c := range testCases {
 		buf := make([]byte, len(c.encoded))
-		n := PutUvarint(buf, c.val)
+		n := putUvarint(buf, c.val)
 		if n != len(c.encoded) {
 			t.Errorf("short write: %d bytes written; %d expected", n, len(c.encoded))
 		}
 		if !bytes.Equal(buf, c.encoded) {
 			t.Errorf("byte mismatch: expected %v, got %v", c.encoded, buf)
 		}
-		decoded, _ := GetUvarint(buf)
+		decoded, _ := getUvarint(buf)
 		if decoded != c.val {
 			t.Errorf("decoded value mismatch: expected %v, got %v", c.val, decoded)
 		}
@@ -90,12 +90,12 @@ func TestVarintOrdering(t *testing.T) {
 		val := uint64(rand.Uint32())<<32 + uint64(rand.Uint32())
 		ints[i] = val
 		varints[i] = make([]byte, maxVarintSize)
-		PutUvarint(varints[i], val)
+		putUvarint(varints[i], val)
 	}
 	sort.Sort(ints)
 	sort.Sort(varints)
 	for i := range ints {
-		decoded, _ := GetUvarint(varints[i])
+		decoded, _ := getUvarint(varints[i])
 		if decoded != ints[i] {
 			t.Errorf("mismatched ordering at index %d: expected: %d, got %d [seed: %d]", i, ints[i], decoded, seed)
 		}

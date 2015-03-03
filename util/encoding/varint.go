@@ -60,10 +60,11 @@ func readBigEndian(buf []byte) uint64 {
 
 const maxVarintSize = 9
 
-// PutUvarint encodes a uint64 into buf and returns the
-// number of bytes written. If the buffer is too small,
-// a panic will ensue.
-func PutUvarint(buf []byte, x uint64) int {
+// putUvarint encodes a uint64 into buf and returns the number of
+// bytes written. If the buffer is too small, a panic will ensue. Note
+// that this varint encoding matches the sqlite4 definition but
+// differs from the encoding/binary.{Put,Read}Uvarint() definitions.
+func putUvarint(buf []byte, x uint64) int {
 	// Treat each byte of the encoding as an unsigned integer
 	// between 0 and 255.
 	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
@@ -116,9 +117,9 @@ func PutUvarint(buf []byte, x uint64) int {
 	}
 }
 
-// GetUvarint decodes a varint-encoded byte slice and returns the result
+// getUvarint decodes a varint-encoded byte slice and returns the result
 // and the length of byte slice been used.
-func GetUvarint(b []byte) (uint64, int) {
+func getUvarint(b []byte) (uint64, int) {
 	// Treat each byte of the encoding as an unsigned integer
 	// between 0 and 255.
 	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.
