@@ -459,9 +459,9 @@ func floatMandE(f float64) (int, []byte) {
 	// precision is necessary to precisely represent f. The 'e' format is
 	// d.dddde±dd.
 	b := strconv.AppendFloat(nil, f, 'e', -1, 64)
-	if len(b) < 5 {
-		// The formatted float must be at least 5 bytes or something unexpected has
-		// occurred.
+	if len(b) < 4 {
+		// The formatted float must be at least 4 bytes ("1e+0") or something
+		// unexpected has occurred.
 		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
 	}
 
@@ -471,8 +471,12 @@ func floatMandE(f float64) (int, []byte) {
 	for i := e + 2; i < len(b); i++ {
 		e10 = e10*10 + int(b[i]-'0')
 	}
-	if b[e+1] == '-' {
+	switch b[e+1] {
+	case '-':
 		e10 = -e10
+	case '+':
+	default:
+		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
 	}
 
 	// Strip off the exponent.
