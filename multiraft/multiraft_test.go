@@ -298,6 +298,19 @@ func TestMembershipChange(t *testing.T) {
 	cluster.triggerElection(0)
 	cluster.waitForElection(0)
 
+	// Consume and apply the membership change events.
+	for i := 0; i < 4; i++ {
+		go func(i int) {
+			for {
+				e, ok := <-cluster.events[i].MembershipChangeCommitted
+				if !ok {
+					return
+				}
+				e.Callback(nil)
+			}
+		}(i)
+	}
+
 	// Add each of the other three nodes to the cluster.
 	for i := 1; i < 4; i++ {
 		ch := cluster.nodes[0].ChangeGroupMembership(groupID, makeCommandID(),

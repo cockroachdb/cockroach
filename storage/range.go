@@ -501,7 +501,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	return nil
 }
 
-func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCommand) {
+func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCommand) error {
 	r.Lock()
 	cmd := r.pendingCmds[idKey]
 	delete(r.pendingCmds, idKey)
@@ -530,6 +530,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 	} else if err != nil {
 		log.Errorf("error executing raft command: %s", err)
 	}
+	return err
 }
 
 // startGossip periodically gossips the cluster ID if it's the

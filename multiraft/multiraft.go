@@ -701,28 +701,34 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if len(cc.Context) > 0 {
 					commandID, payload = decodeCommand(cc.Context)
 				}
-				log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
-				// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
-				switch cc.Type {
-				case raftpb.ConfChangeAddNode:
-					err = s.addNode(NodeID(cc.NodeID), groupID)
-				case raftpb.ConfChangeRemoveNode:
-					// TODO(bdarnell): support removing nodes; fix double-application of initial entries
-					continue
-				case raftpb.ConfChangeUpdateNode:
-					// Updates don't concern multiraft, they are simply passed through.
-				}
-				if err != nil {
-					log.Errorf("error applying configuration change %v: %s", cc, err)
-				}
-				cs := s.multiNode.ApplyConfChange(groupID, cc)
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
 					NodeID:     NodeID(cc.NodeID),
 					ChangeType: cc.Type,
-					ConfState:  *cs,
 					Payload:    payload,
+					Callback: func(err error) {
+						if err == nil {
+							log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+							// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
+							switch cc.Type {
+							case raftpb.ConfChangeAddNode:
+								err = s.addNode(NodeID(cc.NodeID), groupID)
+							case raftpb.ConfChangeRemoveNode:
+								// TODO(bdarnell): support removing nodes; fix double-application of initial entries
+							case raftpb.ConfChangeUpdateNode:
+								// Updates don't concern multiraft, they are simply passed through.
+							}
+							if err != nil {
+								log.Errorf("error applying configuration change %v: %s", cc, err)
+							}
+							s.multiNode.ApplyConfChange(groupID, cc)
+						} else {
+							log.Warningf("aborting configuration change: %s", err)
+							s.multiNode.ApplyConfChange(groupID,
+								raftpb.ConfChange{})
+						}
+					},
 				})
 			}
 			if p, ok := g.pending[commandID]; ok {
@@ -730,6 +736,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				// application consumes EventCommandCommitted. Is closing the channel
 				// at this point useful or do we need to wait for the command to be
 				// applied too?
+				// This could be done with a Callback as in EventMembershipChangeCommitted
+				// or perhaps we should move away from a channel to a callback-based system.
 				if p.ch != nil {
 					// Because of the way we re-queue proposals during leadership
 					// changes, we may close the same proposal object twice.

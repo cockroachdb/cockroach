@@ -1004,6 +1004,7 @@ func (s *Store) processRaft() {
 			var cmd proto.InternalRaftCommand
 			var groupID int64
 			var commandID string
+			var callback func(error)
 
 			switch e := e.(type) {
 			case *multiraft.EventCommandCommitted:
@@ -1017,6 +1018,7 @@ func (s *Store) processRaft() {
 			case *multiraft.EventMembershipChangeCommitted:
 				groupID = int64(e.GroupID)
 				commandID = e.CommandID
+				callback = e.Callback
 				err := gogoproto.Unmarshal(e.Payload, &cmd)
 				if err != nil {
 					log.Fatal(err)
@@ -1033,11 +1035,16 @@ func (s *Store) processRaft() {
 			s.mu.Lock()
 			r, ok := s.ranges[groupID]
 			s.mu.Unlock()
+			var err error
 			if !ok {
-				log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+				err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
 					groupID, cmd)
+				log.Error(err)
 			} else {
-				r.processRaftCommand(cmdIDKey(commandID), cmd)
+				err = r.processRaftCommand(cmdIDKey(commandID), cmd)
+			}
+			if callback != nil {
+				callback(err)
 			}
 
 		case <-s.stopper.ShouldStop():
