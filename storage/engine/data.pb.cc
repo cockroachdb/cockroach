@@ -211,10 +211,11 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(MergeTrigger));
   ChangeReplicasTrigger_descriptor_ = file->message_type(8);
-  static const int ChangeReplicasTrigger_offsets_[3] = {
+  static const int ChangeReplicasTrigger_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, store_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, change_type_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, updated_desc_),
   };
   ChangeReplicasTrigger_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -449,39 +450,40 @@ void protobuf_AddDesc_data_2eproto() {
     "\037\000\"t\n\014MergeTrigger\0222\n\014updated_desc\030\001 \001(\013"
     "2\026.proto.RangeDescriptorB\004\310\336\037\000\0220\n\020subsum"
     "ed_raft_id\030\002 \001(\003B\026\310\336\037\000\342\336\037\016SubsumedRaftID"
-    "\"\245\001\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001 "
+    "\"\331\001\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001 "
     "\001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022,\n\010store_i"
     "d\030\002 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\0223\n\013c"
     "hange_type\030\003 \001(\0162\030.proto.ReplicaChangeTy"
-    "peB\004\310\336\037\000\"\035\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001\""
-    "\307\003\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\030\n\003k"
-    "ey\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030\003 \001(\014B\n\310\336\037\000\342"
-    "\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\022-\n\tisolati"
-    "on\030\005 \001(\0162\024.proto.IsolationTypeB\004\310\336\037\000\022.\n\006"
-    "status\030\006 \001(\0162\030.proto.TransactionStatusB\004"
-    "\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022(\n\016last_heartb"
-    "eat\030\010 \001(\0132\020.proto.Timestamp\022)\n\ttimestamp"
-    "\030\t \001(\0132\020.proto.TimestampB\004\310\336\037\000\022.\n\016orig_t"
-    "imestamp\030\n \001(\0132\020.proto.TimestampB\004\310\336\037\000\022-"
-    "\n\rmax_timestamp\030\013 \001(\0132\020.proto.TimestampB"
-    "\004\310\336\037\000\022,\n\rcertain_nodes\030\014 \001(\0132\017.proto.Nod"
-    "eListB\004\310\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMetadata\022\037\n\003tx"
-    "n\030\001 \001(\0132\022.proto.Transaction\022)\n\ttimestamp"
-    "\030\002 \001(\0132\020.proto.TimestampB\004\310\336\037\000\022\025\n\007delete"
-    "d\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027"
-    "\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005value\030\006 \001(\0132\014"
-    ".proto.Value\"J\n\014ScanMetadata\022\035\n\017last_sca"
-    "n_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nan"
-    "os\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017times"
-    "tamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001("
-    "\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016TimeSeriesData"
-    "\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoints\030\002 \003(\013"
-    "2\032.proto.TimeSeriesDatapoint*>\n\021ReplicaC"
-    "hangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REP"
-    "LICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALI"
-    "ZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Transacti"
-    "onStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007"
-    "ABORTED\020\002\032\004\210\243\036\000", 2135);
+    "peB\004\310\336\037\000\0222\n\014updated_desc\030\004 \001(\0132\026.proto.R"
+    "angeDescriptorB\004\310\336\037\000\"\035\n\010NodeList\022\021\n\005node"
+    "s\030\001 \003(\005B\002\020\001\"\307\003\n\013Transaction\022\022\n\004name\030\001 \001("
+    "\tB\004\310\336\037\000\022\030\n\003key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030"
+    "\003 \001(\014B\n\310\336\037\000\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037"
+    "\000\022-\n\tisolation\030\005 \001(\0162\024.proto.IsolationTy"
+    "peB\004\310\336\037\000\022.\n\006status\030\006 \001(\0162\030.proto.Transac"
+    "tionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022(\n"
+    "\016last_heartbeat\030\010 \001(\0132\020.proto.Timestamp\022"
+    ")\n\ttimestamp\030\t \001(\0132\020.proto.TimestampB\004\310\336"
+    "\037\000\022.\n\016orig_timestamp\030\n \001(\0132\020.proto.Times"
+    "tampB\004\310\336\037\000\022-\n\rmax_timestamp\030\013 \001(\0132\020.prot"
+    "o.TimestampB\004\310\336\037\000\022,\n\rcertain_nodes\030\014 \001(\013"
+    "2\017.proto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMe"
+    "tadata\022\037\n\003txn\030\001 \001(\0132\022.proto.Transaction\022"
+    ")\n\ttimestamp\030\002 \001(\0132\020.proto.TimestampB\004\310\336"
+    "\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004"
+    " \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005v"
+    "alue\030\006 \001(\0132\014.proto.Value\"J\n\014ScanMetadata"
+    "\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldes"
+    "t_intent_nanos\030\002 \001(\003\"\\\n\023TimeSeriesDatapo"
+    "int\022\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tin"
+    "t_value\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016Ti"
+    "meSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndata"
+    "points\030\002 \003(\0132\032.proto.TimeSeriesDatapoint"
+    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
+    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
+    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
+    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
+    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 2187);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -2959,6 +2961,7 @@ void MergeTrigger::Swap(MergeTrigger* other) {
 const int ChangeReplicasTrigger::kNodeIdFieldNumber;
 const int ChangeReplicasTrigger::kStoreIdFieldNumber;
 const int ChangeReplicasTrigger::kChangeTypeFieldNumber;
+const int ChangeReplicasTrigger::kUpdatedDescFieldNumber;
 #endif  // !_MSC_VER
 
 ChangeReplicasTrigger::ChangeReplicasTrigger()
@@ -2968,6 +2971,7 @@ ChangeReplicasTrigger::ChangeReplicasTrigger()
 }
 
 void ChangeReplicasTrigger::InitAsDefaultInstance() {
+  updated_desc_ = const_cast< ::proto::RangeDescriptor*>(&::proto::RangeDescriptor::default_instance());
 }
 
 ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
@@ -2982,6 +2986,7 @@ void ChangeReplicasTrigger::SharedCtor() {
   node_id_ = 0;
   store_id_ = 0;
   change_type_ = 0;
+  updated_desc_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2992,6 +2997,7 @@ ChangeReplicasTrigger::~ChangeReplicasTrigger() {
 
 void ChangeReplicasTrigger::SharedDtor() {
   if (this != default_instance_) {
+    delete updated_desc_;
   }
 }
 
@@ -3027,7 +3033,13 @@ void ChangeReplicasTrigger::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  ZR_(node_id_, change_type_);
+  if (_has_bits_[0 / 32] & 15) {
+    ZR_(node_id_, store_id_);
+    change_type_ = 0;
+    if (has_updated_desc()) {
+      if (updated_desc_ != NULL) updated_desc_->::proto::RangeDescriptor::Clear();
+    }
+  }
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
@@ -3091,6 +3103,19 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_updated_desc;
+        break;
+      }
+
+      // optional .proto.RangeDescriptor updated_desc = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_updated_desc:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_updated_desc()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -3136,6 +3161,12 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
       3, this->change_type(), output);
   }
 
+  // optional .proto.RangeDescriptor updated_desc = 4;
+  if (has_updated_desc()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      4, this->updated_desc(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -3160,6 +3191,13 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
   if (has_change_type()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
       3, this->change_type(), target);
+  }
+
+  // optional .proto.RangeDescriptor updated_desc = 4;
+  if (has_updated_desc()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        4, this->updated_desc(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -3192,6 +3230,13 @@ int ChangeReplicasTrigger::ByteSize() const {
     if (has_change_type()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
+    }
+
+    // optional .proto.RangeDescriptor updated_desc = 4;
+    if (has_updated_desc()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->updated_desc());
     }
 
   }
@@ -3230,6 +3275,9 @@ void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
     if (from.has_change_type()) {
       set_change_type(from.change_type());
     }
+    if (from.has_updated_desc()) {
+      mutable_updated_desc()->::proto::RangeDescriptor::MergeFrom(from.updated_desc());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -3256,6 +3304,7 @@ void ChangeReplicasTrigger::Swap(ChangeReplicasTrigger* other) {
     std::swap(node_id_, other->node_id_);
     std::swap(store_id_, other->store_id_);
     std::swap(change_type_, other->change_type_);
+    std::swap(updated_desc_, other->updated_desc_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

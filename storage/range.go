@@ -941,7 +941,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 		} else if args.MergeTrigger != nil {
 			reply.SetGoError(r.mergeTrigger(batch, args.MergeTrigger))
 		} else if args.ChangeReplicasTrigger != nil {
-			// ChangeReplicasTrigger is processed on input, not output.
+			reply.SetGoError(r.changeReplicasTrigger(args.ChangeReplicasTrigger))
 		}
 	}
 }
@@ -1373,6 +1373,11 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	r.Lock()
 	defer r.Unlock()
 	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+}
+
+func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
+	r.Desc = &change.UpdatedDesc
+	return nil
 }
 
 // AdminSplit divides the range into into two ranges, using either
@@ -1813,9 +1818,10 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 			Commit:        true,
 			ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
-				NodeID:     replica.NodeID,
-				StoreID:    replica.StoreID,
-				ChangeType: changeType,
+				NodeID:      replica.NodeID,
+				StoreID:     replica.StoreID,
+				ChangeType:  changeType,
+				UpdatedDesc: updatedDesc,
 			},
 		}, &proto.EndTransactionResponse{})
 	})
