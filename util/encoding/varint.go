@@ -116,9 +116,9 @@ func PutUvarint(buf []byte, x uint64) int {
 	}
 }
 
-// GetUVarint decodes a varint-encoded byte slice and returns the result
+// GetUvarint decodes a varint-encoded byte slice and returns the result
 // and the length of byte slice been used.
-func GetUVarint(b []byte) (uint64, int) {
+func GetUvarint(b []byte) (uint64, int) {
 	// Treat each byte of the encoding as an unsigned integer
 	// between 0 and 255.
 	// Let the bytes of the encoding be called A0, A1, A2, ..., A8.

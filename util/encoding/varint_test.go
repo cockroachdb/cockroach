@@ -54,7 +54,7 @@ func TestVarint(t *testing.T) {
 		if !bytes.Equal(buf, c.encoded) {
 			t.Errorf("byte mismatch: expected %v, got %v", c.encoded, buf)
 		}
-		decoded, _ := GetUVarint(buf)
+		decoded, _ := GetUvarint(buf)
 		if decoded != c.val {
 			t.Errorf("decoded value mismatch: expected %v, got %v", c.val, decoded)
 		}
@@ -95,7 +95,7 @@ func TestVarintOrdering(t *testing.T) {
 	sort.Sort(ints)
 	sort.Sort(varints)
 	for i := range ints {
-		decoded, _ := GetUVarint(varints[i])
+		decoded, _ := GetUvarint(varints[i])
 		if decoded != ints[i] {
 			t.Errorf("mismatched ordering at index %d: expected: %d, got %d [seed: %d]", i, ints[i], decoded, seed)
 		}

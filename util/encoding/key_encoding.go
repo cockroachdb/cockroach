@@ -626,10 +626,10 @@ func decodeSmallNumber(negative bool, buf []byte) (int, []byte) {
 	var e uint64
 	var n int
 	if negative {
-		e, n = GetUVarint(buf[1:])
+		e, n = GetUvarint(buf[1:])
 	} else {
 		tmp := []byte{^buf[1]}
-		e, n = GetUVarint(tmp)
+		e, n = GetUvarint(tmp)
 	}
 
 	// We don't need the prefix and last terminator.
@@ -663,7 +663,7 @@ func decodeLargeNumber(negative bool, buf []byte) (int, []byte) {
 	if negative {
 		onesComplement(m, 1, len(m))
 	}
-	e, l := GetUVarint(m[1:])
+	e, l := GetUvarint(m[1:])
 
 	// We don't need the prefix and last terminator.
 	return int(e), m[l+1 : len(m)-1]
