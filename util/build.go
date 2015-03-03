@@ -17,10 +17,12 @@
 
 package util
 
+import "runtime"
+
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	buildSHA  string // Git SHA
+	buildVers string // Go Version
 	buildTag  string // Tag of this build (git describe)
 	buildTime string // Build time in UTC (year/month/day hour:min:sec)
 	buildDeps string // Git SHAs of dependencies
@@ -28,7 +30,7 @@ var (
 
 // BuildInfo ...
 type BuildInfo struct {
-	SHA  string
+	Vers string
 	Tag  string
 	Time string
 	Deps string
@@ -37,7 +39,7 @@ type BuildInfo struct {
 // GetBuildInfo ...
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
-		SHA:  buildSHA,
+		Vers: runtime.Version(),
 		Tag:  buildTag,
 		Time: buildTime,
 		Deps: buildDeps,

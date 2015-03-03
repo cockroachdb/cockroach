@@ -91,7 +91,7 @@ Output build version information.
 					info := util.GetBuildInfo()
 					w := &tabwriter.Writer{}
 					w.Init(os.Stdout, 2, 1, 2, ' ', 0)
-					fmt.Fprintf(w, "Build SHA:   %s\n", info.SHA)
+					fmt.Fprintf(w, "Build Vers:  %s\n", info.Vers)
 					fmt.Fprintf(w, "Build Tag:   %s\n", info.Tag)
 					fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
 					fmt.Fprintf(w, "Build Deps:\n\t%s\n",

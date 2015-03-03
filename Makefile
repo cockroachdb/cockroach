@@ -29,7 +29,7 @@ STATIC := $(STATIC)
 COCKROACH_IMAGE :=
 
 RUN := run
-export GOPATH := $(CURDIR)/_vendor:$(CURDIR)/../../../..
+export GOPATH := $(CURDIR)/_vendor:$(shell cd $(CURDIR)/../../../..; pwd)
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
@@ -52,10 +52,9 @@ all: build test
 # "go build -i" explicitly does not rebuild dependent packages that
 # have a different root directory than the package being built, hence
 # the need for a separate build invocation for etcd/raft.
-build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildSHA "$(shell git rev-parse HEAD)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
-build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell make depvers | sort)"
+build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
 build:
 	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
 	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
@@ -121,16 +120,5 @@ godeps:
 	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
 	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
 	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)'
-
-depvers:
-	@SRCDIR=../../..; \
-	  PKGS=$$(go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
-	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
-	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)' | \
-	  egrep -v 'code.google.com/p/(go-uuid/uuid|snappy-go/snappy)'); \
-	  echo github.com/coreos/etcd:$$(git -C _vendor/src/github.com/coreos/etcd rev-parse HEAD); \
-	  for pkg in $${PKGS}; do \
-	    echo $${pkg}:$$(git -C "$${SRCDIR}/$${pkg}" rev-parse HEAD); \
-	  done
 
 .PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers
