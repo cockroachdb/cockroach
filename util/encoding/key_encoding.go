@@ -25,6 +25,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strconv"
 	"unicode/utf8"
 )
 
@@ -391,6 +392,49 @@ func EncodeFloat(b []byte, f float64) []byte {
 	return nil
 }
 
+// DecodeFloat returns the remaining byte slice after decoding and the decoded
+// float64 from buf.
+func DecodeFloat(buf []byte) ([]byte, float64) {
+	if buf[0] == 0x15 {
+		return buf[1:], 0
+	}
+	idx := bytes.Index(buf, []byte{orderedEncodingTerminator})
+	switch {
+	case buf[0] == orderedEncodingNaN:
+		return buf[1:], math.NaN()
+	case buf[0] == orderedEncodingInfinity:
+		return buf[1:], math.Inf(1)
+	case buf[0] == orderedEncodingNegativeInfinity:
+		return buf[1:], math.Inf(-1)
+	case buf[0] == 0x08:
+		// Negative large.
+		e, m := decodeLargeNumber(true, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(true, e, m)
+	case buf[0] > 0x08 && buf[0] <= 0x13:
+		// Negative medium.
+		e, m := decodeMediumNumber(true, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(true, e, m)
+	case buf[0] == 0x14:
+		// Negative small.
+		e, m := decodeSmallNumber(true, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(true, e, m)
+	case buf[0] == 0x22:
+		// Positive large.
+		e, m := decodeLargeNumber(false, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(false, e, m)
+	case buf[0] >= 0x17 && buf[0] < 0x22:
+		// Positive large.
+		e, m := decodeMediumNumber(false, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(false, e, m)
+	case buf[0] == 0x16:
+		// Positive small.
+		e, m := decodeSmallNumber(false, buf[:idx+1])
+		return buf[idx+1:], makeFloatFromMandE(false, e, m)
+	default:
+		panic(fmt.Sprintf("unknown prefix of the encoded byte slice: %q", buf))
+	}
+}
+
 // floatMandE computes and returns the mantissa M and exponent E for f.
 //
 // The mantissa is a base-100 representation of the value. The exponent
@@ -410,44 +454,123 @@ func floatMandE(f float64) (int, []byte) {
 	if f < 0 {
 		f = -f
 	}
-	i := 0
-	if f >= 1 {
-		for t := f; t >= 1; t /= 100 {
-			i++
-		}
-	} else {
-		for t := f; t < 0.01; t *= 100 {
-			i--
-		}
-	}
-	// Iterate through the centimal digits of the
-	// mantissa and add them to the buffer.
-	// For a number like 9999.00001, start with
-	// 99.9900001, write 99 to the buffer, then
-	// multiply by 100 until there is no fractional
-	// portion left.
-	d := f * math.Pow(100, float64(-i+1))
-	var buf bytes.Buffer
-	n, frac := math.Modf(d)
-	buf.WriteByte(byte(2*n + 1))
-	for frac != 0 {
-		// Remove the integral portion and shift to the left.
-		// So given the above example:
-		// 99.9900001 -> [-99] -> 00.9900001 -> [*100] -> 99.00001
-		// 99.00001 -> [-99] -> 00.00001 -> [*100] -> 00.001
-		// 00.001 -> [-00] -> 00.001 -> [*100] -> 00.1
-		// 00.1 -> [-00] -> 00.1 -> [*100] -> 10
-		// Done as frac == 0
-		d = (d - n) * 100
-		n, frac = math.Modf(d)
-		buf.WriteByte(byte(2*n + 1)) // Write the integral to the buf.
-	}
-	b := buf.Bytes()
-	// The last byte is encoded as 2n+0.
-	b[len(b)-1]--
 
-	// Trailing X==0 digits are omitted.
-	return i, removeTrailingZeros(b)
+	// Use strconv.FormatFloat to handle the intricacies of determining how much
+	// precision is necessary to precisely represent f. The 'e' format is
+	// d.dddde±dd.
+	b := strconv.AppendFloat(nil, f, 'e', -1, 64)
+	if len(b) < 4 {
+		// The formatted float must be at least 4 bytes ("1e+0") or something
+		// unexpected has occurred.
+		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
+	}
+
+	// Parse the exponent.
+	e := bytes.IndexByte(b, 'e')
+	e10 := 0
+	for i := e + 2; i < len(b); i++ {
+		e10 = e10*10 + int(b[i]-'0')
+	}
+	switch b[e+1] {
+	case '-':
+		e10 = -e10
+	case '+':
+	default:
+		panic(fmt.Errorf("malformed float: %v -> %s", f, b))
+	}
+
+	// Strip off the exponent.
+	b = b[:e]
+
+	// Move all of the digits after the decimal and prepend a leading 0.
+	if len(b) > 1 {
+		// "d.dddd" -> "dddddd"
+		b[1] = b[0]
+	} else {
+		// "d" -> "dd"
+		b = append(b, b[0])
+	}
+	b[0] = '0' // "0ddddd"
+	e10++
+
+	// Convert the power-10 exponent to a power of 100 exponent.
+	var e100 int
+	if e10 >= 0 {
+		e100 = (e10 + 1) / 2
+	} else {
+		e100 = e10 / 2
+	}
+	// Strip the leading 0 if the conversion to e100 did not add a multiple of
+	// 10.
+	if e100*2 == e10 {
+		b = b[1:]
+	}
+
+	// Ensure that the number of digits is even.
+	if len(b)%2 != 0 {
+		b = append(b, '0')
+	}
+
+	// Convert the base-10 'b' slice to a base-100 'm' slice. We do this
+	// conversion in place to avoid an allocation.
+	m := b[:len(b)/2]
+	for i := 0; i < len(b); i += 2 {
+		accum := 10*int(b[i]-'0') + int(b[i+1]-'0')
+		// The bytes are encoded as 2n+1.
+		m[i/2] = byte(2*accum + 1)
+	}
+	// The last byte is encoded as 2n+0.
+	m[len(m)-1]--
+
+	return e100, m
+}
+
+// makeFloatFromMandE reconstructs the float from the mantissa M and exponent
+// E. Properly handling floating point rounding is tough, so we take the
+// approach of converting the base-100 mantissa into a base-10 mantissa,
+// formatting the floating point number to a string and then using the standard
+// library to parse it.
+func makeFloatFromMandE(negative bool, e int, m []byte) float64 {
+	// ±.dddde±dd.
+	b := make([]byte, 0, len(m)*2+6)
+	if negative {
+		b = append(b, '-')
+	}
+	b = append(b, '.')
+	for i, v := range m {
+		t := int(v)
+		if i == len(m) {
+			t--
+		}
+		t /= 2
+		b = append(b, byte(t/10)+'0')
+		b = append(b, byte(t%10)+'0')
+	}
+	b = append(b, 'e')
+	e = 2 * e
+	if e < 0 {
+		b = append(b, '-')
+		e = -e
+	} else {
+		b = append(b, '+')
+	}
+
+	var buf [3]byte
+	i := len(buf)
+	for e >= 10 {
+		i--
+		buf[i] = byte(e%10 + '0')
+		e /= 10
+	}
+	i--
+	buf[i] = byte(e + '0')
+
+	b = append(b, buf[i:]...)
+	f, err := strconv.ParseFloat(string(b), 64)
+	if err != nil {
+		panic(err)
+	}
+	return f
 }
 
 // onesComplement inverts each byte in buf from index start to end.
@@ -463,10 +586,10 @@ func encodeSmallNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	l := 1 + n + len(m)
 	if negative {
 		buf[0] = 0x14
-		onesComplement(buf, n, l) // ones complement of mantissa
+		onesComplement(buf, 1+n, l) // ones complement of mantissa
 	} else {
 		buf[0] = 0x16
-		onesComplement(buf, 1, n) // ones complement of exponent
+		onesComplement(buf, 1, 1+n) // ones complement of exponent
 	}
 	buf[l] = orderedEncodingTerminator
 	return buf[:l+1]
@@ -497,6 +620,26 @@ func encodeLargeNumber(negative bool, e int, m []byte, buf []byte) []byte {
 	}
 	buf[l] = orderedEncodingTerminator
 	return buf[:l+1]
+}
+
+func decodeSmallNumber(negative bool, buf []byte) (int, []byte) {
+	var e uint64
+	var n int
+	if negative {
+		e, n = GetUVarint(buf[1:])
+	} else {
+		tmp := []byte{^buf[1]}
+		e, n = GetUVarint(tmp)
+	}
+
+	// We don't need the prefix and last terminator.
+	m := make([]byte, len(buf)-(2+n))
+	copy(m, buf[1+n:len(buf)-1])
+
+	if negative {
+		onesComplement(m, 0, len(m))
+	}
+	return int(-e), m
 }
 
 func decodeMediumNumber(negative bool, buf []byte) (int, []byte) {
