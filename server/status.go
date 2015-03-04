@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/server/status"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -38,9 +39,11 @@ const (
 	// statusGossipKeyPrefix exposes a view of the gossip network.
 	statusGossipKeyPrefix = statusKeyPrefix + "gossip"
 
-	// statusLocalKeyPrefix exposes the status of the node serving the request.
-	// This is equivalent to GETing statusNodesKeyPrefix/<current-node-id>.
-	// Useful for debugging nodes that aren't communicating with the cluster properly.
+	// statusLocalKeyPrefix is the key prefix for all local status
+	// info. Unadorned, the URL exposes the status of the node serving
+	// the request.  This is equivalent to GETing
+	// statusNodesKeyPrefix/<current-node-id>.  Useful for debugging
+	// nodes that aren't communicating with the cluster properly.
 	statusLocalKeyPrefix = statusKeyPrefix + "local/"
 
 	// statusLocalStacksKey exposes stack traces of running goroutines.
@@ -84,7 +87,18 @@ func (s *statusServer) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
 }
 
-// TODO(shawn) lots of implementing - setting up a skeleton for hack week.
+// marshalJSON marshals the provided obj into JSON format. If the
+// HTTP request parameter has "indent" set, using MarshalIndent.
+func (s *statusServer) marshalJSON(r *http.Request, obj interface{}) ([]byte, error) {
+	if err := r.ParseForm(); err != nil {
+		log.Errorf("unable to parse request parameters / form: %s", err)
+	} else {
+		if _, ok := r.Form["indent"]; ok {
+			return json.MarshalIndent(obj, "", "  ")
+		}
+	}
+	return json.Marshal(obj)
+}
 
 // handleStatus handles GET requests for cluster status.
 func (s *statusServer) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +106,7 @@ func (s *statusServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	cluster := &status.Cluster{}
 
-	b, err := json.Marshal(cluster)
+	b, err := s.marshalJSON(r, cluster)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -115,8 +129,18 @@ func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request
 // handleLocalStatus handles GET requests for local-node status.
 func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	w.Write([]byte(`{}`))
+	local := struct {
+		BuildInfo util.BuildInfo `json:"buildInfo"`
+	}{
+		BuildInfo: util.GetBuildInfo(),
+	}
+	b, err := s.marshalJSON(r, local)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(b)
 }
 
 // handleLocalStacks handles GET requests for goroutines stack traces.
@@ -145,7 +169,7 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 
 	nodes := &status.NodeList{}
 
-	b, err := json.Marshal(nodes)
+	b, err := s.marshalJSON(r, nodes)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)

@@ -44,16 +44,56 @@ func startStatusServer() *httptest.Server {
 	return httpServer
 }
 
-// TestStatusStacks verifies that goroutine stack traces are available
-// via the /_status/stacks endpoint.
-func TestStatusStacks(t *testing.T) {
+// TestStatusLocalStacks verifies that goroutine stack traces are available
+// via the /_status/local/stacks endpoint.
+func TestStatusLocalStacks(t *testing.T) {
 	s := startStatusServer()
+	defer s.Close()
 	body, err := getText(s.URL + statusLocalStacksKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
 	if matches, err := regexp.MatchString("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", string(body)); !matches || err != nil {
-		t.Errorf("expected match: %t; err nil: %v", matches, err)
+		t.Errorf("expected match: %t; err nil: %s", matches, err)
+	}
+}
+
+// TestStatusLocal verifies that local node info is exported.
+// via the /_status/local/ endpoint.
+func TestStatusLocal(t *testing.T) {
+	s := startStatusServer()
+	defer s.Close()
+	body, err := getText(s.URL + statusLocalKeyPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify match includes goVersion, tag, time & dependencies.
+	pat := `{"buildInfo":{"goVersion":"go[0-9\.]+","tag":"","time":"","dependencies":""}}`
+	if matches, err := regexp.MatchString(pat, string(body)); !matches || err != nil {
+		t.Errorf("expected match on %s; got %s: %s", pat, string(body), err)
+	}
+}
+
+// TestStatusIndent verifies the usage of the indent request parameter
+// on local status.
+func TestStatusIndent(t *testing.T) {
+	s := startStatusServer()
+	defer s.Close()
+	body, err := getText(s.URL + statusLocalKeyPrefix + "?indent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify indentation match with at least two goroutine stacks.
+	pat := `{
+  "buildInfo": {
+    "goVersion": "go[0-9\.]+",
+    "tag": "",
+    "time": "",
+    "dependencies": ""
+  }
+}`
+	if matches, err := regexp.MatchString(pat, string(body)); !matches || err != nil {
+		t.Errorf("expected match on %s; got %s: %s", pat, string(body), err)
 	}
 }

@@ -72,6 +72,15 @@ function finish {
 }
 trap finish EXIT
 
+# Shell script cleanup for failure.
+function fail {
+  docker kill ${CIDS[*]} > /dev/null
+  docker rm ${CIDS[*]} > /dev/null
+  docker kill $DNS_CID > /dev/null
+  docker rm $DNS_CID > /dev/null
+  exit 1
+}
+
 # Create temporary file for DNS hosts.
 DNS_DIR=$(mktemp -d "/tmp/dnsmasq.hosts.XXXXXXXX" || exit 1)
 DNS_FILE="$DNS_DIR/addn-hosts"
@@ -127,7 +136,21 @@ if [[ $DOCKERHOST != "127.0.0.1" ]]; then
   cat $DNS_FILE | boot2docker ssh "sudo -u root /bin/sh -c 'cat - > $DNS_FILE'"
 fi
 
-# Get gossip network contents from each node in turn.
+# Fetch the local status contents from node 1 and verify build information is present.
+LOCAL_URL="$DOCKERHOST:${HTTP_PORTS[1]}/_status/local/?indent"
+LOCAL=$(curl --noproxy '*' -s $LOCAL_URL)
+for key in 'goVersion' 'tag' 'time' 'dependencies'; do
+  if [[ -z $(echo $LOCAL | grep "\"$key\":") ]]; then
+      echo "Build var missing for '$key' in $LOCAL"
+      fail
+  fi
+  if [[ ! -z $(echo $LOCAL | grep "\"$key\": \"\"") ]]; then
+      echo "Build var not set for '$key' in $LOCAL"
+      fail
+  fi
+done
+
+# Get gossip network contents from each node in turn & verify node membership.
 echo -n "Waiting for complete gossip network of $((NODES*NODES)) peerings: "
 MAX_WAIT=20 # seconds
 for ATTEMPT in $(seq 1 $MAX_WAIT); do
@@ -170,8 +193,4 @@ echo "Output for dnsmasq..."
 echo "====================="
 docker logs $DNS_CID
 
-docker kill ${CIDS[*]} > /dev/null
-docker rm ${CIDS[*]} > /dev/null
-docker kill $DNS_CID > /dev/null
-docker rm $DNS_CID > /dev/null
-exit 1
+fail
