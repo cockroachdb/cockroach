@@ -49,18 +49,23 @@ endif
 
 all: build test
 
-# "go build -i" explicitly does not rebuild dependent packages that
-# have a different root directory than the package being built, hence
-# the need for a separate build invocation for etcd/raft.
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
-build:
-	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
+build: etcd
 	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
-test:
+# Similar to "testrace", we want to cache the build before running the
+# tests.
+test: etcd
+	$(GO) test $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
+
+# "go build -i" explicitly does not rebuild dependent packages that
+# have a different root directory than the package being built, hence
+# the need for a separate build invocation for etcd/raft.
+etcd:
+	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -121,4 +126,4 @@ godeps:
 	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
 	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)'
 
-.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers
+.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers etcd
