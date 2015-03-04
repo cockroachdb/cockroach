@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -214,5 +215,57 @@ func TestRestoreReplicas(t *testing.T) {
 				i, mtc.stores[0].Ident.NodeID, rng.Desc.Replicas[0].NodeID)
 		}
 		rng.RUnlock()
+	}
+}
+
+func TestFailedReplicaChange(t *testing.T) {
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+	storage.TestingCommandFilter = func(method string, args proto.Request,
+		reply proto.Response) bool {
+		if method == proto.EndTransaction {
+			reply.Header().SetGoError(util.Errorf("boom"))
+			return true
+		}
+		return false
+	}
+
+	err = rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		})
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("did not get expected error: %s", err)
+	}
+
+	// After the aborted transaction, r.Desc was not updated.
+	if len(rng.Desc.Replicas) != 1 {
+		t.Fatalf("expected 1 replica, found %d", len(rng.Desc.Replicas))
+	}
+
+	// The pending config change flag was cleared, so a subsequent attempt
+	// can succeed.
+	storage.TestingCommandFilter = nil
+
+	err = rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

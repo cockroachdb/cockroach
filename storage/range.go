@@ -71,6 +71,15 @@ var (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
+// TestingCommandFilter may be set in tests to intercept the handling of commands
+// and artificially generate errors. Return true to terminate processing with the
+// filled-in response, or false to continue with regular processing.
+// Note that in a multi-replica test this filter will be run once for each replica
+// and must produce consistent results each time.
+// Should only be used in tests in the storage package but needs to be exported
+// due to circular import issues.
+var TestingCommandFilter func(string, proto.Request, proto.Response) bool
+
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
 // discarded prefix to the log, so we must begin the log at an arbitrary
@@ -686,6 +695,10 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc)
 		reply.Header().SetGoError(err)
 		return err
+	}
+
+	if TestingCommandFilter != nil && TestingCommandFilter(method, args, reply) {
+		return reply.Header().GoError()
 	}
 
 	// Create a new batch for the command to ensure all or nothing semantics.
