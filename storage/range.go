@@ -1389,7 +1389,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 }
 
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
-	r.Desc = &change.UpdatedDesc
+	r.Desc.Replicas = change.UpdatedReplicas
 	return nil
 }
 
@@ -1791,6 +1791,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 
 	// Validate the request and prepare the new descriptor.
 	updatedDesc := *r.Desc
+	updatedDesc.Replicas = append([]proto.Replica{}, r.Desc.Replicas...)
 	found := -1
 	for i, existingRep := range r.Desc.Replicas {
 		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
@@ -1831,10 +1832,10 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 			Commit:        true,
 			ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
-				NodeID:      replica.NodeID,
-				StoreID:     replica.StoreID,
-				ChangeType:  changeType,
-				UpdatedDesc: updatedDesc,
+				NodeID:          replica.NodeID,
+				StoreID:         replica.StoreID,
+				ChangeType:      changeType,
+				UpdatedReplicas: updatedDesc.Replicas,
 			},
 		}, &proto.EndTransactionResponse{})
 	})

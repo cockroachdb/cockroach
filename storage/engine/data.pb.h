@@ -980,14 +980,17 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   inline ::proto::ReplicaChangeType change_type() const;
   inline void set_change_type(::proto::ReplicaChangeType value);
 
-  // optional .proto.RangeDescriptor updated_desc = 4;
-  inline bool has_updated_desc() const;
-  inline void clear_updated_desc();
-  static const int kUpdatedDescFieldNumber = 4;
-  inline const ::proto::RangeDescriptor& updated_desc() const;
-  inline ::proto::RangeDescriptor* mutable_updated_desc();
-  inline ::proto::RangeDescriptor* release_updated_desc();
-  inline void set_allocated_updated_desc(::proto::RangeDescriptor* updated_desc);
+  // repeated .proto.Replica updated_replicas = 4;
+  inline int updated_replicas_size() const;
+  inline void clear_updated_replicas();
+  static const int kUpdatedReplicasFieldNumber = 4;
+  inline const ::proto::Replica& updated_replicas(int index) const;
+  inline ::proto::Replica* mutable_updated_replicas(int index);
+  inline ::proto::Replica* add_updated_replicas();
+  inline const ::google::protobuf::RepeatedPtrField< ::proto::Replica >&
+      updated_replicas() const;
+  inline ::google::protobuf::RepeatedPtrField< ::proto::Replica >*
+      mutable_updated_replicas();
 
   // @@protoc_insertion_point(class_scope:proto.ChangeReplicasTrigger)
  private:
@@ -997,8 +1000,6 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   inline void clear_has_store_id();
   inline void set_has_change_type();
   inline void clear_has_change_type();
-  inline void set_has_updated_desc();
-  inline void clear_has_updated_desc();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1006,7 +1007,7 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
-  ::proto::RangeDescriptor* updated_desc_;
+  ::google::protobuf::RepeatedPtrField< ::proto::Replica > updated_replicas_;
   int change_type_;
   friend void  protobuf_AddDesc_data_2eproto();
   friend void protobuf_AssignDesc_data_2eproto();
@@ -2738,45 +2739,34 @@ inline void ChangeReplicasTrigger::set_change_type(::proto::ReplicaChangeType va
   // @@protoc_insertion_point(field_set:proto.ChangeReplicasTrigger.change_type)
 }
 
-// optional .proto.RangeDescriptor updated_desc = 4;
-inline bool ChangeReplicasTrigger::has_updated_desc() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+// repeated .proto.Replica updated_replicas = 4;
+inline int ChangeReplicasTrigger::updated_replicas_size() const {
+  return updated_replicas_.size();
 }
-inline void ChangeReplicasTrigger::set_has_updated_desc() {
-  _has_bits_[0] |= 0x00000008u;
+inline void ChangeReplicasTrigger::clear_updated_replicas() {
+  updated_replicas_.Clear();
 }
-inline void ChangeReplicasTrigger::clear_has_updated_desc() {
-  _has_bits_[0] &= ~0x00000008u;
+inline const ::proto::Replica& ChangeReplicasTrigger::updated_replicas(int index) const {
+  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Get(index);
 }
-inline void ChangeReplicasTrigger::clear_updated_desc() {
-  if (updated_desc_ != NULL) updated_desc_->::proto::RangeDescriptor::Clear();
-  clear_has_updated_desc();
+inline ::proto::Replica* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
+  // @@protoc_insertion_point(field_mutable:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Mutable(index);
 }
-inline const ::proto::RangeDescriptor& ChangeReplicasTrigger::updated_desc() const {
-  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.updated_desc)
-  return updated_desc_ != NULL ? *updated_desc_ : *default_instance_->updated_desc_;
+inline ::proto::Replica* ChangeReplicasTrigger::add_updated_replicas() {
+  // @@protoc_insertion_point(field_add:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Add();
 }
-inline ::proto::RangeDescriptor* ChangeReplicasTrigger::mutable_updated_desc() {
-  set_has_updated_desc();
-  if (updated_desc_ == NULL) updated_desc_ = new ::proto::RangeDescriptor;
-  // @@protoc_insertion_point(field_mutable:proto.ChangeReplicasTrigger.updated_desc)
-  return updated_desc_;
+inline const ::google::protobuf::RepeatedPtrField< ::proto::Replica >&
+ChangeReplicasTrigger::updated_replicas() const {
+  // @@protoc_insertion_point(field_list:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_;
 }
-inline ::proto::RangeDescriptor* ChangeReplicasTrigger::release_updated_desc() {
-  clear_has_updated_desc();
-  ::proto::RangeDescriptor* temp = updated_desc_;
-  updated_desc_ = NULL;
-  return temp;
-}
-inline void ChangeReplicasTrigger::set_allocated_updated_desc(::proto::RangeDescriptor* updated_desc) {
-  delete updated_desc_;
-  updated_desc_ = updated_desc;
-  if (updated_desc) {
-    set_has_updated_desc();
-  } else {
-    clear_has_updated_desc();
-  }
-  // @@protoc_insertion_point(field_set_allocated:proto.ChangeReplicasTrigger.updated_desc)
+inline ::google::protobuf::RepeatedPtrField< ::proto::Replica >*
+ChangeReplicasTrigger::mutable_updated_replicas() {
+  // @@protoc_insertion_point(field_mutable_list:proto.ChangeReplicasTrigger.updated_replicas)
+  return &updated_replicas_;
 }
 
 // -------------------------------------------------------------------

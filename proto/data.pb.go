@@ -378,9 +378,9 @@ type ChangeReplicasTrigger struct {
 	NodeID     NodeID            `protobuf:"varint,1,opt,name=node_id,customtype=NodeID" json:"node_id"`
 	StoreID    StoreID           `protobuf:"varint,2,opt,name=store_id,customtype=StoreID" json:"store_id"`
 	ChangeType ReplicaChangeType `protobuf:"varint,3,opt,name=change_type,enum=proto.ReplicaChangeType" json:"change_type"`
-	// The new range descriptor with this change applied.
-	UpdatedDesc      RangeDescriptor `protobuf:"bytes,4,opt,name=updated_desc" json:"updated_desc"`
-	XXX_unrecognized []byte          `json:"-"`
+	// The new replica list with this change applied.
+	UpdatedReplicas  []Replica `protobuf:"bytes,4,rep,name=updated_replicas" json:"updated_replicas"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *ChangeReplicasTrigger) Reset()         { *m = ChangeReplicasTrigger{} }
@@ -394,11 +394,11 @@ func (m *ChangeReplicasTrigger) GetChangeType() ReplicaChangeType {
 	return ADD_REPLICA
 }
 
-func (m *ChangeReplicasTrigger) GetUpdatedDesc() RangeDescriptor {
+func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []Replica {
 	if m != nil {
-		return m.UpdatedDesc
+		return m.UpdatedReplicas
 	}
-	return RangeDescriptor{}
+	return nil
 }
 
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()

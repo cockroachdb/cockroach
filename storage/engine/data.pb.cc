@@ -215,7 +215,7 @@ void protobuf_AssignDesc_data_2eproto() {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, store_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, change_type_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, updated_desc_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ChangeReplicasTrigger, updated_replicas_),
   };
   ChangeReplicasTrigger_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -450,40 +450,40 @@ void protobuf_AddDesc_data_2eproto() {
     "\037\000\"t\n\014MergeTrigger\0222\n\014updated_desc\030\001 \001(\013"
     "2\026.proto.RangeDescriptorB\004\310\336\037\000\0220\n\020subsum"
     "ed_raft_id\030\002 \001(\003B\026\310\336\037\000\342\336\037\016SubsumedRaftID"
-    "\"\331\001\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001 "
+    "\"\325\001\n\025ChangeReplicasTrigger\022)\n\007node_id\030\001 "
     "\001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022,\n\010store_i"
     "d\030\002 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\0223\n\013c"
     "hange_type\030\003 \001(\0162\030.proto.ReplicaChangeTy"
-    "peB\004\310\336\037\000\0222\n\014updated_desc\030\004 \001(\0132\026.proto.R"
-    "angeDescriptorB\004\310\336\037\000\"\035\n\010NodeList\022\021\n\005node"
-    "s\030\001 \003(\005B\002\020\001\"\307\003\n\013Transaction\022\022\n\004name\030\001 \001("
-    "\tB\004\310\336\037\000\022\030\n\003key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030"
-    "\003 \001(\014B\n\310\336\037\000\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037"
-    "\000\022-\n\tisolation\030\005 \001(\0162\024.proto.IsolationTy"
-    "peB\004\310\336\037\000\022.\n\006status\030\006 \001(\0162\030.proto.Transac"
-    "tionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022(\n"
-    "\016last_heartbeat\030\010 \001(\0132\020.proto.Timestamp\022"
-    ")\n\ttimestamp\030\t \001(\0132\020.proto.TimestampB\004\310\336"
-    "\037\000\022.\n\016orig_timestamp\030\n \001(\0132\020.proto.Times"
-    "tampB\004\310\336\037\000\022-\n\rmax_timestamp\030\013 \001(\0132\020.prot"
-    "o.TimestampB\004\310\336\037\000\022,\n\rcertain_nodes\030\014 \001(\013"
-    "2\017.proto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMe"
-    "tadata\022\037\n\003txn\030\001 \001(\0132\022.proto.Transaction\022"
-    ")\n\ttimestamp\030\002 \001(\0132\020.proto.TimestampB\004\310\336"
-    "\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004"
-    " \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005v"
-    "alue\030\006 \001(\0132\014.proto.Value\"J\n\014ScanMetadata"
-    "\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldes"
-    "t_intent_nanos\030\002 \001(\003\"\\\n\023TimeSeriesDatapo"
-    "int\022\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tin"
-    "t_value\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016Ti"
-    "meSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndata"
-    "points\030\002 \003(\0132\032.proto.TimeSeriesDatapoint"
-    "*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022"
-    "\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationTyp"
-    "e\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*"
-    "B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOM"
-    "MITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 2187);
+    "peB\004\310\336\037\000\022.\n\020updated_replicas\030\004 \003(\0132\016.pro"
+    "to.ReplicaB\004\310\336\037\000\"\035\n\010NodeList\022\021\n\005nodes\030\001 "
+    "\003(\005B\002\020\001\"\307\003\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310"
+    "\336\037\000\022\030\n\003key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030\003 \001("
+    "\014B\n\310\336\037\000\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\022-\n"
+    "\tisolation\030\005 \001(\0162\024.proto.IsolationTypeB\004"
+    "\310\336\037\000\022.\n\006status\030\006 \001(\0162\030.proto.Transaction"
+    "StatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\022(\n\016las"
+    "t_heartbeat\030\010 \001(\0132\020.proto.Timestamp\022)\n\tt"
+    "imestamp\030\t \001(\0132\020.proto.TimestampB\004\310\336\037\000\022."
+    "\n\016orig_timestamp\030\n \001(\0132\020.proto.Timestamp"
+    "B\004\310\336\037\000\022-\n\rmax_timestamp\030\013 \001(\0132\020.proto.Ti"
+    "mestampB\004\310\336\037\000\022,\n\rcertain_nodes\030\014 \001(\0132\017.p"
+    "roto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"\300\001\n\014MVCCMetada"
+    "ta\022\037\n\003txn\030\001 \001(\0132\022.proto.Transaction\022)\n\tt"
+    "imestamp\030\002 \001(\0132\020.proto.TimestampB\004\310\336\037\000\022\025"
+    "\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003"
+    "B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005value"
+    "\030\006 \001(\0132\014.proto.Value\"J\n\014ScanMetadata\022\035\n\017"
+    "last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_in"
+    "tent_nanos\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022"
+    "\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_va"
+    "lue\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016TimeSe"
+    "riesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoin"
+    "ts\030\002 \003(\0132\032.proto.TimeSeriesDatapoint*>\n\021"
+    "ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016RE"
+    "MOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n"
+    "\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021T"
+    "ransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITT"
+    "ED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 2183);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -2961,7 +2961,7 @@ void MergeTrigger::Swap(MergeTrigger* other) {
 const int ChangeReplicasTrigger::kNodeIdFieldNumber;
 const int ChangeReplicasTrigger::kStoreIdFieldNumber;
 const int ChangeReplicasTrigger::kChangeTypeFieldNumber;
-const int ChangeReplicasTrigger::kUpdatedDescFieldNumber;
+const int ChangeReplicasTrigger::kUpdatedReplicasFieldNumber;
 #endif  // !_MSC_VER
 
 ChangeReplicasTrigger::ChangeReplicasTrigger()
@@ -2971,7 +2971,6 @@ ChangeReplicasTrigger::ChangeReplicasTrigger()
 }
 
 void ChangeReplicasTrigger::InitAsDefaultInstance() {
-  updated_desc_ = const_cast< ::proto::RangeDescriptor*>(&::proto::RangeDescriptor::default_instance());
 }
 
 ChangeReplicasTrigger::ChangeReplicasTrigger(const ChangeReplicasTrigger& from)
@@ -2986,7 +2985,6 @@ void ChangeReplicasTrigger::SharedCtor() {
   node_id_ = 0;
   store_id_ = 0;
   change_type_ = 0;
-  updated_desc_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2997,7 +2995,6 @@ ChangeReplicasTrigger::~ChangeReplicasTrigger() {
 
 void ChangeReplicasTrigger::SharedDtor() {
   if (this != default_instance_) {
-    delete updated_desc_;
   }
 }
 
@@ -3033,17 +3030,15 @@ void ChangeReplicasTrigger::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 7) {
     ZR_(node_id_, store_id_);
     change_type_ = 0;
-    if (has_updated_desc()) {
-      if (updated_desc_ != NULL) updated_desc_->::proto::RangeDescriptor::Clear();
-    }
   }
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
 
+  updated_replicas_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -3103,19 +3098,20 @@ bool ChangeReplicasTrigger::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(34)) goto parse_updated_desc;
+        if (input->ExpectTag(34)) goto parse_updated_replicas;
         break;
       }
 
-      // optional .proto.RangeDescriptor updated_desc = 4;
+      // repeated .proto.Replica updated_replicas = 4;
       case 4: {
         if (tag == 34) {
-         parse_updated_desc:
+         parse_updated_replicas:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_updated_desc()));
+                input, add_updated_replicas()));
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_updated_replicas;
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -3161,10 +3157,10 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
       3, this->change_type(), output);
   }
 
-  // optional .proto.RangeDescriptor updated_desc = 4;
-  if (has_updated_desc()) {
+  // repeated .proto.Replica updated_replicas = 4;
+  for (int i = 0; i < this->updated_replicas_size(); i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      4, this->updated_desc(), output);
+      4, this->updated_replicas(i), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -3193,11 +3189,11 @@ void ChangeReplicasTrigger::SerializeWithCachedSizes(
       3, this->change_type(), target);
   }
 
-  // optional .proto.RangeDescriptor updated_desc = 4;
-  if (has_updated_desc()) {
+  // repeated .proto.Replica updated_replicas = 4;
+  for (int i = 0; i < this->updated_replicas_size(); i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        4, this->updated_desc(), target);
+        4, this->updated_replicas(i), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -3232,14 +3228,15 @@ int ChangeReplicasTrigger::ByteSize() const {
         ::google::protobuf::internal::WireFormatLite::EnumSize(this->change_type());
     }
 
-    // optional .proto.RangeDescriptor updated_desc = 4;
-    if (has_updated_desc()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->updated_desc());
-    }
-
   }
+  // repeated .proto.Replica updated_replicas = 4;
+  total_size += 1 * this->updated_replicas_size();
+  for (int i = 0; i < this->updated_replicas_size(); i++) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        this->updated_replicas(i));
+  }
+
   if (!unknown_fields().empty()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -3265,6 +3262,7 @@ void ChangeReplicasTrigger::MergeFrom(const ::google::protobuf::Message& from) {
 
 void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
   GOOGLE_CHECK_NE(&from, this);
+  updated_replicas_.MergeFrom(from.updated_replicas_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_node_id()) {
       set_node_id(from.node_id());
@@ -3274,9 +3272,6 @@ void ChangeReplicasTrigger::MergeFrom(const ChangeReplicasTrigger& from) {
     }
     if (from.has_change_type()) {
       set_change_type(from.change_type());
-    }
-    if (from.has_updated_desc()) {
-      mutable_updated_desc()->::proto::RangeDescriptor::MergeFrom(from.updated_desc());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -3304,7 +3299,7 @@ void ChangeReplicasTrigger::Swap(ChangeReplicasTrigger* other) {
     std::swap(node_id_, other->node_id_);
     std::swap(store_id_, other->store_id_);
     std::swap(change_type_, other->change_type_);
-    std::swap(updated_desc_, other->updated_desc_);
+    updated_replicas_.Swap(&other->updated_replicas_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

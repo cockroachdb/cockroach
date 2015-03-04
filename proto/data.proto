@@ -129,8 +129,8 @@ message ChangeReplicasTrigger {
       (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
   optional ReplicaChangeType change_type = 3 [(gogoproto.nullable) = false];
 
-  // The new range descriptor with this change applied.
-  optional RangeDescriptor updated_desc = 4 [(gogoproto.nullable) = false];
+  // The new replica list with this change applied.
+  repeated Replica updated_replicas = 4 [(gogoproto.nullable) = false];
 }
 
 // IsolationType TODO(jiajia) Needs documentation.
