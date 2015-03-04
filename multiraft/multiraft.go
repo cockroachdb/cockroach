@@ -735,6 +735,15 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 								s.multiNode.ApplyConfChange(groupID,
 									raftpb.ConfChange{})
 							}
+
+							// Re-submit all pending proposals, in case any of them were config changes
+							// that were dropped due to the one-at-a-time rule. This is a little
+							// redundant since most pending proposals won't benefit from this but
+							// config changes should be rare enough (and the size of the pending queue
+							// small enough) that it doesn't really matter.
+							for _, prop := range g.pending {
+								s.proposalChan <- prop
+							}
 						}
 					},
 				})
