@@ -18,6 +18,7 @@
 #ifndef ROACHLIB_DB_H
 #define ROACHLIB_DB_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -47,14 +48,11 @@ typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
 typedef struct DBSnapshot DBSnapshot;
 
-typedef void (*DBLoggerFunc)(void* state, const char* str, int len);
-
 // DBOptions contains local database options.
 typedef struct {
   int64_t cache_size;
   int allow_os_buffer;
-  // A function pointer to direct log messages to.
-  DBLoggerFunc logger;
+  bool logging_enabled;
 } DBOptions;
 
 // Opens the database located in "dir", creating it if it doesn't

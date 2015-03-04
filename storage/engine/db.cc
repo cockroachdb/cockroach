@@ -33,6 +33,10 @@
 #include "encoding.h"
 
 extern "C" {
+#include "_cgo_export.h"
+}  // extern "C"
+
+extern "C" {
 
 struct DBBatch {
   rocksdb::WriteBatch rep;
@@ -607,19 +611,61 @@ class DBMergeOperator : public rocksdb::MergeOperator {
 
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger(DBLoggerFunc f)
-      : func_(f) {
+  DBLogger(bool enabled)
+      : enabled_(enabled) {
   }
   virtual void Logv(const char* format, va_list ap) {
-    // TODO(pmattis): forward to Go logging. Also need to benchmark
-    // calling Go exported methods from C++ to determine if this is
-    // too slow.
-    vfprintf(stderr, format, ap);
-    fprintf(stderr, "\n");
+    // TODO(pmattis): Benchmark calling Go exported methods from C++
+    // to determine if this is too slow.
+    if (!enabled_) {
+      return;
+    }
+
+    // First try with a small fixed size buffer.
+    char space[1024];
+
+    // It's possible for methods that use a va_list to invalidate the data in
+    // it upon use. The fix is to make a copy of the structure before using it
+    // and use that copy instead.
+    va_list backup_ap;
+    va_copy(backup_ap, ap);
+    int result = vsnprintf(space, sizeof(space), format, backup_ap);
+    va_end(backup_ap);
+
+    if ((result >= 0) && (result < sizeof(space))) {
+      rocksDBLog(space, result);
+      return;
+    }
+
+    // Repeatedly increase buffer size until it fits.
+    int length = sizeof(space);
+    while (true) {
+      if (result < 0) {
+        // Older behavior: just try doubling the buffer size.
+        length *= 2;
+      } else {
+        // We need exactly "result+1" characters.
+        length = result+1;
+      }
+      char* buf = new char[length];
+
+      // Restore the va_list before we use it again
+      va_copy(backup_ap, ap);
+      result = vsnprintf(buf, length, format, backup_ap);
+      va_end(backup_ap);
+
+      if ((result >= 0) && (result < length)) {
+        // It fit
+        rocksDBLog(buf, result);
+        delete[] buf;
+        return;
+      }
+      delete[] buf;
+    }
   }
 
  private:
-  const DBLoggerFunc func_;
+  const bool enabled_;
 };
 
 }  // namespace
@@ -632,7 +678,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.allow_os_buffer = db_opts.allow_os_buffer;
   options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.create_if_missing = true;
-  options.info_log.reset(new DBLogger(db_opts.logger));
+  options.info_log.reset(new DBLogger(db_opts.logging_enabled));
   options.merge_operator.reset(new DBMergeOperator);
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
