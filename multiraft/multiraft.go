@@ -86,7 +86,9 @@ type MultiRaft struct {
 	createGroupChan chan *createGroupOp
 	removeGroupChan chan *removeGroupOp
 	proposalChan    chan *proposal
-	stopper         *util.Stopper
+	// callbackChan is a generic hook to run a callback in the raft thread.
+	callbackChan chan func()
+	stopper      *util.Stopper
 }
 
 // multiraftServer is a type alias to separate RPC methods
@@ -130,6 +132,7 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 		createGroupChan: make(chan *createGroupOp, 100),
 		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan *proposal, 100),
+		callbackChan:    make(chan func(), 100),
 		stopper:         util.NewStopper(1),
 	}
 
@@ -483,6 +486,9 @@ func (s *state) start() {
 				ticks = 0
 				s.coalescedHeartbeat()
 			}
+
+		case cb := <-s.callbackChan:
+			cb()
 		}
 	}
 }
@@ -708,25 +714,27 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					ChangeType: cc.Type,
 					Payload:    payload,
 					Callback: func(err error) {
-						if err == nil {
-							log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
-							// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
-							switch cc.Type {
-							case raftpb.ConfChangeAddNode:
-								err = s.addNode(NodeID(cc.NodeID), groupID)
-							case raftpb.ConfChangeRemoveNode:
-								// TODO(bdarnell): support removing nodes; fix double-application of initial entries
-							case raftpb.ConfChangeUpdateNode:
-								// Updates don't concern multiraft, they are simply passed through.
+						s.callbackChan <- func() {
+							if err == nil {
+								log.V(3).Infof("node %v applying configuration change %v", s.nodeID, cc)
+								// TODO(bdarnell): dedupe by keeping a record of recently-applied commandIDs
+								switch cc.Type {
+								case raftpb.ConfChangeAddNode:
+									err = s.addNode(NodeID(cc.NodeID), groupID)
+								case raftpb.ConfChangeRemoveNode:
+									// TODO(bdarnell): support removing nodes; fix double-application of initial entries
+								case raftpb.ConfChangeUpdateNode:
+									// Updates don't concern multiraft, they are simply passed through.
+								}
+								if err != nil {
+									log.Errorf("error applying configuration change %v: %s", cc, err)
+								}
+								s.multiNode.ApplyConfChange(groupID, cc)
+							} else {
+								log.Warningf("aborting configuration change: %s", err)
+								s.multiNode.ApplyConfChange(groupID,
+									raftpb.ConfChange{})
 							}
-							if err != nil {
-								log.Errorf("error applying configuration change %v: %s", cc, err)
-							}
-							s.multiNode.ApplyConfChange(groupID, cc)
-						} else {
-							log.Warningf("aborting configuration change: %s", err)
-							s.multiNode.ApplyConfChange(groupID,
-								raftpb.ConfChange{})
 						}
 					},
 				})
