@@ -30,10 +30,10 @@ var (
 
 // BuildInfo ...
 type BuildInfo struct {
-	Vers string
-	Tag  string
-	Time string
-	Deps string
+	Vers string `json:"goVersion"`
+	Tag  string `json:"tag"`
+	Time string `json:"time"`
+	Deps string `json:"dependencies"`
 }
 
 // GetBuildInfo ...
