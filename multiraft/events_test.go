@@ -17,7 +17,11 @@
 
 package multiraft
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/util"
+)
 
 // eventDemux turns the unified MultiRaft.Events stream into a set of type-safe
 // channels for ease of testing. It is not suitable for non-test use because
@@ -28,7 +32,7 @@ type eventDemux struct {
 	MembershipChangeCommitted chan *EventMembershipChangeCommitted
 
 	events  <-chan interface{}
-	stopper chan struct{}
+	stopper *util.Stopper
 }
 
 func newEventDemux(events <-chan interface{}) *eventDemux {
@@ -37,7 +41,7 @@ func newEventDemux(events <-chan interface{}) *eventDemux {
 		make(chan *EventCommandCommitted, 1000),
 		make(chan *EventMembershipChangeCommitted, 1000),
 		events,
-		make(chan struct{}),
+		util.NewStopper(1),
 	}
 }
 
@@ -60,7 +64,8 @@ func (e *eventDemux) start() {
 					panic(fmt.Sprintf("got unknown event type %T", event))
 				}
 
-			case <-e.stopper:
+			case <-e.stopper.ShouldStop():
+				e.stopper.SetStopped()
 				return
 			}
 		}
@@ -68,7 +73,7 @@ func (e *eventDemux) start() {
 }
 
 func (e *eventDemux) stop() {
-	close(e.stopper)
+	e.stopper.Stop()
 	close(e.CommandCommitted)
 	close(e.MembershipChangeCommitted)
 	close(e.LeaderElection)
