@@ -87,17 +87,9 @@ func (s *statusServer) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
 }
 
-// marshalJSON marshals the provided obj into JSON format. If the
-// HTTP request parameter has "indent" set, using MarshalIndent.
+// marshalJSON marshals the provided obj into indented JSON format.
 func (s *statusServer) marshalJSON(r *http.Request, obj interface{}) ([]byte, error) {
-	if err := r.ParseForm(); err != nil {
-		log.Errorf("unable to parse request parameters / form: %s", err)
-	} else {
-		if _, ok := r.Form["indent"]; ok {
-			return json.MarshalIndent(obj, "", "  ")
-		}
-	}
-	return json.Marshal(obj)
+	return json.MarshalIndent(obj, "", "  ")
 }
 
 // handleStatus handles GET requests for cluster status.

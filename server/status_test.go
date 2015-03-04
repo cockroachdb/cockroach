@@ -68,22 +68,6 @@ func TestStatusLocal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Verify match includes goVersion, tag, time & dependencies.
-	pat := `{"buildInfo":{"goVersion":"go[0-9\.]+","tag":"","time":"","dependencies":""}}`
-	if matches, err := regexp.MatchString(pat, string(body)); !matches || err != nil {
-		t.Errorf("expected match on %s; got %s: %s", pat, string(body), err)
-	}
-}
-
-// TestStatusIndent verifies the usage of the indent request parameter
-// on local status.
-func TestStatusIndent(t *testing.T) {
-	s := startStatusServer()
-	defer s.Close()
-	body, err := getText(s.URL + statusLocalKeyPrefix + "?indent")
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Verify indentation match with at least two goroutine stacks.
 	pat := `{
   "buildInfo": {

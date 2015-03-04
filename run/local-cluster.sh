@@ -137,7 +137,7 @@ if [[ $DOCKERHOST != "127.0.0.1" ]]; then
 fi
 
 # Fetch the local status contents from node 1 and verify build information is present.
-LOCAL_URL="$DOCKERHOST:${HTTP_PORTS[1]}/_status/local/?indent"
+LOCAL_URL="$DOCKERHOST:${HTTP_PORTS[1]}/_status/local/"
 LOCAL=$(curl --noproxy '*' -s $LOCAL_URL)
 for key in 'goVersion' 'tag' 'time' 'dependencies'; do
   if [[ -z $(echo $LOCAL | grep "\"$key\":") ]]; then
