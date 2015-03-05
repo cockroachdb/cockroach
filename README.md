@@ -106,9 +106,11 @@ See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTR
 For full design details, see the [original design doc](https://docs.google.com/document/d/11k2EmhLGSbViBvi6_zFEiKzuXxYF49ZuuDJLe6O8gBU/edit?usp=sharing).
 
 For a quick design overview, see the [Cockroach tech talk slides](https://docs.google.com/presentation/d/1e3TOxImRg6_nyMZspXvzb2u43D6gnS5422vAIN7J1n8/edit?usp=sharing)
-or watch a presentation of the tech talk
-* [at Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be) by [Spencer Kimball](https://github.com/spencerkimball) (9/5/2014)
-* [at the NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E) by [Tobias Schottdorf](https://github.com/tschottdorf) (11/5/2014).
+or watch a presentation:
+* [Venue: Yelp!](http://www.youtube.com/watch?v=MEAuFgsmND0&feature=youtu.be), Presented by [Spencer Kimball](https://github.com/spencerkimball) on (9/5/2014).
+* [Venue: The NoSQL User Group Cologne](https://www.youtube.com/watch?v=jI3LiKhqN0E), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (11/5/2014).
+* [Venue: The Go Devroom FOSDEM 2015](https://www.youtube.com/watch?v=ndKj77VW2eM&index=2&list=PLtLJO5JKE5YDK74RZm67xfwaDgeCj7oqb), Presented by [Tobias Schottdorf](https://github.com/tschottdorf) on (03/04/2015).
+
 
 Cockroach is a distributed key/value datastore which supports ACID
 transactional semantics and versioned values as first-class
