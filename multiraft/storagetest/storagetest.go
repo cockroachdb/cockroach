@@ -70,11 +70,6 @@ func testEmptyLog(t *testing.T, s WriteableStorage) {
 		t.Errorf("expected LastIndex to be firstIndex - 1 (%d), got %d", firstIndex-1, lastIndex)
 	}
 
-	ents, err := s.Entries(firstIndex, firstIndex+1)
-	if err != raft.ErrUnavailable {
-		t.Errorf("expected ErrUnavailable, got %v, %v", ents, err)
-	}
-
 	term, err := s.Term(firstIndex - 1)
 	if err != nil {
 		t.Fatal(err)

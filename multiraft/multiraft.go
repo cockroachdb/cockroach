@@ -793,7 +793,18 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
 				s.addNode(nodeID, groupID)
 			}
-			s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
+			err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
+			snapStatus := raft.SnapshotFinish
+			if err != nil {
+				log.Warning("node %v failed to send message to %v", s.nodeID, nodeID)
+				s.multiNode.ReportUnreachable(msg.To, groupID)
+				snapStatus = raft.SnapshotFailure
+			}
+			if msg.Type == raftpb.MsgSnap {
+				// TODO(bdarnell): add an ack for snapshots and don't report status until
+				// ack, error, or timeout.
+				s.multiNode.ReportSnapshot(msg.To, groupID, snapStatus)
+			}
 		}
 	}
 }
