@@ -4,9 +4,9 @@
 # It's idempotent so if you don't hack often, your best bet is to just run this.
 # Assumes you are running from the top of the project.
 #
-# 1) Update all source code and submodules
-# 2) Update go dependencies
-# 3) Build a shadow toolchain containing our dependencies in _vendor/build
+# 1) Update go dependencies
+# 2) Update build tools
+# 3) Install git hooks
 
 cd -P "$(dirname $0)"
 
@@ -22,9 +22,6 @@ if ! go vet 2>/dev/null; then
 fi
 
 set -ex
-
-# Update submodules
-git submodule update --init
 
 # Grab binaries required by git hooks.
 go get -u ${PKGS}

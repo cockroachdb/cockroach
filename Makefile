@@ -29,7 +29,6 @@ STATIC := $(STATIC)
 COCKROACH_IMAGE :=
 
 RUN := run
-export GOPATH := $(CURDIR)/_vendor:$(shell cd $(CURDIR)/../../../..; pwd)
 
 # TODO(pmattis): Figure out where to clear the CGO_* variables when
 # building "release" binaries.
@@ -52,20 +51,14 @@ all: build test
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
-build: etcd
+build:
 	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
 # Similar to "testrace", we want to cache the build before running the
 # tests.
-test: etcd
+test:
 	$(GO) test $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
-
-# "go build -i" explicitly does not rebuild dependent packages that
-# have a different root directory than the package being built, hence
-# the need for a separate build invocation for etcd/raft.
-etcd:
-	$(GO) build $(GOFLAGS) -v -i github.com/coreos/etcd/raft
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -109,21 +102,15 @@ acceptance:
 	  ./local-cluster.sh stop)
 
 clean:
-	$(GO) clean -i github.com/cockroachdb/... github.com/coreos/etcd/...
+	$(GO) clean -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
 
-# The gopath target outputs the GOPATH that should be used for building this
-# package. It is used by the emacs go-projectile package for automatic
-# configuration.
-gopath:
-	@echo -n $(GOPATH)
-
 # List all of the dependencies which are not part of the standard
-# library, cockroachdb/cockroach or coreos/etcd.
+# library or cockroachdb/cockroach.
 godeps:
 	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
 	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
-	  egrep -v 'github.com/(cockroachdb/cockroach|coreos/etcd)'
+	  egrep -v 'github.com/cockroachdb/cockroach'
 
-.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers etcd
+.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers
