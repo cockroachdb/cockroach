@@ -8,32 +8,24 @@
 # 2) Update build tools
 # 3) Install git hooks
 
-cd -P "$(dirname $0)"
+set -e
 
-PKGS="github.com/golang/lint/golint"
-PKGS="${PKGS} golang.org/x/tools/cmd/goimports"
+cd -P "$(dirname $0)"
 
 # go vet is special: it installs into $GOROOT (which $USER may not have
 # write access to) instead of $GOPATH. It is usually but not always
 # installed along with the rest of the go toolchain. Don't try to
 # install it if it's already there.
 if ! go vet 2>/dev/null; then
-    PKGS="${PKGS} golang.org/x/tools/cmd/vet"
+    go get golang.org/x/tools/cmd/vet
 fi
 
-set -ex
-
-# Grab binaries required by git hooks.
-go get -u ${PKGS}
+# glock is used to manage the rest of our dependencies (and to update
+# itself, so no -u here)
+go get github.com/robfig/glock
 
 # Grab the go dependencies required for building.
 ./build/devbase/godeps.sh
-
-go install -v \
-   github.com/cockroachdb/c-protobuf/cmd/protoc \
-   github.com/gogo/protobuf/protoc-gen-gogo
-
-set +x
 
 # Create symlinks to all git hooks in your own .git dir.
 for f in $(ls -d githooks/*); do

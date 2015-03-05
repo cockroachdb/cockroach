@@ -10,6 +10,8 @@ RUN apt-get update -y && apt-get dist-upgrade -y && \
 ENV GOPATH /go
 ENV ROACHPATH $GOPATH/src/github.com/cockroachdb
 
+RUN go get github.com/robfig/glock
+
 # Create required directories and a convenience symlink.
 RUN mkdir -p $ROACHPATH && \
  ln -s "${ROACHPATH}/cockroach" /cockroach
@@ -17,6 +19,6 @@ RUN mkdir -p $ROACHPATH && \
 WORKDIR /cockroach
 
 ADD . /cockroach/build/devbase/
-RUN ["./build/devbase/godeps.sh"]
+RUN ["./build/devbase/godeps-docker.sh"]
 
 CMD ["/bin/bash"]

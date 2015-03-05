@@ -21,10 +21,15 @@ cd cockroach
 ./bootstrap.sh
 ```
 
-Now you should be all set for `make build`, `make test` and everything else our Makefile has to offer.
+Now you should be all set for `make build`, `make test` and everything else our Makefile has
+to offer. When dependency versions change, run `glock sync github.com/cockroachdb/cockroach`
+or re-run `bootstrap.sh`.
 
 Note that if you edit a `.proto` file you will need to manually regenerate the associated
 `.pb.{go,cc,h}` files using `go generate`.
+
+To add or update a dependency, use `go get -u` and then
+`glock save github.com/cockroachdb/cockroach` and commit the changes to the GLOCKFILE.
 
 ### Style guide
 We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) fairly closely. In particular, you want to watch out for proper punctuation and capitalization and make sure that your lines stay well below 80 characters.
