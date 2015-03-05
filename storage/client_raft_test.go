@@ -251,6 +251,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	}
 
 	// After the aborted transaction, r.Desc was not updated.
+	// TODO(bdarnell): expose and inspect raft's internal state.
 	if len(rng.Desc.Replicas) != 1 {
 		t.Fatalf("expected 1 replica, found %d", len(rng.Desc.Replicas))
 	}
