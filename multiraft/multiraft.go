@@ -570,6 +570,11 @@ func (s *state) createGroup(groupID uint64) error {
 }
 
 func (s *state) removeGroup(op *removeGroupOp) {
+	// Group creation is lazy and idempotent; so is removal.
+	if _, ok := s.groups[op.groupID]; !ok {
+		op.ch <- nil
+		return
+	}
 	s.multiNode.RemoveGroup(op.groupID)
 	gs := s.Storage.GroupStorage(op.groupID)
 	_, cs, err := gs.InitialState()
