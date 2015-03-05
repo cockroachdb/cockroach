@@ -44,10 +44,10 @@ func TestRandIntInRange(t *testing.T) {
 	}
 }
 
-func TestRandString(t *testing.T) {
+func TestRandBytes(t *testing.T) {
 	rand := NewPseudoRand()
 	for i := 0; i < 100; i++ {
-		x := RandString(rand, i)
+		x := RandBytes(rand, i)
 		if len(x) != i {
 			t.Errorf("got array with unexpected length: %d (expected %d)", len(x), i)
 		}

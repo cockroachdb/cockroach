@@ -161,7 +161,7 @@ func setupMVCCData(rocksdb *RocksDB, numVersions, numKeys int, b *testing.B) map
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				value := proto.Value{Bytes: []byte(util.RandString(rng, 1024))}
+				value := proto.Value{Bytes: util.RandBytes(rng, 1024)}
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
 				}
@@ -198,7 +198,7 @@ func runMVCCScan(numVersions, numKeys int, b *testing.B) {
 	}(b)
 
 	results := setupMVCCData(rocksdb, numVersions, numKeys, b)
-	log.Infof("starting scan benchmark...")
+	log.Infof("starting scan benchmark...%d", b.N)
 	b.ResetTimer()
 
 	const maxRows = 1024
@@ -219,6 +219,8 @@ func runMVCCScan(numVersions, numKeys int, b *testing.B) {
 			keyIdx++
 		}
 	}
+
+	b.StopTimer()
 }
 
 func BenchmarkMVCCScan10Versions(b *testing.B) {
@@ -252,6 +254,9 @@ func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
 	for i := 0; i < numKeys; i++ {
 		keys[i] = proto.Key(fmt.Sprintf("key-%d", i))
 	}
+
+	b.ResetTimer()
+
 	// Use parallelism if specified when test is run.
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -272,12 +277,16 @@ func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
 		} else if val == nil {
 			continue
 		}
-		if val.Integer != nil {
-			fmt.Printf("%q: %d\n", key, val.GetInteger())
-		} else {
-			fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
+		if testing.Verbose() {
+			if val.Integer != nil {
+				fmt.Printf("%q: %d\n", key, val.GetInteger())
+			} else {
+				fmt.Printf("%q: [%d]byte\n", key, len(val.Bytes))
+			}
 		}
 	}
+
+	b.StopTimer()
 }
 
 // BenchmarkMVCCMergeInteger computes performance of merging integers.

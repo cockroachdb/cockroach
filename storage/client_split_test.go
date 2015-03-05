@@ -279,8 +279,8 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
-		key := []byte(util.RandString(src, int(src.Int31n(1<<7))))
-		val := []byte(util.RandString(src, int(src.Int31n(1<<8))))
+		key := util.RandBytes(src, int(src.Int31n(1<<7)))
+		val := util.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, rng.Desc.RaftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
@@ -340,8 +340,8 @@ func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64
 		if keyBytes+valBytes >= bytes {
 			return
 		}
-		key := append(append([]byte(nil), prefix...), []byte(util.RandString(src, 100))...)
-		val := []byte(util.RandString(src, int(src.Int31n(1<<8))))
+		key := append(append([]byte(nil), prefix...), util.RandBytes(src, 100)...)
+		val := util.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs, pReply := putArgs(key, val, raftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {

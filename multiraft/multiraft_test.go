@@ -31,7 +31,7 @@ import (
 var testRand = util.NewPseudoRand()
 
 func makeCommandID() string {
-	return util.RandString(testRand, commandIDLen)
+	return string(util.RandBytes(testRand, commandIDLen))
 }
 
 type testCluster struct {

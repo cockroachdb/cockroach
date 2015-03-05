@@ -1635,7 +1635,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		// Same for aggregate gc'able bytes age.
 		ms.GCBytesAge += ms.KeyBytes + ms.ValBytes - ms.LiveBytes
 
-		key := []byte(fmt.Sprintf("%s-%d", util.RandString(rng, int(rng.Int31n(32))), i))
+		key := []byte(fmt.Sprintf("%s-%d", util.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
 		var txn *proto.Transaction
 		if rng.Int31n(2) == 0 { // create a txn with 50% prob
@@ -1667,7 +1667,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 				}
 			}
 		} else {
-			rngVal := proto.Value{Bytes: []byte(util.RandString(rng, int(rng.Int31n(128))))}
+			rngVal := proto.Value{Bytes: util.RandBytes(rng, int(rng.Int31n(128)))}
 			log.V(1).Infof("*** PUT index %d; TXN=%t", i, txn != nil)
 			if err := MVCCPut(engine, ms, key, makeTS(int64(i+1)*1E9, 0), rngVal, txn); err != nil {
 				t.Fatal(err)
