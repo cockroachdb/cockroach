@@ -133,10 +133,16 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
 	return
 }
 
-// RangeScanMetadataKey returns a range-local key for range scan
-// metadata.
-func RangeScanMetadataKey(key proto.Key) proto.Key {
-	return MakeRangeKey(key, KeyLocalRangeScanMetadataSuffix, proto.Key{})
+// RangeGCMetadataKey returns a range-local key for range garbage
+// collection metadata.
+func RangeGCMetadataKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeGCMetadataSuffix, proto.Key{})
+}
+
+// RangeLastVerificationTimestampKey returns a range-local key for
+// the range's last verification timestamp.
+func RangeLastVerificationTimestampKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRangeLastVerificationTimestampSuffix, proto.Key{})
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor
@@ -339,6 +345,11 @@ var (
 	KeyLocalRaftLogSuffix = proto.Key("rftl")
 	// KeyLocalRaftStateSuffix is the Suffix for the raft HardState.
 	KeyLocalRaftStateSuffix = proto.Key("rfts")
+	// KeyLocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
+	KeyLocalRangeGCMetadataSuffix = proto.Key("rgcm")
+	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's
+	// last verification timestamp (for checking integrity of on-disk data).
+	KeyLocalRangeLastVerificationTimestampSuffix = proto.Key("rlvt")
 	// KeyLocalRangeStatSuffix is the suffix for range statistics.
 	KeyLocalRangeStatSuffix = proto.Key("rst-")
 	// KeyLocalResponseCacheSuffix is the suffix for keys storing
@@ -359,8 +370,6 @@ var (
 	// KeyLocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.
 	KeyLocalRangeDescriptorSuffix = proto.Key("rdsc")
-	// KeyLocalRangeScanMetadataSuffix is the suffix for a range's scan metadata.
-	KeyLocalRangeScanMetadataSuffix = proto.Key("rscm")
 	// KeyLocalTransactionSuffix specifies the key suffix for
 	// transaction records. The additional detail is the transaction id.
 	// NOTE: if this value changes, it must be updated in C++

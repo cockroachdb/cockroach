@@ -162,7 +162,7 @@ func (*InternalHeartbeatTxnResponse) ProtoMessage()    {}
 // MVCC values.
 type InternalGCRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	ScanMeta         ScanMetadata              `protobuf:"bytes,2,opt,name=scan_meta" json:"scan_meta"`
+	GCMeta           GCMetadata                `protobuf:"bytes,2,opt,name=gc_meta" json:"gc_meta"`
 	Keys             []InternalGCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 	XXX_unrecognized []byte                    `json:"-"`
 }
@@ -171,11 +171,11 @@ func (m *InternalGCRequest) Reset()         { *m = InternalGCRequest{} }
 func (m *InternalGCRequest) String() string { return proto1.CompactTextString(m) }
 func (*InternalGCRequest) ProtoMessage()    {}
 
-func (m *InternalGCRequest) GetScanMeta() ScanMetadata {
+func (m *InternalGCRequest) GetGCMeta() GCMetadata {
 	if m != nil {
-		return m.ScanMeta
+		return m.GCMeta
 	}
-	return ScanMetadata{}
+	return GCMetadata{}
 }
 
 func (m *InternalGCRequest) GetKeys() []InternalGCRequest_GCKey {

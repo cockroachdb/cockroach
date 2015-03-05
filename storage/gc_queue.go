@@ -31,8 +31,10 @@ import (
 )
 
 const (
-	// scanQueueMaxSize is the max size of the scan queue.
-	scanQueueMaxSize = 100
+	// gcQueueMaxSize is the max size of the gc queue.
+	gcQueueMaxSize = 100
+	// gcQueueTimerDuration is the duration between GCs of queued ranges.
+	gcQueueTimerDuration = 1 * time.Second
 	// gcByteCountNormalization is the count of GC'able bytes which
 	// amount to a score of "1" added to total range priority.
 	gcByteCountNormalization = 1 << 20 // 1 MB
@@ -42,50 +44,37 @@ const (
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
-	// verificationInterval is the target duration for verifying on-disk
-	// checksums via full scan.
-	verificationInterval = 30 * 24 * time.Hour // 30 days
 )
 
-// scanQueue manages a queue of ranges slated to be scanned in their
-// entirety using the MVCC versions iterator. Currently, range scans
-// manage the following tasks:
+// gcQueue manages a queue of ranges slated to be scanned in their
+// entirety using the MVCC versions iterator. The gc queue manages the
+// following tasks:
 //
 //  - GC of version data via TTL expiration (and more complex schemes
 //    as implemented going forward).
 //  - Resolve extant write intents and determine oldest non-resolvable
 //    intent.
-//  - Periodic verification of on-disk checksums to identify bit-rot
-//    in read-only data sets. See http://en.wikipedia.org/wiki/Data_degradation.
 //
-// The shouldQueue function combines the need for all three tasks into
-// a single priority. If any task is overdue, shouldQueue returns true.
-type scanQueue struct {
+// The shouldQueue function combines the need for both tasks into a
+// single priority. If any task is overdue, shouldQueue returns true.
+type gcQueue struct {
 	*baseQueue
 }
 
-// newScanQueue returns a new instance of scanQueue.
-func newScanQueue() *scanQueue {
-	sq := &scanQueue{}
-	sq.baseQueue = newBaseQueue("scan", sq.shouldQueue, sq.process, scanQueueMaxSize)
-	return sq
+// newGCQueue returns a new instance of gcQueue.
+func newGCQueue() *gcQueue {
+	gcq := &gcQueue{}
+	gcq.baseQueue = newBaseQueue("gc", gcq.shouldQueue, gcq.process, gcq.timer, gcQueueMaxSize)
+	return gcq
 }
 
-// shouldQueue determines whether a range should be queued for
-// scanning, and if so, at what priority. Returns true for shouldQ in
-// the event that there are GC'able bytes, or it's been longer since
-// the last scan than the intent sweep or verification
-// intervals. Priority is derived from the addition of priority from
-// GC'able bytes and how many multiples of intent or verification
-// intervals have elapsed since the last scan.
-func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
-	// Get last scan metadata & GC policy.
-	scanMeta, err := rng.GetScanMetadata()
-	if err != nil {
-		log.Errorf("unable to fetch scan metadata: %s", err)
-		return
-	}
-	policy, err := sq.lookupGCPolicy(rng)
+// shouldQueue determines whether a range should be queued for garbage
+// collection, and if so, at what priority. Returns true for shouldQ
+// in the event that the cumulative ages of GC'able bytes or extant
+// intents exceed thresholds.
+func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+	// Lookup GC policy for this range.
+	policy, err := gcq.lookupGCPolicy(rng)
 	if err != nil {
 		log.Errorf("GC policy: %s", err)
 		return
@@ -98,18 +87,12 @@ func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool,
 	// and normalizes.
 	intentScore := rng.stats.GetAvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
-	// Verify score.
-	verifyScore := float64(now.WallTime-scanMeta.LastScanNanos) / float64(verificationInterval.Nanoseconds())
-
 	// Compute priority.
 	if gcScore > 1 {
 		priority += gcScore
 	}
 	if intentScore > 1 {
 		priority += intentScore
-	}
-	if verifyScore > 1 {
-		priority += verifyScore
 	}
 	shouldQ = priority > 0
 	return
@@ -118,22 +101,25 @@ func (sq *scanQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool,
 // process iterates through all keys in a range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are
 // batched into InternalGC calls. Extant intents are resolved if
-// intents are older than intentAgeThreshold. The very act of scanning
-// keys verifies on-disk checksums, as each block checksum is checked
-// on load.
-func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
+// intents are older than intentAgeThreshold.
+func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
+	if !rng.IsLeader() {
+		log.Infof("not leader of range %s; skipping GC", rng)
+		return nil
+	}
+
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng, snap)
 	defer iter.Close()
 	defer snap.Stop()
 
 	// Lookup the GC policy for the zone containing this key range.
-	policy, err := sq.lookupGCPolicy(rng)
+	policy, err := gcq.lookupGCPolicy(rng)
 	if err != nil {
 		return err
 	}
 
-	scanMeta := proto.NewScanMetadata(now.WallTime)
+	gcMeta := proto.NewGCMetadata(now.WallTime)
 	gc := engine.NewGarbageCollector(now, policy)
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
@@ -183,7 +169,7 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 					if meta.Timestamp.Less(intentExp) {
 						log.Infof("base=%q, now=%s, meta ts=%s, intentExp=%s", expBaseKey, now, meta.Timestamp, intentExp)
 						wg.Add(1)
-						go sq.resolveIntent(rng, expBaseKey, meta, updateOldestIntent, &wg)
+						go gcq.resolveIntent(rng, expBaseKey, meta, updateOldestIntent, &wg)
 					} else {
 						updateOldestIntent(meta.Timestamp.WallTime)
 					}
@@ -219,28 +205,36 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 			vals = append(vals, iter.Value())
 		}
 	}
+	if iter.Error() != nil {
+		return iter.Error()
+	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 
-	// An error during iteration is presumed to means a checksum failure
-	// while iterating over the underlying key/value data.
-	if iter.Error() != nil {
-		// TODO(spencer): do something other than fatal error here. We
-		// want to quarantine this range, make it a non-participating raft
-		// follower until it can be replaced and then destroyed.
-		log.Fatalf("unhandled failure when scanning range %s; probable data corruption: %s", rng, iter.Error())
-	}
 	// Wait for any outstanding intent resolves and set oldest extant intent.
 	wg.Wait()
-	scanMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
+	gcMeta.OldestIntentNanos = gogoproto.Int64(oldestIntentNanos)
 
 	// Send GC request through range.
-	gcArgs.ScanMeta = *scanMeta
+	gcArgs.GCMeta = *gcMeta
 	if err := rng.AddCmd(proto.InternalGC, gcArgs, &proto.InternalGCResponse{}, true); err != nil {
 		return err
 	}
 
+	// Store current timestamp as last verification for this range, as
+	// we've just successfully scanned.
+	// TODO(spencer): TEST THIS BEFORE CHECKIN.
+	if err := rng.SetLastVerificationTimestamp(now); err != nil {
+		log.Errorf("failed to set last verification timestamp for range %s: %s", rng, err)
+	}
+
 	return nil
+}
+
+// timer returns a constant duration to space out GC processing
+// for successive queued ranges.
+func (gcq *gcQueue) timer() time.Duration {
+	return gcQueueTimerDuration
 }
 
 // resolveIntent resolves the intent at key by attempting to abort the
@@ -248,7 +242,7 @@ func (sq *scanQueue) process(now proto.Timestamp, rng *Range) error {
 // aborted or intent cannot be resolved, the oldestIntentNanos value
 // is atomically updated to the min of oldestIntentNanos and the
 // intent's timestamp. The wait group is signaled on completion.
-func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMetadata,
+func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMetadata,
 	updateOldestIntent func(int64), wg *sync.WaitGroup) {
 	defer wg.Done() // signal wait group always on completion
 
@@ -293,7 +287,7 @@ func (sq *scanQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMe
 // supplied range's start key. It queries all matching config prefixes
 // and then iterates from most specific to least, returning the first
 // non-nil GC policy.
-func (sq *scanQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
+func (gcq *gcQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 	info, err := rng.rm.Gossip().GetInfo(gossip.KeyConfigZone)
 	if err != nil {
 		return proto.GCPolicy{}, util.Errorf("unable to fetch zone config from gossip: %s", err)

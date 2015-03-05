@@ -36,21 +36,18 @@ func makeTS(nanos int64, logical int32) proto.Timestamp {
 	}
 }
 
-// TestScanQueueShouldQueue verifies conditions which inform priority
-// and whether or not the range should be queued into the scan queue.
-// Ranges are queued for scanning based on three conditions. The bytes
-// available to be GC'd, and the time since last GC, the time since
-// last scan for unresolved intents (if there are any active intent
-// bytes), and the time since last scan for verification of checksum
-// data.
-func TestScanQueueShouldQueue(t *testing.T) {
+// TestGCQueueShouldQueue verifies conditions which inform priority
+// and whether or not the range should be queued into the GC queue.
+// Ranges are queued for GC based on two conditions. The age of bytes
+// available to be GC'd, and the age of unresolved intents.
+func TestGCQueueShouldQueue(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
 
-	// Put an empty scan metadata; all that's read from it is last scan nanos.
-	key := engine.RangeScanMetadataKey(tc.rng.Desc.StartKey)
-	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &proto.ScanMetadata{}); err != nil {
+	// Put an empty GC metadata; all that's read from it is last scan nanos.
+	key := engine.RangeGCMetadataKey(tc.rng.Desc.RaftID)
+	if err := engine.MVCCPutProto(tc.rng.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &proto.GCMetadata{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,12 +75,6 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		{0, 0, 1, 3 * ia / 2, makeTS(iaN/2, 0), true, 2},
 		// No GC'able bytes, 2 intents, with avg intent age=4x intent normalization.
 		{0, 0, 2, 7 * ia, makeTS(iaN, 0), true, 4.5},
-		// No GC'able bytes, no intent bytes, verification interval elapsed.
-		{0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds(), 0), false, 0},
-		// No GC'able bytes, no intent bytes, verification interval * 2 elapsed.
-		{0, 0, 0, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 2},
-		// No GC'able bytes, with combination of intent bytes and verification interval * 2 elapsed.
-		{0, 0, 1, 0, makeTS(verificationInterval.Nanoseconds()*2, 0), true, 62},
 		// GC'able bytes, no time elapsed.
 		{bc, 0, 0, 0, makeTS(0, 0), false, 0},
 		// GC'able bytes, avg age = TTLSeconds.
@@ -96,7 +87,7 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		{bc, bc * ttl, 1, 0, makeTS(iaN*2, 0), true, 5},
 	}
 
-	scanQ := newScanQueue()
+	gcQ := newGCQueue()
 
 	for i, test := range testCases {
 		// Write gc'able bytes as key bytes; since "live" bytes will be
@@ -111,7 +102,7 @@ func TestScanQueueShouldQueue(t *testing.T) {
 		}
 		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), stats)
 
-		shouldQ, priority := scanQ.shouldQueue(test.now, tc.rng)
+		shouldQ, priority := gcQ.shouldQueue(test.now, tc.rng)
 		if shouldQ != test.shouldQ {
 			t.Errorf("%d: should queue expected %t; got %t", i, test.shouldQ, shouldQ)
 		}
@@ -121,9 +112,9 @@ func TestScanQueueShouldQueue(t *testing.T) {
 	}
 }
 
-// TestScanQueueProcess creates test data in the range over various time
-// scales and verifies that scan queue process properly GC's test data.
-func TestScanQueueProcess(t *testing.T) {
+// TestGCQueueProcess creates test data in the range over various time
+// scales and verifies that scan queue process properly GCs test data.
+func TestGCQueueProcess(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -208,8 +199,8 @@ func TestScanQueueProcess(t *testing.T) {
 	}
 
 	// Process through a scan queue.
-	scanQ := newScanQueue()
-	if err := scanQ.process(tc.clock.Now(), tc.rng); err != nil {
+	gcQ := newGCQueue()
+	if err := gcQ.process(tc.clock.Now(), tc.rng); err != nil {
 		t.Error(err)
 	}
 
@@ -264,22 +255,31 @@ func TestScanQueueProcess(t *testing.T) {
 	}
 
 	// Verify the oldest extant intent age.
-	scanMeta, err := tc.rng.GetScanMetadata()
+	gcMeta, err := tc.rng.GetGCMetadata()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if scanMeta.LastScanNanos != now {
-		t.Errorf("expected last scan nanos=%d; got %d", now, scanMeta.LastScanNanos)
+	if gcMeta.LastScanNanos != now {
+		t.Errorf("expected last scan nanos=%d; got %d", now, gcMeta.LastScanNanos)
 	}
-	if *scanMeta.OldestIntentNanos != ts4.WallTime {
-		t.Errorf("expected oldest intent nanos=%d; got %d", ts4.WallTime, scanMeta.OldestIntentNanos)
+	if *gcMeta.OldestIntentNanos != ts4.WallTime {
+		t.Errorf("expected oldest intent nanos=%d; got %d", ts4.WallTime, gcMeta.OldestIntentNanos)
+	}
+
+	// Verify that the last verification timestamp was updated as whole range was scanned.
+	ts, err := tc.rng.GetLastVerificationTimestamp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gcMeta.LastScanNanos != ts.WallTime {
+		t.Errorf("expected walltime nanos %d; got %d", gcMeta.LastScanNanos, ts.WallTime)
 	}
 }
 
-// TestScanQueueLookupGCPolicy verifies the hierarchical lookup of GC
+// TestGCQueueLookupGCPolicy verifies the hierarchical lookup of GC
 // policy in the event that the longest matching key prefix does not
 // have a zone configured.
-func TestScanQueueLookupGCPolicy(t *testing.T) {
+func TestGCQueueLookupGCPolicy(t *testing.T) {
 	zoneConfig1 := proto.ZoneConfig{
 		ReplicaAttrs:  []proto.Attributes{},
 		RangeMinBytes: 1 << 10,
@@ -326,8 +326,8 @@ func TestScanQueueLookupGCPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanQ := newScanQueue()
-	gcPolicy, err := scanQ.lookupGCPolicy(rng2)
+	gcQ := newGCQueue()
+	gcPolicy, err := gcQ.lookupGCPolicy(rng2)
 	if err != nil {
 		t.Fatal(err)
 	}

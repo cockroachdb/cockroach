@@ -180,6 +180,12 @@ func (c *Clock) PhysicalNow() int64 {
 	return wallTime
 }
 
+// PhysicalTime returns a time.Time struct using the local wall time.
+func (c *Clock) PhysicalTime() time.Time {
+	physNow := c.PhysicalNow()
+	return time.Unix(physNow/1E9, physNow%1E9)
+}
+
 // Update takes a hybrid timestamp, usually originating from
 // an event received from another member of a distributed
 // system. The clock is updated and the hybrid timestamp
