@@ -232,8 +232,12 @@ message EndTransactionRequest {
   // Optional commit triggers. Note that commit triggers are for
   // internal use only and will be ignored if requested through the
   // public-facing KV API.
+  // All trigger fields must be added to verifyRequest in kv/db.go.
+  // TODO(bdarnell): add a wrapper object for triggers so we don't have to
+  // check for them individually.
   optional SplitTrigger split_trigger = 3;
   optional MergeTrigger merge_trigger = 4;
+  optional ChangeReplicasTrigger change_replicas_trigger = 5;
 }
 
 // An EndTransactionResponse is the return value from the

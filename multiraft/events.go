@@ -44,7 +44,11 @@ type EventMembershipChangeCommitted struct {
 	CommandID  string
 	NodeID     NodeID
 	ChangeType raftpb.ConfChangeType
-	ConfState  raftpb.ConfState
+	Payload    []byte
+
+	// Callback should be invoked when this event and its payload have been
+	// processed. A non-nil error aborts the membership change.
+	Callback func(error)
 }
 
 // Commands are encoded with a 1-byte version (currently 0), a 16-byte ID,

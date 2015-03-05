@@ -529,9 +529,13 @@ type EndTransactionRequest struct {
 	// Optional commit triggers. Note that commit triggers are for
 	// internal use only and will be ignored if requested through the
 	// public-facing KV API.
-	SplitTrigger     *SplitTrigger `protobuf:"bytes,3,opt,name=split_trigger" json:"split_trigger,omitempty"`
-	MergeTrigger     *MergeTrigger `protobuf:"bytes,4,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
-	XXX_unrecognized []byte        `json:"-"`
+	// All trigger fields must be added to verifyRequest in kv/db.go.
+	// TODO(bdarnell): add a wrapper object for triggers so we don't have to
+	// check for them individually.
+	SplitTrigger          *SplitTrigger          `protobuf:"bytes,3,opt,name=split_trigger" json:"split_trigger,omitempty"`
+	MergeTrigger          *MergeTrigger          `protobuf:"bytes,4,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
+	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,5,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
+	XXX_unrecognized      []byte                 `json:"-"`
 }
 
 func (m *EndTransactionRequest) Reset()         { *m = EndTransactionRequest{} }
@@ -555,6 +559,13 @@ func (m *EndTransactionRequest) GetSplitTrigger() *SplitTrigger {
 func (m *EndTransactionRequest) GetMergeTrigger() *MergeTrigger {
 	if m != nil {
 		return m.MergeTrigger
+	}
+	return nil
+}
+
+func (m *EndTransactionRequest) GetChangeReplicasTrigger() *ChangeReplicasTrigger {
+	if m != nil {
+		return m.ChangeReplicasTrigger
 	}
 	return nil
 }

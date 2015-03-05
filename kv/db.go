@@ -46,6 +46,9 @@ func verifyRequest(args proto.Request) error {
 		if t.MergeTrigger != nil {
 			return util.Errorf("EndTransaction request from public KV API contains merge trigger: %+v", t.GetMergeTrigger())
 		}
+		if t.ChangeReplicasTrigger != nil {
+			return util.Errorf("EndTransaction request from public KV API contains change replicas trigger: %+v", t.GetChangeReplicasTrigger())
+		}
 	}
 	return nil
 }

@@ -58,8 +58,6 @@ const (
 	InternalMerge = "InternalMerge"
 	// InternalTruncateLog discards a prefix of the raft log.
 	InternalTruncateLog = "InternalTruncateLog"
-	// InternalChangeReplicas adds or removes a replica from a range.
-	InternalChangeReplicas = "InternalChangeReplicas"
 )
 
 // ToValue generates a Value message which contains an encoded copy of this

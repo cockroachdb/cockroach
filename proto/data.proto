@@ -115,6 +115,24 @@ message MergeTrigger {
   optional int64 subsumed_raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SubsumedRaftID"];
 }
 
+// ReplicaChangeType is a parameter of ChangeReplicasTrigger.
+enum ReplicaChangeType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  ADD_REPLICA = 0;
+  REMOVE_REPLICA = 1;
+}
+
+message ChangeReplicasTrigger {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  optional int32 store_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
+  optional ReplicaChangeType change_type = 3 [(gogoproto.nullable) = false];
+
+  // The new replica list with this change applied.
+  repeated Replica updated_replicas = 4 [(gogoproto.nullable) = false];
+}
+
 // IsolationType TODO(jiajia) Needs documentation.
 enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;

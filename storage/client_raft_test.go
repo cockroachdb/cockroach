@@ -18,11 +18,14 @@
 package storage_test
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -98,4 +101,172 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	defer store.Stop()
 
 	validate(store)
+}
+
+// TestReplicateRange verifies basic replication functionality by creating two stores
+// and a range, replicating the range to the second store, and reading its data there.
+func TestReplicateRange(t *testing.T) {
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	// Issue a command on the first node before replicating.
+	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the same data is available on the replica.
+	// TODO(bdarnell): relies on the fact that we allow reads from followers.
+	// When we enforce reads from leader/quorum leases, we'll need to introduce a
+	// non-transactional local read for tests like this.
+	// Also applies to other tests in this file.
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+			return false
+		}
+		return getResp.Value.GetInteger() == 5
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRestoreReplicas ensures that consensus group membership is properly
+// persisted to disk and restored when a node is stopped and restarted.
+func TestRestoreReplicas(t *testing.T) {
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Let the range propagate to the second replica.
+	// TODO(bdarnell): we need an observable indication that this has completed.
+	// TODO(bdarnell): initial creation and replication needs to be atomic;
+	// cutting off the process too soon currently results in a corrupted range.
+	// We need 500ms to be safe in -race tests.
+	time.Sleep(500 * time.Millisecond)
+
+	mtc.StopStore(0)
+	mtc.StopStore(1)
+	mtc.RestartStore(0, t)
+	mtc.RestartStore(1, t)
+
+	// Send a command on each store. The follower will forward to the leader and both
+	// commands will eventually commit.
+	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
+	if err := mtc.stores[1].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+			return false
+		}
+		return getResp.Value.GetInteger() == 16
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both replicas have a complete list in Desc.Replicas
+	for i, store := range mtc.stores {
+		rng, err := store.GetRange(1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rng.RLock()
+		if len(rng.Desc.Replicas) != 2 {
+			t.Fatalf("store %d: expected 2 replicas, found %d", i, len(rng.Desc.Replicas))
+		}
+		if rng.Desc.Replicas[0].NodeID != mtc.stores[0].Ident.NodeID {
+			t.Errorf("store %d: expected replica[0].NodeID == %d, was %d",
+				i, mtc.stores[0].Ident.NodeID, rng.Desc.Replicas[0].NodeID)
+		}
+		rng.RUnlock()
+	}
+}
+
+func TestFailedReplicaChange(t *testing.T) {
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+	storage.TestingCommandFilter = func(method string, args proto.Request,
+		reply proto.Response) bool {
+		if method == proto.EndTransaction {
+			reply.Header().SetGoError(util.Errorf("boom"))
+			return true
+		}
+		return false
+	}
+
+	err = rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		})
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("did not get expected error: %s", err)
+	}
+
+	// After the aborted transaction, r.Desc was not updated.
+	// TODO(bdarnell): expose and inspect raft's internal state.
+	if len(rng.Desc.Replicas) != 1 {
+		t.Fatalf("expected 1 replica, found %d", len(rng.Desc.Replicas))
+	}
+
+	// The pending config change flag was cleared, so a subsequent attempt
+	// can succeed.
+	storage.TestingCommandFilter = nil
+
+	err = rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

@@ -44,6 +44,7 @@ class RawKeyValue;
 class StoreIdent;
 class SplitTrigger;
 class MergeTrigger;
+class ChangeReplicasTrigger;
 class NodeList;
 class Transaction;
 class MVCCMetadata;
@@ -51,6 +52,25 @@ class ScanMetadata;
 class TimeSeriesDatapoint;
 class TimeSeriesData;
 
+enum ReplicaChangeType {
+  ADD_REPLICA = 0,
+  REMOVE_REPLICA = 1
+};
+bool ReplicaChangeType_IsValid(int value);
+const ReplicaChangeType ReplicaChangeType_MIN = ADD_REPLICA;
+const ReplicaChangeType ReplicaChangeType_MAX = REMOVE_REPLICA;
+const int ReplicaChangeType_ARRAYSIZE = ReplicaChangeType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ReplicaChangeType_descriptor();
+inline const ::std::string& ReplicaChangeType_Name(ReplicaChangeType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ReplicaChangeType_descriptor(), value);
+}
+inline bool ReplicaChangeType_Parse(
+    const ::std::string& name, ReplicaChangeType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ReplicaChangeType>(
+    ReplicaChangeType_descriptor(), name, value);
+}
 enum IsolationType {
   SERIALIZABLE = 0,
   SNAPSHOT = 1
@@ -883,6 +903,118 @@ class MergeTrigger : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static MergeTrigger* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class ChangeReplicasTrigger : public ::google::protobuf::Message {
+ public:
+  ChangeReplicasTrigger();
+  virtual ~ChangeReplicasTrigger();
+
+  ChangeReplicasTrigger(const ChangeReplicasTrigger& from);
+
+  inline ChangeReplicasTrigger& operator=(const ChangeReplicasTrigger& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ChangeReplicasTrigger& default_instance();
+
+  void Swap(ChangeReplicasTrigger* other);
+
+  // implements Message ----------------------------------------------
+
+  ChangeReplicasTrigger* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ChangeReplicasTrigger& from);
+  void MergeFrom(const ChangeReplicasTrigger& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int32 node_id = 1;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 1;
+  inline ::google::protobuf::int32 node_id() const;
+  inline void set_node_id(::google::protobuf::int32 value);
+
+  // optional int32 store_id = 2;
+  inline bool has_store_id() const;
+  inline void clear_store_id();
+  static const int kStoreIdFieldNumber = 2;
+  inline ::google::protobuf::int32 store_id() const;
+  inline void set_store_id(::google::protobuf::int32 value);
+
+  // optional .proto.ReplicaChangeType change_type = 3;
+  inline bool has_change_type() const;
+  inline void clear_change_type();
+  static const int kChangeTypeFieldNumber = 3;
+  inline ::proto::ReplicaChangeType change_type() const;
+  inline void set_change_type(::proto::ReplicaChangeType value);
+
+  // repeated .proto.Replica updated_replicas = 4;
+  inline int updated_replicas_size() const;
+  inline void clear_updated_replicas();
+  static const int kUpdatedReplicasFieldNumber = 4;
+  inline const ::proto::Replica& updated_replicas(int index) const;
+  inline ::proto::Replica* mutable_updated_replicas(int index);
+  inline ::proto::Replica* add_updated_replicas();
+  inline const ::google::protobuf::RepeatedPtrField< ::proto::Replica >&
+      updated_replicas() const;
+  inline ::google::protobuf::RepeatedPtrField< ::proto::Replica >*
+      mutable_updated_replicas();
+
+  // @@protoc_insertion_point(class_scope:proto.ChangeReplicasTrigger)
+ private:
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_store_id();
+  inline void clear_has_store_id();
+  inline void set_has_change_type();
+  inline void clear_has_change_type();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int32 node_id_;
+  ::google::protobuf::int32 store_id_;
+  ::google::protobuf::RepeatedPtrField< ::proto::Replica > updated_replicas_;
+  int change_type_;
+  friend void  protobuf_AddDesc_data_2eproto();
+  friend void protobuf_AssignDesc_data_2eproto();
+  friend void protobuf_ShutdownFile_data_2eproto();
+
+  void InitAsDefaultInstance();
+  static ChangeReplicasTrigger* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2532,6 +2664,113 @@ inline void MergeTrigger::set_subsumed_raft_id(::google::protobuf::int64 value) 
 
 // -------------------------------------------------------------------
 
+// ChangeReplicasTrigger
+
+// optional int32 node_id = 1;
+inline bool ChangeReplicasTrigger::has_node_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ChangeReplicasTrigger::set_has_node_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ChangeReplicasTrigger::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ChangeReplicasTrigger::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 ChangeReplicasTrigger::node_id() const {
+  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.node_id)
+  return node_id_;
+}
+inline void ChangeReplicasTrigger::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:proto.ChangeReplicasTrigger.node_id)
+}
+
+// optional int32 store_id = 2;
+inline bool ChangeReplicasTrigger::has_store_id() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void ChangeReplicasTrigger::set_has_store_id() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void ChangeReplicasTrigger::clear_has_store_id() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void ChangeReplicasTrigger::clear_store_id() {
+  store_id_ = 0;
+  clear_has_store_id();
+}
+inline ::google::protobuf::int32 ChangeReplicasTrigger::store_id() const {
+  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.store_id)
+  return store_id_;
+}
+inline void ChangeReplicasTrigger::set_store_id(::google::protobuf::int32 value) {
+  set_has_store_id();
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:proto.ChangeReplicasTrigger.store_id)
+}
+
+// optional .proto.ReplicaChangeType change_type = 3;
+inline bool ChangeReplicasTrigger::has_change_type() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void ChangeReplicasTrigger::set_has_change_type() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void ChangeReplicasTrigger::clear_has_change_type() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void ChangeReplicasTrigger::clear_change_type() {
+  change_type_ = 0;
+  clear_has_change_type();
+}
+inline ::proto::ReplicaChangeType ChangeReplicasTrigger::change_type() const {
+  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.change_type)
+  return static_cast< ::proto::ReplicaChangeType >(change_type_);
+}
+inline void ChangeReplicasTrigger::set_change_type(::proto::ReplicaChangeType value) {
+  assert(::proto::ReplicaChangeType_IsValid(value));
+  set_has_change_type();
+  change_type_ = value;
+  // @@protoc_insertion_point(field_set:proto.ChangeReplicasTrigger.change_type)
+}
+
+// repeated .proto.Replica updated_replicas = 4;
+inline int ChangeReplicasTrigger::updated_replicas_size() const {
+  return updated_replicas_.size();
+}
+inline void ChangeReplicasTrigger::clear_updated_replicas() {
+  updated_replicas_.Clear();
+}
+inline const ::proto::Replica& ChangeReplicasTrigger::updated_replicas(int index) const {
+  // @@protoc_insertion_point(field_get:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Get(index);
+}
+inline ::proto::Replica* ChangeReplicasTrigger::mutable_updated_replicas(int index) {
+  // @@protoc_insertion_point(field_mutable:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Mutable(index);
+}
+inline ::proto::Replica* ChangeReplicasTrigger::add_updated_replicas() {
+  // @@protoc_insertion_point(field_add:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::proto::Replica >&
+ChangeReplicasTrigger::updated_replicas() const {
+  // @@protoc_insertion_point(field_list:proto.ChangeReplicasTrigger.updated_replicas)
+  return updated_replicas_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::proto::Replica >*
+ChangeReplicasTrigger::mutable_updated_replicas() {
+  // @@protoc_insertion_point(field_mutable_list:proto.ChangeReplicasTrigger.updated_replicas)
+  return &updated_replicas_;
+}
+
+// -------------------------------------------------------------------
+
 // NodeList
 
 // repeated int32 nodes = 1 [packed = true];
@@ -3545,6 +3784,11 @@ TimeSeriesData::mutable_datapoints() {
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::proto::ReplicaChangeType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::proto::ReplicaChangeType>() {
+  return ::proto::ReplicaChangeType_descriptor();
+}
 template <> struct is_proto_enum< ::proto::IsolationType> : ::google::protobuf::internal::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::proto::IsolationType>() {

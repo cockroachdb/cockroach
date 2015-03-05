@@ -87,28 +87,27 @@ func (s stringSet) keys() []string {
 
 // AllMethods specifies the complete set of methods.
 var AllMethods = stringSet{
-	Contains:               {},
-	Get:                    {},
-	Put:                    {},
-	ConditionalPut:         {},
-	Increment:              {},
-	Delete:                 {},
-	DeleteRange:            {},
-	Scan:                   {},
-	EndTransaction:         {},
-	ReapQueue:              {},
-	EnqueueUpdate:          {},
-	EnqueueMessage:         {},
-	AdminSplit:             {},
-	AdminMerge:             {},
-	Batch:                  {},
-	InternalHeartbeatTxn:   {},
-	InternalGC:             {},
-	InternalPushTxn:        {},
-	InternalResolveIntent:  {},
-	InternalMerge:          {},
-	InternalTruncateLog:    {},
-	InternalChangeReplicas: {},
+	Contains:              {},
+	Get:                   {},
+	Put:                   {},
+	ConditionalPut:        {},
+	Increment:             {},
+	Delete:                {},
+	DeleteRange:           {},
+	Scan:                  {},
+	EndTransaction:        {},
+	ReapQueue:             {},
+	EnqueueUpdate:         {},
+	EnqueueMessage:        {},
+	AdminSplit:            {},
+	AdminMerge:            {},
+	Batch:                 {},
+	InternalHeartbeatTxn:  {},
+	InternalGC:            {},
+	InternalPushTxn:       {},
+	InternalResolveIntent: {},
+	InternalMerge:         {},
+	InternalTruncateLog:   {},
 }
 
 // PublicMethods specifies the set of methods accessible via the
@@ -133,13 +132,12 @@ var PublicMethods = stringSet{
 // InternalMethods specifies the set of methods accessible only
 // via the internal node RPC API.
 var InternalMethods = stringSet{
-	InternalHeartbeatTxn:   {},
-	InternalGC:             {},
-	InternalPushTxn:        {},
-	InternalResolveIntent:  {},
-	InternalMerge:          {},
-	InternalTruncateLog:    {},
-	InternalChangeReplicas: {},
+	InternalHeartbeatTxn:  {},
+	InternalGC:            {},
+	InternalPushTxn:       {},
+	InternalResolveIntent: {},
+	InternalMerge:         {},
+	InternalTruncateLog:   {},
 }
 
 // ReadMethods specifies the set of methods which read and return data.
@@ -155,23 +153,22 @@ var ReadMethods = stringSet{
 
 // WriteMethods specifies the set of methods which write data.
 var WriteMethods = stringSet{
-	Put:                    {},
-	ConditionalPut:         {},
-	Increment:              {},
-	Delete:                 {},
-	DeleteRange:            {},
-	EndTransaction:         {},
-	ReapQueue:              {},
-	EnqueueUpdate:          {},
-	EnqueueMessage:         {},
-	Batch:                  {},
-	InternalHeartbeatTxn:   {},
-	InternalGC:             {},
-	InternalPushTxn:        {},
-	InternalResolveIntent:  {},
-	InternalMerge:          {},
-	InternalTruncateLog:    {},
-	InternalChangeReplicas: {},
+	Put:                   {},
+	ConditionalPut:        {},
+	Increment:             {},
+	Delete:                {},
+	DeleteRange:           {},
+	EndTransaction:        {},
+	ReapQueue:             {},
+	EnqueueUpdate:         {},
+	EnqueueMessage:        {},
+	Batch:                 {},
+	InternalHeartbeatTxn:  {},
+	InternalGC:            {},
+	InternalPushTxn:       {},
+	InternalResolveIntent: {},
+	InternalMerge:         {},
+	InternalTruncateLog:   {},
 }
 
 // TxnMethods specifies the set of methods which leave key intents
@@ -365,8 +362,6 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalMerge, nil
 	case *InternalTruncateLogRequest:
 		return InternalTruncateLog, nil
-	case *InternalChangeReplicasRequest:
-		return InternalChangeReplicas, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -426,8 +421,6 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalMergeRequest{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogRequest{}, nil
-	case InternalChangeReplicas:
-		return &InternalChangeReplicasRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -477,8 +470,6 @@ func CreateReply(method string) (Response, error) {
 		return &InternalMergeResponse{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogResponse{}, nil
-	case InternalChangeReplicas:
-		return &InternalChangeReplicasResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }

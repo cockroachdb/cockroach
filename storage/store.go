@@ -970,17 +970,19 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		log.Fatal(err)
 	}
 
-	if cr, ok := value.(*proto.InternalChangeReplicasRequest); ok {
-		// InternalChangeReplicasRequest is special because raft needs to
-		// understand it; it cannot simply be an opaque command.
+	data, err := gogoproto.Marshal(&cmd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if etr, ok := value.(*proto.EndTransactionRequest); ok && etr.ChangeReplicasTrigger != nil {
+		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
+		// needs to understand it; it cannot simply be an opaque command.
+		crt := etr.ChangeReplicasTrigger
 		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
-			changeTypeInternalToRaft[cr.ChangeType],
-			makeRaftNodeID(cr.NodeID, cr.StoreID))
+			changeTypeInternalToRaft[crt.ChangeType],
+			makeRaftNodeID(crt.NodeID, crt.StoreID),
+			data)
 	} else {
-		data, err := gogoproto.Marshal(&cmd)
-		if err != nil {
-			log.Fatal(err)
-		}
 		s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 	}
 }
@@ -1011,6 +1013,7 @@ func (s *Store) processRaft() {
 			var cmd proto.InternalRaftCommand
 			var groupID int64
 			var commandID string
+			var callback func(error)
 
 			switch e := e.(type) {
 			case *multiraft.EventCommandCommitted:
@@ -1024,19 +1027,10 @@ func (s *Store) processRaft() {
 			case *multiraft.EventMembershipChangeCommitted:
 				groupID = int64(e.GroupID)
 				commandID = e.CommandID
-				nodeID, storeID := decodeRaftNodeID(e.NodeID)
-				cmd.RaftID = groupID
-				ok := cmd.Cmd.SetValue(&proto.InternalChangeReplicasRequest{
-					// Note that the original timestamp was lost in the transition through raft,
-					// so we use the current time of the commit.
-					RequestHeader: proto.RequestHeader{Timestamp: s.clock.Now()},
-					NodeID:        nodeID,
-					StoreID:       storeID,
-					ChangeType:    changeTypeRaftToInternal[e.ChangeType],
-					Nodes:         e.ConfState.Nodes,
-				})
-				if !ok {
-					log.Fatal("failed to set cmd value")
+				callback = e.Callback
+				err := gogoproto.Unmarshal(e.Payload, &cmd)
+				if err != nil {
+					log.Fatal(err)
 				}
 
 			default:
@@ -1050,11 +1044,16 @@ func (s *Store) processRaft() {
 			s.mu.Lock()
 			r, ok := s.ranges[groupID]
 			s.mu.Unlock()
+			var err error
 			if !ok {
-				log.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+				err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
 					groupID, cmd)
+				log.Error(err)
 			} else {
-				r.processRaftCommand(cmdIDKey(commandID), cmd)
+				err = r.processRaftCommand(cmdIDKey(commandID), cmd)
+			}
+			if callback != nil {
+				callback(err)
 			}
 
 		case <-s.stopper.ShouldStop():
