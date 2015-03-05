@@ -39,10 +39,11 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		{engine.RaftLogKey(r.Desc.RaftID, 2), ts0},
 		{engine.RaftLogKey(r.Desc.RaftID, 1), ts0},
 		{engine.RaftStateKey(r.Desc.RaftID), ts0},
+		{engine.RangeGCMetadataKey(r.Desc.RaftID), ts0},
+		{engine.RangeLastVerificationTimestampKey(r.Desc.RaftID), ts0},
 		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyBytes), ts0},
 		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyCount), ts0},
 		{engine.RangeDescriptorKey(r.Desc.StartKey), ts},
-		{engine.RangeScanMetadataKey(r.Desc.StartKey), ts0},
 		{engine.TransactionKey(r.Desc.StartKey, []byte("1234")), ts0},
 		{engine.TransactionKey(r.Desc.StartKey.Next(), []byte("5678")), ts0},
 		{engine.TransactionKey(r.Desc.EndKey.Prev(), []byte("2468")), ts0},
@@ -139,7 +140,7 @@ func TestRangeDataIterator(t *testing.T) {
 		if key := iter.Key(); !key.Equal(keys[i]) {
 			k1, ts1, _ := engine.MVCCDecodeKey(key)
 			k2, ts2, _ := engine.MVCCDecodeKey(keys[i])
-			t.Errorf("%d: key mismatch %q(%d) != %q(%d)", i, k1, ts1, k2, ts2)
+			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 		}
 		i++
 	}

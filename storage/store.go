@@ -560,9 +560,13 @@ func (s *Store) BootstrapRange() error {
 	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err
 	}
-	// Scan Metadata.
-	scanMeta := proto.NewScanMetadata(now.WallTime)
-	if err := engine.MVCCPutProto(batch, ms, engine.RangeScanMetadataKey(desc.StartKey), proto.ZeroTimestamp, nil, scanMeta); err != nil {
+	// GC Metadata.
+	gcMeta := proto.NewGCMetadata(now.WallTime)
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeGCMetadataKey(desc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+		return err
+	}
+	// Verification timestamp.
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeLastVerificationTimestampKey(desc.RaftID), proto.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
 	// Range addressing for meta1.

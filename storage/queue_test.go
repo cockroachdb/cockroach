@@ -19,9 +19,13 @@ package storage
 
 import (
 	"container/heap"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // TestQueuePriorityQueue verifies priority queue implementation.
@@ -77,33 +81,36 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	shouldQ := func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
 		return shouldAddMap[r], priorityMap[r]
 	}
+	timer := func() time.Duration {
+		return time.Millisecond
+	}
 	process := func(now proto.Timestamp, r *Range) error { return nil }
-	bq := newBaseQueue("test", shouldQ, process, 2)
-	bq.MaybeAdd(proto.ZeroTimestamp, r1)
-	bq.MaybeAdd(proto.ZeroTimestamp, r2)
+	bq := newBaseQueue("test", shouldQ, process, timer, 2)
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop(proto.ZeroTimestamp) != r2 {
+	if bq.pop() != r2 {
 		t.Error("expected r2")
 	}
-	if bq.Pop(proto.ZeroTimestamp) != r1 {
+	if bq.pop() != r1 {
 		t.Error("expected r1")
 	}
-	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
+	if r := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Add again, but this time r2 shouldn't add.
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(proto.ZeroTimestamp, r1)
-	bq.MaybeAdd(proto.ZeroTimestamp, r2)
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
 
 	// Try adding same range twice.
-	bq.MaybeAdd(proto.ZeroTimestamp, r1)
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Errorf("expected length 1; got %d", bq.Length())
 	}
@@ -111,30 +118,108 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	// Re-add r2 and update priority of r1.
 	shouldAddMap[r2] = true
 	priorityMap[r1] = 3.0
-	bq.MaybeAdd(proto.ZeroTimestamp, r1)
-	bq.MaybeAdd(proto.ZeroTimestamp, r2)
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	if bq.Length() != 2 {
 		t.Fatalf("expected length 2; got %d", bq.Length())
 	}
-	if bq.Pop(proto.ZeroTimestamp) != r1 {
+	if bq.pop() != r1 {
 		t.Error("expected r1")
 	}
-	if bq.Pop(proto.ZeroTimestamp) != r2 {
+	if bq.pop() != r2 {
 		t.Error("expected r2")
 	}
-	if r := bq.Pop(proto.ZeroTimestamp); r != nil {
+	if r := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
 	}
 
 	// Set !shouldAdd for r2 and add it; this has effect of removing it.
-	bq.MaybeAdd(proto.ZeroTimestamp, r1)
-	bq.MaybeAdd(proto.ZeroTimestamp, r2)
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	shouldAddMap[r2] = false
-	bq.MaybeAdd(proto.ZeroTimestamp, r2)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
 	if bq.Length() != 1 {
 		t.Fatalf("expected length 1; got %d", bq.Length())
 	}
-	if bq.Pop(proto.ZeroTimestamp) != r1 {
+	if bq.pop() != r1 {
 		t.Errorf("expected r1")
+	}
+}
+
+// TestBaseQueueProcess verifies that items from the queue are
+// processed according to the timer function.
+func TestBaseQueueProcess(t *testing.T) {
+	r1 := &Range{Desc: &proto.RangeDescriptor{RaftID: 1}}
+	r2 := &Range{Desc: &proto.RangeDescriptor{RaftID: 2}}
+	shouldQ := func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueue = true
+		priority = float64(r.Desc.RaftID)
+		return
+	}
+	timer := func() time.Duration {
+		return 5 * time.Millisecond
+	}
+	var processed int32
+	process := func(now proto.Timestamp, r *Range) error {
+		atomic.AddInt32(&processed, 1)
+		return nil
+	}
+	bq := newBaseQueue("test", shouldQ, process, timer, 2)
+	stopper := util.NewStopper(0)
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	bq.Start(clock, stopper)
+	defer stopper.Stop()
+
+	bq.MaybeAdd(r1, proto.ZeroTimestamp)
+	bq.MaybeAdd(r2, proto.ZeroTimestamp)
+	if pc := atomic.LoadInt32(&processed); pc != 0 {
+		t.Errorf("expected no processed ranges; got %d", pc)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	if err := util.IsTrueWithin(func() bool {
+		return atomic.LoadInt32(&processed) == 1
+	}, 5*time.Millisecond); err != nil {
+		t.Error(err)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	if err := util.IsTrueWithin(func() bool {
+		return atomic.LoadInt32(&processed) == 2
+	}, 5*time.Millisecond); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestBaseQueueAddRemove adds then removes a range; ensure range is not processed.
+func TestBaseQueueAddRemove(t *testing.T) {
+	r := &Range{Desc: &proto.RangeDescriptor{RaftID: 1}}
+	shouldQ := func(now proto.Timestamp, r *Range) (shouldQueue bool, priority float64) {
+		shouldQueue = true
+		priority = 1.0
+		return
+	}
+	timer := func() time.Duration {
+		return 1 * time.Millisecond
+	}
+	var processed int32
+	process := func(now proto.Timestamp, r *Range) error {
+		atomic.AddInt32(&processed, 1)
+		return nil
+	}
+	bq := newBaseQueue("test", shouldQ, process, timer, 2)
+	stopper := util.NewStopper(0)
+	mc := hlc.NewManualClock(0)
+	clock := hlc.NewClock(mc.UnixNano)
+	bq.Start(clock, stopper)
+	defer stopper.Stop()
+
+	bq.MaybeAdd(r, proto.ZeroTimestamp)
+	bq.MaybeRemove(r)
+
+	time.Sleep(5 * time.Millisecond)
+	if pc := atomic.LoadInt32(&processed); pc > 0 {
+		t.Errorf("expected processed count of 0; got %d", pc)
 	}
 }

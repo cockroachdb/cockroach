@@ -202,7 +202,12 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	return r, nil
 }
 
-// Start begins gossiping loop in the event this is the first
+// String returns a string representation of the range.
+func (r *Range) String() string {
+	return fmt.Sprintf("range=%d (%s-%s)", r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey)
+}
+
+// start begins gossiping loop in the event this is the first
 // range in the map and gossips config information if the range
 // contains any of the configuration maps.
 func (r *Range) start() {
@@ -264,15 +269,34 @@ func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
 	return r.Desc.ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
 }
 
-// GetScanMetadata reads the latest scan metadata for this range.
-func (r *Range) GetScanMetadata() (*proto.ScanMetadata, error) {
-	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
-	scanMeta := &proto.ScanMetadata{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, scanMeta)
+// GetGCMetadata reads the latest GC metadata for this range.
+func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
+	key := engine.RangeGCMetadataKey(r.Desc.RaftID)
+	gcMeta := &proto.GCMetadata{}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, gcMeta)
 	if err != nil {
 		return nil, err
 	}
-	return scanMeta, nil
+	return gcMeta, nil
+}
+
+// GetLastVerificationTimestamp reads the timestamp at which the range's
+// data was last verified.
+func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
+	key := engine.RangeLastVerificationTimestampKey(r.Desc.RaftID)
+	timestamp := proto.Timestamp{}
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, &timestamp)
+	if err != nil {
+		return proto.ZeroTimestamp, err
+	}
+	return timestamp, nil
+}
+
+// SetLastVerificationTimestamp writes the timestamp at which the range's
+// data was last verified.
+func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
+	key := engine.RangeLastVerificationTimestampKey(r.Desc.RaftID)
+	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
 
 // AddCmd adds a command for execution on this range. The command's
@@ -1073,9 +1097,9 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 }
 
 // InternalGC iterates through the list of keys to garbage collect
-// specified in the arguments. MVCCGarbageCollect is invoked on
-// each listed key along with the expiration timestamp. The scan
-// metadata specified in the args is persisted after GC.
+// specified in the arguments. MVCCGarbageCollect is invoked on each
+// listed key along with the expiration timestamp. The GC metadata
+// specified in the args is persisted after GC.
 func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalGCRequest, reply *proto.InternalGCResponse) {
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(batch, ms, args.Keys, args.Timestamp); err != nil {
@@ -1083,9 +1107,9 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *prot
 		return
 	}
 
-	// Store the scan metadata for this range.
-	key := engine.RangeScanMetadataKey(r.Desc.StartKey)
-	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.ScanMeta)
+	// Store the GC metadata for this range.
+	key := engine.RangeGCMetadataKey(r.Desc.RaftID)
+	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta)
 	reply.SetGoError(err)
 }
 
@@ -1289,16 +1313,22 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
 	}
 
-	// Copy the scan metadata. This will result in an inaccurate scan
-	// metadata, but it's good enough for government work. The scan
-	// metadata will be refreshed on the next scan and recomputing each
-	// separately would almost always just be unnecessary latency here.
-	scanMeta, err := r.GetScanMetadata()
+	// Copy the GC metadata.
+	gcMeta, err := r.GetGCMetadata()
 	if err != nil {
-		return util.Errorf("unable to fetch scan metadata: %s", err)
+		return util.Errorf("unable to fetch GC metadata: %s", err)
 	}
-	if err := engine.MVCCPutProto(batch, nil, engine.RangeScanMetadataKey(split.NewDesc.StartKey), proto.ZeroTimestamp, nil, scanMeta); err != nil {
-		return util.Errorf("unable to copy scan metadata: %s", err)
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeGCMetadataKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, gcMeta); err != nil {
+		return util.Errorf("unable to copy GC metadata: %s", err)
+	}
+
+	// Copy the last verification timestamp.
+	verifyTS, err := r.GetLastVerificationTimestamp()
+	if err != nil {
+		return util.Errorf("unable to fetch last verification timestamp: %s", err)
+	}
+	if err := engine.MVCCPutProto(batch, nil, engine.RangeLastVerificationTimestampKey(split.NewDesc.RaftID), proto.ZeroTimestamp, nil, &verifyTS); err != nil {
+		return util.Errorf("unable to copy last verification timestamp: %s", err)
 	}
 
 	// Compute stats for updated range.

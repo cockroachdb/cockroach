@@ -479,11 +479,11 @@ func (mvcc *MVCCMetadata) IsInline() bool {
 	return mvcc.Value != nil
 }
 
-// NewScanMetadata returns a ScanMetadata with GCMetadata initialized
-// to have a ByteCounts slice with ten byte count values set to zero.
-// Now is specified as nanoseconds since the Unix epoch.
-func NewScanMetadata(nowNanos int64) *ScanMetadata {
-	return &ScanMetadata{
+// NewGCMetadata returns a GCMetadata initialized to have a ByteCounts
+// slice with ten byte count values set to zero.  Now is specified as
+// nanoseconds since the Unix epoch.
+func NewGCMetadata(nowNanos int64) *GCMetadata {
+	return &GCMetadata{
 		LastScanNanos:     nowNanos,
 		OldestIntentNanos: gogoproto.Int64(nowNanos),
 	}

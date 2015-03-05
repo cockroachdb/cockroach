@@ -20,8 +20,11 @@ package storage
 import (
 	"sync/atomic"
 	"time"
+	"unsafe"
 
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -31,17 +34,15 @@ import (
 // or busy stores, a recovery queue for ranges with dead replicas,
 // etc.
 type rangeQueue interface {
-	// Next returns the highest priority range from the queue. If the
-	// queue is empty, returns nil.
-	Next() *Range
+	// Start launches a goroutine to process the contents of the queue.
+	// The provided stopper is used to signal that the goroutine should exit.
+	Start(*hlc.Clock, *util.Stopper)
 	// MaybeAdd adds the range to the queue if the range meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
 	MaybeAdd(*Range)
 	// MaybeRemove removes the range from the queue if it is present.
 	MaybeRemove(*Range)
-	// Clear clears all ranges from the queue.
-	Clear()
 }
 
 // A rangeIterator provides access to a sequence of ranges to consider
@@ -58,15 +59,23 @@ type rangeIterator interface {
 	Reset()
 }
 
+// A storeStats holds statistics over the entire store. Stats is an
+// aggregation of MVCC stats across all ranges in the store.
+type storeStats struct {
+	RangeCount int
+	MVCC       engine.MVCCStats
+}
+
 // A rangeScanner iterates over ranges at a measured pace in order to
 // complete approximately one full scan per interval. Each range is
 // tested for inclusion in a sequence of prioritized range queues.
 type rangeScanner struct {
-	interval time.Duration // Duration interval for scan loop
-	iter     rangeIterator // Iterator to implement scan of ranges
-	queues   []rangeQueue  // Range queues managed by this scanner
-	removed  chan *Range   // Ranges to remove from queues
-	count    int64         // Count of times through the scanning loop
+	interval time.Duration  // Duration interval for scan loop
+	iter     rangeIterator  // Iterator to implement scan of ranges
+	queues   []rangeQueue   // Range queues managed by this scanner
+	removed  chan *Range    // Ranges to remove from queues
+	count    int64          // Count of times through the scanning loop
+	stats    unsafe.Pointer // Latest store stats object; updated atomically
 	stopper  *util.Stopper
 }
 
@@ -78,21 +87,30 @@ func newRangeScanner(interval time.Duration, iter rangeIterator, queues []rangeQ
 		iter:     iter,
 		queues:   queues,
 		removed:  make(chan *Range, 10),
+		stats:    unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
 		stopper:  util.NewStopper(1),
 	}
 }
 
 // Start spins up the scanning loop. Call Stop() to exit the loop.
-func (rs *rangeScanner) Start() {
+func (rs *rangeScanner) Start(clock *hlc.Clock) {
+	for _, queue := range rs.queues {
+		queue.Start(clock, rs.stopper)
+	}
 	go rs.scanLoop()
 }
 
 // Stop stops the scanning loop.
 func (rs *rangeScanner) Stop() {
 	rs.stopper.Stop()
-	for _, q := range rs.queues {
-		q.Clear()
-	}
+}
+
+// Stats returns store stats from the most recently completed scan of
+// all ranges. A scanner which hasn't fully scanned the ranges will
+// return a stats object with MVCC stats empty and only an estimate
+// for RangeCount.
+func (rs *rangeScanner) Stats() storeStats {
+	return *(*storeStats)(atomic.LoadPointer(&rs.stats))
 }
 
 // Count returns the number of times the scanner has cycled through
@@ -113,6 +131,7 @@ func (rs *rangeScanner) RemoveRange(rng *Range) {
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *rangeScanner) scanLoop() {
 	start := time.Now()
+	stats := &storeStats{}
 
 	for {
 		elapsed := time.Now().Sub(start)
@@ -134,11 +153,17 @@ func (rs *rangeScanner) scanLoop() {
 				for _, q := range rs.queues {
 					q.MaybeAdd(rng)
 				}
+				stats.RangeCount++
+				stats.MVCC.Accumulate(rng.stats.GetMVCC())
 			} else {
-				// Otherwise, reset iteration and start time.
+				// Otherwise, we're done with the iteration. Reset iteration and start time.
 				rs.iter.Reset()
 				start = time.Now()
+				// Increment iteration counter.
 				atomic.AddInt64(&rs.count, 1)
+				// Store the most recent scan results in the scanner's stats.
+				atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
+				stats = &storeStats{}
 				log.V(6).Infof("reset range scan iteration")
 			}
 

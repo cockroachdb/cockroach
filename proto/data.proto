@@ -231,10 +231,10 @@ message MVCCMetadata {
   optional Value value = 6;
 }
 
-// ScanMetadata holds information about last complete key/value scan
-// of a range.
-message ScanMetadata {
-  // The last scan timestamp in nanoseconds since the Unix epoch.
+// GCMetadata holds information about the last complete key/value
+// garbage collection scan of a range.
+message GCMetadata {
+  // The last GC scan timestamp in nanoseconds since the Unix epoch.
   optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];
   // The oldest unresolved write intent in nanoseconds since epoch.
   // Null if there are no unresolved write intents.

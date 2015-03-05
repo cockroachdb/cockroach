@@ -57,7 +57,6 @@ func TestKeyAddress(t *testing.T) {
 		{proto.Key("123"), proto.Key("123")},
 		{MakeKey(KeyConfigAccountingPrefix, proto.Key("foo")), proto.Key("\x00acctfoo")},
 		{RangeDescriptorKey(proto.Key("foo")), proto.Key("foo")},
-		{RangeScanMetadataKey(proto.Key("bar")), proto.Key("bar")},
 		{TransactionKey(proto.Key("baz"), proto.Key(uuid.New())), proto.Key("baz")},
 		{TransactionKey(KeyMax, proto.Key(uuid.New())), KeyMax},
 	}

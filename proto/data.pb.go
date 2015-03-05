@@ -564,10 +564,10 @@ func (m *MVCCMetadata) GetValue() *Value {
 	return nil
 }
 
-// ScanMetadata holds information about last complete key/value scan
-// of a range.
-type ScanMetadata struct {
-	// The last scan timestamp in nanoseconds since the Unix epoch.
+// GCMetadata holds information about last complete key/value garbage
+// collection scan of a range.
+type GCMetadata struct {
+	// The last GC scan timestamp in nanoseconds since the Unix epoch.
 	LastScanNanos int64 `protobuf:"varint,1,opt,name=last_scan_nanos" json:"last_scan_nanos"`
 	// The oldest unresolved write intent in nanoseconds since epoch.
 	// Null if there are no unresolved write intents.
@@ -575,18 +575,18 @@ type ScanMetadata struct {
 	XXX_unrecognized  []byte `json:"-"`
 }
 
-func (m *ScanMetadata) Reset()         { *m = ScanMetadata{} }
-func (m *ScanMetadata) String() string { return proto1.CompactTextString(m) }
-func (*ScanMetadata) ProtoMessage()    {}
+func (m *GCMetadata) Reset()         { *m = GCMetadata{} }
+func (m *GCMetadata) String() string { return proto1.CompactTextString(m) }
+func (*GCMetadata) ProtoMessage()    {}
 
-func (m *ScanMetadata) GetLastScanNanos() int64 {
+func (m *GCMetadata) GetLastScanNanos() int64 {
 	if m != nil {
 		return m.LastScanNanos
 	}
 	return 0
 }
 
-func (m *ScanMetadata) GetOldestIntentNanos() int64 {
+func (m *GCMetadata) GetOldestIntentNanos() int64 {
 	if m != nil && m.OldestIntentNanos != nil {
 		return *m.OldestIntentNanos
 	}
