@@ -231,8 +231,8 @@ message MVCCMetadata {
   optional Value value = 6;
 }
 
-// GCMetadata holds information about last complete key/value garbage
-// collection scan of a range.
+// GCMetadata holds information about the last complete key/value
+// garbage collection scan of a range.
 message GCMetadata {
   // The last GC scan timestamp in nanoseconds since the Unix epoch.
   optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];

@@ -241,7 +241,7 @@ func (bq *baseQueue) pop() *Range {
 	return item.value
 }
 
-// remove removes an element from teh priority queue by index. Expects
+// remove removes an element from the priority queue by index. Expects
 // mutex to be locked.
 func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*rangeItem)

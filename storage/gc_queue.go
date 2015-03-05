@@ -223,7 +223,6 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	// Store current timestamp as last verification for this range, as
 	// we've just successfully scanned.
-	// TODO(spencer): TEST THIS BEFORE CHECKIN.
 	if err := rng.SetLastVerificationTimestamp(now); err != nil {
 		log.Errorf("failed to set last verification timestamp for range %s: %s", rng, err)
 	}
