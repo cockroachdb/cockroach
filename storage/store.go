@@ -348,11 +348,6 @@ func (s *Store) Start() error {
 	}
 	s.multiraft = mr
 
-	// Start Raft processing goroutines.
-	s.multiraft.Start()
-	s.stopper.Add(1)
-	go s.processRaft()
-
 	// Iterate over all range descriptors, using just committed
 	// versions. Uncommitted intents which have been abandoned due to a
 	// split crashing halfway will simply be resolved on the next split
@@ -377,15 +372,25 @@ func (s *Store) Start() error {
 		if err != nil {
 			return false, err
 		}
-		if err = s.multiraft.CreateGroup(uint64(rng.Desc.RaftID)); err != nil {
-			return false, err
-		}
+		// Note that we do not create raft groups at this time; they will be created
+		// on-demand the first time they are needed. This helps reduce the amount of
+		// election-related traffic in a cold start.
+		// Raft initialization occurs when we propose a command on this range or
+		// receive a raft message addressed to it.
+		// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+		// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+		// and initialize those groups.
 		return false, nil
 	}); err != nil {
 		return err
 	}
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
+
+	// Start Raft processing goroutines
+	mr.Start()
+	s.stopper.Add(1)
+	go s.processRaft()
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
