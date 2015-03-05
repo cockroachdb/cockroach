@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
@@ -62,6 +64,10 @@ func TestStatusLocalStacks(t *testing.T) {
 // TestStatusLocal verifies that local node info is exported.
 // via the /_status/local/ endpoint.
 func TestStatusLocal(t *testing.T) {
+	// If not on a go release branch, the below compare will fail.
+	if strings.HasPrefix(runtime.Version(), "devel") {
+		t.Skip()
+	}
 	s := startStatusServer()
 	defer s.Close()
 	body, err := getText(s.URL + statusLocalKeyPrefix)
@@ -78,6 +84,6 @@ func TestStatusLocal(t *testing.T) {
   }
 }`
 	if matches, err := regexp.MatchString(pat, string(body)); !matches || err != nil {
-		t.Errorf("expected match on %s; got %s: %s", pat, string(body), err)
+		t.Errorf("expected match on %s; got %s: %v", pat, string(body), err)
 	}
 }
