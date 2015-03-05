@@ -66,8 +66,8 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 				}
 				first = false
 				for j := 0; j <= int(src.Int31n(10)); j++ {
-					key := []byte(util.RandString(src, 10))
-					val := []byte(util.RandString(src, int(src.Int31n(valBytes))))
+					key := util.RandBytes(src, 10)
+					val := util.RandBytes(src, int(src.Int31n(valBytes)))
 					req := &proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}}
 					resp := &proto.PutResponse{}
 					if err := txn.Call(proto.Put, req, resp); err != nil {

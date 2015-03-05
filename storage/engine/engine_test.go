@@ -713,7 +713,7 @@ func TestApproximateSize(t *testing.T) {
 		)
 		for i := 0; i < count; i++ {
 			keys[i] = []byte(fmt.Sprintf("key%8d", i))
-			values[i] = []byte(util.RandString(rand, valueLen))
+			values[i] = util.RandBytes(rand, valueLen)
 		}
 
 		insertKeysAndValues(keys, values, engine, t)
