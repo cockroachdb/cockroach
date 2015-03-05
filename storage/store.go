@@ -375,6 +375,11 @@ func (s *Store) Start() error {
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
 		// election-related traffic in a cold start.
+		// Raft initialization occurs when we propose a command on this range or
+		// receive a raft message addressed to it.
+		// TODO(bdarnell): Also initialize raft groups when read leases are needed.
+		// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
+		// and initialize those groups.
 		return false, nil
 	}); err != nil {
 		return err
