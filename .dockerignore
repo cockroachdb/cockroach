@@ -1,4 +1,3 @@
-_vendor
 cockroach
 build/deploy
 .git/FETCH_HEAD

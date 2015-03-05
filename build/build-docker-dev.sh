@@ -5,6 +5,8 @@ cd "$(dirname $0)/.."
 # Verify docker installation.
 ./build/verify-docker.sh
 
+cp -p GLOCKFILE build/devbase
+
 # Create the docker cockroach image.
 echo "Building Docker Cockroach images..."
 docker build -t "cockroachdb/cockroach-devbase" ./build/devbase
