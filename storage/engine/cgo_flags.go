@@ -6,6 +6,7 @@ import (
 	// symbols.
 	_ "github.com/cockroachdb/c-protobuf"
 	_ "github.com/cockroachdb/c-rocksdb"
+	_ "github.com/cockroachdb/c-snappy"
 )
 
 // #cgo CXXFLAGS: -std=c++11

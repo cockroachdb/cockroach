@@ -25,6 +25,7 @@ code.google.com/p/go-uuid/uuid
 code.google.com/p/snappy-go/snappy
 github.com/cockroachdb/c-protobuf
 github.com/cockroachdb/c-rocksdb
+github.com/cockroachdb/c-snappy
 github.com/coreos/etcd/Godeps/_workspace/src/code.google.com/p/gogoprotobuf/proto
 github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context
 github.com/coreos/etcd/raft
