@@ -104,11 +104,13 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 	for i := 0; i < numReplicas; i++ {
 		gs := c.storages[firstNode+i].GroupStorage(groupID)
 		memStorage := gs.(*blockableGroupStorage).s.(*raft.MemoryStorage)
-		memStorage.SetHardState(raftpb.HardState{
+		if err := memStorage.SetHardState(raftpb.HardState{
 			Commit: 10,
 			Term:   5,
-		})
-		memStorage.ApplySnapshot(raftpb.Snapshot{
+		}); err != nil {
+			c.t.Fatal(err)
+		}
+		if err := memStorage.ApplySnapshot(raftpb.Snapshot{
 			Metadata: raftpb.SnapshotMetadata{
 				ConfState: raftpb.ConfState{
 					Nodes: replicaIDs,
@@ -116,7 +118,9 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 				Index: 10,
 				Term:  5,
 			},
-		})
+		}); err != nil {
+			c.t.Fatal(err)
+		}
 
 		node := c.nodes[firstNode+i]
 		err := node.CreateGroup(groupID)

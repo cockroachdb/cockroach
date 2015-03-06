@@ -28,13 +28,16 @@ import (
 )
 
 // tempUnixFile creates a temporary file for use with a unix domain socket.
+// TODO(bdarnell): use TempDir instead to make this atomic.
 func tempUnixFile() string {
 	f, err := ioutil.TempFile("", "unix-socket")
 	if err != nil {
 		log.Fatalf("unable to create temp file: %s", err)
 	}
 	f.Close()
-	os.Remove(f.Name())
+	if err := os.Remove(f.Name()); err != nil {
+		log.Fatalf("unable to remove temp file: %s", err)
+	}
 	return f.Name()
 }
 

@@ -202,13 +202,16 @@ func (s *state) fanoutHeartbeat(req *RaftMessageRequest) {
 		// some group, so we need to respond so it can activate the recovery process.
 		log.Warningf("node %v: not fanning out heartbeat from unknown node %v (but responding anyway)",
 			s.nodeID, fromID)
-		s.Transport.Send(fromID, &RaftMessageRequest{
+		err := s.Transport.Send(fromID, &RaftMessageRequest{
 			GroupID: math.MaxUint64,
 			Message: raftpb.Message{
 				From: uint64(s.nodeID),
 				Type: raftpb.MsgHeartbeatResp,
 			},
 		})
+		if err != nil {
+			log.Errorf("node %v: error sending heartbeat response to %v", s.nodeID, fromID)
+		}
 		return
 	}
 	cnt := 0
@@ -296,7 +299,11 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			m.multiNode.Propose(context.Background(), uint64(groupID), encodeCommand(commandID, command))
+			err := m.multiNode.Propose(context.Background(), uint64(groupID),
+				encodeCommand(commandID, command))
+			if err != nil {
+				log.Errorf("node %v: error proposing command to group %v: %s", m.nodeID, groupID, err)
+			}
 		},
 		ch: ch,
 	}
@@ -313,12 +320,17 @@ func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
 		groupID:   groupID,
 		commandID: commandID,
 		fn: func() {
-			m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
+			err := m.multiNode.ProposeConfChange(context.Background(), uint64(groupID),
 				raftpb.ConfChange{
 					Type:    changeType,
 					NodeID:  uint64(nodeID),
 					Context: encodeCommand(commandID, payload),
 				})
+			if err != nil {
+				log.Errorf("node %v: error proposing membership change to node %v: %s", m.nodeID,
+					groupID, err)
+			}
+
 		},
 		ch: ch,
 	}
@@ -510,11 +522,14 @@ func (s *state) coalescedHeartbeat() {
 			To:   uint64(nodeID),
 			Type: raftpb.MsgHeartbeat,
 		}
-		s.Transport.Send(nodeID,
+		err := s.Transport.Send(nodeID,
 			&RaftMessageRequest{
 				GroupID: math.MaxUint64, // irrelevant
 				Message: msg,
 			})
+		if err != nil {
+			log.Errorf("node %v: error sending coalesced heartbeat to %v: %s", s.nodeID, nodeID, err)
+		}
 	}
 }
 
@@ -560,17 +575,17 @@ func (s *state) createGroup(groupID uint64) error {
 	if err != nil {
 		return err
 	}
-	for _, nodeID := range cs.Nodes {
-		s.addNode(NodeID(nodeID), groupID)
+	if err := s.multiNode.CreateGroup(groupID, nil, gs); err != nil {
+		return err
 	}
-
-	s.multiNode.CreateGroup(groupID, nil, gs)
 	s.groups[groupID] = &group{
 		pending: map[string]*proposal{},
 	}
 
 	for _, nodeID := range cs.Nodes {
-		s.addNode(NodeID(nodeID), groupID)
+		if err := s.addNode(NodeID(nodeID), groupID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -582,7 +597,10 @@ func (s *state) removeGroup(op *removeGroupOp) {
 		op.ch <- nil
 		return
 	}
-	s.multiNode.RemoveGroup(op.groupID)
+	if err := s.multiNode.RemoveGroup(op.groupID); err != nil {
+		op.ch <- err
+		return
+	}
 	gs := s.Storage.GroupStorage(op.groupID)
 	_, cs, err := gs.InitialState()
 	if err != nil {
@@ -791,7 +809,9 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			nodeID := NodeID(msg.To)
 			if _, ok := s.nodes[nodeID]; !ok {
 				log.V(4).Infof("node %v: connecting to new node %v", s.nodeID, nodeID)
-				s.addNode(nodeID, groupID)
+				if err := s.addNode(nodeID, groupID); err != nil {
+					log.Errorf("node %v: error adding node %v", s.nodeID, nodeID)
+				}
 			}
 			err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
 			snapStatus := raft.SnapshotFinish

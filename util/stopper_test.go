@@ -18,7 +18,6 @@
 package util
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -59,12 +58,15 @@ func TestStopperMultipleStopees(t *testing.T) {
 		}()
 	}
 
-	var done int64
+	done := make(chan struct{})
+	go func() {
+		s.Stop()
+		close(done)
+	}()
 
-	go IsTrueWithin(func() bool {
-		return atomic.LoadInt64(&done) > 0
-	}, 10*time.Millisecond)
-
-	s.Stop()
-	atomic.AddInt64(&done, 1)
+	select {
+	case <-done:
+	case <-time.After(10 * time.Millisecond):
+		t.Errorf("timed out waiting for stop")
+	}
 }
