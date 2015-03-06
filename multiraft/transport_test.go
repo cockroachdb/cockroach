@@ -18,6 +18,7 @@
 package multiraft
 
 import (
+	"log"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -68,7 +69,9 @@ func (lt *localInterceptableTransport) start() {
 			if !ok {
 				continue
 			}
-			srv.RaftMessage(msg, nil)
+			if err := srv.RaftMessage(msg, nil); err != nil {
+				log.Fatal(err)
+			}
 
 		case <-lt.stopper.ShouldStop():
 			return

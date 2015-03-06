@@ -109,6 +109,10 @@ acceptance:
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 
+.PHONY: errcheck
+errcheck:
+	errcheck -ignore='os:Close,net:Close,code.google.com/p/biogo.store/interval:.*,io:Write,bytes:Write.*' $(PKG)
+
 .PHONY: clean
 clean:
 	$(GO) clean -i github.com/cockroachdb/...
