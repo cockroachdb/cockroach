@@ -77,7 +77,7 @@ func (db *testSender) Send(call *client.Call) {
 	// Lookup range and direct request.
 	header := call.Args.Header()
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
-		header.RaftID = rng.Desc.RaftID
+		header.RaftID = rng.Desc().RaftID
 		header.Replica = *rng.GetReplica()
 		db.store.ExecuteCmd(call.Method, call.Args, call.Reply)
 	} else {
@@ -179,17 +179,16 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 func TestRangeSliceSort(t *testing.T) {
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
-		key := proto.Key(fmt.Sprintf("foo%d", i))
-		rs = append(rs, &Range{
-			Desc: &proto.RangeDescriptor{StartKey: key},
-		})
+		r := &Range{}
+		r.SetDesc(&proto.RangeDescriptor{StartKey: proto.Key(fmt.Sprintf("foo%d", i))})
+		rs = append(rs, r)
 	}
 
 	sort.Sort(rs)
 	for i := 0; i < 5; i++ {
 		expectedKey := proto.Key(fmt.Sprintf("foo%d", i))
-		if !bytes.Equal(rs[i].Desc.StartKey, expectedKey) {
-			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Desc.StartKey)
+		if !bytes.Equal(rs[i].Desc().StartKey, expectedKey) {
+			t.Errorf("Expected %s, got %s", expectedKey, rs[i].Desc().StartKey)
 		}
 	}
 }
@@ -294,7 +293,7 @@ func TestStoreRangeIterator(t *testing.T) {
 	iter := newStoreRangeIterator(store)
 	for pass := 0; pass < 2; pass++ {
 		for i := 1; iter.estimatedCount() > 0; i++ {
-			if rng := iter.next(); rng == nil || rng.Desc.RaftID != int64(i) {
+			if rng := iter.next(); rng == nil || rng.Desc().RaftID != int64(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
 		}
@@ -316,7 +315,7 @@ func TestStoreRangeIterator(t *testing.T) {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 	if r := iter.next(); r == nil || r != rng {
-		t.Errorf("expected r==rng; got %d", r.Desc.RaftID)
+		t.Errorf("expected r==rng; got %d", r.Desc().RaftID)
 	}
 	if ec := iter.estimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
@@ -325,8 +324,8 @@ func TestStoreRangeIterator(t *testing.T) {
 	// Now, remove the next range in the iteration but verify iteration
 	// continues as expected.
 	rng = store.LookupRange(proto.Key("a01"), proto.Key("a01"))
-	if rng.Desc.RaftID != 2 {
-		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc.RaftID)
+	if rng.Desc().RaftID != 2 {
+		t.Errorf("expected fetch of raftID=2; got %d", rng.Desc().RaftID)
 	}
 	if err := store.RemoveRange(rng); err != nil {
 		t.Error(err)
@@ -335,8 +334,8 @@ func TestStoreRangeIterator(t *testing.T) {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 	// Verify we skip removed range (id=2).
-	if r := iter.next(); r.Desc.RaftID != 3 {
-		t.Errorf("expected raftID=3; got %d", r.Desc.RaftID)
+	if r := iter.next(); r.Desc().RaftID != 3 {
+		t.Errorf("expected raftID=3; got %d", r.Desc().RaftID)
 	}
 	if ec := iter.estimatedCount(); ec != 7 {
 		t.Errorf("expected 7 remaining; got %d", ec)
@@ -492,7 +491,7 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range 
 	if rng == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc.EndKey, rng.Desc.Replicas)
+	desc, err := store.NewRangeDescriptor(splitKey, rng.Desc().EndKey, rng.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -558,28 +557,28 @@ func TestStoreRangesByKey(t *testing.T) {
 	r4 := splitTestRange(store, proto.Key("X"), proto.Key("ZZ"), t)
 
 	if r := store.LookupRange(proto.Key("0"), nil); r != r0 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r0.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r0.Desc())
 	}
 	if r := store.LookupRange(proto.Key("B"), nil); r != r1 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r1.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r1.Desc())
 	}
 	if r := store.LookupRange(proto.Key("C"), nil); r != r2 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r2.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
 	if r := store.LookupRange(proto.Key("M"), nil); r != r2 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r2.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r2.Desc())
 	}
 	if r := store.LookupRange(proto.Key("X"), nil); r != r3 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r3.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
 	if r := store.LookupRange(proto.Key("Z"), nil); r != r3 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r3.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r3.Desc())
 	}
 	if r := store.LookupRange(proto.Key("ZZ"), nil); r != r4 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r4.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
 	if r := store.LookupRange(engine.KeyMax[:engine.KeyMaxLength-1], nil); r != r4 {
-		t.Errorf("mismatched range %+v != %+v", r.Desc, r4.Desc)
+		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
 	if store.LookupRange(engine.KeyMax, nil) != nil {
 		t.Errorf("expected engine.KeyMax to not have an associated range")

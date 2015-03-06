@@ -182,7 +182,7 @@ func (ls *LocalSender) lookupReplica(start, end proto.Key) (int64, *proto.Replic
 	defer ls.mu.RUnlock()
 	for _, store := range ls.storeMap {
 		if rng := store.LookupRange(start, end); rng != nil {
-			return rng.Desc.RaftID, rng.GetReplica(), nil
+			return rng.Desc().RaftID, rng.GetReplica(), nil
 		}
 	}
 	return 0, nil, proto.NewRangeKeyMismatchError(start, end, nil)

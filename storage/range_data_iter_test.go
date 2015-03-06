@@ -34,21 +34,21 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		key proto.Key
 		ts  proto.Timestamp
 	}{
-		{engine.ResponseCacheKey(r.Desc.RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
-		{engine.ResponseCacheKey(r.Desc.RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
-		{engine.RaftLogKey(r.Desc.RaftID, 2), ts0},
-		{engine.RaftLogKey(r.Desc.RaftID, 1), ts0},
-		{engine.RaftStateKey(r.Desc.RaftID), ts0},
-		{engine.RangeGCMetadataKey(r.Desc.RaftID), ts0},
-		{engine.RangeLastVerificationTimestampKey(r.Desc.RaftID), ts0},
-		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyBytes), ts0},
-		{engine.RangeStatKey(r.Desc.RaftID, engine.StatKeyCount), ts0},
-		{engine.RangeDescriptorKey(r.Desc.StartKey), ts},
-		{engine.TransactionKey(r.Desc.StartKey, []byte("1234")), ts0},
-		{engine.TransactionKey(r.Desc.StartKey.Next(), []byte("5678")), ts0},
-		{engine.TransactionKey(r.Desc.EndKey.Prev(), []byte("2468")), ts0},
-		{r.Desc.StartKey.Next(), ts},
-		{r.Desc.EndKey.Prev(), ts},
+		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
+		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{engine.RaftLogKey(r.Desc().RaftID, 2), ts0},
+		{engine.RaftLogKey(r.Desc().RaftID, 1), ts0},
+		{engine.RaftStateKey(r.Desc().RaftID), ts0},
+		{engine.RangeGCMetadataKey(r.Desc().RaftID), ts0},
+		{engine.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
+		{engine.RangeStatKey(r.Desc().RaftID, engine.StatKeyBytes), ts0},
+		{engine.RangeStatKey(r.Desc().RaftID, engine.StatKeyCount), ts0},
+		{engine.RangeDescriptorKey(r.Desc().StartKey), ts},
+		{engine.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
+		{engine.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
+		{engine.TransactionKey(r.Desc().EndKey.Prev(), []byte("2468")), ts0},
+		{r.Desc().StartKey.Next(), ts},
+		{r.Desc().EndKey.Prev(), ts},
 	}
 
 	keys := []proto.EncodedKey{}
@@ -76,13 +76,9 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 	// Adjust the range descriptor to avoid existing data such as meta
 	// records and config entries during the iteration. This is a rather
 	// nasty little hack, but since it's test code, meh.
-	tc.rng.Lock()
-	tc.store.mu.Lock()
-	newDesc := *tc.rng.Desc
+	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("a")
-	tc.rng.Desc = &newDesc
-	tc.store.mu.Unlock()
-	tc.rng.Unlock()
+	tc.rng.SetDesc(&newDesc)
 
 	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
 	defer iter.Close()
@@ -104,14 +100,10 @@ func TestRangeDataIterator(t *testing.T) {
 	defer tc.Stop()
 
 	// See notes in EmptyRange test method for adjustment to descriptor.
-	tc.rng.Lock()
-	tc.store.mu.Lock()
-	newDesc := *tc.rng.Desc
+	newDesc := *tc.rng.Desc()
 	newDesc.StartKey = proto.Key("b")
 	newDesc.EndKey = proto.Key("c")
-	tc.rng.Desc = &newDesc
-	tc.store.mu.Unlock()
-	tc.rng.Unlock()
+	tc.rng.SetDesc(&newDesc)
 
 	// Create two more ranges, one before the test range and one after.
 	preRng := createRange(tc.store, 2, proto.Key("a"), proto.Key("b"))

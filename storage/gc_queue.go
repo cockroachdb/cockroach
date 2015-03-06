@@ -128,9 +128,9 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 
 	gcArgs := &proto.InternalGCRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:       rng.Desc.StartKey,
+			Key:       rng.Desc().StartKey,
 			Timestamp: now,
-			RaftID:    rng.Desc.RaftID,
+			RaftID:    rng.Desc().RaftID,
 		},
 	}
 	var mu sync.Mutex
@@ -300,11 +300,11 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 	// This could be the case if the zone config is new and the range
 	// hasn't been split yet along the new boundary.
 	var gc *proto.GCPolicy
-	if err = configMap.VisitPrefixesHierarchically(rng.Desc.StartKey, func(start, end proto.Key, config interface{}) (bool, error) {
+	if err = configMap.VisitPrefixesHierarchically(rng.Desc().StartKey, func(start, end proto.Key, config interface{}) (bool, error) {
 		zone := config.(*proto.ZoneConfig)
 		if zone.GC != nil {
 			rng.RLock()
-			isCovered := !end.Less(rng.Desc.EndKey)
+			isCovered := !end.Less(rng.Desc().EndKey)
 			rng.RUnlock()
 			if !isCovered {
 				return false, util.Errorf("range is only partially covered by zone %s (%q-%q); must wait for range split", config, start, end)
@@ -320,7 +320,7 @@ func (gcq *gcQueue) lookupGCPolicy(rng *Range) (proto.GCPolicy, error) {
 
 	// We should always match _at least_ the default GC.
 	if gc == nil {
-		return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc.StartKey)
+		return proto.GCPolicy{}, util.Errorf("no zone for range with start key %q", rng.Desc().StartKey)
 	}
 	return *gc, nil
 }

@@ -50,11 +50,11 @@ func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.Ran
 	rangeA := store.LookupRange([]byte("a"), nil)
 	rangeB := store.LookupRange([]byte("c"), nil)
 
-	if bytes.Equal(rangeA.Desc.StartKey, rangeB.Desc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc.StartKey, rangeB.Desc.StartKey)
+	if bytes.Equal(rangeA.Desc().StartKey, rangeB.Desc().StartKey) {
+		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeB.Desc().StartKey)
 	}
 
-	return rangeA.Desc, rangeB.Desc, nil
+	return rangeA.Desc(), rangeB.Desc(), nil
 }
 
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges
@@ -80,7 +80,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	rangeB := store.LookupRange([]byte("c"), nil)
 
 	if !reflect.DeepEqual(rangeA, rangeB) {
-		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc, rangeB.Desc)
+		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
 	}
 }
 
@@ -130,43 +130,43 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	rangeB := store.LookupRange([]byte("c"), nil)
 
 	if !reflect.DeepEqual(rangeA, rangeB) {
-		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc, rangeB.Desc)
+		t.Fatalf("ranges were not merged %+v=%+v", rangeA.Desc(), rangeB.Desc())
 	}
-	if !bytes.Equal(rangeA.Desc.StartKey, engine.KeyMin) {
-		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc.StartKey, engine.KeyMin)
+	if !bytes.Equal(rangeA.Desc().StartKey, engine.KeyMin) {
+		t.Fatalf("The start key is not equal to KeyMin %q=%q", rangeA.Desc().StartKey, engine.KeyMin)
 	}
-	if !bytes.Equal(rangeA.Desc.EndKey, engine.KeyMax) {
-		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc.EndKey, engine.KeyMax)
+	if !bytes.Equal(rangeA.Desc().EndKey, engine.KeyMax) {
+		t.Fatalf("The end key is not equal to KeyMax %q=%q", rangeA.Desc().EndKey, engine.KeyMax)
 	}
 
 	// Try to get values from after the merge.
-	gArgs, gReply = getArgs([]byte("aaa"), rangeA.Desc.RaftID, store.StoreID())
+	gArgs, gReply = getArgs([]byte("aaa"), rangeA.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
-	gArgs, gReply = getArgs([]byte("ccc"), rangeB.Desc.RaftID, store.StoreID())
+	gArgs, gReply = getArgs([]byte("ccc"), rangeB.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
 
 	// Put new values after the merge on both sides.
-	pArgs, pReply = putArgs([]byte("aaaa"), content, rangeA.Desc.RaftID, store.StoreID())
+	pArgs, pReply = putArgs([]byte("aaaa"), content, rangeA.Desc().RaftID, store.StoreID())
 	if err = store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
-	pArgs, pReply = putArgs([]byte("cccc"), content, rangeB.Desc.RaftID, store.StoreID())
+	pArgs, pReply = putArgs([]byte("cccc"), content, rangeB.Desc().RaftID, store.StoreID())
 	if err = store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to get the newly placed values.
-	gArgs, gReply = getArgs([]byte("aaaa"), rangeA.Desc.RaftID, store.StoreID())
+	gArgs, gReply = getArgs([]byte("aaaa"), rangeA.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil || !bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
-	gArgs, gReply = getArgs([]byte("cccc"), rangeA.Desc.RaftID, store.StoreID())
+	gArgs, gReply = getArgs([]byte("cccc"), rangeA.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
@@ -212,17 +212,17 @@ func TestStoreRangeMergeDistantRanges(t *testing.T) {
 	rangeB := store.LookupRange([]byte("c"), nil)
 	rangeC := store.LookupRange([]byte("e"), nil)
 
-	if bytes.Equal(rangeA.Desc.StartKey, rangeB.Desc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc.StartKey, rangeB.Desc.StartKey)
+	if bytes.Equal(rangeA.Desc().StartKey, rangeB.Desc().StartKey) {
+		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeB.Desc().StartKey)
 	}
-	if bytes.Equal(rangeB.Desc.StartKey, rangeC.Desc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeB.Desc.StartKey, rangeC.Desc.StartKey)
+	if bytes.Equal(rangeB.Desc().StartKey, rangeC.Desc().StartKey) {
+		log.Errorf("split ranges keys are equal %q!=%q", rangeB.Desc().StartKey, rangeC.Desc().StartKey)
 	}
-	if bytes.Equal(rangeA.Desc.StartKey, rangeC.Desc.StartKey) {
-		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc.StartKey, rangeC.Desc.StartKey)
+	if bytes.Equal(rangeA.Desc().StartKey, rangeC.Desc().StartKey) {
+		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeC.Desc().StartKey)
 	}
 
-	argsMerge, replyMerge := adminMergeArgs(rangeC.Desc.StartKey, *rangeC.Desc, 1, store.StoreID())
+	argsMerge, replyMerge := adminMergeArgs(rangeC.Desc().StartKey, *rangeC.Desc(), 1, store.StoreID())
 	rangeA.AdminMerge(argsMerge, replyMerge)
 	if replyMerge.Error == nil {
 		t.Fatal("Should not be able to merge two ranges that are not adjacent.")

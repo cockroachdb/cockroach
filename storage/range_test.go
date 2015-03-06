@@ -159,7 +159,7 @@ func (tc *testContext) Start(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tc.rangeID = tc.rng.Desc.RaftID
+		tc.rangeID = tc.rng.Desc().RaftID
 	}
 }
 
@@ -696,7 +696,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		be.block(key1)
 		cmd1Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc.RaftID,
+			method, args, reply := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RaftID,
 				tc.store.StoreID())
 			err := tc.rng.AddCmd(method, args, reply, true)
 			if err != nil {
@@ -708,7 +708,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc.RaftID,
+			method, args, reply := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RaftID,
 				tc.store.StoreID())
 			err := tc.rng.AddCmd(method, args, reply, true)
 			if err != nil {
@@ -720,7 +720,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		// Next, try read for a non-impacted key--should go through immediately.
 		cmd3Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key2, true, tc.rng.Desc.RaftID, tc.store.StoreID())
+			method, args, reply := readOrWriteArgs(key2, true, tc.rng.Desc().RaftID, tc.store.StoreID())
 			err := tc.rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -808,7 +808,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 		}
 
 		// Now attempt read or write.
-		method, args, reply := readOrWriteArgs(key, read, tc.rng.Desc.RaftID, tc.store.StoreID())
+		method, args, reply := readOrWriteArgs(key, read, tc.rng.Desc().RaftID, tc.store.StoreID())
 		args.Header().Timestamp = tc.clock.Now() // later timestamp
 		if err := tc.rng.AddCmd(method, args, reply, true); err == nil {
 			t.Errorf("test %d: expected failure", i)
@@ -1494,7 +1494,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS := engine.MVCCStats{LiveBytes: 40, KeyBytes: 16, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
 	pArgs, pReply = putArgs([]byte("b"), []byte("value2"), 1, tc.store.StoreID())
@@ -1504,14 +1504,14 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 116 + 2, KeyBytes: 32, ValBytes: 84 + 2, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
-	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.
 	rArgs := &proto.InternalResolveIntentRequest{
 		RequestHeader: proto.RequestHeader{
 			Timestamp: pArgs.Txn.Timestamp,
 			Key:       pArgs.Key,
-			RaftID:    tc.rng.Desc.RaftID,
+			RaftID:    tc.rng.Desc().RaftID,
 			Replica:   proto.Replica{StoreID: tc.store.StoreID()},
 			Txn:       pArgs.Txn,
 		},
@@ -1522,7 +1522,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 80, KeyBytes: 32, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Delete the 1st value.
 	dArgs, dReply := deleteArgs([]byte("a"), 1, tc.store.StoreID())
@@ -1531,7 +1531,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		t.Fatal(err)
 	}
 	expMS = engine.MVCCStats{LiveBytes: 40, KeyBytes: 44, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
-	verifyRangeStats(tc.engine, tc.rng.Desc.RaftID, expMS, t)
+	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 }
 
 // TestInternalMerge verifies that the InternalMerge command is behaving as

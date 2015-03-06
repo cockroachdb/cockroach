@@ -143,7 +143,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
 	should, priority := bq.shouldQ(now, rng)
-	item, ok := bq.ranges[rng.Desc.RaftID]
+	item, ok := bq.ranges[rng.Desc().RaftID]
 	if !should {
 		if ok {
 			bq.remove(item.index)
@@ -158,7 +158,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	log.Infof("adding range %s from %s queue", rng, bq.name)
 	item = &rangeItem{value: rng, priority: priority}
 	heap.Push(&bq.priorityQ, item)
-	bq.ranges[rng.Desc.RaftID] = item
+	bq.ranges[rng.Desc().RaftID] = item
 
 	// If adding this range has pushed the queue past its maximum size,
 	// remove the lowest priority element.
@@ -173,7 +173,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 func (bq *baseQueue) MaybeRemove(rng *Range) {
 	bq.Lock()
 	defer bq.Unlock()
-	if item, ok := bq.ranges[rng.Desc.RaftID]; ok {
+	if item, ok := bq.ranges[rng.Desc().RaftID]; ok {
 		log.Infof("removing range %s from %s queue", item.value, bq.name)
 		bq.remove(item.index)
 	}
@@ -237,7 +237,7 @@ func (bq *baseQueue) pop() *Range {
 		return nil
 	}
 	item := heap.Pop(&bq.priorityQ).(*rangeItem)
-	delete(bq.ranges, item.value.Desc.RaftID)
+	delete(bq.ranges, item.value.Desc().RaftID)
 	return item.value
 }
 
@@ -245,5 +245,5 @@ func (bq *baseQueue) pop() *Range {
 // mutex to be locked.
 func (bq *baseQueue) remove(index int) {
 	item := heap.Remove(&bq.priorityQ, index).(*rangeItem)
-	delete(bq.ranges, item.value.Desc.RaftID)
+	delete(bq.ranges, item.value.Desc().RaftID)
 }

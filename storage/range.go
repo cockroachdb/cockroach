@@ -29,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -168,9 +169,9 @@ type RangeManager interface {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	Desc  *proto.RangeDescriptor
-	rm    RangeManager // Makes some store methods available
-	stats *rangeStats  // Range statistics
+	desc  unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
+	rm    RangeManager   // Makes some store methods available
+	stats *rangeStats    // Range statistics
 	// 1 if a split, merge, or replica change is underway; updated atomically
 	metaLock int32
 	// First non-truncated entry in the raft log. Updated atomically.
@@ -192,7 +193,6 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 // NewRange initializes the range using the given metadata.
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
-		Desc:        desc,
 		rm:          rm,
 		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
@@ -200,6 +200,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
 	}
+	r.SetDesc(desc)
 
 	err := r.loadFirstAndLastIndex()
 	if err != nil {
@@ -214,7 +215,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 
 // String returns a string representation of the range.
 func (r *Range) String() string {
-	return fmt.Sprintf("range=%d (%s-%s)", r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey)
+	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
 // start begins gossiping loop in the event this is the first
@@ -248,7 +249,7 @@ func (r *Range) Destroy() error {
 
 // IsFirstRange returns true if this is the first range.
 func (r *Range) IsFirstRange() bool {
-	return bytes.Equal(r.Desc.StartKey, engine.KeyMin)
+	return bytes.Equal(r.Desc().StartKey, engine.KeyMin)
 }
 
 // IsLeader returns true if this range replica is the raft leader.
@@ -257,31 +258,37 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
+// Desc returns the range's descriptor. This method is thread-safe.
+func (r *Range) Desc() *proto.RangeDescriptor {
+	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
+}
+
+// SetDesc sets the range's descriptor. This method is thread-safe.
+func (r *Range) SetDesc(desc *proto.RangeDescriptor) {
+	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
+}
+
 // GetReplica returns the replica for this range from the range descriptor.
 func (r *Range) GetReplica() *proto.Replica {
-	return r.Desc.FindReplica(r.rm.StoreID())
+	return r.Desc().FindReplica(r.rm.StoreID())
 }
 
 // ContainsKey returns whether this range contains the specified key.
 // Read-lock the mutex to protect access to Desc, which might be changed
 // concurrently via range split.
 func (r *Range) ContainsKey(key proto.Key) bool {
-	r.RLock()
-	defer r.RUnlock()
-	return r.Desc.ContainsKey(engine.KeyAddress(key))
+	return r.Desc().ContainsKey(engine.KeyAddress(key))
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
-	r.RLock()
-	defer r.RUnlock()
-	return r.Desc.ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
+	return r.Desc().ContainsKeyRange(engine.KeyAddress(start), engine.KeyAddress(end))
 }
 
 // GetGCMetadata reads the latest GC metadata for this range.
 func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
-	key := engine.RangeGCMetadataKey(r.Desc.RaftID)
+	key := engine.RangeGCMetadataKey(r.Desc().RaftID)
 	gcMeta := &proto.GCMetadata{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, gcMeta)
 	if err != nil {
@@ -293,7 +300,7 @@ func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
 // GetLastVerificationTimestamp reads the timestamp at which the range's
 // data was last verified.
 func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
-	key := engine.RangeLastVerificationTimestampKey(r.Desc.RaftID)
+	key := engine.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	timestamp := proto.Timestamp{}
 	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, &timestamp)
 	if err != nil {
@@ -305,7 +312,7 @@ func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 // SetLastVerificationTimestamp writes the timestamp at which the range's
 // data was last verified.
 func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
-	key := engine.RangeLastVerificationTimestampKey(r.Desc.RaftID)
+	key := engine.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	return engine.MVCCPutProto(r.rm.Engine(), nil, key, proto.ZeroTimestamp, nil, &timestamp)
 }
 
@@ -479,7 +486,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		done:  make(chan error, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
-		RaftID: r.Desc.RaftID,
+		RaftID: r.Desc().RaftID,
 	}
 	var cmdID proto.ClientCmdID
 	if !args.Header().CmdID.IsEmpty() {
@@ -595,7 +602,7 @@ func (r *Range) maybeGossipClusterID() {
 // the start of the key space and the raft leader.
 func (r *Range) maybeGossipFirstRange() {
 	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
-		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc, 0*time.Second); err != nil {
+		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
 			log.Errorf("failed to gossip first range metadata: %s", err)
 		}
 	}
@@ -675,7 +682,7 @@ func (r *Range) ShouldSplit() bool {
 		log.Errorf("unable to fetch zone config from gossip: %s", err)
 		return false
 	}
-	prefixConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(r.Desc.StartKey)
+	prefixConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(r.Desc().StartKey)
 	zone := prefixConfig.Config.(*proto.ZoneConfig)
 
 	// Fetch the current size of this range in total bytes.
@@ -696,7 +703,7 @@ func (r *Range) maybeSplit() {
 	if r.ShouldSplit() {
 		// Admin commands run synchronously, so run this in a goroutine.
 		go r.AddCmd(proto.AdminSplit, &proto.AdminSplitRequest{
-			RequestHeader: proto.RequestHeader{Key: r.Desc.StartKey},
+			RequestHeader: proto.RequestHeader{Key: r.Desc().StartKey},
 		}, &proto.AdminSplitResponse{}, false)
 	}
 }
@@ -716,7 +723,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 	// or merge activity.
 	header := args.Header()
 	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc)
+		err := proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -1059,7 +1066,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 		// key, but no matching results were returned from the scan. This could
 		// indicate a very bad system error, but for now we will just treat it
 		// as a retryable Key Mismatch error.
-		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc)
+		err := proto.NewRangeKeyMismatchError(args.Key, args.EndKey, r.Desc())
 		reply.SetGoError(err)
 		log.Errorf("InternalRangeLookup dispatched to correct range, but no matching RangeDescriptor was found. %s", err)
 		return
@@ -1123,7 +1130,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *prot
 	}
 
 	// Store the GC metadata for this range.
-	key := engine.RangeGCMetadataKey(r.Desc.RaftID)
+	key := engine.RangeGCMetadataKey(r.Desc().RaftID)
 	err := engine.MVCCPutProto(batch, ms, key, proto.ZeroTimestamp, nil, &args.GCMeta)
 	reply.SetGoError(err)
 }
@@ -1306,8 +1313,8 @@ func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *p
 
 // InternalTruncateLog discards a prefix of the raft log.
 func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) {
-	start := engine.RaftLogKey(r.Desc.RaftID, args.Index).Next()
-	end := engine.RaftLogKey(r.Desc.RaftID, 0)
+	start := engine.RaftLogKey(r.Desc().RaftID, args.Index).Next()
+	end := engine.RaftLogKey(r.Desc().RaftID, 0)
 	err := batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
 		func(kv proto.RawKeyValue) (bool, error) {
 			err := batch.Clear(kv.Key)
@@ -1322,10 +1329,10 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // recomputes stats for both the existing, updated range and the new
 // range.
 func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
-	if !bytes.Equal(r.Desc.StartKey, split.UpdatedDesc.StartKey) ||
-		!bytes.Equal(r.Desc.EndKey, split.NewDesc.EndKey) {
+	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
+		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
 		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,
-			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc.StartKey, r.Desc.EndKey)
+			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc().StartKey, r.Desc().EndKey)
 	}
 
 	// Copy the GC metadata.
@@ -1373,24 +1380,20 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	}
 	newRng.stats.SetMVCCStats(batch, ms)
 
-	// Write-lock the mutex to protect Desc, as SplitRange will modify
-	// Desc.EndKey.
-	r.Lock()
-	defer r.Unlock()
 	return r.rm.SplitRange(r, newRng)
 }
 
 // mergeTrigger is called on a successful commit of an AdminMerge
 // transaction. It recomputes stats for the receiving range.
 func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
-	if !bytes.Equal(r.Desc.StartKey, merge.UpdatedDesc.StartKey) {
+	if !bytes.Equal(r.Desc().StartKey, merge.UpdatedDesc.StartKey) {
 		return util.Errorf("range and updated range start keys do not match: %q != %q",
-			r.Desc.StartKey, merge.UpdatedDesc.StartKey)
+			r.Desc().StartKey, merge.UpdatedDesc.StartKey)
 	}
 
-	if !r.Desc.EndKey.Less(merge.UpdatedDesc.EndKey) {
+	if !r.Desc().EndKey.Less(merge.UpdatedDesc.EndKey) {
 		return util.Errorf("range end key is not less than the post merge end key: %q < %q",
-			r.Desc.EndKey, merge.UpdatedDesc.StartKey)
+			r.Desc().EndKey, merge.UpdatedDesc.StartKey)
 	}
 
 	if merge.SubsumedRaftID <= 0 {
@@ -1411,15 +1414,13 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	}
 	r.stats.SetMVCCStats(batch, ms)
 
-	// Write-lock the mutex to protect Desc, as MergeRange will modify
-	// Desc.EndKey.
-	r.Lock()
-	defer r.Unlock()
 	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
 }
 
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
-	r.Desc.Replicas = change.UpdatedReplicas
+	copy := *r.Desc()
+	copy.Replicas = change.UpdatedReplicas
+	r.SetDesc(&copy)
 	return nil
 }
 
@@ -1433,7 +1434,7 @@ func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error
 func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
 	// Only allow a single split per range at a time.
 	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc.RaftID))
+		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
 		return
 	}
 	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
@@ -1441,12 +1442,13 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
 	// other commands.
+	desc := r.Desc()
 	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
 		defer snap.Stop()
 		var err error
-		if splitKey, err = engine.MVCCFindSplitKey(snap, r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey); err != nil {
+		if splitKey, err = engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey); err != nil {
 			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
 			return
 		}
@@ -1454,34 +1456,34 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 
 	// Verify some properties of split key.
 	if !r.ContainsKey(splitKey) {
-		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, r.Desc))
+		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, desc))
 		return
 	}
 	if !engine.IsValidSplitKey(splitKey) {
 		reply.SetGoError(util.Errorf("cannot split range at key %q", splitKey))
 		return
 	}
-	if splitKey.Equal(r.Desc.StartKey) || splitKey.Equal(r.Desc.EndKey) {
+	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
 		reply.SetGoError(util.Errorf("range has already been split by key %q", splitKey))
 		return
 	}
 
 	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
-	newDesc, err := r.rm.NewRangeDescriptor(splitKey, r.Desc.EndKey, r.Desc.Replicas)
+	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		reply.SetGoError(util.Errorf("unable to allocate new range descriptor: %s", err))
 		return
 	}
 
 	// Init updated version of existing range descriptor.
-	updatedDesc := *r.Desc
+	updatedDesc := *desc
 	updatedDesc.EndKey = splitKey
 
-	log.Infof("initiating a split of range %d %q-%q at key %q", r.Desc.RaftID,
-		proto.Key(r.Desc.StartKey), proto.Key(r.Desc.EndKey), splitKey)
+	log.Infof("initiating a split of range %d %q-%q at key %q", desc.RaftID,
+		proto.Key(desc.StartKey), proto.Key(desc.EndKey), splitKey)
 
 	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("split range %d at %q", r.Desc.RaftID, splitKey),
+		Name: fmt.Sprintf("split range %d at %q", desc.RaftID, splitKey),
 	}
 	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Create range descriptor for second half of split.
@@ -1516,14 +1518,14 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc.RaftID),
+	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
-		if len(r.Desc.EndKey) > 0 {
+		if len(r.Desc().EndKey) > 0 {
 			// If we created this range (and know its start/end keys, set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
@@ -1542,7 +1544,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	}
 
 	var cs raftpb.ConfState
-	for _, rep := range r.Desc.Replicas {
+	for _, rep := range r.Desc().Replicas {
 		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
 	}
 
@@ -1553,7 +1555,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // TODO(bdarnell): remove unnecessary calls to FirstIndex in etcd/raft and then load
 // the first index lazily (so we don't need to scan the whole range at startup)
 func (r *Range) loadFirstAndLastIndex() error {
-	logKey := engine.RaftLogPrefix(r.Desc.RaftID)
+	logKey := engine.RaftLogPrefix(r.Desc().RaftID)
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
 		0, proto.ZeroTimestamp, nil)
@@ -1587,8 +1589,8 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 	// MVCCScan is inclusive in the other direction we must increment both the
 	// start and end keys.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
-		engine.RaftLogKey(r.Desc.RaftID, hi).Next(),
-		engine.RaftLogKey(r.Desc.RaftID, lo).Next(),
+		engine.RaftLogKey(r.Desc().RaftID, hi).Next(),
+		engine.RaftLogKey(r.Desc().RaftID, lo).Next(),
 		0, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return nil, err
@@ -1642,12 +1644,9 @@ func (r *Range) FirstIndex() (uint64, error) {
 
 // Snapshot implements the raft.Storage interface.
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
-	r.RLock()
-	defer r.RUnlock()
-
 	// TODO(bdarnell): package up all the data in the range, not just
 	// the descriptor (and send the appropriate log index).
-	data, err := gogoproto.Marshal(r.Desc)
+	data, err := gogoproto.Marshal(r.Desc())
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
@@ -1658,7 +1657,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// TODO(bdarnell): cs.Nodes must give the replicas as of the log index we
 	// put in the SnapshotMetadata. When we produce a snapshot of the current
 	// time, replace the previous line with the following block.
-	/*for _, rep := range r.Desc.Replicas {
+	/*for _, rep := range r.Desc().Replicas {
 		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
 	}*/
 
@@ -1676,7 +1675,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 func (r *Range) Append(entries []raftpb.Entry) error {
 	batch := r.rm.Engine().NewBatch()
 	for _, ent := range entries {
-		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc.RaftID, ent.Index),
+		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc().RaftID, ent.Index),
 			proto.ZeroTimestamp, nil, &ent)
 		if err != nil {
 			return err
@@ -1693,11 +1692,10 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
-	r.Lock()
-	defer r.Unlock()
-
 	// TODO(bdarnell): discard any existing log that is obsoleted by this snapshot.
-	err := gogoproto.Unmarshal(snap.Data, r.Desc)
+	desc := &proto.RangeDescriptor{}
+	err := gogoproto.Unmarshal(snap.Data, desc)
+	r.SetDesc(desc)
 	atomic.StoreUint64(&r.firstIndex, snap.Metadata.Index+1)
 	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
 	return err
@@ -1705,7 +1703,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc.RaftID),
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }
 
@@ -1747,36 +1745,37 @@ func ReplicaSetsEqual(a, b []proto.Replica) bool {
 func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) {
 	// Only allow a single split/merge per range at a time.
 	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc.RaftID))
+		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
 		return
 	}
 	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
 
+	desc := r.Desc()
 	subsumedDesc := args.SubsumedRange
 
 	// Make sure the range being subsumed follows this one.
-	if !bytes.Equal(r.Desc.EndKey, subsumedDesc.StartKey) {
+	if !bytes.Equal(desc.EndKey, subsumedDesc.StartKey) {
 		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %d = %d",
-			r.Desc.EndKey, subsumedDesc.StartKey))
+			desc.EndKey, subsumedDesc.StartKey))
 		return
 	}
 
 	// Ensure that both ranges are collocate by intersecting the store ids from
 	// their replicas.
-	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), r.Desc.GetReplicas()) {
+	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
 		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
 	}
 
 	// Init updated version of existing range descriptor.
-	updatedDesc := *r.Desc
+	updatedDesc := *desc
 	updatedDesc.EndKey = subsumedDesc.EndKey
 
 	log.Infof("initiating a merge of range %d %q-%q into range %d %q-%q",
 		subsumedDesc.RaftID, proto.Key(subsumedDesc.StartKey), proto.Key(subsumedDesc.EndKey),
-		r.Desc.RaftID, r.Desc.StartKey, r.Desc.EndKey)
+		desc.RaftID, desc.StartKey, desc.EndKey)
 
 	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, r.Desc.RaftID),
+		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, desc.RaftID),
 	}
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Update the range descriptor for the receiving range.
@@ -1789,7 +1788,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		txn.Prepare(proto.Delete, proto.DeleteArgs(engine.RangeDescriptorKey(subsumedDesc.StartKey)),
 			deleteResponse)
 
-		if err := MergeRangeAddressing(txn, r.Desc, &updatedDesc); err != nil {
+		if err := MergeRangeAddressing(txn, desc, &updatedDesc); err != nil {
 			return err
 		}
 
@@ -1805,7 +1804,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
-			subsumedDesc.RaftID, r.Desc.RaftID, err))
+			subsumedDesc.RaftID, desc.RaftID, err))
 	}
 }
 
@@ -1815,15 +1814,16 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
 	// Only allow a single change per range at a time.
 	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		return util.Errorf("range %d metadata locked", r.Desc.RaftID)
+		return util.Errorf("range %d metadata locked", r.Desc().RaftID)
 	}
 	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
 
 	// Validate the request and prepare the new descriptor.
-	updatedDesc := *r.Desc
-	updatedDesc.Replicas = append([]proto.Replica{}, r.Desc.Replicas...)
+	desc := r.Desc()
+	updatedDesc := *desc
+	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
 	found := -1
-	for i, existingRep := range r.Desc.Replicas {
+	for i, existingRep := range desc.Replicas {
 		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
 			found = i
 			break
@@ -1832,20 +1832,20 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	if changeType == proto.ADD_REPLICA {
 		if found != -1 {
 			return util.Errorf("adding replica %v which is already present in range %d",
-				replica, r.Desc.RaftID)
+				replica, desc.RaftID)
 		}
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	} else if changeType == proto.REMOVE_REPLICA {
 		if found == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d",
-				replica, r.Desc.RaftID)
+				replica, desc.RaftID)
 		}
 		updatedDesc.Replicas[found] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
 	}
 
 	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("change replicas of %d", r.Desc.RaftID),
+		Name: fmt.Sprintf("change replicas of %d", desc.RaftID),
 	}
 	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
@@ -1870,7 +1870,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		}, &proto.EndTransactionResponse{})
 	})
 	if err != nil {
-		return util.Errorf("change replicas of %d failed: %s", r.Desc.RaftID, err)
+		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
 	}
 	return nil
 }
