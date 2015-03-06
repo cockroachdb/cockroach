@@ -30,11 +30,15 @@ import (
 
 // verifyConvergence verifies that info from each node is visible from
 // every node in the network within numCycles cycles of the gossip protocol.
-// TODO(Tobias): Currently this test is nondeterministic, usually requiring
-// more cycles for a fully connected network on busy hardware. The clock
-// should be advanced manually instead (this requires some changes to gossip).
-func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "unix", gossip.TestInterval, gossip.TestBootstrap)
+// NOTE: This test is non-deterministic because it involves multiple goroutines
+// that may not all be able to keep up if the given interval is too small.
+// As a rule of thumb, increase the interval until the same number of cycles are used
+// for both race and non-race tests; this indicates that no goroutines are being
+// left behind by CPU limits.
+// TODO(spencer): figure out a more deterministic setup, advancing the clock
+// manually and counting cycles accurately instead of relying on real-time sleeps.
+func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testing.T) {
+	network := simulation.NewNetwork(numNodes, "unix", interval, gossip.TestBootstrap)
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",
@@ -43,13 +47,11 @@ func verifyConvergence(numNodes, maxCycles int, t *testing.T) {
 	network.Stop()
 }
 
-// TestConvergence verifies a 10 node gossip network
-// converges within 10 cycles.
-// TODO(spencer): During race detector tests, it can take >= 8 cycles.
-// Figure out a more deterministic setup.
+// TestConvergence verifies a 10 node gossip network converges within
+// 8 cycles.
 func TestConvergence(t *testing.T) {
-	// 15 cycles to accommodate slower hardware. Usually 10 should do.
-	verifyConvergence(10, 15, t)
+	// 100 milliseconds to accommodate race tests on slower hardware.
+	verifyConvergence(10, 8, 100*time.Millisecond, t)
 }
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
