@@ -51,7 +51,7 @@ typedef struct DBSnapshot DBSnapshot;
 // DBOptions contains local database options.
 typedef struct {
   int64_t cache_size;
-  int allow_os_buffer;
+  bool allow_os_buffer;
   bool logging_enabled;
 } DBOptions;
 
