@@ -676,6 +676,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   rocksdb::Options options;
   options.allow_os_buffer = db_opts.allow_os_buffer;
+  options.compression = rocksdb::kSnappyCompression;
   options.compaction_filter_factory.reset(new DBCompactionFilterFactory());
   options.create_if_missing = true;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
