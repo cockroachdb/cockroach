@@ -182,7 +182,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	s.Start(clock)
 	if err := util.IsTrueWithin(func() bool {
 		return q1.count() == count && q2.count() == count
-	}, 10*time.Millisecond); err != nil {
+	}, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
 

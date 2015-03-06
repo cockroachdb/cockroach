@@ -148,7 +148,7 @@ type rangeAlreadyExists struct {
 
 // Error implements the error interface.
 func (e *rangeAlreadyExists) Error() string {
-	return fmt.Sprintf("range for Raft ID %d already exists on store", e.rng.Desc.RaftID)
+	return fmt.Sprintf("range for Raft ID %d already exists on store", e.rng.Desc().RaftID)
 }
 
 // A RangeSlice is a slice of Range pointers used for replica lookups
@@ -164,7 +164,7 @@ func (rs RangeSlice) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 func (rs RangeSlice) Less(i, j int) bool {
-	return bytes.Compare(rs[i].Desc.StartKey, rs[j].Desc.StartKey) < 0
+	return bytes.Compare(rs[i].Desc().StartKey, rs[j].Desc().StartKey) < 0
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -442,16 +442,16 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		// While locked, find the range which contains this config prefix, if any.
 		s.mu.Lock()
 		n := sort.Search(len(s.rangesByKey), func(i int) bool {
-			return config.Prefix.Less(s.rangesByKey[i].Desc.EndKey)
+			return config.Prefix.Less(s.rangesByKey[i].Desc().EndKey)
 		})
 		// If the config doesn't split the range or the range isn't the
 		// leader of its consensus group, continue.
-		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
 			s.mu.Unlock()
 			continue
 		}
-		start := s.rangesByKey[n].Desc.StartKey
-		end := s.rangesByKey[n].Desc.EndKey
+		start := s.rangesByKey[n].Desc().StartKey
+		end := s.rangesByKey[n].Desc().EndKey
 		s.mu.Unlock()
 
 		// Now split the range into pieces by intersecting it with the
@@ -526,9 +526,9 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 	startAddr := engine.KeyAddress(start)
 	endAddr := engine.KeyAddress(end)
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
-		return startAddr.Less(s.rangesByKey[i].Desc.EndKey)
+		return startAddr.Less(s.rangesByKey[i].Desc().EndKey)
 	})
-	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc.ContainsKeyRange(startAddr, endAddr) {
+	if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKeyRange(startAddr, endAddr) {
 		return nil
 	}
 	return s.rangesByKey[n]
@@ -662,24 +662,22 @@ func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replic
 // range. The new range is added to the ranges map and the rangesByKey
 // sorted slice.
 func (s *Store) SplitRange(origRng, newRng *Range) error {
-	if !bytes.Equal(origRng.Desc.EndKey, newRng.Desc.EndKey) ||
-		bytes.Compare(origRng.Desc.StartKey, newRng.Desc.StartKey) >= 0 {
-		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origRng.Desc, newRng.Desc)
+	if !bytes.Equal(origRng.Desc().EndKey, newRng.Desc().EndKey) ||
+		bytes.Compare(origRng.Desc().StartKey, newRng.Desc().StartKey) >= 0 {
+		return util.Errorf("orig range is not splittable by new range: %+v, %+v", origRng.Desc(), newRng.Desc())
 	}
 	// Replace the end key of the original range with the start key of
-	// the new range. We do this here, with the store lock, in order to
-	// prevent any races while searching through rangesByKey in
-	// concurrent accesses to LookupRange. Since this call is made from
-	// within a command execution, Desc.EndKey is protected from other
-	// concurrent range accesses.
+	// the new range.
+	copy := *origRng.Desc()
+	copy.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
+	origRng.SetDesc(&copy)
 	s.mu.Lock()
-	origRng.Desc.EndKey = append([]byte(nil), newRng.Desc.StartKey...)
 	err := s.addRangeInternal(newRng, true)
 	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	if err := s.multiraft.CreateGroup(uint64(newRng.Desc.RaftID)); err != nil {
+	if err := s.multiraft.CreateGroup(uint64(newRng.Desc().RaftID)); err != nil {
 		return err
 	}
 	return nil
@@ -689,9 +687,9 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 // This merge operation will fail if the two ranges are not collocated
 // on the same store.
 func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
-	if !subsumingRng.Desc.EndKey.Less(updatedEndKey) {
+	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
 		return util.Errorf("the new end key is not greater than the current one: %+v < %+v",
-			updatedEndKey, subsumingRng.Desc.EndKey)
+			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
 	subsumedRng, err := s.GetRange(subsumedRaftID)
@@ -699,9 +697,9 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 		return util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
 	}
 
-	if !ReplicaSetsEqual(subsumedRng.Desc.GetReplicas(), subsumingRng.Desc.GetReplicas()) {
+	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
 		return util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
-			subsumedRng.Desc.GetReplicas(), subsumingRng.Desc.GetReplicas())
+			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
 	}
 
 	// Remove and destroy the subsumed range.
@@ -711,11 +709,10 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 
 	// TODO(bram): The removed range needs to have all of its metadata removed.
 
-	// See comments in SplitRange for details on mutex locking.
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	// Update the end key of the subsuming range.
-	subsumingRng.Desc.EndKey = updatedEndKey
+	copy := *subsumingRng.Desc()
+	copy.EndKey = updatedEndKey
+	subsumingRng.SetDesc(&copy)
 
 	return nil
 }
@@ -729,7 +726,7 @@ func (s *Store) AddRange(rng *Range) error {
 	if err != nil {
 		return err
 	}
-	if err := s.multiraft.CreateGroup(uint64(rng.Desc.RaftID)); err != nil {
+	if err := s.multiraft.CreateGroup(uint64(rng.Desc().RaftID)); err != nil {
 		return err
 	}
 	return nil
@@ -745,10 +742,10 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 	rng.start()
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
-	if exRng, ok := s.ranges[rng.Desc.RaftID]; ok {
+	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {
 		return &rangeAlreadyExists{exRng}
 	}
-	s.ranges[rng.Desc.RaftID] = rng
+	s.ranges[rng.Desc().RaftID] = rng
 	s.rangesByKey = append(s.rangesByKey, rng)
 	if resort {
 		sort.Sort(s.rangesByKey)
@@ -761,17 +758,17 @@ func (s *Store) addRangeInternal(rng *Range, resort bool) error {
 func (s *Store) RemoveRange(rng *Range) error {
 	// RemoveGroup needs to access the storage, which in turn needs the
 	// lock. Some care is needed to avoid deadlocks.
-	if err := s.multiraft.RemoveGroup(uint64(rng.Desc.RaftID)); err != nil {
+	if err := s.multiraft.RemoveGroup(uint64(rng.Desc().RaftID)); err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rng.stop()
-	delete(s.ranges, rng.Desc.RaftID)
+	delete(s.ranges, rng.Desc().RaftID)
 	// Find the range in rangesByKey slice and swap it to end of slice
 	// and truncate.
 	n := sort.Search(len(s.rangesByKey), func(i int) bool {
-		return bytes.Compare(rng.Desc.StartKey, s.rangesByKey[i].Desc.EndKey) < 0
+		return bytes.Compare(rng.Desc().StartKey, s.rangesByKey[i].Desc().EndKey) < 0
 	})
 	if n >= len(s.rangesByKey) {
 		return util.Errorf("couldn't find range in rangesByKey slice")

@@ -185,11 +185,11 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	rng := store.LookupRange(engine.KeyMin, nil)
 	newRng := store.LookupRange([]byte("m"), nil)
-	if !bytes.Equal(newRng.Desc.StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc.EndKey) {
-		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc.StartKey, splitKey, rng.Desc.EndKey)
+	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {
+		t.Errorf("ranges mismatched, wanted %q=%q=%q", newRng.Desc().StartKey, splitKey, rng.Desc().EndKey)
 	}
-	if !bytes.Equal(newRng.Desc.EndKey, engine.KeyMax) || !bytes.Equal(rng.Desc.StartKey, engine.KeyMin) {
-		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc.StartKey, newRng.Desc.EndKey)
+	if !bytes.Equal(newRng.Desc().EndKey, engine.KeyMax) || !bytes.Equal(rng.Desc().StartKey, engine.KeyMin) {
+		t.Errorf("new ranges do not cover KeyMin-KeyMax, but only %q-%q", rng.Desc().StartKey, newRng.Desc().EndKey)
 	}
 
 	// Try to get values from both left and right of where the split happened.
@@ -198,7 +198,7 @@ func TestStoreRangeSplit(t *testing.T) {
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
 	}
-	gArgs, gReply = getArgs([]byte("x"), newRng.Desc.RaftID, store.StoreID())
+	gArgs, gReply = getArgs([]byte("x"), newRng.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil ||
 		!bytes.Equal(gReply.Value.Bytes, content) {
 		t.Fatal(err)
@@ -216,7 +216,7 @@ func TestStoreRangeSplit(t *testing.T) {
 
 	// Send out the same increment copied from above (same ClientCmdID), but
 	// now to the newly created range (which should hold that key).
-	rIncArgs.RequestHeader.RaftID = newRng.Desc.RaftID
+	rIncArgs.RequestHeader.RaftID = newRng.Desc().RaftID
 	rIncReply = &proto.IncrementResponse{}
 	if err := store.ExecuteCmd(proto.Increment, rIncArgs, rIncReply); err != nil {
 		t.Fatal(err)
@@ -235,11 +235,11 @@ func TestStoreRangeSplit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatKeyBytes)
+	rKeyBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc().RaftID, engine.StatKeyBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rValBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc.RaftID, engine.StatValBytes)
+	rValBytes, err := engine.MVCCGetRangeStat(store.Engine(), newRng.Desc().RaftID, engine.StatValBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,14 +274,14 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 	// Verify empty range has empty stats.
 	rng := store.LookupRange(proto.Key("\x01"), nil)
-	verifyRangeStats(store.Engine(), rng.Desc.RaftID, engine.MVCCStats{}, t)
+	verifyRangeStats(store.Engine(), rng.Desc().RaftID, engine.MVCCStats{}, t)
 
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
 	for i := 0; i < 100; i++ {
 		key := util.RandBytes(src, int(src.Int31n(1<<7)))
 		val := util.RandBytes(src, int(src.Int31n(1<<8)))
-		pArgs, pReply := putArgs(key, val, rng.Desc.RaftID, store.StoreID())
+		pArgs, pReply := putArgs(key, val, rng.Desc().RaftID, store.StoreID())
 		pArgs.Timestamp = store.Clock().Now()
 		if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
 			t.Fatal(err)
@@ -289,22 +289,22 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 	// Get the range stats now that we have data.
 	var ms engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID, &ms); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &ms); err != nil {
 		t.Fatal(err)
 	}
 
 	// Split the range at approximate halfway point ("Z" in string "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz").
-	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc.RaftID, store.StoreID())
+	args, reply = adminSplitArgs(proto.Key("\x01"), proto.Key("Z"), rng.Desc().RaftID, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
 		t.Fatal(err)
 	}
 
 	var msLeft, msRight engine.MVCCStats
-	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc.RaftID, &msLeft); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
 	rngRight := store.LookupRange(proto.Key("Z"), nil)
-	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc.RaftID, &msRight); err != nil {
+	if err := engine.MVCCGetRangeStats(store.Engine(), rngRight.Desc().RaftID, &msRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -378,7 +378,7 @@ func TestStoreShouldSplit(t *testing.T) {
 	}
 
 	maxBytes := zoneConfig.RangeMaxBytes
-	fillRange(store, rng.Desc.RaftID, proto.Key("test"), maxBytes, t)
+	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
 
 	if ok := rng.ShouldSplit(); !ok {
 		t.Errorf("range should split after writing %d bytes", maxBytes)

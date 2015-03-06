@@ -81,7 +81,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if err := store.ExecuteCmd(proto.AdminSplit, splitArgs, splitResp); err != nil {
 			t.Fatal(err)
 		}
-		raftID2 = store.LookupRange(key2, nil).Desc.RaftID
+		raftID2 = store.LookupRange(key2, nil).Desc().RaftID
 		if raftID2 == raftID {
 			t.Errorf("got same raft id after split")
 		}
@@ -207,12 +207,12 @@ func TestRestoreReplicas(t *testing.T) {
 			t.Fatal(err)
 		}
 		rng.RLock()
-		if len(rng.Desc.Replicas) != 2 {
-			t.Fatalf("store %d: expected 2 replicas, found %d", i, len(rng.Desc.Replicas))
+		if len(rng.Desc().Replicas) != 2 {
+			t.Fatalf("store %d: expected 2 replicas, found %d", i, len(rng.Desc().Replicas))
 		}
-		if rng.Desc.Replicas[0].NodeID != mtc.stores[0].Ident.NodeID {
+		if rng.Desc().Replicas[0].NodeID != mtc.stores[0].Ident.NodeID {
 			t.Errorf("store %d: expected replica[0].NodeID == %d, was %d",
-				i, mtc.stores[0].Ident.NodeID, rng.Desc.Replicas[0].NodeID)
+				i, mtc.stores[0].Ident.NodeID, rng.Desc().Replicas[0].NodeID)
 		}
 		rng.RUnlock()
 	}
@@ -252,8 +252,8 @@ func TestFailedReplicaChange(t *testing.T) {
 
 	// After the aborted transaction, r.Desc was not updated.
 	// TODO(bdarnell): expose and inspect raft's internal state.
-	if len(rng.Desc.Replicas) != 1 {
-		t.Fatalf("expected 1 replica, found %d", len(rng.Desc.Replicas))
+	if len(rng.Desc().Replicas) != 1 {
+		t.Fatalf("expected 1 replica, found %d", len(rng.Desc().Replicas))
 	}
 
 	// The pending config change flag was cleared, so a subsequent attempt
