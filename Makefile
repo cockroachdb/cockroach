@@ -46,8 +46,10 @@ ifeq ($(STATIC),1)
 GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
 endif
 
+.PHONY: all
 all: build test
 
+.PHONY: build
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
@@ -56,6 +58,7 @@ build:
 
 # Similar to "testrace", we want to cache the build before running the
 # tests.
+.PHONY: test
 test:
 	$(GO) test $(GOFLAGS) -i $(PKG)
 	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
@@ -64,10 +67,12 @@ test:
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
 # "make build", and so they would be built from scratch every time (including the
 # slow-to-compile cgo packages).
+.PHONY: testrace
 testrace:
 	$(GO) test $(GOFLAGS) -race -i $(PKG)
 	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
 
+.PHONY: bench
 bench:
 	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
 
@@ -76,6 +81,7 @@ bench:
 # for details.
 # The test files are moved to the corresponding package. For example,
 # PKG=./storage/engine will generate ./storage/engine/engine.test.
+.PHONY: testbuild
 testbuild: TESTS := $(shell $(GO) list $(PKG))
 testbuild: GOFLAGS += -c
 testbuild:
@@ -90,9 +96,11 @@ testbuild:
 	done
 
 
+.PHONY: coverage
 coverage: build
 	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
+.PHONY: acceptance
 acceptance:
 # The first `stop` stops and cleans up any containers from previous runs.
 	(cd $(RUN) && export COCKROACH_IMAGE="$(COCKROACH_IMAGE)" && \
@@ -101,6 +109,7 @@ acceptance:
 	  ./local-cluster.sh start && \
 	  ./local-cluster.sh stop)
 
+.PHONY: clean
 clean:
 	$(GO) clean -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
@@ -108,9 +117,8 @@ clean:
 
 # List all of the dependencies which are not part of the standard
 # library or cockroachdb/cockroach.
+.PHONY: godeps
 godeps:
 	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
 	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
 	  egrep -v 'github.com/cockroachdb/cockroach'
-
-.PHONY: build test testrace bench testbuild coverage acceptance clean gopath godeps depvers
