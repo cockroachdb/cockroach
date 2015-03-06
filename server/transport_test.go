@@ -18,6 +18,7 @@
 package server
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -41,10 +42,16 @@ func (s *TestTransportServer) RaftMessage(req *multiraft.RaftMessageRequest,
 
 func TestSendAndReceive(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	gossip := gossip.New(rpcContext)
-	addr1 := util.CreateTestAddr("tcp")
+	gossip := gossip.New(rpcContext, gossip.TestInterval, "")
+	//addr1 := util.CreateTestAddr("tcp")
+	addr1, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
 	rpcServer1 := rpc.NewServer(addr1, rpcContext)
-	rpcServer1.Start()
+	if err := rpcServer1.Start(); err != nil {
+		t.Fatal(err)
+	}
 	transport1, err := NewRPCTransport(gossip, rpcServer1)
 	if err != nil {
 		t.Errorf("Unexpected error creating transport1, Error: %s", err)
@@ -52,18 +59,26 @@ func TestSendAndReceive(t *testing.T) {
 
 	addr2 := util.CreateTestAddr("tcp")
 	rpcServer2 := rpc.NewServer(addr2, rpcContext)
-	rpcServer2.Start()
+	if err := rpcServer2.Start(); err != nil {
+		t.Fatal(err)
+	}
 	transport2, err := NewRPCTransport(gossip, rpcServer2)
 	if err != nil {
 		t.Errorf("Unexpected error creating transport2, Error: %s", err)
 	}
 
-	gossip.AddInfo("node-1", rpcServer1.Addr(), time.Hour)
-	gossip.AddInfo("node-2", rpcServer2.Addr(), time.Hour)
+	if err := gossip.AddInfo("node-1", rpcServer1.Addr(), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := gossip.AddInfo("node-2", rpcServer2.Addr(), time.Hour); err != nil {
+		t.Fatal(err)
+	}
 
-	messages := make(chan *multiraft.RaftMessageRequest)
+	messages := make(chan *multiraft.RaftMessageRequest, 10)
 	testServer := &TestTransportServer{messages}
-	transport1.Listen(1, testServer)
+	if err := transport1.Listen(1, testServer); err != nil {
+		t.Fatal(err)
+	}
 
 	msg := raftpb.Message{
 		From: uint64(2),
@@ -79,7 +94,7 @@ func TestSendAndReceive(t *testing.T) {
 	err = transport2.Send(multiraft.NodeID(1), req)
 
 	if err != nil {
-		t.Errorf("Unable to send message to node 1, Error: %s", err)
+		t.Fatalf("Unable to send message to node 1, Error: %s", err)
 	}
 
 	foundReq := <-messages

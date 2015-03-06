@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	crpc "github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/rpc/codec"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -104,10 +105,14 @@ func (t *RPCTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
 	}
 	address := info.(net.Addr)
 
-	client, err = rpc.Dial("tcp", address.String())
-	if err == nil {
-		t.clients[id] = client
+	conn, err := net.Dial("tcp", address.String())
+	if err != nil {
+		return nil, err
 	}
+	log.Infof("connected to %v", address)
+	client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
+
+	t.clients[id] = client
 
 	return client, err
 }
@@ -119,12 +124,21 @@ func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 		return err
 	}
 	call := client.Go(raftMessageName, req, &multiraft.RaftMessageResponse{}, nil)
+	log.Infof("rpc sent %T", req)
 	select {
 	case <-call.Done:
 		// If the call failed synchronously, report an error.
 		return call.Error
 	default:
 		// Otherwise, fire-and-forget.
+		go func() {
+			<-call.Done
+			if call.Error != nil {
+				log.Errorf("raft message failed: %s", call.Error)
+			} else {
+				log.Infof("raft message succeeded")
+			}
+		}()
 		return nil
 	}
 }
