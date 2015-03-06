@@ -258,12 +258,14 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
-// Desc returns the range's descriptor. This method is thread-safe.
+// Desc atomically returns the range's descriptor.
 func (r *Range) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
 }
 
-// SetDesc sets the range's descriptor. This method is thread-safe.
+// SetDesc atomically sets the range's descriptor. This method should
+// be called in the context of having metaLock held, as is the case
+// for merging, splitting and updating the replica set.
 func (r *Range) SetDesc(desc *proto.RangeDescriptor) {
 	atomic.StorePointer(&r.desc, unsafe.Pointer(desc))
 }
