@@ -5,9 +5,7 @@
 ### Assumed
  * A working GCC (on mac os x something like `xcode-select --install` will get you started)
  * [Go environment](http://golang.org/doc/code.html)
- * [protoc](https://github.com/google/protobuf/releases)
- * pkgconfig
- * curl
+ * Git and Mercurial (for retrieving dependencies)
 
 If you're on Mac OS X, [homebrew](http://brew.sh/) can be very helpful to fulfill these dependencies.
 
