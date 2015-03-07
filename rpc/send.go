@@ -96,7 +96,9 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 // number of required replies.
 func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
 	getReply func() interface{}, context *Context) ([]interface{}, error) {
-	if opts.N < len(addrs) {
+
+	// Return error if provided addrs is less. modified by joezxy 2015/03/07
+	if len(addrs) < opts.N {
 		return nil, SendError{
 			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
 			canRetry: false,
