@@ -218,11 +218,11 @@ func newStoreRangeIterator(store *Store) *storeRangeIterator {
 	r := &storeRangeIterator{
 		store: store,
 	}
-	r.reset()
+	r.Reset()
 	return r
 }
 
-func (si *storeRangeIterator) next() *Range {
+func (si *storeRangeIterator) Next() *Range {
 	si.store.mu.Lock()
 	defer si.store.mu.Unlock()
 	if index, remaining := si.index, len(si.store.rangesByKey)-si.index; remaining > 0 {
@@ -233,11 +233,11 @@ func (si *storeRangeIterator) next() *Range {
 	return nil
 }
 
-func (si *storeRangeIterator) estimatedCount() int {
+func (si *storeRangeIterator) EstimatedCount() int {
 	return si.remaining
 }
 
-func (si *storeRangeIterator) reset() {
+func (si *storeRangeIterator) Reset() {
 	si.store.mu.Lock()
 	defer si.store.mu.Unlock()
 	si.remaining = len(si.store.rangesByKey)
@@ -258,7 +258,10 @@ type Store struct {
 	gossip      *gossip.Gossip      // Configs and store capacities
 	transport   multiraft.Transport // Log replication traffic
 	raftIDAlloc *IDAllocator        // Raft ID allocator
-	configMu    sync.Mutex          // Limit config update processing
+	gcQueue     *gcQueue            // Garbage collection queue
+	splitQueue  *splitQueue         // Range splitting queue
+	verifyQueue *verifyQueue        // Checksum verification queue
+	scanner     *rangeScanner       // Range scanner
 	multiraft   *multiraft.MultiRaft
 	stopper     *util.Stopper
 
@@ -285,6 +288,14 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		ranges:      map[int64]*Range{},
 	}
 	s.allocator.storeFinder = s.findStores
+
+	// Add range scanner and configure with queues.
+	s.scanner = newRangeScanner(defaultScanInterval, newStoreRangeIterator(s))
+	s.gcQueue = newGCQueue()
+	s.splitQueue = newSplitQueue(db, gossip)
+	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue)
+
 	return s
 }
 
@@ -384,10 +395,13 @@ func (s *Store) Start() error {
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
-	// Start Raft processing goroutines
+	// Start Raft processing goroutines.
 	mr.Start()
 	s.stopper.Add(1)
 	go s.processRaft()
+
+	// Start the scanner.
+	s.scanner.Start(s.clock, s.stopper)
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
@@ -406,79 +420,63 @@ func (s *Store) Start() error {
 // configGossipUpdate is a callback for gossip updates to
 // configuration maps which affect range split boundaries.
 func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
-	s.configMu.Lock()
-	defer s.configMu.Unlock()
-
-	switch key {
-	case gossip.KeyConfigAccounting, gossip.KeyConfigZone:
-		if !contentsChanged {
-			return // Skip update if it's just a newer timestamp or fewer hops to info
-		}
-		info, err := s.gossip.GetInfo(key)
-		if err != nil {
-			log.Errorf("unable to fetch %s config from gossip: %s", key, err)
-			return
-		}
-		configMap, ok := info.(PrefixConfigMap)
-		if !ok {
-			log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
-			return
-		}
-		s.maybeSplitRangesByConfigs(configMap)
-	default:
-		log.Warningf("unhandled gossip update to key %s", key)
+	if !contentsChanged {
+		return // Skip update if it's just a newer timestamp or fewer hops to info
+	}
+	info, err := s.gossip.GetInfo(key)
+	if err != nil {
+		log.Errorf("unable to fetch %s config from gossip: %s", key, err)
 		return
+	}
+	configMap, ok := info.(PrefixConfigMap)
+	if !ok {
+		log.Errorf("gossiped info is not a prefix configuration map: %+v", info)
+		return
+	}
+	s.maybeSplitRangesByConfigs(configMap)
+
+	// If the zone configs changed, run through ranges and set max bytes.
+	if key == gossip.KeyConfigZone {
+		s.setRangesMaxBytes(configMap)
 	}
 }
 
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
-// issues AdminSplit commands.
+// adds them to the split queue.
 func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, config := range configMap {
-		// While locked, find the range which contains this config prefix, if any.
-		s.mu.Lock()
+		// Find the range which contains this config prefix, if any.
 		n := sort.Search(len(s.rangesByKey), func(i int) bool {
 			return config.Prefix.Less(s.rangesByKey[i].Desc().EndKey)
 		})
 		// If the config doesn't split the range or the range isn't the
 		// leader of its consensus group, continue.
 		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
-			s.mu.Unlock()
 			continue
 		}
-		start := s.rangesByKey[n].Desc().StartKey
-		end := s.rangesByKey[n].Desc().EndKey
-		s.mu.Unlock()
+		s.splitQueue.MaybeAdd(s.rangesByKey[n], s.clock.Now())
+	}
+}
 
-		// Now split the range into pieces by intersecting it with the
-		// boundaries of the config map.
-		splits, err := configMap.SplitRangeByPrefixes(start, end)
-		if err != nil {
-			log.Errorf("unable to split range %q-%q by prefix map %s", start, end, configMap)
-			continue
+// setRangesMaxBytes sets the max bytes for every range according
+// to the zone configs.
+//
+// TODO(spencer): scanning all ranges with the lock held could cause
+//   perf issues if the number of ranges grows large enough.
+func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	zone := zoneMap[0].Config.(*proto.ZoneConfig)
+	idx := 0
+	for _, rng := range s.ranges {
+		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
+			idx++
+			zone = zoneMap[idx].Config.(*proto.ZoneConfig)
 		}
-		// Gather new splits.
-		var splitKeys []proto.Key
-		for _, split := range splits {
-			if split.end.Less(end) {
-				splitKeys = append(splitKeys, split.end)
-			}
-		}
-		if len(splitKeys) == 0 {
-			continue
-		}
-		// Invoke admin split for each proposed split key.
-		log.Infof("splitting range %q-%q at keys %v", start, end, splitKeys)
-		for _, splitKey := range splitKeys {
-			req := &proto.AdminSplitRequest{
-				RequestHeader: proto.RequestHeader{Key: splitKey},
-				SplitKey:      splitKey,
-			}
-			if err := s.db.Call(proto.AdminSplit, req, &proto.AdminSplitResponse{}); err != nil {
-				log.Errorf("unable to split at key %q: %s", splitKey, err)
-			}
-		}
+		rng.SetMaxBytes(zone.RangeMaxBytes)
 	}
 }
 
@@ -641,6 +639,9 @@ func (s *Store) Allocator() *allocator { return s.allocator }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
+
+// SplitQueue accessor.
+func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft

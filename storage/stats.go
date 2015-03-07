@@ -62,6 +62,8 @@ func (rs *rangeStats) GetMVCC() engine.MVCCStats {
 // GetSize returns the range size as the sum of the key and value
 // bytes. This includes all non-live keys and all versioned values.
 func (rs *rangeStats) GetSize() int64 {
+	rs.Lock()
+	defer rs.Unlock()
 	return rs.KeyBytes + rs.ValBytes
 }
 
@@ -98,6 +100,8 @@ func (rs *rangeStats) Update(ms engine.MVCCStats) {
 // GetAvgIntentAge returns the average age of outstanding intents,
 // based on current wall time specified via nowNanos.
 func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
+	rs.Lock()
+	defer rs.Unlock()
 	if rs.IntentCount == 0 {
 		return 0
 	}
@@ -110,6 +114,8 @@ func (rs *rangeStats) GetAvgIntentAge(nowNanos int64) float64 {
 // GetGCBytesAge returns the total age of outstanding gc'able
 // bytes, based on current wall time specified via nowNanos.
 func (rs *rangeStats) GetGCBytesAge(nowNanos int64) int64 {
+	rs.Lock()
+	defer rs.Unlock()
 	gcBytes := (rs.KeyBytes + rs.ValBytes - rs.LiveBytes)
 	if gcBytes == 0 {
 		return 0

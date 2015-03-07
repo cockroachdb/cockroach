@@ -296,17 +296,17 @@ func TestStoreRangeIterator(t *testing.T) {
 	// Verify two passes of the iteration.
 	iter := newStoreRangeIterator(store)
 	for pass := 0; pass < 2; pass++ {
-		for i := 1; iter.estimatedCount() > 0; i++ {
-			if rng := iter.next(); rng == nil || rng.Desc().RaftID != int64(i) {
+		for i := 1; iter.EstimatedCount() > 0; i++ {
+			if rng := iter.Next(); rng == nil || rng.Desc().RaftID != int64(i) {
 				t.Errorf("expected range with Raft ID %d; got %v", i, rng)
 			}
 		}
-		iter.reset()
+		iter.Reset()
 	}
 
 	// Try iterating with an addition.
-	iter.next()
-	if ec := iter.estimatedCount(); ec != 9 {
+	iter.Next()
+	if ec := iter.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 	// Insert range as second range.
@@ -315,13 +315,13 @@ func TestStoreRangeIterator(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Estimated count will still be 9, as it's cached, but next() will refresh.
-	if ec := iter.estimatedCount(); ec != 9 {
+	if ec := iter.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
-	if r := iter.next(); r == nil || r != rng {
+	if r := iter.Next(); r == nil || r != rng {
 		t.Errorf("expected r==rng; got %d", r.Desc().RaftID)
 	}
-	if ec := iter.estimatedCount(); ec != 9 {
+	if ec := iter.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 
@@ -334,14 +334,14 @@ func TestStoreRangeIterator(t *testing.T) {
 	if err := store.RemoveRange(rng); err != nil {
 		t.Error(err)
 	}
-	if ec := iter.estimatedCount(); ec != 9 {
+	if ec := iter.EstimatedCount(); ec != 9 {
 		t.Errorf("expected 9 remaining; got %d", ec)
 	}
 	// Verify we skip removed range (id=2).
-	if r := iter.next(); r.Desc().RaftID != 3 {
+	if r := iter.Next(); r.Desc().RaftID != 3 {
 		t.Errorf("expected raftID=3; got %d", r.Desc().RaftID)
 	}
-	if ec := iter.estimatedCount(); ec != 7 {
+	if ec := iter.EstimatedCount(); ec != 7 {
 		t.Errorf("expected 7 remaining; got %d", ec)
 	}
 }

@@ -350,11 +350,12 @@ func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64
 	}
 }
 
-// TestStoreShouldSplit verifies that shouldSplit() takes into account the
-// zone configuration to figure out what the maximum size of a range is.
-// It further verifies that the range is in fact split on exceeding
-// zone's RangeMaxBytes.
-func TestStoreShouldSplit(t *testing.T) {
+// TestStoreZoneUpdateAndRangeSplit verifies that modifying the zone
+// configuration changes range max bytes and Range.maybeSplit() takes
+// max bytes into account when deciding whether to enqueue a range for
+// splitting. It further verifies that the range is in fact split on
+// exceeding zone's RangeMaxBytes.
+func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -372,9 +373,12 @@ func TestStoreShouldSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// See if the range's max bytes is modified via gossip callback within 50ms.
 	rng := store.LookupRange(engine.KeyMin, nil)
-	if ok := rng.ShouldSplit(); ok {
-		t.Errorf("range should not split with no data in it")
+	if err := util.IsTrueWithin(func() bool {
+		return rng.GetMaxBytes() == 1<<18
+	}, 50*time.Millisecond); err != nil {
+		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
 
 	maxBytes := zoneConfig.RangeMaxBytes
@@ -385,7 +389,7 @@ func TestStoreShouldSplit(t *testing.T) {
 		newRng := store.LookupRange(proto.Key("\xff\x00"), nil)
 		return newRng != rng
 	}, time.Second); err != nil {
-		t.Errorf("expected range to split in 1s")
+		t.Errorf("expected range to split within 1s")
 	}
 }
 

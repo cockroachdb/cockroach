@@ -45,6 +45,11 @@ type PrefixConfig struct {
 	Config    interface{} // the config object
 }
 
+// String returns a human readable description.
+func (pc *PrefixConfig) String() string {
+	return fmt.Sprintf("prefix=%s: %s", pc.Prefix, pc.Config)
+}
+
 // PrefixConfigMap is a slice of prefix configs, sorted by
 // prefix. Along with various accessor methods, the config map
 // also contains additional prefix configs in the slice to

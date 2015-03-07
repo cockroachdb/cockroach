@@ -155,7 +155,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 		return
 	}
 
-	log.Infof("adding range %s from %s queue", rng, bq.name)
+	log.Infof("adding range %s to %s queue", rng, bq.name)
 	item = &rangeItem{value: rng, priority: priority}
 	heap.Push(&bq.priorityQ, item)
 	bq.ranges[rng.Desc().RaftID] = item
