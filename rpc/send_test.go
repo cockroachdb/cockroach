@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,25 +18,17 @@
 package rpc
 
 import (
-	"net"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
-	testAddrs := []net.Addr{
-		util.MakeRawAddr("tcp", "127.0.0.1:8080"),
-		util.MakeRawAddr("tcp", "127.0.0.1:8081"),
-		util.MakeRawAddr("tcp", "127.0.0.1:8082"),
-	}
 
-	testSendOption := Options{
-		N: 5,
-	}
+	// The provided addrs is nil, so its length will be always
+	// less than the specified response number
+	ret, err := Send(Options{N: 1}, "", nil, nil, nil, nil)
 
-	ret, _ := Send(testSendOption, "", testAddrs, nil, nil, nil)
-	if ret != nil {
-		t.Fatalf("Shorter addrs should have nil and SendError return")
+	// the expected return is nil and SendError
+	if _, ok := err.(SendError); !ok || ret != nil {
+		t.Fatalf("Shorter addrs should return nil and SendError.")
 	}
 }
