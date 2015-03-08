@@ -266,7 +266,7 @@ func (is *infoStore) registerCallback(pattern string, method Callback) {
 	}); err != nil {
 		log.Errorf("failed to properly run registered callback while visiting pre-existing info: %s", err)
 	}
-	// Run callbacks in a goroutin to avoid mutex reentry.
+	// Run callbacks in a goroutine to avoid mutex reentry.
 	go func() {
 		for _, i := range infos {
 			method(i.Key, true /* contentsChanged */)

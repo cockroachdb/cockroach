@@ -100,39 +100,6 @@ func ExampleSetAndGetZone() {
 	// range_max_bytes: 67108864
 }
 
-// ExampleSetZoneInvalid sets invalid zone configs and verifies error
-// responses.
-func ExampleSetZoneInvalid() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
-
-	testData := []string{
-		`
-replicas:
-  - attrs: [dc1, ssd]
-range_min_bytes: 128
-range_max_bytes: 524288
-`,
-		`
-replicas:
-  - attrs: [dc1, ssd]
-range_min_bytes: 67108864
-range_max_bytes: 67108864
-`,
-		`
-range_min_bytes: 1048576
-range_max_bytes: 67108864
-`,
-	}
-
-	for _, data := range testData {
-		testConfigFn := createTestConfigFile(data)
-		RunSetZone(testContext, "db1", testConfigFn)
-		os.Remove(testConfigFn)
-	}
-	// Output:
-}
-
 // ExampleLsZones creates a series of zone configs and verifies
 // zone-ls works. First, no regexp lists all zone configs. Second,
 // regexp properly matches results.
