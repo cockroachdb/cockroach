@@ -6,3 +6,4 @@ build/deploy
 */*.test
 */*/*.test
 */*/*/*.test
+storage/engine/mvcc_scan_*
