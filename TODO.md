@@ -1,31 +1,31 @@
-* Construct a base handler for all HTTP servers to glog.Fatal the
+* [ ] Construct a base handler for all HTTP servers to glog.Fatal the
   process with a deferred recover func to prevent HTTP from swallowing
   panics which might otherwise be holding locks, etc.
 
-* Response cache should use 1 hour since last committed log entry for
+* [ ] Response cache should use 1 hour since last committed log entry for
   GC.
 
-* Transactions
+* [ ] Transactions
 
   - Keep a cache of pushed transactions on a store to avoid repushing
     further intents after a txn has already been aborted or its
     timestamp moved forward.
 
-* Redirect clients if HTTP server is busy compared to others in the
+* [ ] Redirect clients if HTTP server is busy compared to others in the
   cluster. Report node's load via gossip as part of a max
   group. Measure node's load using a decaying stat. Verify redirect
   behavior with http client.
 
-* Write a test for transaction starvation.
+* [ ] Write a test for transaction starvation.
 
-* Change key / end key in request to a more flexible list of key
+* [ ] Change key / end key in request to a more flexible list of key
   intervals to properly account for batch requests. This data is
   used for command queue, timestamp cache and response cache.
   Currently, key/end key is the union interval of all sub requests
   in a batch request, meaning there's less allowable concurrency
   in cases where keys affected by the batch are widely separated.
 
-* Allow atomic update batches to replace transactions where possible.
+* [ ] Allow atomic update batches to replace transactions where possible.
   This means batching up BeginTransaction request with first batch via
   TxnSender. In the event BeginTransaction is the first request in the
   batch and EndTransaction is the last, we want to let the DistSender
@@ -45,9 +45,9 @@
     be okay since resolving intents is best-effort and does not require
     transactional semantics (in fact, might be better off without)
 
-* Propagate errors from storage/id_alloc.go
+* [ ] Propagate errors from storage/id_alloc.go
 
-* Rebalance range replica. Only fully-replicated ranges may be
+* [ ] Rebalance range replica. Only fully-replicated ranges may be
   rebalanced.
 
   - Keep a rebalance queue in memory. Range replicas are added to the
@@ -64,14 +64,14 @@
     cluster. Only stores finding themselves in the top N space
     utilized set may have rebalances in effect.
 
-* Cleanup proto files to adhere to proto capitalization instead of go's.
+* [ ] Cleanup proto files to adhere to proto capitalization instead of go's.
 
-* Implement split / merge range queue and remove check for split on
+* [ ] Implement split / merge range queue and remove check for split on
   every read/write range command.
 
-* Move split/merge trigger into a submessage in internal.proto / api.proto.
+* [ ] Move split/merge trigger into a submessage in internal.proto / api.proto.
   This will simplify the logic in kv/db.go for neutering any public-facing
   request which specifies triggers.
 
-* Unexport range.Desc and make func (r *Range) Desc() proto.RangeDescriptor
+* [ ] Unexport range.Desc and make func (r *Range) Desc() proto.RangeDescriptor
   mutex-protected accessor method.
