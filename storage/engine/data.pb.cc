@@ -56,9 +56,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* MVCCMetadata_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   MVCCMetadata_reflection_ = NULL;
-const ::google::protobuf::Descriptor* ScanMetadata_descriptor_ = NULL;
+const ::google::protobuf::Descriptor* GCMetadata_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  ScanMetadata_reflection_ = NULL;
+  GCMetadata_reflection_ = NULL;
 const ::google::protobuf::Descriptor* TimeSeriesDatapoint_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   TimeSeriesDatapoint_reflection_ = NULL;
@@ -289,22 +289,22 @@ void protobuf_AssignDesc_data_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(MVCCMetadata));
-  ScanMetadata_descriptor_ = file->message_type(12);
-  static const int ScanMetadata_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, last_scan_nanos_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, oldest_intent_nanos_),
+  GCMetadata_descriptor_ = file->message_type(12);
+  static const int GCMetadata_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, last_scan_nanos_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, oldest_intent_nanos_),
   };
-  ScanMetadata_reflection_ =
+  GCMetadata_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
-      ScanMetadata_descriptor_,
-      ScanMetadata::default_instance_,
-      ScanMetadata_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ScanMetadata, _unknown_fields_),
+      GCMetadata_descriptor_,
+      GCMetadata::default_instance_,
+      GCMetadata_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, _unknown_fields_),
       -1,
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(ScanMetadata));
+      sizeof(GCMetadata));
   TimeSeriesDatapoint_descriptor_ = file->message_type(13);
   static const int TimeSeriesDatapoint_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, timestamp_nanos_),
@@ -378,7 +378,7 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     MVCCMetadata_descriptor_, &MVCCMetadata::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    ScanMetadata_descriptor_, &ScanMetadata::default_instance());
+    GCMetadata_descriptor_, &GCMetadata::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     TimeSeriesDatapoint_descriptor_, &TimeSeriesDatapoint::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -412,8 +412,8 @@ void protobuf_ShutdownFile_data_2eproto() {
   delete Transaction_reflection_;
   delete MVCCMetadata::default_instance_;
   delete MVCCMetadata_reflection_;
-  delete ScanMetadata::default_instance_;
-  delete ScanMetadata_reflection_;
+  delete GCMetadata::default_instance_;
+  delete GCMetadata_reflection_;
   delete TimeSeriesDatapoint::default_instance_;
   delete TimeSeriesDatapoint_reflection_;
   delete TimeSeriesData::default_instance_;
@@ -472,18 +472,18 @@ void protobuf_AddDesc_data_2eproto() {
     "imestamp\030\002 \001(\0132\020.proto.TimestampB\004\310\336\037\000\022\025"
     "\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003"
     "B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022\033\n\005value"
-    "\030\006 \001(\0132\014.proto.Value\"J\n\014ScanMetadata\022\035\n\017"
-    "last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_in"
-    "tent_nanos\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022"
-    "\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_va"
-    "lue\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016TimeSe"
-    "riesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoin"
-    "ts\030\002 \003(\0132\032.proto.TimeSeriesDatapoint*>\n\021"
-    "ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016RE"
-    "MOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n"
-    "\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021T"
-    "ransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITT"
-    "ED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 2183);
+    "\030\006 \001(\0132\014.proto.Value\"H\n\nGCMetadata\022\035\n\017la"
+    "st_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_inte"
+    "nt_nanos\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n"
+    "\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_valu"
+    "e\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"T\n\016TimeSeri"
+    "esData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022.\n\ndatapoints"
+    "\030\002 \003(\0132\032.proto.TimeSeriesDatapoint*>\n\021Re"
+    "plicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMO"
+    "VE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n\014S"
+    "ERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021Tra"
+    "nsactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED"
+    "\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000", 2181);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -498,7 +498,7 @@ void protobuf_AddDesc_data_2eproto() {
   NodeList::default_instance_ = new NodeList();
   Transaction::default_instance_ = new Transaction();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
-  ScanMetadata::default_instance_ = new ScanMetadata();
+  GCMetadata::default_instance_ = new GCMetadata();
   TimeSeriesDatapoint::default_instance_ = new TimeSeriesDatapoint();
   TimeSeriesData::default_instance_ = new TimeSeriesData();
   Timestamp::default_instance_->InitAsDefaultInstance();
@@ -513,7 +513,7 @@ void protobuf_AddDesc_data_2eproto() {
   NodeList::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
   MVCCMetadata::default_instance_->InitAsDefaultInstance();
-  ScanMetadata::default_instance_->InitAsDefaultInstance();
+  GCMetadata::default_instance_->InitAsDefaultInstance();
   TimeSeriesDatapoint::default_instance_->InitAsDefaultInstance();
   TimeSeriesData::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_data_2eproto);
@@ -4749,67 +4749,67 @@ void MVCCMetadata::Swap(MVCCMetadata* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int ScanMetadata::kLastScanNanosFieldNumber;
-const int ScanMetadata::kOldestIntentNanosFieldNumber;
+const int GCMetadata::kLastScanNanosFieldNumber;
+const int GCMetadata::kOldestIntentNanosFieldNumber;
 #endif  // !_MSC_VER
 
-ScanMetadata::ScanMetadata()
+GCMetadata::GCMetadata()
   : ::google::protobuf::Message() {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:proto.ScanMetadata)
+  // @@protoc_insertion_point(constructor:proto.GCMetadata)
 }
 
-void ScanMetadata::InitAsDefaultInstance() {
+void GCMetadata::InitAsDefaultInstance() {
 }
 
-ScanMetadata::ScanMetadata(const ScanMetadata& from)
+GCMetadata::GCMetadata(const GCMetadata& from)
   : ::google::protobuf::Message() {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:proto.ScanMetadata)
+  // @@protoc_insertion_point(copy_constructor:proto.GCMetadata)
 }
 
-void ScanMetadata::SharedCtor() {
+void GCMetadata::SharedCtor() {
   _cached_size_ = 0;
   last_scan_nanos_ = GOOGLE_LONGLONG(0);
   oldest_intent_nanos_ = GOOGLE_LONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
-ScanMetadata::~ScanMetadata() {
-  // @@protoc_insertion_point(destructor:proto.ScanMetadata)
+GCMetadata::~GCMetadata() {
+  // @@protoc_insertion_point(destructor:proto.GCMetadata)
   SharedDtor();
 }
 
-void ScanMetadata::SharedDtor() {
+void GCMetadata::SharedDtor() {
   if (this != default_instance_) {
   }
 }
 
-void ScanMetadata::SetCachedSize(int size) const {
+void GCMetadata::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* ScanMetadata::descriptor() {
+const ::google::protobuf::Descriptor* GCMetadata::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return ScanMetadata_descriptor_;
+  return GCMetadata_descriptor_;
 }
 
-const ScanMetadata& ScanMetadata::default_instance() {
+const GCMetadata& GCMetadata::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_data_2eproto();
   return *default_instance_;
 }
 
-ScanMetadata* ScanMetadata::default_instance_ = NULL;
+GCMetadata* GCMetadata::default_instance_ = NULL;
 
-ScanMetadata* ScanMetadata::New() const {
-  return new ScanMetadata;
+GCMetadata* GCMetadata::New() const {
+  return new GCMetadata;
 }
 
-void ScanMetadata::Clear() {
+void GCMetadata::Clear() {
 #define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
-  &reinterpret_cast<ScanMetadata*>(16)->f) - \
+  &reinterpret_cast<GCMetadata*>(16)->f) - \
    reinterpret_cast<char*>(16))
 
 #define ZR_(first, last) do {                              \
@@ -4827,11 +4827,11 @@ void ScanMetadata::Clear() {
   mutable_unknown_fields()->Clear();
 }
 
-bool ScanMetadata::MergePartialFromCodedStream(
+bool GCMetadata::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:proto.ScanMetadata)
+  // @@protoc_insertion_point(parse_start:proto.GCMetadata)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
@@ -4880,17 +4880,17 @@ bool ScanMetadata::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:proto.ScanMetadata)
+  // @@protoc_insertion_point(parse_success:proto.GCMetadata)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:proto.ScanMetadata)
+  // @@protoc_insertion_point(parse_failure:proto.GCMetadata)
   return false;
 #undef DO_
 }
 
-void ScanMetadata::SerializeWithCachedSizes(
+void GCMetadata::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:proto.ScanMetadata)
+  // @@protoc_insertion_point(serialize_start:proto.GCMetadata)
   // optional int64 last_scan_nanos = 1;
   if (has_last_scan_nanos()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->last_scan_nanos(), output);
@@ -4905,12 +4905,12 @@ void ScanMetadata::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
   }
-  // @@protoc_insertion_point(serialize_end:proto.ScanMetadata)
+  // @@protoc_insertion_point(serialize_end:proto.GCMetadata)
 }
 
-::google::protobuf::uint8* ScanMetadata::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* GCMetadata::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:proto.ScanMetadata)
+  // @@protoc_insertion_point(serialize_to_array_start:proto.GCMetadata)
   // optional int64 last_scan_nanos = 1;
   if (has_last_scan_nanos()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->last_scan_nanos(), target);
@@ -4925,11 +4925,11 @@ void ScanMetadata::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:proto.ScanMetadata)
+  // @@protoc_insertion_point(serialize_to_array_end:proto.GCMetadata)
   return target;
 }
 
-int ScanMetadata::ByteSize() const {
+int GCMetadata::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
@@ -4959,10 +4959,10 @@ int ScanMetadata::ByteSize() const {
   return total_size;
 }
 
-void ScanMetadata::MergeFrom(const ::google::protobuf::Message& from) {
+void GCMetadata::MergeFrom(const ::google::protobuf::Message& from) {
   GOOGLE_CHECK_NE(&from, this);
-  const ScanMetadata* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const ScanMetadata*>(
+  const GCMetadata* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const GCMetadata*>(
       &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -4971,7 +4971,7 @@ void ScanMetadata::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void ScanMetadata::MergeFrom(const ScanMetadata& from) {
+void GCMetadata::MergeFrom(const GCMetadata& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_last_scan_nanos()) {
@@ -4984,24 +4984,24 @@ void ScanMetadata::MergeFrom(const ScanMetadata& from) {
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
 
-void ScanMetadata::CopyFrom(const ::google::protobuf::Message& from) {
+void GCMetadata::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void ScanMetadata::CopyFrom(const ScanMetadata& from) {
+void GCMetadata::CopyFrom(const GCMetadata& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool ScanMetadata::IsInitialized() const {
+bool GCMetadata::IsInitialized() const {
 
   return true;
 }
 
-void ScanMetadata::Swap(ScanMetadata* other) {
+void GCMetadata::Swap(GCMetadata* other) {
   if (other != this) {
     std::swap(last_scan_nanos_, other->last_scan_nanos_);
     std::swap(oldest_intent_nanos_, other->oldest_intent_nanos_);
@@ -5011,11 +5011,11 @@ void ScanMetadata::Swap(ScanMetadata* other) {
   }
 }
 
-::google::protobuf::Metadata ScanMetadata::GetMetadata() const {
+::google::protobuf::Metadata GCMetadata::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = ScanMetadata_descriptor_;
-  metadata.reflection = ScanMetadata_reflection_;
+  metadata.descriptor = GCMetadata_descriptor_;
+  metadata.reflection = GCMetadata_reflection_;
   return metadata;
 }
 

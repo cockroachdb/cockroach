@@ -586,14 +586,14 @@ class InternalGCRequest : public ::google::protobuf::Message {
   inline ::proto::RequestHeader* release_header();
   inline void set_allocated_header(::proto::RequestHeader* header);
 
-  // optional .proto.ScanMetadata scan_meta = 2;
-  inline bool has_scan_meta() const;
-  inline void clear_scan_meta();
-  static const int kScanMetaFieldNumber = 2;
-  inline const ::proto::ScanMetadata& scan_meta() const;
-  inline ::proto::ScanMetadata* mutable_scan_meta();
-  inline ::proto::ScanMetadata* release_scan_meta();
-  inline void set_allocated_scan_meta(::proto::ScanMetadata* scan_meta);
+  // optional .proto.GCMetadata gc_meta = 2;
+  inline bool has_gc_meta() const;
+  inline void clear_gc_meta();
+  static const int kGcMetaFieldNumber = 2;
+  inline const ::proto::GCMetadata& gc_meta() const;
+  inline ::proto::GCMetadata* mutable_gc_meta();
+  inline ::proto::GCMetadata* release_gc_meta();
+  inline void set_allocated_gc_meta(::proto::GCMetadata* gc_meta);
 
   // repeated .proto.InternalGCRequest.GCKey keys = 3;
   inline int keys_size() const;
@@ -611,15 +611,15 @@ class InternalGCRequest : public ::google::protobuf::Message {
  private:
   inline void set_has_header();
   inline void clear_has_header();
-  inline void set_has_scan_meta();
-  inline void clear_has_scan_meta();
+  inline void set_has_gc_meta();
+  inline void clear_has_gc_meta();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::proto::RequestHeader* header_;
-  ::proto::ScanMetadata* scan_meta_;
+  ::proto::GCMetadata* gc_meta_;
   ::google::protobuf::RepeatedPtrField< ::proto::InternalGCRequest_GCKey > keys_;
   friend void  protobuf_AddDesc_internal_2eproto();
   friend void protobuf_AssignDesc_internal_2eproto();
@@ -2726,45 +2726,45 @@ inline void InternalGCRequest::set_allocated_header(::proto::RequestHeader* head
   // @@protoc_insertion_point(field_set_allocated:proto.InternalGCRequest.header)
 }
 
-// optional .proto.ScanMetadata scan_meta = 2;
-inline bool InternalGCRequest::has_scan_meta() const {
+// optional .proto.GCMetadata gc_meta = 2;
+inline bool InternalGCRequest::has_gc_meta() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void InternalGCRequest::set_has_scan_meta() {
+inline void InternalGCRequest::set_has_gc_meta() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void InternalGCRequest::clear_has_scan_meta() {
+inline void InternalGCRequest::clear_has_gc_meta() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void InternalGCRequest::clear_scan_meta() {
-  if (scan_meta_ != NULL) scan_meta_->::proto::ScanMetadata::Clear();
-  clear_has_scan_meta();
+inline void InternalGCRequest::clear_gc_meta() {
+  if (gc_meta_ != NULL) gc_meta_->::proto::GCMetadata::Clear();
+  clear_has_gc_meta();
 }
-inline const ::proto::ScanMetadata& InternalGCRequest::scan_meta() const {
-  // @@protoc_insertion_point(field_get:proto.InternalGCRequest.scan_meta)
-  return scan_meta_ != NULL ? *scan_meta_ : *default_instance_->scan_meta_;
+inline const ::proto::GCMetadata& InternalGCRequest::gc_meta() const {
+  // @@protoc_insertion_point(field_get:proto.InternalGCRequest.gc_meta)
+  return gc_meta_ != NULL ? *gc_meta_ : *default_instance_->gc_meta_;
 }
-inline ::proto::ScanMetadata* InternalGCRequest::mutable_scan_meta() {
-  set_has_scan_meta();
-  if (scan_meta_ == NULL) scan_meta_ = new ::proto::ScanMetadata;
-  // @@protoc_insertion_point(field_mutable:proto.InternalGCRequest.scan_meta)
-  return scan_meta_;
+inline ::proto::GCMetadata* InternalGCRequest::mutable_gc_meta() {
+  set_has_gc_meta();
+  if (gc_meta_ == NULL) gc_meta_ = new ::proto::GCMetadata;
+  // @@protoc_insertion_point(field_mutable:proto.InternalGCRequest.gc_meta)
+  return gc_meta_;
 }
-inline ::proto::ScanMetadata* InternalGCRequest::release_scan_meta() {
-  clear_has_scan_meta();
-  ::proto::ScanMetadata* temp = scan_meta_;
-  scan_meta_ = NULL;
+inline ::proto::GCMetadata* InternalGCRequest::release_gc_meta() {
+  clear_has_gc_meta();
+  ::proto::GCMetadata* temp = gc_meta_;
+  gc_meta_ = NULL;
   return temp;
 }
-inline void InternalGCRequest::set_allocated_scan_meta(::proto::ScanMetadata* scan_meta) {
-  delete scan_meta_;
-  scan_meta_ = scan_meta;
-  if (scan_meta) {
-    set_has_scan_meta();
+inline void InternalGCRequest::set_allocated_gc_meta(::proto::GCMetadata* gc_meta) {
+  delete gc_meta_;
+  gc_meta_ = gc_meta;
+  if (gc_meta) {
+    set_has_gc_meta();
   } else {
-    clear_has_scan_meta();
+    clear_has_gc_meta();
   }
-  // @@protoc_insertion_point(field_set_allocated:proto.InternalGCRequest.scan_meta)
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalGCRequest.gc_meta)
 }
 
 // repeated .proto.InternalGCRequest.GCKey keys = 3;

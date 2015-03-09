@@ -48,7 +48,7 @@ class ChangeReplicasTrigger;
 class NodeList;
 class Transaction;
 class MVCCMetadata;
-class ScanMetadata;
+class GCMetadata;
 class TimeSeriesDatapoint;
 class TimeSeriesData;
 
@@ -1450,14 +1450,14 @@ class MVCCMetadata : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class ScanMetadata : public ::google::protobuf::Message {
+class GCMetadata : public ::google::protobuf::Message {
  public:
-  ScanMetadata();
-  virtual ~ScanMetadata();
+  GCMetadata();
+  virtual ~GCMetadata();
 
-  ScanMetadata(const ScanMetadata& from);
+  GCMetadata(const GCMetadata& from);
 
-  inline ScanMetadata& operator=(const ScanMetadata& from) {
+  inline GCMetadata& operator=(const GCMetadata& from) {
     CopyFrom(from);
     return *this;
   }
@@ -1471,17 +1471,17 @@ class ScanMetadata : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const ScanMetadata& default_instance();
+  static const GCMetadata& default_instance();
 
-  void Swap(ScanMetadata* other);
+  void Swap(GCMetadata* other);
 
   // implements Message ----------------------------------------------
 
-  ScanMetadata* New() const;
+  GCMetadata* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const ScanMetadata& from);
-  void MergeFrom(const ScanMetadata& from);
+  void CopyFrom(const GCMetadata& from);
+  void MergeFrom(const GCMetadata& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -1517,7 +1517,7 @@ class ScanMetadata : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 oldest_intent_nanos() const;
   inline void set_oldest_intent_nanos(::google::protobuf::int64 value);
 
-  // @@protoc_insertion_point(class_scope:proto.ScanMetadata)
+  // @@protoc_insertion_point(class_scope:proto.GCMetadata)
  private:
   inline void set_has_last_scan_nanos();
   inline void clear_has_last_scan_nanos();
@@ -1535,7 +1535,7 @@ class ScanMetadata : public ::google::protobuf::Message {
   friend void protobuf_ShutdownFile_data_2eproto();
 
   void InitAsDefaultInstance();
-  static ScanMetadata* default_instance_;
+  static GCMetadata* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -3539,54 +3539,54 @@ inline void MVCCMetadata::set_allocated_value(::proto::Value* value) {
 
 // -------------------------------------------------------------------
 
-// ScanMetadata
+// GCMetadata
 
 // optional int64 last_scan_nanos = 1;
-inline bool ScanMetadata::has_last_scan_nanos() const {
+inline bool GCMetadata::has_last_scan_nanos() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void ScanMetadata::set_has_last_scan_nanos() {
+inline void GCMetadata::set_has_last_scan_nanos() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void ScanMetadata::clear_has_last_scan_nanos() {
+inline void GCMetadata::clear_has_last_scan_nanos() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void ScanMetadata::clear_last_scan_nanos() {
+inline void GCMetadata::clear_last_scan_nanos() {
   last_scan_nanos_ = GOOGLE_LONGLONG(0);
   clear_has_last_scan_nanos();
 }
-inline ::google::protobuf::int64 ScanMetadata::last_scan_nanos() const {
-  // @@protoc_insertion_point(field_get:proto.ScanMetadata.last_scan_nanos)
+inline ::google::protobuf::int64 GCMetadata::last_scan_nanos() const {
+  // @@protoc_insertion_point(field_get:proto.GCMetadata.last_scan_nanos)
   return last_scan_nanos_;
 }
-inline void ScanMetadata::set_last_scan_nanos(::google::protobuf::int64 value) {
+inline void GCMetadata::set_last_scan_nanos(::google::protobuf::int64 value) {
   set_has_last_scan_nanos();
   last_scan_nanos_ = value;
-  // @@protoc_insertion_point(field_set:proto.ScanMetadata.last_scan_nanos)
+  // @@protoc_insertion_point(field_set:proto.GCMetadata.last_scan_nanos)
 }
 
 // optional int64 oldest_intent_nanos = 2;
-inline bool ScanMetadata::has_oldest_intent_nanos() const {
+inline bool GCMetadata::has_oldest_intent_nanos() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void ScanMetadata::set_has_oldest_intent_nanos() {
+inline void GCMetadata::set_has_oldest_intent_nanos() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void ScanMetadata::clear_has_oldest_intent_nanos() {
+inline void GCMetadata::clear_has_oldest_intent_nanos() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void ScanMetadata::clear_oldest_intent_nanos() {
+inline void GCMetadata::clear_oldest_intent_nanos() {
   oldest_intent_nanos_ = GOOGLE_LONGLONG(0);
   clear_has_oldest_intent_nanos();
 }
-inline ::google::protobuf::int64 ScanMetadata::oldest_intent_nanos() const {
-  // @@protoc_insertion_point(field_get:proto.ScanMetadata.oldest_intent_nanos)
+inline ::google::protobuf::int64 GCMetadata::oldest_intent_nanos() const {
+  // @@protoc_insertion_point(field_get:proto.GCMetadata.oldest_intent_nanos)
   return oldest_intent_nanos_;
 }
-inline void ScanMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value) {
+inline void GCMetadata::set_oldest_intent_nanos(::google::protobuf::int64 value) {
   set_has_oldest_intent_nanos();
   oldest_intent_nanos_ = value;
-  // @@protoc_insertion_point(field_set:proto.ScanMetadata.oldest_intent_nanos)
+  // @@protoc_insertion_point(field_set:proto.GCMetadata.oldest_intent_nanos)
 }
 
 // -------------------------------------------------------------------

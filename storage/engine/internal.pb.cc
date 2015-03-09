@@ -156,7 +156,7 @@ void protobuf_AssignDesc_internal_2eproto() {
   InternalGCRequest_descriptor_ = file->message_type(4);
   static const int InternalGCRequest_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalGCRequest, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalGCRequest, scan_meta_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalGCRequest, gc_meta_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalGCRequest, keys_),
   };
   InternalGCRequest_reflection_ =
@@ -568,94 +568,94 @@ void protobuf_AddDesc_internal_2eproto() {
     "nRequest\022.\n\006header\030\001 \001(\0132\024.proto.Request"
     "HeaderB\010\310\336\037\000\320\336\037\001\"O\n\034InternalHeartbeatTxn"
     "Response\022/\n\006header\030\001 \001(\0132\025.proto.Respons"
-    "eHeaderB\010\310\336\037\000\320\336\037\001\"\363\001\n\021InternalGCRequest\022"
+    "eHeaderB\010\310\336\037\000\320\336\037\001\"\371\001\n\021InternalGCRequest\022"
     ".\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010\310"
-    "\336\037\000\320\336\037\001\022,\n\tscan_meta\030\002 \001(\0132\023.proto.ScanM"
-    "etadataB\004\310\336\037\000\0222\n\004keys\030\003 \003(\0132\036.proto.Inte"
-    "rnalGCRequest.GCKeyB\004\310\336\037\000\032L\n\005GCKey\022\030\n\003ke"
-    "y\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\022)\n\ttimestamp\030\002 \001(\0132"
-    "\020.proto.TimestampB\004\310\336\037\000\"E\n\022InternalGCRes"
-    "ponse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHe"
-    "aderB\010\310\336\037\000\320\336\037\001\"\213\001\n\026InternalPushTxnReques"
-    "t\022.\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB"
-    "\010\310\336\037\000\320\336\037\001\022,\n\npushee_txn\030\002 \001(\0132\022.proto.Tr"
-    "ansactionB\004\310\336\037\000\022\023\n\005Abort\030\003 \001(\010B\004\310\336\037\000\"r\n\027"
-    "InternalPushTxnResponse\022/\n\006header\030\001 \001(\0132"
-    "\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022&\n\npush"
-    "ee_txn\030\002 \001(\0132\022.proto.Transaction\"N\n\034Inte"
-    "rnalResolveIntentRequest\022.\n\006header\030\001 \001(\013"
-    "2\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"P\n\035Inte"
-    "rnalResolveIntentResponse\022/\n\006header\030\001 \001("
-    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"i\n\024In"
-    "ternalMergeRequest\022.\n\006header\030\001 \001(\0132\024.pro"
-    "to.RequestHeaderB\010\310\336\037\000\320\336\037\001\022!\n\005value\030\002 \001("
-    "\0132\014.proto.ValueB\004\310\336\037\000\"H\n\025InternalMergeRe"
-    "sponse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseH"
-    "eaderB\010\310\336\037\000\320\336\037\001\"a\n\032InternalTruncateLogRe"
-    "quest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHea"
-    "derB\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000\"N\n\033In"
-    "ternalTruncateLogResponse\022/\n\006header\030\001 \001("
-    "\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\277\006\n\024R"
-    "eadWriteCmdResponse\022\037\n\003put\030\001 \001(\0132\022.proto"
-    ".PutResponse\0226\n\017conditional_put\030\002 \001(\0132\035."
-    "proto.ConditionalPutResponse\022+\n\tincremen"
-    "t\030\003 \001(\0132\030.proto.IncrementResponse\022%\n\006del"
-    "ete\030\004 \001(\0132\025.proto.DeleteResponse\0220\n\014dele"
-    "te_range\030\005 \001(\0132\032.proto.DeleteRangeRespon"
-    "se\0226\n\017end_transaction\030\006 \001(\0132\035.proto.EndT"
-    "ransactionResponse\022,\n\nreap_queue\030\007 \001(\0132\030"
-    ".proto.ReapQueueResponse\0224\n\016enqueue_upda"
-    "te\030\010 \001(\0132\034.proto.EnqueueUpdateResponse\0226"
-    "\n\017enqueue_message\030\t \001(\0132\035.proto.EnqueueM"
-    "essageResponse\022C\n\026internal_heartbeat_txn"
-    "\030\n \001(\0132#.proto.InternalHeartbeatTxnRespo"
-    "nse\0229\n\021internal_push_txn\030\013 \001(\0132\036.proto.I"
-    "nternalPushTxnResponse\022E\n\027internal_resol"
-    "ve_intent\030\014 \001(\0132$.proto.InternalResolveI"
-    "ntentResponse\0224\n\016internal_merge\030\r \001(\0132\034."
-    "proto.InternalMergeResponse\022A\n\025internal_"
-    "truncate_log\030\016 \001(\0132\".proto.InternalTrunc"
-    "ateLogResponse\022.\n\013internal_gc\030\017 \001(\0132\031.pr"
-    "oto.InternalGCResponse:\004\310\240\037\001\"\217\010\n\030Interna"
-    "lRaftCommandUnion\022(\n\010contains\030\001 \001(\0132\026.pr"
-    "oto.ContainsRequest\022\036\n\003get\030\002 \001(\0132\021.proto"
-    ".GetRequest\022\036\n\003put\030\003 \001(\0132\021.proto.PutRequ"
-    "est\0225\n\017conditional_put\030\004 \001(\0132\034.proto.Con"
-    "ditionalPutRequest\022*\n\tincrement\030\005 \001(\0132\027."
-    "proto.IncrementRequest\022$\n\006delete\030\006 \001(\0132\024"
-    ".proto.DeleteRequest\022/\n\014delete_range\030\007 \001"
-    "(\0132\031.proto.DeleteRangeRequest\022 \n\004scan\030\010 "
-    "\001(\0132\022.proto.ScanRequest\0225\n\017end_transacti"
-    "on\030\t \001(\0132\034.proto.EndTransactionRequest\022+"
-    "\n\nreap_queue\030\n \001(\0132\027.proto.ReapQueueRequ"
-    "est\0223\n\016enqueue_update\030\013 \001(\0132\033.proto.Enqu"
-    "eueUpdateRequest\0225\n\017enqueue_message\030\014 \001("
-    "\0132\034.proto.EnqueueMessageRequest\022\"\n\005batch"
-    "\030\036 \001(\0132\023.proto.BatchRequest\022@\n\025internal_"
-    "range_lookup\030\037 \001(\0132!.proto.InternalRange"
-    "LookupRequest\022B\n\026internal_heartbeat_txn\030"
-    "  \001(\0132\".proto.InternalHeartbeatTxnReques"
-    "t\0228\n\021internal_push_txn\030! \001(\0132\035.proto.Int"
-    "ernalPushTxnRequest\022D\n\027internal_resolve_"
-    "intent\030\" \001(\0132#.proto.InternalResolveInte"
-    "ntRequest\022<\n\027internal_merge_response\030# \001"
-    "(\0132\033.proto.InternalMergeRequest\022@\n\025inter"
-    "nal_truncate_log\030$ \001(\0132!.proto.InternalT"
-    "runcateLogRequest\022-\n\013internal_gc\030% \001(\0132\030"
-    ".proto.InternalGCRequest:\004\310\240\037\001\"j\n\023Intern"
-    "alRaftCommand\022\037\n\007raft_id\030\002 \001(\003B\016\310\336\037\000\342\336\037\006"
-    "RaftID\0222\n\003cmd\030\003 \001(\0132\037.proto.InternalRaft"
-    "CommandUnionB\004\310\336\037\000\"\224\001\n\026InternalTimeSerie"
-    "sData\022#\n\025start_timestamp_nanos\030\001 \001(\003B\004\310\336"
-    "\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B\004\310\336\037\000\022"
-    "0\n\007samples\030\003 \003(\0132\037.proto.InternalTimeSer"
-    "iesSample\"\320\001\n\030InternalTimeSeriesSample\022\024"
-    "\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\027\n\tint_count\030\002 \001(\rB"
-    "\004\310\336\037\000\022\017\n\007int_sum\030\003 \001(\003\022\017\n\007int_max\030\004 \001(\003\022"
-    "\017\n\007int_min\030\005 \001(\003\022\031\n\013float_count\030\006 \001(\rB\004\310"
-    "\336\037\000\022\021\n\tfloat_sum\030\007 \001(\002\022\021\n\tfloat_max\030\010 \001("
-    "\002\022\021\n\tfloat_min\030\t \001(\002*%\n\021InternalValueTyp"
-    "e\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000", 3979);
+    "\336\037\000\320\336\037\001\0222\n\007gc_meta\030\002 \001(\0132\021.proto.GCMetad"
+    "ataB\016\310\336\037\000\342\336\037\006GCMeta\0222\n\004keys\030\003 \003(\0132\036.prot"
+    "o.InternalGCRequest.GCKeyB\004\310\336\037\000\032L\n\005GCKey"
+    "\022\030\n\003key\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\022)\n\ttimestamp\030"
+    "\002 \001(\0132\020.proto.TimestampB\004\310\336\037\000\"E\n\022Interna"
+    "lGCResponse\022/\n\006header\030\001 \001(\0132\025.proto.Resp"
+    "onseHeaderB\010\310\336\037\000\320\336\037\001\"\213\001\n\026InternalPushTxn"
+    "Request\022.\n\006header\030\001 \001(\0132\024.proto.RequestH"
+    "eaderB\010\310\336\037\000\320\336\037\001\022,\n\npushee_txn\030\002 \001(\0132\022.pr"
+    "oto.TransactionB\004\310\336\037\000\022\023\n\005Abort\030\003 \001(\010B\004\310\336"
+    "\037\000\"r\n\027InternalPushTxnResponse\022/\n\006header\030"
+    "\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022&"
+    "\n\npushee_txn\030\002 \001(\0132\022.proto.Transaction\"N"
+    "\n\034InternalResolveIntentRequest\022.\n\006header"
+    "\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"P"
+    "\n\035InternalResolveIntentResponse\022/\n\006heade"
+    "r\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001"
+    "\"i\n\024InternalMergeRequest\022.\n\006header\030\001 \001(\013"
+    "2\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022!\n\005valu"
+    "e\030\002 \001(\0132\014.proto.ValueB\004\310\336\037\000\"H\n\025InternalM"
+    "ergeResponse\022/\n\006header\030\001 \001(\0132\025.proto.Res"
+    "ponseHeaderB\010\310\336\037\000\320\336\037\001\"a\n\032InternalTruncat"
+    "eLogRequest\022.\n\006header\030\001 \001(\0132\024.proto.Requ"
+    "estHeaderB\010\310\336\037\000\320\336\037\001\022\023\n\005index\030\002 \001(\004B\004\310\336\037\000"
+    "\"N\n\033InternalTruncateLogResponse\022/\n\006heade"
+    "r\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001"
+    "\"\277\006\n\024ReadWriteCmdResponse\022\037\n\003put\030\001 \001(\0132\022"
+    ".proto.PutResponse\0226\n\017conditional_put\030\002 "
+    "\001(\0132\035.proto.ConditionalPutResponse\022+\n\tin"
+    "crement\030\003 \001(\0132\030.proto.IncrementResponse\022"
+    "%\n\006delete\030\004 \001(\0132\025.proto.DeleteResponse\0220"
+    "\n\014delete_range\030\005 \001(\0132\032.proto.DeleteRange"
+    "Response\0226\n\017end_transaction\030\006 \001(\0132\035.prot"
+    "o.EndTransactionResponse\022,\n\nreap_queue\030\007"
+    " \001(\0132\030.proto.ReapQueueResponse\0224\n\016enqueu"
+    "e_update\030\010 \001(\0132\034.proto.EnqueueUpdateResp"
+    "onse\0226\n\017enqueue_message\030\t \001(\0132\035.proto.En"
+    "queueMessageResponse\022C\n\026internal_heartbe"
+    "at_txn\030\n \001(\0132#.proto.InternalHeartbeatTx"
+    "nResponse\0229\n\021internal_push_txn\030\013 \001(\0132\036.p"
+    "roto.InternalPushTxnResponse\022E\n\027internal"
+    "_resolve_intent\030\014 \001(\0132$.proto.InternalRe"
+    "solveIntentResponse\0224\n\016internal_merge\030\r "
+    "\001(\0132\034.proto.InternalMergeResponse\022A\n\025int"
+    "ernal_truncate_log\030\016 \001(\0132\".proto.Interna"
+    "lTruncateLogResponse\022.\n\013internal_gc\030\017 \001("
+    "\0132\031.proto.InternalGCResponse:\004\310\240\037\001\"\217\010\n\030I"
+    "nternalRaftCommandUnion\022(\n\010contains\030\001 \001("
+    "\0132\026.proto.ContainsRequest\022\036\n\003get\030\002 \001(\0132\021"
+    ".proto.GetRequest\022\036\n\003put\030\003 \001(\0132\021.proto.P"
+    "utRequest\0225\n\017conditional_put\030\004 \001(\0132\034.pro"
+    "to.ConditionalPutRequest\022*\n\tincrement\030\005 "
+    "\001(\0132\027.proto.IncrementRequest\022$\n\006delete\030\006"
+    " \001(\0132\024.proto.DeleteRequest\022/\n\014delete_ran"
+    "ge\030\007 \001(\0132\031.proto.DeleteRangeRequest\022 \n\004s"
+    "can\030\010 \001(\0132\022.proto.ScanRequest\0225\n\017end_tra"
+    "nsaction\030\t \001(\0132\034.proto.EndTransactionReq"
+    "uest\022+\n\nreap_queue\030\n \001(\0132\027.proto.ReapQue"
+    "ueRequest\0223\n\016enqueue_update\030\013 \001(\0132\033.prot"
+    "o.EnqueueUpdateRequest\0225\n\017enqueue_messag"
+    "e\030\014 \001(\0132\034.proto.EnqueueMessageRequest\022\"\n"
+    "\005batch\030\036 \001(\0132\023.proto.BatchRequest\022@\n\025int"
+    "ernal_range_lookup\030\037 \001(\0132!.proto.Interna"
+    "lRangeLookupRequest\022B\n\026internal_heartbea"
+    "t_txn\030  \001(\0132\".proto.InternalHeartbeatTxn"
+    "Request\0228\n\021internal_push_txn\030! \001(\0132\035.pro"
+    "to.InternalPushTxnRequest\022D\n\027internal_re"
+    "solve_intent\030\" \001(\0132#.proto.InternalResol"
+    "veIntentRequest\022<\n\027internal_merge_respon"
+    "se\030# \001(\0132\033.proto.InternalMergeRequest\022@\n"
+    "\025internal_truncate_log\030$ \001(\0132!.proto.Int"
+    "ernalTruncateLogRequest\022-\n\013internal_gc\030%"
+    " \001(\0132\030.proto.InternalGCRequest:\004\310\240\037\001\"j\n\023"
+    "InternalRaftCommand\022\037\n\007raft_id\030\002 \001(\003B\016\310\336"
+    "\037\000\342\336\037\006RaftID\0222\n\003cmd\030\003 \001(\0132\037.proto.Intern"
+    "alRaftCommandUnionB\004\310\336\037\000\"\224\001\n\026InternalTim"
+    "eSeriesData\022#\n\025start_timestamp_nanos\030\001 \001"
+    "(\003B\004\310\336\037\000\022#\n\025sample_duration_nanos\030\002 \001(\003B"
+    "\004\310\336\037\000\0220\n\007samples\030\003 \003(\0132\037.proto.InternalT"
+    "imeSeriesSample\"\320\001\n\030InternalTimeSeriesSa"
+    "mple\022\024\n\006offset\030\001 \001(\005B\004\310\336\037\000\022\027\n\tint_count\030"
+    "\002 \001(\rB\004\310\336\037\000\022\017\n\007int_sum\030\003 \001(\003\022\017\n\007int_max\030"
+    "\004 \001(\003\022\017\n\007int_min\030\005 \001(\003\022\031\n\013float_count\030\006 "
+    "\001(\rB\004\310\336\037\000\022\021\n\tfloat_sum\030\007 \001(\002\022\021\n\tfloat_ma"
+    "x\030\010 \001(\002\022\021\n\tfloat_min\030\t \001(\002*%\n\021InternalVa"
+    "lueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000", 3985);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -1990,7 +1990,7 @@ void InternalGCRequest_GCKey::Swap(InternalGCRequest_GCKey* other) {
 
 #ifndef _MSC_VER
 const int InternalGCRequest::kHeaderFieldNumber;
-const int InternalGCRequest::kScanMetaFieldNumber;
+const int InternalGCRequest::kGcMetaFieldNumber;
 const int InternalGCRequest::kKeysFieldNumber;
 #endif  // !_MSC_VER
 
@@ -2002,7 +2002,7 @@ InternalGCRequest::InternalGCRequest()
 
 void InternalGCRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::proto::RequestHeader*>(&::proto::RequestHeader::default_instance());
-  scan_meta_ = const_cast< ::proto::ScanMetadata*>(&::proto::ScanMetadata::default_instance());
+  gc_meta_ = const_cast< ::proto::GCMetadata*>(&::proto::GCMetadata::default_instance());
 }
 
 InternalGCRequest::InternalGCRequest(const InternalGCRequest& from)
@@ -2015,7 +2015,7 @@ InternalGCRequest::InternalGCRequest(const InternalGCRequest& from)
 void InternalGCRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
-  scan_meta_ = NULL;
+  gc_meta_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2027,7 +2027,7 @@ InternalGCRequest::~InternalGCRequest() {
 void InternalGCRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
-    delete scan_meta_;
+    delete gc_meta_;
   }
 }
 
@@ -2057,8 +2057,8 @@ void InternalGCRequest::Clear() {
     if (has_header()) {
       if (header_ != NULL) header_->::proto::RequestHeader::Clear();
     }
-    if (has_scan_meta()) {
-      if (scan_meta_ != NULL) scan_meta_->::proto::ScanMetadata::Clear();
+    if (has_gc_meta()) {
+      if (gc_meta_ != NULL) gc_meta_->::proto::GCMetadata::Clear();
     }
   }
   keys_.Clear();
@@ -2084,16 +2084,16 @@ bool InternalGCRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_scan_meta;
+        if (input->ExpectTag(18)) goto parse_gc_meta;
         break;
       }
 
-      // optional .proto.ScanMetadata scan_meta = 2;
+      // optional .proto.GCMetadata gc_meta = 2;
       case 2: {
         if (tag == 18) {
-         parse_scan_meta:
+         parse_gc_meta:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_scan_meta()));
+               input, mutable_gc_meta()));
         } else {
           goto handle_unusual;
         }
@@ -2146,10 +2146,10 @@ void InternalGCRequest::SerializeWithCachedSizes(
       1, this->header(), output);
   }
 
-  // optional .proto.ScanMetadata scan_meta = 2;
-  if (has_scan_meta()) {
+  // optional .proto.GCMetadata gc_meta = 2;
+  if (has_gc_meta()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->scan_meta(), output);
+      2, this->gc_meta(), output);
   }
 
   // repeated .proto.InternalGCRequest.GCKey keys = 3;
@@ -2175,11 +2175,11 @@ void InternalGCRequest::SerializeWithCachedSizes(
         1, this->header(), target);
   }
 
-  // optional .proto.ScanMetadata scan_meta = 2;
-  if (has_scan_meta()) {
+  // optional .proto.GCMetadata gc_meta = 2;
+  if (has_gc_meta()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        2, this->scan_meta(), target);
+        2, this->gc_meta(), target);
   }
 
   // repeated .proto.InternalGCRequest.GCKey keys = 3;
@@ -2208,11 +2208,11 @@ int InternalGCRequest::ByteSize() const {
           this->header());
     }
 
-    // optional .proto.ScanMetadata scan_meta = 2;
-    if (has_scan_meta()) {
+    // optional .proto.GCMetadata gc_meta = 2;
+    if (has_gc_meta()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->scan_meta());
+          this->gc_meta());
     }
 
   }
@@ -2254,8 +2254,8 @@ void InternalGCRequest::MergeFrom(const InternalGCRequest& from) {
     if (from.has_header()) {
       mutable_header()->::proto::RequestHeader::MergeFrom(from.header());
     }
-    if (from.has_scan_meta()) {
-      mutable_scan_meta()->::proto::ScanMetadata::MergeFrom(from.scan_meta());
+    if (from.has_gc_meta()) {
+      mutable_gc_meta()->::proto::GCMetadata::MergeFrom(from.gc_meta());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -2281,7 +2281,7 @@ bool InternalGCRequest::IsInitialized() const {
 void InternalGCRequest::Swap(InternalGCRequest* other) {
   if (other != this) {
     std::swap(header_, other->header_);
-    std::swap(scan_meta_, other->scan_meta_);
+    std::swap(gc_meta_, other->gc_meta_);
     keys_.Swap(&other->keys_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
