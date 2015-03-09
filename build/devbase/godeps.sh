@@ -4,14 +4,26 @@
 set -e
 
 # Ensure we only have one entry in GOPATH (glock gets confused
-# by more). Adding $GOPATH/bin to $PATH is common but optional
-# so add it here to make sure we can find glock.
+# by more).
 export GOPATH=$(cd $(dirname $0)/../../../../../.. && pwd)
-export PATH=$GOPATH/bin:$PATH
 
-glock sync github.com/cockroachdb/cockroach
+# go vet is special: it installs into $GOROOT (which $USER may not have
+# write access to) instead of $GOPATH. It is usually but not always
+# installed along with the rest of the go toolchain. Don't try to
+# install it if it's already there.
+if ! go vet 2>/dev/null; then
+    go get golang.org/x/tools/cmd/vet
+fi
 
-# NOTE: Use "make godeps" to update this list. We can't just use "go
+if ! test -e ${GOPATH}/bin/glock ; then
+    # glock is used to manage the rest of our dependencies (and to update
+    # itself, so no -u here)
+    go get github.com/robfig/glock
+fi
+    
+${GOPATH}/bin/glock sync github.com/cockroachdb/cockroach
+
+# NOTE: Use "make listdeps" to update this list. We can't just use "go
 # list" here because this script is run during docker container builds
 # before the cockroach code is present. The GLOCKFILE is present,
 # but we can't use it because it deals in repos and not packages
