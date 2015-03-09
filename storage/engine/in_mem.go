@@ -382,11 +382,12 @@ func (in *inMemIterator) Seek(key []byte) {
 	}
 	in.mu.RLock()
 	defer in.mu.RUnlock()
+
 	in.data.DoRange(func(c llrb.Comparable) (done bool) {
 		kv := c.(proto.RawKeyValue)
 		in.cur = &kv
 		return true
-	}, proto.RawKeyValue{Key: key}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
+	}, proto.RawKeyValue{Key: key}, proto.RawKeyValue{Key: proto.EncodedKey(MVCCKeyMax)})
 }
 
 func (in *inMemIterator) Valid() bool {
@@ -406,7 +407,7 @@ func (in *inMemIterator) Next() {
 		kv := c.(proto.RawKeyValue)
 		in.cur = &kv
 		return true
-	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: proto.EncodedKey(KeyMax)})
+	}, proto.RawKeyValue{Key: start}, proto.RawKeyValue{Key: proto.EncodedKey(MVCCKeyMax)})
 }
 
 func (in *inMemIterator) Key() proto.EncodedKey {

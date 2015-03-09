@@ -20,11 +20,10 @@
 
 #include <stdint.h>
 
-// DecodeBinary decodes the given key-encoded buf slice, returning
-// true on a successful decode. The the unencoded bytes are returned
-// in *decoded, and if not NULL, any remaining bytes are returned in
-// *remainder.
-bool DecodeBinary(const rocksdb::Slice& buf, std::string* decoded, std::string* remainder);
+// DecodeBytes decodes the given key-encoded buf slice, returning true
+// on a successful decode. The unencoded bytes are returned in
+// *decoded.
+bool DecodeBytes(const rocksdb::Slice& buf, std::string* decoded);
 
 #endif // ROACHLIB_ENCODING_H
 

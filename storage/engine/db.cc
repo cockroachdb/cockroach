@@ -63,8 +63,8 @@ namespace {
 // in storage/engine/keys.go.
 const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\x00\x00i", 4);
 const rocksdb::Slice kKeyLocalRangeKeyPrefix("\x00\x00\x00k", 4);
-const rocksdb::Slice kKeyLocalResponseCacheSuffix("res-");
-const rocksdb::Slice kKeyLocalTransactionSuffix("txn-");
+const rocksdb::Slice kKeyLocalResponseCacheSuffix("\x00res-", 5);
+const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 
 const DBStatus kSuccess = { NULL, 0 };
 
@@ -164,11 +164,24 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
         min_rcache_ts_(min_rcache_ts) {
   }
 
+  // For debugging:
+  // static std::string BinaryToHex(const rocksdb::Slice& b) {
+  //   const char kHexChars[] = "0123456789abcdef";
+  //   std::string h(b.size() * 2 + (b.size() - 1), ' ');
+  //   const uint8_t* p = (const uint8_t*)b.data();
+  //   for (int i = 0; i < b.size(); ++i) {
+  //     const int c = p[i];
+  //     h[3 * i] = kHexChars[c >> 4];
+  //     h[3 * i + 1] = kHexChars[c & 0xf];
+  //   }
+  //   return h;
+  // }
+
   // IsKeyOfType determines whether key, when binary-decoded, matches
-  // the format: <prefix>[enc-value]\x00<suffix>[remainder].
+  // the format: <prefix>[enc-value]<suffix>[remainder].
   bool IsKeyOfType(const rocksdb::Slice& key, const rocksdb::Slice& prefix, const rocksdb::Slice& suffix) const {
     std::string decStr;
-    if (!DecodeBinary(key, &decStr, NULL)) {
+    if (!DecodeBytes(key, &decStr)) {
       return false;
     }
     rocksdb::Slice decKey(decStr);
@@ -177,18 +190,12 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     }
     decKey.remove_prefix(prefix.size());
 
-    // Remove bytes up to including the first null byte.
-    int i = 0;
-    for (; i < decKey.size(); i++) {
-      if (decKey[i] == 0x0) {
-        break;
-      }
-    }
-    if (i == decKey.size()) {
-      return false;
-    }
-    decKey.remove_prefix(i+1);
-    return decKey.starts_with(suffix);
+    // Search for "suffix" within "decKey".
+    const char *result = std::search(
+        decKey.data(), decKey.data() + decKey.size(),
+        suffix.data(), suffix.data() + suffix.size());
+    const int xpos = result - decKey.data();
+    return xpos + suffix.size() <= decKey.size();
   }
 
   bool IsResponseCacheEntry(const rocksdb::Slice& key) const {

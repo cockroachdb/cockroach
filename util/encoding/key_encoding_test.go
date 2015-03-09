@@ -23,6 +23,8 @@ import (
 	"math"
 	"sort"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestEncodeDecodeString(t *testing.T) {
@@ -136,7 +138,7 @@ func TestEncodeBinary(t *testing.T) {
 		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x98, 0x00}},
 	}
 	for _, c := range testCases {
-		b := EncodeBinary([]byte{}, c.blob)
+		b := EncodeBinary(nil, c.blob)
 		if !bytes.Equal(b, c.encoded) {
 			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
 		}
@@ -246,7 +248,7 @@ func TestEncodeInt(t *testing.T) {
 		{9223372036854775807, []byte{0x21, 0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e, 0x00}},
 	}
 	for i, c := range testCases {
-		enc := EncodeInt([]byte{}, c.Value)
+		enc := EncodeInt(nil, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
 			t.Errorf("unexpected mismatch for %v. expected %v, got %v",
 				c.Value, prettyBytes(c.Encoding), prettyBytes(enc))
@@ -364,7 +366,7 @@ func TestEncodeFloat(t *testing.T) {
 	}
 
 	for i, c := range testCases {
-		enc := EncodeFloat([]byte{}, c.Value)
+		enc := EncodeFloat(nil, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
 			t.Errorf("unexpected mismatch for %v. expected %v, got %v",
 				c.Value, prettyBytes(c.Encoding), prettyBytes(enc))
@@ -383,5 +385,22 @@ func TestEncodeFloat(t *testing.T) {
 		} else if dec != c.Value {
 			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 		}
+	}
+}
+
+func BenchmarkEncodeDecodeBinary(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	keys := make([][]byte, 10000)
+	for i := range keys {
+		keys[i] = util.RandBytes(rng, 100)
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		enc := EncodeBinary(buf, keys[rng.Intn(len(keys))])
+		_, _ = DecodeBinary(enc)
 	}
 }

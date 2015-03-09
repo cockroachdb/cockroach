@@ -96,7 +96,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	g := gossip.New(rpcContext, gossip.TestInterval, "")
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	store := NewStore(clock, eng, nil, g, multiraft.NewLocalRPCTransport())
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)

@@ -233,9 +233,12 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 			startKey := proto.Key(encoding.EncodeInt([]byte("key-"), int64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
-			_, err := MVCCScan(rocksdb, startKey, KeyMax, int64(numRows), ts, nil)
+			kvs, err := MVCCScan(rocksdb, startKey, KeyMax, int64(numRows), ts, nil)
 			if err != nil {
 				b.Fatalf("failed scan: %s", err)
+			}
+			if len(kvs) != numRows {
+				b.Fatalf("failed to scan: %d != %d", len(kvs), numRows)
 			}
 		}
 	})

@@ -48,7 +48,7 @@ import (
 // engine. The caller is responsible for closing the store on exit.
 func createTestStore(t *testing.T) *storage.Store {
 	return createTestStoreWithEngine(t,
-		engine.NewInMem(proto.Attributes{}, 1<<20),
+		engine.NewInMem(proto.Attributes{}, 10<<20),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
 		true)
 }
