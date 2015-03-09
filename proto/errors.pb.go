@@ -142,7 +142,7 @@ func (m *TransactionAbortedError) GetTxn() Transaction {
 }
 
 // A TransactionPushError indicates that the transaction could not
-// continu because it encountered a write intent from another
+// continue because it encountered a write intent from another
 // transaction which it was unable to push.
 type TransactionPushError struct {
 	// txn can be null in the event the push error happened to a

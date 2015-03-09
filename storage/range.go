@@ -982,12 +982,14 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 	// Run triggers if successfully committed. Any failures running
 	// triggers will set an error and prevent the batch from committing.
 	if reply.Txn.Status == proto.COMMITTED {
-		if args.SplitTrigger != nil {
-			reply.SetGoError(r.splitTrigger(batch, args.SplitTrigger))
-		} else if args.MergeTrigger != nil {
-			reply.SetGoError(r.mergeTrigger(batch, args.MergeTrigger))
-		} else if args.ChangeReplicasTrigger != nil {
-			reply.SetGoError(r.changeReplicasTrigger(args.ChangeReplicasTrigger))
+		if ct := args.InternalCommitTrigger; ct != nil {
+			if ct.SplitTrigger != nil {
+				reply.SetGoError(r.splitTrigger(batch, ct.SplitTrigger))
+			} else if ct.MergeTrigger != nil {
+				reply.SetGoError(r.mergeTrigger(batch, ct.MergeTrigger))
+			} else if ct.ChangeReplicasTrigger != nil {
+				reply.SetGoError(r.changeReplicasTrigger(ct.ChangeReplicasTrigger))
+			}
 		}
 	}
 }
@@ -1507,9 +1509,11 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
-			SplitTrigger: &proto.SplitTrigger{
-				UpdatedDesc: updatedDesc,
-				NewDesc:     *newDesc,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				SplitTrigger: &proto.SplitTrigger{
+					UpdatedDesc: updatedDesc,
+					NewDesc:     *newDesc,
+				},
 			},
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
@@ -1799,9 +1803,11 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
-			MergeTrigger: &proto.MergeTrigger{
-				UpdatedDesc:    updatedDesc,
-				SubsumedRaftID: subsumedDesc.RaftID,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				MergeTrigger: &proto.MergeTrigger{
+					UpdatedDesc:    updatedDesc,
+					SubsumedRaftID: subsumedDesc.RaftID,
+				},
 			},
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
@@ -1863,11 +1869,13 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 			Commit:        true,
-			ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
-				NodeID:          replica.NodeID,
-				StoreID:         replica.StoreID,
-				ChangeType:      changeType,
-				UpdatedReplicas: updatedDesc.Replicas,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+					NodeID:          replica.NodeID,
+					StoreID:         replica.StoreID,
+					ChangeType:      changeType,
+					UpdatedReplicas: updatedDesc.Replicas,
+				},
 			},
 		}, &proto.EndTransactionResponse{})
 	})

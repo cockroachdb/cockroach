@@ -40,14 +40,8 @@ var allowedEncodings = []util.EncodingType{util.JSONEncoding, util.ProtoEncoding
 func verifyRequest(args proto.Request) error {
 	switch t := args.(type) {
 	case *proto.EndTransactionRequest:
-		if t.SplitTrigger != nil {
-			return util.Errorf("EndTransaction request from public KV API contains split trigger: %+v", t.GetSplitTrigger())
-		}
-		if t.MergeTrigger != nil {
-			return util.Errorf("EndTransaction request from public KV API contains merge trigger: %+v", t.GetMergeTrigger())
-		}
-		if t.ChangeReplicasTrigger != nil {
-			return util.Errorf("EndTransaction request from public KV API contains change replicas trigger: %+v", t.GetChangeReplicasTrigger())
+		if t.InternalCommitTrigger != nil {
+			return util.Errorf("EndTransaction request from public KV API contains commit trigger: %+v", t.GetInternalCommitTrigger())
 		}
 	}
 	return nil

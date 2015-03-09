@@ -401,6 +401,39 @@ func (m *ChangeReplicasTrigger) GetUpdatedReplicas() []Replica {
 	return nil
 }
 
+// CommitTrigger encapsulates all of the internal-only commit triggers.
+type InternalCommitTrigger struct {
+	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
+	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
+	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
+	XXX_unrecognized      []byte                 `json:"-"`
+}
+
+func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
+func (m *InternalCommitTrigger) String() string { return proto1.CompactTextString(m) }
+func (*InternalCommitTrigger) ProtoMessage()    {}
+
+func (m *InternalCommitTrigger) GetSplitTrigger() *SplitTrigger {
+	if m != nil {
+		return m.SplitTrigger
+	}
+	return nil
+}
+
+func (m *InternalCommitTrigger) GetMergeTrigger() *MergeTrigger {
+	if m != nil {
+		return m.MergeTrigger
+	}
+	return nil
+}
+
+func (m *InternalCommitTrigger) GetChangeReplicasTrigger() *ChangeReplicasTrigger {
+	if m != nil {
+		return m.ChangeReplicasTrigger
+	}
+	return nil
+}
+
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 type NodeList struct {

@@ -64,14 +64,5 @@
     cluster. Only stores finding themselves in the top N space
     utilized set may have rebalances in effect.
 
-* Cleanup proto files to adhere to proto capitalization instead of go's.
-
 * Implement split / merge range queue and remove check for split on
   every read/write range command.
-
-* Move split/merge trigger into a submessage in internal.proto / api.proto.
-  This will simplify the logic in kv/db.go for neutering any public-facing
-  request which specifies triggers.
-
-* Unexport range.Desc and make func (r *Range) Desc() proto.RangeDescriptor
-  mutex-protected accessor method.

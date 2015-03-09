@@ -45,6 +45,7 @@ class StoreIdent;
 class SplitTrigger;
 class MergeTrigger;
 class ChangeReplicasTrigger;
+class InternalCommitTrigger;
 class NodeList;
 class Transaction;
 class MVCCMetadata;
@@ -1015,6 +1016,111 @@ class ChangeReplicasTrigger : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static ChangeReplicasTrigger* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalCommitTrigger : public ::google::protobuf::Message {
+ public:
+  InternalCommitTrigger();
+  virtual ~InternalCommitTrigger();
+
+  InternalCommitTrigger(const InternalCommitTrigger& from);
+
+  inline InternalCommitTrigger& operator=(const InternalCommitTrigger& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalCommitTrigger& default_instance();
+
+  void Swap(InternalCommitTrigger* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalCommitTrigger* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalCommitTrigger& from);
+  void MergeFrom(const InternalCommitTrigger& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .proto.SplitTrigger split_trigger = 1;
+  inline bool has_split_trigger() const;
+  inline void clear_split_trigger();
+  static const int kSplitTriggerFieldNumber = 1;
+  inline const ::proto::SplitTrigger& split_trigger() const;
+  inline ::proto::SplitTrigger* mutable_split_trigger();
+  inline ::proto::SplitTrigger* release_split_trigger();
+  inline void set_allocated_split_trigger(::proto::SplitTrigger* split_trigger);
+
+  // optional .proto.MergeTrigger merge_trigger = 2;
+  inline bool has_merge_trigger() const;
+  inline void clear_merge_trigger();
+  static const int kMergeTriggerFieldNumber = 2;
+  inline const ::proto::MergeTrigger& merge_trigger() const;
+  inline ::proto::MergeTrigger* mutable_merge_trigger();
+  inline ::proto::MergeTrigger* release_merge_trigger();
+  inline void set_allocated_merge_trigger(::proto::MergeTrigger* merge_trigger);
+
+  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 3;
+  inline bool has_change_replicas_trigger() const;
+  inline void clear_change_replicas_trigger();
+  static const int kChangeReplicasTriggerFieldNumber = 3;
+  inline const ::proto::ChangeReplicasTrigger& change_replicas_trigger() const;
+  inline ::proto::ChangeReplicasTrigger* mutable_change_replicas_trigger();
+  inline ::proto::ChangeReplicasTrigger* release_change_replicas_trigger();
+  inline void set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger);
+
+  // @@protoc_insertion_point(class_scope:proto.InternalCommitTrigger)
+ private:
+  inline void set_has_split_trigger();
+  inline void clear_has_split_trigger();
+  inline void set_has_merge_trigger();
+  inline void clear_has_merge_trigger();
+  inline void set_has_change_replicas_trigger();
+  inline void clear_has_change_replicas_trigger();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::proto::SplitTrigger* split_trigger_;
+  ::proto::MergeTrigger* merge_trigger_;
+  ::proto::ChangeReplicasTrigger* change_replicas_trigger_;
+  friend void  protobuf_AddDesc_data_2eproto();
+  friend void protobuf_AssignDesc_data_2eproto();
+  friend void protobuf_ShutdownFile_data_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalCommitTrigger* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2767,6 +2873,133 @@ inline ::google::protobuf::RepeatedPtrField< ::proto::Replica >*
 ChangeReplicasTrigger::mutable_updated_replicas() {
   // @@protoc_insertion_point(field_mutable_list:proto.ChangeReplicasTrigger.updated_replicas)
   return &updated_replicas_;
+}
+
+// -------------------------------------------------------------------
+
+// InternalCommitTrigger
+
+// optional .proto.SplitTrigger split_trigger = 1;
+inline bool InternalCommitTrigger::has_split_trigger() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalCommitTrigger::set_has_split_trigger() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalCommitTrigger::clear_has_split_trigger() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalCommitTrigger::clear_split_trigger() {
+  if (split_trigger_ != NULL) split_trigger_->::proto::SplitTrigger::Clear();
+  clear_has_split_trigger();
+}
+inline const ::proto::SplitTrigger& InternalCommitTrigger::split_trigger() const {
+  // @@protoc_insertion_point(field_get:proto.InternalCommitTrigger.split_trigger)
+  return split_trigger_ != NULL ? *split_trigger_ : *default_instance_->split_trigger_;
+}
+inline ::proto::SplitTrigger* InternalCommitTrigger::mutable_split_trigger() {
+  set_has_split_trigger();
+  if (split_trigger_ == NULL) split_trigger_ = new ::proto::SplitTrigger;
+  // @@protoc_insertion_point(field_mutable:proto.InternalCommitTrigger.split_trigger)
+  return split_trigger_;
+}
+inline ::proto::SplitTrigger* InternalCommitTrigger::release_split_trigger() {
+  clear_has_split_trigger();
+  ::proto::SplitTrigger* temp = split_trigger_;
+  split_trigger_ = NULL;
+  return temp;
+}
+inline void InternalCommitTrigger::set_allocated_split_trigger(::proto::SplitTrigger* split_trigger) {
+  delete split_trigger_;
+  split_trigger_ = split_trigger;
+  if (split_trigger) {
+    set_has_split_trigger();
+  } else {
+    clear_has_split_trigger();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalCommitTrigger.split_trigger)
+}
+
+// optional .proto.MergeTrigger merge_trigger = 2;
+inline bool InternalCommitTrigger::has_merge_trigger() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void InternalCommitTrigger::set_has_merge_trigger() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void InternalCommitTrigger::clear_has_merge_trigger() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void InternalCommitTrigger::clear_merge_trigger() {
+  if (merge_trigger_ != NULL) merge_trigger_->::proto::MergeTrigger::Clear();
+  clear_has_merge_trigger();
+}
+inline const ::proto::MergeTrigger& InternalCommitTrigger::merge_trigger() const {
+  // @@protoc_insertion_point(field_get:proto.InternalCommitTrigger.merge_trigger)
+  return merge_trigger_ != NULL ? *merge_trigger_ : *default_instance_->merge_trigger_;
+}
+inline ::proto::MergeTrigger* InternalCommitTrigger::mutable_merge_trigger() {
+  set_has_merge_trigger();
+  if (merge_trigger_ == NULL) merge_trigger_ = new ::proto::MergeTrigger;
+  // @@protoc_insertion_point(field_mutable:proto.InternalCommitTrigger.merge_trigger)
+  return merge_trigger_;
+}
+inline ::proto::MergeTrigger* InternalCommitTrigger::release_merge_trigger() {
+  clear_has_merge_trigger();
+  ::proto::MergeTrigger* temp = merge_trigger_;
+  merge_trigger_ = NULL;
+  return temp;
+}
+inline void InternalCommitTrigger::set_allocated_merge_trigger(::proto::MergeTrigger* merge_trigger) {
+  delete merge_trigger_;
+  merge_trigger_ = merge_trigger;
+  if (merge_trigger) {
+    set_has_merge_trigger();
+  } else {
+    clear_has_merge_trigger();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalCommitTrigger.merge_trigger)
+}
+
+// optional .proto.ChangeReplicasTrigger change_replicas_trigger = 3;
+inline bool InternalCommitTrigger::has_change_replicas_trigger() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalCommitTrigger::set_has_change_replicas_trigger() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalCommitTrigger::clear_has_change_replicas_trigger() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void InternalCommitTrigger::clear_change_replicas_trigger() {
+  if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::proto::ChangeReplicasTrigger::Clear();
+  clear_has_change_replicas_trigger();
+}
+inline const ::proto::ChangeReplicasTrigger& InternalCommitTrigger::change_replicas_trigger() const {
+  // @@protoc_insertion_point(field_get:proto.InternalCommitTrigger.change_replicas_trigger)
+  return change_replicas_trigger_ != NULL ? *change_replicas_trigger_ : *default_instance_->change_replicas_trigger_;
+}
+inline ::proto::ChangeReplicasTrigger* InternalCommitTrigger::mutable_change_replicas_trigger() {
+  set_has_change_replicas_trigger();
+  if (change_replicas_trigger_ == NULL) change_replicas_trigger_ = new ::proto::ChangeReplicasTrigger;
+  // @@protoc_insertion_point(field_mutable:proto.InternalCommitTrigger.change_replicas_trigger)
+  return change_replicas_trigger_;
+}
+inline ::proto::ChangeReplicasTrigger* InternalCommitTrigger::release_change_replicas_trigger() {
+  clear_has_change_replicas_trigger();
+  ::proto::ChangeReplicasTrigger* temp = change_replicas_trigger_;
+  change_replicas_trigger_ = NULL;
+  return temp;
+}
+inline void InternalCommitTrigger::set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger) {
+  delete change_replicas_trigger_;
+  change_replicas_trigger_ = change_replicas_trigger;
+  if (change_replicas_trigger) {
+    set_has_change_replicas_trigger();
+  } else {
+    clear_has_change_replicas_trigger();
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.InternalCommitTrigger.change_replicas_trigger)
 }
 
 // -------------------------------------------------------------------

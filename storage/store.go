@@ -971,10 +971,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	if err != nil {
 		log.Fatal(err)
 	}
-	if etr, ok := value.(*proto.EndTransactionRequest); ok && etr.ChangeReplicasTrigger != nil {
+	etr, ok := value.(*proto.EndTransactionRequest)
+	if ok && etr.InternalCommitTrigger != nil &&
+		etr.InternalCommitTrigger.ChangeReplicasTrigger != nil {
 		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 		// needs to understand it; it cannot simply be an opaque command.
-		crt := etr.ChangeReplicasTrigger
+		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
 		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
 			makeRaftNodeID(crt.NodeID, crt.StoreID),

@@ -188,7 +188,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 }
 
 // TestKVDBEndTransactionWithTriggers verifies that triggers are
-// stripped on call to EndTransaction.
+// disallowed on call to EndTransaction.
 func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	addr, server, _ := startServer(t)
 	defer server.Close()
@@ -202,8 +202,10 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
 			Commit:        true,
-			SplitTrigger: &proto.SplitTrigger{
-				UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				SplitTrigger: &proto.SplitTrigger{
+					UpdatedDesc: proto.RangeDescriptor{StartKey: proto.Key("bar")},
+				},
 			},
 		}, &proto.EndTransactionResponse{})
 	})
