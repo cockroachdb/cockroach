@@ -20,7 +20,6 @@ package log
 import "github.com/golang/glog"
 
 func init() {
-	// Raft logs verbosely with log.Printf.
 	glog.CopyStandardLogTo("INFO")
 }
 
@@ -46,6 +45,9 @@ var Infof = glog.Infof
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
 var Infoln = glog.Infoln
 
+// InfoDepth logs to the INFO log, ofsetting the caller's stack frame by 'depth'
+var InfoDepth = glog.InfoDepth
+
 // Warning logs to the INFO and WARNING logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
 var Warning = glog.Warning
@@ -58,6 +60,9 @@ var Warningf = glog.Warningf
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
 var Warningln = glog.Warningln
 
+// WarningDepth logs to the INFO and WARNING logs, ofsetting the caller's stack frame by 'depth'
+var WarningDepth = glog.WarningDepth
+
 // Error logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Print; a newline is appended if missing.
 var Error = glog.Error
@@ -69,6 +74,10 @@ var Errorf = glog.Errorf
 // Errorln logs to the INFO, WARNING, and ERROR logs.
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
 var Errorln = glog.Errorln
+
+// ErrorDepth logs to the INFO, WARNING, and ERROR logs, ofsetting the caller's stack
+// frame by 'depth'
+var ErrorDepth = glog.ErrorDepth
 
 // Fatal logs to the INFO, WARNING, ERROR, and FATAL logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
@@ -84,6 +93,10 @@ var Fatalf = glog.Fatalf
 // including a stack trace of all running goroutines, then calls os.Exit(255).
 // Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
 var Fatalln = glog.Fatalln
+
+// FatalDepth logs to the INFO, WARNING, and ERROR, and FATAL logs, ofsetting the caller's stack
+// frame by 'depth', then calls os.Exit(255).
+var FatalDepth = glog.FatalDepth
 
 // V wraps glog.V. See that documentation for details.
 var V = glog.V
