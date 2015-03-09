@@ -1,6 +1,7 @@
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
+cmd github.com/jteeuwen/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/robfig/glock
 cmd golang.org/x/tools/cmd/goimports
@@ -13,9 +14,11 @@ github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb 7e314cc04e9ac55d353ba7c7c7e68e13311324f6
 github.com/cockroachdb/c-snappy af73b00e85e6f0e3c1fcc51f73f1d036df1e99ff
 github.com/coreos/etcd a2be25cba4bb74756890dcd21dd67c66decdfd77
+github.com/elazarl/go-bindata-assetfs 09ba9c6a7e9a5ee35586127fdf88bb20bb4990b7
 github.com/gogo/protobuf bc946d07d1016848dfd2507f90f0859c9471681e
 github.com/golang/glog 44145f04b68cf362d9c4df2182967c2275eaefed
 github.com/golang/lint 39d15d55e9777df34cdffde4f406ab27fd2e60c0
+github.com/jteeuwen/go-bindata 8ee21af0fa554ff13f12acd730a7b40a106965f0
 github.com/kisielk/errcheck eb516cb958915b69ad14384890b4d37bd910c9f3
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/robfig/glock 78c45da050a4d993d12ad07e8ddb10a4891ac701

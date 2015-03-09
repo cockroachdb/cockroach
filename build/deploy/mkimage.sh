@@ -19,7 +19,7 @@ docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockr
   make clean build testbuild >/dev/null 2>&1 && \
   find . -name '*.test' -type f -printf "\"/build/%h \"" | xargs mkdir -p && \
   find . -name '*.test' -type f -exec mv {} "/build/{}" \; && \
-  cp -r {ui,resources} /build/ && \
+  cp -r resource /build/ && \
   cp cockroach /build/cockroach"
 
 docker build -t cockroachdb/cockroach .

@@ -47,7 +47,7 @@ deployment:
   docker:
     branch: master
     commands:
-      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resources/deploy_templates/.dockercfg.template" > ~/.dockercfg
+      - sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < "resource/deploy_templates/.dockercfg.template" > ~/.dockercfg
       - |
           VERSION=$(git describe 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
           echo "Deploying ${VERSION}..."

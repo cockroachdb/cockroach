@@ -2,7 +2,7 @@
 
 ## A Scalable, Geo-Replicated, Transactional Datastore
 
-<img align="right" src="/resources/doc/color_cockroach.png?raw=true"/>
+<img align="right" src="/resource/doc/color_cockroach.png?raw=true"/>
 
 **Table of Contents**
 
@@ -13,7 +13,7 @@
 - [Design](#design) and [Datastore Goal Articulation](#datastore-goal-articulation)
 - [Architecture](#architecture) and [Client Architecture](#client-architecture)
 
-[![WIRED on CockroachDB](/resources/doc/wired-preview.png?raw=true)](http://www.wired.com/2014/07/cockroachdb/)
+[![WIRED on CockroachDB](/resource/doc/wired-preview.png?raw=true)](http://www.wired.com/2014/07/cockroachdb/)
 
 ## Status
 
@@ -46,10 +46,9 @@ If you don't want to use Docker,
 ```bash
 $ docker run -d -p 8080:8080 "cockroachdb/cockroach" \
     init -rpc="localhost:0" \
-    -certs="resources/test_certs" \
-    -stores="ssd=/tmp/db"
+    -stores="ssd=$(mktemp -d)"
 ```
-This bootstraps and starts a single node with one temporary RocksDB instance at /tmp/db in the background (remove the `-d` flag if you want to see stdout).
+This bootstraps and starts a single node with one temporary RocksDB instance in the background (remove the `-d` flag if you want to see stdout).
 Now let's talk to this node. You can use the [REST Explorer at
 localhost:8080](http://localhost:8080) or talk directly to the API:
 ```bash
@@ -173,7 +172,7 @@ communication between distributed system components.
 
 #### SQL - NoSQL - NewSQL Capabilities
 
-![SQL - NoSQL - NewSQL Capabilities](/resources/doc/sql-nosql-newsql.png?raw=true)
+![SQL - NoSQL - NewSQL Capabilities](/resource/doc/sql-nosql-newsql.png?raw=true)
 
 ## Datastore Goal Articulation
 
@@ -204,7 +203,7 @@ controlling physical order in different systems.
   hash-bucketing, primarily based on the Dynamo design. (Cassandra,
   Riak)
 
-![Datastore Scan Efficiency Spectrum](/resources/doc/scan-efficiency.png?raw=true)
+![Datastore Scan Efficiency Spectrum](/resource/doc/scan-efficiency.png?raw=true)
 
 #### Read vs. Write Optimization Spectrum
 
@@ -240,7 +239,7 @@ CouchDB), hybrid stores are read-optimized with better
 write-throughput (Tokutek MySQL/MongoDB), while LSM-variants are
 write-optimized (HBase, Cassandra, SQLite3/LSM, Cockroach).
 
-![Read vs. Write Optimization Spectrum](/resources/doc/read-vs-write.png?raw=true)
+![Read vs. Write Optimization Spectrum](/resource/doc/read-vs-write.png?raw=true)
 
 ## Architecture
 
@@ -257,7 +256,7 @@ with any number of [cockroach nodes][9] ([server/][10]), storing the actual
 data. Each node contains one or more [stores][11] ([storage/][12]), one per
 physical device.
 
-![Cockroach Architecture](/resources/doc/architecture.png?raw=true)
+![Cockroach Architecture](/resource/doc/architecture.png?raw=true)
 
 Each store contains potentially many ranges, the lowest-level unit of
 key-value data. Ranges are replicated using the [Raft][2] consensus
@@ -266,7 +265,7 @@ of the five nodes in the previous diagram. Each range is replicated
 three ways using raft. The color coding shows associated range
 replicas.
 
-![Range Architecture Blowup](/resources/doc/architecture-blowup.png?raw=true)
+![Range Architecture Blowup](/resource/doc/architecture-blowup.png?raw=true)
 
 ## Client Architecture
 
@@ -302,7 +301,7 @@ eschews the HTTP sender and instead directly shares the transaction
 coordinator and distributed sender used by the REST and DB client
 gateways.
 
-![Client Architecture](/resources/doc/client-architecture.png?raw=true)
+![Client Architecture](/resource/doc/client-architecture.png?raw=true)
 
 [0]: http://rocksdb.org/
 [1]: https://code.google.com/p/leveldb/

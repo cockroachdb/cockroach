@@ -31,15 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/resource"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/elazarl/go-bindata-assetfs"
 )
-
-const staticDir = "./ui/"
 
 var (
 	// Regular expression for capturing data directory specifications.
@@ -171,7 +171,8 @@ func (s *Server) Start(selfBootstrap bool) error {
 }
 
 func (s *Server) initHTTP() {
-	s.mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+	s.mux.Handle("/", http.FileServer(
+		&assetfs.AssetFS{Asset: resource.Asset, AssetDir: resource.AssetDir, Prefix: "./ui/"}))
 
 	// Admin handlers.
 	s.admin.RegisterHandlers(s.mux)

@@ -102,7 +102,7 @@ func LoadInsecureTLSConfig() *TLSConfig {
 // a path to the project root.
 // TODO Maybe instead of returning err, take a testing.T?  And move to tls_test?
 func LoadTestTLSConfig(projectRoot string) (*TLSConfig, error) {
-	return LoadTLSConfig(path.Join(projectRoot, "resources", "test_certs"))
+	return LoadTLSConfig(path.Join(projectRoot, "resource", "test_certs"))
 }
 
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of
