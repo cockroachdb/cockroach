@@ -1,7 +1,7 @@
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
-cmd github.com/jteeuwen/go-bindata
+cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/robfig/glock
 cmd golang.org/x/tools/cmd/goimports
