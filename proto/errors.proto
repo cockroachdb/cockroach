@@ -64,7 +64,7 @@ message TransactionAbortedError {
 }
 
 // A TransactionPushError indicates that the transaction could not
-// continu because it encountered a write intent from another
+// continue because it encountered a write intent from another
 // transaction which it was unable to push.
 message TransactionPushError {
   // txn can be null in the event the push error happened to a
