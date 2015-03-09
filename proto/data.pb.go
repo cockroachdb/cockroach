@@ -625,8 +625,8 @@ func (m *MVCCMetadata) GetValue() *Value {
 	return nil
 }
 
-// GCMetadata holds information about last complete key/value garbage
-// collection scan of a range.
+// GCMetadata holds information about the last complete key/value
+// garbage collection scan of a range.
 type GCMetadata struct {
 	// The last GC scan timestamp in nanoseconds since the Unix epoch.
 	LastScanNanos int64 `protobuf:"varint,1,opt,name=last_scan_nanos" json:"last_scan_nanos"`

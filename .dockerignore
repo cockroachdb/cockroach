@@ -1,5 +1,4 @@
 cockroach
-build/deploy
 .git/FETCH_HEAD
 .git/modules
 *.test

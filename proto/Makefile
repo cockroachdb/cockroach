@@ -17,7 +17,7 @@
 # Author: Andrew Bonventre (andybons@gmail.com)
 
 PROTOC      := ../../../../../bin/protoc
-PROTOS      := $(wildcard *.proto)
+PROTOS      := $(sort $(wildcard *.proto))
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
 GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
 SOURCES     := $(PROTOS:.proto=.pb.cc) github.com/gogo/protobuf/gogoproto/gogo.pb.cc

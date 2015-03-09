@@ -30,6 +30,8 @@ dependencies:
 
 test:
   override:
+    # Check whether the committer forgot to run `go generate`.
+    - docker run cockroachdb/cockroach-dev shell "go generate ./... && git ls-files --modified --deleted --untracked | diff /dev/null -"
     - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-logtostderr -timeout 30s -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/test.log"; test ${PIPESTATUS[0]} -eq 0
     - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-logtostderr -timeout 5m -vmodule=multiraft=5' | tee "${CIRCLE_ARTIFACTS}/testrace.log"; test ${PIPESTATUS[0]} -eq 0
       # Kill off the previous images since we don't care for them any more,
