@@ -62,7 +62,7 @@ A node exports an HTTP API with the following endpoints:
 // A CmdInit command initializes a new Cockroach cluster.
 var CmdInit = &commander.Command{
 	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
-		"-certs=<cert-dir>" +
+		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd|7200rpm=<data-dir>,mem=<capacity-in-bytes>)[,...]",
 	Short: "init new Cockroach cluster and start server",
 	Long: `
@@ -118,7 +118,7 @@ func runInit(cmd *commander.Command, args []string) {
 // A CmdStart command starts nodes by joining the gossip network.
 var CmdStart = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
-		"-certs=<cert-dir>" +
+		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd|7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
 	Short: "start node by joining the gossip network",
 	Long:  cmdStartLongDescription,
