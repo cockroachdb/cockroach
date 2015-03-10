@@ -24,16 +24,41 @@ const unsigned char kEscape      = 0x00;
 const unsigned char kEscapedTerm = 0x01;
 const unsigned char kEscapedNul  = 0xff;
 
+template <typename T>
+bool DecodeVarint(rocksdb::Slice* buf, T* value) {
+  if (buf->empty()) {
+    return false;
+  }
+  int len = (*buf)[0];
+  if ((len + 1) > buf->size()) {
+    return false;
+  }
+  if (len > sizeof(T)) {
+    // Decoded value will overflow.
+    return false;
+  }
+
+  *value = 0;
+  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(buf->data()) + len;
+  for (int i = 0; i < len; ++i) {
+    *value |= static_cast<T>(*ptr--) << (i * 8);
+  }
+  buf->remove_prefix(len + 1);
+
+  return true;
+}
+
 }  // namespace
 
-bool DecodeBytes(const rocksdb::Slice& buf, std::string* decoded) {
+bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
   int copyStart = 0;
-  for (int i = 0, n = int(buf.size()) - 1; i < n; ++i) {
-    unsigned char v = buf[i];
+  for (int i = 0, n = int(buf->size()) - 1; i < n; ++i) {
+    unsigned char v = (*buf)[i];
     if (v == kEscape) {
-      decoded->append(buf.data() + copyStart, i-copyStart);
-      v = buf[++i];
+      decoded->append(buf->data() + copyStart, i-copyStart);
+      v = (*buf)[++i];
       if (v == kEscapedTerm) {
+        buf->remove_prefix(i + 1);
         return true;
       }
       if (v == kEscapedNul) {
@@ -43,4 +68,8 @@ bool DecodeBytes(const rocksdb::Slice& buf, std::string* decoded) {
     }
   }
   return false;
+}
+
+bool DecodeVarint64(rocksdb::Slice* buf, uint64_t* value) {
+  return DecodeVarint(buf, value);
 }

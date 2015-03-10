@@ -57,8 +57,7 @@ func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != KeyLocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
 	}
-	// TODO(pmattis): Use encoding.EncodeVarUint64.
-	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeNumericInt(nil, raftID), suffix, detail)
+	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeVarUint64(nil, uint64(raftID)), suffix, detail)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
@@ -84,8 +83,8 @@ func DecodeRaftStateKey(key proto.Key) int64 {
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(KeyLocalRangeIDPrefix):]
-	_, raftID := encoding.DecodeNumericInt(b)
-	return raftID
+	_, raftID := encoding.DecodeVarUint64(b)
+	return int64(raftID)
 }
 
 // RangeStatKey returns the key for accessing the named stat
@@ -341,10 +340,13 @@ var (
 
 	// KeyLocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Raft ID. The Raft ID is appended to this prefix,
-	// encoded using EncodeNumericInt. The specific sort of per-range
+	// encoded using EncodeVarUint64. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, such as a command
 	// ID in the case of response cache entry.
+	//
+	// NOTE: KeyLocalRangeIDPrefix must be kept in sync with the value
+	// in storage/engine/db.cc.
 	KeyLocalRangeIDPrefix = MakeKey(KeyLocalPrefix, proto.Key("i"))
 	// KeyLocalRaftLogSuffix is the suffix for the raft log.
 	KeyLocalRaftLogSuffix = proto.Key("rftl")
@@ -371,6 +373,9 @@ var (
 	// identified by one of the suffixes listed below, along with
 	// potentially additional encoded key info, such as the txn UUID in
 	// the case of a transaction record.
+	//
+	// NOTE: KeyLocalRangeKeyPrefix must be kept in sync with the value
+	// in storage/engine/db.cc.
 	KeyLocalRangeKeyPrefix = MakeKey(KeyLocalPrefix, proto.Key("k"))
 	// KeyLocalRangeDescriptorSuffix is the suffix for keys storing
 	// range descriptors. The value is a struct of type RangeDescriptor.

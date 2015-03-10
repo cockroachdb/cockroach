@@ -59,11 +59,13 @@ struct DBSnapshot {
 
 namespace {
 
-// NOTE: these constants must be kept in sync with the values
-// in storage/engine/keys.go.
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\x00\x00i", 4);
-const rocksdb::Slice kKeyLocalRangeKeyPrefix("\x00\x00\x00k", 4);
-const rocksdb::Slice kKeyLocalResponseCacheSuffix("\x00res-", 5);
+// NOTE: these constants must be kept in sync with the values in
+// storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
+// kKeyLocalRangeKeyPrefix are the mvcc-encoded prefixes.
+const int kKeyLocalRangePrefixSize = 4;
+const rocksdb::Slice kKeyLocalRangeIDPrefix("\x00\xff\x00\xff\x00\xffi", 7);
+const rocksdb::Slice kKeyLocalRangeKeyPrefix("\x00\xff\x00\xff\x00\xffk", 7);
+const rocksdb::Slice kKeyLocalResponseCacheSuffix("res-", 4);
 const rocksdb::Slice kKeyLocalTransactionSuffix("\x00\x01txn-", 6);
 
 const DBStatus kSuccess = { NULL, 0 };
@@ -177,33 +179,49 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
   //   return h;
   // }
 
-  // IsKeyOfType determines whether key, when binary-decoded, matches
-  // the format: <prefix>[enc-value]<suffix>[remainder].
-  bool IsKeyOfType(const rocksdb::Slice& key, const rocksdb::Slice& prefix, const rocksdb::Slice& suffix) const {
+  bool IsResponseCacheEntry(rocksdb::Slice key) const {
+    // The response cache key format is:
+    //   <prefix><varint64-range-id><suffix>[remainder].
+    if (!key.starts_with(kKeyLocalRangeIDPrefix)) {
+      return false;
+    }
+
     std::string decStr;
-    if (!DecodeBytes(key, &decStr)) {
+    if (!DecodeBytes(&key, &decStr)) {
       return false;
     }
     rocksdb::Slice decKey(decStr);
-    if (!decKey.starts_with(prefix)) {
+    decKey.remove_prefix(kKeyLocalRangePrefixSize);
+
+    uint64_t dummy;
+    if (!DecodeVarint64(&decKey, &dummy)) {
       return false;
     }
-    decKey.remove_prefix(prefix.size());
+
+    return decKey.starts_with(kKeyLocalResponseCacheSuffix);
+  }
+
+  bool IsTransactionRecord(rocksdb::Slice key) const {
+    // The transaction key format is:
+    //   <prefix>[key]<suffix>[remainder].
+    if (!key.starts_with(kKeyLocalRangeKeyPrefix)) {
+      return false;
+    }
+
+    std::string decStr;
+    if (!DecodeBytes(&key, &decStr)) {
+      return false;
+    }
+    rocksdb::Slice decKey(decStr);
+    decKey.remove_prefix(kKeyLocalRangePrefixSize);
 
     // Search for "suffix" within "decKey".
+    const rocksdb::Slice suffix(kKeyLocalTransactionSuffix);
     const char *result = std::search(
         decKey.data(), decKey.data() + decKey.size(),
         suffix.data(), suffix.data() + suffix.size());
     const int xpos = result - decKey.data();
     return xpos + suffix.size() <= decKey.size();
-  }
-
-  bool IsResponseCacheEntry(const rocksdb::Slice& key) const {
-    return IsKeyOfType(key, kKeyLocalRangeIDPrefix, kKeyLocalResponseCacheSuffix);
-  }
-
-  bool IsTransactionRecord(const rocksdb::Slice& key) const {
-    return IsKeyOfType(key, kKeyLocalRangeKeyPrefix, kKeyLocalTransactionSuffix);
   }
 
   virtual bool Filter(int level,
@@ -215,7 +233,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
 
     // Only filter response cache entries and transaction rows.
     bool is_rcache = IsResponseCacheEntry(key);
-    bool is_txn = IsTransactionRecord(key);
+    bool is_txn = !is_rcache && IsTransactionRecord(key);
     if (!is_rcache && !is_txn) {
       return false;
     }
