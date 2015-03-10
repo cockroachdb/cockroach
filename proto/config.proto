@@ -49,7 +49,8 @@ message RangeDescriptor {
   // contained in this range - it will be contained in the immediately
   // subsequent range.
   optional bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
-  // List of replicas where this range is stored.
+  // Replicas is the set of replicas on which this range is stored, the
+  // ordering being arbitrary and subject to permutation.
   repeated Replica replicas = 4 [(gogoproto.nullable) = false];
 }
 
@@ -81,8 +82,9 @@ message PermConfig {
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 message ZoneConfig {
-  // ReplicaAttrs is a slice of Attributes, each describing required
-  // attributes for each replica in the zone.
+  // ReplicaAttrs is a slice of Attributes, each describing required attributes
+  // for each replica in the zone. The order in which the attributes are stored
+  // in ReplicaAttrs is arbitrary and may change.
   repeated Attributes replica_attrs = 1 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"replicas,omitempty\""];
   optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes,omitempty\""];
   optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes,omitempty\""];
