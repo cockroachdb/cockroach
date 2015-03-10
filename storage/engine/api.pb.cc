@@ -443,12 +443,10 @@ void protobuf_AssignDesc_api_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ScanResponse));
   EndTransactionRequest_descriptor_ = file->message_type(19);
-  static const int EndTransactionRequest_offsets_[5] = {
+  static const int EndTransactionRequest_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, commit_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, split_trigger_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, merge_trigger_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, change_replicas_trigger_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionRequest, internal_commit_trigger_),
   };
   EndTransactionRequest_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -936,72 +934,70 @@ void protobuf_AddDesc_api_2eproto() {
     "\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336\037\000\"d\n\014"
     "ScanResponse\022/\n\006header\030\001 \001(\0132\025.proto.Res"
     "ponseHeaderB\010\310\336\037\000\320\336\037\001\022#\n\004rows\030\002 \003(\0132\017.pr"
-    "oto.KeyValueB\004\310\336\037\000\"\364\001\n\025EndTransactionReq"
+    "oto.KeyValueB\004\310\336\037\000\"\234\001\n\025EndTransactionReq"
     "uest\022.\n\006header\030\001 \001(\0132\024.proto.RequestHead"
-    "erB\010\310\336\037\000\320\336\037\001\022\024\n\006commit\030\002 \001(\010B\004\310\336\037\000\022*\n\rsp"
-    "lit_trigger\030\003 \001(\0132\023.proto.SplitTrigger\022*"
-    "\n\rmerge_trigger\030\004 \001(\0132\023.proto.MergeTrigg"
-    "er\022=\n\027change_replicas_trigger\030\005 \001(\0132\034.pr"
-    "oto.ChangeReplicasTrigger\"d\n\026EndTransact"
-    "ionResponse\022/\n\006header\030\001 \001(\0132\025.proto.Resp"
-    "onseHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wait\030\002 \001("
-    "\003B\004\310\336\037\000\"]\n\020ReapQueueRequest\022.\n\006header\030\001 "
-    "\001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013m"
-    "ax_results\030\002 \001(\003B\004\310\336\037\000\"j\n\021ReapQueueRespo"
+    "erB\010\310\336\037\000\320\336\037\001\022\024\n\006commit\030\002 \001(\010B\004\310\336\037\000\022=\n\027in"
+    "ternal_commit_trigger\030\003 \001(\0132\034.proto.Inte"
+    "rnalCommitTrigger\"d\n\026EndTransactionRespo"
     "nse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHead"
-    "erB\010\310\336\037\000\320\336\037\001\022$\n\010messages\030\002 \003(\0132\014.proto.V"
-    "alueB\004\310\336\037\000\"F\n\024EnqueueUpdateRequest\022.\n\006he"
-    "ader\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336"
-    "\037\001\"H\n\025EnqueueUpdateResponse\022/\n\006header\030\001 "
-    "\001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"h\n\025"
-    "EnqueueMessageRequest\022.\n\006header\030\001 \001(\0132\024."
-    "proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\037\n\003msg\030\002 \001"
-    "(\0132\014.proto.ValueB\004\310\336\037\000\"I\n\026EnqueueMessage"
-    "Response\022/\n\006header\030\001 \001(\0132\025.proto.Respons"
-    "eHeaderB\010\310\336\037\000\320\336\037\001\"\252\004\n\014RequestUnion\022(\n\010co"
-    "ntains\030\001 \001(\0132\026.proto.ContainsRequest\022\036\n\003"
-    "get\030\002 \001(\0132\021.proto.GetRequest\022\036\n\003put\030\003 \001("
-    "\0132\021.proto.PutRequest\0225\n\017conditional_put\030"
-    "\004 \001(\0132\034.proto.ConditionalPutRequest\022*\n\ti"
-    "ncrement\030\005 \001(\0132\027.proto.IncrementRequest\022"
-    "$\n\006delete\030\006 \001(\0132\024.proto.DeleteRequest\022/\n"
-    "\014delete_range\030\007 \001(\0132\031.proto.DeleteRangeR"
-    "equest\022 \n\004scan\030\010 \001(\0132\022.proto.ScanRequest"
-    "\0225\n\017end_transaction\030\t \001(\0132\034.proto.EndTra"
-    "nsactionRequest\022+\n\nreap_queue\030\n \001(\0132\027.pr"
-    "oto.ReapQueueRequest\0223\n\016enqueue_update\030\013"
-    " \001(\0132\033.proto.EnqueueUpdateRequest\0225\n\017enq"
-    "ueue_message\030\014 \001(\0132\034.proto.EnqueueMessag"
-    "eRequest:\004\310\240\037\001\"\267\004\n\rResponseUnion\022)\n\010cont"
-    "ains\030\001 \001(\0132\027.proto.ContainsResponse\022\037\n\003g"
-    "et\030\002 \001(\0132\022.proto.GetResponse\022\037\n\003put\030\003 \001("
-    "\0132\022.proto.PutResponse\0226\n\017conditional_put"
-    "\030\004 \001(\0132\035.proto.ConditionalPutResponse\022+\n"
-    "\tincrement\030\005 \001(\0132\030.proto.IncrementRespon"
-    "se\022%\n\006delete\030\006 \001(\0132\025.proto.DeleteRespons"
-    "e\0220\n\014delete_range\030\007 \001(\0132\032.proto.DeleteRa"
-    "ngeResponse\022!\n\004scan\030\010 \001(\0132\023.proto.ScanRe"
-    "sponse\0226\n\017end_transaction\030\t \001(\0132\035.proto."
-    "EndTransactionResponse\022,\n\nreap_queue\030\n \001"
-    "(\0132\030.proto.ReapQueueResponse\0224\n\016enqueue_"
-    "update\030\013 \001(\0132\034.proto.EnqueueUpdateRespon"
-    "se\0226\n\017enqueue_message\030\014 \001(\0132\035.proto.Enqu"
-    "eueMessageResponse:\004\310\240\037\001\"k\n\014BatchRequest"
-    "\022.\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010"
-    "\310\336\037\000\320\336\037\001\022+\n\010requests\030\002 \003(\0132\023.proto.Reque"
-    "stUnionB\004\310\336\037\000\"o\n\rBatchResponse\022/\n\006header"
-    "\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022"
-    "-\n\tresponses\030\002 \003(\0132\024.proto.ResponseUnion"
-    "B\004\310\336\037\000\"c\n\021AdminSplitRequest\022.\n\006header\030\001 "
-    "\001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\036\n\ts"
-    "plit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\"E\n\022AdminSpli"
-    "tResponse\022/\n\006header\030\001 \001(\0132\025.proto.Respon"
-    "seHeaderB\010\310\336\037\000\320\336\037\001\"y\n\021AdminMergeRequest\022"
-    ".\n\006header\030\001 \001(\0132\024.proto.RequestHeaderB\010\310"
-    "\336\037\000\320\336\037\001\0224\n\016subsumed_range\030\002 \001(\0132\026.proto."
-    "RangeDescriptorB\004\310\336\037\000\"E\n\022AdminMergeRespo"
-    "nse\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHead"
-    "erB\010\310\336\037\000\320\336\037\001", 4612);
+    "erB\010\310\336\037\000\320\336\037\001\022\031\n\013commit_wait\030\002 \001(\003B\004\310\336\037\000\""
+    "]\n\020ReapQueueRequest\022.\n\006header\030\001 \001(\0132\024.pr"
+    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013max_resul"
+    "ts\030\002 \001(\003B\004\310\336\037\000\"j\n\021ReapQueueResponse\022/\n\006h"
+    "eader\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000"
+    "\320\336\037\001\022$\n\010messages\030\002 \003(\0132\014.proto.ValueB\004\310\336"
+    "\037\000\"F\n\024EnqueueUpdateRequest\022.\n\006header\030\001 \001"
+    "(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"H\n\025En"
+    "queueUpdateResponse\022/\n\006header\030\001 \001(\0132\025.pr"
+    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"h\n\025EnqueueM"
+    "essageRequest\022.\n\006header\030\001 \001(\0132\024.proto.Re"
+    "questHeaderB\010\310\336\037\000\320\336\037\001\022\037\n\003msg\030\002 \001(\0132\014.pro"
+    "to.ValueB\004\310\336\037\000\"I\n\026EnqueueMessageResponse"
+    "\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHeaderB"
+    "\010\310\336\037\000\320\336\037\001\"\252\004\n\014RequestUnion\022(\n\010contains\030\001"
+    " \001(\0132\026.proto.ContainsRequest\022\036\n\003get\030\002 \001("
+    "\0132\021.proto.GetRequest\022\036\n\003put\030\003 \001(\0132\021.prot"
+    "o.PutRequest\0225\n\017conditional_put\030\004 \001(\0132\034."
+    "proto.ConditionalPutRequest\022*\n\tincrement"
+    "\030\005 \001(\0132\027.proto.IncrementRequest\022$\n\006delet"
+    "e\030\006 \001(\0132\024.proto.DeleteRequest\022/\n\014delete_"
+    "range\030\007 \001(\0132\031.proto.DeleteRangeRequest\022 "
+    "\n\004scan\030\010 \001(\0132\022.proto.ScanRequest\0225\n\017end_"
+    "transaction\030\t \001(\0132\034.proto.EndTransaction"
+    "Request\022+\n\nreap_queue\030\n \001(\0132\027.proto.Reap"
+    "QueueRequest\0223\n\016enqueue_update\030\013 \001(\0132\033.p"
+    "roto.EnqueueUpdateRequest\0225\n\017enqueue_mes"
+    "sage\030\014 \001(\0132\034.proto.EnqueueMessageRequest"
+    ":\004\310\240\037\001\"\267\004\n\rResponseUnion\022)\n\010contains\030\001 \001"
+    "(\0132\027.proto.ContainsResponse\022\037\n\003get\030\002 \001(\013"
+    "2\022.proto.GetResponse\022\037\n\003put\030\003 \001(\0132\022.prot"
+    "o.PutResponse\0226\n\017conditional_put\030\004 \001(\0132\035"
+    ".proto.ConditionalPutResponse\022+\n\tincreme"
+    "nt\030\005 \001(\0132\030.proto.IncrementResponse\022%\n\006de"
+    "lete\030\006 \001(\0132\025.proto.DeleteResponse\0220\n\014del"
+    "ete_range\030\007 \001(\0132\032.proto.DeleteRangeRespo"
+    "nse\022!\n\004scan\030\010 \001(\0132\023.proto.ScanResponse\0226"
+    "\n\017end_transaction\030\t \001(\0132\035.proto.EndTrans"
+    "actionResponse\022,\n\nreap_queue\030\n \001(\0132\030.pro"
+    "to.ReapQueueResponse\0224\n\016enqueue_update\030\013"
+    " \001(\0132\034.proto.EnqueueUpdateResponse\0226\n\017en"
+    "queue_message\030\014 \001(\0132\035.proto.EnqueueMessa"
+    "geResponse:\004\310\240\037\001\"k\n\014BatchRequest\022.\n\006head"
+    "er\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001"
+    "\022+\n\010requests\030\002 \003(\0132\023.proto.RequestUnionB"
+    "\004\310\336\037\000\"o\n\rBatchResponse\022/\n\006header\030\001 \001(\0132\025"
+    ".proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\022-\n\trespo"
+    "nses\030\002 \003(\0132\024.proto.ResponseUnionB\004\310\336\037\000\"c"
+    "\n\021AdminSplitRequest\022.\n\006header\030\001 \001(\0132\024.pr"
+    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\036\n\tsplit_key"
+    "\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\"E\n\022AdminSplitRespons"
+    "e\022/\n\006header\030\001 \001(\0132\025.proto.ResponseHeader"
+    "B\010\310\336\037\000\320\336\037\001\"y\n\021AdminMergeRequest\022.\n\006heade"
+    "r\030\001 \001(\0132\024.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022"
+    "4\n\016subsumed_range\030\002 \001(\0132\026.proto.RangeDes"
+    "criptorB\004\310\336\037\000\"E\n\022AdminMergeResponse\022/\n\006h"
+    "eader\030\001 \001(\0132\025.proto.ResponseHeaderB\010\310\336\037\000"
+    "\320\336\037\001", 4524);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -6374,9 +6370,7 @@ void ScanResponse::Swap(ScanResponse* other) {
 #ifndef _MSC_VER
 const int EndTransactionRequest::kHeaderFieldNumber;
 const int EndTransactionRequest::kCommitFieldNumber;
-const int EndTransactionRequest::kSplitTriggerFieldNumber;
-const int EndTransactionRequest::kMergeTriggerFieldNumber;
-const int EndTransactionRequest::kChangeReplicasTriggerFieldNumber;
+const int EndTransactionRequest::kInternalCommitTriggerFieldNumber;
 #endif  // !_MSC_VER
 
 EndTransactionRequest::EndTransactionRequest()
@@ -6387,9 +6381,7 @@ EndTransactionRequest::EndTransactionRequest()
 
 void EndTransactionRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::proto::RequestHeader*>(&::proto::RequestHeader::default_instance());
-  split_trigger_ = const_cast< ::proto::SplitTrigger*>(&::proto::SplitTrigger::default_instance());
-  merge_trigger_ = const_cast< ::proto::MergeTrigger*>(&::proto::MergeTrigger::default_instance());
-  change_replicas_trigger_ = const_cast< ::proto::ChangeReplicasTrigger*>(&::proto::ChangeReplicasTrigger::default_instance());
+  internal_commit_trigger_ = const_cast< ::proto::InternalCommitTrigger*>(&::proto::InternalCommitTrigger::default_instance());
 }
 
 EndTransactionRequest::EndTransactionRequest(const EndTransactionRequest& from)
@@ -6403,9 +6395,7 @@ void EndTransactionRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
   commit_ = false;
-  split_trigger_ = NULL;
-  merge_trigger_ = NULL;
-  change_replicas_trigger_ = NULL;
+  internal_commit_trigger_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6417,9 +6407,7 @@ EndTransactionRequest::~EndTransactionRequest() {
 void EndTransactionRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
-    delete split_trigger_;
-    delete merge_trigger_;
-    delete change_replicas_trigger_;
+    delete internal_commit_trigger_;
   }
 }
 
@@ -6445,19 +6433,13 @@ EndTransactionRequest* EndTransactionRequest::New() const {
 }
 
 void EndTransactionRequest::Clear() {
-  if (_has_bits_[0 / 32] & 31) {
+  if (_has_bits_[0 / 32] & 7) {
     if (has_header()) {
       if (header_ != NULL) header_->::proto::RequestHeader::Clear();
     }
     commit_ = false;
-    if (has_split_trigger()) {
-      if (split_trigger_ != NULL) split_trigger_->::proto::SplitTrigger::Clear();
-    }
-    if (has_merge_trigger()) {
-      if (merge_trigger_ != NULL) merge_trigger_->::proto::MergeTrigger::Clear();
-    }
-    if (has_change_replicas_trigger()) {
-      if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::proto::ChangeReplicasTrigger::Clear();
+    if (has_internal_commit_trigger()) {
+      if (internal_commit_trigger_ != NULL) internal_commit_trigger_->::proto::InternalCommitTrigger::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -6497,42 +6479,16 @@ bool EndTransactionRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(26)) goto parse_split_trigger;
+        if (input->ExpectTag(26)) goto parse_internal_commit_trigger;
         break;
       }
 
-      // optional .proto.SplitTrigger split_trigger = 3;
+      // optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
       case 3: {
         if (tag == 26) {
-         parse_split_trigger:
+         parse_internal_commit_trigger:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_split_trigger()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(34)) goto parse_merge_trigger;
-        break;
-      }
-
-      // optional .proto.MergeTrigger merge_trigger = 4;
-      case 4: {
-        if (tag == 34) {
-         parse_merge_trigger:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_merge_trigger()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(42)) goto parse_change_replicas_trigger;
-        break;
-      }
-
-      // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-      case 5: {
-        if (tag == 42) {
-         parse_change_replicas_trigger:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_change_replicas_trigger()));
+               input, mutable_internal_commit_trigger()));
         } else {
           goto handle_unusual;
         }
@@ -6576,22 +6532,10 @@ void EndTransactionRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->commit(), output);
   }
 
-  // optional .proto.SplitTrigger split_trigger = 3;
-  if (has_split_trigger()) {
+  // optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
+  if (has_internal_commit_trigger()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      3, this->split_trigger(), output);
-  }
-
-  // optional .proto.MergeTrigger merge_trigger = 4;
-  if (has_merge_trigger()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      4, this->merge_trigger(), output);
-  }
-
-  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-  if (has_change_replicas_trigger()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      5, this->change_replicas_trigger(), output);
+      3, this->internal_commit_trigger(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -6616,25 +6560,11 @@ void EndTransactionRequest::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->commit(), target);
   }
 
-  // optional .proto.SplitTrigger split_trigger = 3;
-  if (has_split_trigger()) {
+  // optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
+  if (has_internal_commit_trigger()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        3, this->split_trigger(), target);
-  }
-
-  // optional .proto.MergeTrigger merge_trigger = 4;
-  if (has_merge_trigger()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        4, this->merge_trigger(), target);
-  }
-
-  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-  if (has_change_replicas_trigger()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        5, this->change_replicas_trigger(), target);
+        3, this->internal_commit_trigger(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6661,25 +6591,11 @@ int EndTransactionRequest::ByteSize() const {
       total_size += 1 + 1;
     }
 
-    // optional .proto.SplitTrigger split_trigger = 3;
-    if (has_split_trigger()) {
+    // optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
+    if (has_internal_commit_trigger()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->split_trigger());
-    }
-
-    // optional .proto.MergeTrigger merge_trigger = 4;
-    if (has_merge_trigger()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->merge_trigger());
-    }
-
-    // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-    if (has_change_replicas_trigger()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->change_replicas_trigger());
+          this->internal_commit_trigger());
     }
 
   }
@@ -6715,14 +6631,8 @@ void EndTransactionRequest::MergeFrom(const EndTransactionRequest& from) {
     if (from.has_commit()) {
       set_commit(from.commit());
     }
-    if (from.has_split_trigger()) {
-      mutable_split_trigger()->::proto::SplitTrigger::MergeFrom(from.split_trigger());
-    }
-    if (from.has_merge_trigger()) {
-      mutable_merge_trigger()->::proto::MergeTrigger::MergeFrom(from.merge_trigger());
-    }
-    if (from.has_change_replicas_trigger()) {
-      mutable_change_replicas_trigger()->::proto::ChangeReplicasTrigger::MergeFrom(from.change_replicas_trigger());
+    if (from.has_internal_commit_trigger()) {
+      mutable_internal_commit_trigger()->::proto::InternalCommitTrigger::MergeFrom(from.internal_commit_trigger());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -6749,9 +6659,7 @@ void EndTransactionRequest::Swap(EndTransactionRequest* other) {
   if (other != this) {
     std::swap(header_, other->header_);
     std::swap(commit_, other->commit_);
-    std::swap(split_trigger_, other->split_trigger_);
-    std::swap(merge_trigger_, other->merge_trigger_);
-    std::swap(change_replicas_trigger_, other->change_replicas_trigger_);
+    std::swap(internal_commit_trigger_, other->internal_commit_trigger_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

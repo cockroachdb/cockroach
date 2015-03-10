@@ -1937,32 +1937,14 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   inline bool commit() const;
   inline void set_commit(bool value);
 
-  // optional .proto.SplitTrigger split_trigger = 3;
-  inline bool has_split_trigger() const;
-  inline void clear_split_trigger();
-  static const int kSplitTriggerFieldNumber = 3;
-  inline const ::proto::SplitTrigger& split_trigger() const;
-  inline ::proto::SplitTrigger* mutable_split_trigger();
-  inline ::proto::SplitTrigger* release_split_trigger();
-  inline void set_allocated_split_trigger(::proto::SplitTrigger* split_trigger);
-
-  // optional .proto.MergeTrigger merge_trigger = 4;
-  inline bool has_merge_trigger() const;
-  inline void clear_merge_trigger();
-  static const int kMergeTriggerFieldNumber = 4;
-  inline const ::proto::MergeTrigger& merge_trigger() const;
-  inline ::proto::MergeTrigger* mutable_merge_trigger();
-  inline ::proto::MergeTrigger* release_merge_trigger();
-  inline void set_allocated_merge_trigger(::proto::MergeTrigger* merge_trigger);
-
-  // optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-  inline bool has_change_replicas_trigger() const;
-  inline void clear_change_replicas_trigger();
-  static const int kChangeReplicasTriggerFieldNumber = 5;
-  inline const ::proto::ChangeReplicasTrigger& change_replicas_trigger() const;
-  inline ::proto::ChangeReplicasTrigger* mutable_change_replicas_trigger();
-  inline ::proto::ChangeReplicasTrigger* release_change_replicas_trigger();
-  inline void set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger);
+  // optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
+  inline bool has_internal_commit_trigger() const;
+  inline void clear_internal_commit_trigger();
+  static const int kInternalCommitTriggerFieldNumber = 3;
+  inline const ::proto::InternalCommitTrigger& internal_commit_trigger() const;
+  inline ::proto::InternalCommitTrigger* mutable_internal_commit_trigger();
+  inline ::proto::InternalCommitTrigger* release_internal_commit_trigger();
+  inline void set_allocated_internal_commit_trigger(::proto::InternalCommitTrigger* internal_commit_trigger);
 
   // @@protoc_insertion_point(class_scope:proto.EndTransactionRequest)
  private:
@@ -1970,21 +1952,15 @@ class EndTransactionRequest : public ::google::protobuf::Message {
   inline void clear_has_header();
   inline void set_has_commit();
   inline void clear_has_commit();
-  inline void set_has_split_trigger();
-  inline void clear_has_split_trigger();
-  inline void set_has_merge_trigger();
-  inline void clear_has_merge_trigger();
-  inline void set_has_change_replicas_trigger();
-  inline void clear_has_change_replicas_trigger();
+  inline void set_has_internal_commit_trigger();
+  inline void clear_has_internal_commit_trigger();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::proto::RequestHeader* header_;
-  ::proto::SplitTrigger* split_trigger_;
-  ::proto::MergeTrigger* merge_trigger_;
-  ::proto::ChangeReplicasTrigger* change_replicas_trigger_;
+  ::proto::InternalCommitTrigger* internal_commit_trigger_;
   bool commit_;
   friend void  protobuf_AddDesc_api_2eproto();
   friend void protobuf_AssignDesc_api_2eproto();
@@ -5323,127 +5299,45 @@ inline void EndTransactionRequest::set_commit(bool value) {
   // @@protoc_insertion_point(field_set:proto.EndTransactionRequest.commit)
 }
 
-// optional .proto.SplitTrigger split_trigger = 3;
-inline bool EndTransactionRequest::has_split_trigger() const {
+// optional .proto.InternalCommitTrigger internal_commit_trigger = 3;
+inline bool EndTransactionRequest::has_internal_commit_trigger() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void EndTransactionRequest::set_has_split_trigger() {
+inline void EndTransactionRequest::set_has_internal_commit_trigger() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void EndTransactionRequest::clear_has_split_trigger() {
+inline void EndTransactionRequest::clear_has_internal_commit_trigger() {
   _has_bits_[0] &= ~0x00000004u;
 }
-inline void EndTransactionRequest::clear_split_trigger() {
-  if (split_trigger_ != NULL) split_trigger_->::proto::SplitTrigger::Clear();
-  clear_has_split_trigger();
+inline void EndTransactionRequest::clear_internal_commit_trigger() {
+  if (internal_commit_trigger_ != NULL) internal_commit_trigger_->::proto::InternalCommitTrigger::Clear();
+  clear_has_internal_commit_trigger();
 }
-inline const ::proto::SplitTrigger& EndTransactionRequest::split_trigger() const {
-  // @@protoc_insertion_point(field_get:proto.EndTransactionRequest.split_trigger)
-  return split_trigger_ != NULL ? *split_trigger_ : *default_instance_->split_trigger_;
+inline const ::proto::InternalCommitTrigger& EndTransactionRequest::internal_commit_trigger() const {
+  // @@protoc_insertion_point(field_get:proto.EndTransactionRequest.internal_commit_trigger)
+  return internal_commit_trigger_ != NULL ? *internal_commit_trigger_ : *default_instance_->internal_commit_trigger_;
 }
-inline ::proto::SplitTrigger* EndTransactionRequest::mutable_split_trigger() {
-  set_has_split_trigger();
-  if (split_trigger_ == NULL) split_trigger_ = new ::proto::SplitTrigger;
-  // @@protoc_insertion_point(field_mutable:proto.EndTransactionRequest.split_trigger)
-  return split_trigger_;
+inline ::proto::InternalCommitTrigger* EndTransactionRequest::mutable_internal_commit_trigger() {
+  set_has_internal_commit_trigger();
+  if (internal_commit_trigger_ == NULL) internal_commit_trigger_ = new ::proto::InternalCommitTrigger;
+  // @@protoc_insertion_point(field_mutable:proto.EndTransactionRequest.internal_commit_trigger)
+  return internal_commit_trigger_;
 }
-inline ::proto::SplitTrigger* EndTransactionRequest::release_split_trigger() {
-  clear_has_split_trigger();
-  ::proto::SplitTrigger* temp = split_trigger_;
-  split_trigger_ = NULL;
+inline ::proto::InternalCommitTrigger* EndTransactionRequest::release_internal_commit_trigger() {
+  clear_has_internal_commit_trigger();
+  ::proto::InternalCommitTrigger* temp = internal_commit_trigger_;
+  internal_commit_trigger_ = NULL;
   return temp;
 }
-inline void EndTransactionRequest::set_allocated_split_trigger(::proto::SplitTrigger* split_trigger) {
-  delete split_trigger_;
-  split_trigger_ = split_trigger;
-  if (split_trigger) {
-    set_has_split_trigger();
+inline void EndTransactionRequest::set_allocated_internal_commit_trigger(::proto::InternalCommitTrigger* internal_commit_trigger) {
+  delete internal_commit_trigger_;
+  internal_commit_trigger_ = internal_commit_trigger;
+  if (internal_commit_trigger) {
+    set_has_internal_commit_trigger();
   } else {
-    clear_has_split_trigger();
+    clear_has_internal_commit_trigger();
   }
-  // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.split_trigger)
-}
-
-// optional .proto.MergeTrigger merge_trigger = 4;
-inline bool EndTransactionRequest::has_merge_trigger() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void EndTransactionRequest::set_has_merge_trigger() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void EndTransactionRequest::clear_has_merge_trigger() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void EndTransactionRequest::clear_merge_trigger() {
-  if (merge_trigger_ != NULL) merge_trigger_->::proto::MergeTrigger::Clear();
-  clear_has_merge_trigger();
-}
-inline const ::proto::MergeTrigger& EndTransactionRequest::merge_trigger() const {
-  // @@protoc_insertion_point(field_get:proto.EndTransactionRequest.merge_trigger)
-  return merge_trigger_ != NULL ? *merge_trigger_ : *default_instance_->merge_trigger_;
-}
-inline ::proto::MergeTrigger* EndTransactionRequest::mutable_merge_trigger() {
-  set_has_merge_trigger();
-  if (merge_trigger_ == NULL) merge_trigger_ = new ::proto::MergeTrigger;
-  // @@protoc_insertion_point(field_mutable:proto.EndTransactionRequest.merge_trigger)
-  return merge_trigger_;
-}
-inline ::proto::MergeTrigger* EndTransactionRequest::release_merge_trigger() {
-  clear_has_merge_trigger();
-  ::proto::MergeTrigger* temp = merge_trigger_;
-  merge_trigger_ = NULL;
-  return temp;
-}
-inline void EndTransactionRequest::set_allocated_merge_trigger(::proto::MergeTrigger* merge_trigger) {
-  delete merge_trigger_;
-  merge_trigger_ = merge_trigger;
-  if (merge_trigger) {
-    set_has_merge_trigger();
-  } else {
-    clear_has_merge_trigger();
-  }
-  // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.merge_trigger)
-}
-
-// optional .proto.ChangeReplicasTrigger change_replicas_trigger = 5;
-inline bool EndTransactionRequest::has_change_replicas_trigger() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void EndTransactionRequest::set_has_change_replicas_trigger() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void EndTransactionRequest::clear_has_change_replicas_trigger() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void EndTransactionRequest::clear_change_replicas_trigger() {
-  if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::proto::ChangeReplicasTrigger::Clear();
-  clear_has_change_replicas_trigger();
-}
-inline const ::proto::ChangeReplicasTrigger& EndTransactionRequest::change_replicas_trigger() const {
-  // @@protoc_insertion_point(field_get:proto.EndTransactionRequest.change_replicas_trigger)
-  return change_replicas_trigger_ != NULL ? *change_replicas_trigger_ : *default_instance_->change_replicas_trigger_;
-}
-inline ::proto::ChangeReplicasTrigger* EndTransactionRequest::mutable_change_replicas_trigger() {
-  set_has_change_replicas_trigger();
-  if (change_replicas_trigger_ == NULL) change_replicas_trigger_ = new ::proto::ChangeReplicasTrigger;
-  // @@protoc_insertion_point(field_mutable:proto.EndTransactionRequest.change_replicas_trigger)
-  return change_replicas_trigger_;
-}
-inline ::proto::ChangeReplicasTrigger* EndTransactionRequest::release_change_replicas_trigger() {
-  clear_has_change_replicas_trigger();
-  ::proto::ChangeReplicasTrigger* temp = change_replicas_trigger_;
-  change_replicas_trigger_ = NULL;
-  return temp;
-}
-inline void EndTransactionRequest::set_allocated_change_replicas_trigger(::proto::ChangeReplicasTrigger* change_replicas_trigger) {
-  delete change_replicas_trigger_;
-  change_replicas_trigger_ = change_replicas_trigger;
-  if (change_replicas_trigger) {
-    set_has_change_replicas_trigger();
-  } else {
-    clear_has_change_replicas_trigger();
-  }
-  // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.change_replicas_trigger)
+  // @@protoc_insertion_point(field_set_allocated:proto.EndTransactionRequest.internal_commit_trigger)
 }
 
 // -------------------------------------------------------------------

@@ -133,6 +133,13 @@ message ChangeReplicasTrigger {
   repeated Replica updated_replicas = 4 [(gogoproto.nullable) = false];
 }
 
+// CommitTrigger encapsulates all of the internal-only commit triggers.
+message InternalCommitTrigger {
+  optional SplitTrigger split_trigger = 1;
+  optional MergeTrigger merge_trigger = 2;
+  optional ChangeReplicasTrigger change_replicas_trigger = 3;
+}
+
 // IsolationType TODO(jiajia) Needs documentation.
 enum IsolationType {
   option (gogoproto.goproto_enum_prefix) = false;
