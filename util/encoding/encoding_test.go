@@ -272,9 +272,14 @@ func TestEncodeDecodeBytes(t *testing.T) {
 		value   []byte
 		encoded []byte
 	}{
+		{[]byte{0, 1, 'a'}, []byte{0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{[]byte{0, 'a'}, []byte{0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{0, 0xff, 'a'}, []byte{0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
 		{[]byte{'a'}, []byte{'a', 0x00, 0x01}},
 		{[]byte{'b'}, []byte{'b', 0x00, 0x01}},
 		{[]byte{'b', 0}, []byte{'b', 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
 		{[]byte{'b', 0xff}, []byte{'b', 0xff, 0x00, 0x01}},
 		{[]byte("hello"), []byte{'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
 	}
@@ -295,6 +300,12 @@ func TestEncodeDecodeBytes(t *testing.T) {
 			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
 		}
 		if len(remainder) != 0 {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
+		}
+
+		enc = append(enc, []byte("remainder")...)
+		remainder, dec = DecodeBytes(enc)
+		if string(remainder) != "remainder" {
 			t.Errorf("unexpected remaining bytes: %v", remainder)
 		}
 	}

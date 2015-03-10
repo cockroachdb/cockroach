@@ -295,26 +295,32 @@ func DecodeVarUint64Decreasing(b []byte) ([]byte, uint64) {
 }
 
 const (
-	escape = 0x00
-	term   = 0x01
-	null   = 0xff
+	escape      = 0x00
+	escapedTerm = 0x01
+	escapedNul  = 0xff
 )
 
-// EncodeBytes ...
+// EncodeBytes encodes the []byte value using an escape-based
+// encoding. The encoded value is terminated with the sequence
+// "\x00\x01" which is guaranteed to not occur elsewhere in the
+// encoded value. The bytes are append to the supplied buffer and the
+// final buffer is returned.
 func EncodeBytes(b []byte, data []byte) []byte {
 	copyStart := 0
 	for i, v := range data {
 		if v == escape {
 			b = append(b, data[copyStart:i]...)
-			b = append(b, escape, null)
+			b = append(b, escape, escapedNul)
 			copyStart = i + 1
 		}
 	}
 	b = append(b, data[copyStart:]...)
-	return append(b, escape, term)
+	return append(b, escape, escapedTerm)
 }
 
-// DecodeBytes ...
+// DecodeBytes decodes a []byte value from the input buffer which was
+// encoded using EncodeBytees. The remainder of the input buffer and
+// the decoded []byte are returned.
 func DecodeBytes(b []byte) ([]byte, []byte) {
 	var r []byte
 	copyStart := 0
@@ -322,7 +328,7 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 		v := b[i]
 		if v == escape {
 			v = b[i+1]
-			if v == term {
+			if v == escapedTerm {
 				if r == nil {
 					return b[i+2:], b[:i]
 				}
@@ -331,7 +337,7 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 			}
 			r = append(r, b[copyStart:i]...)
 			i++
-			if v == null {
+			if v == escapedNul {
 				r = append(r, 0)
 			}
 			copyStart = i + 1
