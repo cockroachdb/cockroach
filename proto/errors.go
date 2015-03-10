@@ -63,8 +63,8 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
 	if e.Range != nil {
-		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q (%+v)",
-			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey, e.Range.Replicas[0])
+		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q",
+			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey)
 	}
 	return fmt.Sprintf("key range %q-%q could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
 }
@@ -94,9 +94,8 @@ func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError 
 func (e *TransactionPushError) Error() string {
 	if e.Txn == nil {
 		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
-	} else {
-		return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 	}
+	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
 // NewTransactionRetryError initializes a new TransactionRetryError.

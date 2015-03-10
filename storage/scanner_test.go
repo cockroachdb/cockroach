@@ -124,7 +124,9 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 				}
 				tq.Unlock()
 			case <-stopper.ShouldStop():
+				tq.Lock()
 				tq.done = true
+				tq.Unlock()
 				stopper.SetStopped()
 				return
 			}

@@ -836,6 +836,35 @@ func (m *InternalTimeSeriesSample) GetFloatMin() float32 {
 	return 0
 }
 
+// RaftTruncatedState contains metadata about the truncated portion of the raft log.
+// Raft requires access to the term of the last truncated log entry even after the
+// rest of the entry has been discarded.
+type RaftTruncatedState struct {
+	// The highest index that has been removed from the log.
+	Index uint64 `protobuf:"varint,1,opt,name=index" json:"index"`
+	// The term corresponding to 'index'.
+	Term             uint64 `protobuf:"varint,2,opt,name=term" json:"term"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RaftTruncatedState) Reset()         { *m = RaftTruncatedState{} }
+func (m *RaftTruncatedState) String() string { return proto1.CompactTextString(m) }
+func (*RaftTruncatedState) ProtoMessage()    {}
+
+func (m *RaftTruncatedState) GetIndex() uint64 {
+	if m != nil {
+		return m.Index
+	}
+	return 0
+}
+
+func (m *RaftTruncatedState) GetTerm() uint64 {
+	if m != nil {
+		return m.Term
+	}
+	return 0
+}
+
 func init() {
 	proto1.RegisterEnum("cockroach.proto.InternalValueType", InternalValueType_name, InternalValueType_value)
 }

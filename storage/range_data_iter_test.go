@@ -60,9 +60,9 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 	}{
 		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 1, Random: 1}), ts0},
 		{engine.ResponseCacheKey(r.Desc().RaftID, &proto.ClientCmdID{WallTime: 2, Random: 2}), ts0},
+		{engine.RaftHardStateKey(r.Desc().RaftID), ts0},
 		{engine.RaftLogKey(r.Desc().RaftID, 2), ts0},
 		{engine.RaftLogKey(r.Desc().RaftID, 1), ts0},
-		{engine.RaftStateKey(r.Desc().RaftID), ts0},
 		{engine.RangeGCMetadataKey(r.Desc().RaftID), ts0},
 		{engine.RangeLastVerificationTimestampKey(r.Desc().RaftID), ts0},
 		{engine.RangeStatKey(r.Desc().RaftID, engine.StatKeyBytes), ts0},

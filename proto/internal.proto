@@ -314,3 +314,13 @@ message InternalTimeSeriesSample {
     // Minimum encountered floating point measurement in this sample.
     optional float float_min = 9;
 }
+
+// RaftTruncatedState contains metadata about the truncated portion of the raft log.
+// Raft requires access to the term of the last truncated log entry even after the
+// rest of the entry has been discarded.
+message RaftTruncatedState {
+  // The highest index that has been removed from the log.
+  optional uint64 index = 1 [(gogoproto.nullable) = false];
+  // The term corresponding to 'index'.
+  optional uint64 term = 2 [(gogoproto.nullable) = false];
+}
