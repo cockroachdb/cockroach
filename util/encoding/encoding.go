@@ -247,6 +247,53 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
 	return leftover, ^v
 }
 
+// EncodeVarUint32 encodes the uint32 value using a variable length
+// (length-prefixed) big-endian 8 byte representation. The bytes are
+// appended to the supplied buffer and the final buffer is returned.
+func EncodeVarUint32(b []byte, v uint32) []byte {
+	var enc [5]byte
+	i := 4
+	for v > 0 {
+		enc[i] = byte(v & 0xff)
+		i--
+		v >>= 8
+	}
+	enc[i] = byte(4 - i)
+	return append(b, enc[i:]...)
+}
+
+// EncodeVarUint32Decreasing encodes the uint32 value so that it sorts in
+// reverse order, from largest to smallest.
+func EncodeVarUint32Decreasing(b []byte, v uint32) []byte {
+	return EncodeVarUint32(b, ^v)
+}
+
+// DecodeVarUint32 decodes a uint32 from the input buffer, treating
+// the input as a big-endian 8 byte uint32 representation. The remainder
+// of the input buffer and the decoded uint32 are returned.
+func DecodeVarUint32(b []byte) ([]byte, uint32) {
+	if len(b) == 0 {
+		panic("insufficient bytes to decode var uint32 int value")
+	}
+	length := int(b[0])
+	b = b[1:] // skip length byte
+	if len(b) < length {
+		panic(fmt.Sprintf("insufficient bytes to decode var uint32 int value: %s", b))
+	}
+	var v uint32
+	for i := 0; i < length; i++ {
+		v = (v << 8) | uint32(b[i])
+	}
+	return b[length:], v
+}
+
+// DecodeVarUint32Decreasing decodes a uint32 value which was encoded
+// using EncodeVarUint32Decreasing.
+func DecodeVarUint32Decreasing(b []byte) ([]byte, uint32) {
+	leftover, v := DecodeVarUint32(b)
+	return leftover, ^v
+}
+
 // EncodeVarUint64 encodes the uint64 value using a variable length
 // (length-prefixed) big-endian 8 byte representation. The bytes are
 // appended to the supplied buffer and the final buffer is returned.
@@ -319,12 +366,12 @@ func EncodeBytes(b []byte, data []byte) []byte {
 }
 
 // DecodeBytes decodes a []byte value from the input buffer which was
-// encoded using EncodeBytees. The remainder of the input buffer and
+// encoded using EncodeBytes. The remainder of the input buffer and
 // the decoded []byte are returned.
 func DecodeBytes(b []byte) ([]byte, []byte) {
 	var r []byte
 	copyStart := 0
-	for i := 0; i < len(b); i++ {
+	for i, n := 0, len(b)-1; i < n; i++ {
 		v := b[i]
 		if v == escape {
 			v = b[i+1]

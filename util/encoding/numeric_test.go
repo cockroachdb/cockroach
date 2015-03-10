@@ -19,167 +19,11 @@ package encoding
 
 import (
 	"bytes"
-	"fmt"
 	"math"
-	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/util"
 )
-
-func TestEncodeDecodeString(t *testing.T) {
-	testCases := []struct {
-		text   string
-		length int
-	}{
-		{"foo", 5},
-		{"baaaar", 8},
-		{"bazz", 6},
-		{"Hello, 世界", 15},
-		{"", 2},
-		{"abcd", 6},
-		{"☺☻☹", 11},
-		{"日a本b語ç日ð本Ê語þ日¥本¼語i日©", 49},
-		{"日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©", 143},
-	}
-	for _, c := range testCases {
-		buf := EncodeString(nil, c.text)
-		n := len(buf)
-		if n != c.length {
-			t.Errorf("short write for %q: %d bytes written; %d expected", c.text, n, c.length)
-		}
-		if buf[n-1] != orderedEncodingTerminator {
-			t.Errorf("expected terminating byte (%#x), got %#x", orderedEncodingTerminator, buf[n-1])
-		}
-		_, s := DecodeString(buf)
-
-		if s != c.text {
-			t.Errorf("error decoding string: expected %q, got %q", c.text, s)
-		}
-	}
-}
-
-func TestStringOrdering(t *testing.T) {
-	strs := []string{
-		"foo",
-		"baaaar",
-		"bazz",
-		"Hello, 世界",
-		"",
-		"abcd",
-		"☺☻☹",
-		"日a本b語ç日ð本Ê語þ日¥本¼語i日©",
-		"日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©日a本b語ç日ð本Ê語þ日¥本¼語i日©",
-	}
-	encodedStrs := make(byteSlice, len(strs))
-	for i := range strs {
-		encodedStrs[i] = EncodeString(nil, strs[i])
-	}
-	sort.Strings(strs)
-	sort.Sort(encodedStrs)
-	for i := range strs {
-		_, decoded := DecodeString(encodedStrs[i])
-		if decoded != strs[i] {
-			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, strs[i], decoded)
-		}
-	}
-}
-
-func TestInvalidUTF8String(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to invalid utf-8 string")
-		}
-	}()
-	EncodeString(nil, "\x80\x80\x80\x80")
-}
-
-func TestStringNullBytePanic(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to intervening 0x00 byte in string")
-		}
-	}()
-	EncodeString(nil, string([]byte{0x00, 0x01, 0x02}))
-}
-
-func TestStringNoTerminatorPanic(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to absence of terminator byte in encoded string")
-		}
-	}()
-	DecodeString([]byte{orderedEncodingText, byte('a')})
-}
-
-func TestEncodeBinary(t *testing.T) {
-	testCases := []struct{ blob, encoded []byte }{
-		{[]byte{}, []byte{orderedEncodingBinary, orderedEncodingTerminator}},
-		{[]byte{0xff}, []byte{orderedEncodingBinary, 0xff, 0xc0, 0x00}},
-		{[]byte{0x00}, []byte{orderedEncodingBinary, 0x80, 0x80, 0x00}},
-		{[]byte{0x01}, []byte{orderedEncodingBinary, 0x80, 0xc0, 0x00}},
-		{[]byte("1"), []byte{orderedEncodingBinary, 0x98, 0xc0, 0x00}},
-		{[]byte("1\x00"), []byte{orderedEncodingBinary, 0x98, 0xc0, 0x80, 0x00}},
-		{[]byte("2"), []byte{orderedEncodingBinary, 0x99, 0x80, 0x00}},
-		{[]byte("2\x00"), []byte{orderedEncodingBinary, 0x99, 0x80, 0x80, 0x00}},
-		{[]byte("2\x01"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xa0, 0x00}},
-		{[]byte("2\x02"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xc0, 0x00}},
-		{[]byte("2\x03"), []byte{orderedEncodingBinary, 0x99, 0x80, 0xe0, 0x00}},
-		{[]byte("2\x04"), []byte{orderedEncodingBinary, 0x99, 0x81, 0x80, 0x00}},
-		{[]byte("22"), []byte{orderedEncodingBinary, 0x99, 0x8c, 0xc0, 0x00}},
-		{[]byte("333"), []byte{orderedEncodingBinary, 0x99, 0xcc, 0xe6, 0xb0, 0x00}},
-		{[]byte("4444"), []byte{orderedEncodingBinary, 0x9a, 0x8d, 0x86, 0xc3, 0xa0, 0x00}},
-		{[]byte("55555"), []byte{orderedEncodingBinary, 0x9a, 0xcd, 0xa6, 0xd3, 0xa9, 0xd4, 0x00}},
-		{[]byte("666666"), []byte{orderedEncodingBinary, 0x9b, 0x8d, 0xc6, 0xe3, 0xb1, 0xd8, 0xec, 0x00}},
-		{[]byte("7777777"), []byte{orderedEncodingBinary, 0x9b, 0xcd, 0xe6, 0xf3, 0xb9, 0xdc, 0xee, 0xb7, 0x00}},
-		{[]byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x80}, []byte{orderedEncodingBinary, 0x80, 0xc0, 0xa0, 0x90, 0x88, 0x84, 0x83, 0x80, 0x00}},
-		{[]byte("88888888"), []byte{orderedEncodingBinary, 0x9c, 0x8e, 0x87, 0x83, 0xc1, 0xe0, 0xf0, 0xb8, 0x9c, 0x80, 0x00}},
-		{[]byte("Carl"), []byte{orderedEncodingBinary, 0xa1, 0xd8, 0xae, 0xa6, 0xe0, 0x00}},
-		{[]byte("Hello, 世界"), []byte{orderedEncodingBinary, 0xa4, 0x99, 0xad, 0xc6, 0xe3, 0xbc, 0xd8, 0xa0, 0xf2, 0xae, 0x92, 0xee, 0xbc, 0xd6, 0x98, 0x00}},
-	}
-	for _, c := range testCases {
-		b := EncodeBinary(nil, c.blob)
-		if !bytes.Equal(b, c.encoded) {
-			t.Errorf("unexpected mismatch of encoded value: expected %s, got %s", prettyBytes(c.encoded), prettyBytes(b))
-		}
-		remainder, d := DecodeBinary(c.encoded)
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remainder: %s", remainder)
-		}
-		if !bytes.Equal(d, c.blob) {
-			t.Errorf("unexpected mismatch of decoded value: expected %s, got %s", prettyBytes(c.blob), prettyBytes(d))
-		}
-	}
-	blobs := make(byteSlice, len(testCases))
-	encodedBlobs := make(byteSlice, len(testCases))
-	for i, c := range testCases {
-		blobs[i] = c.blob
-		encodedBlobs[i] = c.encoded
-	}
-	sort.Sort(blobs)
-	sort.Sort(encodedBlobs)
-	for i := range encodedBlobs {
-		remainder, decoded := DecodeBinary(encodedBlobs[i])
-		if len(remainder) != 0 {
-			t.Errorf("unexpected remainder: %s", remainder)
-		}
-		if !bytes.Equal(decoded, blobs[i]) {
-			t.Errorf("mismatched ordering at index %d: expected: %s, got %s", i, prettyBytes(blobs[i]), prettyBytes(decoded))
-		}
-	}
-}
-
-func prettyBytes(b []byte) string {
-	str := "["
-	for i, v := range b {
-		str += fmt.Sprintf("%#x", v)
-		if i < len(b)-1 {
-			str += ", "
-		}
-	}
-	str += "]"
-	return str
-}
 
 func TestIntMandE(t *testing.T) {
 	testCases := []struct {
@@ -210,17 +54,17 @@ func TestIntMandE(t *testing.T) {
 	}
 	for _, c := range testCases {
 		if e, m := intMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
-			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v",
-				c.Value, c.E, prettyBytes(c.M), e, prettyBytes(m))
+			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=[% x], got E=%v | M=[% x]",
+				c.Value, c.E, c.M, e, m)
 		}
 		if v := makeIntFromMandE(c.Value < 0, c.E, c.M); v != c.Value {
-			t.Errorf("unexpected mismatch in Value for E=%v and M=%+v. expected value=%v, got value=%v",
-				c.E, prettyBytes(c.M), c.Value, v)
+			t.Errorf("unexpected mismatch in Value for E=%v and M=[% x]. expected value=%v, got value=%v",
+				c.E, c.M, c.Value, v)
 		}
 	}
 }
 
-func TestEncodeInt(t *testing.T) {
+func TestEncodeNumericInt(t *testing.T) {
 	testCases := []struct {
 		Value    int64
 		Encoding []byte
@@ -248,17 +92,17 @@ func TestEncodeInt(t *testing.T) {
 		{9223372036854775807, []byte{0x21, 0x13, 0x2d, 0x43, 0x91, 0x07, 0x89, 0x6d, 0x9b, 0x75, 0x0e, 0x00}},
 	}
 	for i, c := range testCases {
-		enc := EncodeInt(nil, c.Value)
+		enc := EncodeNumericInt(nil, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
-			t.Errorf("unexpected mismatch for %v. expected %v, got %v",
-				c.Value, prettyBytes(c.Encoding), prettyBytes(enc))
+			t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
+				c.Value, c.Encoding, enc)
 		}
 		if i > 0 {
 			if bytes.Compare(testCases[i-1].Encoding, enc) >= 0 {
-				t.Errorf("expected %v to be less than %v", prettyBytes(testCases[i-1].Encoding), prettyBytes(enc))
+				t.Errorf("expected [% x] to be less than [% x]", testCases[i-1].Encoding, enc)
 			}
 		}
-		_, dec := DecodeInt(enc)
+		_, dec := DecodeNumericInt(enc)
 		if dec != c.Value {
 			t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
 		}
@@ -306,13 +150,13 @@ func TestFloatMandE(t *testing.T) {
 	}
 	for _, c := range testCases {
 		if e, m := floatMandE(c.Value); e != c.E || !bytes.Equal(m, c.M) {
-			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=%+v, got E=%v | M=%+v",
-				c.Value, c.E, prettyBytes(c.M), e, prettyBytes(m))
+			t.Errorf("unexpected mismatch in E/M for %v. expected E=%v | M=[% x], got E=%v | M=[% x]",
+				c.Value, c.E, c.M, e, m)
 		}
 	}
 }
 
-func TestEncodeFloat(t *testing.T) {
+func TestEncodeNumericFloat(t *testing.T) {
 	testCases := []struct {
 		Value    float64
 		Encoding []byte
@@ -366,18 +210,18 @@ func TestEncodeFloat(t *testing.T) {
 	}
 
 	for i, c := range testCases {
-		enc := EncodeFloat(nil, c.Value)
+		enc := EncodeNumericFloat(nil, c.Value)
 		if !bytes.Equal(enc, c.Encoding) {
-			t.Errorf("unexpected mismatch for %v. expected %v, got %v",
-				c.Value, prettyBytes(c.Encoding), prettyBytes(enc))
+			t.Errorf("unexpected mismatch for %v. expected [% x], got [% x]",
+				c.Value, c.Encoding, enc)
 		}
 		if i > 0 {
 			if bytes.Compare(testCases[i-1].Encoding, enc) >= 0 {
-				t.Errorf("%v: expected %v to be less than %v",
-					c.Value, prettyBytes(testCases[i-1].Encoding), prettyBytes(enc))
+				t.Errorf("%v: expected [% x] to be less than [% x]",
+					c.Value, testCases[i-1].Encoding, enc)
 			}
 		}
-		_, dec := DecodeFloat(enc)
+		_, dec := DecodeNumericFloat(enc)
 		if math.IsNaN(c.Value) {
 			if !math.IsNaN(dec) {
 				t.Errorf("unexpected mismatch for %v. got %v", c.Value, dec)
@@ -388,19 +232,62 @@ func TestEncodeFloat(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeDecodeBinary(b *testing.B) {
+func BenchmarkEncodeNumericInt(b *testing.B) {
 	rng := util.NewPseudoRand()
 
-	keys := make([][]byte, 10000)
-	for i := range keys {
-		keys[i] = util.RandBytes(rng, 100)
+	vals := make([]int64, 10000)
+	for i := range vals {
+		vals[i] = int64(rng.Int31())
 	}
 
-	buf := make([]byte, 0, 1000)
+	buf := make([]byte, 0, 16)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		enc := EncodeBinary(buf, keys[rng.Intn(len(keys))])
-		_, _ = DecodeBinary(enc)
+		_ = EncodeNumericInt(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeNumericInt(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeNumericInt(nil, int64(rng.Int31()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeNumericInt(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeNumericFloat(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([]float64, 10000)
+	for i := range vals {
+		vals[i] = rng.Float64()
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeNumericFloat(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeNumericFloat(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeNumericFloat(nil, rng.Float64())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeNumericFloat(vals[i%len(vals)])
 	}
 }

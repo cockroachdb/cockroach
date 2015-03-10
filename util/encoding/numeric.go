@@ -13,11 +13,12 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// An ordered key encoding scheme based on sqlite4's key encoding:
+// An ordered key encoding scheme for numbers (both integers and floats) based
+// on sqlite4's key encoding:
 // http://sqlite.org/src4/doc/trunk/www/key_encoding.wiki
 //
 // Author: Andrew Bonventre (andybons@gmail.com)
-// TODO(andybons): Add get* functions for decoding.
+// Author: Peter Mattis (petermattis@gmail.com)
 
 package encoding
 
@@ -26,198 +27,21 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"unicode/utf8"
-)
-
-// Maximum sizes for allocating buffers to hold encoded values.
-const (
-	// MaxIntSize is the maximum encoded integer size in bytes.
-	MaxIntSize = 12
 )
 
 // Direct mappings or prefixes of encoded data dependent on the type.
 const (
-	orderedEncodingNil                 = 0x05
-	orderedEncodingNaN                 = 0x06
-	orderedEncodingNegativeInfinity    = 0x07
-	orderedEncodingZero                = 0x15
-	orderedEncodingInfinity            = 0x23
-	orderedEncodingText                = 0x24
-	orderedEncodingBinary              = 0x25
-	orderedEncodingBinaryNoTermination = 0x26
-	orderedEncodingTerminator          = 0x00
+	orderedEncodingNaN              = 0x06
+	orderedEncodingNegativeInfinity = 0x07
+	orderedEncodingZero             = 0x15
+	orderedEncodingInfinity         = 0x23
+	orderedEncodingTerminator       = 0x00
 )
 
-// EncodeNil returns a byte slice containing a nil-encoded value.
-func EncodeNil() []byte {
-	return []byte{orderedEncodingNil}
-}
-
-// EncodeString returns the resulting byte slice with s encoded
-// and appended to b. If b is nil, it is treated as an empty
-// byte slice. If s is not a valid utf8-encoded string or
-// contains an intervening 0x00 byte, EncodeString will panic.
-//
-// Each value that is TEXT begins with a single byte of 0x24
-// and ends with a single byte of 0x00. There are zero or more
-// intervening bytes that encode the text value. The intervening
-// bytes are chosen so that the encoding will sort in the desired
-// collating order. The default sequence of bytes is simply UTF8.
-// The intervening bytes may not contain a 0x00 character; the only
-// 0x00 byte allowed in a text encoding is the final byte.
-//
-// Note that all key-encoded text with the BINARY collating sequence
-// is simply UTF8 text. UTF8 not UTF16. Strings must be converted to
-// UTF8 so that equivalent strings in different encodings compare the
-// same and so that the strings contain no embedded 0x00 bytes. In other
-// words, strcmp() should be sufficient for comparing two text keys.
-//
-// The text encoding ends in 0x00 in order to ensure that when there
-// are two strings where one is a prefix of the other that the shorter
-// string will sort first.
-func EncodeString(b []byte, s string) []byte {
-	if !utf8.ValidString(s) {
-		panic("invalid utf8 string passed")
-	}
-	b = append(b, orderedEncodingText)
-	for _, v := range []byte(s) {
-		if v == 0x00 {
-			panic("string contains intervening 0x00 byte")
-		}
-		b = append(b, v)
-	}
-	return append(b, orderedEncodingTerminator)
-}
-
-// DecodeString returns the remaining byte slice after decoding and the
-// decoded string from b.
-func DecodeString(b []byte) ([]byte, string) {
-	if b[0] != orderedEncodingText {
-		panic("first byte of encoded string must be 0x24")
-	}
-	for i, v := range b[1:] {
-		if v == orderedEncodingTerminator {
-			return b[1+i:], string(b[1 : 1+i])
-		}
-	}
-	panic("encoded string must have terminator byte")
-}
-
-// EncodeBinary returns the resulting byte slice with i encoded
-// and appended to b.
-//
-// The encoding of binaries fields is different depending
-// on whether or not the value to be encoded is the last value
-// (the right-most value) in the key.
-//
-// Each value that is BINARY that is not the last value of the key
-// begins with a single byte of 0x25 and ends with a single terminator
-// byte of 0x00. There are zero or more intervening bytes that encode
-// the binary value. None of the intervening bytes may be zero. Each
-// of the intervening bytes contains 7 bits of blob content with a 1
-// in the high-order bit (the 0x80 bit). Each encoded byte thereafter
-// consists of a high-order bit followed by 7 bits of payload. An
-// empty input value is encoded as the header byte immediately
-// followed by a termination byte 0x00.
-//
-// When the very last value of a key is BINARY, then it is encoded
-// as a single byte of 0x26 and is followed by a byte-for-byte
-// copy of the BINARY value. This alternative encoding is more efficient,
-// but it only works if there are no subsequent values in the key,
-// since there is no termination mark on the BLOB being encoded.
-//
-// The initial byte of a binary value, 0x25 or 0x26, is larger than
-// the initial byte of a text value, 0x24, ensuring that every binary
-// value will sort after every text value.
-func EncodeBinary(b []byte, i []byte) []byte {
-	b = append(b, orderedEncodingBinary)
-	s := uint(1)
-	t := byte(0)
-	for _, v := range i {
-		b = append(b, byte(0x80|t|((v&0xff)>>s)))
-		if s < 7 {
-			t = v << (7 - s)
-			s++
-		} else {
-			b = append(b, byte(0x80|v))
-			s = 1
-			t = 0
-		}
-	}
-	if s > 1 {
-		b = append(b, byte(0x80|t))
-	}
-	return append(b, orderedEncodingTerminator)
-}
-
-// DecodeBinary decodes the given key-encoded byte slice, returning
-// the unencoded byte slice value. (see documentation for EncodeBinary
-// for more details). The first return argument is the remainder of
-// the input buffer, after decoding the binary value.
-func DecodeBinary(buf []byte) ([]byte, []byte) {
-	if buf[0] != orderedEncodingBinary {
-		panic(fmt.Sprintf("%q doesn't begin with binary encoding byte", buf))
-	}
-	out := new(bytes.Buffer)
-	s := uint(6)
-	i := int(1)
-	if buf[i] == orderedEncodingTerminator {
-		return buf[2:], out.Bytes()
-	}
-	t := (buf[i] << 1) & 0xff
-	for i = 2; buf[i] != orderedEncodingTerminator; i++ {
-		if s == 7 {
-			out.WriteByte(t | (buf[i] & 0x7f))
-			i++
-		} else {
-			out.WriteByte(t | ((buf[i] & 0x7f) >> s))
-		}
-
-		t = (buf[i] << (8 - s)) & 0xff
-
-		if buf[i] == orderedEncodingTerminator {
-			break
-		}
-
-		if s == 1 {
-			s = 7
-		} else {
-			s--
-		}
-	}
-	if t != 0 {
-		panic("unexpected bits remaining after decoding blob")
-	}
-	return buf[i+1:], out.Bytes()
-}
-
-// DecodeBinaryFinal decodes a byte slice and returns the
-// result presuming that it is the last part of the buffer
-// (see documentation for EncodeBinary for more details).
-func DecodeBinaryFinal(buf []byte) []byte {
-	if buf[0] != orderedEncodingBinaryNoTermination {
-		panic(fmt.Sprintf("%q doesn't begin with binary-no-termination encoding byte", buf))
-	}
-	out := make([]byte, len(buf)-1)
-	copy(buf[1:], out)
-	return out
-}
-
-// EncodeBinaryFinal encodes a byte slice and returns
-// the result presuming that the byte slice is the last
-// portion of the buffer (see the comment for EncodeBinary).
-func EncodeBinaryFinal(b []byte) []byte {
-	buf := make([]byte, 1+len(b))
-	buf[0] = orderedEncodingBinaryNoTermination
-	for i, v := range b {
-		buf[i+1] = v
-	}
-	return buf
-}
-
-// EncodeInt returns the resulting byte slice with the encoded int64 and
-// appended to b. See the notes for EncodeFloat for a complete description.
-func EncodeInt(b []byte, i int64) []byte {
+// EncodeNumericInt returns the resulting byte slice with the encoded int64
+// appended to b. See the notes for EncodeNumericFloat for a complete
+// description.
+func EncodeNumericInt(b []byte, i int64) []byte {
 	if i == 0 {
 		return append(b, orderedEncodingZero)
 	}
@@ -235,15 +59,15 @@ func EncodeInt(b []byte, i int64) []byte {
 	panic(fmt.Sprintf("unexpected value e: %d", e))
 }
 
-// EncodeIntDecreasing returns the resulting byte slice with the
-// encoded int64 values in decreasing order and appended to b.
-func EncodeIntDecreasing(b []byte, i int64) []byte {
-	return EncodeInt(b, ^i)
+// EncodeNumericIntDecreasing returns the resulting byte slice with
+// the encoded int64 value in decreasing order appended to b.
+func EncodeNumericIntDecreasing(b []byte, i int64) []byte {
+	return EncodeNumericInt(b, ^i)
 }
 
-// DecodeInt returns the remaining byte slice after decoding and the decoded
-// int64 from buf.
-func DecodeInt(buf []byte) ([]byte, int64) {
+// DecodeNumericInt returns the remaining byte slice after decoding
+// and the decoded int64 from buf.
+func DecodeNumericInt(buf []byte) ([]byte, int64) {
 	if buf[0] == 0x15 {
 		return buf[1:], 0
 	}
@@ -274,10 +98,10 @@ func DecodeInt(buf []byte) ([]byte, int64) {
 	}
 }
 
-// DecodeIntDecreasing returns the remaining byte slice after decoding and
+// DecodeNumericIntDecreasing returns the remaining byte slice after decoding and
 // the decoded int64 in decreasing order from buf.
-func DecodeIntDecreasing(buf []byte) ([]byte, int64) {
-	b, v := DecodeInt(buf)
+func DecodeNumericIntDecreasing(buf []byte) ([]byte, int64) {
+	b, v := DecodeNumericInt(buf)
 	return b, ^v
 }
 
@@ -287,31 +111,28 @@ func DecodeIntDecreasing(buf []byte) ([]byte, int64) {
 // of M. This method computes E and M in a simpler loop.
 func intMandE(i int64) (int, []byte) {
 	var e int
-	var buf bytes.Buffer
+	var m [12]byte
 	for v := i; v != 0; v /= 100 {
-		mod := v % 100
-		if mod == 0 && buf.Len() == 0 {
-			// Trailing X==0 digits are omitted.
-		} else if mod < 0 {
-			buf.WriteByte(byte(2*-mod + 1))
-		} else {
-			buf.WriteByte(byte(2*mod + 1))
-		}
 		e++
+		mod := v % 100
+		if mod < 0 {
+			m[12-e] = byte(2*-mod + 1)
+		} else {
+			m[12-e] = byte(2*mod + 1)
+		}
 	}
-	m := buf.Bytes()
-	// Reverse the mantissa so highest byte sorts first.
-	for i := range m {
-		j := len(m) - i - 1
-		if i >= j {
+
+	// Remove trailing zeroes which were encoded above as 1.
+	n := 11
+	for ; n > 0; n-- {
+		if m[n] != 1 {
 			break
 		}
-		m[i], m[j] = m[j], m[i]
 	}
-	// The last byte is encoded as 2n+0.
-	m[len(m)-1]--
 
-	return e, m
+	// The last byte is encoded as 2n+0.
+	m[n]--
+	return e, m[12-e : n+1]
 }
 
 // makeIntFromMandE reconstructs the integer from the mantissa M
@@ -338,36 +159,29 @@ func makeIntFromMandE(negative bool, e int, m []byte) int64 {
 	return i
 }
 
-func removeTrailingZeros(m []byte) []byte {
-	for i := len(m); i > 0; i-- {
-		if m[i-1] != 0 {
-			return m[:i]
-		}
-	}
-	return []byte{}
-}
-
-// EncodeFloat returns the resulting byte slice with the encoded
-// float64 and appended to b.
+// EncodeNumericFloat returns the resulting byte slice with the encoded float64
+// appended to b.
 //
-// Values are classified as large, medium, or small
-// according to the value of E. If E is 11 or more,
-// the value is large. For E between 0 and 10, the
-// value is medium. For E less than zero, the value is small.
+// Values are classified as large, medium, or small according to the value of
+// E. If E is 11 or more, the value is large. For E between 0 and 10, the value
+// is medium. For E less than zero, the value is small.
 //
-// Large positive values are encoded as a single byte 0x22
-// followed by E as a varint and then M. Medium positive
-// values are a single byte of 0x17+E followed by M. Small
-// positive values are encoded as a single byte 0x16 followed
-// by the ones-complement of the varint for -E followed by M.
+// Large positive values are encoded as a single byte 0x22 followed by E as a
+// varint and then M. Medium positive values are a single byte of 0x17+E
+// followed by M. Small positive values are encoded as a single byte 0x16
+// followed by the ones-complement of the varint for -E followed by M.
 //
-// Small negative values are encoded as a single byte 0x14
-// followed by -E as a varint and then the ones-complement
-// of M. Medium negative values are encoded as a byte 0x13-E
-// followed by the ones-complement of M. Large negative values
-// consist of the single byte 0x08 followed by the ones-complement
-// of the varint encoding of E followed by the ones-complement of M.
-func EncodeFloat(b []byte, f float64) []byte {
+// Small negative values are encoded as a single byte 0x14 followed by -E as a
+// varint and then the ones-complement of M. Medium negative values are encoded
+// as a byte 0x13-E followed by the ones-complement of M. Large negative values
+// consist of the single byte 0x08 followed by the ones-complement of the
+// varint encoding of E followed by the ones-complement of M.
+//
+// The results numeric encodings are all comparable. That is, the result from
+// EncodeNumericInt is comparable with the result from EncodeNumericFloat. But
+// this flexibility comes at the cost of speed. Prefer the EncodeVarUint{32,64}
+// routines for speed.
+func EncodeNumericFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
 	switch {
 	case math.IsNaN(f):
@@ -392,9 +206,9 @@ func EncodeFloat(b []byte, f float64) []byte {
 	return nil
 }
 
-// DecodeFloat returns the remaining byte slice after decoding and the decoded
+// DecodeNumericFloat returns the remaining byte slice after decoding and the decoded
 // float64 from buf.
-func DecodeFloat(buf []byte) ([]byte, float64) {
+func DecodeNumericFloat(buf []byte) ([]byte, float64) {
 	if buf[0] == 0x15 {
 		return buf[1:], 0
 	}
@@ -437,15 +251,15 @@ func DecodeFloat(buf []byte) ([]byte, float64) {
 
 // floatMandE computes and returns the mantissa M and exponent E for f.
 //
-// The mantissa is a base-100 representation of the value. The exponent
-// E determines where to put the decimal point.
+// The mantissa is a base-100 representation of the value. The exponent E
+// determines where to put the decimal point.
 //
-// Each centimal digit of the mantissa is stored in a byte. If the value
-// of the centimal digit is X (hence X>=0 and X<=99) then the byte value
-// will be 2*X+1 for every byte of the mantissa, except for the last byte
-// which will be 2*X+0. The mantissa must be the minimum number of bytes
-// necessary to represent the value; trailing X==0 digits are omitted.
-// This means that the mantissa will never contain a byte with the value 0x00.
+// Each centimal digit of the mantissa is stored in a byte. If the value of the
+// centimal digit is X (hence X>=0 and X<=99) then the byte value will be 2*X+1
+// for every byte of the mantissa, except for the last byte which will be
+// 2*X+0. The mantissa must be the minimum number of bytes necessary to
+// represent the value; trailing X==0 digits are omitted.  This means that the
+// mantissa will never contain a byte with the value 0x00.
 //
 // If we assume all digits of the mantissa occur to the right of the decimal
 // point, then the exponent E is the power of one hundred by which one must

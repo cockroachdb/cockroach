@@ -57,7 +57,8 @@ func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != KeyLocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
 	}
-	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, raftID), suffix, detail)
+	// TODO(pmattis): Use encoding.EncodeVarUint64.
+	return MakeKey(KeyLocalRangeIDPrefix, encoding.EncodeNumericInt(nil, raftID), suffix, detail)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
@@ -83,7 +84,7 @@ func DecodeRaftStateKey(key proto.Key) int64 {
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(KeyLocalRangeIDPrefix):]
-	_, raftID := encoding.DecodeInt(b)
+	_, raftID := encoding.DecodeNumericInt(b)
 	return raftID
 }
 
@@ -99,8 +100,8 @@ func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
 func ResponseCacheKey(raftID int64, cmdID *proto.ClientCmdID) proto.Key {
 	detail := proto.Key{}
 	if cmdID != nil {
-		detail = encoding.EncodeInt(nil, cmdID.WallTime)  // wall time helps sort for locality
-		detail = encoding.EncodeInt(detail, cmdID.Random) // TODO(spencer): encode as Fixed64
+		detail = encoding.EncodeVarUint64(nil, uint64(cmdID.WallTime)) // wall time helps sort for locality
+		detail = encoding.EncodeUint64(detail, uint64(cmdID.Random))
 	}
 	return MakeRangeIDKey(raftID, KeyLocalResponseCacheSuffix, detail)
 }
@@ -340,10 +341,10 @@ var (
 
 	// KeyLocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Raft ID. The Raft ID is appended to this prefix,
-	// encoded using EncodeInt. The specific sort of per-range metadata
-	// is identified by one of the suffixes listed below, along with
-	// potentially additional encoded key info, such as a command ID in
-	// the case of response cache entry.
+	// encoded using EncodeNumericInt. The specific sort of per-range
+	// metadata is identified by one of the suffixes listed below, along
+	// with potentially additional encoded key info, such as a command
+	// ID in the case of response cache entry.
 	KeyLocalRangeIDPrefix = MakeKey(KeyLocalPrefix, proto.Key("i"))
 	// KeyLocalRaftLogSuffix is the suffix for the raft log.
 	KeyLocalRaftLogSuffix = proto.Key("rftl")
