@@ -118,11 +118,26 @@ clean:
 	$(GO) clean -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
-
 # List all of the dependencies which are not part of the standard
 # library or cockroachdb/cockroach.
-.PHONY: godeps
-godeps:
+.PHONY: listdeps
+listdeps:
 	@go list -f '{{range .Deps}}{{printf "%s\n" .}}{{end}}' ./... | \
 	  sort | uniq | egrep '[^/]+\.[^/]+/' | \
 	  egrep -v 'github.com/cockroachdb/cockroach'
+
+
+GITHOOKS := $(subst githooks/,.git/hooks/,$(wildcard githooks/*))
+.git/hooks/%: githooks/%
+	@echo installing $<
+	@rm -f $@
+	@mkdir -p $(dir $@)
+	@ln -s ../../$(basename $<) $(dir $@)
+
+# Update the git hooks and run the bootstrap script whenever either
+# one changes.
+.bootstrap: $(GITHOOKS) build/devbase/godeps.sh
+	@build/devbase/godeps.sh
+	@touch $@
+
+-include .bootstrap

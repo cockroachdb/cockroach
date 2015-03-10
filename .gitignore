@@ -34,3 +34,5 @@ cockroach
 # That file is present in the cockroach-dev Docker container, required to avoid
 # untracked files.
 cockroach.sh
+
+.bootstrap
