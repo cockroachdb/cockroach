@@ -20,23 +20,23 @@
 
 namespace {
 
-const unsigned char kEscape = 0x00;
-const unsigned char kTerm   = 0x01;
-const unsigned char kNull   = 0xff;
+const unsigned char kEscape      = 0x00;
+const unsigned char kEscapedTerm = 0x01;
+const unsigned char kEscapedNul  = 0xff;
 
 }  // namespace
 
 bool DecodeBytes(const rocksdb::Slice& buf, std::string* decoded) {
   int copyStart = 0;
-  for (int i = 0; i < buf.size(); ++i) {
+  for (int i = 0, n = int(buf.size()) - 1; i < n; ++i) {
     unsigned char v = buf[i];
     if (v == kEscape) {
       decoded->append(buf.data() + copyStart, i-copyStart);
       v = buf[++i];
-      if (v == kTerm) {
+      if (v == kEscapedTerm) {
         return true;
       }
-      if (v == kNull) {
+      if (v == kEscapedNul) {
         decoded->append("\0", 1);
       }
       copyStart = i + 1;
