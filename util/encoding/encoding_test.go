@@ -22,6 +22,8 @@ import (
 	"math"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestEncoding(t *testing.T) {
@@ -263,4 +265,65 @@ func TestEncodeDecodeVarUint64Decreasing(t *testing.T) {
 		{math.MaxUint64, []byte{0x00}},
 	}
 	testCustomEncode64(testCases, EncodeVarUint64Decreasing, t)
+}
+
+func TestEncodeDecodeBytes(t *testing.T) {
+	testCases := []struct {
+		value   []byte
+		encoded []byte
+	}{
+		{[]byte{0, 1, 'a'}, []byte{0x00, 0xff, 1, 'a', 0x00, 0x01}},
+		{[]byte{0, 'a'}, []byte{0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{0, 0xff, 'a'}, []byte{0x00, 0xff, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'a'}, []byte{'a', 0x00, 0x01}},
+		{[]byte{'b'}, []byte{'b', 0x00, 0x01}},
+		{[]byte{'b', 0}, []byte{'b', 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 0x00, 0x01}},
+		{[]byte{'b', 0, 0, 'a'}, []byte{'b', 0x00, 0xff, 0x00, 0xff, 'a', 0x00, 0x01}},
+		{[]byte{'b', 0xff}, []byte{'b', 0xff, 0x00, 0x01}},
+		{[]byte("hello"), []byte{'h', 'e', 'l', 'l', 'o', 0x00, 0x01}},
+	}
+	for i, c := range testCases {
+		enc := EncodeBytes(nil, c.value)
+		if !bytes.Equal(enc, c.encoded) {
+			t.Errorf("unexpected encoding mismatch for %v. expected %v, got %v",
+				c.value, prettyBytes(c.encoded), prettyBytes(enc))
+		}
+		if i > 0 {
+			if bytes.Compare(testCases[i-1].encoded, enc) >= 0 {
+				t.Errorf("%v: expected %v to be less than %v",
+					c.value, prettyBytes(testCases[i-1].encoded), prettyBytes(enc))
+			}
+		}
+		remainder, dec := DecodeBytes(enc)
+		if !bytes.Equal(c.value, dec) {
+			t.Errorf("unexpected decoding mismatch for %v. got %v", c.value, dec)
+		}
+		if len(remainder) != 0 {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
+		}
+
+		enc = append(enc, []byte("remainder")...)
+		remainder, dec = DecodeBytes(enc)
+		if string(remainder) != "remainder" {
+			t.Errorf("unexpected remaining bytes: %v", remainder)
+		}
+	}
+}
+
+func BenchmarkEncodeDecodeBytes(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	keys := make([][]byte, 10000)
+	for i := range keys {
+		keys[i] = util.RandBytes(rng, 100)
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		enc := EncodeBytes(buf, keys[rng.Intn(len(keys))])
+		_, _ = DecodeBytes(enc)
+	}
 }

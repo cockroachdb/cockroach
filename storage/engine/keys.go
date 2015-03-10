@@ -112,7 +112,7 @@ func MakeRangeKey(key, suffix, detail proto.Key) proto.Key {
 	if len(suffix) != KeyLocalSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, KeyLocalSuffixLength))
 	}
-	return MakeKey(KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, key), suffix, detail)
+	return MakeKey(KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, key), suffix, detail)
 }
 
 // DecodeRangeKey decodes the range key into range start key,
@@ -123,7 +123,7 @@ func DecodeRangeKey(key proto.Key) (startKey, suffix, detail proto.Key) {
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(KeyLocalRangeKeyPrefix):]
-	b, startKey = encoding.DecodeBinary(b)
+	b, startKey = encoding.DecodeBytes(b)
 	if len(b) < KeyLocalSuffixLength {
 		panic(fmt.Sprintf("key %q does not have suffix of length %d", key, KeyLocalSuffixLength))
 	}
@@ -178,7 +178,7 @@ func KeyAddress(k proto.Key) proto.Key {
 	}
 	if bytes.HasPrefix(k, KeyLocalRangeKeyPrefix) {
 		k = k[len(KeyLocalRangeKeyPrefix):]
-		_, k = encoding.DecodeBinary(k)
+		_, k = encoding.DecodeBytes(k)
 		return k
 	}
 	log.Fatalf("local key %q malformed; should contain prefix %q", k, KeyLocalRangeKeyPrefix)
@@ -296,6 +296,10 @@ var (
 	// KeyMax is a maximum key value which sorts after all other keys.
 	KeyMax = proto.KeyMax
 
+	// MVCCKeyMax is a maximum mvcc-encoded key value which sorts after
+	// all other keys.
+	MVCCKeyMax = MVCCEncodeKey(KeyMax)
+
 	// KeyLocalPrefix is the prefix for keys which hold data local to a
 	// RocksDB instance, such as store and range-specific metadata which
 	// must not pollute the user key space, but must be collocate with
@@ -362,7 +366,7 @@ var (
 	// KeyLocalRangeKeyPrefix is the prefix identifying per-range data
 	// indexed by range key (either start key, or some key in the
 	// range). The key is appended to this prefix, encoded using
-	// EncodeBinary. The specific sort of per-range metadata is
+	// EncodeBytes. The specific sort of per-range metadata is
 	// identified by one of the suffixes listed below, along with
 	// potentially additional encoded key info, such as the txn UUID in
 	// the case of a transaction record.

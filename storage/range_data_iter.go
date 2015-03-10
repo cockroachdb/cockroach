@@ -56,8 +56,8 @@ func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
 				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeIDPrefix, encoding.EncodeInt(nil, r.Desc().RaftID+1))),
 			},
 			{
-				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, startKey))),
-				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBinary(nil, endKey))),
+				start: engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, startKey))),
+				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, endKey))),
 			},
 			{
 				start: engine.MVCCEncodeKey(startKey),
@@ -116,7 +116,7 @@ func (ri *rangeDataIterator) advance() {
 			ri.iter.Seek(ri.ranges[ri.curIndex].start)
 		} else {
 			// Otherwise, seek to end to make iterator invalid.
-			ri.iter.Seek(engine.MVCCEncodeKey(engine.KeyMax))
+			ri.iter.Seek(engine.MVCCKeyMax)
 			return
 		}
 	}

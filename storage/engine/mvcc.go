@@ -1352,7 +1352,7 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 // for storing raw values directly. Use MVCCEncodeVersionValue for
 // storing timestamped version values.
 func MVCCEncodeKey(key proto.Key) proto.EncodedKey {
-	return encoding.EncodeBinary(nil, key)
+	return encoding.EncodeBytes(nil, key)
 }
 
 // MVCCEncodeVersionKey makes an MVCC version key, which consists
@@ -1362,7 +1362,7 @@ func MVCCEncodeVersionKey(key proto.Key, timestamp proto.Timestamp) proto.Encode
 	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
 		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
 	}
-	k := encoding.EncodeBinary(nil, key)
+	k := encoding.EncodeBytes(nil, key)
 	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.WallTime))
 	k = encoding.EncodeUint32Decreasing(k, uint32(timestamp.Logical))
 	return k
@@ -1376,7 +1376,7 @@ func MVCCEncodeVersionKey(key proto.Key, timestamp proto.Timestamp) proto.Encode
 // The decoded key, timestamp and true are returned to indicate the
 // key is for an MVCC versioned value.
 func MVCCDecodeKey(encodedKey proto.EncodedKey) (proto.Key, proto.Timestamp, bool) {
-	tsBytes, key := encoding.DecodeBinary(encodedKey)
+	tsBytes, key := encoding.DecodeBytes(encodedKey)
 	if len(tsBytes) == 0 {
 		return key, proto.Timestamp{}, false
 	} else if len(tsBytes) != 12 {

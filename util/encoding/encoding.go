@@ -173,12 +173,12 @@ func WillOverflow(a, b int64) bool {
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32(b []byte, v uint32) []byte {
-	enc := make([]byte, 4)
+	var enc [4]byte
 	for i := 3; i >= 0; i-- {
 		enc[i] = byte(v & 0xff)
 		v >>= 8
 	}
-	return append(b, enc...)
+	return append(b, enc[:]...)
 }
 
 // EncodeUint32Decreasing encodes the uint32 value so that it sorts in
@@ -212,12 +212,12 @@ func DecodeUint32Decreasing(b []byte) ([]byte, uint32) {
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint64(b []byte, v uint64) []byte {
-	enc := make([]byte, 8)
+	var enc [8]byte
 	for i := 7; i >= 0; i-- {
 		enc[i] = byte(v & 0xff)
 		v >>= 8
 	}
-	return append(b, enc...)
+	return append(b, enc[:]...)
 }
 
 // EncodeUint64Decreasing encodes the uint64 value so that it sorts in
@@ -251,19 +251,15 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
 // (length-prefixed) big-endian 8 byte representation. The bytes are
 // appended to the supplied buffer and the final buffer is returned.
 func EncodeVarUint64(b []byte, v uint64) []byte {
-	enc := make([]byte, 9)
-	var length int
+	var enc [9]byte
+	i := 8
 	for v > 0 {
-		enc[length+1] = byte(v & 0xff)
-		length++
+		enc[i] = byte(v & 0xff)
+		i--
 		v >>= 8
 	}
-	// Reverse the bytes.
-	for i := 0; i < length/2; i++ {
-		enc[i+1], enc[length-i] = enc[length-i], enc[i+1]
-	}
-	enc[0] = byte(length)
-	return append(b, enc[:length+1]...)
+	enc[i] = byte(8 - i)
+	return append(b, enc[i:]...)
 }
 
 // EncodeVarUint64Decreasing encodes the uint64 value so that it sorts in
@@ -296,4 +292,56 @@ func DecodeVarUint64(b []byte) ([]byte, uint64) {
 func DecodeVarUint64Decreasing(b []byte) ([]byte, uint64) {
 	leftover, v := DecodeVarUint64(b)
 	return leftover, ^v
+}
+
+const (
+	escape      = 0x00
+	escapedTerm = 0x01
+	escapedNul  = 0xff
+)
+
+// EncodeBytes encodes the []byte value using an escape-based
+// encoding. The encoded value is terminated with the sequence
+// "\x00\x01" which is guaranteed to not occur elsewhere in the
+// encoded value. The bytes are append to the supplied buffer and the
+// final buffer is returned.
+func EncodeBytes(b []byte, data []byte) []byte {
+	copyStart := 0
+	for i, v := range data {
+		if v == escape {
+			b = append(b, data[copyStart:i]...)
+			b = append(b, escape, escapedNul)
+			copyStart = i + 1
+		}
+	}
+	b = append(b, data[copyStart:]...)
+	return append(b, escape, escapedTerm)
+}
+
+// DecodeBytes decodes a []byte value from the input buffer which was
+// encoded using EncodeBytees. The remainder of the input buffer and
+// the decoded []byte are returned.
+func DecodeBytes(b []byte) ([]byte, []byte) {
+	var r []byte
+	copyStart := 0
+	for i := 0; i < len(b); i++ {
+		v := b[i]
+		if v == escape {
+			v = b[i+1]
+			if v == escapedTerm {
+				if r == nil {
+					return b[i+2:], b[:i]
+				}
+				r = append(r, b[copyStart:i]...)
+				return b[i+2:], r
+			}
+			r = append(r, b[copyStart:i]...)
+			i++
+			if v == escapedNul {
+				r = append(r, 0)
+			}
+			copyStart = i + 1
+		}
+	}
+	panic("did not find terminator")
 }
