@@ -286,13 +286,13 @@ func TestEncodeDecodeBytes(t *testing.T) {
 	for i, c := range testCases {
 		enc := EncodeBytes(nil, c.value)
 		if !bytes.Equal(enc, c.encoded) {
-			t.Errorf("unexpected encoding mismatch for %v. expected %v, got %v",
-				c.value, prettyBytes(c.encoded), prettyBytes(enc))
+			t.Errorf("unexpected encoding mismatch for %v. expected [% x], got [% x]",
+				c.value, c.encoded, enc)
 		}
 		if i > 0 {
 			if bytes.Compare(testCases[i-1].encoded, enc) >= 0 {
-				t.Errorf("%v: expected %v to be less than %v",
-					c.value, prettyBytes(testCases[i-1].encoded), prettyBytes(enc))
+				t.Errorf("%v: expected [% x] to be less than [% x]",
+					c.value, testCases[i-1].encoded, enc)
 			}
 		}
 		remainder, dec := DecodeBytes(enc)
@@ -311,19 +311,161 @@ func TestEncodeDecodeBytes(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeDecodeBytes(b *testing.B) {
+func TestDecodeInvalidBytes(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic due to absence of terminate byte in encoded data")
+		}
+	}()
+	DecodeBytes([]byte{'a', 0x00})
+}
+
+func BenchmarkEncodeUint32(b *testing.B) {
 	rng := util.NewPseudoRand()
 
-	keys := make([][]byte, 10000)
-	for i := range keys {
-		keys[i] = util.RandBytes(rng, 100)
+	vals := make([]uint32, 10000)
+	for i := range vals {
+		vals[i] = uint32(rng.Int31())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeUint32(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeUint32(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUint32(nil, uint32(rng.Int31()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeUint32(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeUint64(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([]uint64, 10000)
+	for i := range vals {
+		vals[i] = uint64(rng.Int63())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeUint64(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeUint64(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeUint64(nil, uint64(rng.Int63()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeUint64(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeVarUint32(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([]uint32, 10000)
+	for i := range vals {
+		vals[i] = uint32(rng.Int31())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeVarUint32(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeVarUint32(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeVarUint32(nil, uint32(rng.Int31()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeVarUint32(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeVarUint64(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([]uint64, 10000)
+	for i := range vals {
+		vals[i] = uint64(rng.Int63())
+	}
+
+	buf := make([]byte, 0, 16)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeVarUint64(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeVarUint64(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeVarUint64(nil, uint64(rng.Int63()))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeVarUint64(vals[i%len(vals)])
+	}
+}
+
+func BenchmarkEncodeBytes(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = util.RandBytes(rng, 100)
 	}
 
 	buf := make([]byte, 0, 1000)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		enc := EncodeBytes(buf, keys[rng.Intn(len(keys))])
-		_, _ = DecodeBytes(enc)
+		_ = EncodeBytes(buf, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeBytes(b *testing.B) {
+	rng := util.NewPseudoRand()
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeBytes(nil, util.RandBytes(rng, 100))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeBytes(vals[i%len(vals)])
 	}
 }
