@@ -353,15 +353,18 @@ const (
 // encoded value. The bytes are append to the supplied buffer and the
 // final buffer is returned.
 func EncodeBytes(b []byte, data []byte) []byte {
-	copyStart := 0
-	for i, v := range data {
-		if v == escape {
-			b = append(b, data[copyStart:i]...)
-			b = append(b, escape, escapedNul)
-			copyStart = i + 1
+	for {
+		// IndexByte is implemented by the go runtime in assembly and is
+		// much faster than looping over the bytes in the slice.
+		i := bytes.IndexByte(data, escape)
+		if i == -1 {
+			break
 		}
+		b = append(b, data[:i]...)
+		b = append(b, escape, escapedNul)
+		data = data[i+1:]
 	}
-	b = append(b, data[copyStart:]...)
+	b = append(b, data...)
 	return append(b, escape, escapedTerm)
 }
 
@@ -370,25 +373,29 @@ func EncodeBytes(b []byte, data []byte) []byte {
 // the decoded []byte are returned.
 func DecodeBytes(b []byte) ([]byte, []byte) {
 	var r []byte
-	copyStart := 0
-	for i, n := 0, len(b)-1; i < n; i++ {
-		v := b[i]
-		if v == escape {
-			v = b[i+1]
-			if v == escapedTerm {
-				if r == nil {
-					return b[i+2:], b[:i]
-				}
-				r = append(r, b[copyStart:i]...)
-				return b[i+2:], r
-			}
-			r = append(r, b[copyStart:i]...)
-			i++
-			if v == escapedNul {
-				r = append(r, 0)
-			}
-			copyStart = i + 1
+	for {
+		i := bytes.IndexByte(b, escape)
+		if i == -1 {
+			panic("did not find terminator")
 		}
+		if i+1 > len(b) {
+			panic("malformed escape")
+		}
+		v := b[i+1]
+		if v == escapedTerm {
+			if r == nil {
+				r = b[:i]
+			} else {
+				r = append(r, b[:i]...)
+			}
+			return b[i+2:], r
+		}
+		r = append(r, b[:i]...)
+		if v == escapedNul {
+			r = append(r, 0)
+		} else {
+			panic("unknown escape")
+		}
+		b = b[i+2:]
 	}
-	panic("did not find terminator")
 }

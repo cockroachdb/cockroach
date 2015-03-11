@@ -312,12 +312,24 @@ func TestEncodeDecodeBytes(t *testing.T) {
 }
 
 func TestDecodeInvalidBytes(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to absence of terminate byte in encoded data")
-		}
-	}()
-	DecodeBytes([]byte{'a', 0x00})
+	testCases := []struct {
+		value []byte
+	}{
+		{[]byte{'a'}},             // no terminator
+		{[]byte{'a', 0x00}},       // malformed escape
+		{[]byte{'a', 0x00, 0x00}}, // invalid escape
+		{[]byte{'a', 0x00, 0x02}}, // invalid escape
+	}
+	for _, c := range testCases {
+		func() {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Error("expected panic")
+				}
+			}()
+			DecodeBytes(c.value)
+		}()
+	}
 }
 
 func BenchmarkEncodeUint32(b *testing.B) {
