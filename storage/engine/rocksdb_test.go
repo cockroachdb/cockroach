@@ -206,11 +206,10 @@ func prewarmCache(rocksdb *RocksDB) {
 	}
 }
 
-// runMVCCScan first creates test data (and resets benchmarking
-// timer). It then performs b.N MVCCScans in increments of
-// scanIncrement keys over all of the data in the rocksdb instance,
-// restarting at the beginning of the keyspace, as many times as
-// necessary.
+// runMVCCScan first creates test data (and resets the benchmarking
+// timer). It then performs b.N MVCCScans in increments of numRows
+// keys over all of the data in the rocksdb instance, restarting at
+// the beginning of the keyspace, as many times as necessary.
 func runMVCCScan(numRows, numVersions int, b *testing.B) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
@@ -295,6 +294,53 @@ func BenchmarkMVCCScan100Versions100Rows(b *testing.B) {
 
 func BenchmarkMVCCScan100Versions1000Rows(b *testing.B) {
 	runMVCCScan(1000, 100, b)
+}
+
+// runMVCCGet first creates test data (and resets the benchmarking
+// timer). It then performs b.N MVCCGets.
+func runMVCCGet(numVersions int, b *testing.B) {
+	// Use the same number of keys for all of the mvcc get
+	// benchmarks. Using a different number of keys per test gives
+	// preferential treatment to tests with fewer keys. Note that the
+	// datasets all fit in cache and the cache is pre-warmed.
+	const numKeys = 100000
+
+	rocksdb := setupMVCCScanData(numVersions, numKeys, b)
+	defer rocksdb.Stop()
+
+	prewarmCache(rocksdb)
+
+	b.SetBytes(1024)
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			// Choose a random key to retrieve.
+			keyIdx := rand.Int31n(int32(numKeys))
+			key := proto.Key(encoding.EncodeVarUint32([]byte("key-"), uint32(keyIdx)))
+			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
+			ts := makeTS(walltime, 0)
+			if v, err := MVCCGet(rocksdb, key, ts, nil); err != nil {
+				b.Fatalf("failed get: %s", err)
+			} else if len(v.Bytes) != 1024 {
+				b.Fatalf("unexpected value size: %d", len(v.Bytes))
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCGet1Version(b *testing.B) {
+	runMVCCGet(1, b)
+}
+
+func BenchmarkMVCCGet10Versions(b *testing.B) {
+	runMVCCGet(10, b)
+}
+
+func BenchmarkMVCCGet100Versions(b *testing.B) {
+	runMVCCGet(100, b)
 }
 
 // runMVCCMerge merges value numMerges times into numKeys separate keys.
