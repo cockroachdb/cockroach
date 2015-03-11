@@ -65,7 +65,8 @@ type RangeDescriptor struct {
 	// contained in this range - it will be contained in the immediately
 	// subsequent range.
 	EndKey Key `protobuf:"bytes,3,opt,name=end_key,customtype=Key" json:"end_key"`
-	// List of replicas where this range is stored.
+	// Replicas is the set of replicas on which this range is stored, the
+	// ordering being arbitrary and subject to permutation.
 	Replicas         []Replica `protobuf:"bytes,4,rep,name=replicas" json:"replicas"`
 	XXX_unrecognized []byte    `json:"-"`
 }
@@ -159,8 +160,9 @@ func (m *PermConfig) GetWrite() []string {
 
 // ZoneConfig holds configuration that is needed for a range of KV pairs.
 type ZoneConfig struct {
-	// ReplicaAttrs is a slice of Attributes, each describing required
-	// attributes for each replica in the zone.
+	// ReplicaAttrs is a slice of Attributes, each describing required attributes
+	// for each replica in the zone. The order in which the attributes are stored
+	// in ReplicaAttrs is arbitrary and may change.
 	ReplicaAttrs  []Attributes `protobuf:"bytes,1,rep,name=replica_attrs" json:"replica_attrs" yaml:"replicas,omitempty"`
 	RangeMinBytes int64        `protobuf:"varint,2,opt,name=range_min_bytes" json:"range_min_bytes" yaml:"range_min_bytes,omitempty"`
 	RangeMaxBytes int64        `protobuf:"varint,3,opt,name=range_max_bytes" json:"range_max_bytes" yaml:"range_max_bytes,omitempty"`

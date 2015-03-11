@@ -76,7 +76,7 @@ func ui_css_main_css() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/css/main.css", size: 1472, mode: os.FileMode(436), modTime: time.Unix(1419191781, 0)}
+	info := bindata_file_info{name: "ui/css/main.css", size: 1472, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -96,7 +96,7 @@ func ui_css_rest_explorer_css() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/css/rest_explorer.css", size: 1309, mode: os.FileMode(436), modTime: time.Unix(1419191781, 0)}
+	info := bindata_file_info{name: "ui/css/rest_explorer.css", size: 1309, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -116,7 +116,7 @@ func ui_index_html() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/index.html", size: 1681, mode: os.FileMode(436), modTime: time.Unix(1419191781, 0)}
+	info := bindata_file_info{name: "ui/index.html", size: 1681, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -136,7 +136,7 @@ func ui_js_controllers_rest_explorer_js() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/js/controllers/rest_explorer.js", size: 2298, mode: os.FileMode(436), modTime: time.Unix(1423816307, 0)}
+	info := bindata_file_info{name: "ui/js/controllers/rest_explorer.js", size: 2298, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -156,7 +156,7 @@ func ui_js_main_js() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/js/main.js", size: 986, mode: os.FileMode(436), modTime: time.Unix(1419191781, 0)}
+	info := bindata_file_info{name: "ui/js/main.js", size: 986, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -176,7 +176,7 @@ func ui_templates_rest_explorer_html() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindata_file_info{name: "ui/templates/rest_explorer.html", size: 3522, mode: os.FileMode(436), modTime: time.Unix(1423816307, 0)}
+	info := bindata_file_info{name: "ui/templates/rest_explorer.html", size: 3522, mode: os.FileMode(420), modTime: time.Unix(1400000000, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -194,6 +194,17 @@ func Asset(name string) ([]byte, error) {
 		return a.bytes, nil
 	}
 	return nil, fmt.Errorf("Asset %s not found", name)
+}
+
+// MustAsset is like Asset but panics when Asset would return an error.
+// It simplifies safe initialization of global variables.
+func MustAsset(name string) []byte {
+	a, err := Asset(name)
+	if err != nil {
+		panic("asset: Asset(" + name + "): " + err.Error())
+	}
+
+	return a
 }
 
 // AssetInfo loads and returns the asset info for the given name.
