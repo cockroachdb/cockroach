@@ -173,12 +173,7 @@ func WillOverflow(a, b int64) bool {
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32(b []byte, v uint32) []byte {
-	var enc [4]byte
-	for i := 3; i >= 0; i-- {
-		enc[i] = byte(v & 0xff)
-		v >>= 8
-	}
-	return append(b, enc[:]...)
+	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
 // EncodeUint32Decreasing encodes the uint32 value so that it sorts in
@@ -194,10 +189,8 @@ func DecodeUint32(b []byte) ([]byte, uint32) {
 	if len(b) < 4 {
 		panic("insufficient bytes to decode uint32 int value")
 	}
-	var v uint32
-	for i := 0; i < 4; i++ {
-		v = (v << 8) | uint32(b[i])
-	}
+	v := (uint32(b[0]) << 24) | (uint32(b[1]) << 16) |
+		(uint32(b[2]) << 8) | uint32(b[3])
 	return b[4:], v
 }
 
@@ -212,12 +205,9 @@ func DecodeUint32Decreasing(b []byte) ([]byte, uint32) {
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint64(b []byte, v uint64) []byte {
-	var enc [8]byte
-	for i := 7; i >= 0; i-- {
-		enc[i] = byte(v & 0xff)
-		v >>= 8
-	}
-	return append(b, enc[:]...)
+	return append(b,
+		byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }
 
 // EncodeUint64Decreasing encodes the uint64 value so that it sorts in
@@ -233,10 +223,10 @@ func DecodeUint64(b []byte) ([]byte, uint64) {
 	if len(b) < 8 {
 		panic("insufficient bytes to decode uint64 int value")
 	}
-	var v uint64
-	for i := 0; i < 8; i++ {
-		v = (v << 8) | uint64(b[i])
-	}
+	v := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) |
+		(uint64(b[2]) << 40) | (uint64(b[3]) << 32) |
+		(uint64(b[4]) << 24) | (uint64(b[5]) << 16) |
+		(uint64(b[6]) << 8) | uint64(b[7])
 	return b[8:], v
 }
 
@@ -251,15 +241,18 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
 // (length-prefixed) big-endian 8 byte representation. The bytes are
 // appended to the supplied buffer and the final buffer is returned.
 func EncodeVarUint32(b []byte, v uint32) []byte {
-	var enc [5]byte
-	i := 4
-	for v > 0 {
-		enc[i] = byte(v & 0xff)
-		i--
-		v >>= 8
+	switch {
+	case v == 0:
+		return append(b, 0)
+	case v <= 0xff:
+		return append(b, 1, byte(v))
+	case v <= 0xffff:
+		return append(b, 2, byte(v>>8), byte(v))
+	case v <= 0xffffff:
+		return append(b, 3, byte(v>>16), byte(v>>8), byte(v))
+	default:
+		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
-	enc[i] = byte(4 - i)
-	return append(b, enc[i:]...)
 }
 
 // EncodeVarUint32Decreasing encodes the uint32 value so that it sorts in
@@ -281,8 +274,10 @@ func DecodeVarUint32(b []byte) ([]byte, uint32) {
 		panic(fmt.Sprintf("insufficient bytes to decode var uint32 int value: %s", b))
 	}
 	var v uint32
-	for i := 0; i < length; i++ {
-		v = (v << 8) | uint32(b[i])
+	// It is faster to range over the elements in a slice than to index
+	// into the slice on each loop iteration.
+	for _, t := range b[:length] {
+		v = (v << 8) | uint32(t)
 	}
 	return b[length:], v
 }
@@ -298,15 +293,30 @@ func DecodeVarUint32Decreasing(b []byte) ([]byte, uint32) {
 // (length-prefixed) big-endian 8 byte representation. The bytes are
 // appended to the supplied buffer and the final buffer is returned.
 func EncodeVarUint64(b []byte, v uint64) []byte {
-	var enc [9]byte
-	i := 8
-	for v > 0 {
-		enc[i] = byte(v & 0xff)
-		i--
-		v >>= 8
+	switch {
+	case v == 0:
+		return append(b, 0)
+	case v <= 0xff:
+		return append(b, 1, byte(v))
+	case v <= 0xffff:
+		return append(b, 2, byte(v>>8), byte(v))
+	case v <= 0xffffff:
+		return append(b, 3, byte(v>>16), byte(v>>8), byte(v))
+	case v <= 0xffffffff:
+		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+	case v <= 0xffffffffff:
+		return append(b, 5, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+			byte(v))
+	case v <= 0xffffffffffff:
+		return append(b, 6, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+			byte(v>>8), byte(v))
+	case v <= 0xffffffffffffff:
+		return append(b, 7, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+			byte(v>>16), byte(v>>8), byte(v))
+	default:
+		return append(b, 8, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
-	enc[i] = byte(8 - i)
-	return append(b, enc[i:]...)
 }
 
 // EncodeVarUint64Decreasing encodes the uint64 value so that it sorts in
@@ -328,8 +338,10 @@ func DecodeVarUint64(b []byte) ([]byte, uint64) {
 		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
 	}
 	var v uint64
-	for i := 0; i < length; i++ {
-		v = (v << 8) | uint64(b[i])
+	// It is faster to range over the elements in a slice than to index
+	// into the slice on each loop iteration.
+	for _, t := range b[:length] {
+		v = (v << 8) | uint64(t)
 	}
 	return b[length:], v
 }
