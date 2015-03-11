@@ -608,10 +608,11 @@ func (hv *historyVerifier) runCmd(db *client.KV, txnIdx, retry, cmdIdx int, cmds
 func checkConcurrency(name string, isolations []proto.IsolationType, txns []string,
 	verify *verifier, expSuccess bool, t *testing.T) {
 	verifier := newHistoryVerifier(name, txns, verify, expSuccess, t)
-	db, _, _, _, lSender, err := createTestDB()
+	db, _, _, _, lSender, transport, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer transport.Close()
 	setCorrectnessRetryOptions(lSender)
 	verifier.run(isolations, db, t)
 }

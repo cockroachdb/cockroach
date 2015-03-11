@@ -90,10 +90,11 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 // 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
-	db, _, _, _, _, err := createTestDB()
+	db, _, _, _, _, transport, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer transport.Close()
 	defer db.Close()
 
 	// This channel shuts the whole apparatus down.
@@ -139,10 +140,11 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
-	db, eng, _, _, _, err := createTestDB()
+	db, eng, _, _, _, transport, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer transport.Close()
 	defer db.Close()
 	setTestRetryOptions()
 

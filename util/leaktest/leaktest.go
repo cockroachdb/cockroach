@@ -2,7 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package http_test
+// Package leaktest provides tools to detect leaked goroutines in tests.
+// To use it, call "defer leaktest.AfterTest(t)" at the beginning of each
+// test that may use goroutines, and add a TestMain function for the package
+// which calls leaktest.TestMainWithLeakCheck.
+package leaktest
 
 import (
 	"fmt"
@@ -15,7 +19,14 @@ import (
 	"time"
 )
 
-func TestMain(m *testing.M) {
+// TestMainWithLeakCheck is an implementation of TestMain which verifies that
+// there are no leaked goroutines at the end of the run (except those created
+// by the system which are on a whitelist). Usage:
+//
+// func TestMain(m *testing.M) {
+//   leaktest.TestMainWithLeakCheck(m)
+// }
+func TestMainWithLeakCheck(m *testing.M) {
 	v := m.Run()
 	if v == 0 && goroutineLeaked() {
 		os.Exit(1)
@@ -40,8 +51,9 @@ func interestingGoroutines() (gs []string) {
 			// These only show up with GOTRACEBACK=2; Issue 5005 (comment 28)
 			strings.Contains(stack, "runtime.goexit") ||
 			strings.Contains(stack, "created by runtime.gc") ||
-			strings.Contains(stack, "net/http_test.interestingGoroutines") ||
-			strings.Contains(stack, "runtime.MHeap_Scavenger") {
+			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/leaktest.interestingGoroutines") ||
+			strings.Contains(stack, "runtime.MHeap_Scavenger") ||
+			strings.Contains(stack, "golang/glog.init") {
 			continue
 		}
 		gs = append(gs, stack)
@@ -68,14 +80,18 @@ func goroutineLeaked() bool {
 	if n == 0 {
 		return false
 	}
-	fmt.Fprintf(os.Stderr, "Too many goroutines running after net/http test(s).\n")
+	fmt.Fprintf(os.Stderr, "Too many goroutines running after tests.\n")
 	for stack, count := range stackCount {
 		fmt.Fprintf(os.Stderr, "%d instances of:\n%s\n", count, stack)
 	}
 	return true
 }
 
-func afterTest(t testing.TB) {
+// AfterTest should be called (generally with "defer leaktest.AfterTest(t)")
+// from each test which uses goroutines. This waits for all goroutines
+// on a blacklist to terminate and provides more precise error reporting
+// than TestMainWithLeakCheck alone.
+func AfterTest(t testing.TB) {
 	http.DefaultTransport.(*http.Transport).CloseIdleConnections()
 	if testing.Short() {
 		return
@@ -88,6 +104,7 @@ func afterTest(t testing.TB) {
 		"timeoutHandler":                               "a TimeoutHandler",
 		"net.(*netFD).connect(":                        "a timing out dial",
 		").noteClientGone(":                            "a closenotifier sender",
+		"created by net/rpc.NewClientWithCodec":        "an rpc client",
 	}
 	var stacks string
 	for i := 0; i < 4; i++ {
@@ -103,7 +120,7 @@ func afterTest(t testing.TB) {
 		}
 		// Bad stuff found, but goroutines might just still be
 		// shutting down, so give it some time.
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Errorf("Test appears to have leaked %s:\n%s", bad, stacks)
 }
