@@ -200,6 +200,7 @@ func (tc *TxnCoordSender) Close() {
 		close(txn.closer)
 	}
 	tc.txns = map[string]*txnMetadata{}
+	tc.wrapped.Close()
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified
