@@ -237,102 +237,131 @@ func DecodeUint64Decreasing(b []byte) ([]byte, uint64) {
 	return leftover, ^v
 }
 
-// EncodeVarUint32 encodes the uint32 value using a variable length
-// (length-prefixed) big-endian 8 byte representation. The bytes are
-// appended to the supplied buffer and the final buffer is returned.
-func EncodeVarUint32(b []byte, v uint32) []byte {
-	switch {
-	case v == 0:
-		return append(b, 0)
-	case v <= 0xff:
-		return append(b, 1, byte(v))
-	case v <= 0xffff:
-		return append(b, 2, byte(v>>8), byte(v))
-	case v <= 0xffffff:
-		return append(b, 3, byte(v>>16), byte(v>>8), byte(v))
-	default:
-		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+// EncodeVarint encodes the int64 value using a variable length
+// (length-prefixed) representation. The length is encoded as a single
+// byte. If the value to be encoded is negative the length is encoded
+// as 8-numBytes. If the value is positive it is encoded as
+// 8+numBytes. The encoded bytes are appended to the supplied buffer
+// and the final buffer is returned.
+func EncodeVarint(b []byte, v int64) []byte {
+	if v < 0 {
+		switch {
+		case v >= -0xff:
+			return append(b, 7, byte(v))
+		case v >= -0xffff:
+			return append(b, 6, byte(v>>8), byte(v))
+		case v >= -0xffffff:
+			return append(b, 5, byte(v>>16), byte(v>>8), byte(v))
+		case v >= -0xffffffff:
+			return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		case v >= -0xffffffffff:
+			return append(b, 3, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+				byte(v))
+		case v >= -0xffffffffffff:
+			return append(b, 2, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+				byte(v>>8), byte(v))
+		case v >= -0xffffffffffffff:
+			return append(b, 1, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+				byte(v>>16), byte(v>>8), byte(v))
+		default:
+			return append(b, 0, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+				byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		}
 	}
+
+	return EncodeUvarint(b, uint64(v))
 }
 
-// EncodeVarUint32Decreasing encodes the uint32 value so that it sorts in
+// EncodeVarintDecreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
-func EncodeVarUint32Decreasing(b []byte, v uint32) []byte {
-	return EncodeVarUint32(b, ^v)
+func EncodeVarintDecreasing(b []byte, v int64) []byte {
+	return EncodeVarint(b, ^v)
 }
 
-// DecodeVarUint32 decodes a uint32 from the input buffer, treating
-// the input as a big-endian 8 byte uint32 representation. The remainder
-// of the input buffer and the decoded uint32 are returned.
-func DecodeVarUint32(b []byte) ([]byte, uint32) {
+// DecodeVarint decodes a varint encoded int64 from the input
+// buffer. The remainder of the input buffer and the decoded int64
+// are returned.
+func DecodeVarint(b []byte) ([]byte, int64) {
 	if len(b) == 0 {
-		panic("insufficient bytes to decode var uint32 int value")
+		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0])
-	b = b[1:] // skip length byte
-	if len(b) < length {
-		panic(fmt.Sprintf("insufficient bytes to decode var uint32 int value: %s", b))
+	length := int(b[0]) - 8
+	if length < 0 {
+		length = -length
+		b = b[1:]
+		if len(b) < length {
+			panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
+		}
+		var v int64
+		// Use the ones-complement of each encoded byte in order to build
+		// up a positive number, then take the ones-complement again to
+		// arrive at our negative value.
+		for _, t := range b[:length] {
+			v = (v << 8) | int64(^t)
+		}
+		return b[length:], ^v
 	}
-	var v uint32
-	// It is faster to range over the elements in a slice than to index
-	// into the slice on each loop iteration.
-	for _, t := range b[:length] {
-		v = (v << 8) | uint32(t)
-	}
-	return b[length:], v
+
+	b, v := DecodeUvarint(b)
+	return b, int64(v)
 }
 
-// DecodeVarUint32Decreasing decodes a uint32 value which was encoded
-// using EncodeVarUint32Decreasing.
-func DecodeVarUint32Decreasing(b []byte) ([]byte, uint32) {
-	leftover, v := DecodeVarUint32(b)
+// DecodeVarintDecreasing decodes a uint64 value which was encoded
+// using EncodeVarintDecreasing.
+func DecodeVarintDecreasing(b []byte) ([]byte, int64) {
+	leftover, v := DecodeVarint(b)
 	return leftover, ^v
 }
 
-// EncodeVarUint64 encodes the uint64 value using a variable length
-// (length-prefixed) big-endian 8 byte representation. The bytes are
-// appended to the supplied buffer and the final buffer is returned.
-func EncodeVarUint64(b []byte, v uint64) []byte {
+// EncodeUvarint encodes the uint64 value using a variable length
+// (length-prefixed) representation. The length is encoded as a single
+// byte indicating the number of encoded bytes (-8) to follow. See
+// EncodeVarint for rationale. The encoded bytes are appended to the
+// supplied buffer and the final buffer is returned.
+func EncodeUvarint(b []byte, v uint64) []byte {
 	switch {
 	case v == 0:
-		return append(b, 0)
+		return append(b, 8)
 	case v <= 0xff:
-		return append(b, 1, byte(v))
+		return append(b, 9, byte(v))
 	case v <= 0xffff:
-		return append(b, 2, byte(v>>8), byte(v))
+		return append(b, 10, byte(v>>8), byte(v))
 	case v <= 0xffffff:
-		return append(b, 3, byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 11, byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffff:
-		return append(b, 4, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+		return append(b, 12, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	case v <= 0xffffffffff:
-		return append(b, 5, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
+		return append(b, 13, byte(v>>32), byte(v>>24), byte(v>>16), byte(v>>8),
 			byte(v))
 	case v <= 0xffffffffffff:
-		return append(b, 6, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
+		return append(b, 14, byte(v>>40), byte(v>>32), byte(v>>24), byte(v>>16),
 			byte(v>>8), byte(v))
 	case v <= 0xffffffffffffff:
-		return append(b, 7, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
+		return append(b, 15, byte(v>>48), byte(v>>40), byte(v>>32), byte(v>>24),
 			byte(v>>16), byte(v>>8), byte(v))
 	default:
-		return append(b, 8, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
+		return append(b, 16, byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
 			byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
 
-// EncodeVarUint64Decreasing encodes the uint64 value so that it sorts in
+// EncodeUvarintDecreasing encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
-func EncodeVarUint64Decreasing(b []byte, v uint64) []byte {
-	return EncodeVarUint64(b, ^v)
+func EncodeUvarintDecreasing(b []byte, v uint64) []byte {
+	return EncodeUvarint(b, ^v)
 }
 
-// DecodeVarUint64 decodes a uint64 from the input buffer, treating
-// the input as a big-endian 8 byte uint64 representation. The remainder
-// of the input buffer and the decoded uint64 are returned.
-func DecodeVarUint64(b []byte) ([]byte, uint64) {
+// DecodeUvarint decodes a varint encoded uint64 from the input
+// buffer. The remainder of the input buffer and the decoded uint64
+// are returned.
+func DecodeUvarint(b []byte) ([]byte, uint64) {
 	if len(b) == 0 {
 		panic("insufficient bytes to decode var uint64 int value")
 	}
-	length := int(b[0])
+	length := int(b[0]) - 8
+	if length < 0 {
+		panic(fmt.Sprintf("unable to decode negative value into uint64: %d", length))
+	}
 	b = b[1:] // skip length byte
 	if len(b) < length {
 		panic(fmt.Sprintf("insufficient bytes to decode var uint64 int value: %s", b))
@@ -346,10 +375,10 @@ func DecodeVarUint64(b []byte) ([]byte, uint64) {
 	return b[length:], v
 }
 
-// DecodeVarUint64Decreasing decodes a uint64 value which was encoded
-// using EncodeVarUint64Decreasing.
-func DecodeVarUint64Decreasing(b []byte) ([]byte, uint64) {
-	leftover, v := DecodeVarUint64(b)
+// DecodeUvarintDecreasing decodes a uint64 value which was encoded
+// using EncodeUvarintDecreasing.
+func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
+	leftover, v := DecodeUvarint(b)
 	return leftover, ^v
 }
 

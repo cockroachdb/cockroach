@@ -177,9 +177,9 @@ func makeIntFromMandE(negative bool, e int, m []byte) int64 {
 // consist of the single byte 0x08 followed by the ones-complement of the
 // varint encoding of E followed by the ones-complement of M.
 //
-// The results numeric encodings are all comparable. That is, the result from
+// The resulting numeric encodings are all comparable. That is, the result from
 // EncodeNumericInt is comparable with the result from EncodeNumericFloat. But
-// this flexibility comes at the cost of speed. Prefer the EncodeVarUint{32,64}
+// this flexibility comes at the cost of speed. Prefer the EncodeUvarint{32,64}
 // routines for speed.
 func EncodeNumericFloat(b []byte, f float64) []byte {
 	// Handle the simplistic cases first.
