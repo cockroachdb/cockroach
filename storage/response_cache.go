@@ -254,7 +254,7 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(engine.KeyLocalRangeIDPrefix):]
-	b, _ = encoding.DecodeNumericInt(b)
+	b, _ = encoding.DecodeVarUint64(b)
 	if !bytes.HasPrefix(b, engine.KeyLocalResponseCacheSuffix) {
 		return ret, util.Errorf("key %q does not contain the response cache suffix %q", key, engine.KeyLocalResponseCacheSuffix)
 	}
