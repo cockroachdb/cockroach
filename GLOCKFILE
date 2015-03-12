@@ -11,7 +11,7 @@ code.google.com/p/go-uuid 35bc42037350
 code.google.com/p/snappy-go 8850bd446ad6
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
-github.com/cockroachdb/c-rocksdb 7e314cc04e9ac55d353ba7c7c7e68e13311324f6
+github.com/cockroachdb/c-rocksdb 72de025ca13dd4ab2dce63e8e19c6a59b8388ffd
 github.com/cockroachdb/c-snappy af73b00e85e6f0e3c1fcc51f73f1d036df1e99ff
 github.com/coreos/etcd a2be25cba4bb74756890dcd21dd67c66decdfd77
 github.com/elazarl/go-bindata-assetfs 09ba9c6a7e9a5ee35586127fdf88bb20bb4990b7

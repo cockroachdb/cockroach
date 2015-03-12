@@ -115,6 +115,9 @@ type Engine interface {
 	// ApproximateSize returns the approximate number of bytes the engine is
 	// using to store data for the given range of keys.
 	ApproximateSize(start, end proto.EncodedKey) (uint64, error)
+	// Flush causes the engine to write all in-memory data to disk
+	// immediately.
+	Flush() error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished with
 	// the iterator to free resources.

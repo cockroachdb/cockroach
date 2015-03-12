@@ -708,6 +708,10 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.merge_operator.reset(new DBMergeOperator);
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
+  if (dir.len == 0) {
+    options.env = rocksdb::NewMemEnv(rocksdb::Env::Default());
+  }
+
   rocksdb::DB *db_ptr;
   rocksdb::Status status = rocksdb::DB::Open(options, ToString(dir), &db_ptr);
   if (!status.ok()) {
