@@ -44,6 +44,7 @@ struct DBBatch {
 
 struct DBEngine {
   rocksdb::DB* rep;
+  rocksdb::Env* memenv;
 };
 
 struct DBIterator {
@@ -708,8 +709,10 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.merge_operator.reset(new DBMergeOperator);
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
 
+  rocksdb::Env* memenv = NULL;
   if (dir.len == 0) {
-    options.env = rocksdb::NewMemEnv(rocksdb::Env::Default());
+    memenv = rocksdb::NewMemEnv(rocksdb::Env::Default());
+    options.env = memenv;
   }
 
   rocksdb::DB *db_ptr;
@@ -719,6 +722,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   }
   *db = new DBEngine;
   (*db)->rep = db_ptr;
+  (*db)->memenv = memenv;
   return kSuccess;
 }
 
@@ -729,6 +733,7 @@ DBStatus DBDestroy(DBSlice dir) {
 
 void DBClose(DBEngine* db) {
   delete db->rep;
+  delete db->memenv;
   delete db;
 }
 
