@@ -28,7 +28,7 @@ import (
 	"path"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/resource"
+	"github.com/cockroachdb/cockroach/rpc/rpctest"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -112,16 +112,17 @@ func LoadInsecureTLSConfig() *TLSConfig {
 // LoadTestTLSConfig loads the test TLSConfig included with the project. It requires
 // a path to the project root, loading the certs from assets bundled with the test.
 // TODO Maybe instead of returning err, take a testing.T?  And move to tls_test?
-func LoadTestTLSConfig(certDir string) (*TLSConfig, error) {
-	certPEM, err := resource.Asset(path.Join(certDir, "node.crt"))
+func LoadTestTLSConfig() (*TLSConfig, error) {
+	certDir := "./test_certs"
+	certPEM, err := rpctest.Asset(path.Join(certDir, "node.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := resource.Asset(path.Join(certDir, "node.key"))
+	keyPEM, err := rpctest.Asset(path.Join(certDir, "node.key"))
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := resource.Asset(path.Join(certDir, "ca.crt"))
+	caPEM, err := rpctest.Asset(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}

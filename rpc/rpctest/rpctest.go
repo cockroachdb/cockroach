@@ -15,13 +15,8 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-// Package resource embeds into the Cockroach certain data such as web html
-// and stylesheets.
-package resource
+// Package rpctest embeds the TLS test certificates.
+package rpctest
 
-// When changing files included here, you may add the `-debug` flag, which will
-// avoid embedding any files (but instead passes them through from disk). This
-// avoids having to recompile before testing changes.
-//go:generate go-bindata -pkg resource -mode 0644 -modtime 1400000000 -o ./embedded.go ./ui/...
-// `go vet` complains about the go file created by go-bindata, so we groom it.
+//go:generate go-bindata -pkg rpctest -mode 0644 -modtime 1400000000 -o ./embedded.go -prefix ../../resource ../../resource/test_certs/...
 //go:generate goimports -w embedded.go

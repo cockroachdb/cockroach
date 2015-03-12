@@ -43,7 +43,7 @@ import (
 // nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node) {
-	tlsConfig, err := rpc.LoadTestTLSConfig("./test_certs")
+	tlsConfig, err := rpc.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
