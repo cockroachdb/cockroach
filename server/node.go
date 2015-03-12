@@ -117,6 +117,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, false), nil)
+	// TODO(bdarnell): arrange to have the transport closed.
 	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport())
 
 	// Verify the store isn't already part of a cluster.
@@ -213,7 +214,8 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 		return util.Error("no engines")
 	}
 	for _, e := range engines {
-		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport
+		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport.
+		// TODO(bdarnell): arrange to have the transport closed.
 		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport())
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.

@@ -294,9 +294,6 @@ func (s *Store) Stop() {
 		rng.stop()
 	}
 	s.stopper.Stop()
-	// TODO(bdarnell): we don't necessarily own the Transport here; probably need
-	// to move the Close up to a higher level once we have a real Transport.
-	s.transport.Close()
 }
 
 // String formats a store for debug output.

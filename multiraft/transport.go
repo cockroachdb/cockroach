@@ -73,6 +73,8 @@ type localRPCTransport struct {
 	mu        sync.Mutex
 	listeners map[NodeID]net.Listener
 	clients   map[NodeID]*rpc.Client
+	conns     map[net.Conn]struct{}
+	closed    chan struct{}
 }
 
 // NewLocalRPCTransport creates a Transport for local testing use. MultiRaft instances
@@ -84,6 +86,8 @@ func NewLocalRPCTransport() Transport {
 	return &localRPCTransport{
 		listeners: make(map[NodeID]net.Listener),
 		clients:   make(map[NodeID]*rpc.Client),
+		conns:     make(map[net.Conn]struct{}),
+		closed:    make(chan struct{}),
 	}
 }
 
@@ -120,7 +124,17 @@ func (lt *localRPCTransport) accept(server *rpc.Server, listener net.Listener) {
 			log.Fatalf("localRPCTransport.accept: %s", err.Error())
 			continue
 		}
-		go server.ServeConn(conn)
+		lt.mu.Lock()
+		lt.conns[conn] = struct{}{}
+		lt.mu.Unlock()
+		go func(conn net.Conn) {
+			defer func() {
+				lt.mu.Lock()
+				defer lt.mu.Unlock()
+				delete(lt.conns, conn)
+			}()
+			server.ServeConn(conn)
+		}(conn)
 	}
 }
 
@@ -169,7 +183,11 @@ func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
 	default:
 		// Otherwise, fire-and-forget.
 		go func() {
-			<-call.Done
+			select {
+			case <-call.Done:
+			case <-lt.closed:
+				return
+			}
 			if call.Error != nil {
 				log.Errorf("sending rpc failed: %s", call.Error)
 			}
@@ -179,10 +197,14 @@ func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
 }
 
 func (lt *localRPCTransport) Close() {
+	close(lt.closed)
 	for _, c := range lt.clients {
 		err := c.Close()
 		if err != nil {
 			log.Warningf("error stopping client: %s", err)
 		}
+	}
+	for conn := range lt.conns {
+		conn.Close()
 	}
 }
