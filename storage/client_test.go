@@ -215,6 +215,19 @@ func incrementArgs(key []byte, inc int64, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
+func internalTruncateLogArgs(index uint64, raftID int64, storeID proto.StoreID) (
+	*proto.InternalTruncateLogRequest, *proto.InternalTruncateLogResponse) {
+	args := &proto.InternalTruncateLogRequest{
+		RequestHeader: proto.RequestHeader{
+			RaftID:  raftID,
+			Replica: proto.Replica{StoreID: storeID},
+		},
+		Index: index,
+	}
+	reply := &proto.InternalTruncateLogResponse{}
+	return args, reply
+}
+
 type metaRecord struct {
 	key  proto.Key
 	desc *proto.RangeDescriptor

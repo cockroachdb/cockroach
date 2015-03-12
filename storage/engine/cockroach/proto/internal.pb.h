@@ -60,6 +60,8 @@ class InternalRaftCommand;
 class InternalTimeSeriesData;
 class InternalTimeSeriesSample;
 class RaftTruncatedState;
+class RaftSnapshotData;
+class RaftSnapshotData_KV;
 
 enum InternalValueType {
   _CR_TS = 1
@@ -2413,6 +2415,189 @@ class RaftTruncatedState : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static RaftTruncatedState* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class RaftSnapshotData_KV : public ::google::protobuf::Message {
+ public:
+  RaftSnapshotData_KV();
+  virtual ~RaftSnapshotData_KV();
+
+  RaftSnapshotData_KV(const RaftSnapshotData_KV& from);
+
+  inline RaftSnapshotData_KV& operator=(const RaftSnapshotData_KV& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RaftSnapshotData_KV& default_instance();
+
+  void Swap(RaftSnapshotData_KV* other);
+
+  // implements Message ----------------------------------------------
+
+  RaftSnapshotData_KV* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const RaftSnapshotData_KV& from);
+  void MergeFrom(const RaftSnapshotData_KV& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional bytes key = 2;
+  inline bool has_key() const;
+  inline void clear_key();
+  static const int kKeyFieldNumber = 2;
+  inline const ::std::string& key() const;
+  inline void set_key(const ::std::string& value);
+  inline void set_key(const char* value);
+  inline void set_key(const void* value, size_t size);
+  inline ::std::string* mutable_key();
+  inline ::std::string* release_key();
+  inline void set_allocated_key(::std::string* key);
+
+  // optional bytes value = 3;
+  inline bool has_value() const;
+  inline void clear_value();
+  static const int kValueFieldNumber = 3;
+  inline const ::std::string& value() const;
+  inline void set_value(const ::std::string& value);
+  inline void set_value(const char* value);
+  inline void set_value(const void* value, size_t size);
+  inline ::std::string* mutable_value();
+  inline ::std::string* release_value();
+  inline void set_allocated_value(::std::string* value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData.KV)
+ private:
+  inline void set_has_key();
+  inline void clear_has_key();
+  inline void set_has_value();
+  inline void clear_has_value();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::std::string* key_;
+  ::std::string* value_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static RaftSnapshotData_KV* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class RaftSnapshotData : public ::google::protobuf::Message {
+ public:
+  RaftSnapshotData();
+  virtual ~RaftSnapshotData();
+
+  RaftSnapshotData(const RaftSnapshotData& from);
+
+  inline RaftSnapshotData& operator=(const RaftSnapshotData& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RaftSnapshotData& default_instance();
+
+  void Swap(RaftSnapshotData* other);
+
+  // implements Message ----------------------------------------------
+
+  RaftSnapshotData* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const RaftSnapshotData& from);
+  void MergeFrom(const RaftSnapshotData& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  typedef RaftSnapshotData_KV KV;
+
+  // accessors -------------------------------------------------------
+
+  // repeated group KV = 1 {
+  inline int kv_size() const;
+  inline void clear_kv();
+  static const int kKvFieldNumber = 1;
+  inline const ::cockroach::proto::RaftSnapshotData_KV& kv(int index) const;
+  inline ::cockroach::proto::RaftSnapshotData_KV* mutable_kv(int index);
+  inline ::cockroach::proto::RaftSnapshotData_KV* add_kv();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >&
+      kv() const;
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >*
+      mutable_kv();
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData)
+ private:
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV > kv_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static RaftSnapshotData* default_instance_;
 };
 // ===================================================================
 
@@ -5328,6 +5513,196 @@ inline void RaftTruncatedState::set_term(::google::protobuf::uint64 value) {
   set_has_term();
   term_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.RaftTruncatedState.term)
+}
+
+// -------------------------------------------------------------------
+
+// RaftSnapshotData_KV
+
+// optional bytes key = 2;
+inline bool RaftSnapshotData_KV::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RaftSnapshotData_KV::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RaftSnapshotData_KV::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RaftSnapshotData_KV::clear_key() {
+  if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_->clear();
+  }
+  clear_has_key();
+}
+inline const ::std::string& RaftSnapshotData_KV::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KV.key)
+  return *key_;
+}
+inline void RaftSnapshotData_KV::set_key(const ::std::string& value) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KV.key)
+}
+inline void RaftSnapshotData_KV::set_key(const char* value) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KV.key)
+}
+inline void RaftSnapshotData_KV::set_key(const void* value, size_t size) {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  key_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KV.key)
+}
+inline ::std::string* RaftSnapshotData_KV::mutable_key() {
+  set_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    key_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KV.key)
+  return key_;
+}
+inline ::std::string* RaftSnapshotData_KV::release_key() {
+  clear_has_key();
+  if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = key_;
+    key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void RaftSnapshotData_KV::set_allocated_key(::std::string* key) {
+  if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete key_;
+  }
+  if (key) {
+    set_has_key();
+    key_ = key;
+  } else {
+    clear_has_key();
+    key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KV.key)
+}
+
+// optional bytes value = 3;
+inline bool RaftSnapshotData_KV::has_value() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void RaftSnapshotData_KV::set_has_value() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void RaftSnapshotData_KV::clear_has_value() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void RaftSnapshotData_KV::clear_value() {
+  if (value_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    value_->clear();
+  }
+  clear_has_value();
+}
+inline const ::std::string& RaftSnapshotData_KV::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KV.value)
+  return *value_;
+}
+inline void RaftSnapshotData_KV::set_value(const ::std::string& value) {
+  set_has_value();
+  if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    value_ = new ::std::string;
+  }
+  value_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KV.value)
+}
+inline void RaftSnapshotData_KV::set_value(const char* value) {
+  set_has_value();
+  if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    value_ = new ::std::string;
+  }
+  value_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KV.value)
+}
+inline void RaftSnapshotData_KV::set_value(const void* value, size_t size) {
+  set_has_value();
+  if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    value_ = new ::std::string;
+  }
+  value_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KV.value)
+}
+inline ::std::string* RaftSnapshotData_KV::mutable_value() {
+  set_has_value();
+  if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    value_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KV.value)
+  return value_;
+}
+inline ::std::string* RaftSnapshotData_KV::release_value() {
+  clear_has_value();
+  if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = value_;
+    value_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void RaftSnapshotData_KV::set_allocated_value(::std::string* value) {
+  if (value_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete value_;
+  }
+  if (value) {
+    set_has_value();
+    value_ = value;
+  } else {
+    clear_has_value();
+    value_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KV.value)
+}
+
+// -------------------------------------------------------------------
+
+// RaftSnapshotData
+
+// repeated group KV = 1 {
+inline int RaftSnapshotData::kv_size() const {
+  return kv_.size();
+}
+inline void RaftSnapshotData::clear_kv() {
+  kv_.Clear();
+}
+inline const ::cockroach::proto::RaftSnapshotData_KV& RaftSnapshotData::kv(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.kv)
+  return kv_.Get(index);
+}
+inline ::cockroach::proto::RaftSnapshotData_KV* RaftSnapshotData::mutable_kv(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.kv)
+  return kv_.Mutable(index);
+}
+inline ::cockroach::proto::RaftSnapshotData_KV* RaftSnapshotData::add_kv() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.RaftSnapshotData.kv)
+  return kv_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >&
+RaftSnapshotData::kv() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.RaftSnapshotData.kv)
+  return kv_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >*
+RaftSnapshotData::mutable_kv() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.RaftSnapshotData.kv)
+  return &kv_;
 }
 
 
