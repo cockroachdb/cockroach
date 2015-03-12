@@ -1458,7 +1458,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	return hs, cs, nil
 }
 
-// loadFirstAndLastIndex looks in the engine to find the first and last log index.
+// loadLastIndex looks in the engine to find the last log index.
 func (r *Range) loadLastIndex() error {
 	logKey := engine.RaftLogPrefix(r.Desc().RaftID)
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
@@ -1553,9 +1553,12 @@ func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 	}
 	if !ok {
 		if len(r.Desc().EndKey) > 0 {
+			// If we created this range (and know its start/end keys, set the initial log index/term.
 			ts.Index = raftInitialLogIndex
 			ts.Term = raftInitialLogTerm
 		} else {
+			// If we don't know the start/end keys, this is a new range we are receiving from
+			// another node. Start from zero so we will receive a snapshot.
 			ts.Index = 0
 			ts.Term = 0
 		}

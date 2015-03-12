@@ -1636,7 +1636,7 @@ func TestInternalTruncateLog(t *testing.T) {
 	// The terms of older entries are gone.
 	_, err = tc.rng.Term(indexes[3])
 	if err != raft.ErrUnavailable {
-		t.Errorf("expectedErrUnavailable, got %s", err)
+		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
 }
 
