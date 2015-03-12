@@ -79,20 +79,10 @@ bench:
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image which comes without the build environment. See ./build/deploy
 # for details.
-# The test files are moved to the corresponding package. For example,
-# PKG=./storage/engine will generate ./storage/engine/engine.test.
 .PHONY: testbuild
-testbuild: TESTS := $(shell $(GO) list $(PKG))
-testbuild: GOFLAGS += -c
 testbuild:
-	for p in $(TESTS); do \
-	  NAME=$$(basename "$$p"); \
-	  OUT="$$NAME.test"; \
-	  DIR=$$($(GO) list -f {{.Dir}} ./...$$NAME); \
-	  $(GO) test $(GOFLAGS) "$$p" $(TESTFLAGS) || break; \
-	  if [ -f "$$OUT" ]; then \
-		mv "$$OUT" "$$DIR" || break; \
-	  fi \
+	for p in $(shell $(GO) list $(PKG)); do \
+	  $(GO) test $(GOFLAGS) -c -i $$p || exit $?; \
 	done
 
 

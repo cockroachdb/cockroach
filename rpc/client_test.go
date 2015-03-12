@@ -34,7 +34,7 @@ func init() {
 }
 
 func TestClientHeartbeat(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig("..")
+	tlsConfig, err := LoadTestTLSConfig("./test_certs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func (ac *AdvancingClock) UnixNano() int64 {
 // addr. Be sure to close the server when done. Building the server manually
 // like this allows for manual registration of the heartbeat service.
 func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
-	tlsConfig, err := LoadTestTLSConfig("..")
+	tlsConfig, err := LoadTestTLSConfig("./test_certs")
 	if err != nil {
 		t.Fatal(err)
 	}

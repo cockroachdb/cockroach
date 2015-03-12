@@ -23,12 +23,13 @@ package rpc
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"io/ioutil"
 	"net"
 	"path"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/resource"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -50,31 +51,41 @@ func (c *TLSConfig) Config() *tls.Config {
 	return &cc
 }
 
-// LoadTLSConfig creates a TLSConfig by loading our keys and certs from the
+// LoadTLSConfigFromDir creates a TLSConfig by loading our keys and certs from the
 // specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
 // - node.crt -- the certificate of this node; should be signed by the CA
 // - node.key -- the private key of this node
-func LoadTLSConfig(certDir string) (*TLSConfig, error) {
-	cert, err := tls.LoadX509KeyPair(
-		path.Join(certDir, "node.crt"),
-		path.Join(certDir, "node.key"),
-	)
+func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+	certPEM, err := ioutil.ReadFile(path.Join(certDir, "node.crt"))
 	if err != nil {
-		log.Info(err)
+		return nil, err
+	}
+	keyPEM, err := ioutil.ReadFile(path.Join(certDir, "node.key"))
+	if err != nil {
+		return nil, err
+	}
+	caPEM, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return nil, err
+	}
+	return LoadTLSConfig(certPEM, keyPEM, caPEM)
+}
+
+// LoadTLSConfig creates a TLSConfig from the supplied byte strings containing
+// - the certificate of the cluster CA,
+// - the certificate of this node (should be signed by the CA),
+// - the private key of this node.
+func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
 		return nil, err
 	}
 
 	certPool := x509.NewCertPool()
-	pemData, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
-	if err != nil {
-		log.Info(err)
-		return nil, err
-	}
 
-	if ok := certPool.AppendCertsFromPEM(pemData); !ok {
-		err = errors.New("failed to parse PEM data to pool")
-		log.Info(err)
+	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
+		err = util.Error("failed to parse PEM data to pool")
 		return nil, err
 	}
 
@@ -99,10 +110,22 @@ func LoadInsecureTLSConfig() *TLSConfig {
 }
 
 // LoadTestTLSConfig loads the test TLSConfig included with the project. It requires
-// a path to the project root.
+// a path to the project root, loading the certs from assets bundled with the test.
 // TODO Maybe instead of returning err, take a testing.T?  And move to tls_test?
-func LoadTestTLSConfig(projectRoot string) (*TLSConfig, error) {
-	return LoadTLSConfig(path.Join(projectRoot, "resource", "test_certs"))
+func LoadTestTLSConfig(certDir string) (*TLSConfig, error) {
+	certPEM, err := resource.Asset(path.Join(certDir, "node.crt"))
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := resource.Asset(path.Join(certDir, "node.key"))
+	if err != nil {
+		return nil, err
+	}
+	caPEM, err := resource.Asset(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return nil, err
+	}
+	return LoadTLSConfig(certPEM, keyPEM, caPEM)
 }
 
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of

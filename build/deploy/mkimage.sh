@@ -13,16 +13,17 @@ set -ex
 cd -P "$(dirname $0)"
 DIR=$(pwd -P)
 
+function cleanup() {
+  # Files in ./build may belong to root, so let's delete that folder via this hack.
+  docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "rm -rf /build/*"
+}
+trap cleanup EXIT
+
 rm -rf build && mkdir -p build
 docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
   rm -rf /build/*
-  make clean build testbuild >/dev/null 2>&1 && \
-  find . -name '*.test' -type f -printf "\"/build/%h \"" | xargs mkdir -p && \
-  find . -name '*.test' -type f -exec mv {} "/build/{}" \; && \
-  cp -r resource /build/ && \
-  cp cockroach /build/cockroach"
+  make build testbuild && \
+  cp -r resource cockroach *.test /build/"
 
 docker build -t cockroachdb/cockroach .
 docker run -v "${DIR}/build":/build cockroachdb/cockroach
-# Files in ./build may belong to root, so let's delete that folder via this hack.
-docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "rm -rf /build/*"

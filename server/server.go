@@ -95,7 +95,7 @@ func NewServer(ctx *Context) (*Server, error) {
 		tlsConfig = rpc.LoadInsecureTLSConfig()
 	} else {
 		var err error
-		if tlsConfig, err = rpc.LoadTLSConfig(ctx.Certs); err != nil {
+		if tlsConfig, err = rpc.LoadTLSConfigFromDir(ctx.Certs); err != nil {
 			return nil, util.Errorf("unable to load TLS config: %v", err)
 		}
 	}
