@@ -383,30 +383,50 @@ func DecodeUvarintDecreasing(b []byte) ([]byte, uint64) {
 }
 
 const (
-	escape      = 0x00
+	// <term>     -> \x00\x01
+	// \x00       -> \x00\xff
+	// \xff       -> \xff\x00
+	// <infinity> -> \xff\xff
+	escape1     = 0x00
+	escape2     = 0xff
 	escapedTerm = 0x01
 	escapedNul  = 0xff
+	escapedFF   = 0x00
+)
+
+var (
+	// Infinity compares greater than every other encoded value.
+	Infinity = []byte{0xff, 0xff}
 )
 
 // EncodeBytes encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
-// encoded value. The bytes are append to the supplied buffer and the
-// final buffer is returned.
+// encoded value. The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned.
+//
+// The encoded data is guaranteed to compare less than the Infinity
+// symbol \xff\xff. This is accomplished by transforming \xff to
+// \xff\x00 when it occurs at the beginning of the bytes to encode.
 func EncodeBytes(b []byte, data []byte) []byte {
+	if len(data) > 0 && data[0] == escape2 {
+		b = append(b, escape2, escapedFF)
+		data = data[1:]
+	}
+
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
 		// much faster than looping over the bytes in the slice.
-		i := bytes.IndexByte(data, escape)
+		i := bytes.IndexByte(data, escape1)
 		if i == -1 {
 			break
 		}
 		b = append(b, data[:i]...)
-		b = append(b, escape, escapedNul)
+		b = append(b, escape1, escapedNul)
 		data = data[i+1:]
 	}
 	b = append(b, data...)
-	return append(b, escape, escapedTerm)
+	return append(b, escape1, escapedTerm)
 }
 
 // DecodeBytes decodes a []byte value from the input buffer which was
@@ -414,14 +434,27 @@ func EncodeBytes(b []byte, data []byte) []byte {
 // the decoded []byte are returned.
 func DecodeBytes(b []byte) ([]byte, []byte) {
 	var r []byte
+
+	if len(b) > 0 && b[0] == escape2 {
+		if len(b) == 1 {
+			panic("malformed escape")
+		}
+		if b[1] != escapedFF {
+			panic("unknown escape")
+		}
+		r = append(r, 0xff)
+		b = b[2:]
+	}
+
 	for {
-		i := bytes.IndexByte(b, escape)
+		i := bytes.IndexByte(b, escape1)
 		if i == -1 {
 			panic("did not find terminator")
 		}
 		if i+1 > len(b) {
 			panic("malformed escape")
 		}
+
 		v := b[i+1]
 		if v == escapedTerm {
 			if r == nil {
@@ -431,12 +464,14 @@ func DecodeBytes(b []byte) ([]byte, []byte) {
 			}
 			return b[i+2:], r
 		}
-		r = append(r, b[:i]...)
+
 		if v == escapedNul {
+			r = append(r, b[:i]...)
 			r = append(r, 0)
 		} else {
 			panic("unknown escape")
 		}
+
 		b = b[i+2:]
 	}
 }

@@ -18,11 +18,35 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
+
+func prevKey(k proto.Key) proto.Key {
+	length := len(k)
+
+	// When the byte array is empty.
+	if length == 0 {
+		panic(fmt.Sprint("cannot get the prev key of an empty key"))
+	}
+
+	// If the last byte is a 0, then drop it.
+	if k[length-1] == 0 {
+		return k[0 : length-1]
+	}
+
+	// If the last byte isn't 0, subtract one from it and append "\xff"s
+	// until the end of the key space.
+	return bytes.Join([][]byte{
+		k[0 : length-1],
+		[]byte{k[length-1] - 1},
+		bytes.Repeat([]byte{0xff}, engine.KeyMaxLength-length),
+	}, nil)
+}
 
 // createRangeData creates sample range data in all possible areas of
 // the key space. Returns a slice of the encoded keys of all created
@@ -46,9 +70,9 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		{engine.RangeDescriptorKey(r.Desc().StartKey), ts},
 		{engine.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
 		{engine.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
-		{engine.TransactionKey(r.Desc().EndKey.Prev(), []byte("2468")), ts0},
+		{engine.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
 		{r.Desc().StartKey.Next(), ts},
-		{r.Desc().EndKey.Prev(), ts},
+		{prevKey(r.Desc().EndKey), ts},
 	}
 
 	keys := []proto.EncodedKey{}

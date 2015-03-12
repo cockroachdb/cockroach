@@ -255,14 +255,14 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}{
 		{proto.Key("a"), proto.Key("a\x00"), rng2},
 		{proto.Key("a"), proto.Key("b"), rng2},
-		{proto.Key("b").Prev(), proto.Key("b"), rng2},
+		{proto.Key("a\xff\xff"), proto.Key("b"), rng2},
 		{proto.Key("c"), proto.Key("c\x00"), rng3},
 		{proto.Key("c"), proto.Key("d"), rng3},
-		{proto.Key("d").Prev(), proto.Key("d"), rng3},
-		{proto.Key("a").Prev(), proto.Key("a"), nil},
-		{proto.Key("a").Prev(), proto.Key("a\x00"), nil},
+		{proto.Key("c\xff\xff"), proto.Key("d"), rng3},
+		{proto.Key("x60\xff\xff"), proto.Key("a"), nil},
+		{proto.Key("x60\xff\xff"), proto.Key("a\x00"), nil},
 		{proto.Key("d"), proto.Key("d"), nil},
-		{proto.Key("d").Prev(), proto.Key("d\x00"), nil},
+		{proto.Key("c\xff\xff"), proto.Key("d\x00"), nil},
 	}
 
 	for i, test := range testCases {
@@ -581,7 +581,7 @@ func TestStoreRangesByKey(t *testing.T) {
 	if r := store.LookupRange(proto.Key("ZZ"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
-	if r := store.LookupRange(engine.KeyMax[:engine.KeyMaxLength-1], nil); r != r4 {
+	if r := store.LookupRange(proto.Key("\xff\x00"), nil); r != r4 {
 		t.Errorf("mismatched range %+v != %+v", r.Desc(), r4.Desc())
 	}
 	if store.LookupRange(engine.KeyMax, nil) != nil {
