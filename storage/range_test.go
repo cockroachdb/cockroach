@@ -314,7 +314,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -355,7 +355,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1663,7 +1663,7 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs, pReply := putArgs(key, value, 1, tc.store.StoreID())
-	if err := tc.rng.executeCmd(proto.Put, pArgs, pReply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
@@ -1681,7 +1681,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 	reply := &proto.ConditionalPutResponse{}
-	err := tc.rng.executeCmd(proto.ConditionalPut, args, reply)
+	err := tc.rng.executeCmd(0, proto.ConditionalPut, args, reply)
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
