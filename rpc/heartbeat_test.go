@@ -82,7 +82,7 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig("..")
+	tlsConfig, err := LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
