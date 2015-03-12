@@ -71,7 +71,7 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 func TestRocksDBCompaction(t *testing.T) {
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, testCacheSize)
+	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	err := rocksdb.Start()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)

@@ -21,16 +21,13 @@ import "github.com/cockroachdb/cockroach/proto"
 
 // InMem wraps RocksDB and configures it for in-memory only storage.
 type InMem struct {
-	RocksDB
+	*RocksDB
 }
 
 // NewInMem allocates and returns a new InMem object.
 func NewInMem(attrs proto.Attributes, cacheSize int64) *InMem {
 	db := &InMem{
-		RocksDB: RocksDB{
-			attrs:     attrs,
-			cacheSize: cacheSize,
-		},
+		RocksDB: newMemRocksDB(attrs, cacheSize),
 	}
 	if err := db.Start(); err != nil {
 		panic(err)
