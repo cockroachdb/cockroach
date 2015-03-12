@@ -55,6 +55,14 @@ func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64) *RocksDB {
 	}
 }
 
+func newMemRocksDB(attrs proto.Attributes, cacheSize int64) *RocksDB {
+	return &RocksDB{
+		attrs: attrs,
+		// dir: empty dir == "mem" RocksDB instance.
+		cacheSize: cacheSize,
+	}
+}
+
 // String formatter.
 func (r *RocksDB) String() string {
 	return fmt.Sprintf("%s=%s", r.attrs, r.dir)
