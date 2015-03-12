@@ -45,6 +45,9 @@ type RocksDB struct {
 
 // NewRocksDB allocates and returns a new RocksDB object.
 func NewRocksDB(attrs proto.Attributes, dir string, cacheSize int64) *RocksDB {
+	if dir == "" {
+		panic(util.Errorf("dir must be non-empty"))
+	}
 	return &RocksDB{
 		attrs:     attrs,
 		dir:       dir,
@@ -227,7 +230,11 @@ func (r *RocksDB) WriteBatch(cmds []interface{}) error {
 func (r *RocksDB) Capacity() (StoreCapacity, error) {
 	var fs syscall.Statfs_t
 	var capacity StoreCapacity
-	if err := syscall.Statfs(r.dir, &fs); err != nil {
+	dir := r.dir
+	if dir == "" {
+		dir = "/tmp"
+	}
+	if err := syscall.Statfs(dir, &fs); err != nil {
 		return capacity, err
 	}
 	capacity.Capacity = int64(fs.Bsize) * int64(fs.Blocks)
@@ -434,6 +441,11 @@ func (r *rocksDBSnapshot) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
 // using to store data for the given range of keys.
 func (r *rocksDBSnapshot) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return r.parent.ApproximateSize(start, end)
+}
+
+// Flush is a no-op for snapshots.
+func (r *rocksDBSnapshot) Flush() error {
+	return nil
 }
 
 // NewIterator returns a new instance of an Iterator over the

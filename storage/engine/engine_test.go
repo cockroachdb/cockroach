@@ -60,6 +60,7 @@ var (
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	inMem := NewInMem(inMemAttrs, 10<<20)
+	defer inMem.Stop()
 
 	loc := fmt.Sprintf("%s/data_%d", os.TempDir(), time.Now().UnixNano())
 	rocksdb := NewRocksDB(rocksDBAttrs, loc, testCacheSize)
@@ -717,11 +718,9 @@ func TestApproximateSize(t *testing.T) {
 		}
 
 		insertKeysAndValues(keys, values, engine, t)
-		if rocksdb, ok := engine.(*RocksDB); ok {
-			err := rocksdb.Flush()
-			if err != nil {
-				t.Fatalf("Error flushing RocksDB: %s", err.Error())
-			}
+
+		if err := engine.Flush(); err != nil {
+			t.Fatalf("Error flushing InMem: %s", err)
 		}
 
 		sizePerRecord := (len([]byte(keys[0])) + valueLen)

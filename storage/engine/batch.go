@@ -214,6 +214,11 @@ func (b *Batch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
 	return 0, util.Errorf("cannot get approximate size from a Batch")
 }
 
+// Flush returns an error if called on a Batch.
+func (b *Batch) Flush() error {
+	return util.Errorf("cannot flush a Batch")
+}
+
 // NewIterator returns an iterator over Batch. Batch iterators are
 // not thread safe.
 func (b *Batch) NewIterator() Iterator {
