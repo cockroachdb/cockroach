@@ -254,14 +254,14 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(engine.KeyLocalRangeIDPrefix):]
-	b, _ = encoding.DecodeVarUint64(b)
+	b, _ = encoding.DecodeUvarint(b)
 	if !bytes.HasPrefix(b, engine.KeyLocalResponseCacheSuffix) {
 		return ret, util.Errorf("key %q does not contain the response cache suffix %q", key, engine.KeyLocalResponseCacheSuffix)
 	}
 	// Cut the response cache suffix.
 	b = b[len(engine.KeyLocalResponseCacheSuffix):]
 	// Now, decode the command ID.
-	b, wt := encoding.DecodeVarUint64(b)
+	b, wt := encoding.DecodeUvarint(b)
 	b, rd := encoding.DecodeUint64(b)
 	if len(b) > 0 {
 		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, b)

@@ -25,11 +25,14 @@ const unsigned char kEscapedTerm = 0x01;
 const unsigned char kEscapedNul  = 0xff;
 
 template <typename T>
-bool DecodeVarint(rocksdb::Slice* buf, T* value) {
+bool DecodeUvarint(rocksdb::Slice* buf, T* value) {
   if (buf->empty()) {
     return false;
   }
-  int len = (*buf)[0];
+  int len = (*buf)[0] - 8;
+  if (len < 0) {
+    return false;
+  }
   if ((len + 1) > buf->size()) {
     return false;
   }
@@ -70,6 +73,6 @@ bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded) {
   return false;
 }
 
-bool DecodeVarint64(rocksdb::Slice* buf, uint64_t* value) {
-  return DecodeVarint(buf, value);
+bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value) {
+  return DecodeUvarint(buf, value);
 }

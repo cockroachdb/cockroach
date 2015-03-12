@@ -24,10 +24,10 @@
 // successful decode. The decoded bytes are returned in *decoded.
 bool DecodeBytes(rocksdb::Slice* buf, std::string* decoded);
 
-// DecodeVarint64 decodes a varint encoded uint64 from a buffer,
+// DecodeUvarint64 decodes a varint encoded uint64 from a buffer,
 // returning true on a successful decode. The decoded value is
 // returned in *decoded.
-bool DecodeVarint64(rocksdb::Slice* buf, uint64_t* value);
+bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value);
 
 #endif // ROACHLIB_ENCODING_H
 

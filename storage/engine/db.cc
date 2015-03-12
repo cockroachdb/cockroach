@@ -194,7 +194,7 @@ class DBCompactionFilter : public rocksdb::CompactionFilter {
     decKey.remove_prefix(kKeyLocalRangePrefixSize);
 
     uint64_t dummy;
-    if (!DecodeVarint64(&decKey, &dummy)) {
+    if (!DecodeUvarint64(&decKey, &dummy)) {
       return false;
     }
 

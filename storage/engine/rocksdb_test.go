@@ -174,7 +174,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 		batch := rocksdb.NewBatch()
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
-				keys[i] = proto.Key(encoding.EncodeVarUint32([]byte("key-"), uint32(i)))
+				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
 				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
 			}
 			// Only write values if this iteration is less than the random
@@ -229,7 +229,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := proto.Key(encoding.EncodeVarUint32([]byte("key-"), uint32(keyIdx)))
+			startKey := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			kvs, err := MVCCScan(rocksdb, startKey, KeyMax, int64(numRows), ts, nil)
@@ -317,7 +317,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 		for pb.Next() {
 			// Choose a random key to retrieve.
 			keyIdx := rand.Int31n(int32(numKeys))
-			key := proto.Key(encoding.EncodeVarUint32([]byte("key-"), uint32(keyIdx)))
+			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			if v, err := MVCCGet(rocksdb, key, ts, nil); err != nil {
