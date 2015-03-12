@@ -366,7 +366,7 @@ func TestStoreShouldSplit(t *testing.T) {
 			{},
 		},
 		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 18,
+		RangeMaxBytes: 1 << 16,
 	}
 	if err := store.DB().PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
@@ -379,10 +379,6 @@ func TestStoreShouldSplit(t *testing.T) {
 
 	maxBytes := zoneConfig.RangeMaxBytes
 	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
-
-	if ok := rng.ShouldSplit(); !ok {
-		t.Errorf("range should split after writing %d bytes", maxBytes)
-	}
 
 	// Verify that the range is in fact split (give it a second for very slow test machines).
 	if err := util.IsTrueWithin(func() bool {
