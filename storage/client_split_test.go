@@ -382,7 +382,7 @@ func TestStoreShouldSplit(t *testing.T) {
 
 	// Verify that the range is in fact split (give it a second for very slow test machines).
 	if err := util.IsTrueWithin(func() bool {
-		newRng := store.LookupRange(engine.KeyMax[:engine.KeyMaxLength-1], nil)
+		newRng := store.LookupRange(proto.Key("\xff\x00"), nil)
 		return newRng != rng
 	}, time.Second); err != nil {
 		t.Errorf("expected range to split in 1s")

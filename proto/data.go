@@ -24,7 +24,6 @@ import (
 	"math"
 	"math/rand"
 	"sort"
-	"strings"
 
 	"code.google.com/p/biogo.store/interval"
 	"code.google.com/p/biogo.store/llrb"
@@ -45,7 +44,7 @@ var (
 	// KeyMin is a minimum key value which sorts before all other keys.
 	KeyMin = Key("")
 	// KeyMax is a maximum key value which sorts after all other keys.
-	KeyMax = Key(strings.Repeat("\xff", KeyMaxLength))
+	KeyMax = Key(encoding.Infinity)
 )
 
 // Key is a custom type for a byte string in proto
@@ -68,43 +67,8 @@ func MakeKey(keys ...Key) Key {
 
 // Returns the next possible byte by appending an \x00.
 func bytesNext(b []byte) []byte {
-	if len(b) == KeyMaxLength && bytes.Equal(b, KeyMax) {
-		panic(fmt.Sprint("cannot get the next bytes of KeyMax"))
-	}
-
-	return bytes.Join([][]byte{b, {0}}, nil)
-}
-
-// Returns the previous byte bounded by the max key length.
-// If the last byte is 0, then truncate it. Otherwise decrease the
-// last byte by one and add in "\xff"s for the rest of the key length.
-// Examples:
-// 	 "" -> panic
-//   "\x00" -> ""
-//   "\xff00" -> "\xff"
-//   "\xff03" -> "\xff\x02\xff..."
-//   "\xff...\x01" -> "\xff...\x00"
-//   "\xff...\x00" -> "\xff..." (same except the \x00 is removed)
-//   "\xff..." -> "\xff...\xfe"
-func bytesPrev(b []byte) []byte {
-	length := len(b)
-
-	// When the byte array is empty.
-	if length == 0 {
-		panic(fmt.Sprint("cannot get the prev bytes of an empty byte array"))
-	}
-
-	// If the last byte is a 0, then drop it.
-	if b[length-1] == 0 {
-		return append([]byte(nil), b[0:length-1]...)
-	}
-
-	// If the last byte isn't 0, subtract one from it and
-	// append "\xff"s until the end of the key space.
-	prefix := b[0 : length-1]
-	reducedValue := []byte{b[length-1] - 1}
-	postfix := KeyMax[length:KeyMaxLength]
-	return bytes.Join([][]byte{prefix, reducedValue, postfix}, nil)
+	// TODO(spencer): Do we need to enforce KeyMaxLength here?
+	return append(append([]byte(nil), b...), 0)
 }
 
 func bytesPrefixEnd(b []byte) []byte {
@@ -123,11 +87,6 @@ func bytesPrefixEnd(b []byte) []byte {
 // Next returns the next key in lexicographic sort order.
 func (k Key) Next() Key {
 	return Key(bytesNext(k))
-}
-
-// Prev returns the prev key in lexicographic sort order.
-func (k Key) Prev() Key {
-	return Key(bytesPrev(k))
 }
 
 // Next returns the next key in lexicographic sort order.
@@ -180,13 +139,9 @@ func (k Key) Compare(b interval.Comparable) int {
 	return bytes.Compare(k, b.(Key))
 }
 
-// String returns a string-formatted version, with a maximum
-// key formatted for brevity as "\xff...".
+// String returns a string-formatted version of the key.
 func (k Key) String() string {
-	if idx := bytes.Index(k, KeyMax); idx != -1 {
-		return string(MakeKey(k[:idx], Key("\xff..."), k[idx+KeyMaxLength:]))
-	}
-	return string(k)
+	return fmt.Sprintf("%q", []byte(k))
 }
 
 // The following methods implement the custom marshalling and
