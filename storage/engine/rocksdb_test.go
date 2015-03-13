@@ -24,6 +24,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
@@ -343,19 +344,97 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 	runMVCCGet(100, b)
 }
 
-// runMVCCMerge merges value numMerges times into numKeys separate keys.
-func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
-	loc := util.CreateTempDirectory()
-	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, testCacheSize)
-	if err := rocksdb.Start(); err != nil {
-		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
-	}
-	defer func(b *testing.B) {
-		rocksdb.Stop()
-		if err := rocksdb.Destroy(); err != nil {
-			b.Errorf("could not delete rocksdb db at %s: %v", loc, err)
+func runMVCCPut(valueSize int, b *testing.B) {
+	rng := util.NewPseudoRand()
+	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+
+	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	defer rocksdb.Stop()
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+		ts := makeTS(time.Now().UnixNano(), 0)
+		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
+			b.Fatalf("failed put: %s", err)
 		}
-	}(b)
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCPut10(b *testing.B) {
+	runMVCCPut(10, b)
+}
+
+func BenchmarkMVCCPut100(b *testing.B) {
+	runMVCCPut(100, b)
+}
+
+func BenchmarkMVCCPut1000(b *testing.B) {
+	runMVCCPut(1000, b)
+}
+
+func BenchmarkMVCCPut10000(b *testing.B) {
+	runMVCCPut(10000, b)
+}
+
+func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
+	rng := util.NewPseudoRand()
+	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+
+	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	defer rocksdb.Stop()
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i += batchSize {
+		end := i + batchSize
+		if end > b.N {
+			end = b.N
+		}
+
+		batch := rocksdb.NewBatch()
+
+		for j := i; j < end; j++ {
+			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(j)))
+			ts := makeTS(time.Now().UnixNano(), 0)
+			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
+				b.Fatalf("failed put: %s", err)
+			}
+		}
+
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCBatchPut1(b *testing.B) {
+	runMVCCBatchPut(10, 1, b)
+}
+
+func BenchmarkMVCCBatchPut100(b *testing.B) {
+	runMVCCBatchPut(10, 100, b)
+}
+
+func BenchmarkMVCCBatchPut10000(b *testing.B) {
+	runMVCCBatchPut(10, 10000, b)
+}
+
+func BenchmarkMVCCBatchPut100000(b *testing.B) {
+	runMVCCBatchPut(10, 100000, b)
+}
+
+// runMVCCMerge merges value into numKeys separate keys.
+func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
+	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	defer rocksdb.Stop()
 
 	// Precompute keys so we don't waste time formatting them at each iteration.
 	keys := make([]proto.Key, numKeys)
@@ -369,10 +448,8 @@ func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ms := MVCCStats{}
-			for i := 0; i < numMerges; i++ {
-				if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], *value); err != nil {
-					b.Fatal(err)
-				}
+			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], *value); err != nil {
+				b.Fatal(err)
 			}
 		}
 	})
@@ -399,7 +476,7 @@ func runMVCCMerge(value *proto.Value, numMerges, numKeys int, b *testing.B) {
 
 // BenchmarkMVCCMergeInteger computes performance of merging integers.
 func BenchmarkMVCCMergeInteger(b *testing.B) {
-	runMVCCMerge(&proto.Value{Integer: gogoproto.Int64(1)}, 1024, 1024, b)
+	runMVCCMerge(&proto.Value{Integer: gogoproto.Int64(1)}, 1024, b)
 }
 
 // BenchmarkMVCCMergeTimeSeries computes performance of merging time series data.
@@ -415,5 +492,5 @@ func BenchmarkMVCCMergeTimeSeries(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	runMVCCMerge(value, 1024, 1024, b)
+	runMVCCMerge(value, 1024, b)
 }
