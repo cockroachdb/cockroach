@@ -698,7 +698,8 @@ class DBLogger : public rocksdb::Logger {
 
 DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   rocksdb::BlockBasedTableOptions table_options;
-  table_options.block_cache = rocksdb::NewLRUCache(db_opts.cache_size);
+  table_options.block_cache = rocksdb::NewLRUCache(
+      db_opts.cache_size, 4 /* num-shard-bits */);
 
   rocksdb::Options options;
   options.allow_os_buffer = db_opts.allow_os_buffer;
@@ -708,6 +709,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
   options.merge_operator.reset(new DBMergeOperator);
   options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+  options.write_buffer_size = 64 << 20;           // 64 MB
+  options.target_file_size_base = 64 << 20;       // 64 MB
+  options.max_bytes_for_level_base = 512 << 20;   // 512 MB
 
   rocksdb::Env* memenv = NULL;
   if (dir.len == 0) {
