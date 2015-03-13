@@ -345,8 +345,6 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
-	const numKeys = 100000
-
 	rng := util.NewPseudoRand()
 	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
 
@@ -356,17 +354,13 @@ func runMVCCPut(valueSize int, b *testing.B) {
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			// Choose a random key.
-			keyIdx := rand.Int31n(int32(numKeys))
-			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(keyIdx)))
-			ts := makeTS(time.Now().UnixNano(), 0)
-			if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
-				b.Fatalf("failed put: %s", err)
-			}
+	for i := 0; i < b.N; i++ {
+		key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+		ts := makeTS(time.Now().UnixNano(), 0)
+		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
+			b.Fatalf("failed put: %s", err)
 		}
-	})
+	}
 
 	b.StopTimer()
 }
@@ -385,6 +379,56 @@ func BenchmarkMVCCPut1000(b *testing.B) {
 
 func BenchmarkMVCCPut10000(b *testing.B) {
 	runMVCCPut(10000, b)
+}
+
+func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
+	rng := util.NewPseudoRand()
+	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+
+	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
+	defer rocksdb.Stop()
+
+	b.SetBytes(int64(valueSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i += batchSize {
+		end := i + batchSize
+		if end > b.N {
+			end = b.N
+		}
+
+		batch := rocksdb.NewBatch()
+
+		for j := i; j < end; j++ {
+			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(j)))
+			ts := makeTS(time.Now().UnixNano(), 0)
+			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
+				b.Fatalf("failed put: %s", err)
+			}
+		}
+
+		if err := batch.Commit(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.StopTimer()
+}
+
+func BenchmarkMVCCBatchPut1(b *testing.B) {
+	runMVCCBatchPut(10, 1, b)
+}
+
+func BenchmarkMVCCBatchPut100(b *testing.B) {
+	runMVCCBatchPut(10, 100, b)
+}
+
+func BenchmarkMVCCBatchPut10000(b *testing.B) {
+	runMVCCBatchPut(10, 10000, b)
+}
+
+func BenchmarkMVCCBatchPut100000(b *testing.B) {
+	runMVCCBatchPut(10, 100000, b)
 }
 
 // runMVCCMerge merges value into numKeys separate keys.
