@@ -347,6 +347,7 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 func runMVCCPut(valueSize int, b *testing.B) {
 	rng := util.NewPseudoRand()
 	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	defer rocksdb.Stop()
@@ -355,7 +356,7 @@ func runMVCCPut(valueSize int, b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+		key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(i)))
 		ts := makeTS(time.Now().UnixNano(), 0)
 		if err := MVCCPut(rocksdb, nil, key, ts, value, nil); err != nil {
 			b.Fatalf("failed put: %s", err)
@@ -384,6 +385,7 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	rng := util.NewPseudoRand()
 	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	defer rocksdb.Stop()
@@ -400,7 +402,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 		batch := rocksdb.NewBatch()
 
 		for j := i; j < end; j++ {
-			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(j)))
+			key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(j)))
 			ts := makeTS(time.Now().UnixNano(), 0)
 			if err := MVCCPut(batch, nil, key, ts, value, nil); err != nil {
 				b.Fatalf("failed put: %s", err)
@@ -415,19 +417,19 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkMVCCBatchPut1(b *testing.B) {
+func BenchmarkMVCCBatch1Put10(b *testing.B) {
 	runMVCCBatchPut(10, 1, b)
 }
 
-func BenchmarkMVCCBatchPut100(b *testing.B) {
+func BenchmarkMVCCBatch100Put10(b *testing.B) {
 	runMVCCBatchPut(10, 100, b)
 }
 
-func BenchmarkMVCCBatchPut10000(b *testing.B) {
+func BenchmarkMVCCBatch10000Put10(b *testing.B) {
 	runMVCCBatchPut(10, 10000, b)
 }
 
-func BenchmarkMVCCBatchPut100000(b *testing.B) {
+func BenchmarkMVCCBatch100000Put10(b *testing.B) {
 	runMVCCBatchPut(10, 100000, b)
 }
 

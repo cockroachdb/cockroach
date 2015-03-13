@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -568,6 +569,24 @@ func mvccGetInternal(engine Engine, key proto.Key, kv proto.RawKeyValue, timesta
 	return value.Value, nil
 }
 
+// putBuffer holds pointer data needed by mvccPutInternal. Bundling
+// this data into a single structure reduces memory
+// allocations. Managing this temporary buffer using a sync.Pool
+// completely eliminates allocation from the put common path.
+type putBuffer struct {
+	meta    proto.MVCCMetadata
+	newMeta proto.MVCCMetadata
+	value   proto.MVCCValue
+	pvalue  proto.Value
+	key     [1024]byte
+}
+
+var putBufferPool = sync.Pool{
+	New: func() interface{} {
+		return &putBuffer{}
+	},
+}
+
 // MVCCPut sets the value for a specified key. It will save the value
 // with different versions according to its timestamp and update the
 // key metadata. We assume the range will check for an existing write
@@ -580,33 +599,56 @@ func mvccGetInternal(engine Engine, key proto.Key, kv proto.RawKeyValue, timesta
 // single row and never accumulate more than a single value. Successive
 // zero timestamp writes to a key replace the value and deletes clear
 // the value. In addition, zero timestamp values may be merged.
-func MVCCPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.Value, txn *proto.Transaction) error {
+func MVCCPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
+	value proto.Value, txn *proto.Transaction) error {
 	if value.Timestamp != nil && !value.Timestamp.Equal(timestamp) {
 		return util.Errorf(
 			"the timestamp %+v provided in value does not match the timestamp %+v in request",
 			value.Timestamp, timestamp)
 	}
-	return mvccPutInternal(engine, ms, key, timestamp, proto.MVCCValue{Value: &value}, txn)
+
+	buf := putBufferPool.Get().(*putBuffer)
+	buf.pvalue = value
+	buf.value.Reset()
+	buf.value.Value = &buf.pvalue
+
+	err := mvccPutInternal(engine, ms, key, timestamp, buf.value, txn, buf)
+
+	// Using defer would be more convenient, but it is measurably
+	// slower.
+	putBufferPool.Put(buf)
+	return err
 }
 
 // MVCCDelete marks the key deleted so that it will not be returned in
 // future get responses.
-func MVCCDelete(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction) error {
-	return mvccPutInternal(engine, ms, key, timestamp, proto.MVCCValue{Deleted: true}, txn)
+func MVCCDelete(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
+	txn *proto.Transaction) error {
+	buf := putBufferPool.Get().(*putBuffer)
+	buf.value.Reset()
+	buf.value.Deleted = true
+
+	err := mvccPutInternal(engine, ms, key, timestamp, buf.value, txn, buf)
+
+	// Using defer would be more convenient, but it is measurably
+	// slower.
+	putBufferPool.Put(buf)
+	return err
 }
 
 // mvccPutInternal adds a new timestamped value to the specified key.
 // If value is nil, creates a deletion tombstone value.
-func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp, value proto.MVCCValue, txn *proto.Transaction) error {
+func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.Timestamp,
+	value proto.MVCCValue, txn *proto.Transaction, buf *putBuffer) error {
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
-	metaKey := MVCCEncodeKey(key)
 	if value.Value != nil && value.Value.Bytes != nil && value.Value.Integer != nil {
 		return util.Errorf("key %q value contains both a byte slice and an integer value: %+v", key, value)
 	}
 
-	meta := &proto.MVCCMetadata{}
+	meta := &buf.meta
+	metaKey := mvccEncodeKey(buf.key[0:0], key)
 	ok, origMetaKeySize, origMetaValSize, err := GetProto(engine, metaKey, meta)
 	if err != nil {
 		return err
@@ -653,9 +695,11 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 			// If this is an intent and timestamps have changed,
 			// need to remove old version.
 			if meta.Txn != nil && !timestamp.Equal(meta.Timestamp) {
-				engine.Clear(MVCCEncodeVersionKey(key, meta.Timestamp))
+				versionKey := mvccEncodeTimestamp(metaKey, meta.Timestamp)
+				engine.Clear(versionKey)
 			}
-			newMeta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+			newMeta = &buf.newMeta
+			*newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 		} else if timestamp.Less(meta.Timestamp) && meta.Txn == nil {
 			// If we receive a Put request to write before an already-
 			// committed version, send write tool old error.
@@ -671,7 +715,8 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 		}
 		// Create key metadata.
 		meta = nil
-		newMeta = &proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
+		newMeta = &buf.newMeta
+		*newMeta = proto.MVCCMetadata{Txn: txn, Timestamp: timestamp}
 	}
 
 	// Make sure to zero the redundant timestamp (timestamp is encoded
@@ -679,7 +724,10 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 	if value.Value != nil {
 		value.Value.Timestamp = nil
 	}
-	_, valueSize, err := PutProto(engine, MVCCEncodeVersionKey(key, timestamp), &value)
+
+	// The metaKey is always the prefix of the versionKey.
+	versionKey := mvccEncodeTimestamp(metaKey, timestamp)
+	_, valueSize, err := PutProto(engine, versionKey, &buf.value)
 	if err != nil {
 		return err
 	}
@@ -1352,20 +1400,32 @@ func MVCCComputeStats(engine Engine, key, endKey proto.Key, nowNanos int64) (MVC
 // for storing raw values directly. Use MVCCEncodeVersionValue for
 // storing timestamped version values.
 func MVCCEncodeKey(key proto.Key) proto.EncodedKey {
-	return encoding.EncodeBytes(nil, key)
+	return mvccEncodeKey(nil, key)
+}
+
+// mvccEncodeKey is the internal version of MVCCEncodeKey and takes a
+// buffer to append the encoded key to.
+func mvccEncodeKey(buf []byte, key proto.Key) proto.EncodedKey {
+	return encoding.EncodeBytes(buf, key)
 }
 
 // MVCCEncodeVersionKey makes an MVCC version key, which consists
 // of a binary-encoding of key, followed by a decreasing encoding
 // of the timestamp, so that more recent versions sort first.
 func MVCCEncodeVersionKey(key proto.Key, timestamp proto.Timestamp) proto.EncodedKey {
+	k := encoding.EncodeBytes(nil, key)
+	return mvccEncodeTimestamp(k, timestamp)
+}
+
+// mvccEncodeTimestamp encodes the MVCC version info onto an existing
+// MVCC key (created using MVCCEncodeKey).
+func mvccEncodeTimestamp(key proto.EncodedKey, timestamp proto.Timestamp) proto.EncodedKey {
 	if timestamp.WallTime < 0 || timestamp.Logical < 0 {
 		panic(fmt.Sprintf("negative values disallowed in timestamps: %+v", timestamp))
 	}
-	k := encoding.EncodeBytes(nil, key)
-	k = encoding.EncodeUint64Decreasing(k, uint64(timestamp.WallTime))
-	k = encoding.EncodeUint32Decreasing(k, uint32(timestamp.Logical))
-	return k
+	key = encoding.EncodeUint64Decreasing(key, uint64(timestamp.WallTime))
+	key = encoding.EncodeUint32Decreasing(key, uint32(timestamp.Logical))
+	return key
 }
 
 // MVCCDecodeKey decodes encodedKey by binary decoding the leading
