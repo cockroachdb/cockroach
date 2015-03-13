@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -153,7 +154,7 @@ func (r *RocksDB) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
-// Get returns the value for the given key.
+// getInternal returns the value for the given key.
 func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
@@ -164,6 +165,40 @@ func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot
 		return nil, err
 	}
 	return cStringToGoBytes(result), nil
+}
+
+// GetProto fetches the value at the specified key and unmarshals it.
+func (r *RocksDB) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	return r.getProtoInternal(key, msg, nil)
+}
+
+func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
+	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
+	if len(key) == 0 {
+		err = emptyKeyError()
+		return
+	}
+	var result C.DBString
+	if err = statusToError(C.DBGet(r.rdb, snapshotHandle, goToCSlice(key), &result)); err != nil {
+		return
+	}
+	if result.len <= 0 {
+		return
+	}
+	ok = true
+	if msg != nil {
+		// Make a byte slice that is backed by result.data. This slice
+		// cannot live past the lifetime of this method, but we're only
+		// using it to unmarshal the proto.
+		// data := C.GoBytes(unsafe.Pointer(result.data), result.len)
+		data := (*[0x7fffffff]byte)(unsafe.Pointer(result.data))[:result.len:result.len]
+		err = gogoproto.Unmarshal(data, msg)
+	}
+	C.free(unsafe.Pointer(result.data))
+	keyBytes = int64(len(key))
+	valBytes = int64(result.len)
+	return
 }
 
 // Clear removes the item from the db with the given key.
@@ -529,6 +564,19 @@ func (r *rocksDBIterator) Key() proto.EncodedKey {
 func (r *rocksDBIterator) Value() []byte {
 	data := C.DBIterValue(r.iter)
 	return cSliceToGoBytes(data)
+}
+
+func (r *rocksDBIterator) valueUnmarshal(msg gogoproto.Message) error {
+	result := C.DBIterValue(r.iter)
+	if result.len <= 0 {
+		return nil
+	}
+	// Make a byte slice that is backed by result.data. This slice
+	// cannot live past the lifetime of this method, but we're only
+	// using it to unmarshal the proto.
+	// data := cSliceToGoBytes(result)
+	data := (*[0x7fffffff]byte)(unsafe.Pointer(result.data))[:result.len:result.len]
+	return gogoproto.Unmarshal(data, msg)
 }
 
 func (r *rocksDBIterator) Error() error {

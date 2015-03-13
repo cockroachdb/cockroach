@@ -227,10 +227,11 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
+		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(keyIdx)))
+			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			kvs, err := MVCCScan(rocksdb, startKey, KeyMax, int64(numRows), ts, nil)
@@ -315,10 +316,11 @@ func runMVCCGet(numVersions int, b *testing.B) {
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
+		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 		for pb.Next() {
 			// Choose a random key to retrieve.
 			keyIdx := rand.Int31n(int32(numKeys))
-			key := proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(keyIdx)))
+			key := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
 			walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 			ts := makeTS(walltime, 0)
 			if v, err := MVCCGet(rocksdb, key, ts, nil); err != nil {

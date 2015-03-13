@@ -188,6 +188,13 @@ func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBy
 // key was not found. On success, returns the length in bytes of the
 // key and the value.
 func GetProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
+	type protoGetter interface {
+		GetProto(key proto.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error)
+	}
+	if g, ok := engine.(protoGetter); ok {
+		return g.GetProto(key, msg)
+	}
+
 	var data []byte
 	if data, err = engine.Get(key); err != nil {
 		return
@@ -204,6 +211,18 @@ func GetProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (ok bo
 	keyBytes = int64(len(key))
 	valBytes = int64(len(data))
 	return
+}
+
+// valueUnmarshal unmarshals the value the iterator is currently
+// pointing to using a protobuf decoder.
+func valueUnmarshal(iter Iterator, msg gogoproto.Message) error {
+	type unmarshaler interface {
+		valueUnmarshal(msg gogoproto.Message) error
+	}
+	if g, ok := iter.(unmarshaler); ok {
+		return g.valueUnmarshal(msg)
+	}
+	return gogoproto.Unmarshal(iter.Value(), msg)
 }
 
 // Increment fetches the varint encoded int64 value specified by key
