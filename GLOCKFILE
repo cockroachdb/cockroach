@@ -5,11 +5,11 @@ cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/robfig/glock
 cmd golang.org/x/tools/cmd/goimports
-code.google.com/p/biogo.store 183e7d0d9b67b3a25462dfe9fa518d8df377c355
 code.google.com/p/go-commander df033a4b379cd723ef7408b881c1e092cd943831
 code.google.com/p/go-uuid 35bc42037350
 code.google.com/p/snappy-go 8850bd446ad6
 github.com/agtorre/gocolorize f42b554bf7f006936130c9bb4f971afd2d87f671
+github.com/biogo/store cb1ae010c5c75b7ce4f5c5d0ef92defcafdfdce4
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb 72de025ca13dd4ab2dce63e8e19c6a59b8388ffd
 github.com/cockroachdb/c-snappy af73b00e85e6f0e3c1fcc51f73f1d036df1e99ff

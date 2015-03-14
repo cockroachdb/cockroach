@@ -25,9 +25,9 @@ import (
 	"math/rand"
 	"sort"
 
-	"code.google.com/p/biogo.store/interval"
-	"code.google.com/p/biogo.store/llrb"
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/biogo/store/interval"
+	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	gogoproto "github.com/gogo/protobuf/proto"
