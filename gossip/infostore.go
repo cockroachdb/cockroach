@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // callback holds regexp pattern match and GossipCallback method.
@@ -256,6 +257,21 @@ func (is *infoStore) maxHops() uint32 {
 func (is *infoStore) registerCallback(pattern string, method Callback) {
 	re := regexp.MustCompile(pattern)
 	is.callbacks = append(is.callbacks, callback{pattern: re, method: method})
+	var infos []*info
+	if err := is.visitInfos(nil, func(i *info) error {
+		if re.MatchString(i.Key) {
+			infos = append(infos, i)
+		}
+		return nil
+	}); err != nil {
+		log.Errorf("failed to properly run registered callback while visiting pre-existing info: %s", err)
+	}
+	// Run callbacks in a goroutine to avoid mutex reentry.
+	go func() {
+		for _, i := range infos {
+			method(i.Key, true /* contentsChanged */)
+		}
+	}()
 }
 
 // processCallbacks processes callbacks for the specified key by

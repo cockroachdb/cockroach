@@ -73,6 +73,10 @@ func newGCQueue() *gcQueue {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
+	// Only queue for GC if this replica is leader.
+	if !rng.IsLeader() {
+		return
+	}
 	// Lookup GC policy for this range.
 	policy, err := gcq.lookupGCPolicy(rng)
 	if err != nil {

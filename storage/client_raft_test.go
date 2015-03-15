@@ -231,9 +231,8 @@ func TestFailedReplicaChange(t *testing.T) {
 	defer func() {
 		storage.TestingCommandFilter = nil
 	}()
-	storage.TestingCommandFilter = func(method string, args proto.Request,
-		reply proto.Response) bool {
-		if method == proto.EndTransaction {
+	storage.TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+		if method == proto.EndTransaction && args.(*proto.EndTransactionRequest).Commit == true {
 			reply.Header().SetGoError(util.Errorf("boom"))
 			return true
 		}

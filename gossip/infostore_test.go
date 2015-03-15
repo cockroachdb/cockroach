@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -551,16 +552,39 @@ func TestCallbacks(t *testing.T) {
 		t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
 	}
 
-	// Register another callback with same pattern and verify both the
-	// original and the new are invoked.
+	// Register another callback with same pattern and verify it is
+	// invoked for all three keys.
+	wg.Add(3)
 	is.registerCallback("key.*", cbAll.Add)
-	i3 = is.newInfo("key3", float64(1), time.Second)
-	wg.Add(2)
-	is.addInfo(i3)
 	wg.Wait()
 
-	expKeys := []string{"key1-true", "key2-true", "key3-true", "key1-true", "key3-false", "key3-false"}
-	if !reflect.DeepEqual(cbAll.Keys(), expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cbAll.Keys())
+	expKeys := []string{"key1-true", "key2-true", "key3-true", "key1-true", "key1-true", "key2-true", "key3-true"}
+	sort.Strings(expKeys)
+	keys := append([]string{}, cbAll.Keys()...)
+	sort.Strings(keys)
+	if !reflect.DeepEqual(keys, expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, keys)
+	}
+}
+
+// TestRegisterCallback verifies that a callback is invoked when
+// registered if there are items which match its regexp in the
+// infostore.
+func TestRegisterCallback(t *testing.T) {
+	is := newInfoStore(emptyAddr)
+	wg := &sync.WaitGroup{}
+	cb := callbackRecord{wg: wg}
+
+	i1 := is.newInfo("key1", float64(1), time.Second)
+	i2 := is.newInfo("key2", float64(1), time.Second)
+	is.addInfo(i1)
+	is.addInfo(i2)
+
+	wg.Add(2)
+	is.registerCallback("key.*", cb.Add)
+	wg.Wait()
+
+	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(cb.Keys(), expKeys) {
+		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
 }

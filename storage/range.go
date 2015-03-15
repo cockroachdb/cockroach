@@ -143,14 +143,15 @@ type pendingCmd struct {
 // contained in the store can access the methods required for splitting.
 type RangeManager interface {
 	// Accessors for shared state.
-	Allocator() *allocator
-	Clock() *hlc.Clock
 	ClusterID() string
-	DB() *client.KV
-	Engine() engine.Engine
-	Gossip() *gossip.Gossip
 	StoreID() proto.StoreID
 	RaftNodeID() multiraft.NodeID
+	Clock() *hlc.Clock
+	Engine() engine.Engine
+	DB() *client.KV
+	Allocator() *allocator
+	Gossip() *gossip.Gossip
+	SplitQueue() *splitQueue
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -169,9 +170,10 @@ type RangeManager interface {
 // integrity by replacing failed replicas, splitting and merging
 // as appropriate.
 type Range struct {
-	desc  unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
-	rm    RangeManager   // Makes some store methods available
-	stats *rangeStats    // Range statistics
+	desc     unsafe.Pointer // Atomic pointer for *proto.RangeDescriptor
+	rm       RangeManager   // Makes some store methods available
+	stats    *rangeStats    // Range statistics
+	maxBytes int64          // Max bytes before split.
 	// 1 if a split, merge, or replica change is underway; updated atomically
 	metaLock int32
 	// First non-truncated entry in the raft log. Updated atomically.
@@ -245,6 +247,17 @@ func (r *Range) Destroy() error {
 		deletes = append(deletes, engine.BatchDelete{RawKeyValue: proto.RawKeyValue{Key: iter.Key()}})
 	}
 	return r.rm.Engine().WriteBatch(deletes)
+}
+
+// GetMaxBytes atomically gets the range maximum byte limit.
+func (r *Range) GetMaxBytes() int64 {
+	return atomic.LoadInt64(&r.maxBytes)
+}
+
+// SetMaxBytes atomically sets the maximum byte limit before
+// split. This value is cached by the range for efficiency.
+func (r *Range) SetMaxBytes(maxBytes int64) {
+	atomic.StoreInt64(&r.maxBytes, maxBytes)
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -670,43 +683,16 @@ func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
 	}
 }
 
-// ShouldSplit returns whether the current size of the range exceeds
-// the max size specified in the zone config.
-func (r *Range) ShouldSplit() bool {
-	// If not the leader or gossip is not enabled, ignore.
-	if !r.IsLeader() || r.rm.Gossip() == nil {
-		return false
-	}
-
-	// Fetch the zone config for the zone containing this range's start key.
-	zoneMap, err := r.rm.Gossip().GetInfo(gossip.KeyConfigZone)
-	if err != nil || zoneMap == nil {
-		log.Errorf("unable to fetch zone config from gossip: %s", err)
-		return false
-	}
-	prefixConfig := zoneMap.(PrefixConfigMap).MatchByPrefix(r.Desc().StartKey)
-	zone := prefixConfig.Config.(*proto.ZoneConfig)
-
-	// Fetch the current size of this range in total bytes.
-	return r.stats.GetSize() > zone.RangeMaxBytes
-}
-
-// maybeSplit initiates an asynchronous split via AdminSplit request
-// if ShouldSplit is true. This operation is invoked after each
-// successful execution of a read/write command.
+// maybeSplit checks whether the current size of the range exceeds the
+// max size specified in the zone config. If yes, the range is added
+// to the split queue.
 func (r *Range) maybeSplit() {
-	// If we're already splitting, ignore.
-	if atomic.LoadInt32(&r.metaLock) == int32(1) {
+	if !r.IsLeader() {
 		return
 	}
-	// If this zone's total bytes are in excess, split the range. We omit
-	// the split key in order to have AdminSplit determine it via scan
-	// of range data.
-	if r.ShouldSplit() {
-		// Admin commands run synchronously, so run this in a goroutine.
-		go r.AddCmd(proto.AdminSplit, &proto.AdminSplitRequest{
-			RequestHeader: proto.RequestHeader{Key: r.Desc().StartKey},
-		}, &proto.AdminSplitResponse{}, false)
+	maxBytes := r.GetMaxBytes()
+	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
+		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
 	}
 }
 
@@ -791,7 +777,7 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 			} else {
 				// After successful commit, update cached stats values.
 				r.stats.Update(ms)
-				// If the commit succeeded, potentially initiate a split of this range.
+				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
 			}
 		}
@@ -1428,99 +1414,6 @@ func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error
 	return nil
 }
 
-// AdminSplit divides the range into into two ranges, using either
-// args.SplitKey (if provided) or an internally computed key that aims to
-// roughly equipartition the range by size. The split is done inside of
-// a distributed txn which writes updated and new range descriptors, and
-// updates the range addressing metadata. The handover of responsibility for
-// the reassigned key range is carried out seamlessly through a split trigger
-// carried out as part of the commit of that transaction.
-func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
-	// Only allow a single split per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
-		return
-	}
-	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
-
-	// Determine split key if not provided with args. This scan is
-	// allowed to be relatively slow because admin commands don't block
-	// other commands.
-	desc := r.Desc()
-	splitKey := proto.Key(args.SplitKey)
-	if len(splitKey) == 0 {
-		snap := r.rm.NewSnapshot()
-		defer snap.Stop()
-		var err error
-		if splitKey, err = engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey); err != nil {
-			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
-			return
-		}
-	}
-
-	// Verify some properties of split key.
-	if !r.ContainsKey(splitKey) {
-		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, desc))
-		return
-	}
-	if !engine.IsValidSplitKey(splitKey) {
-		reply.SetGoError(util.Errorf("cannot split range at key %q", splitKey))
-		return
-	}
-	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
-		reply.SetGoError(util.Errorf("range has already been split by key %q", splitKey))
-		return
-	}
-
-	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
-	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
-	if err != nil {
-		reply.SetGoError(util.Errorf("unable to allocate new range descriptor: %s", err))
-		return
-	}
-
-	// Init updated version of existing range descriptor.
-	updatedDesc := *desc
-	updatedDesc.EndKey = splitKey
-
-	log.Infof("initiating a split of range %d %q-%q at key %q", desc.RaftID,
-		proto.Key(desc.StartKey), proto.Key(desc.EndKey), splitKey)
-
-	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("split range %d at %q", desc.RaftID, splitKey),
-	}
-	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
-		// Create range descriptor for second half of split.
-		// Note that this put must go first in order to locate the
-		// transaction record on the correct range.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(newDesc.StartKey), newDesc); err != nil {
-			return err
-		}
-		// Update existing range descriptor for first half of split.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
-			return err
-		}
-		// Update range descriptor addressing record(s).
-		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
-			return err
-		}
-		// End the transaction manually, instead of letting RunTransaction
-		// loop do it, in order to provide a split trigger.
-		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: args.Key},
-			Commit:        true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				SplitTrigger: &proto.SplitTrigger{
-					UpdatedDesc: updatedDesc,
-					NewDesc:     *newDesc,
-				},
-			},
-		}, &proto.EndTransactionResponse{})
-	}); err != nil {
-		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
-	}
-}
-
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
@@ -1711,6 +1604,99 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 func (r *Range) SetHardState(st raftpb.HardState) error {
 	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &st)
+}
+
+// AdminSplit divides the range into into two ranges, using either
+// args.SplitKey (if provided) or an internally computed key that aims to
+// roughly equipartition the range by size. The split is done inside of
+// a distributed txn which writes updated and new range descriptors, and
+// updates the range addressing metadata. The handover of responsibility for
+// the reassigned key range is carried out seamlessly through a split trigger
+// carried out as part of the commit of that transaction.
+func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
+	// Only allow a single split per range at a time.
+	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
+		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
+		return
+	}
+	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
+
+	// Determine split key if not provided with args. This scan is
+	// allowed to be relatively slow because admin commands don't block
+	// other commands.
+	desc := r.Desc()
+	splitKey := proto.Key(args.SplitKey)
+	if len(splitKey) == 0 {
+		snap := r.rm.NewSnapshot()
+		defer snap.Stop()
+		var err error
+		if splitKey, err = engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey); err != nil {
+			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))
+			return
+		}
+	}
+
+	// Verify some properties of split key.
+	if !r.ContainsKey(splitKey) {
+		reply.SetGoError(proto.NewRangeKeyMismatchError(splitKey, splitKey, desc))
+		return
+	}
+	if !engine.IsValidSplitKey(splitKey) {
+		reply.SetGoError(util.Errorf("cannot split range at key %q", splitKey))
+		return
+	}
+	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
+		reply.SetGoError(util.Errorf("range has already been split by key %q", splitKey))
+		return
+	}
+
+	// Create new range descriptor with newly-allocated replica IDs and Raft IDs.
+	newDesc, err := r.rm.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+	if err != nil {
+		reply.SetGoError(util.Errorf("unable to allocate new range descriptor: %s", err))
+		return
+	}
+
+	// Init updated version of existing range descriptor.
+	updatedDesc := *desc
+	updatedDesc.EndKey = splitKey
+
+	log.Infof("initiating a split of range %d %q-%q at key %q", desc.RaftID,
+		proto.Key(desc.StartKey), proto.Key(desc.EndKey), splitKey)
+
+	txnOpts := &client.TransactionOptions{
+		Name: fmt.Sprintf("split range %d at %q", desc.RaftID, splitKey),
+	}
+	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+		// Create range descriptor for second half of split.
+		// Note that this put must go first in order to locate the
+		// transaction record on the correct range.
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(newDesc.StartKey), newDesc); err != nil {
+			return err
+		}
+		// Update existing range descriptor for first half of split.
+		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+			return err
+		}
+		// Update range descriptor addressing record(s).
+		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
+			return err
+		}
+		// End the transaction manually, instead of letting RunTransaction
+		// loop do it, in order to provide a split trigger.
+		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+			RequestHeader: proto.RequestHeader{Key: args.Key},
+			Commit:        true,
+			InternalCommitTrigger: &proto.InternalCommitTrigger{
+				SplitTrigger: &proto.SplitTrigger{
+					UpdatedDesc: updatedDesc,
+					NewDesc:     *newDesc,
+				},
+			},
+		}, &proto.EndTransactionResponse{})
+	}); err != nil {
+		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
+	}
 }
 
 // ReplicaSetsEqual is used in AdminMerge to ensure that the ranges are

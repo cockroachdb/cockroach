@@ -65,6 +65,13 @@ func MakeKey(keys ...Key) Key {
 	return Key(bytes.Join(byteSlices, nil))
 }
 
+// KeySlice implements sort.Interface.
+type KeySlice []Key
+
+func (s KeySlice) Len() int           { return len(s) }
+func (s KeySlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s KeySlice) Less(i, j int) bool { return s[i].Less(s[j]) }
+
 // Returns the next possible byte by appending an \x00.
 func bytesNext(b []byte) []byte {
 	// TODO(spencer): Do we need to enforce KeyMaxLength here?

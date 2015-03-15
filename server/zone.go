@@ -30,6 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+const (
+	// minRangeMaxBytes is the minimum value for range max bytes.
+	minRangeMaxBytes = 1 << 20
+)
+
 // A zoneHandler implements the adminHandler interface.
 type zoneHandler struct {
 	db *client.KV // Key-value database client
@@ -46,6 +51,16 @@ func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
 	config := &proto.ZoneConfig{}
 	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
 		return util.Errorf("zone config has invalid format: %q: %s", body, err)
+	}
+	if len(config.ReplicaAttrs) == 0 {
+		return util.Errorf("attributes for at least one replica must be specified in zone config")
+	}
+	if config.RangeMaxBytes < minRangeMaxBytes {
+		return util.Errorf("RangeMaxBytes %d less than minimum allowed %d", config.RangeMaxBytes, minRangeMaxBytes)
+	}
+	if config.RangeMinBytes >= config.RangeMaxBytes {
+		return util.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
+			config.RangeMinBytes, config.RangeMaxBytes)
 	}
 	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
 	if err := zh.db.PutProto(zoneKey, config); err != nil {
