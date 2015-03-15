@@ -16,9 +16,11 @@
 // Author: Kathy Spradlin (kathyspradlin@gmail.com)
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package proto;
+syntax = "proto2";
+package cockroach.proto;
+option go_package = "proto";
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
 // remote server. Error is the maximum error in the reading of this offset, so

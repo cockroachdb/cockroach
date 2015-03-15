@@ -28,7 +28,7 @@ _testmain.go
 
 .vagrant
 
-cockroach
+/cockroach
 *.swp
 
 # That file is present in the cockroach-dev Docker container, required to avoid
