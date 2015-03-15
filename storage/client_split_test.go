@@ -359,7 +359,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
-	// Rewrite zone config with range max bytes set to 256K.
+	// Rewrite zone config with range max bytes set to 64K.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
@@ -376,7 +376,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	// See if the range's max bytes is modified via gossip callback within 50ms.
 	rng := store.LookupRange(engine.KeyMin, nil)
 	if err := util.IsTrueWithin(func() bool {
-		return rng.GetMaxBytes() == 1<<18
+		return rng.GetMaxBytes() == zoneConfig.RangeMaxBytes
 	}, 50*time.Millisecond); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
