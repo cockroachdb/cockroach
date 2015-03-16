@@ -221,9 +221,9 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 		case <-stopper.ShouldStop():
 			stopper.SetStopped()
 			bq.Lock()
-			bq.Unlock()
 			bq.ranges = map[int64]*rangeItem{}
 			bq.priorityQ = nil
+			bq.Unlock()
 			return
 		}
 	}
