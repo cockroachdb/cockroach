@@ -16,6 +16,8 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
+PWD=$(shell pwd)
+
 PROTOC      := $(PWD)/../../../../../bin/protoc
 PROTOS      := $(sort $(wildcard *.proto))
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
