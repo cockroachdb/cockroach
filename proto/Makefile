@@ -16,17 +16,31 @@
 # Author: Spencer Kimball (spencer.kimball@gmail.com)
 # Author: Andrew Bonventre (andybons@gmail.com)
 
-PROTOC      := ../../../../../bin/protoc
+PWD=$(shell pwd)
+
+PROTOC      := $(PWD)/../../../../../bin/protoc
 PROTOS      := $(sort $(wildcard *.proto))
 PROTO_GO    := $(PROTOS:.proto=.pb.go)
-GOGO_PROTOS := ../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
+GOGO_PROTOS := $(PWD)/../../../../github.com/gogo/protobuf/gogoproto/gogo.proto
 SOURCES     := $(PROTOS:.proto=.pb.cc) github.com/gogo/protobuf/gogoproto/gogo.pb.cc
 HEADERS     := $(PROTOS:.proto=.pb.h) github.com/gogo/protobuf/gogoproto/gogo.pb.h
 
-PROTO_PATH := ../../../../:../../../../github.com/gogo/protobuf/protobuf
-PROTOC_GEN_GOGO := ../../../../../bin/protoc-gen-gogo
+PROTO_PATH := $(PWD)/../..:$(PWD)/../../../../github.com/gogo/protobuf:$(PWD)/../../../../github.com/gogo/protobuf/protobuf
+PROTOC_GEN_GOGO := $(PWD)/../../../../../bin/protoc-gen-gogo
 
+# Protoc is very picky about paths. It doesn't like '..' in any of the input filenames,
+# and generally expects paths and package names to match (this is especially important
+# when compiling the proto files to python). We must work from a few levels higher in
+# the tree so we can use the package name "cockroach.proto". (go is fine with a package
+# name like "proto" but that won't work for other languages where package names come
+# from a global namespace).
+#
+# For c++, it generates a directory structure mirroring the package structure
+# (and these directories must be in the include path), but cgo can only compile
+# a single directory so we symlink the generated pb.cc files into the storage/engine
+# directory.
 all:
-	$(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=../storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS)
-	$(PROTOC) --cpp_out=../storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS)
-	ln -sf github.com/gogo/protobuf/gogoproto/gogo.pb.cc ../storage/engine/gogo.pb.cc
+	(cd ../.. && $(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=cockroach/storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS:%=cockroach/proto/%))
+	(cd ../.. && $(PROTOC) --cpp_out=cockroach/storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS))
+	(cd ../storage/engine && ln -sf gogoproto/gogo.pb.cc .)
+	(cd ../storage/engine && ln -sf cockroach/proto/*.pb.cc .)

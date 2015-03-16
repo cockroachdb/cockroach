@@ -1,1 +1,1 @@
-github.com/gogo/protobuf/gogoproto/gogo.pb.cc
+gogoproto/gogo.pb.cc
