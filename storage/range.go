@@ -783,21 +783,21 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 		return util.Errorf("unrecognized command %q", method)
 	}
 
-	// If we are applying a raft command, update the applied index.
-	if reply.Header().GoError() == nil && index > 0 {
-		if r.appliedIndex >= index {
-			log.Fatalf("applied index moved backwards: %d >= %d", r.appliedIndex, index)
-		}
-		r.appliedIndex = index
-		err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-			proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
-		if err != nil {
-			reply.Header().SetGoError(err)
-		}
-	}
-
 	// On success, flush the MVCC stats to the batch and commit.
 	if err := reply.Header().GoError(); err == nil {
+		// If we are applying a raft command, update the applied index.
+		if index > 0 {
+			if r.appliedIndex >= index {
+				log.Fatalf("applied index moved backwards: %d >= %d", r.appliedIndex, index)
+			}
+			r.appliedIndex = index
+			err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
+			if err != nil {
+				reply.Header().SetGoError(err)
+			}
+		}
+
 		if proto.IsReadWrite(method) {
 			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
 			if err := batch.Commit(); err != nil {

@@ -47,6 +47,7 @@ type EventCommandCommitted struct {
 // An EventMembershipChangeCommitted is broadcast whenever a membership change
 // has been committed.
 type EventMembershipChangeCommitted struct {
+	// GroupID, CommandID, and Index are the same as for EventCommandCommitted.
 	GroupID    uint64
 	CommandID  string
 	Index      uint64

@@ -1718,3 +1718,30 @@ func TestReplicaSetsEqual(t *testing.T) {
 		}
 	}
 }
+
+func TestAppliedIndex(t *testing.T) {
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	var appliedIndex uint64
+	var sum int64
+	for i := int64(1); i <= 10; i++ {
+		args, reply := incrementArgs([]byte("a"), i, 1, tc.store.StoreID())
+		err := tc.rng.AddCmd(proto.Increment, args, reply, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum += i
+
+		if reply.NewValue != sum {
+			t.Errorf("expected %d, got %d", sum, reply.NewValue)
+		}
+
+		newAppliedIndex := atomic.LoadUint64(&tc.rng.appliedIndex)
+		if newAppliedIndex <= appliedIndex {
+			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
+		}
+		appliedIndex = newAppliedIndex
+	}
+}
