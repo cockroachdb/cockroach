@@ -107,9 +107,7 @@ func RetryWithBackoff(opts RetryOptions, fn func() (RetryStatus, error)) error {
 			}
 		}
 		// Wait before retry.
-		select {
-		case <-time.After(wait):
-		}
+		time.Sleep(wait)
 	}
 	return nil
 }
