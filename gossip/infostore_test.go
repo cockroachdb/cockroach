@@ -583,8 +583,9 @@ func TestRegisterCallback(t *testing.T) {
 	wg.Add(2)
 	is.registerCallback("key.*", cb.Add)
 	wg.Wait()
-
-	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(cb.Keys(), expKeys) {
+	actKeys := cb.Keys()
+	sort.Strings(actKeys)
+	if expKeys := []string{"key1-true", "key2-true"}; !reflect.DeepEqual(actKeys, expKeys) {
 		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
 	}
 }
