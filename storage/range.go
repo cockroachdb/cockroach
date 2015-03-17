@@ -269,6 +269,14 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
+// isInitialized is true if we know the metadata of this range, either
+// because we created it or we have received an initial snapshot from
+// another node. It is false when a range has been created in response
+// to an incoming message but we are waiting for our initial snapshot.
+func (r *Range) isInitialized() bool {
+	return len(r.Desc().EndKey) > 0
+}
+
 // Desc atomically returns the range's descriptor.
 func (r *Range) Desc() *proto.RangeDescriptor {
 	return (*proto.RangeDescriptor)(atomic.LoadPointer(&r.desc))
@@ -1322,7 +1330,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 		Index: args.Index - 1,
 		Term:  term,
 	}
-	err = engine.MVCCPutProto(batch, nil, engine.RaftTruncatedStateKey(r.Desc().RaftID),
+	err = engine.MVCCPutProto(batch, ms, engine.RaftTruncatedStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &ts)
 	reply.SetGoError(err)
 }
@@ -1437,15 +1445,15 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	}
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
-		if len(r.Desc().EndKey) > 0 {
-			// If we created this range (and know its start/end keys, set the initial log term.
+		if r.isInitialized() {
+			// Set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
 
 			atomic.StoreUint64(&r.lastIndex, raftInitialLogIndex)
 		} else {
-			// If we don't know the start/end keys, this is a new range we are receiving from
-			// another node. Start from zero so we will receive a snapshot.
+			// This is a new range we are receiving from another node. Start
+			// from zero so we will receive a snapshot.
 			atomic.StoreUint64(&r.lastIndex, 0)
 		}
 	}
@@ -1461,6 +1469,8 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 // loadLastIndex looks in the engine to find the last log index.
 func (r *Range) loadLastIndex() error {
 	logKey := engine.RaftLogPrefix(r.Desc().RaftID)
+	// The log keys are encoded in descending order, so the first log
+	// entry in the database is the last one that was written.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
 		1, proto.ZeroTimestamp, nil)
@@ -1468,6 +1478,8 @@ func (r *Range) loadLastIndex() error {
 		return err
 	}
 	if len(kvs) > 0 {
+		// The log is non-empty, so use the most recent entry's index.
+		// The index is encoded in both the key and the value.
 		var lastEnt raftpb.Entry
 		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &lastEnt)
 		if err != nil {
@@ -1475,9 +1487,12 @@ func (r *Range) loadLastIndex() error {
 		}
 		atomic.StoreUint64(&r.lastIndex, lastEnt.Index)
 	} else if len(kvs) == 0 {
+		// The log is empty, which means we are either starting from scratch
+		// or the entire log has been truncated away. raftTruncatedState
+		// handles both cases.
 		ts, err := r.raftTruncatedState()
 		if err != nil {
-			return nil
+			return err
 		}
 		atomic.StoreUint64(&r.lastIndex, ts.Index)
 	}
@@ -1544,6 +1559,9 @@ func (r *Range) LastIndex() (uint64, error) {
 	return atomic.LoadUint64(&r.lastIndex), nil
 }
 
+// raftTruncatedState returns metadata about the log that preceded the first
+// current entry. This includes both entries that have been compacted away
+// and the dummy entries that make up the starting point of an empty log.
 func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 	ts := proto.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftTruncatedStateKey(r.Desc().RaftID),
@@ -1552,13 +1570,13 @@ func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 		return ts, err
 	}
 	if !ok {
-		if len(r.Desc().EndKey) > 0 {
-			// If we created this range (and know its start/end keys, set the initial log index/term.
+		if r.isInitialized() {
+			// If we created this range, set the initial log index/term.
 			ts.Index = raftInitialLogIndex
 			ts.Term = raftInitialLogTerm
 		} else {
-			// If we don't know the start/end keys, this is a new range we are receiving from
-			// another node. Start from zero so we will receive a snapshot.
+			// This is a new range we are receiving from another node. Start
+			// from zero so we will receive a snapshot.
 			ts.Index = 0
 			ts.Term = 0
 		}
