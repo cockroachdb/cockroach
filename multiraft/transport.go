@@ -197,6 +197,8 @@ func (lt *localRPCTransport) Send(id NodeID, req *RaftMessageRequest) error {
 }
 
 func (lt *localRPCTransport) Close() {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 	close(lt.closed)
 	for _, c := range lt.clients {
 		err := c.Close()
