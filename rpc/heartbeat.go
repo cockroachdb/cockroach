@@ -36,8 +36,8 @@ type HeartbeatService struct {
 
 // Ping echos the contents of the request to the response, and returns the
 // server's current clock value, allowing the requester to measure its clock.
-// The reqeuster should also an estimate of their offset from this server along
-// with their address.
+// The requester should also estimate its offset from this server along
+// with the requester's address.
 func (hs *HeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
