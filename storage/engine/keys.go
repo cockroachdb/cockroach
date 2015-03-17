@@ -71,9 +71,9 @@ func RaftLogPrefix(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, proto.Key{})
 }
 
-// RaftStateKey returns a system-local key for a Raft HardState.
-func RaftStateKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRaftStateSuffix, proto.Key{})
+// RaftHardStateKey returns a system-local key for a Raft HardState.
+func RaftHardStateKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftHardStateSuffix, proto.Key{})
 }
 
 // DecodeRaftStateKey extracts the Raft ID from a RaftStateKey.
@@ -85,6 +85,11 @@ func DecodeRaftStateKey(key proto.Key) int64 {
 	b := key[len(KeyLocalRangeIDPrefix):]
 	_, raftID := encoding.DecodeUvarint(b)
 	return int64(raftID)
+}
+
+// RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
+func RaftTruncatedStateKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftTruncatedStateSuffix, proto.Key{})
 }
 
 // RangeStatKey returns the key for accessing the named stat
@@ -350,8 +355,10 @@ var (
 	KeyLocalRangeIDPrefix = MakeKey(KeyLocalPrefix, proto.Key("i"))
 	// KeyLocalRaftLogSuffix is the suffix for the raft log.
 	KeyLocalRaftLogSuffix = proto.Key("rftl")
-	// KeyLocalRaftStateSuffix is the Suffix for the raft HardState.
-	KeyLocalRaftStateSuffix = proto.Key("rfts")
+	// KeyLocalRaftHardStateSuffix is the Suffix for the raft HardState.
+	KeyLocalRaftHardStateSuffix = proto.Key("rfth")
+	// KeyLocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
+	KeyLocalRaftTruncatedStateSuffix = proto.Key("rftt")
 	// KeyLocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
 	KeyLocalRangeGCMetadataSuffix = proto.Key("rgcm")
 	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's

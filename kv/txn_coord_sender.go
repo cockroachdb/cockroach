@@ -160,8 +160,9 @@ type TxnCoordSender struct {
 }
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
-// distributed DB instance. TxnCoordSenders should be closed when no
-// longer in use via Close().
+// distributed DB instance. A TxnCoordSender should be closed when no
+// longer in use via Close(), which also closes the wrapped sender
+// supplied here.
 func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable bool) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
@@ -200,6 +201,7 @@ func (tc *TxnCoordSender) Close() {
 		close(txn.closer)
 	}
 	tc.txns = map[string]*txnMetadata{}
+	tc.wrapped.Close()
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified

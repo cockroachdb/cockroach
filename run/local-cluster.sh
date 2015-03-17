@@ -139,6 +139,11 @@ fi
 # Fetch the local status contents from node 1 and verify build information is present.
 LOCAL_URL="$DOCKERHOST:${HTTP_PORTS[1]}/_status/local/"
 LOCAL=$(curl --noproxy '*' -s $LOCAL_URL)
+if [[ -z $LOCAL ]]; then
+  echo "Failed to fetch status from node 1"
+  docker logs ${CIDS[1]}
+  fail
+fi
 for key in 'goVersion' 'tag' 'time' 'dependencies'; do
   if [[ -z $(echo $LOCAL | grep "\"$key\":") ]]; then
       echo "Build var missing for '$key' in $LOCAL"

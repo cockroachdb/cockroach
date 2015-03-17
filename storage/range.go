@@ -176,8 +176,6 @@ type Range struct {
 	maxBytes int64          // Max bytes before split.
 	// 1 if a split, merge, or replica change is underway; updated atomically
 	metaLock int32
-	// First non-truncated entry in the raft log. Updated atomically.
-	firstIndex uint64
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -204,7 +202,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	r.SetDesc(desc)
 
-	err := r.loadFirstAndLastIndex()
+	err := r.loadLastIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +267,14 @@ func (r *Range) IsFirstRange() bool {
 // TODO(spencer): this is always true for now.
 func (r *Range) IsLeader() bool {
 	return true
+}
+
+// isInitialized is true if we know the metadata of this range, either
+// because we created it or we have received an initial snapshot from
+// another node. It is false when a range has been created in response
+// to an incoming message but we are waiting for our initial snapshot.
+func (r *Range) isInitialized() bool {
+	return len(r.Desc().EndKey) > 0
 }
 
 // Desc atomically returns the range's descriptor.
@@ -583,7 +589,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
-		log.Errorf("error executing raft command: %s", err)
+		log.Errorf("error executing raft command %s: %s", method, err)
 	}
 	return err
 }
@@ -1303,15 +1309,30 @@ func (r *Range) InternalMerge(batch engine.Engine, ms *engine.MVCCStats, args *p
 
 // InternalTruncateLog discards a prefix of the raft log.
 func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) {
+	// args.Index is the first index to keep.
+	term, err := r.Term(args.Index - 1)
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
 	start := engine.RaftLogKey(r.Desc().RaftID, args.Index).Next()
 	end := engine.RaftLogKey(r.Desc().RaftID, 0)
-	err := batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
+	err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
 		func(kv proto.RawKeyValue) (bool, error) {
 			err := batch.Clear(kv.Key)
 			return false, err
 		})
+	if err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	ts := proto.RaftTruncatedState{
+		Index: args.Index - 1,
+		Term:  term,
+	}
+	err = engine.MVCCPutProto(batch, ms, engine.RaftTruncatedStateKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, nil, &ts)
 	reply.SetGoError(err)
-	atomic.StoreUint64(&r.firstIndex, args.Index)
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
@@ -1417,27 +1438,22 @@ func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error
 // InitialState implements the raft.Storage interface.
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftStateKey(r.Desc().RaftID),
+	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
 	if !found {
 		// We don't have a saved HardState, so set up the defaults.
-		if len(r.Desc().EndKey) > 0 {
-			// If we created this range (and know its start/end keys, set the initial log term.
+		if r.isInitialized() {
+			// Set the initial log term.
 			hs.Term = raftInitialLogTerm
 			hs.Commit = raftInitialLogIndex
 
-			// firstIndex and lastIndex are both inclusive, so when the log is empty
-			// firstIndex == lastIndex + 1. raftInitialLogIndex is the dummy term-only
-			// entry; raftInitialLogIndex+1 is the first regular entry.
-			atomic.StoreUint64(&r.firstIndex, raftInitialLogIndex+1)
 			atomic.StoreUint64(&r.lastIndex, raftInitialLogIndex)
 		} else {
-			// If we don't know the start/end keys, this is a new range we are receiving from
-			// another node. Start from zero so we will receive a snapshot.
-			atomic.StoreUint64(&r.firstIndex, 1)
+			// This is a new range we are receiving from another node. Start
+			// from zero so we will receive a snapshot.
 			atomic.StoreUint64(&r.lastIndex, 0)
 		}
 	}
@@ -1450,31 +1466,35 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	return hs, cs, nil
 }
 
-// loadFirstAndLastIndex looks in the engine to find the first and last log index.
-// TODO(bdarnell): remove unnecessary calls to FirstIndex in etcd/raft and then load
-// the first index lazily (so we don't need to scan the whole range at startup)
-func (r *Range) loadFirstAndLastIndex() error {
+// loadLastIndex looks in the engine to find the last log index.
+func (r *Range) loadLastIndex() error {
 	logKey := engine.RaftLogPrefix(r.Desc().RaftID)
+	// The log keys are encoded in descending order, so the first log
+	// entry in the database is the last one that was written.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
-		0, proto.ZeroTimestamp, nil)
+		1, proto.ZeroTimestamp, nil)
 	if err != nil {
 		return err
 	}
 	if len(kvs) > 0 {
+		// The log is non-empty, so use the most recent entry's index.
+		// The index is encoded in both the key and the value.
 		var lastEnt raftpb.Entry
 		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &lastEnt)
 		if err != nil {
 			return err
 		}
 		atomic.StoreUint64(&r.lastIndex, lastEnt.Index)
-
-		var firstEnt raftpb.Entry
-		err = gogoproto.Unmarshal(kvs[len(kvs)-1].Value.Bytes, &firstEnt)
+	} else if len(kvs) == 0 {
+		// The log is empty, which means we are either starting from scratch
+		// or the entire log has been truncated away. raftTruncatedState
+		// handles both cases.
+		ts, err := r.raftTruncatedState()
 		if err != nil {
 			return err
 		}
-		atomic.StoreUint64(&r.firstIndex, firstEnt.Index)
+		atomic.StoreUint64(&r.lastIndex, ts.Index)
 	}
 	return nil
 }
@@ -1515,14 +1535,17 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 
 // Term implements the raft.Storage interface.
 func (r *Range) Term(i uint64) (uint64, error) {
-	if i == 0 {
-		return 0, nil
-	} else if i == raftInitialLogIndex {
-		// TODO(bdarnell): handle the pre-snapshot dummy entry
-		return raftInitialLogTerm, nil
-	}
 	ents, err := r.Entries(i, i+1)
-	if err != nil {
+	if err == raft.ErrUnavailable {
+		ts, err := r.raftTruncatedState()
+		if err != nil {
+			return 0, err
+		}
+		if i == ts.Index {
+			return ts.Term, nil
+		}
+		return 0, raft.ErrUnavailable
+	} else if err != nil {
 		return 0, err
 	}
 	if len(ents) == 0 {
@@ -1536,9 +1559,38 @@ func (r *Range) LastIndex() (uint64, error) {
 	return atomic.LoadUint64(&r.lastIndex), nil
 }
 
+// raftTruncatedState returns metadata about the log that preceded the first
+// current entry. This includes both entries that have been compacted away
+// and the dummy entries that make up the starting point of an empty log.
+func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
+	ts := proto.RaftTruncatedState{}
+	ok, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftTruncatedStateKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, nil, &ts)
+	if err != nil {
+		return ts, err
+	}
+	if !ok {
+		if r.isInitialized() {
+			// If we created this range, set the initial log index/term.
+			ts.Index = raftInitialLogIndex
+			ts.Term = raftInitialLogTerm
+		} else {
+			// This is a new range we are receiving from another node. Start
+			// from zero so we will receive a snapshot.
+			ts.Index = 0
+			ts.Term = 0
+		}
+	}
+	return ts, nil
+}
+
 // FirstIndex implements the raft.Storage interface.
 func (r *Range) FirstIndex() (uint64, error) {
-	return atomic.LoadUint64(&r.firstIndex), nil
+	ts, err := r.raftTruncatedState()
+	if err != nil {
+		return 0, err
+	}
+	return ts.Index + 1, nil
 }
 
 // Snapshot implements the raft.Storage interface.
@@ -1594,15 +1646,23 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 	// TODO(bdarnell): discard any existing log that is obsoleted by this snapshot.
 	desc := &proto.RangeDescriptor{}
 	err := gogoproto.Unmarshal(snap.Data, desc)
+	if err != nil {
+		return err
+	}
 	r.SetDesc(desc)
-	atomic.StoreUint64(&r.firstIndex, snap.Metadata.Index+1)
 	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
+	ts := proto.RaftTruncatedState{
+		Index: snap.Metadata.Index,
+		Term:  snap.Metadata.Term,
+	}
+	err = engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftTruncatedStateKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, nil, &ts)
 	return err
 }
 
 // SetHardState implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) SetHardState(st raftpb.HardState) error {
-	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftStateKey(r.Desc().RaftID),
+	return engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftHardStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &st)
 }
 

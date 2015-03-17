@@ -1623,6 +1623,21 @@ func TestInternalTruncateLog(t *testing.T) {
 	if err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
+
+	// The term of the last truncated entry is still available.
+	term, err := tc.rng.Term(indexes[4])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if term == 0 {
+		t.Errorf("invalid term 0 for truncated entry")
+	}
+
+	// The terms of older entries are gone.
+	_, err = tc.rng.Term(indexes[3])
+	if err != raft.ErrUnavailable {
+		t.Errorf("expected ErrUnavailable, got %s", err)
+	}
 }
 
 func TestRaftStorage(t *testing.T) {
