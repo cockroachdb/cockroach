@@ -1010,12 +1010,14 @@ func (s *Store) processRaft() {
 			var cmd proto.InternalRaftCommand
 			var groupID int64
 			var commandID string
+			var index uint64
 			var callback func(error)
 
 			switch e := e.(type) {
 			case *multiraft.EventCommandCommitted:
 				groupID = int64(e.GroupID)
 				commandID = e.CommandID
+				index = e.Index
 				err := gogoproto.Unmarshal(e.Command, &cmd)
 				if err != nil {
 					log.Fatal(err)
@@ -1024,6 +1026,7 @@ func (s *Store) processRaft() {
 			case *multiraft.EventMembershipChangeCommitted:
 				groupID = int64(e.GroupID)
 				commandID = e.CommandID
+				index = e.Index
 				callback = e.Callback
 				err := gogoproto.Unmarshal(e.Payload, &cmd)
 				if err != nil {
@@ -1047,7 +1050,7 @@ func (s *Store) processRaft() {
 					groupID, cmd)
 				log.Error(err)
 			} else {
-				err = r.processRaftCommand(cmdIDKey(commandID), cmd)
+				err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
 			}
 			if callback != nil {
 				callback(err)

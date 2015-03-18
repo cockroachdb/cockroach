@@ -92,6 +92,11 @@ func RaftTruncatedStateKey(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRaftTruncatedStateSuffix, proto.Key{})
 }
 
+// RaftAppliedIndexKey returns a system-local key for a raft applied index.
+func RaftAppliedIndexKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftAppliedIndexSuffix, proto.Key{})
+}
+
 // RangeStatKey returns the key for accessing the named stat
 // for the specified Raft ID.
 func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
@@ -359,6 +364,8 @@ var (
 	KeyLocalRaftHardStateSuffix = proto.Key("rfth")
 	// KeyLocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	KeyLocalRaftTruncatedStateSuffix = proto.Key("rftt")
+	// KeyLocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
+	KeyLocalRaftAppliedIndexSuffix = proto.Key("rfta")
 	// KeyLocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
 	KeyLocalRangeGCMetadataSuffix = proto.Key("rgcm")
 	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's

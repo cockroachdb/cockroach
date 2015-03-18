@@ -32,16 +32,25 @@ type EventLeaderElection struct {
 
 // An EventCommandCommitted is broadcast whenever a command has been committed.
 type EventCommandCommitted struct {
-	GroupID   uint64
+	GroupID uint64
+	// CommandID is the application-supplied ID for this command. The same CommandID
+	// may be seen multiple times, so the application should remember this CommandID
+	// for deduping.
 	CommandID string
-	Command   []byte
+	// Index is the raft log index for this event. The application should persist
+	// the Index of the last applied command atomically with any effects of that
+	// command.
+	Index   uint64
+	Command []byte
 }
 
 // An EventMembershipChangeCommitted is broadcast whenever a membership change
 // has been committed.
 type EventMembershipChangeCommitted struct {
+	// GroupID, CommandID, and Index are the same as for EventCommandCommitted.
 	GroupID    uint64
 	CommandID  string
+	Index      uint64
 	NodeID     NodeID
 	ChangeType raftpb.ConfChangeType
 	Payload    []byte

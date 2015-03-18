@@ -314,7 +314,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -355,7 +355,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1663,7 +1663,7 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs, pReply := putArgs(key, value, 1, tc.store.StoreID())
-	if err := tc.rng.executeCmd(proto.Put, pArgs, pReply); err != nil {
+	if err := tc.rng.executeCmd(0, proto.Put, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
@@ -1681,7 +1681,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 	reply := &proto.ConditionalPutResponse{}
-	err := tc.rng.executeCmd(proto.ConditionalPut, args, reply)
+	err := tc.rng.executeCmd(0, proto.ConditionalPut, args, reply)
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)
@@ -1716,5 +1716,32 @@ func TestReplicaSetsEqual(t *testing.T) {
 		if ReplicaSetsEqual(test.a, test.b) != test.expected {
 			t.Fatalf("unexpected replica intersection: %+v", test)
 		}
+	}
+}
+
+func TestAppliedIndex(t *testing.T) {
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	var appliedIndex uint64
+	var sum int64
+	for i := int64(1); i <= 10; i++ {
+		args, reply := incrementArgs([]byte("a"), i, 1, tc.store.StoreID())
+		err := tc.rng.AddCmd(proto.Increment, args, reply, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum += i
+
+		if reply.NewValue != sum {
+			t.Errorf("expected %d, got %d", sum, reply.NewValue)
+		}
+
+		newAppliedIndex := atomic.LoadUint64(&tc.rng.appliedIndex)
+		if newAppliedIndex <= appliedIndex {
+			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
+		}
+		appliedIndex = newAppliedIndex
 	}
 }

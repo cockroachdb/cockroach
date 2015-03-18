@@ -717,6 +717,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 						GroupID:   groupID,
 						CommandID: commandID,
 						Command:   command,
+						Index:     entry.Index,
 					})
 				}
 
@@ -733,6 +734,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
+					Index:      entry.Index,
 					NodeID:     NodeID(cc.NodeID),
 					ChangeType: cc.Type,
 					Payload:    payload,

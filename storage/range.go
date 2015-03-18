@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
@@ -179,7 +180,10 @@ type Range struct {
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
-	closer    chan struct{} // Channel for closing the range
+	// Last index applied to the state machine. Only used in the raft processing
+	// thread to assert that it is monotonically increasing.
+	appliedIndex uint64
+	closer       chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -420,7 +424,7 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
 		return &proto.NotLeaderError{}
 	}
-	err := r.executeCmd(method, args, reply)
+	err := r.executeCmd(0, method, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
@@ -562,7 +566,11 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	return nil
 }
 
-func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCommand) error {
+func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
+	raftCmd proto.InternalRaftCommand) error {
+	if index == 0 {
+		log.Fatal("processRaftCommand requires a non-zero index")
+	}
 	r.Lock()
 	cmd := r.pendingCmds[idKey]
 	delete(r.pendingCmds, idKey)
@@ -585,7 +593,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, raftCmd proto.InternalRaftCom
 			log.Fatal(err)
 		}
 	}
-	err = r.executeCmd(method, args, reply)
+	err = r.executeCmd(index, method, args, reply)
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
@@ -712,7 +720,8 @@ func (r *Range) maybeSplit() {
 // errors which should be classified as a ReplicaCorruptionError--when those
 // bubble up to the point where we've just tried to execute a Raft command, the
 // Raft replica would need to stall itself.
-func (r *Range) executeCmd(method string, args proto.Request, reply proto.Response) error {
+func (r *Range) executeCmd(index uint64, method string, args proto.Request,
+	reply proto.Response) error {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
@@ -776,6 +785,19 @@ func (r *Range) executeCmd(method string, args proto.Request, reply proto.Respon
 
 	// On success, flush the MVCC stats to the batch and commit.
 	if err := reply.Header().GoError(); err == nil {
+		// If we are applying a raft command, update the applied index.
+		if index > 0 {
+			if r.appliedIndex >= index {
+				log.Fatalf("applied index moved backwards: %d >= %d", r.appliedIndex, index)
+			}
+			r.appliedIndex = index
+			err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
+			if err != nil {
+				reply.Header().SetGoError(err)
+			}
+		}
+
 		if proto.IsReadWrite(method) {
 			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
 			if err := batch.Commit(); err != nil {
