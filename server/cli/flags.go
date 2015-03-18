@@ -41,7 +41,7 @@ func InitFlags(ctx *server.Context) {
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
 		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
-	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify a comma-separated list of node "+
+	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify a colon-separated list of node "+
 		"attributes. Attributes are arbitrary strings specifying topography or "+
 		"machine capabilities. Topography might include datacenter designation (e.g. "+
 		"\"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+

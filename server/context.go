@@ -68,8 +68,9 @@ type Context struct {
 	// For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824
 	Stores string
 
-	// Attrs specifies node topography or machine capabilities, used to
-	// match capabilities or location preferences specified in zone configs.
+	// Attrs specifies a colon-separated list of node topography or machine
+	// capabilities, used to match capabilities or location preferences specified
+	// in zone configs.
 	Attrs string
 
 	// Maximum clock offset for the cluster.
@@ -166,7 +167,7 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 }
 
 // parseAttributes parses a colon-separated list of strings,
-// filtering empty strings (i.e. ",," will yield no attributes.
+// filtering empty strings (i.e. "::" will yield no attributes.
 // Returns the list of strings as Attributes.
 func parseAttributes(attrsStr string) proto.Attributes {
 	var filtered []string
