@@ -176,7 +176,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		return len(resp.Rows) >= 5
-	}, 3*time.Second); err != nil {
+	}, 6*time.Second); err != nil {
 		t.Errorf("failed to split 5 times: %s", err)
 	}
 	close(done)
