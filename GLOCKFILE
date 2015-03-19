@@ -1,3 +1,4 @@
+cmd bitbucket.org/tebeka/go2xunit
 cmd github.com/cockroachdb/c-protobuf/cmd/protoc
 cmd github.com/gogo/protobuf/protoc-gen-gogo
 cmd github.com/golang/lint/golint
@@ -5,6 +6,7 @@ cmd github.com/jteeuwen/go-bindata/go-bindata
 cmd github.com/kisielk/errcheck
 cmd github.com/robfig/glock
 cmd golang.org/x/tools/cmd/goimports
+bitbucket.org/tebeka/go2xunit 77968f802fb3
 code.google.com/p/go-commander df033a4b379cd723ef7408b881c1e092cd943831
 code.google.com/p/go-uuid 35bc42037350
 code.google.com/p/snappy-go 8850bd446ad6
