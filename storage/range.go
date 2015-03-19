@@ -1521,10 +1521,12 @@ func (r *Range) loadLastIndex() error {
 	return nil
 }
 
-// Entries implements the raft.Storage interface.
+// Entries implements the raft.Storage interface. Note that maxBytes is advisory
+// and this method will always return at least one entry even if it exceeds
+// maxBytes.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
-func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
+func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	// Scan over the log (which is stored backwards) to find the
 	// requested entries. Reversing [lo, hi) gives us (hi, lo]; since
 	// MVCCScan is inclusive in the other direction we must increment both the
@@ -1552,12 +1554,22 @@ func (r *Range) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
 	for i, j := 0, len(ents)-1; i < j; i, j = i+1, j-1 {
 		ents[i], ents[j] = ents[j], ents[i]
 	}
+
+	// TODO(bdarnell): apply the limit earlier instead of after loading everything.
+	size := ents[0].Size()
+	for i := 1; i < len(ents); i++ {
+		size += ents[i].Size()
+		if uint64(size) > maxBytes {
+			return ents[:i], nil
+		}
+	}
+
 	return ents, nil
 }
 
 // Term implements the raft.Storage interface.
 func (r *Range) Term(i uint64) (uint64, error) {
-	ents, err := r.Entries(i, i+1)
+	ents, err := r.Entries(i, i+1, 0)
 	if err == raft.ErrUnavailable {
 		ts, err := r.raftTruncatedState()
 		if err != nil {
