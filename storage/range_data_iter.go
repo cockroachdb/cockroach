@@ -44,11 +44,15 @@ type rangeDataIterator struct {
 func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
 	r.RLock()
 	startKey := r.Desc().StartKey
-	if startKey.Equal(engine.KeyMin) {
-		startKey = engine.KeyLocalMax
-	}
 	endKey := r.Desc().EndKey
 	r.RUnlock()
+	// The first range in the keyspace starts at KeyMin, which includes the node-local
+	// space. We need the original StartKey to find the range metadata, but the
+	// actual data starts at KeyLocalMax.
+	dataStartKey := startKey
+	if startKey.Equal(engine.KeyMin) {
+		dataStartKey = engine.KeyLocalMax
+	}
 	ri := &rangeDataIterator{
 		ranges: []keyRange{
 			{
@@ -60,7 +64,7 @@ func newRangeDataIterator(r *Range, e engine.Engine) *rangeDataIterator {
 				end:   engine.MVCCEncodeKey(engine.MakeKey(engine.KeyLocalRangeKeyPrefix, encoding.EncodeBytes(nil, endKey))),
 			},
 			{
-				start: engine.MVCCEncodeKey(startKey),
+				start: engine.MVCCEncodeKey(dataStartKey),
 				end:   engine.MVCCEncodeKey(endKey),
 			},
 		},

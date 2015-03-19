@@ -71,7 +71,13 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 		{engine.TransactionKey(r.Desc().StartKey, []byte("1234")), ts0},
 		{engine.TransactionKey(r.Desc().StartKey.Next(), []byte("5678")), ts0},
 		{engine.TransactionKey(prevKey(r.Desc().EndKey), []byte("2468")), ts0},
-		{r.Desc().StartKey.Next(), ts},
+		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
+		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
+		// replace this with something that reliably generates the first valid key in the range.
+		//{r.Desc().StartKey.Next(), ts},
+		// The following line is similar to StartKey.Next() but adds more to the key to
+		// avoid falling into the system-local space.
+		{append(append([]byte{}, r.Desc().StartKey...), '\x01'), ts},
 		{prevKey(r.Desc().EndKey), ts},
 	}
 
@@ -130,11 +136,11 @@ func TestRangeDataIterator(t *testing.T) {
 	tc.rng.SetDesc(&newDesc)
 
 	// Create two more ranges, one before the test range and one after.
-	preRng := createRange(tc.store, 2, proto.Key("a"), proto.Key("b"))
+	preRng := createRange(tc.store, 2, proto.KeyMin, proto.Key("b"))
 	if err := tc.store.AddRange(preRng); err != nil {
 		t.Fatal(err)
 	}
-	postRng := createRange(tc.store, 3, proto.Key("c"), proto.Key("d"))
+	postRng := createRange(tc.store, 3, proto.Key("c"), proto.KeyMax)
 	if err := tc.store.AddRange(postRng); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +152,8 @@ func TestRangeDataIterator(t *testing.T) {
 
 	iter := newRangeDataIterator(tc.rng, tc.rng.rm.Engine())
 	defer iter.Close()
-	for i := 0; iter.Valid(); iter.Next() {
+	i := 0
+	for ; iter.Valid(); iter.Next() {
 		if err := iter.Error(); err != nil {
 			t.Fatal(err)
 		}
@@ -159,6 +166,9 @@ func TestRangeDataIterator(t *testing.T) {
 			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
 		}
 		i++
+	}
+	if i != len(keys) {
+		t.Fatal("there are fewer keys in the iteration than expected")
 	}
 
 	// Destroy range and verify that its data has been completely cleared.
@@ -181,13 +191,25 @@ func TestRangeDataIterator(t *testing.T) {
 	} {
 		iter = newRangeDataIterator(test.r, test.r.rm.Engine())
 		defer iter.Close()
-		for i := 0; iter.Valid(); iter.Next() {
+		i = 0
+		for ; iter.Valid(); iter.Next() {
+			k1, ts1, _ := engine.MVCCDecodeKey(iter.Key())
+			if bytes.HasPrefix(k1, engine.KeyConfigAccountingPrefix) ||
+				bytes.HasPrefix(k1, engine.KeyConfigPermissionPrefix) ||
+				bytes.HasPrefix(k1, engine.KeyConfigZonePrefix) {
+				// Some data is written into the system prefix by Store.BootstrapRange,
+				// but it is not in our expected key list so skip it.
+				// TODO(bdarnell): validate this data instead of skipping it.
+				continue
+			}
 			if key := iter.Key(); !key.Equal(test.keys[i]) {
-				k1, ts1, _ := engine.MVCCDecodeKey(key)
 				k2, ts2, _ := engine.MVCCDecodeKey(test.keys[i])
 				t.Errorf("%d: key mismatch %q(%d) != %q(%d)", i, k1, ts1, k2, ts2)
 			}
 			i++
+		}
+		if i != len(keys) {
+			t.Fatal("there are fewer keys in the iteration than expected")
 		}
 	}
 }
