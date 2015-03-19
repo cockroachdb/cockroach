@@ -59,8 +59,8 @@ type RawMetricSet struct {
 	Gauges     map[string]float64
 }
 
-// timerToken facilitates concurrent timings of durations of the same label.
-type timerToken struct {
+// TimerToken facilitates concurrent timings of durations of the same label.
+type TimerToken struct {
 	Name  string
 	ID    uint32
 	Start time.Time
@@ -211,8 +211,8 @@ func (ms *MetricSystem) UnsubscribeFromProcessedMetrics(
 
 // StartTimer begins a timer and returns a token which is required for halting
 // the timer. This allows for concurrent timings under the same name.
-func (ms *MetricSystem) StartTimer(name string) timerToken {
-	return timerToken{
+func (ms *MetricSystem) StartTimer(name string) TimerToken {
+	return TimerToken{
 		Name:  name,
 		Start: time.Now(),
 	}
@@ -221,7 +221,7 @@ func (ms *MetricSystem) StartTimer(name string) timerToken {
 // StopTimer takes a token given by StartTimer, stops the timer, submits a
 // Histogram of its duration in nanoseconds, and returns its duration in
 // nanoseconds.
-func (ms *MetricSystem) StopTimer(token timerToken) time.Duration {
+func (ms *MetricSystem) StopTimer(token TimerToken) time.Duration {
 	duration := time.Since(token.Start)
 	ms.Histogram(token.Name, float64(duration.Nanoseconds()))
 	return duration
@@ -582,19 +582,26 @@ func (ms *MetricSystem) reaper() {
 			// add aggregate mean
 			for name := range rawMetrics.Histograms {
 				ms.histogramCountMu.RLock()
-				aggCount, countPresent :=
+				aggCountPtr, countPresent :=
 					ms.histogramCountStore[fmt.Sprintf("%s_count", name)]
-				aggSum, sumPresent :=
+				aggSumPtr, sumPresent :=
 					ms.histogramCountStore[fmt.Sprintf("%s_sum", name)]
 				ms.histogramCountMu.RUnlock()
+				var aggCount, aggSum uint64
+				if countPresent {
+					aggCount = atomic.LoadUint64(aggCountPtr)
+				}
+				if sumPresent {
+					aggSum = atomic.LoadUint64(aggSumPtr)
+				}
 
-				if countPresent && sumPresent && *aggCount > 0 {
+				if countPresent && sumPresent && aggCount > 0 {
 					processedMetrics.Metrics[fmt.Sprintf("%s_agg_avg", name)] =
-						float64(*aggSum / *aggCount)
+						float64(aggSum / aggCount)
 					processedMetrics.Metrics[fmt.Sprintf("%s_agg_count", name)] =
-						float64(*aggCount)
+						float64(aggCount)
 					processedMetrics.Metrics[fmt.Sprintf("%s_agg_sum", name)] =
-						float64(*aggSum)
+						float64(aggSum)
 				}
 			}
 
