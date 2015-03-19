@@ -99,6 +99,8 @@ func (ti *testIterator) remove(index int) *Range {
 }
 
 func (ti *testIterator) avgScan() time.Duration {
+	ti.Lock()
+	defer ti.Unlock()
 	return time.Duration(ti.total.Nanoseconds() / int64(ti.count))
 }
 
