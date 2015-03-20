@@ -35,14 +35,10 @@ test:
     - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
     - docker run "cockroachdb/cockroach-dev" test TESTTIMEOUT=30s TESTFLAGS='-v -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/test.log"
     - docker run "cockroachdb/cockroach-dev" testrace RACETIMEOUT=5m TESTFLAGS='-v -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/testrace.log"
-      # Kill off the previous images since we don't care for them any more,
-      # but we do want to save the logs for the following ones.
-      # `docker rm` actually errors on CircleCI but still works, hence the ';'.
-    - docker rm $(docker ps -aq) || true
     - make acceptance
   post:
       # Write the container's log output to artifacts.
-    - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_${cid}.log"; done
+    - i=0; for cid in $(docker ps -aq); do i=$((i+1)); docker logs $cid &> "${CIRCLE_ARTIFACTS}/${i}_$(docker inspect -f '{{ .Config.Hostname }}' ${cid})_${cid}.log"; done
     - mkdir -p ${CIRCLE_TEST_REPORTS}/{go,race}
     - "[ -f ${CIRCLE_ARTIFACTS}/test.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/test.log > ${CIRCLE_TEST_REPORTS}/go/test.xml"
     - "[ -f ${CIRCLE_ARTIFACTS}/testrace.log ] && docker run -i cockroachdb/cockroach-dev shell /go/bin/go2xunit < ${CIRCLE_ARTIFACTS}/testrace.log > ${CIRCLE_TEST_REPORTS}/race/testrace.xml"
