@@ -19,7 +19,7 @@ function cleanup() {
 }
 trap cleanup EXIT
 
-rm -rf build && mkdir -p build
+mkdir -p build
 docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
   rm -rf /build/*
   make build testbuild && \
