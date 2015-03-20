@@ -359,7 +359,14 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
+	maxBytes := int64(1 << 16)
+	rng := store.LookupRange(engine.KeyMin, nil)
+	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
+
 	// Rewrite zone config with range max bytes set to 64K.
+	// This will cause the split queue to split the range in the background.
+	// This must happen after fillRange() because that function is not using
+	// a full-fledged client and cannot handle running concurrently with splits.
 	zoneConfig := &proto.ZoneConfig{
 		ReplicaAttrs: []proto.Attributes{
 			{},
@@ -367,22 +374,18 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 			{},
 		},
 		RangeMinBytes: 1 << 8,
-		RangeMaxBytes: 1 << 16,
+		RangeMaxBytes: maxBytes,
 	}
 	if err := store.DB().PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
 	// See if the range's max bytes is modified via gossip callback within 50ms.
-	rng := store.LookupRange(engine.KeyMin, nil)
 	if err := util.IsTrueWithin(func() bool {
 		return rng.GetMaxBytes() == zoneConfig.RangeMaxBytes
 	}, 50*time.Millisecond); err != nil {
 		t.Fatalf("failed to notice range max bytes update: %s", err)
 	}
-
-	maxBytes := zoneConfig.RangeMaxBytes
-	fillRange(store, rng.Desc().RaftID, proto.Key("test"), maxBytes, t)
 
 	// Verify that the range is in fact split (give it a second for very slow test machines).
 	if err := util.IsTrueWithin(func() bool {
