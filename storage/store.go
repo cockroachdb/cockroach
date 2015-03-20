@@ -320,7 +320,11 @@ func (s *Store) Start() error {
 	}
 
 	// Create ID allocators.
-	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	if err != nil {
+		return err
+	}
+	s.raftIDAlloc = idAlloc
 
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
@@ -648,11 +652,15 @@ func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
 // and range IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
 	desc := &proto.RangeDescriptor{
-		RaftID:   s.raftIDAlloc.Allocate(),
 		StartKey: start,
 		EndKey:   end,
 		Replicas: append([]proto.Replica(nil), replicas...),
 	}
+	raftID, err := s.raftIDAlloc.Allocate()
+	if err != nil {
+		return nil, err
+	}
+	desc.RaftID = raftID
 	return desc, nil
 }
 

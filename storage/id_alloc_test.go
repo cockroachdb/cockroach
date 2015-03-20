@@ -33,12 +33,16 @@ import (
 func TestIDAllocator(t *testing.T) {
 	store, _ := createTestStore(t)
 	allocd := make(chan int, 100)
-	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
 
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 10; j++ {
-				allocd <- int(idAlloc.Allocate())
+				id, _ := idAlloc.Allocate()
+				allocd <- int(id)
 			}
 		}()
 	}
@@ -78,9 +82,89 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if newValue != -1024 {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
-	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
-	value := idAlloc.Allocate()
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
+	value, err := idAlloc.Allocate()
+	if err != nil {
+		t.Errorf("failed to allocate id: %v", err)
+	}
 	if value != 2 {
 		t.Errorf("expected id allocation to have value 2; got %d", value)
 	}
+}
+
+// TestNewIDAllocatorInvalidArgs checks validation logic of NewIDAllocator
+func TestNewIDAllocatorInvalidArgs(t *testing.T) {
+	args := [][]int64{
+		{0, 10}, // minID <= 0
+		{2, 0},  // blockSize < 1
+	}
+	for i := range args {
+		if _, err := NewIDAllocator(nil, nil, args[i][0], args[i][1]); err == nil {
+			t.Errorf("expect to have error return, but got nil")
+		}
+	}
+}
+
+// TestAllocateErrorHandling creates a invalid IDAllocator which will
+// return error when fetch ID from KV DB. Because there isn't existing
+// allocated ID, Allocate() will directly return error
+func TestAllocateErrorHandling(t *testing.T) {
+	store, _ := createTestStore(t)
+	// set nil idKey to trigger KV DB increment error
+	idAlloc, err := NewIDAllocator(nil, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
+
+	_, err = idAlloc.Allocate()
+	if err == nil {
+		t.Errorf("expect to return error, but got nil")
+	}
+}
+
+// TestAllocateErrorWithExistingID allocates a set of ID firstly, then makes
+// IDAllocator invalid, error should happen only after all the allocated
+// ID is returned
+func TestAllocateErrorWithExistingID(t *testing.T) {
+	store, _ := createTestStore(t)
+
+	// firstly create a valid IDAllocator to get some ID
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
+
+	id, err := idAlloc.Allocate()
+	if err != nil {
+		t.Errorf("failed to allocate id: %v", err)
+	}
+	if id != 2 {
+		t.Errorf("expected ID is 2, but got: %d", id)
+	}
+
+	// set nil idKey to trigger KV DB increment error
+	idAlloc.idKey = nil
+
+	// even allocateBlock will return error, but Allocate() will return the
+	// existing ID. Already got one ID from channel, and one allocationTrigger
+	// in the middle, so there will be only 8 ID in the channel
+	for i := 0; i < 8; i++ {
+		id, err := idAlloc.Allocate()
+		if err != nil {
+			t.Errorf("failed to allocate id: %v", err)
+		}
+		if id != int64(i+3) {
+			t.Errorf("expected ID is %d, but got: %d", i+3, id)
+		}
+	}
+
+	// then finally Allocate() will return error
+	_, err = idAlloc.Allocate()
+	if err == nil {
+		t.Errorf("expect to return error, but got nil")
+	}
+
 }

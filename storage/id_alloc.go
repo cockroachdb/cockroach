@@ -20,12 +20,14 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // allocationTrigger is a special ID which if encountered,
 // causes allocation of the next block of IDs.
 const allocationTrigger = 0
+const invalidID = -1
 
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
@@ -35,18 +37,19 @@ type IDAllocator struct {
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
+	err       chan error // channel for returning error from allocateBlock
 }
 
 // NewIDAllocator creates a new ID allocator which increments the
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) *IDAllocator {
+func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) (*IDAllocator, error) {
 	if minID <= allocationTrigger {
-		log.Fatalf("minID must be > %d", allocationTrigger)
+		return nil, util.Errorf("minID must be > %d", allocationTrigger)
 	}
 	if blockSize < 1 {
-		log.Fatalf("blockSize must be a positive integer: %d", blockSize)
+		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &IDAllocator{
 		idKey:     idKey,
@@ -54,21 +57,30 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
+		err:       make(chan error),
 	}
 	ia.ids <- allocationTrigger
-	return ia
+	return ia, nil
 }
 
-// Allocate allocates a new ID from the global KV DB. If multiple
-func (ia *IDAllocator) Allocate() int64 {
-	for {
-		id := <-ia.ids
-		if id == allocationTrigger {
-			go ia.allocateBlock(ia.blockSize)
-		} else {
-			return id
+// Allocate allocates a new ID from the global KV DB, and it will
+// start allocateBlock in background to prefetch ID
+func (ia *IDAllocator) Allocate() (id int64, err error) {
+	exit := false // flag to break loop while allocateBlock return error
+	// even error happens, return the allocated ID until channel is empty
+	for !exit || len(ia.ids) > 0 {
+		select {
+		case id = <-ia.ids:
+			if id == allocationTrigger {
+				go ia.allocateBlock(ia.blockSize)
+			} else {
+				return id, nil
+			}
+		case err = <-ia.err:
+			exit = true
 		}
 	}
+	return invalidID, err
 }
 
 // allocateBlock allocates a block of IDs using db.Increment and
@@ -78,7 +90,8 @@ func (ia *IDAllocator) Allocate() int64 {
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
 	if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
-		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, err)
+		ia.err <- err
+		return
 	}
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
