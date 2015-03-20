@@ -23,11 +23,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -50,6 +52,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	})
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
+	defer db.Close()
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -80,5 +83,100 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		// Hurrah!
 	case <-time.After(1 * time.Second):
 		t.Errorf("get request did not succeed in face of range metadata intent")
+	}
+}
+
+// setupMultipleRanges creates a test server and splits the
+// key range at key "b". Returns the test server and client.
+// The caller is responsible for stopping the server and
+// closing the client.
+func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
+	s := &server.TestServer{}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	sender := client.NewHTTPSender(s.HTTPAddr, &http.Transport{
+		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+	})
+	db := client.NewKV(sender, nil)
+	db.User = storage.UserRoot
+
+	// Split the keyspace at "b".
+	if err := db.Call(proto.AdminSplit,
+		&proto.AdminSplitRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: proto.Key("b"),
+			},
+			SplitKey: proto.Key("b"),
+		}, &proto.AdminSplitResponse{}); err != nil {
+		t.Fatal(err)
+	}
+
+	return s, db
+}
+
+// TestMultiRangeScan verifies that a scan across ranges will
+// return an OpRequiresTxn error.
+func TestMultiRangeScan(t *testing.T) {
+	s, db := setupMultipleRanges(t)
+	defer s.Stop()
+	defer db.Close()
+
+	// Write keys "a" and "b".
+	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
+		pr := &proto.PutResponse{}
+		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sr := &proto.ScanResponse{}
+	if err := db.Call(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0), sr); err != nil {
+		t.Fatalf("unexpected error on scan: %s", err)
+	}
+	if l := len(sr.Rows); l != 2 {
+		t.Errorf("expected 2 rows; got %d", l)
+	}
+}
+
+// TestMultiRangeScanInconsistent verifies that a scan across ranges
+// that doesn't require read consistency will set a timestamp using
+// the clock local to the distributed sender.
+func TestMultiRangeScanInconsistent(t *testing.T) {
+	s, db := setupMultipleRanges(t)
+	defer s.Stop()
+	defer db.Close()
+
+	// Write keys "a" and "b".
+	keys := []proto.Key{proto.Key("a"), proto.Key("b")}
+	ts := []proto.Timestamp{}
+	for _, key := range keys {
+		pr := &proto.PutResponse{}
+		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+			t.Fatal(err)
+		}
+		ts = append(ts, pr.Timestamp)
+	}
+
+	// Do an inconsistent scan from a new dist sender and verify it does
+	// the read at it's local clock and doesn't receive an
+	// OpRequiresTxnError. We set the local clock to the timestamp of
+	// the first key to verify it's used to read only key "a".
+	manual := hlc.NewManualClock(ts[1].WallTime - 1)
+	clock := hlc.NewClock(manual.UnixNano)
+	ds := kv.NewDistSender(clock, s.Gossip())
+	sa := proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0)
+	sa.ReadConsistency = proto.INCONSISTENT
+	sa.User = storage.UserRoot
+	sr := &proto.ScanResponse{}
+	ds.Send(&client.Call{Method: proto.Scan, Args: sa, Reply: sr})
+	if err := sr.GoError(); err != nil {
+		t.Fatal(err)
+	}
+	if l := len(sr.Rows); l != 1 {
+		t.Fatalf("expected 1 row; got %d", l)
+	}
+	if key := sr.Rows[0].Key; !key.Equal(keys[0]) {
+		t.Errorf("expected key %q; got %q", keys[0], key)
 	}
 }

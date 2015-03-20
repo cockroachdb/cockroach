@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -86,6 +87,9 @@ func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
 type DistSender struct {
+	// clock is used to set time for some calls. E.g. read-only ops
+	// which span ranges and don't require read consistency.
+	clock *hlc.Clock
 	// gossip provides up-to-date information about the start of the
 	// key range, used to find the replica metadata for arbitrary key
 	// ranges.
@@ -96,8 +100,9 @@ type DistSender struct {
 
 // NewDistSender returns a client.KVSender instance which connects to the
 // Cockroach cluster via the supplied gossip instance.
-func NewDistSender(gossip *gossip.Gossip) *DistSender {
+func NewDistSender(clock *hlc.Clock, gossip *gossip.Gossip) *DistSender {
 	ds := &DistSender{
+		clock:  clock,
 		gossip: gossip,
 	}
 	ds.rangeCache = NewRangeDescriptorCache(ds)
@@ -260,9 +265,11 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 }
 
 // sendRPC sends one or more RPCs to replicas from the supplied
-// proto.Replica slice. First, replicas which have gossiped
-// addresses are corralled and then sent via rpc.Send, with requirement
-// that one RPC to a server must succeed.
+// proto.Replica slice. First, replicas which have gossiped addresses
+// are corralled and then sent via rpc.Send, with requirement that one
+// RPC to a server must succeed. Returns an RPC error if the request
+// could not be sent. Note that the reply may contain a higher level
+// error and must be checked in addition to the RPC error.
 func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
@@ -348,9 +355,17 @@ func (ds *DistSender) Send(call *client.Call) {
 	// accumulatedResults is used to track the received result number of
 	// multi-range response.
 	var accumulatedResults int64
+
+	// In the event that timestamp isn't set and read consistency isn't
+	// required, set the timestamp using the local clock.
+	if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Timestamp.Equal(proto.ZeroTimestamp) {
+		args.Header().Timestamp = ds.clock.Now()
+	}
+
 	for {
 		reply := call.Reply
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+			reply.Header().Error = nil
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
 			if err == nil {
@@ -360,7 +375,11 @@ func (ds *DistSender) Send(call *client.Call) {
 					if _, ok := call.Reply.(proto.Combinable); !ok {
 						return util.RetryBreak, util.Error("illegal cross-range operation", call)
 					}
-					if call.Args.Header().Txn == nil {
+					// If there's no transaction and op spans ranges, possibly
+					// re-run as part of a transaction for consistency.  The
+					// case where we don't need to re-run is if the read
+					// consistency is not required.
+					if call.Args.Header().Txn == nil && args.Header().ReadConsistency != proto.INCONSISTENT {
 						return util.RetryBreak, &proto.OpRequiresTxnError{}
 					}
 					// This next lookup is likely for free since we've read the
@@ -385,6 +404,9 @@ func (ds *DistSender) Send(call *client.Call) {
 					reply = gogoproto.Clone(call.Reply).(proto.Response)
 				}
 				err = ds.sendRPC(desc, call.Method, args, reply)
+				if err == nil && reply.Header().Error != nil {
+					err = reply.Header().GoError()
+				}
 			}
 
 			if err != nil {
@@ -396,7 +418,7 @@ func (ds *DistSender) Send(call *client.Call) {
 				case *proto.RangeNotFoundError, *proto.RangeKeyMismatchError:
 					// Range descriptor might be out of date - evict it.
 					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
-					// On addressing errors, don't backoff and retry immediately.
+					// On addressing errors, don't backoff; retry immediately.
 					return util.RetryReset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {

@@ -259,7 +259,8 @@ func TestGzip(t *testing.T) {
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	tds := kv.NewTxnCoordSender(kv.NewDistSender(s.Gossip()), s.Clock(), testContext.Linearizable)
+	ds := kv.NewDistSender(s.Clock(), s.Gossip())
+	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
 	defer tds.Close()
 
 	if err := s.node.db.Call(proto.AdminSplit,
