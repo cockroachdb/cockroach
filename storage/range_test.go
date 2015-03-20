@@ -131,6 +131,8 @@ func (tc *testContext) Start(t *testing.T) {
 		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
 		}
+		// We created the store without a real KV client, so it can't perform splits.
+		tc.store.splitQueue.disabled = true
 
 		if tc.rng == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
 			if err := tc.store.BootstrapRange(); err != nil {
