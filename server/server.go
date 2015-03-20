@@ -24,7 +24,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -41,13 +40,8 @@ import (
 	"github.com/elazarl/go-bindata-assetfs"
 )
 
-var (
-	// Regular expression for capturing data directory specifications.
-	storesRE = regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
-
-	// Allocation pool for gzip writers.
-	gzipWriterPool sync.Pool
-)
+// Allocation pool for gzip writers.
+var gzipWriterPool sync.Pool
 
 // Server is the cockroach server node.
 type Server struct {
@@ -94,7 +88,6 @@ func NewServer(ctx *Context) (*Server, error) {
 	if ctx.Certs == "" {
 		tlsConfig = rpc.LoadInsecureTLSConfig()
 	} else {
-		var err error
 		if tlsConfig, err = rpc.LoadTLSConfigFromDir(ctx.Certs); err != nil {
 			return nil, util.Errorf("unable to load TLS config: %v", err)
 		}

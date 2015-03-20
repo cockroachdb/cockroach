@@ -18,6 +18,7 @@
 package server
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -122,6 +123,7 @@ func NewContext() *Context {
 // Init interprets the stores parameter to initialize a slice of
 // engine.Engine objects and parses node attributes.
 func (ctx *Context) Init() error {
+	storesRE := regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 	// Error if regexp doesn't match.
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 	if storeSpecs == nil || len(storeSpecs) == 0 {
