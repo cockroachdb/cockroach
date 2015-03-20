@@ -206,6 +206,21 @@ func TestEqual(t *testing.T) {
 	}
 }
 
+func TestTimestampPrev(t *testing.T) {
+	testCases := []struct {
+		ts, expPrev Timestamp
+	}{
+		{makeTS(1, 2), makeTS(1, 1)},
+		{makeTS(1, 1), makeTS(1, 0)},
+		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
+	}
+	for i, c := range testCases {
+		if prev := c.ts.Prev(); !prev.Equal(c.expPrev) {
+			t.Errorf("%d: expected %s; got %s", i, c.expPrev, prev)
+		}
+	}
+}
+
 func TestValueBothBytesAndIntegerSet(t *testing.T) {
 	k := []byte("key")
 	v := Value{Bytes: []byte("a"), Integer: gogoproto.Int64(0)}

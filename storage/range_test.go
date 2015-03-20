@@ -239,6 +239,30 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
+func TestRangeCanService(t *testing.T) {
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	gArgs, gReply := getArgs(proto.Key("a"), 1, tc.store.StoreID())
+	gArgs.Timestamp = tc.clock.Now()
+
+	// Try a consensus read and verify error.
+	gArgs.ReadConsistency = proto.CONSENSUS
+	if err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true); err == nil {
+		t.Errorf("expected error on consensus read")
+	}
+
+	// Try an inconsistent read within a transaction.
+	gArgs.ReadConsistency = proto.INCONSISTENT
+	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
+	if err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true); err == nil {
+		t.Errorf("expected error on inconsistent read within a txn")
+	}
+
+	// TODO(spencer): verify non-leader inconsistent read works.
+}
+
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {

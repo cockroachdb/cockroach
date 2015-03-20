@@ -342,7 +342,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		}
 		store.DB().Flush()
 		// Scan meta keys directly from engine.
-		kvs, err := engine.MVCCScan(store.Engine(), engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, nil)
+		kvs, err := engine.MVCCScan(store.Engine(), engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

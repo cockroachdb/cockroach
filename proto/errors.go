@@ -74,10 +74,10 @@ func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMi
 // Error formats error.
 func (e *RangeKeyMismatchError) Error() string {
 	if e.Range != nil {
-		return fmt.Sprintf("key range %q-%q outside of bounds of range %q-%q",
+		return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
 			e.RequestStartKey, e.RequestEndKey, e.Range.StartKey, e.Range.EndKey)
 	}
-	return fmt.Sprintf("key range %q-%q could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
+	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
 }
 
 // CanRetry indicates whether or not this RangeKeyMismatchError can be retried.
@@ -150,7 +150,7 @@ func (e *TransactionStatusError) Error() string {
 
 // Error formats error.
 func (e *WriteIntentError) Error() string {
-	return fmt.Sprintf("conflicting write intent at key %q from transaction %s: resolved? %t", e.Key, e.Txn, e.Resolved)
+	return fmt.Sprintf("conflicting write intent at key %s from transaction %s: resolved? %t", e.Key, e.Txn, e.Resolved)
 }
 
 // Error formats error.

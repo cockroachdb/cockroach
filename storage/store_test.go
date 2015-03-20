@@ -935,6 +935,64 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 }
 
+// TestStoreReadInconsistent verifies that gets and scans with
+// read consistency set to INCONSISTENT ignore extant intents.
+func TestStoreReadInconsistent(t *testing.T) {
+	store, _ := createTestStore(t)
+	defer store.Stop()
+
+	keyA := proto.Key("a")
+	keyB := proto.Key("b")
+
+	// First, write keyA.
+	args, reply := putArgs(keyA, []byte("value1"), 1, store.StoreID())
+	if err := store.ExecuteCmd(proto.Put, args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	// Next, write intents for keyA and keyB.
+	args.Value.Bytes = []byte("value2")
+	txnA := newTransaction("test", keyA, 1, proto.SERIALIZABLE, store.clock)
+	txnB := newTransaction("test", keyB, 1, proto.SERIALIZABLE, store.clock)
+	for _, txn := range []*proto.Transaction{txnA, txnB} {
+		args.Key = txn.Key
+		args.Timestamp = txn.Timestamp
+		args.Txn = txn
+		if err := store.ExecuteCmd(proto.Put, args, reply); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Now, get from both keys and verify.
+	gArgs, gReply := getArgs(keyA, 1, store.StoreID())
+	gArgs.ReadConsistency = proto.INCONSISTENT
+	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil {
+		t.Errorf("expected read to succeed: %s", err)
+	} else if !bytes.Equal(gReply.Value.Bytes, []byte("value1")) {
+		t.Errorf("expected value %q, got %q", []byte("value1"), gReply.Value.Bytes)
+	}
+	gArgs.Key = keyB
+	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil {
+		t.Errorf("expected read to succeed: %s", err)
+	} else if gReply.Value != nil {
+		t.Errorf("expected value to be nil, got %+v", gReply.Value)
+	}
+
+	// Scan keys and verify results.
+	sArgs, sReply := scanArgs(keyA, proto.KeyMax, 1, store.StoreID())
+	sArgs.ReadConsistency = proto.INCONSISTENT
+	if err := store.ExecuteCmd(proto.Scan, sArgs, sReply); err != nil {
+		t.Errorf("expected scan to succeed: %s", err)
+	}
+	if l := len(sReply.Rows); l != 1 {
+		t.Errorf("expected 1 result; got %d", l)
+	} else if key := sReply.Rows[0].Key; !key.Equal(keyA) {
+		t.Errorf("expected key %q; got %q", keyA, key)
+	} else if val := sReply.Rows[0].Value.Bytes; !bytes.Equal(val, []byte("value1")) {
+		t.Errorf("expected value %q, got %q", []byte("value1"), sReply.Rows[0].Value.Bytes)
+	}
+}
+
 func TestRaftNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	cases := []struct {

@@ -273,6 +273,26 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
+// canServiceCmd returns an error in the event thatthe range replica
+// cannot service the command as specified. This is of the case in
+// the event that the replica is not the leader.
+func (r *Range) canServiceCmd(method string, args proto.Request) error {
+	if !r.IsLeader() {
+		if !proto.IsReadOnly(method) || args.Header().ReadConsistency == proto.CONSISTENT {
+			// TODO(spencer): when we happen to know the leader, fill it in here via replica.
+			return &proto.NotLeaderError{}
+		}
+	}
+	if proto.IsReadOnly(method) {
+		if args.Header().ReadConsistency == proto.CONSENSUS {
+			return util.Errorf("consensus reads not implemented")
+		} else if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Txn != nil {
+			return util.Errorf("cannot allow inconsistent reads within a transaction")
+		}
+	}
+	return nil
+}
+
 // isInitialized is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response
@@ -348,9 +368,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
-	if !r.IsLeader() {
-		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		err := &proto.NotLeaderError{}
+	if err := r.canServiceCmd(method, args); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
@@ -420,9 +438,8 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	// timestamps. This is because the read-timestamp-cache prevents it
 	// for the active leader and leadership changes force the
 	// read-timestamp-cache to reset its low water mark.
-	if !r.IsLeader() {
-		// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-		return &proto.NotLeaderError{}
+	if err := r.canServiceCmd(method, args); err != nil {
+		return err
 	}
 	err := r.executeCmd(0, method, args, reply)
 
@@ -676,7 +693,7 @@ func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
 // instantiates/returns a config map. Prefix configuration maps
 // include accounting, permissions, and zones.
 func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixConfigMap, error) {
-	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, nil)
+	kvs, err := engine.MVCCScan(r.rm.Engine(), keyPrefix, keyPrefix.PrefixEnd(), 0, proto.MaxTimestamp, true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +874,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 
 // Contains verifies the existence of a key in the key value store.
 func (r *Range) Contains(batch engine.Engine, args *proto.ContainsRequest, reply *proto.ContainsResponse) {
-	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.Txn)
+	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -869,7 +886,7 @@ func (r *Range) Contains(batch engine.Engine, args *proto.ContainsRequest, reply
 
 // Get returns the value for a specified key.
 func (r *Range) Get(batch engine.Engine, args *proto.GetRequest, reply *proto.GetResponse) {
-	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.Txn)
+	val, err := engine.MVCCGet(batch, args.Key, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Value = val
 	reply.SetGoError(err)
 }
@@ -914,7 +931,7 @@ func (r *Range) DeleteRange(batch engine.Engine, ms *engine.MVCCStats, args *pro
 // to some maximum number of results. The last key of the iteration is
 // returned with the reply.
 func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest, reply *proto.ScanResponse) {
-	kvs, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.Txn)
+	kvs, err := engine.MVCCScan(batch, args.Key, args.EndKey, args.MaxResults, args.Timestamp, args.ReadConsistency == proto.CONSISTENT, args.Txn)
 	reply.Rows = kvs
 	reply.SetGoError(err)
 }
@@ -1079,7 +1096,7 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// MaxRanges.
 	metaPrefix := proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
 	nextKey := proto.Key(args.Key).Next()
-	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, args.Txn)
+	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, false, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1502,7 +1519,7 @@ func (r *Range) loadLastIndex() error {
 	// entry in the database is the last one that was written.
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		logKey, logKey.PrefixEnd(),
-		1, proto.ZeroTimestamp, nil)
+		1, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return err
 	}
@@ -1541,7 +1558,7 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
 		engine.RaftLogKey(r.Desc().RaftID, hi).Next(),
 		engine.RaftLogKey(r.Desc().RaftID, lo).Next(),
-		0, proto.ZeroTimestamp, nil)
+		0, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return nil, err
 	}
