@@ -64,9 +64,9 @@ func (b *blockableGroupStorage) InitialState() (raftpb.HardState, raftpb.ConfSta
 	return b.s.InitialState()
 }
 
-func (b *blockableGroupStorage) Entries(lo, hi uint64) ([]raftpb.Entry, error) {
+func (b *blockableGroupStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	b.b.wait()
-	return b.s.Entries(lo, hi)
+	return b.s.Entries(lo, hi, maxBytes)
 }
 
 func (b *blockableGroupStorage) Term(i uint64) (uint64, error) {

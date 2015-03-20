@@ -15,7 +15,7 @@ github.com/biogo/store cb1ae010c5c75b7ce4f5c5d0ef92defcafdfdce4
 github.com/cockroachdb/c-protobuf 9e8dac59ca2a3fc82cd0665ad32b1a36f3df40b8
 github.com/cockroachdb/c-rocksdb 72de025ca13dd4ab2dce63e8e19c6a59b8388ffd
 github.com/cockroachdb/c-snappy af73b00e85e6f0e3c1fcc51f73f1d036df1e99ff
-github.com/coreos/etcd a2be25cba4bb74756890dcd21dd67c66decdfd77
+github.com/coreos/etcd ed81ccc1bbcdaa22b30a35d7e91271125844a9c5
 github.com/elazarl/go-bindata-assetfs 09ba9c6a7e9a5ee35586127fdf88bb20bb4990b7
 github.com/gogo/protobuf bc946d07d1016848dfd2507f90f0859c9471681e
 github.com/golang/glog 44145f04b68cf362d9c4df2182967c2275eaefed

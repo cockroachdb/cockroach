@@ -20,6 +20,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"sync"
@@ -1610,7 +1611,7 @@ func TestInternalTruncateLog(t *testing.T) {
 	}
 
 	// We can still get what remains of the log.
-	entries, err := tc.rng.Entries(indexes[5], indexes[9])
+	entries, err := tc.rng.Entries(indexes[5], indexes[9], math.MaxUint64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1619,7 +1620,7 @@ func TestInternalTruncateLog(t *testing.T) {
 	}
 
 	// But any range that includes the truncated entries returns an error.
-	_, err = tc.rng.Entries(indexes[4], indexes[9])
+	_, err = tc.rng.Entries(indexes[4], indexes[9], math.MaxUint64)
 	if err != raft.ErrUnavailable {
 		t.Errorf("expected ErrUnavailable, got %s", err)
 	}
