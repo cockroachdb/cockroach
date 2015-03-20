@@ -85,9 +85,9 @@ func newAdminServer(db *client.KV) *adminServer {
 	}
 }
 
-// RegisterHandlers registers admin handlers with the supplied
+// registerHandlers registers admin handlers with the supplied
 // serve mux.
-func (s *adminServer) RegisterHandlers(mux *http.ServeMux) {
+func (s *adminServer) registerHandlers(mux *http.ServeMux) {
 	// Pass through requests to /debug to the default serve mux so we
 	// get exported variables and pprof tools.
 	mux.HandleFunc(acctPathPrefix, s.handleAcctAction)

@@ -168,10 +168,10 @@ func (s *Server) initHTTP() {
 		&assetfs.AssetFS{Asset: resource.Asset, AssetDir: resource.AssetDir, Prefix: "./ui/"}))
 
 	// Admin handlers.
-	s.admin.RegisterHandlers(s.mux)
+	s.admin.registerHandlers(s.mux)
 
 	// Status endpoints:
-	s.status.RegisterHandlers(s.mux)
+	s.status.registerHandlers(s.mux)
 
 	s.mux.Handle(kv.RESTPrefix, s.kvREST)
 	s.mux.Handle(kv.DBPrefix, s.kvDB)
