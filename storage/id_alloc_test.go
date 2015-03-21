@@ -108,10 +108,10 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 	}
 }
 
-// TestAllocateErrorHandling creates a invalid IDAllocator which will
+// TestAllocateError creates a invalid IDAllocator which will
 // return error when fetch ID from KV DB. Because there isn't existing
 // allocated ID, Allocate() will directly return error
-func TestAllocateErrorHandling(t *testing.T) {
+func TestAllocateError(t *testing.T) {
 	store, _ := createTestStore(t)
 	// set nil idKey to trigger KV DB increment error
 	idAlloc, err := NewIDAllocator(nil, store.db, 2, 10)
@@ -125,11 +125,11 @@ func TestAllocateErrorHandling(t *testing.T) {
 	}
 }
 
-// TestAllocateErrorWithExistingIDAndRecovery has three steps:
+// TestAllocateErrorAndRecovery has three steps:
 // 1) allocates a set of ID firstly and check
 // 2) then makes IDAllocator invalid, error should happen for subsequent call
 // 3) set IDAllocator to valid again, can continue to allocate ID
-func TestAllocateErrorWithExistingIDAndRecovery(t *testing.T) {
+func TestAllocateErrorAndRecovery(t *testing.T) {
 	store, _ := createTestStore(t)
 
 	// firstly create a valid IDAllocator to get some ID
