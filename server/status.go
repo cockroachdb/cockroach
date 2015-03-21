@@ -75,9 +75,9 @@ func newStatusServer(db *client.KV, gossip *gossip.Gossip) *statusServer {
 	}
 }
 
-// RegisterHandlers registers admin handlers with the supplied
+// registerHandlers registers admin handlers with the supplied
 // serve mux.
-func (s *statusServer) RegisterHandlers(mux *http.ServeMux) {
+func (s *statusServer) registerHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(statusKeyPrefix, s.handleStatus)
 	mux.HandleFunc(statusGossipKeyPrefix, s.handleGossipStatus)
 	mux.HandleFunc(statusLocalKeyPrefix, s.handleLocalStatus)

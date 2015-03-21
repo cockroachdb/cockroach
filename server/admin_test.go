@@ -42,7 +42,7 @@ func startAdminServer() *httptest.Server {
 	}
 	admin := newAdminServer(db)
 	mux := http.NewServeMux()
-	admin.RegisterHandlers(mux)
+	admin.registerHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	if strings.HasPrefix(httpServer.URL, "http://") {
 		testContext.Addr = strings.TrimPrefix(httpServer.URL, "http://")

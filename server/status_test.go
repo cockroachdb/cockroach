@@ -41,7 +41,7 @@ func startStatusServer() *httptest.Server {
 	}
 	status := newStatusServer(db, nil)
 	mux := http.NewServeMux()
-	status.RegisterHandlers(mux)
+	status.registerHandlers(mux)
 	httpServer := httptest.NewServer(mux)
 	return httpServer
 }
