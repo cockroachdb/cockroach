@@ -125,10 +125,11 @@ func TestAllocateErrorHandling(t *testing.T) {
 	}
 }
 
-// TestAllocateErrorWithExistingID allocates a set of ID firstly, then makes
-// IDAllocator invalid, error should happen only after all the allocated
-// ID is returned
-func TestAllocateErrorWithExistingID(t *testing.T) {
+// TestAllocateErrorWithExistingIDAndRecovery has three steps:
+// 1) allocates a set of ID firstly and check
+// 2) then makes IDAllocator invalid, error should happen for subsequent call
+// 3) set IDAllocator to valid again, can continue to allocate ID
+func TestAllocateErrorWithExistingIDAndRecovery(t *testing.T) {
 	store, _ := createTestStore(t)
 
 	// firstly create a valid IDAllocator to get some ID
@@ -150,7 +151,8 @@ func TestAllocateErrorWithExistingID(t *testing.T) {
 
 	// even allocateBlock will return error, but Allocate() will return the
 	// existing ID. Already got one ID from channel, and one allocationTrigger
-	// in the middle, so there will be only 8 ID in the channel
+	// in the middle, so there will be only 8 IDs left in the channel, and start
+	// from 3
 	for i := 0; i < 8; i++ {
 		id, err := idAlloc.Allocate()
 		if err != nil {
@@ -161,10 +163,24 @@ func TestAllocateErrorWithExistingID(t *testing.T) {
 		}
 	}
 
-	// then finally Allocate() will return error
-	_, err = idAlloc.Allocate()
-	if err == nil {
-		t.Errorf("expect to return error, but got nil")
+	// the subsequent Allocate() will return error
+	for i := 0; i < 10; i++ {
+		_, err := idAlloc.Allocate()
+		if err == nil {
+			t.Errorf("expect to return error, but got nil")
+		}
 	}
 
+	// then set correct idKey to recover from error, should be able to allocate
+	// ID again
+	idAlloc.idKey = engine.KeyRaftIDGenerator
+	for i := 11; i < 50; i++ { //previous existing MaxID is 10, so start from 11
+		id, err := idAlloc.Allocate()
+		if err != nil {
+			t.Errorf("failed to allocate id: %v", err)
+		}
+		if id != int64(i) {
+			t.Errorf("expected ID is %d, but got: %d", i, id)
+		}
+	}
 }

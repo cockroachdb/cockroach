@@ -28,6 +28,7 @@ import (
 // causes allocation of the next block of IDs.
 const allocationTrigger = 0
 const invalidID = -1
+const maxRetryTimes = 3
 
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
@@ -67,8 +68,10 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 // start allocateBlock in background to prefetch ID
 func (ia *IDAllocator) Allocate() (id int64, err error) {
 	exit := false // flag to break loop while allocateBlock return error
+	retry := 0    //if receive error, start another allocateBlock to retry
+
 	// even error happens, return the allocated ID until channel is empty
-	for !exit || len(ia.ids) > 0 {
+	for len(ia.ids) > 0 || !exit || retry < maxRetryTimes {
 		select {
 		case id = <-ia.ids:
 			if id == allocationTrigger {
@@ -78,6 +81,11 @@ func (ia *IDAllocator) Allocate() (id int64, err error) {
 			}
 		case err = <-ia.err:
 			exit = true
+
+			// the below allocateBlock will always put ID or error to
+			// channel, so the next Allocate() call will not hang
+			go ia.allocateBlock(ia.blockSize)
+			retry++
 		}
 	}
 	return invalidID, err
