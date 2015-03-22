@@ -50,7 +50,7 @@ test:
       if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ] && [ -s "${CIRCLE_ARTIFACTS}/excerpt.txt" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
           "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues" \
-          -d "{ \"title\": \"test failure #${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(sed -e 's/"/\\"/g' -e 's/$/\\n/' ${CIRCLE_ARTIFACTS}/excerpt.txt | tr -d '\n')\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }"
+          -d "{ \"title\": \"test failure #${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }"
       else
         echo "Not posting an issue."
       fi
