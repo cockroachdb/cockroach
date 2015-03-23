@@ -127,7 +127,7 @@ func (tc *testContext) Start(t *testing.T) {
 	}
 
 	if tc.store == nil {
-		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport)
+		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport, TestStoreConfig)
 		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +216,7 @@ func TestRangeContains(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
-	store := NewStore(clock, e, nil, nil, multiraft.NewLocalRPCTransport())
+	store := NewStore(clock, e, nil, nil, multiraft.NewLocalRPCTransport(), TestStoreConfig)
 	defer store.Stop()
 	r, err := NewRange(desc, store)
 	if err != nil {

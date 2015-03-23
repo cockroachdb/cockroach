@@ -41,7 +41,7 @@ func TestLocalSenderAddStore(t *testing.T) {
 	}
 }
 
-func TesLocalSendertGetStoreCount(t *testing.T) {
+func TestLocalSenderGetStoreCount(t *testing.T) {
 	ls := NewLocalSender()
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
@@ -129,7 +129,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	db := client.NewKV(NewTxnCoordSender(ls, clock, false), nil)
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
-	store := storage.NewStore(clock, eng, db, nil, transport)
+	store := storage.NewStore(clock, eng, db, nil, transport, storage.TestStoreConfig)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
 		transport := multiraft.NewLocalRPCTransport()
 		defer transport.Close()
-		s[i] = storage.NewStore(clock, e[i], db, nil, transport)
+		s[i] = storage.NewStore(clock, e[i], db, nil, transport, storage.TestStoreConfig)
 		s[i].Ident.StoreID = rng.storeID
 		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}); err != nil {
 			t.Fatal(err)

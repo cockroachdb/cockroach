@@ -64,7 +64,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer)
 	}
 	db := client.NewKV(kv.NewDistSender(g), nil)
-	node := NewNode(db, g)
+	node := NewNode(db, g, storage.TestStoreConfig)
 	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
 		t.Fatal(err)
 	}

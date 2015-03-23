@@ -58,12 +58,13 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID  string                 // UUID for Cockroach cluster
-	Descriptor storage.NodeDescriptor // Node ID, network/physical topology
-	gossip     *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
-	db         *client.KV             // KV DB client; used to access global id generators
-	lSender    *kv.LocalSender        // Local KV sender for access to node-local stores
-	closer     chan struct{}
+	ClusterID   string                 // UUID for Cockroach cluster
+	Descriptor  storage.NodeDescriptor // Node ID, network/physical topology
+	storeConfig storage.StoreConfig    // Store/Raft configuration.
+	gossip      *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
+	db          *client.KV             // KV DB client; used to access global id generators
+	lSender     *kv.LocalSender        // Local KV sender for access to node-local stores
+	closer      chan struct{}
 
 	maxAvailPrefix string // Prefix for max avail capacity gossip topic
 }
@@ -118,7 +119,10 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	lSender := kv.NewLocalSender()
 	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, false), nil)
 	// TODO(bdarnell): arrange to have the transport closed.
-	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport())
+	// The bootstrapping store will not connect to other nodes so its StoreConfig
+	// doesn't really matter.
+	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport(),
+		storage.StoreConfig{})
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {
@@ -155,12 +159,13 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 // NewNode returns a new instance of Node, interpreting command line
 // flags to initialize the appropriate Store or set of
 // Stores. Registers the storage instance for the RPC service "Node".
-func NewNode(db *client.KV, gossip *gossip.Gossip) *Node {
+func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConfig) *Node {
 	n := &Node{
-		gossip:  gossip,
-		db:      db,
-		lSender: kv.NewLocalSender(),
-		closer:  make(chan struct{}),
+		storeConfig: storeConfig,
+		gossip:      gossip,
+		db:          db,
+		lSender:     kv.NewLocalSender(),
+		closer:      make(chan struct{}),
 	}
 	return n
 }
@@ -216,7 +221,9 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 	for _, e := range engines {
 		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport.
 		// TODO(bdarnell): arrange to have the transport closed.
-		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport())
+		// TODO(bdarnell): make StoreConfig configurable.
+		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport(),
+			n.storeConfig)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(); err != nil {

@@ -64,7 +64,8 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	db := client.NewKV(sender, nil)
 	db.User = storage.UserRoot
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport())
+	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport(),
+		storage.TestStoreConfig)
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 			t.Fatal(err)
@@ -131,7 +132,7 @@ func (m *multiTestContext) Stop() {
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore(t *testing.T) {
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport)
+	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport, storage.TestStoreConfig)
 	err := store.Bootstrap(proto.StoreIdent{
 		NodeID:  proto.NodeID(len(m.stores) + 1),
 		StoreID: proto.StoreID(len(m.stores) + 1),
@@ -163,7 +164,8 @@ func (m *multiTestContext) StopStore(i int) {
 
 // RetartStore restarts a store previously stopped with StopStore.
 func (m *multiTestContext) RestartStore(i int, t *testing.T) {
-	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport)
+	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport,
+		storage.TestStoreConfig)
 	if err := m.stores[i].Start(); err != nil {
 		t.Fatal(err)
 	}
