@@ -304,14 +304,9 @@ func TestGCQueueLookupGCPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Setup test context and add new zone config map. This actually
-	// starts a split. However, because this store has a mock DB, which
-	// does not support splits, the splits will fail; they usually don't
-	// even get started before the test finishes. However, there may
-	// sometimes be failures in the log about the Batch method not being
-	// supported and the split failing; just ignore these.
-	// TODO(spencer): maybe should be a way to disable splits
-	// functionality for tests like this.
+	// Setup test context and add new zone config map. This would normally
+	// start a split, but splits are disabled in this testing configuration
+	// because the mock DB does not support splits.
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

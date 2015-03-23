@@ -41,6 +41,8 @@ type splitQueue struct {
 	*baseQueue
 	db     *client.KV
 	gossip *gossip.Gossip
+	// Some tests in this package disable the split queue.
+	disabled bool
 }
 
 // newSplitQueue returns a new instance of splitQueue.
@@ -59,7 +61,7 @@ func newSplitQueue(db *client.KV, gossip *gossip.Gossip) *splitQueue {
 // bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
 	// Only queue for Split if this replica is leader.
-	if !rng.IsLeader() {
+	if !rng.IsLeader() || sq.disabled {
 		return
 	}
 
