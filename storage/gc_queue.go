@@ -64,7 +64,7 @@ type gcQueue struct {
 // newGCQueue returns a new instance of gcQueue.
 func newGCQueue() *gcQueue {
 	gcq := &gcQueue{}
-	gcq.baseQueue = newBaseQueue("gc", gcq.shouldQueue, gcq.process, gcq.timer, gcQueueMaxSize)
+	gcq.baseQueue = newBaseQueue("gc", gcq, gcQueueMaxSize)
 	return gcq
 }
 
