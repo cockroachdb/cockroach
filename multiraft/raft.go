@@ -34,28 +34,38 @@ func init() {
 // (at least in the go 1.4 compiler), methods on a value type called through
 // an interface pointer go through an additional layer of indirection that
 // appears on the stack, and would make all our stack frame offsets incorrect.
+//
+// Raft is fairly verbose at the "info" level, so we map "info" messages to
+// glog.V(1) and "debug" messages to glog.V(2).
+//
+// This file is named raft.go instead of something like logger.go because this
+// file's name is used to determine the vmodule parameter: --vmodule=raft=1
 type glogLogger struct{}
 
 func (*glogLogger) Debug(v ...interface{}) {
-	if log.V(1) {
+	if log.V(2) {
 		log.InfoDepth(1, v...)
 	}
 }
 
 func (*glogLogger) Debugf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
-	if log.V(1) {
+	if log.V(2) {
+		s := fmt.Sprintf(format, v...)
 		log.InfoDepth(1, s)
 	}
 }
 
 func (*glogLogger) Info(v ...interface{}) {
-	log.InfoDepth(1, v...)
+	if log.V(1) {
+		log.InfoDepth(1, v...)
+	}
 }
 
 func (*glogLogger) Infof(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
-	log.InfoDepth(1, s)
+	if log.V(1) {
+		s := fmt.Sprintf(format, v...)
+		log.InfoDepth(1, s)
+	}
 }
 
 func (*glogLogger) Warning(v ...interface{}) {
