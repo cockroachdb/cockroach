@@ -370,3 +370,34 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestStoreRangeReplicate verifies that the replication queue will notice
+// under-replicated ranges and replicate them.
+func TestStoreRangeReplicate(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := multiTestContext{}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+
+	// Initialize the gossip network.
+	for _, s := range mtc.stores {
+		s.GossipCapacity(&storage.NodeDescriptor{NodeID: s.Ident.NodeID})
+	}
+	mtc.stores[0].WaitForNodes(3)
+
+	// Once we know our peers, trigger a scan.
+	mtc.stores[0].ForceReplicationScan()
+
+	// The range should become available on every node.
+	if err := util.IsTrueWithin(func() bool {
+		for _, s := range mtc.stores {
+			r := s.LookupRange(proto.Key("a"), proto.Key("b"))
+			if r == nil {
+				return false
+			}
+		}
+		return true
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}

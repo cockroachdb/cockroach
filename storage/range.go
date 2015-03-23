@@ -155,6 +155,7 @@ type RangeManager interface {
 	Allocator() *allocator
 	Gossip() *gossip.Gossip
 	SplitQueue() *splitQueue
+	ReplicateQueue() *replicateQueue
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -2100,5 +2101,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
 	}
+	// Enqueue this range again to see if there are more changes to be made.
+	r.rm.ReplicateQueue().MaybeAdd(r, r.rm.Clock().Now())
 	return nil
 }

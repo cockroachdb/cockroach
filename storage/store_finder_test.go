@@ -29,7 +29,7 @@ import (
 
 func TestCapacityGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	sf := StoreFinder{}
+	sf := newStoreFinder(nil)
 	key := "testkey"
 
 	// Order and value of contentsChanged shouldn't matter.

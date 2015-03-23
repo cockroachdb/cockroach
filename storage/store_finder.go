@@ -35,8 +35,16 @@ type stringSet map[string]struct{}
 // attributes.
 type StoreFinder struct {
 	finderMu     sync.Mutex
+	cond         *sync.Cond
 	capacityKeys stringSet // Tracks gosisp keys used for capacity
 	gossip       *gossip.Gossip
+}
+
+// newStoreFinder creates a StoreFinder.
+func newStoreFinder(g *gossip.Gossip) *StoreFinder {
+	sf := &StoreFinder{gossip: g}
+	sf.cond = sync.NewCond(&sf.finderMu)
+	return sf
 }
 
 // capacityGossipUpdate is a gossip callback triggered whenever capacity
@@ -49,6 +57,18 @@ func (sf *StoreFinder) capacityGossipUpdate(key string, contentsChanged bool) {
 		sf.capacityKeys = stringSet{}
 	}
 	sf.capacityKeys[key] = struct{}{}
+	sf.cond.Broadcast()
+}
+
+// WaitForNodes blocks until at least the given number of nodes are present in the
+// capacity map. Used for tests.
+func (sf *StoreFinder) WaitForNodes(n int) {
+	sf.finderMu.Lock()
+	defer sf.finderMu.Unlock()
+
+	for len(sf.capacityKeys) < n {
+		sf.cond.Wait()
+	}
 }
 
 // findStores is the Store's implementation of a StoreFinder. It returns a list

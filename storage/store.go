@@ -50,6 +50,8 @@ const (
 	// defaultScanInterval is the default value for the scan interval
 	// command line flag.
 	defaultScanInterval = 10 * time.Minute
+	// ttlCapacityGossip is time-to-live for capacity-related info.
+	ttlCapacityGossip = 2 * time.Minute
 )
 
 var (
@@ -298,20 +300,21 @@ type Store struct {
 	*StoreFinder
 	StoreConfig
 
-	Ident       proto.StoreIdent
-	RetryOpts   util.RetryOptions
-	clock       *hlc.Clock
-	engine      engine.Engine       // The underlying key-value store
-	db          *client.KV          // Cockroach KV DB
-	allocator   *allocator          // Makes allocation decisions
-	gossip      *gossip.Gossip      // Configs and store capacities
-	transport   multiraft.Transport // Log replication traffic
-	raftIDAlloc *IDAllocator        // Raft ID allocator
-	gcQueue     *gcQueue            // Garbage collection queue
-	splitQueue  *splitQueue         // Range splitting queue
-	verifyQueue *verifyQueue        // Checksum verification queue
-	scanner     *rangeScanner       // Range scanner
-	multiraft   *multiraft.MultiRaft
+	Ident          proto.StoreIdent
+	RetryOpts      util.RetryOptions
+	clock          *hlc.Clock
+	engine         engine.Engine       // The underlying key-value store
+	db             *client.KV          // Cockroach KV DB
+	allocator      *allocator          // Makes allocation decisions
+	gossip         *gossip.Gossip      // Configs and store capacities
+	transport      multiraft.Transport // Log replication traffic
+	raftIDAlloc    *IDAllocator        // Raft ID allocator
+	gcQueue        *gcQueue            // Garbage collection queue
+	splitQueue     *splitQueue         // Range splitting queue
+	verifyQueue    *verifyQueue        // Checksum verification queue
+	replicateQueue *replicateQueue     // Replication queue
+	scanner        *rangeScanner       // Range scanner
+	multiraft      *multiraft.MultiRaft
 	// scanStopper is used to stop background tasks that might be adding work to the
 	// store. stopper is used to stop the store itself. Deadlocks could result if
 	// the two used the same stopper.
@@ -329,28 +332,29 @@ var _ multiraft.Storage = &Store{}
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip,
 	transport multiraft.Transport, config StoreConfig) *Store {
 	config.setDefaults()
+	sf := newStoreFinder(gossip)
 	s := &Store{
-		StoreFinder: &StoreFinder{gossip: gossip},
+		StoreFinder: sf,
 		StoreConfig: config,
 		RetryOpts:   defaultRangeRetryOptions,
 		clock:       clock,
 		engine:      eng,
 		db:          db,
-		allocator:   &allocator{},
+		allocator:   newAllocator(sf.findStores),
 		gossip:      gossip,
 		transport:   transport,
 		scanStopper: util.NewStopper(0),
 		stopper:     util.NewStopper(0),
 		ranges:      map[int64]*Range{},
 	}
-	s.allocator.storeFinder = s.findStores
 
 	// Add range scanner and configure with queues.
 	s.scanner = newRangeScanner(defaultScanInterval, newStoreRangeIterator(s))
 	s.gcQueue = newGCQueue()
 	s.splitQueue = newSplitQueue(db, gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
-	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue)
+	s.replicateQueue = newReplicateQueue(gossip, s.allocator)
+	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue)
 
 	return s
 }
@@ -513,6 +517,19 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 	}
 }
 
+// GossipCapacity broadcasts the node's capacity on the gossip network.
+func (s *Store) GossipCapacity(n *NodeDescriptor) {
+	storeDesc, err := s.Descriptor(n)
+	if err != nil {
+		log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
+		return
+	}
+	// Unique gossip key per store.
+	keyMaxCapacity := gossip.MakeMaxAvailCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
+	// Gossip store descriptor.
+	s.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
+}
+
 // maybeSplitRangesByConfigs determines ranges which should be
 // split by the boundaries of the prefix config map, if any, and
 // adds them to the split queue.
@@ -533,11 +550,22 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 	}
 }
 
+// ForceReplicationScan iterates over all ranges and enqueues any that need to be
+// replicated. Exposed only for testing.
+func (s *Store) ForceReplicationScan() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, r := range s.ranges {
+		s.replicateQueue.MaybeAdd(r, s.clock.Now())
+	}
+}
+
 // setRangesMaxBytes sets the max bytes for every range according
 // to the zone configs.
 //
 // TODO(spencer): scanning all ranges with the lock held could cause
-//   perf issues if the number of ranges grows large enough.
+// perf issues if the number of ranges grows large enough.
 func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -725,6 +753,9 @@ func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
 
 // SplitQueue accessor.
 func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
+
+// ReplicateQueue accessor.
+func (s *Store) ReplicateQueue() *replicateQueue { return s.replicateQueue }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
