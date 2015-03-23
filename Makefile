@@ -20,7 +20,7 @@
 # Cockroach build rules.
 GO ?= go
 # Allow setting of go build flags from the command line.
-GOFLAGS := 
+GOFLAGS :=
 # Set to 1 to use static linking for all builds (including tests).
 STATIC := $(STATIC)
 # The cockroach image to be used for starting Docker containers
@@ -36,11 +36,17 @@ export CGO_CFLAGS :=-g
 export CGO_CXXFLAGS :=-g
 export CGO_LDFLAGS :=-g
 
-PKG        := "./..."
-TESTS      := ".*"
-TESTFLAGS  := -logtostderr -timeout 10s
-RACEFLAGS  := -logtostderr -timeout 1m
-BENCHFLAGS := -logtostderr -timeout 5m
+# Variables to be overridden on the command line, e.g.
+#   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
+PKG          := "./..."
+TESTS        := ".*"
+TESTTIMEOUT  := 10s
+RACETIMEOUT  := 1m
+BENCHTIMEOUT := 5m
+# STANDARDTESTFLAGS contains flags that you probably don't want to override;
+# TESTFLAGS defaults to empty so setting it doesn't clobber anything standard.
+STANDARDTESTFLAGS := -logtostderr
+TESTFLAGS         :=
 
 ifeq ($(STATIC),1)
 GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
@@ -61,7 +67,7 @@ build:
 .PHONY: test
 test:
 	$(GO) test $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -70,11 +76,11 @@ test:
 .PHONY: testrace
 testrace:
 	$(GO) test $(GOFLAGS) -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(RACEFLAGS)
+	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(RACETIMEOUT) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(BENCHFLAGS)
+	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image which comes without the build environment. See ./build/deploy

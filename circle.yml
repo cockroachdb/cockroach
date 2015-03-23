@@ -33,8 +33,8 @@ test:
     # Check whether the committer forgot to run `go generate`.
     # Either `go generate` does not change any files or it does, in which case we print the diff and fail.
     - docker run cockroachdb/cockroach-dev shell "(go generate ./... && git ls-files --modified --deleted --others --exclude-standard | diff /dev/null -) || (git add -A && git diff -u HEAD && false)" | tee "${CIRCLE_ARTIFACTS}/generate.log"; test ${PIPESTATUS[0]} -eq 0
-    - docker run "cockroachdb/cockroach-dev" test TESTFLAGS='-v -logtostderr -timeout 30s -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/test.log"
-    - docker run "cockroachdb/cockroach-dev" testrace RACEFLAGS='-v -logtostderr -timeout 5m -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/testrace.log"
+    - docker run "cockroachdb/cockroach-dev" test TESTTIMEOUT=30s TESTFLAGS='-v -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/test.log"
+    - docker run "cockroachdb/cockroach-dev" testrace RACETIMEOUT=5m TESTFLAGS='-v -vmodule=multiraft=5,raft=1' > "${CIRCLE_ARTIFACTS}/testrace.log"
       # Kill off the previous images since we don't care for them any more,
       # but we do want to save the logs for the following ones.
       # `docker rm` actually errors on CircleCI but still works, hence the ';'.
