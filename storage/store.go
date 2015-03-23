@@ -244,10 +244,48 @@ func (si *storeRangeIterator) Reset() {
 	si.index = 0
 }
 
+// StoreConfig contains various parameters of a Store.
+type StoreConfig struct {
+	// RaftTickInterval is the resolution of the Raft timer; other raft timeouts
+	// are defined in terms of multiples of this value.
+	RaftTickInterval time.Duration
+
+	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
+	RaftHeartbeatIntervalTicks int
+
+	// RaftElectionTimeoutTicks is the number of ticks that must pass before a follower
+	// considers a leader to have failed and calls a new election. Should be significantly
+	// higher than RaftHeartbeatIntervalTicks. The raft paper recommends a value of 150ms
+	// for local networks.
+	RaftElectionTimeoutTicks int
+}
+
+// setDefaults initializes unset fields in StoreConfig to values
+// suitable for use on a local network.
+func (c *StoreConfig) setDefaults() {
+	if c.RaftTickInterval == 0 {
+		c.RaftTickInterval = 10 * time.Millisecond
+	}
+	if c.RaftHeartbeatIntervalTicks == 0 {
+		c.RaftHeartbeatIntervalTicks = 3
+	}
+	if c.RaftElectionTimeoutTicks == 0 {
+		c.RaftElectionTimeoutTicks = 15
+	}
+}
+
+// TestStoreConfig is a StoreConfig for use in tests which uses very short timeouts.
+var TestStoreConfig = StoreConfig{
+	RaftTickInterval:           time.Millisecond,
+	RaftHeartbeatIntervalTicks: 1,
+	RaftElectionTimeoutTicks:   5,
+}
+
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
 	*StoreFinder
+	StoreConfig
 
 	Ident       proto.StoreIdent
 	RetryOpts   util.RetryOptions
@@ -274,9 +312,11 @@ var _ multiraft.Storage = &Store{}
 
 // NewStore returns a new instance of a store.
 func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip,
-	transport multiraft.Transport) *Store {
+	transport multiraft.Transport, config StoreConfig) *Store {
+	config.setDefaults()
 	s := &Store{
 		StoreFinder: &StoreFinder{gossip: gossip},
+		StoreConfig: config,
 		RetryOpts:   defaultRangeRetryOptions,
 		clock:       clock,
 		engine:      eng,
@@ -343,12 +383,11 @@ func (s *Store) Start() error {
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
 	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
-		Transport: s.transport,
-		Storage:   s,
-		// TODO(bdarnell): parameterize TickInterval and Timeouts.
-		TickInterval:           time.Millisecond,
-		ElectionTimeoutTicks:   5,
-		HeartbeatIntervalTicks: 1,
+		Transport:              s.transport,
+		Storage:                s,
+		TickInterval:           s.RaftTickInterval,
+		ElectionTimeoutTicks:   s.RaftElectionTimeoutTicks,
+		HeartbeatIntervalTicks: s.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
 	})
 	if err != nil {

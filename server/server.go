@@ -115,7 +115,8 @@ func NewServer(ctx *Context) (*Server, error) {
 
 	s.kvDB = kv.NewDBServer(sender)
 	s.kvREST = kv.NewRESTServer(s.kv)
-	s.node = NewNode(s.kv, s.gossip)
+	// TODO(bdarnell): make StoreConfig configurable.
+	s.node = NewNode(s.kv, s.gossip, storage.StoreConfig{})
 	s.admin = newAdminServer(s.kv)
 	s.status = newStatusServer(s.kv, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)

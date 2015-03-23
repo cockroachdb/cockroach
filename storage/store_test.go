@@ -98,7 +98,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := NewStore(clock, eng, nil, g, multiraft.NewLocalRPCTransport())
+	store := NewStore(clock, eng, nil, g, multiraft.NewLocalRPCTransport(), TestStoreConfig)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
-	store := NewStore(clock, eng, nil, nil, transport)
+	store := NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
 
 	// Can't start as haven't bootstrapped.
 	if err := store.Start(); err == nil {
@@ -144,7 +144,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store = NewStore(clock, eng, nil, nil, transport)
+	store = NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
 	if err := store.Start(); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
@@ -167,7 +167,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	transport := multiraft.NewLocalRPCTransport()
-	store := NewStore(clock, eng, nil, nil, transport)
+	store := NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Start(); err == nil {
