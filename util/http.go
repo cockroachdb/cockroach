@@ -33,17 +33,17 @@ const (
 	ContentTypeHeader = "Content-Type"
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
-	// JSON content type.
+	// JSONContentType is the JSON content type.
 	JSONContentType = "application/json"
-	// Alternate JSON content type.
+	// AltJSONContentType is the alternate JSON content type.
 	AltJSONContentType = "application/x-json"
-	// Protobuf content type.
+	// ProtoContentType is the protobuf content type.
 	ProtoContentType = "application/x-protobuf"
-	// Alternate protobuf content type.
+	// AltProtoContentType is the alternate protobuf content type.
 	AltProtoContentType = "application/x-google-protobuf"
-	// YAML content type.
+	// YAMLContentType is the YAML content type.
 	YAMLContentType = "text/yaml"
-	// Alternate YAML content type.
+	// AltYAMLContentType is the alternate YAML content type.
 	AltYAMLContentType = "application/x-yaml"
 )
 
@@ -138,7 +138,7 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed [
 // is used. The value parameter is marshalled using the response
 // encoding and the resulting body and content type are returned. If
 // the encoding could not be determined by either header, the response
-// is marshalled using JSON. An error is retruned on marshalling
+// is marshalled using JSON. An error is returned on marshalling
 // failure.
 func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType) (
 	body []byte, contentType string, err error) {
