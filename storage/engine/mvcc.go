@@ -909,8 +909,10 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 	buf := getBufferPool.Get().(*getBuffer)
 	defer getBufferPool.Put(buf)
 
+	// We store encEndKey and encKey in the same buffer to avoid memory
+	// allocations.
 	encEndKey := mvccEncodeKey(buf.key[0:0], endKey)
-	keyBuf := buf.key[len(encEndKey):len(encEndKey)]
+	keyBuf := encEndKey[len(encEndKey):]
 	encKey := mvccEncodeKey(keyBuf, key)
 
 	// Get a new iterator and define our getEarlierFunc using iter.Seek.
