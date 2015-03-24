@@ -574,7 +574,8 @@ func (s *Store) LookupRange(start, end proto.Key) *Range {
 // permissions, and zones are created. All configs are specified for
 // the empty key prefix, meaning they apply to the entire
 // database. Permissions are granted to all users and the zone
-// requires three replicas with no other specifications.
+// requires three replicas with no other specifications. It also adds
+// the range tree and the root node, the first range, to it.
 func (s *Store) BootstrapRange() error {
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
@@ -641,6 +642,10 @@ func (s *Store) BootstrapRange() error {
 	}
 	key = engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
 	if err := engine.MVCCPutProto(batch, ms, key, now, nil, zoneConfig); err != nil {
+		return err
+	}
+	// Range Tree setup.
+	if _, _, err := s.SetupRangeTree(batch, ms, now, desc.RaftID); err != nil {
 		return err
 	}
 
