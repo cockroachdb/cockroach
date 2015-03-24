@@ -467,11 +467,11 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp,
 	}
 
 	buf := getBufferPool.Get().(*getBuffer)
+	defer getBufferPool.Put(buf)
 
 	metaKey := mvccEncodeKey(buf.key[0:0], key)
 	ok, _, _, err := engine.GetProto(metaKey, &buf.meta)
 	if err != nil || !ok {
-		getBufferPool.Put(buf)
 		return nil, err
 	}
 
@@ -481,7 +481,6 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp,
 		rvalue = &proto.Value{}
 		*rvalue = *value
 	}
-	getBufferPool.Put(buf)
 	return rvalue, err
 }
 
