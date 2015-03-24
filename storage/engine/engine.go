@@ -60,6 +60,9 @@ type Iterator interface {
 	Key() proto.EncodedKey
 	// Value returns the current value as a byte slice.
 	Value() []byte
+	// ValueProto unmarshals the value the iterator is currently
+	// pointing to using a protobuf decoder.
+	ValueProto(msg gogoproto.Message) error
 	// Error returns the error, if any, which the iterator encountered.
 	Error() error
 }
@@ -77,6 +80,11 @@ type Engine interface {
 	Put(key proto.EncodedKey, value []byte) error
 	// Get returns the value for the given key, nil otherwise.
 	Get(key proto.EncodedKey) ([]byte, error)
+	// GetProto fetches the value at the specified key and unmarshals it
+	// using a protobuf decoder. Returns true on success or false if the
+	// key was not found. On success, returns the length in bytes of the
+	// key and the value.
+	GetProto(key proto.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// Iterate scans from start to end keys, visiting at most max
 	// key/value pairs. On each key value pair, the function f is
 	// invoked. If f returns an error or if the scan itself encounters
@@ -180,29 +188,6 @@ func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBy
 	valBytes = int64(len(data))
 
 	bufferPool.Put(buf)
-	return
-}
-
-// GetProto fetches the value at the specified key and unmarshals it
-// using a protobuf decoder. Returns true on success or false if the
-// key was not found. On success, returns the length in bytes of the
-// key and the value.
-func GetProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (ok bool, keyBytes, valBytes int64, err error) {
-	var data []byte
-	if data, err = engine.Get(key); err != nil {
-		return
-	}
-	if data == nil {
-		return
-	}
-	ok = true
-	if msg != nil {
-		if err = gogoproto.Unmarshal(data, msg); err != nil {
-			return
-		}
-	}
-	keyBytes = int64(len(key))
-	valBytes = int64(len(data))
 	return
 }
 

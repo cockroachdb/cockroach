@@ -198,7 +198,7 @@ func TestBatchProto(t *testing.T) {
 	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
 	PutProto(b, proto.EncodedKey("proto"), kv)
 	getKV := &proto.RawKeyValue{}
-	ok, keySize, valSize, err := GetProto(b, proto.EncodedKey("proto"), getKV)
+	ok, keySize, valSize, err := b.GetProto(proto.EncodedKey("proto"), getKV)
 	if !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
@@ -216,14 +216,14 @@ func TestBatchProto(t *testing.T) {
 		t.Errorf("expected %v; got %v", kv, getKV)
 	}
 	// Before commit, proto will not be available via engine.
-	if ok, _, _, err := GetProto(e, proto.EncodedKey("proto"), getKV); ok || err != nil {
+	if ok, _, _, err := e.GetProto(proto.EncodedKey("proto"), getKV); ok || err != nil {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
 	if err := b.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _, _, err := GetProto(e, proto.EncodedKey("proto"), getKV); !ok || err != nil {
+	if ok, _, _, err := e.GetProto(proto.EncodedKey("proto"), getKV); !ok || err != nil {
 		t.Fatalf("expected GetProto to success ok=%t: %s", ok, err)
 	}
 	if !reflect.DeepEqual(getKV, kv) {

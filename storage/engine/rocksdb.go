@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -153,7 +154,7 @@ func (r *RocksDB) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.getInternal(key, nil)
 }
 
-// Get returns the value for the given key.
+// getInternal returns the value for the given key.
 func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot) ([]byte, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
@@ -164,6 +165,39 @@ func (r *RocksDB) getInternal(key proto.EncodedKey, snapshotHandle *C.DBSnapshot
 		return nil, err
 	}
 	return cStringToGoBytes(result), nil
+}
+
+// GetProto fetches the value at the specified key and unmarshals it.
+func (r *RocksDB) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	return r.getProtoInternal(key, msg, nil)
+}
+
+func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
+	snapshotHandle *C.DBSnapshot) (ok bool, keyBytes, valBytes int64, err error) {
+	if len(key) == 0 {
+		err = emptyKeyError()
+		return
+	}
+	var result C.DBString
+	if err = statusToError(C.DBGet(r.rdb, snapshotHandle, goToCSlice(key), &result)); err != nil {
+		return
+	}
+	if result.len <= 0 {
+		return
+	}
+	ok = true
+	if msg != nil {
+		// Make a byte slice that is backed by result.data. This slice
+		// cannot live past the lifetime of this method, but we're only
+		// using it to unmarshal the proto.
+		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
+		err = gogoproto.Unmarshal(data, msg)
+	}
+	C.free(unsafe.Pointer(result.data))
+	keyBytes = int64(len(key))
+	valBytes = int64(result.len)
+	return
 }
 
 // Clear removes the item from the db with the given key.
@@ -336,6 +370,20 @@ func cSliceToGoBytes(s C.DBSlice) []byte {
 	return C.GoBytes(unsafe.Pointer(s.data), s.len)
 }
 
+func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Go limits arrays to a length that will fit in a (signed) 32-bit
+	// integer. Fall back to using cSliceToGoBytes if our slice is
+	// larger.
+	const maxLen = 0x7fffffff
+	if s.len > maxLen {
+		return cSliceToGoBytes(s)
+	}
+	return (*[maxLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
+}
+
 func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
@@ -412,6 +460,11 @@ func (r *rocksDBSnapshot) Put(key proto.EncodedKey, value []byte) error {
 // the snapshot handle.
 func (r *rocksDBSnapshot) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.parent.getInternal(key, r.handle)
+}
+
+func (r *rocksDBSnapshot) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	return r.parent.getProtoInternal(key, msg, r.handle)
 }
 
 // Iterate iterates over the keys between start inclusive and end
@@ -529,6 +582,18 @@ func (r *rocksDBIterator) Key() proto.EncodedKey {
 func (r *rocksDBIterator) Value() []byte {
 	data := C.DBIterValue(r.iter)
 	return cSliceToGoBytes(data)
+}
+
+func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
+	result := C.DBIterValue(r.iter)
+	if result.len <= 0 {
+		return nil
+	}
+	// Make a byte slice that is backed by result.data. This slice
+	// cannot live past the lifetime of this method, but we're only
+	// using it to unmarshal the proto.
+	data := cSliceToUnsafeGoBytes(result)
+	return gogoproto.Unmarshal(data, msg)
 }
 
 func (r *rocksDBIterator) Error() error {
