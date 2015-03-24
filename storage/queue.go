@@ -73,29 +73,28 @@ func (pq *priorityQueue) update(item *rangeItem, priority float64) {
 	heap.Fix(pq, item.index)
 }
 
-// shouldQueueFn accepts current time and a Range and returns whether
-// it should be queued and if so, at what priority.
-type shouldQueueFn func(proto.Timestamp, *Range) (shouldQueue bool, priority float64)
+type queueImpl interface {
+	// shouldQueue accepts current time and a Range and returns whether
+	// it should be queued and if so, at what priority.
+	shouldQueue(proto.Timestamp, *Range) (shouldQueue bool, priority float64)
 
-// processFn accepts current time and a range and executes
-// queue-specific work on it.
-type processFn func(proto.Timestamp, *Range) error
+	// process accepts current time and a range and executes
+	// queue-specific work on it.
+	process(proto.Timestamp, *Range) error
 
-// timerFn returns a duration to wait between processing the next item
-// from the queue.
-type timerFn func() time.Duration
+	// timer returns a duration to wait between processing the next item
+	// from the queue.
+	timer() time.Duration
+}
 
 // baseQueue is the base implementation of the rangeQueue interface.
-// Queue implementations should embed a baseQueue and provide it
-// with shouldQueueFn.
+// Queue implementations should embed a baseQueue and implement queueImpl.
 //
 // baseQueue is not thread safe and is intended for usage only from
 // the scanner's goroutine.
 type baseQueue struct {
 	name       string
-	shouldQ    shouldQueueFn        // Should a range be queued?
-	process    processFn            // Executes queue-specific work on range
-	timer      timerFn              // Returns duration for queue processing
+	impl       queueImpl
 	maxSize    int                  // Maximum number of ranges to queue
 	incoming   chan *Range          // Channel for ranges to be queued
 	sync.Mutex                      // Mutex protects priorityQ and ranges
@@ -109,12 +108,10 @@ type baseQueue struct {
 // maxSize doesn't prevent new ranges from being added, it just
 // limits the total size. Higher priority ranges can still be
 // added; their addition simply removes the lowest priority range.
-func newBaseQueue(name string, shouldQ shouldQueueFn, process processFn, timer timerFn, maxSize int) *baseQueue {
+func newBaseQueue(name string, impl queueImpl, maxSize int) *baseQueue {
 	return &baseQueue{
 		name:     name,
-		shouldQ:  shouldQ,
-		process:  process,
-		timer:    timer,
+		impl:     impl,
 		maxSize:  maxSize,
 		incoming: make(chan *Range, 10),
 		ranges:   map[int64]*rangeItem{},
@@ -142,7 +139,7 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
-	should, priority := bq.shouldQ(now, rng)
+	should, priority := bq.impl.shouldQueue(now, rng)
 	item, ok := bq.ranges[rng.Desc().RaftID]
 	if !should {
 		if ok {
@@ -197,18 +194,18 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 		case <-bq.incoming:
 			if emptyQueue {
 				emptyQueue = false
-				nextTime = time.Now().Add(bq.timer())
+				nextTime = time.Now().Add(bq.impl.timer())
 			}
 		// Process ranges as the timer expires.
 		case <-time.After(nextTime.Sub(time.Now())):
 			start := time.Now()
-			nextTime = start.Add(bq.timer())
+			nextTime = start.Add(bq.impl.timer())
 			bq.Lock()
 			rng := bq.pop()
 			bq.Unlock()
 			if rng != nil {
 				log.Infof("processing range %s from %s queue...", rng, bq.name)
-				if err := bq.process(clock.Now(), rng); err != nil {
+				if err := bq.impl.process(clock.Now(), rng); err != nil {
 					log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
 				}
 				log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))

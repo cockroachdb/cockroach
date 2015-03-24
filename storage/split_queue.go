@@ -51,7 +51,7 @@ func newSplitQueue(db *client.KV, gossip *gossip.Gossip) *splitQueue {
 		db:     db,
 		gossip: gossip,
 	}
-	sq.baseQueue = newBaseQueue("split", sq.shouldQueue, sq.process, sq.timer, splitQueueMaxSize)
+	sq.baseQueue = newBaseQueue("split", sq, splitQueueMaxSize)
 	return sq
 }
 

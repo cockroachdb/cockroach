@@ -47,7 +47,7 @@ type verifyQueue struct {
 // newVerifyQueue returns a new instance of verifyQueue.
 func newVerifyQueue(stats storeStatsFn) *verifyQueue {
 	vq := &verifyQueue{stats: stats}
-	vq.baseQueue = newBaseQueue("verify", vq.shouldQueue, vq.process, vq.timer, verifyQueueMaxSize)
+	vq.baseQueue = newBaseQueue("verify", vq, verifyQueueMaxSize)
 	return vq
 }
 
