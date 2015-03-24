@@ -114,44 +114,30 @@ func (s *adminServer) handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// TODO(bram): using a single handler instead of one each for zone/perm/acct
 // handleAcctAction handles actions for accounting configuration by method.
 func (s *adminServer) handleAcctAction(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		s.handleGetAction(s.acct, w, r, acctPathPrefix)
-	case "PUT", "POST":
-		s.handlePutAction(s.acct, w, r, acctPathPrefix)
-	case "DELETE":
-		s.handleDeleteAction(s.acct, w, r, acctPathPrefix)
-	default:
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-	}
+	s.handleRESTAction(s.acct, w, r, acctPathPrefix)
 }
 
 // handlePermAction handles actions for perm configuration by method.
 func (s *adminServer) handlePermAction(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		s.handleGetAction(s.perm, w, r, permPathPrefix)
-	case "PUT", "POST":
-		s.handlePutAction(s.perm, w, r, permPathPrefix)
-	case "DELETE":
-		s.handleDeleteAction(s.perm, w, r, permPathPrefix)
-	default:
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-	}
+	s.handleRESTAction(s.perm, w, r, permPathPrefix)
 }
 
 // handleZoneAction handles actions for zone configuration by method.
 func (s *adminServer) handleZoneAction(w http.ResponseWriter, r *http.Request) {
+	s.handleRESTAction(s.zone, w, r, zonePathPrefix)
+}
+
+// handleRESTAction handles RESTful admin actions.
+func (s *adminServer) handleRESTAction(handler actionHandler, w http.ResponseWriter, r *http.Request, prefix string) {
 	switch r.Method {
 	case "GET":
-		s.handleGetAction(s.zone, w, r, zonePathPrefix)
+		s.handleGetAction(handler, w, r, prefix)
 	case "PUT", "POST":
-		s.handlePutAction(s.zone, w, r, zonePathPrefix)
+		s.handlePutAction(handler, w, r, prefix)
 	case "DELETE":
-		s.handleDeleteAction(s.zone, w, r, zonePathPrefix)
+		s.handleDeleteAction(handler, w, r, prefix)
 	default:
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 	}
