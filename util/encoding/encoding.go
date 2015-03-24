@@ -20,7 +20,6 @@ package encoding
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -28,48 +27,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/util"
 )
-
-// GobEncode is a convenience function to return the gob representation
-// of the given value. If this value implements an interface, it needs
-// to be registered before GobEncode can be used.
-func GobEncode(v interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	err := gob.NewEncoder(&buf).Encode(&v)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// GobDecode is a convenience function to return the unmarshaled value
-// of the given byte slice. If the value implements an interface, it
-// needs to be registered before GobEncode can be used.
-func GobDecode(b []byte) (interface{}, error) {
-	var result interface{}
-	err := gob.NewDecoder(bytes.NewBuffer(b)).Decode(&result)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// MustGobDecode calls GobDecode and panics in case of an error.
-func MustGobDecode(b []byte) interface{} {
-	bDecoded, err := GobDecode(b)
-	if err != nil {
-		panic(err)
-	}
-	return bDecoded
-}
-
-// MustGobEncode calls GobEncode and panics in case of an error.
-func MustGobEncode(o interface{}) []byte {
-	oEncoded, err := GobEncode(o)
-	if err != nil {
-		panic(err)
-	}
-	return oEncoded
-}
 
 // NewCRC32Checksum returns a CRC32 checksum computed from the input byte slice.
 func NewCRC32Checksum(b []byte) hash.Hash32 {
