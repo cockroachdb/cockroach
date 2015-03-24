@@ -175,8 +175,8 @@ type Range struct {
 	rm       RangeManager   // Makes some store methods available
 	stats    *rangeStats    // Range statistics
 	maxBytes int64          // Max bytes before split.
-	// 1 if a split, merge, or replica change is underway; updated atomically
-	metaLock int32
+	// Held while a split, merge, or replica change is underway.
+	metaLock sync.Mutex
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
@@ -1709,11 +1709,8 @@ func (r *Range) SetHardState(st raftpb.HardState) error {
 // carried out as part of the commit of that transaction.
 func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) {
 	// Only allow a single split per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
-		return
-	}
-	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
+	r.metaLock.Lock()
+	defer r.metaLock.Unlock()
 
 	// Determine split key if not provided with args. This scan is
 	// allowed to be relatively slow because admin commands don't block
@@ -1830,11 +1827,8 @@ func ReplicaSetsEqual(a, b []proto.Replica) bool {
 // A merge requires that the two ranges are collocate on the same set of replicas.
 func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) {
 	// Only allow a single split/merge per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		reply.SetGoError(util.Errorf("range %d metadata locked", r.Desc().RaftID))
-		return
-	}
-	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
+	r.metaLock.Lock()
+	defer r.metaLock.Unlock()
 
 	desc := r.Desc()
 	subsumedDesc := args.SubsumedRange
@@ -1901,10 +1895,8 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 // When removing a replica, only the NodeID and StoreID fields of the Replica are used.
 func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto.Replica) error {
 	// Only allow a single change per range at a time.
-	if !atomic.CompareAndSwapInt32(&r.metaLock, int32(0), int32(1)) {
-		return util.Errorf("range %d metadata locked", r.Desc().RaftID)
-	}
-	defer func() { atomic.StoreInt32(&r.metaLock, int32(0)) }()
+	r.metaLock.Lock()
+	defer r.metaLock.Unlock()
 
 	// Validate the request and prepare the new descriptor.
 	desc := r.Desc()

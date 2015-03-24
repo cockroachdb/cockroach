@@ -104,7 +104,8 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 }
 
 // TestStoreRangeSplitConcurrent verifies that concurrent range splits
-// of the same range are disallowed.
+// of the same range are executed serially, and all but the first fail
+// because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
@@ -118,7 +119,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 			args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
 			err := store.ExecuteCmd(proto.AdminSplit, args, reply)
 			if err != nil {
-				if matched, regexpErr := regexp.MatchString(".*range 1 metadata locked", err.Error()); !matched || regexpErr != nil {
+				if matched, regexpErr := regexp.MatchString(".*outside of bounds of range", err.Error()); !matched || regexpErr != nil {
 					t.Errorf("error %s didn't match: %s", err, regexpErr)
 				} else {
 					atomic.AddInt32(&failureCount, 1)
@@ -129,7 +130,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	if failureCount != concurrentCount-1 {
-		t.Fatalf("concurrent splits succeeded unexpectedly")
+		t.Fatalf("concurrent splits succeeded unexpectedly; failureCount=%d", failureCount)
 	}
 }
 
