@@ -6,3 +6,4 @@ cockroach
 */*/*.test
 */*/*/*.test
 storage/engine/mvcc_scan_*
+build/deploy/build
