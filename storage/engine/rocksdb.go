@@ -191,8 +191,7 @@ func (r *RocksDB) getProtoInternal(key proto.EncodedKey, msg gogoproto.Message,
 		// Make a byte slice that is backed by result.data. This slice
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the proto.
-		// data := C.GoBytes(unsafe.Pointer(result.data), result.len)
-		data := (*[0x7fffffff]byte)(unsafe.Pointer(result.data))[:result.len:result.len]
+		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
 		err = gogoproto.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
@@ -369,6 +368,20 @@ func cSliceToGoBytes(s C.DBSlice) []byte {
 		return nil
 	}
 	return C.GoBytes(unsafe.Pointer(s.data), s.len)
+}
+
+func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
+	if s.data == nil {
+		return nil
+	}
+	// Go limits arrays to a length that will fit in a (signed) 32-bit
+	// integer. Fall back to using cSliceToGoBytes if our slice is
+	// larger.
+	const maxLen = 0x7fffffff
+	if s.len > maxLen {
+		return cSliceToGoBytes(s)
+	}
+	return (*[maxLen]byte)(unsafe.Pointer(s.data))[:s.len:s.len]
 }
 
 func statusToError(s C.DBStatus) error {
@@ -579,8 +592,7 @@ func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
 	// Make a byte slice that is backed by result.data. This slice
 	// cannot live past the lifetime of this method, but we're only
 	// using it to unmarshal the proto.
-	// data := cSliceToGoBytes(result)
-	data := (*[0x7fffffff]byte)(unsafe.Pointer(result.data))[:result.len:result.len]
+	data := cSliceToUnsafeGoBytes(result)
 	return gogoproto.Unmarshal(data, msg)
 }
 
