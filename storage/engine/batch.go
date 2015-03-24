@@ -26,6 +26,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // Batch wrap an instance of Engine and provides a limited subset of
@@ -87,6 +88,24 @@ func (b *Batch) Get(key proto.EncodedKey) ([]byte, error) {
 		}
 	}
 	return b.engine.Get(key)
+}
+
+// GetProto fetches the value at the specified key and unmarshals it.
+func (b *Batch) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	var data []byte
+	if data, err = b.Get(key); err != nil || data == nil {
+		return
+	}
+	ok = true
+	if msg != nil {
+		if err = gogoproto.Unmarshal(data, msg); err != nil {
+			return
+		}
+	}
+	keyBytes = int64(len(key))
+	valBytes = int64(len(data))
+	return
 }
 
 // Iterate invokes f on key/value pairs merged from the underlying
@@ -307,6 +326,10 @@ func (bi *batchIterator) Value() []byte {
 		return nil
 	}
 	return bi.pending[0].Value
+}
+
+func (bi *batchIterator) ValueProto(msg gogoproto.Message) error {
+	return gogoproto.Unmarshal(bi.Value(), msg)
 }
 
 func (bi *batchIterator) Error() error {

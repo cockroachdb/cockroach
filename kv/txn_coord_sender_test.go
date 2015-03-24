@@ -356,7 +356,7 @@ func verifyCleanup(key proto.Key, db *client.KV, eng engine.Engine, t *testing.T
 
 	if err := util.IsTrueWithin(func() bool {
 		meta := &proto.MVCCMetadata{}
-		ok, _, _, err := engine.GetProto(eng, engine.MVCCEncodeKey(key), meta)
+		ok, _, _, err := eng.GetProto(engine.MVCCEncodeKey(key), meta)
 		if err != nil {
 			t.Errorf("error getting MVCC metadata: %s", err)
 		}

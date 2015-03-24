@@ -463,13 +463,13 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp,
 		if bytes.Compare(key, end) >= 0 {
 			return nil, iter.Error()
 		}
-		return key, valueUnmarshal(iter, msg)
+		return key, iter.ValueProto(msg)
 	}
 
 	buf := getBufferPool.Get().(*getBuffer)
 
 	metaKey := mvccEncodeKey(buf.key[0:0], key)
-	ok, _, _, err := GetProto(engine, metaKey, &buf.meta)
+	ok, _, _, err := engine.GetProto(metaKey, &buf.meta)
 	if err != nil || !ok {
 		getBufferPool.Put(buf)
 		return nil, err
@@ -528,7 +528,7 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 			valueKey, err = getValue(engine, latestKey.Next(), MVCCEncodeKey(key.Next()), value)
 		} else {
 			var ok bool
-			ok, _, _, err = GetProto(engine, latestKey, value)
+			ok, _, _, err = engine.GetProto(latestKey, value)
 			if ok {
 				valueKey = latestKey
 			}
@@ -682,7 +682,7 @@ func mvccPutInternal(engine Engine, ms *MVCCStats, key proto.Key, timestamp prot
 
 	meta := &buf.meta
 	metaKey := mvccEncodeKey(buf.key[0:0], key)
-	ok, origMetaKeySize, origMetaValSize, err := GetProto(engine, metaKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
 	if err != nil {
 		return err
 	}
@@ -927,7 +927,7 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 		if bytes.Compare(key, end) >= 0 {
 			return nil, iter.Error()
 		}
-		return key, valueUnmarshal(iter, msg)
+		return key, iter.ValueProto(msg)
 	}
 
 	res := []proto.KeyValue{}
@@ -944,7 +944,7 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 		if isValue {
 			return nil, util.Errorf("expected an MVCC metadata key: %q", metaKey)
 		}
-		if err := valueUnmarshal(iter, &buf.meta); err != nil {
+		if err := iter.ValueProto(&buf.meta); err != nil {
 			return nil, err
 		}
 		value, err := mvccGetInternal(engine, key, metaKey, timestamp, txn, getValue, buf)
@@ -1055,7 +1055,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 
 	metaKey := MVCCEncodeKey(key)
 	meta := &proto.MVCCMetadata{}
-	ok, origMetaKeySize, origMetaValSize, err := GetProto(engine, metaKey, meta)
+	ok, origMetaKeySize, origMetaValSize, err := engine.GetProto(metaKey, meta)
 	if err != nil {
 		return err
 	}
@@ -1143,7 +1143,7 @@ func MVCCResolveWriteIntent(engine Engine, ms *MVCCStats, key proto.Key, timesta
 		}
 		// Get the bytes for the next version so we have size for stat counts.
 		value := proto.MVCCValue{}
-		ok, _, valueSize, err := GetProto(engine, kvs[0].Key, &value)
+		ok, _, valueSize, err := engine.GetProto(kvs[0].Key, &value)
 		if err != nil || !ok {
 			return util.Errorf("unable to fetch previous version for key %q (%t): %s", kvs[0].Key, ok, err)
 		}

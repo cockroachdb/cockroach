@@ -449,6 +449,11 @@ func (r *rocksDBSnapshot) Get(key proto.EncodedKey) ([]byte, error) {
 	return r.parent.getInternal(key, r.handle)
 }
 
+func (r *rocksDBSnapshot) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	return r.parent.getProtoInternal(key, msg, r.handle)
+}
+
 // Iterate iterates over the keys between start inclusive and end
 // exclusive, invoking f() on each key/value pair using the snapshot
 // handle.
@@ -566,7 +571,7 @@ func (r *rocksDBIterator) Value() []byte {
 	return cSliceToGoBytes(data)
 }
 
-func (r *rocksDBIterator) valueUnmarshal(msg gogoproto.Message) error {
+func (r *rocksDBIterator) ValueProto(msg gogoproto.Message) error {
 	result := C.DBIterValue(r.iter)
 	if result.len <= 0 {
 		return nil
