@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -131,10 +132,10 @@ func (c *testCluster) createGroup(groupID uint64, firstNode, numReplicas int) {
 	}
 }
 
-func (c *testCluster) triggerElection(i int) {
-	// Elections are currently triggered after ElectionTimeoutTicks+1 ticks.
-	c.tickers[i].Tick()
-	c.tickers[i].Tick()
+func (c *testCluster) triggerElection(nodeIndex int, groupID uint64) {
+	if err := c.nodes[nodeIndex].multiNode.Campaign(context.Background(), groupID); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 // Trigger an election on node i and wait for it to complete.
@@ -162,7 +163,7 @@ func TestInitialLeaderElection(t *testing.T) {
 		groupID := uint64(1)
 		cluster.createGroup(groupID, 0, 3)
 
-		cluster.triggerElection(leaderIndex)
+		cluster.triggerElection(leaderIndex, groupID)
 		event := cluster.waitForElection(leaderIndex)
 		if event.GroupID != groupID {
 			t.Fatalf("election event had incorrect group id %v", event.GroupID)
@@ -235,7 +236,7 @@ func TestCommand(t *testing.T) {
 	defer cluster.stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
-	cluster.triggerElection(0)
+	cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
 
 	// Submit a command to the leader
@@ -258,7 +259,7 @@ func TestSlowStorage(t *testing.T) {
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 
-	cluster.triggerElection(0)
+	cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
 
 	// Block the storage on the last node.
@@ -305,7 +306,7 @@ func TestMembershipChange(t *testing.T) {
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 1)
-	cluster.triggerElection(0)
+	cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
 
 	// Consume and apply the membership change events.

@@ -164,7 +164,6 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 	leaderIndex := 0 // first node is leader
 	nc := nodeCount
 	ltc := tickCount // leader tick count
-	ec := 2          // extra ticks; due to election triggering.
 	// Ticks of first follower. Hard coded to one in the test below, since any
 	// higher value can lead to new elections which break the test.
 	// Assigning this to a variable helps to make sense of the formulae below.
@@ -172,13 +171,13 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 
 	expCnt := heartbeatCountMap{
 		// The leader is the only node that receives responses.
-		uint64(leaderIndex + 1): {reqOut: (ec + ltc) * (nc - 1), reqIn: ftc, respOut: 0, respIn: ltc * (nc - 1)},
+		uint64(leaderIndex + 1): {reqOut: (ltc) * (nc - 1), reqIn: ftc, respOut: 0, respIn: ltc * (nc - 1)},
 	}
 	// The first follower ticks `ftc` times, but nobody responds.
-	expCnt[2] = heartbeatCount{reqOut: (nc - 1) * ftc, reqIn: ec + ltc, respOut: ltc, respIn: 0}
+	expCnt[2] = heartbeatCount{reqOut: (nc - 1) * ftc, reqIn: ltc, respOut: ltc, respIn: 0}
 	// The remaining nodes follow the leader and don't tick.
 	for i := 2; i < nodeCount; i++ {
-		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ec + ltc + ftc, respOut: ltc, respIn: 0}
+		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ltc + ftc, respOut: ltc, respIn: 0}
 	}
 
 	cluster, stopper := blockingCluster(nc, t)
@@ -194,7 +193,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 	go func() {
 		// Create group, elect leader, then send ticks as we want them.
 		cluster.createGroup(1, 0, nc)
-		cluster.triggerElection(leaderIndex)
+		cluster.triggerElection(leaderIndex, 1)
 		cluster.waitForElection(leaderIndex)
 		cluster.tickers[leaderIndex+1].Tick() // Single tick for first follower.
 		for i := 0; i < ltc; i++ {
@@ -249,7 +248,8 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		cluster.createGroup(2, 2, 3)
 		// The node at index 2 (nodeID 3) is contained in both groups
 		// Two requests to #1, #2, #4, #5 (from #3).
-		cluster.triggerElection(2)
+		cluster.triggerElection(2, 1)
+		cluster.triggerElection(2, 2)
 		// Wait until it winds up elected twice
 		for i := 0; i < 2; i++ {
 			if el := cluster.waitForElection(2); el.NodeID != 3 {
@@ -278,7 +278,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 		<-firstPhase
 		// Elect a new leader for the second group.
 		// Two requests to #3, #4
-		cluster.triggerElection(3)
+		cluster.triggerElection(3, 2)
 		if el := cluster.waitForElection(3); el.NodeID != 4 {
 			t.Fatalf("wrong leader elected, wanted node 4 but got event %v", el)
 		}
@@ -295,11 +295,11 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 
 	// The main message processing loop.
 	expCntFirstPhase := heartbeatCountMap{
-		1: {reqOut: 2, reqIn: 4, respOut: 1, respIn: 0},
-		2: {reqOut: 2, reqIn: 4, respOut: 1, respIn: 0},
-		3: {reqOut: 12, reqIn: 3, respOut: 0, respIn: 4},
-		4: {reqOut: 0, reqIn: 4, respOut: 1, respIn: 0},
-		5: {reqOut: 2, reqIn: 3, respOut: 1, respIn: 0},
+		1: {reqOut: 2, reqIn: 2, respOut: 1, respIn: 0},
+		2: {reqOut: 2, reqIn: 2, respOut: 1, respIn: 0},
+		3: {reqOut: 4, reqIn: 3, respOut: 0, respIn: 4},
+		4: {reqOut: 0, reqIn: 2, respOut: 1, respIn: 0},
+		5: {reqOut: 2, reqIn: 1, respOut: 1, respIn: 0},
 		// NodeID 6 is not member of any Raft group, so it has no peers and
 		// consequently must not even show up in the heartbeat count map.
 	}
@@ -316,9 +316,9 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	expCntSecondPhase := heartbeatCountMap{
 		1: {reqOut: 2, reqIn: 1, respOut: 1, respIn: 0},
 		2: {reqOut: 0, reqIn: 2, respOut: 1, respIn: 0},
-		3: {reqOut: 4, reqIn: 5, respOut: 1, respIn: 2},
-		4: {reqOut: 6, reqIn: 2, respOut: 0, respIn: 2},
-		5: {reqOut: 2, reqIn: 4, respOut: 1, respIn: 0},
+		3: {reqOut: 4, reqIn: 3, respOut: 1, respIn: 2},
+		4: {reqOut: 2, reqIn: 2, respOut: 0, respIn: 2},
+		5: {reqOut: 2, reqIn: 2, respOut: 1, respIn: 0},
 	}
 	actCnt = countHeartbeats(transport.Events,
 		func(req *RaftMessageRequest, cnt heartbeatCountMap) bool {
