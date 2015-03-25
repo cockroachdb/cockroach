@@ -92,7 +92,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	}
 }
 
-// TestNewIDAllocatorInvalidArgs checks validation logic of NewIDAllocator
+// TestNewIDAllocatorInvalidArgs checks validation logic of NewIDAllocator.
 func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 	args := [][]int64{
 		{0, 10}, // minID <= 0
@@ -106,16 +106,16 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 }
 
 // TestAllocateErrorAndRecovery has several steps:
-// 1) allocate a set of ID firstly and check
-// 2) then make IDAllocator invalid, should be able to return existing one
-// 3) after channel becomes empty, allocation will be blocked
-// 4) make IDAllocator valid again, the blocked allocations return correct ID
-// 5) check if the following allocations return correctly
+// 1) Allocate a set of ID firstly and check.
+// 2) Then make IDAllocator invalid, should be able to return existing one.
+// 3) After channel becomes empty, allocation will be blocked.
+// 4) Make IDAllocator valid again, the blocked allocations return correct ID.
+// 5) Check if the following allocations return correctly.
 func TestAllocateErrorAndRecovery(t *testing.T) {
 	store, _ := createTestStore(t)
 	allocd := make(chan int, 10)
 
-	// firstly create a valid IDAllocator to get some ID
+	// Firstly create a valid IDAllocator to get some ID.
 	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
@@ -125,33 +125,33 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		t.Errorf("expected ID is 2, but got: %d", id)
 	}
 
-	// make Allocator invalid
+	// Make Allocator invalid.
 	idAlloc.idKey = nil
 
-	// should be able to get the allocated IDs, and there will be one
-	// background allocateBlock to get ID continously
+	// Should be able to get the allocated IDs, and there will be one
+	// background allocateBlock to get ID continuously.
 	for i := 0; i < 8; i++ {
 		if id := int(idAlloc.Allocate()); id != i+3 {
 			t.Errorf("expected ID is %d, but got: %d", i+3, id)
 		}
 	}
 
-	// then the paralleled allocations should be blocked until Allocator
-	// is recovered
+	// Then the paralleled allocations should be blocked until Allocator
+	// is recovered.
 	for i := 0; i < 10; i++ {
 		go func() {
 			allocd <- int(idAlloc.Allocate())
 		}()
 	}
-	// make sure no allocation returns
+	// Make sure no allocation returns.
 	time.Sleep(10 * time.Millisecond)
 	if len(allocd) != 0 {
 		t.Errorf("Allocate() should be blocked until allocateBlock return ID")
 	}
 
-	// make the IDAllocator valid again
+	// Make the IDAllocator valid again.
 	idAlloc.idKey = engine.KeyRaftIDGenerator
-	// check if the blocked allocations return the expected ID
+	// Check if the blocked allocations return expected ID.
 	ids := make([]int, 10)
 	for i := 0; i < 10; i++ {
 		ids[i] = <-allocd
@@ -163,7 +163,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		}
 	}
 
-	// check if the following allocations return expected ID
+	// Check if the following allocations return expected ID.
 	for i := 0; i < 10; i++ {
 		if id := int(idAlloc.Allocate()); id != i+21 {
 			t.Errorf("expected ID is %d, but got: %d", i+21, id)

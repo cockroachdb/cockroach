@@ -31,7 +31,7 @@ import (
 const allocationTrigger = 0
 
 // IDAllocationRetryOpts sets the retry options for handling RaftID
-// allocation error
+// allocation errors.
 var IDAllocationRetryOpts = util.RetryOptions{
 	Backoff:     50 * time.Millisecond,
 	MaxBackoff:  5 * time.Second,
@@ -71,8 +71,7 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 	return ia, nil
 }
 
-// Allocate allocates a new ID from the global KV DB, and it will
-// start allocateBlock in background to prefetch ID
+// Allocate allocates a new ID from the global KV DB.
 func (ia *IDAllocator) Allocate() int64 {
 	for {
 		id := <-ia.ids
