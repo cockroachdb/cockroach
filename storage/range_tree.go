@@ -20,38 +20,29 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // SetupRangeTree creates a new range tree.  This should only be called as part of
 // store.BootstrapRange.
-func (s *Store) SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats,
-	timestamp proto.Timestamp, raftID int64) (*proto.RangeTree, *proto.RangeTreeNode, error) {
-	var previousTree proto.RangeTree
-	ok, err := engine.MVCCGetProto(batch, engine.KeyRangeTreeRoot, timestamp, nil, &previousTree)
-	if err != nil {
-		return nil, nil, err
-	}
-	if ok {
-		return nil, nil, util.Errorf("range tree already exists")
-	}
+func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats,
+	timestamp proto.Timestamp, startKey proto.Key) error {
 
 	tree := &proto.RangeTree{
-		RootID: raftID,
+		RootKey: startKey,
 	}
 
 	node := &proto.RangeTreeNode{
-		RaftID: raftID,
-		Black:  true,
+		Key:   startKey,
+		Black: true,
 	}
 
-	if err = engine.MVCCPutProto(batch, ms, engine.RangeTreeNodeKey(raftID), timestamp, nil, node); err != nil {
-		return nil, nil, err
+	if err := engine.MVCCPutProto(batch, ms, engine.RangeTreeNodeKey(startKey), timestamp, nil, node); err != nil {
+		return err
 	}
 
-	if err = engine.MVCCPutProto(batch, ms, engine.KeyRangeTreeRoot, timestamp, nil, tree); err != nil {
-		return nil, nil, err
+	if err := engine.MVCCPutProto(batch, ms, engine.KeyRangeTreeRoot, timestamp, nil, tree); err != nil {
+		return err
 	}
 
-	return tree, node, nil
+	return nil
 }

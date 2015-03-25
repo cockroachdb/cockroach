@@ -174,7 +174,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(ZoneConfig));
   RangeTree_descriptor_ = file->message_type(7);
   static const int RangeTree_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, root_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTree, root_key_),
   };
   RangeTree_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -189,11 +189,11 @@ void protobuf_AssignDesc_cockroach_2fproto_2fconfig_2eproto() {
       sizeof(RangeTree));
   RangeTreeNode_descriptor_ = file->message_type(8);
   static const int RangeTreeNode_offsets_[5] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, raft_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, black_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, parent_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, left_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, right_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, parent_key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, left_key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RangeTreeNode, right_key_),
   };
   RangeTreeNode_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -293,12 +293,12 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "\022A\n\017range_max_bytes\030\003 \001(\003B(\310\336\037\000\362\336\037 yaml:"
     "\"range_max_bytes,omitempty\"\022D\n\002gc\030\004 \001(\0132"
     "\031.cockroach.proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023ya"
-    "ml:\"gc,omitempty\"\",\n\tRangeTree\022\037\n\007root_i"
-    "d\030\001 \001(\003B\016\310\336\037\000\342\336\037\006RootID\"\242\001\n\rRangeTreeNod"
-    "e\022\037\n\007raft_id\030\001 \001(\003B\016\310\336\037\000\342\336\037\006RaftID\022\023\n\005bl"
-    "ack\030\002 \001(\010B\004\310\336\037\000\022\037\n\tparent_id\030\003 \001(\003B\014\342\336\037\010"
-    "ParentID\022\033\n\007left_id\030\004 \001(\003B\n\342\336\037\006LeftID\022\035\n"
-    "\010right_id\030\005 \001(\003B\013\342\336\037\007RightIDB\007Z\005proto", 1197);
+    "ml:\"gc,omitempty\"\"*\n\tRangeTree\022\035\n\010root_k"
+    "ey\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\"\226\001\n\rRangeTreeNode\022"
+    "\030\n\003key\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\023\n\005black\030\002 \001(\010"
+    "B\004\310\336\037\000\022\037\n\nparent_key\030\003 \001(\014B\013\310\336\037\000\332\336\037\003Key\022"
+    "\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003Key\022\032\n\tright_key\030"
+    "\005 \001(\014B\007\332\336\037\003KeyB\007Z\005proto", 1183);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
@@ -2347,7 +2347,7 @@ void ZoneConfig::Swap(ZoneConfig* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RangeTree::kRootIdFieldNumber;
+const int RangeTree::kRootKeyFieldNumber;
 #endif  // !_MSC_VER
 
 RangeTree::RangeTree()
@@ -2367,8 +2367,9 @@ RangeTree::RangeTree(const RangeTree& from)
 }
 
 void RangeTree::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  root_id_ = GOOGLE_LONGLONG(0);
+  root_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2378,6 +2379,9 @@ RangeTree::~RangeTree() {
 }
 
 void RangeTree::SharedDtor() {
+  if (root_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete root_key_;
+  }
   if (this != default_instance_) {
   }
 }
@@ -2404,7 +2408,11 @@ RangeTree* RangeTree::New() const {
 }
 
 void RangeTree::Clear() {
-  root_id_ = GOOGLE_LONGLONG(0);
+  if (has_root_key()) {
+    if (root_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+      root_key_->clear();
+    }
+  }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -2419,13 +2427,11 @@ bool RangeTree::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 root_id = 1;
+      // optional bytes root_key = 1;
       case 1: {
-        if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &root_id_)));
-          set_has_root_id();
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_root_key()));
         } else {
           goto handle_unusual;
         }
@@ -2458,9 +2464,10 @@ failure:
 void RangeTree::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeTree)
-  // optional int64 root_id = 1;
-  if (has_root_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->root_id(), output);
+  // optional bytes root_key = 1;
+  if (has_root_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      1, this->root_key(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -2473,9 +2480,11 @@ void RangeTree::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RangeTree::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeTree)
-  // optional int64 root_id = 1;
-  if (has_root_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->root_id(), target);
+  // optional bytes root_key = 1;
+  if (has_root_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        1, this->root_key(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -2490,11 +2499,11 @@ int RangeTree::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional int64 root_id = 1;
-    if (has_root_id()) {
+    // optional bytes root_key = 1;
+    if (has_root_key()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->root_id());
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->root_key());
     }
 
   }
@@ -2524,8 +2533,8 @@ void RangeTree::MergeFrom(const ::google::protobuf::Message& from) {
 void RangeTree::MergeFrom(const RangeTree& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_root_id()) {
-      set_root_id(from.root_id());
+    if (from.has_root_key()) {
+      set_root_key(from.root_key());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -2550,7 +2559,7 @@ bool RangeTree::IsInitialized() const {
 
 void RangeTree::Swap(RangeTree* other) {
   if (other != this) {
-    std::swap(root_id_, other->root_id_);
+    std::swap(root_key_, other->root_key_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -2569,11 +2578,11 @@ void RangeTree::Swap(RangeTree* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RangeTreeNode::kRaftIdFieldNumber;
+const int RangeTreeNode::kKeyFieldNumber;
 const int RangeTreeNode::kBlackFieldNumber;
-const int RangeTreeNode::kParentIdFieldNumber;
-const int RangeTreeNode::kLeftIdFieldNumber;
-const int RangeTreeNode::kRightIdFieldNumber;
+const int RangeTreeNode::kParentKeyFieldNumber;
+const int RangeTreeNode::kLeftKeyFieldNumber;
+const int RangeTreeNode::kRightKeyFieldNumber;
 #endif  // !_MSC_VER
 
 RangeTreeNode::RangeTreeNode()
@@ -2593,12 +2602,13 @@ RangeTreeNode::RangeTreeNode(const RangeTreeNode& from)
 }
 
 void RangeTreeNode::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
-  raft_id_ = GOOGLE_LONGLONG(0);
+  key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   black_ = false;
-  parent_id_ = GOOGLE_LONGLONG(0);
-  left_id_ = GOOGLE_LONGLONG(0);
-  right_id_ = GOOGLE_LONGLONG(0);
+  parent_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  left_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  right_key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -2608,6 +2618,18 @@ RangeTreeNode::~RangeTreeNode() {
 }
 
 void RangeTreeNode::SharedDtor() {
+  if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete key_;
+  }
+  if (parent_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete parent_key_;
+  }
+  if (left_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete left_key_;
+  }
+  if (right_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete right_key_;
+  }
   if (this != default_instance_) {
   }
 }
@@ -2634,23 +2656,29 @@ RangeTreeNode* RangeTreeNode::New() const {
 }
 
 void RangeTreeNode::Clear() {
-#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
-  &reinterpret_cast<RangeTreeNode*>(16)->f) - \
-   reinterpret_cast<char*>(16))
-
-#define ZR_(first, last) do {                              \
-    size_t f = OFFSET_OF_FIELD_(first);                    \
-    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
-    ::memset(&first, 0, n);                                \
-  } while (0)
-
   if (_has_bits_[0 / 32] & 31) {
-    ZR_(raft_id_, black_);
+    if (has_key()) {
+      if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        key_->clear();
+      }
+    }
+    black_ = false;
+    if (has_parent_key()) {
+      if (parent_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        parent_key_->clear();
+      }
+    }
+    if (has_left_key()) {
+      if (left_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        left_key_->clear();
+      }
+    }
+    if (has_right_key()) {
+      if (right_key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        right_key_->clear();
+      }
+    }
   }
-
-#undef OFFSET_OF_FIELD_
-#undef ZR_
-
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -2665,13 +2693,11 @@ bool RangeTreeNode::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 raft_id = 1;
+      // optional bytes key = 1;
       case 1: {
-        if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &raft_id_)));
-          set_has_raft_id();
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_key()));
         } else {
           goto handle_unusual;
         }
@@ -2690,48 +2716,42 @@ bool RangeTreeNode::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_parent_id;
+        if (input->ExpectTag(26)) goto parse_parent_key;
         break;
       }
 
-      // optional int64 parent_id = 3;
+      // optional bytes parent_key = 3;
       case 3: {
-        if (tag == 24) {
-         parse_parent_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &parent_id_)));
-          set_has_parent_id();
+        if (tag == 26) {
+         parse_parent_key:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_parent_key()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(32)) goto parse_left_id;
+        if (input->ExpectTag(34)) goto parse_left_key;
         break;
       }
 
-      // optional int64 left_id = 4;
+      // optional bytes left_key = 4;
       case 4: {
-        if (tag == 32) {
-         parse_left_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &left_id_)));
-          set_has_left_id();
+        if (tag == 34) {
+         parse_left_key:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_left_key()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(40)) goto parse_right_id;
+        if (input->ExpectTag(42)) goto parse_right_key;
         break;
       }
 
-      // optional int64 right_id = 5;
+      // optional bytes right_key = 5;
       case 5: {
-        if (tag == 40) {
-         parse_right_id:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &right_id_)));
-          set_has_right_id();
+        if (tag == 42) {
+         parse_right_key:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_right_key()));
         } else {
           goto handle_unusual;
         }
@@ -2764,9 +2784,10 @@ failure:
 void RangeTreeNode::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RangeTreeNode)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->raft_id(), output);
+  // optional bytes key = 1;
+  if (has_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      1, this->key(), output);
   }
 
   // optional bool black = 2;
@@ -2774,19 +2795,22 @@ void RangeTreeNode::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(2, this->black(), output);
   }
 
-  // optional int64 parent_id = 3;
-  if (has_parent_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->parent_id(), output);
+  // optional bytes parent_key = 3;
+  if (has_parent_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      3, this->parent_key(), output);
   }
 
-  // optional int64 left_id = 4;
-  if (has_left_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->left_id(), output);
+  // optional bytes left_key = 4;
+  if (has_left_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      4, this->left_key(), output);
   }
 
-  // optional int64 right_id = 5;
-  if (has_right_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->right_id(), output);
+  // optional bytes right_key = 5;
+  if (has_right_key()) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      5, this->right_key(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -2799,9 +2823,11 @@ void RangeTreeNode::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RangeTreeNode::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RangeTreeNode)
-  // optional int64 raft_id = 1;
-  if (has_raft_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->raft_id(), target);
+  // optional bytes key = 1;
+  if (has_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        1, this->key(), target);
   }
 
   // optional bool black = 2;
@@ -2809,19 +2835,25 @@ void RangeTreeNode::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteBoolToArray(2, this->black(), target);
   }
 
-  // optional int64 parent_id = 3;
-  if (has_parent_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->parent_id(), target);
+  // optional bytes parent_key = 3;
+  if (has_parent_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        3, this->parent_key(), target);
   }
 
-  // optional int64 left_id = 4;
-  if (has_left_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->left_id(), target);
+  // optional bytes left_key = 4;
+  if (has_left_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        4, this->left_key(), target);
   }
 
-  // optional int64 right_id = 5;
-  if (has_right_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->right_id(), target);
+  // optional bytes right_key = 5;
+  if (has_right_key()) {
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
+        5, this->right_key(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -2836,11 +2868,11 @@ int RangeTreeNode::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional int64 raft_id = 1;
-    if (has_raft_id()) {
+    // optional bytes key = 1;
+    if (has_key()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->raft_id());
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->key());
     }
 
     // optional bool black = 2;
@@ -2848,25 +2880,25 @@ int RangeTreeNode::ByteSize() const {
       total_size += 1 + 1;
     }
 
-    // optional int64 parent_id = 3;
-    if (has_parent_id()) {
+    // optional bytes parent_key = 3;
+    if (has_parent_key()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->parent_id());
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->parent_key());
     }
 
-    // optional int64 left_id = 4;
-    if (has_left_id()) {
+    // optional bytes left_key = 4;
+    if (has_left_key()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->left_id());
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->left_key());
     }
 
-    // optional int64 right_id = 5;
-    if (has_right_id()) {
+    // optional bytes right_key = 5;
+    if (has_right_key()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->right_id());
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->right_key());
     }
 
   }
@@ -2896,20 +2928,20 @@ void RangeTreeNode::MergeFrom(const ::google::protobuf::Message& from) {
 void RangeTreeNode::MergeFrom(const RangeTreeNode& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_raft_id()) {
-      set_raft_id(from.raft_id());
+    if (from.has_key()) {
+      set_key(from.key());
     }
     if (from.has_black()) {
       set_black(from.black());
     }
-    if (from.has_parent_id()) {
-      set_parent_id(from.parent_id());
+    if (from.has_parent_key()) {
+      set_parent_key(from.parent_key());
     }
-    if (from.has_left_id()) {
-      set_left_id(from.left_id());
+    if (from.has_left_key()) {
+      set_left_key(from.left_key());
     }
-    if (from.has_right_id()) {
-      set_right_id(from.right_id());
+    if (from.has_right_key()) {
+      set_right_key(from.right_key());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -2934,11 +2966,11 @@ bool RangeTreeNode::IsInitialized() const {
 
 void RangeTreeNode::Swap(RangeTreeNode* other) {
   if (other != this) {
-    std::swap(raft_id_, other->raft_id_);
+    std::swap(key_, other->key_);
     std::swap(black_, other->black_);
-    std::swap(parent_id_, other->parent_id_);
-    std::swap(left_id_, other->left_id_);
-    std::swap(right_id_, other->right_id_);
+    std::swap(parent_key_, other->parent_key_);
+    std::swap(left_key_, other->left_key_);
+    std::swap(right_key_, other->right_key_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
