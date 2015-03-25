@@ -652,15 +652,11 @@ func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
 // and range IDs to fill out the supplied replicas.
 func (s *Store) NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error) {
 	desc := &proto.RangeDescriptor{
+		RaftID:   s.raftIDAlloc.Allocate(),
 		StartKey: start,
 		EndKey:   end,
 		Replicas: append([]proto.Replica(nil), replicas...),
 	}
-	raftID, err := s.raftIDAlloc.Allocate()
-	if err != nil {
-		return nil, err
-	}
-	desc.RaftID = raftID
 	return desc, nil
 }
 

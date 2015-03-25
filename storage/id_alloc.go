@@ -18,6 +18,8 @@
 package storage
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
@@ -27,8 +29,15 @@ import (
 // allocationTrigger is a special ID which if encountered,
 // causes allocation of the next block of IDs.
 const allocationTrigger = 0
-const invalidID = -1
-const maxRetryTimes = 3
+
+// IDAllocationRetryOpts sets the retry options for handling RaftID
+// allocation error
+var IDAllocationRetryOpts = util.RetryOptions{
+	Backoff:     50 * time.Millisecond,
+	MaxBackoff:  5 * time.Second,
+	Constant:    2,
+	MaxAttempts: 0,
+}
 
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
@@ -38,7 +47,6 @@ type IDAllocator struct {
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
-	err       chan error // channel for returning error from allocateBlock
 }
 
 // NewIDAllocator creates a new ID allocator which increments the
@@ -58,7 +66,6 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
-		err:       make(chan error),
 	}
 	ia.ids <- allocationTrigger
 	return ia, nil
@@ -66,26 +73,15 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 
 // Allocate allocates a new ID from the global KV DB, and it will
 // start allocateBlock in background to prefetch ID
-func (ia *IDAllocator) Allocate() (id int64, err error) {
-	retry := 0    //if receive error, start another allocateBlock to retry
-
-	// even error happens, return the allocated ID until ids is empty
-	for len(ia.ids) > 0 || retry < maxRetryTimes {
-		select {
-		case id = <-ia.ids:
-			if id == allocationTrigger {
-				go ia.allocateBlock(ia.blockSize)
-			} else {
-				return id, nil
-			}
-		case err = <-ia.err:
-			// the below allocateBlock will always put ID or error to
-			// channel, so the next Allocate() call will not hang
+func (ia *IDAllocator) Allocate() int64 {
+	for {
+		id := <-ia.ids
+		if id == allocationTrigger {
 			go ia.allocateBlock(ia.blockSize)
-			retry++
+		} else {
+			return id
 		}
 	}
-	return invalidID, err
 }
 
 // allocateBlock allocates a block of IDs using db.Increment and
@@ -94,10 +90,14 @@ func (ia *IDAllocator) Allocate() (id int64, err error) {
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
-	if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
-		ia.err <- err
-		return
-	}
+	retryOpts := IDAllocationRetryOpts
+	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
+			return util.RetryContinue, nil
+		}
+		return util.RetryBreak, nil
+	})
+
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
 			ir.NewValue, ia.minID, ia.minID-ir.NewValue)
