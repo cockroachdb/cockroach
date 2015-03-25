@@ -123,9 +123,8 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 	}
 
 	m := &MultiRaft{
-		Config: *config,
-		multiNode: raft.StartMultiNode(uint64(nodeID), config.ElectionTimeoutTicks,
-			config.HeartbeatIntervalTicks),
+		Config:          *config,
+		multiNode:       raft.StartMultiNode(uint64(nodeID)),
 		nodeID:          nodeID,
 		Events:          make(chan interface{}, 1000),
 		reqChan:         make(chan *RaftMessageRequest, 100),
@@ -575,7 +574,15 @@ func (s *state) createGroup(groupID uint64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.multiNode.CreateGroup(groupID, nil, gs); err != nil {
+	raftCfg := &raft.Config{
+		ElectionTick:  s.ElectionTimeoutTicks,
+		HeartbeatTick: s.HeartbeatIntervalTicks,
+		Storage:       gs,
+		// TODO(bdarnell): make these configurable; evaluate defaults.
+		MaxSizePerMsg:   1024 * 1024,
+		MaxInflightMsgs: 256,
+	}
+	if err := s.multiNode.CreateGroup(groupID, raftCfg, nil); err != nil {
 		return err
 	}
 	s.groups[groupID] = &group{

@@ -58,7 +58,7 @@ func newTestCluster(transport Transport, size int, t *testing.T) *testCluster {
 			Transport:              transport,
 			Storage:                storage,
 			Ticker:                 ticker,
-			ElectionTimeoutTicks:   1,
+			ElectionTimeoutTicks:   2,
 			HeartbeatIntervalTicks: 1,
 			TickInterval:           time.Hour, // not in use
 			Strict:                 true,
