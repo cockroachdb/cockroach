@@ -211,17 +211,13 @@ func TestScannerAddToQueues(t *testing.T) {
 
 // TestScannerTiming verifies that ranges are scanned, regardless
 // of how many, to match scanInterval.
-//
-// TODO(spencer): in order to make this test not take too much time,
-// we're running these loops at speeds where clock ticks may be
-// an issue on virtual machines used for continuous integration.
 func TestScannerTiming(t *testing.T) {
 	const count = 3
-	const runTime = 50 * time.Millisecond
+	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
 	durations := []time.Duration{
-		5 * time.Millisecond,
-		12500 * time.Microsecond,
+		10 * time.Millisecond,
+		25 * time.Millisecond,
 	}
 	for i, duration := range durations {
 		iter := newTestIterator(count)
