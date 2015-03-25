@@ -1629,28 +1629,84 @@ func (r *Range) FirstIndex() (uint64, error) {
 
 // Snapshot implements the raft.Storage interface.
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
-	// TODO(bdarnell): package up all the data in the range, not just
-	// the descriptor (and send the appropriate log index).
-	data, err := gogoproto.Marshal(r.Desc())
+	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
+	snap := r.rm.NewSnapshot()
+	defer snap.Stop()
+	var snapData proto.RaftSnapshotData
+
+	// Certain keys are treated specially while building the snapshot;
+	// see the switch statement below for details.
+	hardStateKey := engine.RaftHardStateKey(r.Desc().RaftID)
+	appliedKey := engine.RaftAppliedIndexKey(r.Desc().RaftID)
+	descKey := engine.RangeDescriptorKey(r.Desc().StartKey)
+
+	// Save the range metadata while iterating. Use the values read from
+	// the snapshot instead of the members of the Range struct because
+	// they might be changed concurrently.
+	appliedIndex := uint64(raftInitialLogIndex)
+	var desc proto.RangeDescriptor
+	seenDesc := false
+
+	// Iterate over all the data in the range, including local-only data like
+	// the response cache.
+	for iter := newRangeDataIterator(r, snap); iter.Valid(); iter.Next() {
+		key, _, isValue := engine.MVCCDecodeKey(iter.Key())
+		switch {
+		case bytes.Equal(key, hardStateKey):
+			// The raft HardState must not be transmitted via snapshot,
+			// because the receiving node may have already cast a vote in this term.
+			continue
+		case bytes.Equal(key, appliedKey):
+			// Raft uses the applied index to synchronize the snapshot with the log.
+			var v proto.MVCCMetadata
+			err := gogoproto.Unmarshal(iter.Value(), &v)
+			if err != nil {
+				return raftpb.Snapshot{}, err
+			}
+			_, appliedIndex = encoding.DecodeUint64(v.Value.Bytes)
+		case bytes.Equal(key, descKey) && isValue && !seenDesc:
+			// Extract the descriptor so we can tell raft about the range membership at
+			// the time of the snapshot.
+			// TODO(bdarnell): Correctly handle pending transactions on the descriptor.
+			// Should we just skip the descriptor while iterating and call engine.MVCCGet
+			// on the snapshot?
+			seenDesc = true
+			var v proto.MVCCValue
+			err := gogoproto.Unmarshal(iter.Value(), &v)
+			if err != nil {
+				return raftpb.Snapshot{}, err
+			}
+			err = gogoproto.Unmarshal(v.Value.Bytes, &desc)
+			if err != nil {
+				return raftpb.Snapshot{}, err
+			}
+		}
+
+		snapData.KV = append(snapData.KV,
+			&proto.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
+	}
+
+	data, err := gogoproto.Marshal(&snapData)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
 
-	// Synthesize our raftpb.ConfState from Desc.
+	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState
-	cs.Nodes = []uint64{uint64(r.rm.RaftNodeID())}
-	// TODO(bdarnell): cs.Nodes must give the replicas as of the log index we
-	// put in the SnapshotMetadata. When we produce a snapshot of the current
-	// time, replace the previous line with the following block.
-	/*for _, rep := range r.Desc().Replicas {
+	for _, rep := range desc.Replicas {
 		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
-	}*/
+	}
+
+	term, err := r.Term(appliedIndex)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
 
 	return raftpb.Snapshot{
 		Data: data,
 		Metadata: raftpb.SnapshotMetadata{
-			Index:     raftInitialLogIndex,
-			Term:      raftInitialLogTerm,
+			Index:     appliedIndex,
+			Term:      term,
 			ConfState: cs,
 		},
 	}, nil
@@ -1677,20 +1733,66 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 
 // ApplySnapshot implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
-	// TODO(bdarnell): discard any existing log that is obsoleted by this snapshot.
-	desc := &proto.RangeDescriptor{}
-	err := gogoproto.Unmarshal(snap.Data, desc)
+	snapData := proto.RaftSnapshotData{}
+	err := gogoproto.Unmarshal(snap.Data, &snapData)
 	if err != nil {
+		return nil
+	}
+
+	hardStateKey := engine.RaftHardStateKey(r.Desc().RaftID)
+	encodedHardStateKey := engine.MVCCEncodeKey(hardStateKey)
+	descKey := engine.RangeDescriptorKey(r.Desc().StartKey)
+	var desc proto.RangeDescriptor
+	seenDesc := false
+	batch := engine.NewBatch(r.rm.Engine())
+
+	// Delete everything in the range and recreate it from the snapshot.
+	for iter := newRangeDataIterator(r, r.rm.Engine()); iter.Valid(); iter.Next() {
+		if bytes.Equal(encodedHardStateKey, iter.Key()) {
+			// Don't replace the raft HardState.
+			continue
+		}
+		if err := batch.Clear(iter.Key()); err != nil {
+			return err
+		}
+	}
+
+	for _, kv := range snapData.KV {
+		key, _, isValue := engine.MVCCDecodeKey(kv.Key)
+		switch {
+		case bytes.Equal(descKey, key) && isValue && !seenDesc:
+			// Save the descriptor so we can assign it to r.Desc.
+			// TODO(bdarnell): handle pending transactions on the descriptor.
+			seenDesc = true
+			var v proto.MVCCValue
+			err := gogoproto.Unmarshal(kv.Value, &v)
+			if err != nil {
+				return err
+			}
+			err = gogoproto.Unmarshal(v.Value.Bytes, &desc)
+			if err != nil {
+				return err
+			}
+		case bytes.Equal(hardStateKey, key):
+			// Don't replace the raft HardState. The leader shouldn't be sending a
+			// HardState in the snapshot, but just in case reject it on the receiving
+			// side as well.
+			continue
+		}
+		if err := batch.Put(kv.Key, kv.Value); err != nil {
+			return err
+		}
+	}
+
+	if err := batch.Commit(); err != nil {
 		return err
 	}
-	r.SetDesc(desc)
+	r.SetDesc(&desc)
+	// TODO(bdarnell): extract the real last index.
+	// snap.Metadata.Index is the last applied index, but our snapshot may have given us
+	// some unapplied entries too. It's safe to set lastIndex too low (the entries will
+	// be re-sent), but it would be better to set this to the last entry in the log.
 	atomic.StoreUint64(&r.lastIndex, snap.Metadata.Index)
-	ts := proto.RaftTruncatedState{
-		Index: snap.Metadata.Index,
-		Term:  snap.Metadata.Term,
-	}
-	err = engine.MVCCPutProto(r.rm.Engine(), nil, engine.RaftTruncatedStateKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, nil, &ts)
 	return err
 }
 

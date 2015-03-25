@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TestStoreRecoverFromEngine verifies that the store recovers all ranges and their contents
@@ -266,6 +267,83 @@ func TestFailedReplicaChange(t *testing.T) {
 			Attrs:   proto.Attributes{},
 		})
 	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// We can truncate the old log entries and a new replica will be brought up from a snapshot.
+func TestReplicateAfterTruncation(t *testing.T) {
+	mtc := multiTestContext{}
+	mtc.Start(t, 2)
+	defer mtc.Stop()
+
+	rng, err := mtc.stores[0].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Issue a command on the first node before replicating.
+	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get that command's log index.
+	index, err := rng.LastIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Truncate the log at index+1 (log entries < N are removed, so this includes
+	// the increment).
+	truncArgs, truncResp := internalTruncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.InternalTruncateLog, truncArgs, truncResp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Issue a second command post-truncation.
+	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now add the second replica.
+	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
+		proto.Replica{
+			NodeID:  mtc.stores[1].Ident.NodeID,
+			StoreID: mtc.stores[1].Ident.StoreID,
+			Attrs:   proto.Attributes{},
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Once it catches up, the effects of both commands can be seen.
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+			return false
+		}
+		log.Infof("read value %d", getResp.Value.GetInteger())
+		return getResp.Value.GetInteger() == 16
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send a third command to verify that the log states are synced up so the
+	// new node can accept new commands.
+	incArgs, incResp = incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := util.IsTrueWithin(func() bool {
+		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+			return false
+		}
+		log.Infof("read value %d", getResp.Value.GetInteger())
+		return getResp.Value.GetInteger() == 39
+	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
