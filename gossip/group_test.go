@@ -172,12 +172,12 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 
 	// First two inserts work fine.
 	info1 := newTestInfo("a.a", int64(1))
-	info1.TTLStamp = info1.Timestamp + int64(time.Millisecond)
+	info1.TTLStamp = info1.Timestamp + int64(5*time.Millisecond)
 	if _, err := group.addInfo(info1); err != nil {
 		t.Error(err)
 	}
 	info2 := newTestInfo("a.b", int64(2))
-	info2.TTLStamp = info2.Timestamp + int64(time.Millisecond)
+	info2.TTLStamp = info2.Timestamp + int64(5*time.Millisecond)
 	if _, err := group.addInfo(info2); err != nil {
 		t.Error(err)
 	}
@@ -188,8 +188,8 @@ func TestGroupCompactAfterTTL(t *testing.T) {
 		t.Error("shouldn't be able to insert")
 	}
 
-	// Now, wait a millisecond and try again.
-	time.Sleep(time.Millisecond)
+	// Now, wait for the TTL and try again.
+	time.Sleep(5 * time.Millisecond)
 	if _, err := group.addInfo(info3); err != nil {
 		t.Error(err)
 	}
