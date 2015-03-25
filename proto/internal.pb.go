@@ -868,39 +868,39 @@ func (m *RaftTruncatedState) GetTerm() uint64 {
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
 // all of the range's data and metadata, including the raft log, response cache, etc.
 type RaftSnapshotData struct {
-	KV               []*RaftSnapshotData_KV `protobuf:"group,1,rep,name=KV" json:"kv,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	KV               []*RaftSnapshotData_KeyValue `protobuf:"bytes,1,rep" json:"KV,omitempty"`
+	XXX_unrecognized []byte                       `json:"-"`
 }
 
 func (m *RaftSnapshotData) Reset()         { *m = RaftSnapshotData{} }
 func (m *RaftSnapshotData) String() string { return proto1.CompactTextString(m) }
 func (*RaftSnapshotData) ProtoMessage()    {}
 
-func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KV {
+func (m *RaftSnapshotData) GetKV() []*RaftSnapshotData_KeyValue {
 	if m != nil {
 		return m.KV
 	}
 	return nil
 }
 
-type RaftSnapshotData_KV struct {
-	Key              []byte `protobuf:"bytes,2,opt,name=key" json:"key,omitempty"`
-	Value            []byte `protobuf:"bytes,3,opt,name=value" json:"value,omitempty"`
+type RaftSnapshotData_KeyValue struct {
+	Key              []byte `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value            []byte `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
-func (m *RaftSnapshotData_KV) Reset()         { *m = RaftSnapshotData_KV{} }
-func (m *RaftSnapshotData_KV) String() string { return proto1.CompactTextString(m) }
-func (*RaftSnapshotData_KV) ProtoMessage()    {}
+func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }
+func (m *RaftSnapshotData_KeyValue) String() string { return proto1.CompactTextString(m) }
+func (*RaftSnapshotData_KeyValue) ProtoMessage()    {}
 
-func (m *RaftSnapshotData_KV) GetKey() []byte {
+func (m *RaftSnapshotData_KeyValue) GetKey() []byte {
 	if m != nil {
 		return m.Key
 	}
 	return nil
 }
 
-func (m *RaftSnapshotData_KV) GetValue() []byte {
+func (m *RaftSnapshotData_KeyValue) GetValue() []byte {
 	if m != nil {
 		return m.Value
 	}

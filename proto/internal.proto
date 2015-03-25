@@ -328,8 +328,9 @@ message RaftTruncatedState {
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
 // all of the range's data and metadata, including the raft log, response cache, etc.
 message RaftSnapshotData {
-  repeated group KV = 1 [(gogoproto.customname) = "KV"]{
-    optional bytes key = 2;
-    optional bytes value = 3;
+  message KeyValue {
+    optional bytes key = 1;
+    optional bytes value = 2;
   }
+  repeated KeyValue KV = 1 [(gogoproto.customname) = "KV"];
 }

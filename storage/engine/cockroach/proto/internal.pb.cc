@@ -87,9 +87,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* RaftSnapshotData_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RaftSnapshotData_reflection_ = NULL;
-const ::google::protobuf::Descriptor* RaftSnapshotData_KV_descriptor_ = NULL;
+const ::google::protobuf::Descriptor* RaftSnapshotData_KeyValue_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
-  RaftSnapshotData_KV_reflection_ = NULL;
+  RaftSnapshotData_KeyValue_reflection_ = NULL;
 const ::google::protobuf::EnumDescriptor* InternalValueType_descriptor_ = NULL;
 
 }  // namespace
@@ -486,22 +486,22 @@ void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(RaftSnapshotData));
-  RaftSnapshotData_KV_descriptor_ = RaftSnapshotData_descriptor_->nested_type(0);
-  static const int RaftSnapshotData_KV_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KV, key_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KV, value_),
+  RaftSnapshotData_KeyValue_descriptor_ = RaftSnapshotData_descriptor_->nested_type(0);
+  static const int RaftSnapshotData_KeyValue_offsets_[2] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, key_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, value_),
   };
-  RaftSnapshotData_KV_reflection_ =
+  RaftSnapshotData_KeyValue_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
-      RaftSnapshotData_KV_descriptor_,
-      RaftSnapshotData_KV::default_instance_,
-      RaftSnapshotData_KV_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KV, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KV, _unknown_fields_),
+      RaftSnapshotData_KeyValue_descriptor_,
+      RaftSnapshotData_KeyValue::default_instance_,
+      RaftSnapshotData_KeyValue_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RaftSnapshotData_KeyValue, _unknown_fields_),
       -1,
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(RaftSnapshotData_KV));
+      sizeof(RaftSnapshotData_KeyValue));
   InternalValueType_descriptor_ = file->enum_type(0);
 }
 
@@ -560,7 +560,7 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     RaftSnapshotData_descriptor_, &RaftSnapshotData::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    RaftSnapshotData_KV_descriptor_, &RaftSnapshotData_KV::default_instance());
+    RaftSnapshotData_KeyValue_descriptor_, &RaftSnapshotData_KeyValue::default_instance());
 }
 
 }  // namespace
@@ -610,8 +610,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto() {
   delete RaftTruncatedState_reflection_;
   delete RaftSnapshotData::default_instance_;
   delete RaftSnapshotData_reflection_;
-  delete RaftSnapshotData_KV::default_instance_;
-  delete RaftSnapshotData_KV_reflection_;
+  delete RaftSnapshotData_KeyValue::default_instance_;
+  delete RaftSnapshotData_KeyValue_reflection_;
 }
 
 void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
@@ -741,10 +741,11 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
     "\022\021\n\tfloat_sum\030\007 \001(\002\022\021\n\tfloat_max\030\010 \001(\002\022\021"
     "\n\tfloat_min\030\t \001(\002\"=\n\022RaftTruncatedState\022"
     "\023\n\005index\030\001 \001(\004B\004\310\336\037\000\022\022\n\004term\030\002 \001(\004B\004\310\336\037\000"
-    "\"n\n\020RaftSnapshotData\0228\n\002kv\030\001 \003(\n2$.cockr"
-    "oach.proto.RaftSnapshotData.KVB\006\342\336\037\002KV\032 "
-    "\n\002KV\022\013\n\003key\030\002 \001(\014\022\r\n\005value\030\003 \001(\014*%\n\021Inte"
-    "rnalValueType\022\n\n\006_CR_TS\020\001\032\004\210\243\036\000B\007Z\005proto", 4800);
+    "\"z\n\020RaftSnapshotData\022>\n\002KV\030\001 \003(\0132*.cockr"
+    "oach.proto.RaftSnapshotData.KeyValueB\006\342\336"
+    "\037\002KV\032&\n\010KeyValue\022\013\n\003key\030\001 \001(\014\022\r\n\005value\030\002"
+    " \001(\014*%\n\021InternalValueType\022\n\n\006_CR_TS\020\001\032\004\210"
+    "\243\036\000B\007Z\005proto", 4812);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/internal.proto", &protobuf_RegisterTypes);
   InternalRangeLookupRequest::default_instance_ = new InternalRangeLookupRequest();
@@ -769,7 +770,7 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
   InternalTimeSeriesSample::default_instance_ = new InternalTimeSeriesSample();
   RaftTruncatedState::default_instance_ = new RaftTruncatedState();
   RaftSnapshotData::default_instance_ = new RaftSnapshotData();
-  RaftSnapshotData_KV::default_instance_ = new RaftSnapshotData_KV();
+  RaftSnapshotData_KeyValue::default_instance_ = new RaftSnapshotData_KeyValue();
   InternalRangeLookupRequest::default_instance_->InitAsDefaultInstance();
   InternalRangeLookupResponse::default_instance_->InitAsDefaultInstance();
   InternalHeartbeatTxnRequest::default_instance_->InitAsDefaultInstance();
@@ -792,7 +793,7 @@ void protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto() {
   InternalTimeSeriesSample::default_instance_->InitAsDefaultInstance();
   RaftTruncatedState::default_instance_->InitAsDefaultInstance();
   RaftSnapshotData::default_instance_->InitAsDefaultInstance();
-  RaftSnapshotData_KV::default_instance_->InitAsDefaultInstance();
+  RaftSnapshotData_KeyValue::default_instance_->InitAsDefaultInstance();
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto);
 }
 
@@ -7979,27 +7980,27 @@ void RaftTruncatedState::Swap(RaftTruncatedState* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int RaftSnapshotData_KV::kKeyFieldNumber;
-const int RaftSnapshotData_KV::kValueFieldNumber;
+const int RaftSnapshotData_KeyValue::kKeyFieldNumber;
+const int RaftSnapshotData_KeyValue::kValueFieldNumber;
 #endif  // !_MSC_VER
 
-RaftSnapshotData_KV::RaftSnapshotData_KV()
+RaftSnapshotData_KeyValue::RaftSnapshotData_KeyValue()
   : ::google::protobuf::Message() {
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(constructor:cockroach.proto.RaftSnapshotData.KeyValue)
 }
 
-void RaftSnapshotData_KV::InitAsDefaultInstance() {
+void RaftSnapshotData_KeyValue::InitAsDefaultInstance() {
 }
 
-RaftSnapshotData_KV::RaftSnapshotData_KV(const RaftSnapshotData_KV& from)
+RaftSnapshotData_KeyValue::RaftSnapshotData_KeyValue(const RaftSnapshotData_KeyValue& from)
   : ::google::protobuf::Message() {
   SharedCtor();
   MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.RaftSnapshotData.KeyValue)
 }
 
-void RaftSnapshotData_KV::SharedCtor() {
+void RaftSnapshotData_KeyValue::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -8007,12 +8008,12 @@ void RaftSnapshotData_KV::SharedCtor() {
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
-RaftSnapshotData_KV::~RaftSnapshotData_KV() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.RaftSnapshotData.KV)
+RaftSnapshotData_KeyValue::~RaftSnapshotData_KeyValue() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.RaftSnapshotData.KeyValue)
   SharedDtor();
 }
 
-void RaftSnapshotData_KV::SharedDtor() {
+void RaftSnapshotData_KeyValue::SharedDtor() {
   if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete key_;
   }
@@ -8023,28 +8024,28 @@ void RaftSnapshotData_KV::SharedDtor() {
   }
 }
 
-void RaftSnapshotData_KV::SetCachedSize(int size) const {
+void RaftSnapshotData_KeyValue::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const ::google::protobuf::Descriptor* RaftSnapshotData_KV::descriptor() {
+const ::google::protobuf::Descriptor* RaftSnapshotData_KeyValue::descriptor() {
   protobuf_AssignDescriptorsOnce();
-  return RaftSnapshotData_KV_descriptor_;
+  return RaftSnapshotData_KeyValue_descriptor_;
 }
 
-const RaftSnapshotData_KV& RaftSnapshotData_KV::default_instance() {
+const RaftSnapshotData_KeyValue& RaftSnapshotData_KeyValue::default_instance() {
   if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   return *default_instance_;
 }
 
-RaftSnapshotData_KV* RaftSnapshotData_KV::default_instance_ = NULL;
+RaftSnapshotData_KeyValue* RaftSnapshotData_KeyValue::default_instance_ = NULL;
 
-RaftSnapshotData_KV* RaftSnapshotData_KV::New() const {
-  return new RaftSnapshotData_KV;
+RaftSnapshotData_KeyValue* RaftSnapshotData_KeyValue::New() const {
+  return new RaftSnapshotData_KeyValue;
 }
 
-void RaftSnapshotData_KV::Clear() {
+void RaftSnapshotData_KeyValue::Clear() {
   if (_has_bits_[0 / 32] & 3) {
     if (has_key()) {
       if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
@@ -8061,31 +8062,31 @@ void RaftSnapshotData_KV::Clear() {
   mutable_unknown_fields()->Clear();
 }
 
-bool RaftSnapshotData_KV::MergePartialFromCodedStream(
+bool RaftSnapshotData_KeyValue::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(parse_start:cockroach.proto.RaftSnapshotData.KeyValue)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional bytes key = 2;
-      case 2: {
-        if (tag == 18) {
+      // optional bytes key = 1;
+      case 1: {
+        if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_key()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(26)) goto parse_value;
+        if (input->ExpectTag(18)) goto parse_value;
         break;
       }
 
-      // optional bytes value = 3;
-      case 3: {
-        if (tag == 26) {
+      // optional bytes value = 2;
+      case 2: {
+        if (tag == 18) {
          parse_value:
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_value()));
@@ -8110,73 +8111,73 @@ bool RaftSnapshotData_KV::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(parse_success:cockroach.proto.RaftSnapshotData.KeyValue)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.RaftSnapshotData.KeyValue)
   return false;
 #undef DO_
 }
 
-void RaftSnapshotData_KV::SerializeWithCachedSizes(
+void RaftSnapshotData_KeyValue::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftSnapshotData.KV)
-  // optional bytes key = 2;
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftSnapshotData.KeyValue)
+  // optional bytes key = 1;
   if (has_key()) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      2, this->key(), output);
+      1, this->key(), output);
   }
 
-  // optional bytes value = 3;
+  // optional bytes value = 2;
   if (has_value()) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      3, this->value(), output);
+      2, this->value(), output);
   }
 
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
   }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.RaftSnapshotData.KeyValue)
 }
 
-::google::protobuf::uint8* RaftSnapshotData_KV::SerializeWithCachedSizesToArray(
+::google::protobuf::uint8* RaftSnapshotData_KeyValue::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftSnapshotData.KV)
-  // optional bytes key = 2;
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftSnapshotData.KeyValue)
+  // optional bytes key = 1;
   if (has_key()) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        2, this->key(), target);
+        1, this->key(), target);
   }
 
-  // optional bytes value = 3;
+  // optional bytes value = 2;
   if (has_value()) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        3, this->value(), target);
+        2, this->value(), target);
   }
 
   if (!unknown_fields().empty()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.RaftSnapshotData.KeyValue)
   return target;
 }
 
-int RaftSnapshotData_KV::ByteSize() const {
+int RaftSnapshotData_KeyValue::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional bytes key = 2;
+    // optional bytes key = 1;
     if (has_key()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
           this->key());
     }
 
-    // optional bytes value = 3;
+    // optional bytes value = 2;
     if (has_value()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
@@ -8195,10 +8196,10 @@ int RaftSnapshotData_KV::ByteSize() const {
   return total_size;
 }
 
-void RaftSnapshotData_KV::MergeFrom(const ::google::protobuf::Message& from) {
+void RaftSnapshotData_KeyValue::MergeFrom(const ::google::protobuf::Message& from) {
   GOOGLE_CHECK_NE(&from, this);
-  const RaftSnapshotData_KV* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const RaftSnapshotData_KV*>(
+  const RaftSnapshotData_KeyValue* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const RaftSnapshotData_KeyValue*>(
       &from);
   if (source == NULL) {
     ::google::protobuf::internal::ReflectionOps::Merge(from, this);
@@ -8207,7 +8208,7 @@ void RaftSnapshotData_KV::MergeFrom(const ::google::protobuf::Message& from) {
   }
 }
 
-void RaftSnapshotData_KV::MergeFrom(const RaftSnapshotData_KV& from) {
+void RaftSnapshotData_KeyValue::MergeFrom(const RaftSnapshotData_KeyValue& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_key()) {
@@ -8220,24 +8221,24 @@ void RaftSnapshotData_KV::MergeFrom(const RaftSnapshotData_KV& from) {
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
 
-void RaftSnapshotData_KV::CopyFrom(const ::google::protobuf::Message& from) {
+void RaftSnapshotData_KeyValue::CopyFrom(const ::google::protobuf::Message& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-void RaftSnapshotData_KV::CopyFrom(const RaftSnapshotData_KV& from) {
+void RaftSnapshotData_KeyValue::CopyFrom(const RaftSnapshotData_KeyValue& from) {
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool RaftSnapshotData_KV::IsInitialized() const {
+bool RaftSnapshotData_KeyValue::IsInitialized() const {
 
   return true;
 }
 
-void RaftSnapshotData_KV::Swap(RaftSnapshotData_KV* other) {
+void RaftSnapshotData_KeyValue::Swap(RaftSnapshotData_KeyValue* other) {
   if (other != this) {
     std::swap(key_, other->key_);
     std::swap(value_, other->value_);
@@ -8247,11 +8248,11 @@ void RaftSnapshotData_KV::Swap(RaftSnapshotData_KV* other) {
   }
 }
 
-::google::protobuf::Metadata RaftSnapshotData_KV::GetMetadata() const {
+::google::protobuf::Metadata RaftSnapshotData_KeyValue::GetMetadata() const {
   protobuf_AssignDescriptorsOnce();
   ::google::protobuf::Metadata metadata;
-  metadata.descriptor = RaftSnapshotData_KV_descriptor_;
-  metadata.reflection = RaftSnapshotData_KV_reflection_;
+  metadata.descriptor = RaftSnapshotData_KeyValue_descriptor_;
+  metadata.reflection = RaftSnapshotData_KeyValue_reflection_;
   return metadata;
 }
 
@@ -8259,7 +8260,7 @@ void RaftSnapshotData_KV::Swap(RaftSnapshotData_KV* other) {
 // -------------------------------------------------------------------
 
 #ifndef _MSC_VER
-const int RaftSnapshotData::kKvFieldNumber;
+const int RaftSnapshotData::kKVFieldNumber;
 #endif  // !_MSC_VER
 
 RaftSnapshotData::RaftSnapshotData()
@@ -8330,16 +8331,16 @@ bool RaftSnapshotData::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // repeated group KV = 1 {
+      // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
       case 1: {
-        if (tag == 11) {
-         parse_kv:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadGroupNoVirtual(
-                1, input, add_kv()));
+        if (tag == 10) {
+         parse_KV:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                input, add_kv()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(11)) goto parse_kv;
+        if (input->ExpectTag(10)) goto parse_KV;
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -8369,9 +8370,9 @@ failure:
 void RaftSnapshotData::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.RaftSnapshotData)
-  // repeated group KV = 1 {
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
   for (int i = 0; i < this->kv_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteGroupMaybeToArray(
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
       1, this->kv(i), output);
   }
 
@@ -8385,10 +8386,10 @@ void RaftSnapshotData::SerializeWithCachedSizes(
 ::google::protobuf::uint8* RaftSnapshotData::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.RaftSnapshotData)
-  // repeated group KV = 1 {
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
   for (int i = 0; i < this->kv_size(); i++) {
     target = ::google::protobuf::internal::WireFormatLite::
-      WriteGroupNoVirtualToArray(
+      WriteMessageNoVirtualToArray(
         1, this->kv(i), target);
   }
 
@@ -8403,11 +8404,11 @@ void RaftSnapshotData::SerializeWithCachedSizes(
 int RaftSnapshotData::ByteSize() const {
   int total_size = 0;
 
-  // repeated group KV = 1 {
-  total_size += 2 * this->kv_size();
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
+  total_size += 1 * this->kv_size();
   for (int i = 0; i < this->kv_size(); i++) {
     total_size +=
-      ::google::protobuf::internal::WireFormatLite::GroupSizeNoVirtual(
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
         this->kv(i));
   }
 

@@ -294,8 +294,9 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Truncate the log.
-	truncArgs, truncResp := internalTruncateLogArgs(index, 1, mtc.stores[0].StoreID())
+	// Truncate the log at index+1 (log entries < N are removed, so this includes
+	// the increment).
+	truncArgs, truncResp := internalTruncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
 	if err := mtc.stores[0].ExecuteCmd(proto.InternalTruncateLog, truncArgs, truncResp); err != nil {
 		t.Fatal(err)
 	}

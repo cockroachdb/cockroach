@@ -61,7 +61,7 @@ class InternalTimeSeriesData;
 class InternalTimeSeriesSample;
 class RaftTruncatedState;
 class RaftSnapshotData;
-class RaftSnapshotData_KV;
+class RaftSnapshotData_KeyValue;
 
 enum InternalValueType {
   _CR_TS = 1
@@ -2418,14 +2418,14 @@ class RaftTruncatedState : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
-class RaftSnapshotData_KV : public ::google::protobuf::Message {
+class RaftSnapshotData_KeyValue : public ::google::protobuf::Message {
  public:
-  RaftSnapshotData_KV();
-  virtual ~RaftSnapshotData_KV();
+  RaftSnapshotData_KeyValue();
+  virtual ~RaftSnapshotData_KeyValue();
 
-  RaftSnapshotData_KV(const RaftSnapshotData_KV& from);
+  RaftSnapshotData_KeyValue(const RaftSnapshotData_KeyValue& from);
 
-  inline RaftSnapshotData_KV& operator=(const RaftSnapshotData_KV& from) {
+  inline RaftSnapshotData_KeyValue& operator=(const RaftSnapshotData_KeyValue& from) {
     CopyFrom(from);
     return *this;
   }
@@ -2439,17 +2439,17 @@ class RaftSnapshotData_KV : public ::google::protobuf::Message {
   }
 
   static const ::google::protobuf::Descriptor* descriptor();
-  static const RaftSnapshotData_KV& default_instance();
+  static const RaftSnapshotData_KeyValue& default_instance();
 
-  void Swap(RaftSnapshotData_KV* other);
+  void Swap(RaftSnapshotData_KeyValue* other);
 
   // implements Message ----------------------------------------------
 
-  RaftSnapshotData_KV* New() const;
+  RaftSnapshotData_KeyValue* New() const;
   void CopyFrom(const ::google::protobuf::Message& from);
   void MergeFrom(const ::google::protobuf::Message& from);
-  void CopyFrom(const RaftSnapshotData_KV& from);
-  void MergeFrom(const RaftSnapshotData_KV& from);
+  void CopyFrom(const RaftSnapshotData_KeyValue& from);
+  void MergeFrom(const RaftSnapshotData_KeyValue& from);
   void Clear();
   bool IsInitialized() const;
 
@@ -2471,10 +2471,10 @@ class RaftSnapshotData_KV : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional bytes key = 2;
+  // optional bytes key = 1;
   inline bool has_key() const;
   inline void clear_key();
-  static const int kKeyFieldNumber = 2;
+  static const int kKeyFieldNumber = 1;
   inline const ::std::string& key() const;
   inline void set_key(const ::std::string& value);
   inline void set_key(const char* value);
@@ -2483,10 +2483,10 @@ class RaftSnapshotData_KV : public ::google::protobuf::Message {
   inline ::std::string* release_key();
   inline void set_allocated_key(::std::string* key);
 
-  // optional bytes value = 3;
+  // optional bytes value = 2;
   inline bool has_value() const;
   inline void clear_value();
-  static const int kValueFieldNumber = 3;
+  static const int kValueFieldNumber = 2;
   inline const ::std::string& value() const;
   inline void set_value(const ::std::string& value);
   inline void set_value(const char* value);
@@ -2495,7 +2495,7 @@ class RaftSnapshotData_KV : public ::google::protobuf::Message {
   inline ::std::string* release_value();
   inline void set_allocated_value(::std::string* value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData.KV)
+  // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData.KeyValue)
  private:
   inline void set_has_key();
   inline void clear_has_key();
@@ -2513,7 +2513,7 @@ class RaftSnapshotData_KV : public ::google::protobuf::Message {
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
 
   void InitAsDefaultInstance();
-  static RaftSnapshotData_KV* default_instance_;
+  static RaftSnapshotData_KeyValue* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2568,20 +2568,20 @@ class RaftSnapshotData : public ::google::protobuf::Message {
 
   // nested types ----------------------------------------------------
 
-  typedef RaftSnapshotData_KV KV;
+  typedef RaftSnapshotData_KeyValue KeyValue;
 
   // accessors -------------------------------------------------------
 
-  // repeated group KV = 1 {
+  // repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
   inline int kv_size() const;
   inline void clear_kv();
-  static const int kKvFieldNumber = 1;
-  inline const ::cockroach::proto::RaftSnapshotData_KV& kv(int index) const;
-  inline ::cockroach::proto::RaftSnapshotData_KV* mutable_kv(int index);
-  inline ::cockroach::proto::RaftSnapshotData_KV* add_kv();
-  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >&
+  static const int kKVFieldNumber = 1;
+  inline const ::cockroach::proto::RaftSnapshotData_KeyValue& kv(int index) const;
+  inline ::cockroach::proto::RaftSnapshotData_KeyValue* mutable_kv(int index);
+  inline ::cockroach::proto::RaftSnapshotData_KeyValue* add_kv();
+  inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue >&
       kv() const;
-  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >*
+  inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue >*
       mutable_kv();
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.RaftSnapshotData)
@@ -2591,7 +2591,7 @@ class RaftSnapshotData : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV > kv_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue > kv_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
@@ -5517,61 +5517,61 @@ inline void RaftTruncatedState::set_term(::google::protobuf::uint64 value) {
 
 // -------------------------------------------------------------------
 
-// RaftSnapshotData_KV
+// RaftSnapshotData_KeyValue
 
-// optional bytes key = 2;
-inline bool RaftSnapshotData_KV::has_key() const {
+// optional bytes key = 1;
+inline bool RaftSnapshotData_KeyValue::has_key() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void RaftSnapshotData_KV::set_has_key() {
+inline void RaftSnapshotData_KeyValue::set_has_key() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void RaftSnapshotData_KV::clear_has_key() {
+inline void RaftSnapshotData_KeyValue::clear_has_key() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void RaftSnapshotData_KV::clear_key() {
+inline void RaftSnapshotData_KeyValue::clear_key() {
   if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_->clear();
   }
   clear_has_key();
 }
-inline const ::std::string& RaftSnapshotData_KV::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KV.key)
+inline const ::std::string& RaftSnapshotData_KeyValue::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KeyValue.key)
   return *key_;
 }
-inline void RaftSnapshotData_KV::set_key(const ::std::string& value) {
+inline void RaftSnapshotData_KeyValue::set_key(const ::std::string& value) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KV.key)
+  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KeyValue.key)
 }
-inline void RaftSnapshotData_KV::set_key(const char* value) {
+inline void RaftSnapshotData_KeyValue::set_key(const char* value) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KV.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KeyValue.key)
 }
-inline void RaftSnapshotData_KV::set_key(const void* value, size_t size) {
+inline void RaftSnapshotData_KeyValue::set_key(const void* value, size_t size) {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
   key_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KV.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KeyValue.key)
 }
-inline ::std::string* RaftSnapshotData_KV::mutable_key() {
+inline ::std::string* RaftSnapshotData_KeyValue::mutable_key() {
   set_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     key_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KV.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KeyValue.key)
   return key_;
 }
-inline ::std::string* RaftSnapshotData_KV::release_key() {
+inline ::std::string* RaftSnapshotData_KeyValue::release_key() {
   clear_has_key();
   if (key_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
@@ -5581,7 +5581,7 @@ inline ::std::string* RaftSnapshotData_KV::release_key() {
     return temp;
   }
 }
-inline void RaftSnapshotData_KV::set_allocated_key(::std::string* key) {
+inline void RaftSnapshotData_KeyValue::set_allocated_key(::std::string* key) {
   if (key_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete key_;
   }
@@ -5592,62 +5592,62 @@ inline void RaftSnapshotData_KV::set_allocated_key(::std::string* key) {
     clear_has_key();
     key_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KV.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KeyValue.key)
 }
 
-// optional bytes value = 3;
-inline bool RaftSnapshotData_KV::has_value() const {
+// optional bytes value = 2;
+inline bool RaftSnapshotData_KeyValue::has_value() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void RaftSnapshotData_KV::set_has_value() {
+inline void RaftSnapshotData_KeyValue::set_has_value() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void RaftSnapshotData_KV::clear_has_value() {
+inline void RaftSnapshotData_KeyValue::clear_has_value() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void RaftSnapshotData_KV::clear_value() {
+inline void RaftSnapshotData_KeyValue::clear_value() {
   if (value_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     value_->clear();
   }
   clear_has_value();
 }
-inline const ::std::string& RaftSnapshotData_KV::value() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KV.value)
+inline const ::std::string& RaftSnapshotData_KeyValue::value() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KeyValue.value)
   return *value_;
 }
-inline void RaftSnapshotData_KV::set_value(const ::std::string& value) {
+inline void RaftSnapshotData_KeyValue::set_value(const ::std::string& value) {
   set_has_value();
   if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     value_ = new ::std::string;
   }
   value_->assign(value);
-  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KV.value)
+  // @@protoc_insertion_point(field_set:cockroach.proto.RaftSnapshotData.KeyValue.value)
 }
-inline void RaftSnapshotData_KV::set_value(const char* value) {
+inline void RaftSnapshotData_KeyValue::set_value(const char* value) {
   set_has_value();
   if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     value_ = new ::std::string;
   }
   value_->assign(value);
-  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KV.value)
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.RaftSnapshotData.KeyValue.value)
 }
-inline void RaftSnapshotData_KV::set_value(const void* value, size_t size) {
+inline void RaftSnapshotData_KeyValue::set_value(const void* value, size_t size) {
   set_has_value();
   if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     value_ = new ::std::string;
   }
   value_->assign(reinterpret_cast<const char*>(value), size);
-  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KV.value)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.RaftSnapshotData.KeyValue.value)
 }
-inline ::std::string* RaftSnapshotData_KV::mutable_value() {
+inline ::std::string* RaftSnapshotData_KeyValue::mutable_value() {
   set_has_value();
   if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     value_ = new ::std::string;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KV.value)
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KeyValue.value)
   return value_;
 }
-inline ::std::string* RaftSnapshotData_KV::release_value() {
+inline ::std::string* RaftSnapshotData_KeyValue::release_value() {
   clear_has_value();
   if (value_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     return NULL;
@@ -5657,7 +5657,7 @@ inline ::std::string* RaftSnapshotData_KV::release_value() {
     return temp;
   }
 }
-inline void RaftSnapshotData_KV::set_allocated_value(::std::string* value) {
+inline void RaftSnapshotData_KeyValue::set_allocated_value(::std::string* value) {
   if (value_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete value_;
   }
@@ -5668,40 +5668,40 @@ inline void RaftSnapshotData_KV::set_allocated_value(::std::string* value) {
     clear_has_value();
     value_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KV.value)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RaftSnapshotData.KeyValue.value)
 }
 
 // -------------------------------------------------------------------
 
 // RaftSnapshotData
 
-// repeated group KV = 1 {
+// repeated .cockroach.proto.RaftSnapshotData.KeyValue KV = 1;
 inline int RaftSnapshotData::kv_size() const {
   return kv_.size();
 }
 inline void RaftSnapshotData::clear_kv() {
   kv_.Clear();
 }
-inline const ::cockroach::proto::RaftSnapshotData_KV& RaftSnapshotData::kv(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.kv)
+inline const ::cockroach::proto::RaftSnapshotData_KeyValue& RaftSnapshotData::kv(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RaftSnapshotData.KV)
   return kv_.Get(index);
 }
-inline ::cockroach::proto::RaftSnapshotData_KV* RaftSnapshotData::mutable_kv(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.kv)
+inline ::cockroach::proto::RaftSnapshotData_KeyValue* RaftSnapshotData::mutable_kv(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.RaftSnapshotData.KV)
   return kv_.Mutable(index);
 }
-inline ::cockroach::proto::RaftSnapshotData_KV* RaftSnapshotData::add_kv() {
-  // @@protoc_insertion_point(field_add:cockroach.proto.RaftSnapshotData.kv)
+inline ::cockroach::proto::RaftSnapshotData_KeyValue* RaftSnapshotData::add_kv() {
+  // @@protoc_insertion_point(field_add:cockroach.proto.RaftSnapshotData.KV)
   return kv_.Add();
 }
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >&
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue >&
 RaftSnapshotData::kv() const {
-  // @@protoc_insertion_point(field_list:cockroach.proto.RaftSnapshotData.kv)
+  // @@protoc_insertion_point(field_list:cockroach.proto.RaftSnapshotData.KV)
   return kv_;
 }
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KV >*
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::proto::RaftSnapshotData_KeyValue >*
 RaftSnapshotData::mutable_kv() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.RaftSnapshotData.kv)
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.RaftSnapshotData.KV)
   return &kv_;
 }
 

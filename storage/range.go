@@ -1683,7 +1683,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 		}
 
 		snapData.KV = append(snapData.KV,
-			&proto.RaftSnapshotData_KV{Key: iter.Key(), Value: iter.Value()})
+			&proto.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
 
 	data, err := gogoproto.Marshal(&snapData)
