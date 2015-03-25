@@ -98,18 +98,18 @@ message ZoneConfig {
 
 // RangeTree holds the root node and size of the range tree.
 message RangeTree {
-  optional int64 root_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RootID"];
+  optional bytes root_key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
 }
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 message RangeTreeNode {
-  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
 
   // Color is black if true, red if false.
   optional bool black = 2 [(gogoproto.nullable) = false];
 
   // If the parent key is null, this is the root node.
-  optional int64 parent_id = 3 [(gogoproto.customname) = "ParentID"];
-  optional int64 left_id = 4 [(gogoproto.customname) = "LeftID"];
-  optional int64 right_id = 5 [(gogoproto.customname) = "RightID"];
+  optional bytes parent_key = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
+  optional bytes left_key = 4 [(gogoproto.customtype) = "Key"];
+  optional bytes right_key = 5 [(gogoproto.customtype) = "Key"];
 }

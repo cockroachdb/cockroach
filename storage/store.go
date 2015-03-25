@@ -645,7 +645,7 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 	// Range Tree setup.
-	if _, _, err := s.SetupRangeTree(batch, ms, now, desc.RaftID); err != nil {
+	if err := SetupRangeTree(batch, ms, now, desc.StartKey); err != nil {
 		return err
 	}
 

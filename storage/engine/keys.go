@@ -157,8 +157,8 @@ func RangeLastVerificationTimestampKey(raftID int64) proto.Key {
 
 // RangeTreeNodeKey returns a range-local key for the the range's
 // node in the range tree.
-func RangeTreeNodeKey(raftID int64) proto.Key {
-	return MakeRangeIDKey(raftID, KeyLocalRangeTreeNodeSuffix, proto.Key{})
+func RangeTreeNodeKey(key proto.Key) proto.Key {
+	return MakeRangeKey(key, KeyLocalRangeTreeNodeSuffix, proto.Key{})
 }
 
 // RangeDescriptorKey returns a range-local key for the descriptor

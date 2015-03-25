@@ -34,7 +34,7 @@ func TestSetupRangeTree(t *testing.T) {
 
 	// Check to make sure the range tree is stored correctly.
 	expectedTree := &proto.RangeTree{
-		RootID: 1,
+		RootKey: engine.KeyMin,
 	}
 	treeArgs, treeReply := getArgs(engine.KeyRangeTreeRoot, 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.Get, treeArgs, treeReply); err != nil {
@@ -50,17 +50,17 @@ func TestSetupRangeTree(t *testing.T) {
 
 	// Check to make sure the first range tree node is stored correctly.
 	expectedNode := &proto.RangeTreeNode{
-		RaftID: 1,
-		Black:  true,
+		Key:   engine.KeyMin,
+		Black: true,
 	}
 	// To read the local key, we need to use MVCCGetProto.
 	actualNode := &proto.RangeTreeNode{}
-	ok, err := engine.MVCCGetProto(store.Engine(), engine.RangeTreeNodeKey(1), clock.Now(), nil, actualNode)
+	ok, err := engine.MVCCGetProto(store.Engine(), engine.RangeTreeNodeKey(engine.KeyMin), clock.Now(), nil, actualNode)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ok {
-		t.Errorf("Could not find the first range's node:%s", engine.RangeTreeNodeKey(1))
+		t.Errorf("Could not find the first range's node:%s", engine.RangeTreeNodeKey(engine.KeyMin))
 	}
 	if !reflect.DeepEqual(expectedNode, actualNode) {
 		t.Errorf("expected range tree node and actual range tree node are not equal - expected:%s actual:%s", expectedNode, actualNode)

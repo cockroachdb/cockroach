@@ -206,7 +206,7 @@ func (m *ZoneConfig) GetGC() *GCPolicy {
 
 // RangeTree holds the root node and size of the range tree.
 type RangeTree struct {
-	RootID           int64  `protobuf:"varint,1,opt,name=root_id" json:"root_id"`
+	RootKey          Key    `protobuf:"bytes,1,opt,name=root_key,customtype=Key" json:"root_key"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -214,22 +214,15 @@ func (m *RangeTree) Reset()         { *m = RangeTree{} }
 func (m *RangeTree) String() string { return proto1.CompactTextString(m) }
 func (*RangeTree) ProtoMessage()    {}
 
-func (m *RangeTree) GetRootID() int64 {
-	if m != nil {
-		return m.RootID
-	}
-	return 0
-}
-
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 type RangeTreeNode struct {
-	RaftID int64 `protobuf:"varint,1,opt,name=raft_id" json:"raft_id"`
+	Key Key `protobuf:"bytes,1,opt,name=key,customtype=Key" json:"key"`
 	// Color is black if true, red if false.
 	Black bool `protobuf:"varint,2,opt,name=black" json:"black"`
 	// If the parent key is null, this is the root node.
-	ParentID         *int64 `protobuf:"varint,3,opt,name=parent_id" json:"parent_id,omitempty"`
-	LeftID           *int64 `protobuf:"varint,4,opt,name=left_id" json:"left_id,omitempty"`
-	RightID          *int64 `protobuf:"varint,5,opt,name=right_id" json:"right_id,omitempty"`
+	ParentKey        Key    `protobuf:"bytes,3,opt,name=parent_key,customtype=Key" json:"parent_key"`
+	LeftKey          *Key   `protobuf:"bytes,4,opt,name=left_key,customtype=Key" json:"left_key,omitempty"`
+	RightKey         *Key   `protobuf:"bytes,5,opt,name=right_key,customtype=Key" json:"right_key,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -237,39 +230,11 @@ func (m *RangeTreeNode) Reset()         { *m = RangeTreeNode{} }
 func (m *RangeTreeNode) String() string { return proto1.CompactTextString(m) }
 func (*RangeTreeNode) ProtoMessage()    {}
 
-func (m *RangeTreeNode) GetRaftID() int64 {
-	if m != nil {
-		return m.RaftID
-	}
-	return 0
-}
-
 func (m *RangeTreeNode) GetBlack() bool {
 	if m != nil {
 		return m.Black
 	}
 	return false
-}
-
-func (m *RangeTreeNode) GetParentID() int64 {
-	if m != nil && m.ParentID != nil {
-		return *m.ParentID
-	}
-	return 0
-}
-
-func (m *RangeTreeNode) GetLeftID() int64 {
-	if m != nil && m.LeftID != nil {
-		return *m.LeftID
-	}
-	return 0
-}
-
-func (m *RangeTreeNode) GetRightID() int64 {
-	if m != nil && m.RightID != nil {
-		return *m.RightID
-	}
-	return 0
 }
 
 func init() {
