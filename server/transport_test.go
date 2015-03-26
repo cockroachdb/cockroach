@@ -18,7 +18,7 @@
 package server
 
 import (
-	"net"
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,79 +30,102 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-type TestTransportServer struct {
-	messages chan *multiraft.RaftMessageRequest
-}
+type ChannelServer chan *multiraft.RaftMessageRequest
 
-func (s *TestTransportServer) RaftMessage(req *multiraft.RaftMessageRequest,
+func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 	resp *multiraft.RaftMessageResponse) error {
-	s.messages <- req
+	s <- req
 	return nil
 }
 
 func TestSendAndReceive(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	gossip := gossip.New(rpcContext, gossip.TestInterval, "")
-	//addr1 := util.CreateTestAddr("tcp")
-	addr1, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rpcServer1 := rpc.NewServer(addr1, rpcContext)
-	if err := rpcServer1.Start(); err != nil {
-		t.Fatal(err)
-	}
-	transport1, err := NewRPCTransport(gossip, rpcServer1)
-	if err != nil {
-		t.Errorf("Unexpected error creating transport1, Error: %s", err)
+
+	// Create several servers, each of which has two stores (A multiraft node ID addresses
+	// a store).
+	const numServers = 3
+	const storesPerServer = 2
+	const numStores = numServers * storesPerServer
+	// servers has length numServers.
+	servers := []*rpc.Server{}
+	// All the rest have length numStores (note that several stores share a transport).
+	nextNodeID := uint64(1)
+	nodeIDs := []uint64{}
+	transports := []multiraft.Transport{}
+	channels := []ChannelServer{}
+	for server := 0; server < numServers; server++ {
+		server := rpc.NewServer(util.CreateTestAddr("tcp"), rpcContext)
+		if err := server.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer server.Close()
+
+		transport, err := NewRPCTransport(gossip, server)
+		if err != nil {
+			t.Fatalf("Unexpected error creating transport, Error: %s", err)
+		}
+		defer transport.Close()
+
+		for store := 0; store < storesPerServer; store++ {
+			nodeID := nextNodeID
+			nextNodeID++
+
+			channel := make(ChannelServer, 10)
+			if err := transport.Listen(multiraft.NodeID(nodeID), channel); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := gossip.AddInfo(fmt.Sprintf("node-%d", nodeID), server.Addr(), time.Hour); err != nil {
+				t.Fatal(err)
+			}
+
+			nodeIDs = append(nodeIDs, nodeID)
+			transports = append(transports, transport)
+			channels = append(channels, channel)
+		}
+
+		servers = append(servers, server)
 	}
 
-	addr2 := util.CreateTestAddr("tcp")
-	rpcServer2 := rpc.NewServer(addr2, rpcContext)
-	if err := rpcServer2.Start(); err != nil {
-		t.Fatal(err)
-	}
-	transport2, err := NewRPCTransport(gossip, rpcServer2)
-	if err != nil {
-		t.Errorf("Unexpected error creating transport2, Error: %s", err)
-	}
+	// Each store sends one message to each store.
+	for from := 0; from < numStores; from++ {
+		for to := 0; to < numStores; to++ {
+			req := &multiraft.RaftMessageRequest{
+				GroupID: 1,
+				Message: raftpb.Message{
+					From: nodeIDs[from],
+					To:   nodeIDs[to],
+					Type: raftpb.MsgHeartbeat,
+				},
+			}
 
-	if err := gossip.AddInfo("node-1", rpcServer1.Addr(), time.Hour); err != nil {
-		t.Fatal(err)
-	}
-	if err := gossip.AddInfo("node-2", rpcServer2.Addr(), time.Hour); err != nil {
-		t.Fatal(err)
-	}
-
-	messages := make(chan *multiraft.RaftMessageRequest, 10)
-	testServer := &TestTransportServer{messages}
-	if err := transport1.Listen(1, testServer); err != nil {
-		t.Fatal(err)
+			if err := transports[from].Send(multiraft.NodeID(nodeIDs[to]), req); err != nil {
+				t.Errorf("Unable to send message from %d to %d: %s", nodeIDs[from], nodeIDs[to], err)
+			}
+		}
 	}
 
-	msg := raftpb.Message{
-		From: uint64(2),
-		To:   uint64(1),
-		Type: raftpb.MsgHeartbeat,
+	// Read all the messages from the channels.  Note that the transport does not
+	// currently guarantee in-order delivery, so we just verify that the right number
+	// of messages end up in each channel.
+	for to := 0; to < numStores; to++ {
+		for from := 0; from < numStores; from++ {
+			select {
+			case req := <-channels[to]:
+				if req.Message.To != nodeIDs[to] {
+					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
+						nodeIDs[to], nodeIDs[from], req)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for message")
+			}
+		}
+
+		select {
+		case req := <-channels[to]:
+			t.Errorf("got unexpected message %+v on channel %d", req, nodeIDs[to])
+		default:
+		}
 	}
-
-	req := &multiraft.RaftMessageRequest{
-		GroupID: 1,
-		Message: msg,
-	}
-
-	err = transport2.Send(multiraft.NodeID(1), req)
-
-	if err != nil {
-		t.Fatalf("Unable to send message to node 1, Error: %s", err)
-	}
-
-	foundReq := <-messages
-
-	foundMsg := foundReq.Message
-
-	if foundMsg.To != uint64(1) || foundMsg.From != uint64(2) || foundMsg.Type != raftpb.MsgHeartbeat {
-		t.Errorf("Invalid message received from transport")
-	}
-
 }

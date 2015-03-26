@@ -31,8 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var (
-	raftMessageName = "MultiRaft.RaftMessage"
+const (
+	raftServiceName = "MultiRaft"
+	raftMessageName = raftServiceName + ".RaftMessage"
 )
 
 // RPCTransport handles the rpc messages for multiraft.
@@ -53,7 +54,7 @@ func NewRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.T
 		clients:   make(map[multiraft.NodeID]*rpc.Client),
 	}
 
-	err := t.rpcServer.RegisterName("MultiRaft", t)
+	err := t.rpcServer.RegisterName("MultiRaft", (*transportRPCServer)(t))
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +62,12 @@ func NewRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.T
 	return t, nil
 }
 
+// transportServer is a type alias to separate RPC methods
+// (which net/rpc finds via reflection) from others.
+type transportRPCServer RPCTransport
+
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *RPCTransport) RaftMessage(protoReq *proto.RaftMessageRequest,
+func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
 	resp *proto.RaftMessageResponse) error {
 	// Convert from proto to internal formats.
 	req := &multiraft.RaftMessageRequest{GroupID: protoReq.GroupID}
@@ -116,7 +121,6 @@ func (t *RPCTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("connected to %v", address)
 	client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
 
 	t.clients[id] = client
@@ -138,7 +142,6 @@ func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 		return err
 	}
 	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
-	log.Infof("rpc sent %T", req)
 	select {
 	case <-call.Done:
 		// If the call failed synchronously, report an error.
@@ -149,8 +152,6 @@ func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 			<-call.Done
 			if call.Error != nil {
 				log.Errorf("raft message failed: %s", call.Error)
-			} else {
-				log.Infof("raft message succeeded")
 			}
 		}()
 		return nil
