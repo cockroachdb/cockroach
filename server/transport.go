@@ -62,13 +62,20 @@ func NewRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.T
 }
 
 // RaftMessage proxies the incoming request to the listening server interface.
-func (t *RPCTransport) RaftMessage(req *multiraft.RaftMessageRequest,
-	resp *multiraft.RaftMessageResponse) error {
+func (t *RPCTransport) RaftMessage(protoReq *proto.RaftMessageRequest,
+	resp *proto.RaftMessageResponse) error {
+	// Convert from proto to internal formats.
+	req := &multiraft.RaftMessageRequest{GroupID: protoReq.GroupID}
+	if err := req.Message.Unmarshal(protoReq.Msg); err != nil {
+		return err
+	}
+
 	t.mu.Lock()
 	server, ok := t.servers[multiraft.NodeID(req.Message.To)]
 	t.mu.Unlock()
+
 	if ok {
-		return server.RaftMessage(req, resp)
+		return server.RaftMessage(req, &multiraft.RaftMessageResponse{})
 	}
 
 	return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
@@ -119,11 +126,18 @@ func (t *RPCTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
 
 // Send a message to the specified Node id.
 func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageRequest) error {
+	// Convert internal to proto formats.
+	protoReq := &proto.RaftMessageRequest{GroupID: req.GroupID}
+	var err error
+	if protoReq.Msg, err = req.Message.Marshal(); err != nil {
+		return err
+	}
+
 	client, err := t.getClient(id)
 	if err != nil {
 		return err
 	}
-	call := client.Go(raftMessageName, req, &multiraft.RaftMessageResponse{}, nil)
+	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
 	log.Infof("rpc sent %T", req)
 	select {
 	case <-call.Done:
