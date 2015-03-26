@@ -23,12 +23,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range tree and first node.
 // SetupRangeTree is called via store.BootstrapRange.
 func TestSetupRangeTree(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, clock := createTestStoreWithClock(t)
 	defer store.Stop()
 

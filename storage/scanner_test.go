@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -176,6 +177,7 @@ func (tq *testQueue) isDone() bool {
 // TestScannerAddToQueues verifies that ranges are added to and
 // removed from multiple queues.
 func TestScannerAddToQueues(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	const count = 3
 	iter := newTestIterator(count)
 	q1, q2 := &testQueue{}, &testQueue{}
@@ -212,6 +214,7 @@ func TestScannerAddToQueues(t *testing.T) {
 // TestScannerTiming verifies that ranges are scanned, regardless
 // of how many, to match scanInterval.
 func TestScannerTiming(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	const count = 3
 	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
@@ -242,6 +245,7 @@ func TestScannerTiming(t *testing.T) {
 
 // TestScannerEmptyIterator verifies that an empty iterator doesn't busy loop.
 func TestScannerEmptyIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	iter := newTestIterator(0)
 	q := &testQueue{}
 	s := newRangeScanner(1*time.Millisecond, iter)
@@ -259,6 +263,7 @@ func TestScannerEmptyIterator(t *testing.T) {
 
 // TestScannerStats verifies that stats accumulate from all ranges.
 func TestScannerStats(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	const count = 3
 	iter := newTestIterator(count)
 	q := &testQueue{}

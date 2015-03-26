@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // waitForCmd launches a goroutine to wait on the supplied
@@ -50,6 +51,7 @@ func testCmdDone(cmdDone <-chan struct{}, wait time.Duration) bool {
 }
 
 func TestCommandQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 
@@ -73,6 +75,7 @@ func TestCommandQueue(t *testing.T) {
 }
 
 func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 	// Add a read-only command.
@@ -93,6 +96,7 @@ func TestCommandQueueNoWaitOnReadOnly(t *testing.T) {
 }
 
 func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
 	wg := sync.WaitGroup{}
 
@@ -117,6 +121,7 @@ func TestCommandQueueMultipleExecutingCommands(t *testing.T) {
 }
 
 func TestCommandQueueMultiplePendingCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
@@ -145,6 +150,7 @@ func TestCommandQueueMultiplePendingCommands(t *testing.T) {
 }
 
 func TestCommandQueueClear(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cq := NewCommandQueue()
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}

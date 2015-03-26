@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestSplitQueueShouldQueue verifies shouldQueue method correctly
 // combines splits in accounting and zone configs with the size of
 // the range.
 func TestSplitQueueShouldQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 )
 
 func TestTimestampCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -103,6 +105,7 @@ func TestTimestampCache(t *testing.T) {
 // TestTimestampCacheEviction verifies the eviction of
 // timestamp cache entries after minCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -127,6 +130,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 // is chosen if previous entries have ranges which are layered over
 // each other.
 func TestTimestampCacheLayeredIntervals(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -176,6 +180,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 }
 
 func TestTimestampCacheClear(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	clock.SetMaxOffset(maxClockOffset)
@@ -202,6 +207,7 @@ func TestTimestampCacheClear(t *testing.T) {
 // in the timestamp cache which completely "covers" an older
 // entry will replace it.
 func TestTimestampCacheReplacements(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
@@ -253,6 +259,7 @@ func TestTimestampCacheReplacements(t *testing.T) {
 // TestTimestampCacheWithTxnMD5 verifies that timestamps matching
 // a specified MD5 of the txn ID are ignored.
 func TestTimestampCacheWithTxnMD5(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)
@@ -283,6 +290,7 @@ func TestTimestampCacheWithTxnMD5(t *testing.T) {
 // TestTimestampCacheReadVsWrite verifies that the timestamp cache
 // can differentiate between read and write timestamp.
 func TestTimestampCacheReadVsWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	tc := NewTimestampCache(clock)

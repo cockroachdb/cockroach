@@ -24,9 +24,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func TestCapacityGossipUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	sf := StoreFinder{}
 	key := "testkey"
 
@@ -45,6 +47,7 @@ func TestCapacityGossipUpdate(t *testing.T) {
 }
 
 func TestStoreFinder(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, _ := createTestStore(t)
 	defer s.Stop()
 	required := []string{"ssd", "dc"}
@@ -96,6 +99,7 @@ func TestStoreFinder(t *testing.T) {
 // TestStoreFinderGarbageCollection ensures removal of capacity gossip keys in
 // the map, if their gossip does not exist when we try to retrieve them.
 func TestStoreFinderGarbageCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	s, _ := createTestStore(t)
 	defer s.Stop()
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,6 +61,7 @@ func createSplitRanges(store *storage.Store) (*proto.RangeDescriptor, *proto.Ran
 // TestStoreRangeMergeTwoEmptyRanges tries to merge two empty ranges
 // together.
 func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -87,6 +89,7 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 // TestStoreRangeMergeWithData attempts to merge two collocate ranges
 // each containing data.
 func TestStoreRangeMergeWithData(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	content := proto.Key("testing!")
 
 	store := createTestStore(t)
@@ -176,6 +179,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 // TestStoreRangeMergeFirstRange attempts to merge the first range
 // which is illegal.
 func TestStoreRangeMergeFirstRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -195,6 +199,7 @@ func TestStoreRangeMergeFirstRange(t *testing.T) {
 // TestStoreRangeMergeDistantRanges attempts to merge two ranges
 // that are not not next to each other.
 func TestStoreRangeMergeDistantRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -53,6 +54,7 @@ func (tq *testQueueImpl) timer() time.Duration {
 
 // TestQueuePriorityQueue verifies priority queue implementation.
 func TestQueuePriorityQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Create a priority queue, put the items in it, and
 	// establish the priority queue (heap) invariants.
 	const count = 3
@@ -91,6 +93,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 // queue including adding ranges which both should and shouldn't be
 // queued, updating an existing range, and removing a range.
 func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	r1 := &Range{}
 	r1.SetDesc(&proto.RangeDescriptor{RaftID: 1})
 	r2 := &Range{}
@@ -172,6 +175,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 // TestBaseQueueProcess verifies that items from the queue are
 // processed according to the timer function.
 func TestBaseQueueProcess(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	r1 := &Range{}
 	r1.SetDesc(&proto.RangeDescriptor{RaftID: 1})
 	r2 := &Range{}
@@ -214,6 +218,7 @@ func TestBaseQueueProcess(t *testing.T) {
 
 // TestBaseQueueAddRemove adds then removes a range; ensure range is not processed.
 func TestBaseQueueAddRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	r := &Range{}
 	r.SetDesc(&proto.RangeDescriptor{RaftID: 1})
 	testQueue := &testQueueImpl{

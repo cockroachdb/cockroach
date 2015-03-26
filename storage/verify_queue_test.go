@@ -23,12 +23,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestVerifyQueueShouldQueue verifies shouldQueue method correctly
 // indicates that a range should be queued for verification if the
 // time since last verification exceeds the threshold limit.
 func TestVerifyQueueShouldQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

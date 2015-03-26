@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -115,6 +116,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 // TestStoreInitAndBootstrap verifies store initialization and
 // bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
@@ -158,6 +160,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 // TestBootstrapOfNonEmptyStore verifies bootstrap failure if engine
 // is not empty.
 func TestBootstrapOfNonEmptyStore(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 
 	// Put some random garbage into the engine.
@@ -181,6 +184,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 }
 
 func TestRangeSliceSort(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var rs RangeSlice
 	for i := 4; i >= 0; i-- {
 		r := &Range{}
@@ -211,6 +215,7 @@ func createRange(s *Store, raftID int64, start, end proto.Key) *Range {
 }
 
 func TestStoreAddRemoveRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	if _, err := store.GetRange(0); err == nil {
@@ -273,6 +278,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 }
 
 func TestStoreRangeIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -347,11 +353,13 @@ func TestStoreRangeIterator(t *testing.T) {
 }
 
 func TestStoreIteratorWithAddAndRemoval(t *testing.T) {
+	defer leaktest.AfterTest(t)
 }
 
 // TestStoreExecuteCmd verifies straightforward command execution
 // of both a read-only and a read-write command.
 func TestStoreExecuteCmd(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	gArgs, gReply := getArgs([]byte("a"), 1, store.StoreID())
@@ -369,6 +377,7 @@ func TestStoreExecuteCmd(t *testing.T) {
 // TestStoreVerifyKeys checks that key length is enforced and
 // that end keys must sort >= start.
 func TestStoreVerifyKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	tooLongKey := engine.MakeKey(engine.KeyMax, []byte{0})
@@ -421,6 +430,7 @@ func TestStoreVerifyKeys(t *testing.T) {
 
 // TestStoreExecuteCmdUpdateTime verifies that the node clock is updated.
 func TestStoreExecuteCmdUpdateTime(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
@@ -439,6 +449,7 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 // TestStoreExecuteCmdWithZeroTime verifies that no timestamp causes
 // the command to assume the node's wall time.
 func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, mc := createTestStore(t)
 	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
@@ -461,6 +472,7 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 // specifies a timestamp further into the future than the node's
 // maximum allowed clock offset, the cmd fails with an error.
 func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, mc := createTestStore(t)
 	defer store.Stop()
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
@@ -481,6 +493,7 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 
 // TestStoreExecuteCmdBadRange passes a bad range.
 func TestStoreExecuteCmdBadRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	args, reply := getArgs([]byte("0"), 2, store.StoreID()) // no range ID 2
@@ -512,6 +525,7 @@ func splitTestRange(store *Store, key, splitKey proto.Key, t *testing.T) *Range 
 // TestStoreExecuteCmdOutOfRange passes a key not contained
 // within the range's key range.
 func TestStoreExecuteCmdOutOfRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	// Split the range and then remove the second half to clear up some space.
@@ -531,6 +545,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 // TestStoreRaftIDAllocation verifies that raft IDs are
 // allocated in successive blocks.
 func TestStoreRaftIDAllocation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -551,6 +566,7 @@ func TestStoreRaftIDAllocation(t *testing.T) {
 // TestStoreRangesByKey verifies we can lookup ranges by key using
 // the sorted rangesByKey slice.
 func TestStoreRangesByKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -594,6 +610,7 @@ func TestStoreRangesByKey(t *testing.T) {
 // pushee has lower priority. Othwerise, verifies that a
 // TransactionPushError is returned.
 func TestStoreResolveWriteIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -653,6 +670,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 // TestStoreResolveWriteIntentRollback verifies that resolving a write
 // intent by aborting it yields the previous value.
 func TestStoreResolveWriteIntentRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -686,6 +704,7 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // write intent for a read will push the timestamp. On failure to
 // push, verify a write intent error is returned with !Resolvable.
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	setTestRetryOptions(store)
@@ -790,6 +809,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 // TestStoreResolveWriteIntentSnapshotIsolation verifies that the
 // timestamp can always be pushed if txn has snapshot isolation.
 func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -843,6 +863,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 // TestStoreResolveWriteIntentNoTxn verifies that reads and writes
 // which are not part of a transaction can push intents.
 func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 
@@ -915,6 +936,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 }
 
 func TestRaftNodeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cases := []struct {
 		nodeID   proto.NodeID
 		storeID  proto.StoreID

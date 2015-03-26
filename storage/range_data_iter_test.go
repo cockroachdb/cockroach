@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 func prevKey(k proto.Key) proto.Key {
@@ -97,6 +98,7 @@ func createRangeData(r *Range, t *testing.T) []proto.EncodedKey {
 // TestRangeDataIterator verifies correct operation of iterator if
 // a range contains no data and never has.
 func TestRangeDataIteratorEmptyRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -123,6 +125,7 @@ func TestRangeDataIteratorEmptyRange(t *testing.T) {
 // and verifies it's empty. Finally, it verifies the pre and post
 // ranges still contain the expected data.
 func TestRangeDataIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
