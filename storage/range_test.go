@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -206,6 +207,7 @@ func createReplicaSets(replicaNumbers []proto.StoreID) []proto.Replica {
 // TestRangeContains verifies that the range uses Key.Address() in
 // order to properly resolve addresses for local keys.
 func TestRangeContains(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	desc := &proto.RangeDescriptor{
 		RaftID:   1,
 		StartKey: proto.Key("a"),
@@ -240,6 +242,7 @@ func TestRangeContains(t *testing.T) {
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -269,6 +272,7 @@ func TestRangeGossipFirstRange(t *testing.T) {
 // TestRangeGossipAllConfigs verifies that all config types are
 // gossiped.
 func TestRangeGossipAllConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -298,6 +302,7 @@ func TestRangeGossipAllConfigs(t *testing.T) {
 // TestRangeGossipConfigWithMultipleKeyPrefixes verifies that multiple
 // key prefixes for a config are gossiped.
 func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -339,6 +344,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 // TestRangeGossipConfigUpdates verifies that writes to the
 // permissions cause the updated configs to be re-gossiped.
 func TestRangeGossipConfigUpdates(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -635,6 +641,7 @@ func verifyErrorMatches(err error, regexpStr string, t *testing.T) {
 // TestRangeUpdateTSCache verifies that reads and writes update the
 // timestamp cache.
 func TestRangeUpdateTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -677,6 +684,7 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // pending commands to complete through Raft before being executed on
 // range.
 func TestRangeCommandQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	be := newBlockingEngine()
 	tc := testContext{
 		engine: be,
@@ -773,6 +781,7 @@ func TestRangeCommandQueue(t *testing.T) {
 // TestRangeUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestRangeUseTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -799,6 +808,7 @@ func TestRangeUseTSCache(t *testing.T) {
 // commands do not update the timestamp cache if they result in
 // failure.
 func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -836,6 +846,7 @@ func TestRangeNoTSCacheUpdateOnFailure(t *testing.T) {
 // read the write commands within the same transaction do not cause
 // the write to receive an incremented timestamp.
 func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -878,6 +889,7 @@ func TestRangeNoTimestampIncrementWithinTxn(t *testing.T) {
 // TestRangeIdempotence verifies that a retry increment with
 // same client command ID receives same reply.
 func TestRangeIdempotence(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -931,6 +943,7 @@ func TestRangeIdempotence(t *testing.T) {
 // TestEndTransactionBeforeHeartbeat verifies that a transaction
 // can be committed/aborted before being heartbeat.
 func TestEndTransactionBeforeHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -966,6 +979,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 // TestEndTransactionAfterHeartbeat verifies that a transaction
 // can be committed/aborted after being heartbeat.
 func TestEndTransactionAfterHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1008,6 +1022,7 @@ func TestEndTransactionAfterHeartbeat(t *testing.T) {
 // greater than the transaction timestamp, depending on the isolation
 // level.
 func TestEndTransactionWithPushedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1055,6 +1070,7 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 // TestEndTransactionWithIncrementedEpoch verifies that txn ended with
 // a higher epoch (and priority) correctly assumes the higher epoch.
 func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1092,6 +1108,7 @@ func TestEndTransactionWithIncrementedEpoch(t *testing.T) {
 // are checked such as transaction already being committed or
 // aborted, or timestamp or epoch regression.
 func TestEndTransactionWithErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1136,6 +1153,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 // TestInternalPushTxnBadKey verifies that args.Key equals args.PusheeTxn.ID.
 func TestInternalPushTxnBadKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1151,6 +1169,7 @@ func TestInternalPushTxnBadKey(t *testing.T) {
 // TestInternalPushTxnAlreadyCommittedOrAborted verifies success
 // (noop) in event that pushee is already committed or aborted.
 func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1185,6 +1204,7 @@ func TestInternalPushTxnAlreadyCommittedOrAborted(t *testing.T) {
 // epoch and timestamp if greater. In all test cases, the
 // priorities are set such that the push will succeed.
 func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1248,6 +1268,7 @@ func TestInternalPushTxnUpgradeExistingTxn(t *testing.T) {
 // hasn't been heartbeat within 2x the heartbeat interval can be
 // pushed/aborted.
 func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1301,6 +1322,7 @@ func TestInternalPushTxnHeartbeatTimeout(t *testing.T) {
 // TestInternalPushTxnOldEpoch verifies that a txn intent from an
 // older epoch may be pushed.
 func TestInternalPushTxnOldEpoch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1352,6 +1374,7 @@ func TestInternalPushTxnOldEpoch(t *testing.T) {
 // are ordered by txn timestamp, with the more recent timestamp
 // being pushable.
 func TestInternalPushTxnPriorities(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1411,8 +1434,10 @@ func TestInternalPushTxnPriorities(t *testing.T) {
 // PENDING, but has its txn Timestamp moved forward to the pusher's
 // txn Timestamp + 1.
 func TestInternalPushTxnPushTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
+	defer tc.Stop()
 
 	pusher := newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
 	pushee := newTransaction("test", proto.Key("b"), 1, proto.SERIALIZABLE, tc.clock)
@@ -1441,6 +1466,7 @@ func TestInternalPushTxnPushTimestamp(t *testing.T) {
 // noop. We do this by ensuring that priorities would otherwise make
 // pushing impossible.
 func TestInternalPushTxnPushTimestampAlreadyPushed(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1489,6 +1515,7 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 // in the right ways, not the exact amounts. If the encodings change,
 // will need to update this test.
 func TestRangeStatsComputation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{
 		bootstrapMode: bootstrapRangeOnly,
 	}
@@ -1547,6 +1574,7 @@ func TestRangeStatsComputation(t *testing.T) {
 // at the engine level; this test is intended only to show that values passed to
 // InternalMerge are being merged.
 func TestInternalMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1579,6 +1607,7 @@ func TestInternalMerge(t *testing.T) {
 // removes a prefix of the raft logs (modifying FirstIndex() and making them
 // inaccessible via Entries()).
 func TestInternalTruncateLog(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1644,6 +1673,7 @@ func TestInternalTruncateLog(t *testing.T) {
 }
 
 func TestRaftStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var tc testContext
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
@@ -1659,6 +1689,7 @@ func TestRaftStorage(t *testing.T) {
 // TestConditionFailedError tests that a ConditionFailedError correctly
 // bubbles up from MVCC to Range.
 func TestConditionFailedError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
@@ -1697,6 +1728,7 @@ func TestConditionFailedError(t *testing.T) {
 // TestReplicaSetsEqual tests to ensure that intersectReplicaSets
 // returns the correct responses.
 func TestReplicaSetsEqual(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testData := []struct {
 		expected bool
 		a        []proto.Replica
@@ -1723,6 +1755,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 }
 
 func TestAppliedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()

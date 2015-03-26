@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var simpleZoneConfig = proto.ZoneConfig{
@@ -175,6 +176,7 @@ var noStores = func(a proto.Attributes) ([]*StoreDescriptor, error) {
 }
 
 func TestSimpleRetrieval(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var a = allocator{
 		storeFinder: singleStore,
 		rand:        *rand.New(rand.NewSource(0)),
@@ -189,6 +191,7 @@ func TestSimpleRetrieval(t *testing.T) {
 }
 
 func TestNoAvailableDisks(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var a = allocator{
 		storeFinder: noStores,
 		rand:        *rand.New(rand.NewSource(0)),
@@ -203,6 +206,7 @@ func TestNoAvailableDisks(t *testing.T) {
 }
 
 func TestThreeDisksSameDC(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var a = allocator{
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
@@ -241,6 +245,7 @@ func TestThreeDisksSameDC(t *testing.T) {
 }
 
 func TestTwoDatacenters(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var a = allocator{
 		storeFinder: multiDCStores,
 		rand:        *rand.New(rand.NewSource(0)),
@@ -270,6 +275,7 @@ func TestTwoDatacenters(t *testing.T) {
 }
 
 func TestExistingReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	var a = allocator{
 		storeFinder: sameDCStores,
 		rand:        *rand.New(rand.NewSource(0)),

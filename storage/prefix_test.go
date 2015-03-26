@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -69,6 +70,7 @@ func verifyPrefixConfigMap(pcc PrefixConfigMap, expPrefixConfigs []PrefixConfig,
 
 // TestPrefixEndKey verifies the end keys on prefixes.
 func TestPrefixEndKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testData := []struct {
 		prefix, expEnd proto.Key
 	}{
@@ -90,6 +92,7 @@ func TestPrefixEndKey(t *testing.T) {
 
 // TestPrefixConfigSort verifies sorting of keys.
 func TestPrefixConfigSort(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	keys := []proto.Key{
 		engine.KeyMax,
 		proto.Key("c"),
@@ -123,6 +126,7 @@ func TestPrefixConfigSort(t *testing.T) {
 // TestPrefixConfigBuild adds prefixes and verifies they're
 // sorted and proper end keys are generated.
 func TestPrefixConfigBuild(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	expPrefixConfigs := []PrefixConfig{
 		{engine.KeyMin, nil, config1},
@@ -137,6 +141,7 @@ func TestPrefixConfigBuild(t *testing.T) {
 }
 
 func TestPrefixConfigMapDuplicates(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
 		{engine.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
@@ -148,6 +153,7 @@ func TestPrefixConfigMapDuplicates(t *testing.T) {
 }
 
 func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	configs := []*PrefixConfig{
 		{engine.KeyMin, nil, config1},
 		{proto.Key("/db2"), nil, config2},
@@ -173,6 +179,7 @@ func TestPrefixConfigSuccessivePrefixes(t *testing.T) {
 
 // TestMatchByPrefix verifies matching on longest prefix.
 func TestMatchByPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		key       proto.Key
@@ -202,6 +209,7 @@ func TestMatchByPrefix(t *testing.T) {
 
 // TestesMatchesByPrefix verifies all matching prefixes.
 func TestMatchesByPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		key        proto.Key
@@ -238,6 +246,7 @@ func TestMatchesByPrefix(t *testing.T) {
 // TestSplitRangeByPrefixesErrors verifies various error conditions
 // for splitting ranges.
 func TestSplitRangeByPrefixesError(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc, err := NewPrefixConfigMap([]*PrefixConfig{})
 	if err == nil {
 		t.Error("expected error building config map with no default prefix")
@@ -256,6 +265,7 @@ func TestSplitRangeByPrefixesError(t *testing.T) {
 // TestSplitRangeByPrefixes verifies splitting of a key range
 // into sub-ranges based on config prefixes.
 func TestSplitRangeByPrefixes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		start, end proto.Key
@@ -333,6 +343,7 @@ func TestSplitRangeByPrefixes(t *testing.T) {
 // TestVisitPrefixesHierarchically verifies visitor pattern on a hierarchically
 // matching set of prefixes from longest to shortest.
 func TestVisitPrefixesHierarchically(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	var configs []interface{}
 	pcc.VisitPrefixesHierarchically(proto.Key("/db1/table/1"), func(start, end proto.Key, config interface{}) (bool, error) {
@@ -374,6 +385,7 @@ func TestVisitPrefixesHierarchically(t *testing.T) {
 
 // TestVisitPrefixes verifies visitor pattern across matching prefixes.
 func TestVisitPrefixes(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	pcc := buildTestPrefixConfigMap()
 	testData := []struct {
 		start, end proto.Key

@@ -27,12 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // TestStoreRecoverFromEngine verifies that the store recovers all ranges and their contents
 // after being stopped and recreated.
 func TestStoreRecoverFromEngine(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	raftID := int64(1)
 	splitKey := proto.Key("m")
 	key1 := proto.Key("a")
@@ -107,6 +109,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 // TestReplicateRange verifies basic replication functionality by creating two stores
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	mtc := multiTestContext{}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -150,6 +153,7 @@ func TestReplicateRange(t *testing.T) {
 // TestRestoreReplicas ensures that consensus group membership is properly
 // persisted to disk and restored when a node is stopped and restarted.
 func TestRestoreReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	mtc := multiTestContext{}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -220,6 +224,7 @@ func TestRestoreReplicas(t *testing.T) {
 }
 
 func TestFailedReplicaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	mtc := multiTestContext{}
 	mtc.Start(t, 2)
 	defer mtc.Stop()
@@ -273,6 +278,7 @@ func TestFailedReplicaChange(t *testing.T) {
 
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	mtc := multiTestContext{}
 	mtc.Start(t, 2)
 	defer mtc.Stop()

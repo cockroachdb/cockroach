@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -49,6 +50,7 @@ func serializedMVCCValue(deleted bool, t *testing.T) []byte {
 // TestGarbageCollectorFilter verifies the filter policies for
 // different sorts of MVCC keys.
 func TestGarbageCollectorFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	gcA := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 1})
 	gcB := NewGarbageCollector(makeTS(0, 0), proto.GCPolicy{TTLSeconds: 2})
 	n := serializedMVCCValue(false, t)

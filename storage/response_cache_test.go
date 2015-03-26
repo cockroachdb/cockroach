@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 var incR = proto.IncrementResponse{
@@ -45,6 +46,7 @@ func makeCmdID(wallTime, random int64) proto.ClientCmdID {
 // TestResponseCachePutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
 func TestResponseCachePutGetClearData(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
@@ -72,6 +74,7 @@ func TestResponseCachePutGetClearData(t *testing.T) {
 // TestResponseCacheEmptyCmdID tests operation with empty client
 // command id. All calls should be noops.
 func TestResponseCacheEmptyCmdID(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
 	cmdID := proto.ClientCmdID{}
 	val := proto.IncrementResponse{}
@@ -92,6 +95,7 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 // TestResponseCacheCopyInto tests that responses cached in one cache get
 // transferred correctly to another cache using CopyInto().
 func TestResponseCacheCopyInto(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
@@ -115,6 +119,7 @@ func TestResponseCacheCopyInto(t *testing.T) {
 // TestResponseCacheCopyFrom tests that responses cached in one cache get
 // transferred correctly to another cache using CopyFrom().
 func TestResponseCacheCopyFrom(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc1, rc2 := createTestResponseCache(t, 1), createTestResponseCache(t, 2)
 	cmdID := makeCmdID(1, 1)
 	// Store an increment with new value one in the first cache.
@@ -140,6 +145,7 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 // TestResponseCacheInflight verifies GetResponse invocations block on
 // inflight requests.
 func TestResponseCacheInflight(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
@@ -184,6 +190,7 @@ func TestResponseCacheInflight(t *testing.T) {
 // TestResponseCacheTwoInflights verifies panic in the event
 // that AddInflight is called twice for same command ID.
 func TestResponseCacheTwoInflights(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("expected panic due to two successive calls to AddInflight")
@@ -198,6 +205,7 @@ func TestResponseCacheTwoInflights(t *testing.T) {
 // TestResponseCacheClear verifies that inflight waiters are
 // signaled in the event the cache is cleared.
 func TestResponseCacheClear(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
 	cmdID := makeCmdID(1, 1)
 	val := proto.IncrementResponse{}
@@ -224,6 +232,7 @@ func TestResponseCacheClear(t *testing.T) {
 
 // TestResponseCacheShouldCache verifies conditions for caching responses.
 func TestResponseCacheShouldCache(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
 
 	testCases := []struct {
@@ -256,6 +265,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 // TestResponseCacheGC verifies that response cache entries are
 // garbage collected periodically.
 func TestResponseCacheGC(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	eng := engine.NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, 1<<30)
 	defer eng.Stop()
 

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -262,7 +263,10 @@ func meta2Key(key proto.Key) proto.Key {
 // TestUpdateRangeAddressing verifies range addressing records are
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
+	defer store.Stop()
+
 	// When split is false, merging treats the right range as the merged
 	// range. With merging, expNewLeft indicates the addressing keys we
 	// expect to be removed.
@@ -399,7 +403,9 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // attempt to update range addressing records that would allow a split
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
+	defer store.Stop()
 	left := &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
 	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
 	if err := storage.SplitRangeAddressing(store.DB(), left, right); err == nil {

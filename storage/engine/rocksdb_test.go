@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -70,6 +71,7 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 // installed on a RocksDB engine and will properly compact response
 // cache and transaction entries.
 func TestRocksDBCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
 	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)

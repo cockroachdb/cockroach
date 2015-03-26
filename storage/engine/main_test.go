@@ -15,7 +15,7 @@
 //
 // Author: Ben Darnell
 
-package multiraft
+package engine
 
 import (
 	"testing"
@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
 	leaktest.TestMainWithLeakCheck(m)

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -60,6 +61,7 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 // TestStoreRangeSplitAtIllegalKeys verifies a range cannot be split
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -85,6 +87,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // arrived for same key. The first one succeeds and second would try
 // to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -107,6 +110,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // of the same range are executed serially, and all but the first fail
 // because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -138,6 +142,7 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // resulting ranges respond to the right key ranges and that their stats
 // and response caches have been properly accounted for.
 func TestStoreRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 	raftID := int64(1)
@@ -265,6 +270,7 @@ func TestStoreRangeSplit(t *testing.T) {
 // splits it halfway and verifies the two splits have stats exactly equaling
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -357,6 +363,7 @@ func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64
 // splitting. It further verifies that the range is in fact split on
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
@@ -401,6 +408,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // accounting and zone configs cause ranges to be split along prefix
 // boundaries.
 func TestStoreRangeSplitOnConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
