@@ -193,3 +193,31 @@ func TestMarshalResponse(t *testing.T) {
 		}
 	}
 }
+
+// TestProtoEncodingError verifies that MarshalResponse and
+// UnmarshalRequest gracefully handles a protocol message type error.
+func TestProtoEncodingError(t *testing.T) {
+	req, err := http.NewRequest("GET", "http://foo.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add(util.ContentTypeHeader, "application/x-protobuf")
+	reqBody := []byte("foo")
+	var value string
+	err = util.UnmarshalRequest(req, reqBody, value, []util.EncodingType{util.ProtoEncoding})
+	if err == nil {
+		t.Errorf("%d: unexpected success")
+	}
+
+	req.Header.Add(util.AcceptHeader, "application/x-protobuf")
+	body, cType, err := util.MarshalResponse(req, value, []util.EncodingType{util.ProtoEncoding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cType != "application/json" {
+		t.Errorf("unexpected content type; got %s", cType)
+	}
+	if !bytes.Equal(body, body) {
+		t.Errorf("unexpected boy; got %s", body)
+	}
+}

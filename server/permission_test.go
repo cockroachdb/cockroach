@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -267,4 +268,61 @@ func ExamplePermContentTypes() {
 	// write:
 	// - readwrite
 	// - writeonly
+}
+
+// TestPermEmptyKey verifies that the Accept header can be used
+// to control the format of the response when a key is empty.
+func TestPermEmptyKey(t *testing.T) {
+	httpServer := startAdminServer()
+	defer httpServer.Close()
+
+	config := &proto.PermConfig{}
+	err := yaml.Unmarshal([]byte(testPermConfig), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{"key0", "key1"}
+	for _, key := range keys {
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", adminScheme, testContext.Addr, permPathPrefix, key), bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if _, err = sendAdminRequest(req); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := []struct {
+		accept, expBody string
+	}{
+		{"application/json", `[
+  "",
+  "key0",
+  "key1"
+]`},
+		{"text/yaml", `- ""
+- key0
+- key1
+`},
+		{"application/x-protobuf", `[
+  "",
+  "key0",
+  "key1"
+]`},
+	}
+
+	for i, test := range testCases {
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, testContext.Addr, permPathPrefix), nil)
+		req.Header.Set("Accept", test.accept)
+		body, err = sendAdminRequest(req)
+		if err != nil {
+			t.Fatalf("%d: %s", i, err)
+		}
+		if string(body) != test.expBody {
+			t.Errorf("%d: expected %q; got %q", i, test.expBody, body)
+		}
+	}
 }
