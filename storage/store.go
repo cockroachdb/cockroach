@@ -345,6 +345,7 @@ func (s *Store) Stop() {
 		rng.stop()
 	}
 	s.stopper.Stop()
+	s.engine.Stop()
 }
 
 // String formats a store for debug output.

@@ -204,6 +204,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 // stop cleanly stops the node.
 func (n *Node) stop() {
 	close(n.closer)
+	n.lSender.Close()
 }
 
 // initStores initializes the Stores map from id to Store. Stores are
