@@ -46,10 +46,10 @@ func TestResponseHeaderSetGoError(t *testing.T) {
 	rh := ResponseHeader{}
 	rh.SetGoError(&testError{})
 	err := rh.GoError()
-	if reflect.TypeOf(err) != reflect.TypeOf(&GenericError{}) {
-		t.Errorf("expected set error to be type GenericError; got %s", reflect.TypeOf(err))
+	if reflect.TypeOf(err) != reflect.TypeOf(&Error{}) {
+		t.Errorf("expected set error to be type Error; got %s", reflect.TypeOf(err))
 	}
-	if !err.(*GenericError).Retryable {
+	if !err.(*Error).Retryable {
 		t.Error("expected generic error to be retryable")
 	}
 }

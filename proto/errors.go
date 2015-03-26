@@ -20,13 +20,13 @@ package proto
 import "fmt"
 
 // Error implements the Go error interface.
-func (ge *GenericError) Error() string {
-	return ge.Message
+func (e *Error) Error() string {
+	return e.Message
 }
 
 // CanRetry implements the util/Retryable interface.
-func (ge *GenericError) CanRetry() bool {
-	return ge.Retryable
+func (e *Error) CanRetry() bool {
+	return e.Retryable
 }
 
 // Error formats error.

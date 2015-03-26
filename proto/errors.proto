@@ -23,13 +23,6 @@ import "cockroach/proto/config.proto";
 import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
-// A GenericError is a generic representation of a go error including
-// the string message and whether or not the error is retryable.
-message GenericError {
-  optional string message = 1 [(gogoproto.nullable) = false];
-  optional bool retryable = 2 [(gogoproto.nullable) = false];
-}
-
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 message NotLeaderError {
@@ -129,20 +122,34 @@ message ConditionFailedError {
   optional Value actual_value = 1;
 }
 
-// Error is a union type containing all available errors.
-message Error {
+// ErrorDetail is a union type containing all available errors.
+message ErrorDetail {
   option (gogoproto.onlyone) = true;
-  optional GenericError generic = 1;
-  optional NotLeaderError not_leader = 2;
-  optional RangeNotFoundError range_not_found = 3;
-  optional RangeKeyMismatchError range_key_mismatch = 4;
-  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 5;
-  optional TransactionAbortedError transaction_aborted = 6;
-  optional TransactionPushError transaction_push = 7;
-  optional TransactionRetryError transaction_retry = 8;
-  optional TransactionStatusError transaction_status = 9;
-  optional WriteIntentError write_intent = 10;
-  optional WriteTooOldError write_too_old = 11;
-  optional OpRequiresTxnError op_requires_txn = 12;
-  optional ConditionFailedError condition_failed = 13;
+  optional NotLeaderError not_leader = 1;
+  optional RangeNotFoundError range_not_found = 2;
+  optional RangeKeyMismatchError range_key_mismatch = 3;
+  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
+  optional TransactionAbortedError transaction_aborted = 5;
+  optional TransactionPushError transaction_push = 6;
+  optional TransactionRetryError transaction_retry = 7;
+  optional TransactionStatusError transaction_status = 8;
+  optional WriteIntentError write_intent = 9;
+  optional WriteTooOldError write_too_old = 10;
+  optional OpRequiresTxnError op_requires_txn = 11;
+  optional ConditionFailedError condition_failed = 12;
+}
+
+// Error is a generic represesentation including a string message
+// and information about retryability.
+message Error {
+  // Message is a human-readable error message.
+  optional string message = 1 [(gogoproto.nullable) = false];
+
+  // If retryable is true, the error condition may be transient and the failed
+  // operation may be retried.
+  optional bool retryable = 2 [(gogoproto.nullable) = false];
+
+  // If an ErrorDetail is present, it may contain additional structured data
+  // about the error.
+  optional ErrorDetail detail = 3;
 }

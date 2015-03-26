@@ -239,7 +239,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 		{&proto.TransactionAbortedError{}, true},
 		{&proto.TransactionPushError{}, true},
 		{&proto.TransactionRetryError{}, true},
-		{&proto.GenericError{}, false},
+		{&proto.Error{}, false},
 		{&proto.RangeNotFoundError{}, false},
 		{&proto.RangeKeyMismatchError{}, false},
 		{&proto.TransactionStatusError{}, false},

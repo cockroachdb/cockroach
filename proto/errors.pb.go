@@ -13,32 +13,6 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
-// A GenericError is a generic representation of a go error including
-// the string message and whether or not the error is retryable.
-type GenericError struct {
-	Message          string `protobuf:"bytes,1,opt,name=message" json:"message"`
-	Retryable        bool   `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *GenericError) Reset()         { *m = GenericError{} }
-func (m *GenericError) String() string { return proto1.CompactTextString(m) }
-func (*GenericError) ProtoMessage()    {}
-
-func (m *GenericError) GetMessage() string {
-	if m != nil {
-		return m.Message
-	}
-	return ""
-}
-
-func (m *GenericError) GetRetryable() bool {
-	if m != nil {
-		return m.Retryable
-	}
-	return false
-}
-
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 type NotLeaderError struct {
@@ -310,125 +284,153 @@ func (m *ConditionFailedError) GetActualValue() *Value {
 	return nil
 }
 
-// Error is a union type containing all available errors.
-type Error struct {
-	Generic                       *GenericError                       `protobuf:"bytes,1,opt,name=generic" json:"generic,omitempty"`
-	NotLeader                     *NotLeaderError                     `protobuf:"bytes,2,opt,name=not_leader" json:"not_leader,omitempty"`
-	RangeNotFound                 *RangeNotFoundError                 `protobuf:"bytes,3,opt,name=range_not_found" json:"range_not_found,omitempty"`
-	RangeKeyMismatch              *RangeKeyMismatchError              `protobuf:"bytes,4,opt,name=range_key_mismatch" json:"range_key_mismatch,omitempty"`
-	ReadWithinUncertaintyInterval *ReadWithinUncertaintyIntervalError `protobuf:"bytes,5,opt,name=read_within_uncertainty_interval" json:"read_within_uncertainty_interval,omitempty"`
-	TransactionAborted            *TransactionAbortedError            `protobuf:"bytes,6,opt,name=transaction_aborted" json:"transaction_aborted,omitempty"`
-	TransactionPush               *TransactionPushError               `protobuf:"bytes,7,opt,name=transaction_push" json:"transaction_push,omitempty"`
-	TransactionRetry              *TransactionRetryError              `protobuf:"bytes,8,opt,name=transaction_retry" json:"transaction_retry,omitempty"`
-	TransactionStatus             *TransactionStatusError             `protobuf:"bytes,9,opt,name=transaction_status" json:"transaction_status,omitempty"`
-	WriteIntent                   *WriteIntentError                   `protobuf:"bytes,10,opt,name=write_intent" json:"write_intent,omitempty"`
-	WriteTooOld                   *WriteTooOldError                   `protobuf:"bytes,11,opt,name=write_too_old" json:"write_too_old,omitempty"`
-	OpRequiresTxn                 *OpRequiresTxnError                 `protobuf:"bytes,12,opt,name=op_requires_txn" json:"op_requires_txn,omitempty"`
-	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,13,opt,name=condition_failed" json:"condition_failed,omitempty"`
+// ErrorDetail is a union type containing all available errors.
+type ErrorDetail struct {
+	NotLeader                     *NotLeaderError                     `protobuf:"bytes,1,opt,name=not_leader" json:"not_leader,omitempty"`
+	RangeNotFound                 *RangeNotFoundError                 `protobuf:"bytes,2,opt,name=range_not_found" json:"range_not_found,omitempty"`
+	RangeKeyMismatch              *RangeKeyMismatchError              `protobuf:"bytes,3,opt,name=range_key_mismatch" json:"range_key_mismatch,omitempty"`
+	ReadWithinUncertaintyInterval *ReadWithinUncertaintyIntervalError `protobuf:"bytes,4,opt,name=read_within_uncertainty_interval" json:"read_within_uncertainty_interval,omitempty"`
+	TransactionAborted            *TransactionAbortedError            `protobuf:"bytes,5,opt,name=transaction_aborted" json:"transaction_aborted,omitempty"`
+	TransactionPush               *TransactionPushError               `protobuf:"bytes,6,opt,name=transaction_push" json:"transaction_push,omitempty"`
+	TransactionRetry              *TransactionRetryError              `protobuf:"bytes,7,opt,name=transaction_retry" json:"transaction_retry,omitempty"`
+	TransactionStatus             *TransactionStatusError             `protobuf:"bytes,8,opt,name=transaction_status" json:"transaction_status,omitempty"`
+	WriteIntent                   *WriteIntentError                   `protobuf:"bytes,9,opt,name=write_intent" json:"write_intent,omitempty"`
+	WriteTooOld                   *WriteTooOldError                   `protobuf:"bytes,10,opt,name=write_too_old" json:"write_too_old,omitempty"`
+	OpRequiresTxn                 *OpRequiresTxnError                 `protobuf:"bytes,11,opt,name=op_requires_txn" json:"op_requires_txn,omitempty"`
+	ConditionFailed               *ConditionFailedError               `protobuf:"bytes,12,opt,name=condition_failed" json:"condition_failed,omitempty"`
 	XXX_unrecognized              []byte                              `json:"-"`
 }
 
-func (m *Error) Reset()         { *m = Error{} }
-func (m *Error) String() string { return proto1.CompactTextString(m) }
-func (*Error) ProtoMessage()    {}
+func (m *ErrorDetail) Reset()         { *m = ErrorDetail{} }
+func (m *ErrorDetail) String() string { return proto1.CompactTextString(m) }
+func (*ErrorDetail) ProtoMessage()    {}
 
-func (m *Error) GetGeneric() *GenericError {
-	if m != nil {
-		return m.Generic
-	}
-	return nil
-}
-
-func (m *Error) GetNotLeader() *NotLeaderError {
+func (m *ErrorDetail) GetNotLeader() *NotLeaderError {
 	if m != nil {
 		return m.NotLeader
 	}
 	return nil
 }
 
-func (m *Error) GetRangeNotFound() *RangeNotFoundError {
+func (m *ErrorDetail) GetRangeNotFound() *RangeNotFoundError {
 	if m != nil {
 		return m.RangeNotFound
 	}
 	return nil
 }
 
-func (m *Error) GetRangeKeyMismatch() *RangeKeyMismatchError {
+func (m *ErrorDetail) GetRangeKeyMismatch() *RangeKeyMismatchError {
 	if m != nil {
 		return m.RangeKeyMismatch
 	}
 	return nil
 }
 
-func (m *Error) GetReadWithinUncertaintyInterval() *ReadWithinUncertaintyIntervalError {
+func (m *ErrorDetail) GetReadWithinUncertaintyInterval() *ReadWithinUncertaintyIntervalError {
 	if m != nil {
 		return m.ReadWithinUncertaintyInterval
 	}
 	return nil
 }
 
-func (m *Error) GetTransactionAborted() *TransactionAbortedError {
+func (m *ErrorDetail) GetTransactionAborted() *TransactionAbortedError {
 	if m != nil {
 		return m.TransactionAborted
 	}
 	return nil
 }
 
-func (m *Error) GetTransactionPush() *TransactionPushError {
+func (m *ErrorDetail) GetTransactionPush() *TransactionPushError {
 	if m != nil {
 		return m.TransactionPush
 	}
 	return nil
 }
 
-func (m *Error) GetTransactionRetry() *TransactionRetryError {
+func (m *ErrorDetail) GetTransactionRetry() *TransactionRetryError {
 	if m != nil {
 		return m.TransactionRetry
 	}
 	return nil
 }
 
-func (m *Error) GetTransactionStatus() *TransactionStatusError {
+func (m *ErrorDetail) GetTransactionStatus() *TransactionStatusError {
 	if m != nil {
 		return m.TransactionStatus
 	}
 	return nil
 }
 
-func (m *Error) GetWriteIntent() *WriteIntentError {
+func (m *ErrorDetail) GetWriteIntent() *WriteIntentError {
 	if m != nil {
 		return m.WriteIntent
 	}
 	return nil
 }
 
-func (m *Error) GetWriteTooOld() *WriteTooOldError {
+func (m *ErrorDetail) GetWriteTooOld() *WriteTooOldError {
 	if m != nil {
 		return m.WriteTooOld
 	}
 	return nil
 }
 
-func (m *Error) GetOpRequiresTxn() *OpRequiresTxnError {
+func (m *ErrorDetail) GetOpRequiresTxn() *OpRequiresTxnError {
 	if m != nil {
 		return m.OpRequiresTxn
 	}
 	return nil
 }
 
-func (m *Error) GetConditionFailed() *ConditionFailedError {
+func (m *ErrorDetail) GetConditionFailed() *ConditionFailedError {
 	if m != nil {
 		return m.ConditionFailed
 	}
 	return nil
 }
 
+// Error is a generic represesentation including a string message
+// and information about retryability.
+type Error struct {
+	// Message is a human-readable error message.
+	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
+	// If retryable is true, the error condition may be transient and the failed
+	// operation may be retried.
+	Retryable bool `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
+	// If an ErrorDetail is present, it may contain additional structured data
+	// about the error.
+	Detail           *ErrorDetail `protobuf:"bytes,3,opt,name=detail" json:"detail,omitempty"`
+	XXX_unrecognized []byte       `json:"-"`
+}
+
+func (m *Error) Reset()         { *m = Error{} }
+func (m *Error) String() string { return proto1.CompactTextString(m) }
+func (*Error) ProtoMessage()    {}
+
+func (m *Error) GetMessage() string {
+	if m != nil {
+		return m.Message
+	}
+	return ""
+}
+
+func (m *Error) GetRetryable() bool {
+	if m != nil {
+		return m.Retryable
+	}
+	return false
+}
+
+func (m *Error) GetDetail() *ErrorDetail {
+	if m != nil {
+		return m.Detail
+	}
+	return nil
+}
+
 func init() {
 }
-func (this *Error) GetValue() interface{} {
-	if this.Generic != nil {
-		return this.Generic
-	}
+func (this *ErrorDetail) GetValue() interface{} {
 	if this.NotLeader != nil {
 		return this.NotLeader
 	}
@@ -468,10 +470,8 @@ func (this *Error) GetValue() interface{} {
 	return nil
 }
 
-func (this *Error) SetValue(value interface{}) bool {
+func (this *ErrorDetail) SetValue(value interface{}) bool {
 	switch vt := value.(type) {
-	case *GenericError:
-		this.Generic = vt
 	case *NotLeaderError:
 		this.NotLeader = vt
 	case *RangeNotFoundError:
