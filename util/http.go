@@ -121,7 +121,11 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed [
 		}
 	case ProtoContentType, AltProtoContentType:
 		if isAllowed(ProtoEncoding, allowed) {
-			return gogoproto.Unmarshal(body, value.(gogoproto.Message))
+			msg, ok := value.(gogoproto.Message)
+			if !ok {
+				return Errorf("unable to convert %+v to protobuf", value)
+			}
+			return gogoproto.Unmarshal(body, msg)
 		}
 	case YAMLContentType, AltYAMLContentType:
 		if isAllowed(YAMLEncoding, allowed) {
@@ -138,8 +142,8 @@ func UnmarshalRequest(r *http.Request, body []byte, value interface{}, allowed [
 // is used. The value parameter is marshalled using the response
 // encoding and the resulting body and content type are returned. If
 // the encoding could not be determined by either header, the response
-// is marshalled using JSON. An error is returned on marshalling
-// failure.
+// is marshalled using JSON. Falls back to JSON when the protobuf format
+// cannot be used for the given value.
 func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType) (
 	body []byte, contentType string, err error) {
 	// TODO(spencer): until there's a nice (free) way to parse the
@@ -176,6 +180,13 @@ func MarshalResponse(r *http.Request, value interface{}, allowed []EncodingType)
 			if isAllowed(YAMLEncoding, allowed) {
 				yamlIdx = 0
 			}
+		}
+	}
+
+	// Reset protoIdx if value cannot be converted to a protocol message
+	if protoIdx < math.MaxInt32 {
+		if _, ok := value.(gogoproto.Message); !ok {
+			protoIdx = int32(math.MaxInt32)
 		}
 	}
 
