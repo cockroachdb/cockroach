@@ -23,12 +23,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TestBatchBasics verifies that all commands work in a batch, aren't
 // visible until commit, and then are all visible after commit.
 func TestBatchBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -93,6 +95,7 @@ func TestBatchBasics(t *testing.T) {
 }
 
 func TestBatchGet(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -139,6 +142,7 @@ func compareMergedValues(result, expected []byte) bool {
 }
 
 func TestBatchMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	b := NewInMem(proto.Attributes{}, 1<<20).NewBatch()
 	defer b.Stop()
 
@@ -191,6 +195,7 @@ func TestBatchMerge(t *testing.T) {
 }
 
 func TestBatchProto(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -232,6 +237,7 @@ func TestBatchProto(t *testing.T) {
 }
 
 func TestBatchScan(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -321,6 +327,7 @@ func TestBatchScan(t *testing.T) {
 // TestBatchScanWithDelete verifies that a scan containing
 // a single deleted value returns nothing.
 func TestBatchScanWithDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -345,6 +352,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 // in the updates map shadows an entry from the engine, the
 // max on a scan is still reached.
 func TestBatchScanMaxWithDeleted(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 
@@ -375,6 +383,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 // keys. This should never happen with the way Cockroach uses
 // batches, but worth verifying.
 func TestBatchConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
 	defer e.Stop()
 

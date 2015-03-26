@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -66,6 +67,7 @@ func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 // loop. The test verifies that either there is no value for the key
 // or it contains the final value, but never a value in between.
 func TestEngineWriteBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	numWrites := 10000
 	key := proto.EncodedKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
@@ -113,6 +115,7 @@ func TestEngineWriteBatch(t *testing.T) {
 }
 
 func TestEngineBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		numShuffles := 100
 		key := proto.EncodedKey("a")
@@ -174,6 +177,7 @@ func TestEngineBatch(t *testing.T) {
 }
 
 func TestEnginePutGetDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Test for correct handling of empty keys, which should produce errors.
 		for i, err := range []error{
@@ -242,6 +246,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 // to the goMerge function works as expected. The semantics are tested more
 // exhaustively in the merge tests themselves.
 func TestEngineMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testcases := []struct {
 			testKey  proto.EncodedKey
@@ -302,6 +307,7 @@ func TestEngineMerge(t *testing.T) {
 }
 
 func TestEngineScan1(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		testCases := []struct {
 			key, value []byte
@@ -360,6 +366,7 @@ func TestEngineScan1(t *testing.T) {
 }
 
 func TestEngineIncrement(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		// Start with increment of an empty key.
 		val, err := Increment(engine, proto.EncodedKey("a"), 1)
@@ -421,6 +428,7 @@ func verifyScan(start, end proto.EncodedKey, max int64, expKeys []proto.EncodedK
 }
 
 func TestEngineScan2(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// TODO(Tobias): Merge this with TestEngineScan1 and remove
 	// either verifyScan or the other helper function.
 	runWithAllEngines(func(engine Engine, t *testing.T) {
@@ -453,6 +461,7 @@ func TestEngineScan2(t *testing.T) {
 }
 
 func TestEngineDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		keys := []proto.EncodedKey{
 			proto.EncodedKey("a"),
@@ -484,6 +493,7 @@ func TestEngineDeleteRange(t *testing.T) {
 }
 
 func TestSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		key := []byte("a")
 		val1 := []byte("1")
@@ -532,6 +542,7 @@ func TestSnapshot(t *testing.T) {
 // TestSnapshotMethods verifies that snapshots allow only read-only
 // engine operations.
 func TestSnapshotMethods(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		keys := [][]byte{[]byte("a"), []byte("b")}
 		vals := [][]byte{[]byte("1"), []byte("2")}
@@ -657,6 +668,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 // TestSnapshotNewSnapshot panics.
 func TestSnapshotNewSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
@@ -671,6 +683,7 @@ func TestSnapshotNewSnapshot(t *testing.T) {
 
 // TestSnapshotNewBatch panics.
 func TestSnapshotNewBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
@@ -684,6 +697,7 @@ func TestSnapshotNewBatch(t *testing.T) {
 }
 
 func TestApproximateSize(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	runWithAllEngines(func(engine Engine, t *testing.T) {
 		var (
 			count    = 10000

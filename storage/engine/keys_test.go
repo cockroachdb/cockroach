@@ -23,11 +23,13 @@ import (
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 // TestLocalKeySorting is a sanity check to make sure that
 // the non-replicated part of a store sorts before the meta.
 func TestKeySorting(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Reminder: Increasing the last byte by one < adding a null byte.
 	if !(proto.Key("").Less(proto.Key("\x00")) && proto.Key("\x00").Less(proto.Key("\x01")) &&
 		proto.Key("\x01").Less(proto.Key("\x01\x00"))) {
@@ -42,6 +44,7 @@ func TestKeySorting(t *testing.T) {
 }
 
 func TestMakeKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	if !bytes.Equal(MakeKey(proto.Key("A"), proto.Key("B")), proto.Key("AB")) ||
 		!bytes.Equal(MakeKey(proto.Key("A")), proto.Key("A")) ||
 		!bytes.Equal(MakeKey(proto.Key("A"), proto.Key("B"), proto.Key("C")), proto.Key("ABC")) {
@@ -50,6 +53,7 @@ func TestMakeKey(t *testing.T) {
 }
 
 func TestKeyAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key, expAddress proto.Key
 	}{
@@ -69,6 +73,7 @@ func TestKeyAddress(t *testing.T) {
 }
 
 func TestRangeMetaKey(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	testCases := []struct {
 		key, expKey proto.Key
 	}{

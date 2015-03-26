@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -137,6 +138,7 @@ func timeSeriesFloat(start int64, duration int64, samples ...tsFloatSample) []by
 // TestGoMerge tests the function goMerge but not the integration with
 // the storage engines. For that, see the engine tests.
 func TestGoMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	// Let's start with stuff that should go wrong.
 	badCombinations := []struct {
 		existing, update []byte

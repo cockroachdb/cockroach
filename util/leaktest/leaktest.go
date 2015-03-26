@@ -23,6 +23,10 @@ import (
 // there are no leaked goroutines at the end of the run (except those created
 // by the system which are on a whitelist). Usage:
 //
+//
+// // Adjust the relative path as needed.
+// //go:generate ../util/leaktest/add-leaktest.sh *_test.go
+//
 // func TestMain(m *testing.M) {
 //   leaktest.TestMainWithLeakCheck(m)
 // }

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
@@ -148,6 +149,7 @@ func blockingCluster(nodeCount int, t *testing.T) (*testCluster, *util.Stopper) 
 // TestHeartbeatSingleGroup makes sure that in a single raft consensus group
 // with a ticking master the correct heartbeats are sent and acknowledged.
 func TestHeartbeatSingleGroup(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	for _, nodeCount := range []int{2, 3, 5, 10} {
 		for tickCount := range []int{0, 1, 2, 3, 8} {
 			validateHeartbeatSingleGroup(nodeCount, tickCount, t)
@@ -238,6 +240,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 }
 
 func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	cluster, stopper := blockingCluster(6, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	done := make(chan struct{})
