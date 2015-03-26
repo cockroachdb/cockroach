@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -39,6 +40,7 @@ import (
 // RocksDB is a wrapper around a RocksDB database instance.
 type RocksDB struct {
 	rdb       *C.DBEngine
+	refcount  int32
 	attrs     proto.Attributes // Attributes for this engine
 	dir       string           // The data directory
 	cacheSize int64            // Memory to use to cache values.
@@ -71,9 +73,14 @@ func (r *RocksDB) String() string {
 
 // Start creates options and opens the database. If the database
 // doesn't yet exist at the specified directory, one is initialized
-// from scratch. Subsequent calls to this method on an open DB are no-ops.
+// from scratch. The RocksDB Start and Stop methods are reference
+// counted such that subsequent Start calls to an already started
+// RocksDB instance only bump the reference count. The RocksDB is only
+// closed when a sufficient number of Stop calls are performed to
+// bring the reference count down to 0.
 func (r *RocksDB) Start() error {
 	if r.rdb != nil {
+		atomic.AddInt32(&r.refcount, 1)
 		return nil
 	}
 
@@ -94,13 +101,19 @@ func (r *RocksDB) Start() error {
 		}
 		return err
 	}
+	atomic.AddInt32(&r.refcount, 1)
 	return nil
 }
 
 // Stop closes the database by deallocating the underlying handle.
 func (r *RocksDB) Stop() {
-	C.DBClose(r.rdb)
-	r.rdb = nil
+	if atomic.AddInt32(&r.refcount, -1) > 0 {
+		return
+	}
+	if r.rdb != nil {
+		C.DBClose(r.rdb)
+		r.rdb = nil
+	}
 }
 
 // Attrs returns the list of attributes describing this engine. This

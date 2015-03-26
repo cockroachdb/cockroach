@@ -36,7 +36,7 @@ error. The example below shows a get and a put.
     log.Fatal(err)
   }
   putResp := &proto.PutResponse{}
-  if _, err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), getResp.Value.Bytes), putResp) err != nil {
+  if err := kv.Call(proto.Put, proto.PutArgs(proto.Key("b"), getResp.Value.Bytes), putResp) err != nil {
     log.Fatal(err)
   }
 
@@ -75,7 +75,7 @@ sequence of puts in parallel:
   }
 
   // Flush all puts for parallel execution.
-  if _, err := kv.Flush(); err != nil {
+  if err := kv.Flush(); err != nil {
     log.Fatal(err)
   }
 

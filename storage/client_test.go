@@ -134,6 +134,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 }
 
 func (m *multiTestContext) Stop() {
+	for _, eng := range m.engines {
+		eng.Stop() // Remove extra engine reference count. See addStore() for details.
+	}
 	for _, store := range m.stores {
 		store.Stop()
 	}
@@ -161,6 +164,10 @@ func (m *multiTestContext) addStore(t *testing.T) {
 	if err := store.Start(); err != nil {
 		t.Fatal(err)
 	}
+	// Add an extra reference count to the engine so that the underlying
+	// rocksdb instance is not closed when stopping and restarting the
+	// engine.
+	eng.Start()
 	m.engines = append(m.engines, eng)
 	m.stores = append(m.stores, store)
 	m.sender.AddStore(store)
