@@ -18,16 +18,12 @@
 package server
 
 import (
-	"bytes"
 	"net/http"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // A permHandler implements the adminHandler interface.
@@ -62,62 +58,11 @@ func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
 // configs if "key" is equal to "". The body result contains
 // JSON-formatted output for a listing of keys and JSON-formatted
 // output for retrieval of a perm config.
-func (ph *permHandler) Get(path string, r *http.Request) (body []byte, contentType string, err error) {
-	// Scan all perms if the key is empty.
-	if len(path) == 0 {
-		sr := &proto.ScanResponse{}
-		if err = ph.db.Call(proto.Scan, &proto.ScanRequest{
-			RequestHeader: proto.RequestHeader{
-				Key:    engine.KeyConfigPermissionPrefix,
-				EndKey: engine.KeyConfigPermissionPrefix.PrefixEnd(),
-				User:   storage.UserRoot,
-			},
-			MaxResults: maxGetResults,
-		}, sr); err != nil {
-			return
-		}
-		if len(sr.Rows) == maxGetResults {
-			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
-		}
-		var prefixes []string
-		for _, kv := range sr.Rows {
-			trimmed := bytes.TrimPrefix(kv.Key, engine.KeyConfigPermissionPrefix)
-			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
-		}
-		// Encode the response.
-		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
-	} else {
-		permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
-		var ok bool
-		config := &proto.PermConfig{}
-		if ok, _, err = ph.db.GetProto(permKey, config); err != nil {
-			return
-		}
-		// On get, if there's no perm config for the requested prefix,
-		// return a not found error.
-		if !ok {
-			err = util.Errorf("no config found for key prefix %q", path)
-			return
-		}
-		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)
-	}
-
-	return
+func (ph *permHandler) Get(path string, r *http.Request) ([]byte, string, error) {
+	return getConfig(ph.db, engine.KeyConfigPermissionPrefix, &proto.PermConfig{}, path, r)
 }
 
 // Delete removes the perm config specified by key.
 func (ph *permHandler) Delete(path string, r *http.Request) error {
-	if len(path) == 0 {
-		return util.Errorf("no path specified for permission Delete")
-	}
-	if path == "/" {
-		return util.Errorf("the default permission configuration cannot be deleted")
-	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
-	return ph.db.Call(proto.Delete, &proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  permKey,
-			User: storage.UserRoot,
-		},
-	}, &proto.DeleteResponse{})
+	return deleteConfig(ph.db, engine.KeyConfigPermissionPrefix, path, r)
 }
