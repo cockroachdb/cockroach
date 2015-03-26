@@ -34,12 +34,8 @@ type Call struct {
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
 func (c *Call) resetClientCmdID(clock Clock) {
-	// On mutating commands, set a client command ID. This prevents
-	// mutations from being run multiple times on retries.
-	if proto.IsReadWrite(c.Method) {
-		c.Args.Header().CmdID = proto.ClientCmdID{
-			WallTime: clock.Now(),
-			Random:   rand.Int63(),
-		}
+	c.Args.Header().CmdID = proto.ClientCmdID{
+		WallTime: clock.Now(),
+		Random:   rand.Int63(),
 	}
 }
