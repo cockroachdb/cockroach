@@ -18,6 +18,7 @@
 package server
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -56,34 +58,67 @@ func TestStatusLocalStacks(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify match with at least two goroutine stacks.
-	if matches, err := regexp.MatchString("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", string(body)); !matches || err != nil {
+	if matches, err := regexp.Match("(?s)goroutine [0-9]+.*goroutine [0-9]+.*", body); !matches || err != nil {
 		t.Errorf("expected match: %t; err nil: %s", matches, err)
 	}
 }
 
-// TestStatusLocal verifies that local node info is exported.
-// via the /_status/local/ endpoint.
-func TestStatusLocal(t *testing.T) {
-	// If not on a go release branch, the below compare will fail.
-	if strings.HasPrefix(runtime.Version(), "devel") {
-		t.Skip()
-	}
+// TestStatusJson verifies that status endpoints return expected
+// Json results. The content type of the responses is always
+// "application/json".
+func TestStatusJson(t *testing.T) {
 	s := startStatusServer()
 	defer s.Close()
-	body, err := getText(s.URL + statusLocalKeyPrefix)
-	if err != nil {
-		t.Fatal(err)
+
+	type TestCase struct {
+		keyPrefix string
+		expected  string
 	}
-	// Verify indentation match with at least two goroutine stacks.
-	pat := `{
+
+	testCases := []TestCase{
+		{statusKeyPrefix, "{}"},
+		{statusNodesKeyPrefix, "\"nodes\": null"},
+	}
+	// Test the /_status/local/stacks endpoint only in a go release branch.
+	if !strings.HasPrefix(runtime.Version(), "devel") {
+		testCases = append(testCases, TestCase{statusLocalKeyPrefix, `{
   "buildInfo": {
     "goVersion": "go[0-9\.]+",
     "tag": "",
     "time": "",
     "dependencies": ""
   }
-}`
-	if matches, err := regexp.MatchString(pat, string(body)); !matches || err != nil {
-		t.Errorf("expected match on %s; got %s: %v", pat, string(body), err)
+}`})
+	}
+
+	for _, spec := range testCases {
+		contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
+		for _, contentType := range contentTypes {
+			req, err := http.NewRequest("GET", s.URL+spec.keyPrefix, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Accept", contentType)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				t.Errorf("Unpexected status code: %v", resp.StatusCode)
+			}
+			contentType = resp.Header.Get(util.ContentTypeHeader)
+			if contentType != "application/json" {
+				t.Errorf("Unpexected content type: %v", contentType)
+			}
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
+				t.Errorf("expected match: %t; err nil: %s", matches, err)
+			}
+		}
 	}
 }

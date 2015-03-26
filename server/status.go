@@ -18,7 +18,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"runtime"
 
@@ -87,23 +86,16 @@ func (s *statusServer) registerHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(statusTransactionsKeyPrefix, s.handleTransactionStatus)
 }
 
-// marshalJSON marshals the provided obj into indented JSON format.
-func (s *statusServer) marshalJSON(r *http.Request, obj interface{}) ([]byte, error) {
-	return json.MarshalIndent(obj, "", "  ")
-}
-
 // handleStatus handles GET requests for cluster status.
 func (s *statusServer) handleStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	cluster := &status.Cluster{}
-
-	b, err := s.marshalJSON(r, cluster)
+	b, contentType, err := util.MarshalResponse(r, cluster, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", contentType)
 	w.Write(b)
 }
 
@@ -120,18 +112,18 @@ func (s *statusServer) handleGossipStatus(w http.ResponseWriter, r *http.Request
 
 // handleLocalStatus handles GET requests for local-node status.
 func (s *statusServer) handleLocalStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	local := struct {
 		BuildInfo util.BuildInfo `json:"buildInfo"`
 	}{
 		BuildInfo: util.GetBuildInfo(),
 	}
-	b, err := s.marshalJSON(r, local)
+	b, contentType, err := util.MarshalResponse(r, local, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", contentType)
 	w.Write(b)
 }
 
@@ -155,18 +147,16 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 
 // handleNodeStatus handles GET requests for node status.
 func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	// TODO(shawn) parse node-id in path
 
 	nodes := &status.NodeList{}
-
-	b, err := s.marshalJSON(r, nodes)
+	b, contentType, err := util.MarshalResponse(r, nodes, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", contentType)
 	w.Write(b)
 }
 
