@@ -39,7 +39,7 @@ github.com/cockroachdb/c-protobuf
 github.com/cockroachdb/c-rocksdb
 github.com/cockroachdb/c-snappy
 github.com/jteeuwen/go-bindata/go-bindata
-github.com/coreos/etcd/Godeps/_workspace/src/code.google.com/p/gogoprotobuf/proto
+github.com/coreos/etcd/Godeps/_workspace/src/github.com/gogo/protobuf/proto
 github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context
 github.com/coreos/etcd/raft
 github.com/coreos/etcd/raft/raftpb
