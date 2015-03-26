@@ -27,8 +27,13 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // sendAdminRequest send an HTTP request and processes the response for
@@ -228,4 +233,72 @@ func RunSetPerm(ctx *Context, keyPrefix, configFileName string) {
 // RunSetZone sets the zone to the key given the yaml filename.
 func RunSetZone(ctx *Context, keyPrefix, configFileName string) {
 	runSetConfig(ctx, zonePathPrefix, keyPrefix, configFileName)
+}
+
+// getConfig retrieves the configuration for the specified key. If the
+// key is empty, all configurations are returned. Otherwise, the
+// leading "/" path delimiter is stripped and the configuration
+// matching the remainder is retrieved. Note that this will retrieve
+// the default config if "key" is equal to "/", and will list all
+// configs if "key" is equal to "". The body result contains a listing
+// of keys and retrieval of a config. The output format is determined
+// by the request header.
+func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
+	path string, r *http.Request) (body []byte, contentType string, err error) {
+	// Scan all configs if the key is empty.
+	if len(path) == 0 {
+		sr := &proto.ScanResponse{}
+		if err = db.Call(proto.Scan, &proto.ScanRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:    configPrefix,
+				EndKey: configPrefix.PrefixEnd(),
+				User:   storage.UserRoot,
+			},
+			MaxResults: maxGetResults,
+		}, sr); err != nil {
+			return
+		}
+		if len(sr.Rows) == maxGetResults {
+			log.Warningf("retrieved maximum number of results (%d); some may be missing", maxGetResults)
+		}
+		var prefixes []string
+		for _, kv := range sr.Rows {
+			trimmed := bytes.TrimPrefix(kv.Key, configPrefix)
+			prefixes = append(prefixes, url.QueryEscape(string(trimmed)))
+		}
+		// Encode the response.
+		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
+	} else {
+		configkey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+		var ok bool
+		if ok, _, err = db.GetProto(configkey, config); err != nil {
+			return
+		}
+		// On get, if there's no config for the requested prefix,
+		// return a not found error.
+		if !ok {
+			err = util.Errorf("no config found for key prefix %q", path)
+			return
+		}
+		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)
+	}
+
+	return
+}
+
+// deleteConfig removes the config specified by key.
+func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Request) error {
+	if len(path) == 0 {
+		return util.Errorf("no path specified for config Delete")
+	}
+	if path == "/" {
+		return util.Errorf("the default configuration cannot be deleted")
+	}
+	configKey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+	return db.Call(proto.Delete, &proto.DeleteRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:  configKey,
+			User: storage.UserRoot,
+		},
+	}, &proto.DeleteResponse{})
 }
