@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 
 	commander "code.google.com/p/go-commander"
 )
@@ -246,7 +247,7 @@ func runScan(cmd *commander.Command, args []string) {
 		// Start with the first key after the system key range.
 		//
 		// TODO(pmattis): Add a flag for retrieving system keys as well.
-		startKey = proto.Key("\x01")
+		startKey = engine.KeySystemMax
 	}
 	if len(args) >= 2 {
 		endKey = proto.Key(args[1])

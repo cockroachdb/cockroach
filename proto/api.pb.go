@@ -381,8 +381,8 @@ func (*ConditionalPutResponse) ProtoMessage()    {}
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
 // create a zero value. IncrementRequest cannot be called on a key set
-// by Put() or ConditionalPut(). Similarly, Get(), Put() and
-// ConditionalPut() cannot be invoked on an incremented key.
+// by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
+// cannot be invoked on an incremented key.
 type IncrementRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Increment        int64  `protobuf:"varint,2,opt,name=increment" json:"increment"`

@@ -95,14 +95,19 @@ Output build version information.
 	c := commander.Commander{
 		Name: "cockroach",
 		Commands: []*commander.Command{
-			// Admin commands.
+			// Initialization commands.
 			cli.CmdInit,
+			cli.CmdStart,
+
+			// Zone commands.
 			cli.CmdGetZone,
 			cli.CmdLsZones,
 			cli.CmdRmZone,
 			cli.CmdSetZone,
-			cli.CmdStart,
-			// TODO(pmattis): ls-ranges, split-range, stats
+
+			// Range commands.
+			cli.CmdLsRanges,
+			// TODO(pmattis): split-range
 
 			// Key/value commands.
 			cli.CmdGet,
@@ -112,6 +117,7 @@ Output build version information.
 			cli.CmdScan,
 
 			// Miscellaneous commands.
+			// TODO(pmattis): stats
 			listParamsCmd,
 			versionCmd,
 		},
