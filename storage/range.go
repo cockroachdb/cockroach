@@ -1946,6 +1946,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	// their replicas.
 	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
 		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
+		return
 	}
 
 	// Init updated version of existing range descriptor.
