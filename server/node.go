@@ -154,35 +154,30 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	return localDB, nil
 }
 
-// NewNode returns a new instance of Node, interpreting command line
-// flags to initialize the appropriate Store or set of
-// Stores. Registers the storage instance for the RPC service "Node".
+// NewNode returns a new instance of Node.
 func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConfig) *Node {
-	n := &Node{
+	return &Node{
 		storeConfig: storeConfig,
 		gossip:      gossip,
 		db:          db,
 		lSender:     kv.NewLocalSender(),
 		closer:      make(chan struct{}),
 	}
-	return n
 }
 
-// initDescriptor initializes the physical/network topology attributes
-// if possible. Datacenter, PDU & Rack values are taken from environment
-// variables or command line flags.
+// initDescriptor initializes the node descriptor with the server
+// address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 	n.Descriptor = storage.NodeDescriptor{
-		// NodeID is after invocation of start()
+		// NodeID is set after invocation of start()
 		Address: addr,
 		Attrs:   attrs,
 	}
 }
 
-// start starts the node by initializing network/physical topology
-// attributes gleaned from the environment and initializing stores
-// for each specified engine. Launches periodic store gossiping
-// in a goroutine.
+// start starts the node by registering the storage instance for the
+// RPC service "Node" and initializing stores for each specified
+// engine. Launches periodic store gossiping in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	engines []engine.Engine, attrs proto.Attributes) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
