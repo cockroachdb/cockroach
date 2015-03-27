@@ -107,7 +107,7 @@ func runRmZone(cmd *commander.Command, args []string) {
 // config.
 var CmdSetZone = &commander.Command{
 	UsageLine: "set-zone [options] <key-prefix> <zone-config-file>",
-	Short:     "create or update zone config for key prefix",
+	Short:     "create or update zone config for key prefix\n",
 	Long: `
 Create or update a zone config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file

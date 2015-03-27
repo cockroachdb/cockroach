@@ -32,7 +32,7 @@ import (
 // A CmdLsRanges command lists the ranges in a cluster.
 var CmdLsRanges = &commander.Command{
 	UsageLine: "ls-ranges [options] [<start-key>]",
-	Short:     "lists the ranges",
+	Short:     "lists the ranges\n",
 	Long: `
 Lists the ranges in a cluster.
 

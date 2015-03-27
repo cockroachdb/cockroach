@@ -120,7 +120,7 @@ var CmdStart = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network",
+	Short: "start node by joining the gossip network\n",
 	Long:  cmdStartLongDescription,
 	Run:   runStart,
 	Flag:  *flag.CommandLine,

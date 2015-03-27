@@ -219,7 +219,7 @@ func runDel(cmd *commander.Command, args []string) {
 // range.
 var CmdScan = &commander.Command{
 	UsageLine: "scan [options] [<start-key> [<end-key>]]",
-	Short:     "scans a range of keys",
+	Short:     "scans a range of keys\n",
 	Long: `
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
