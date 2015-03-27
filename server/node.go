@@ -227,17 +227,15 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 			}
 			return err
 		}
-		if s.Ident.ClusterID != "" {
-			if s.Ident.StoreID == 0 {
-				return util.Error("cluster id set for node ident but missing store id")
-			}
-			capacity, err := s.Capacity()
-			if err != nil {
-				return err
-			}
-			log.Infof("initialized store %s: %+v", s, capacity)
-			n.lSender.AddStore(s)
+		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
+			return util.Errorf("unidentified store: %s", s)
 		}
+		capacity, err := s.Capacity()
+		if err != nil {
+			return err
+		}
+		log.Infof("initialized store %s: %+v", s, capacity)
+		n.lSender.AddStore(s)
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -262,9 +260,6 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 // the agreed-upon cluster and node IDs.
 func (n *Node) validateStores() error {
 	return n.lSender.VisitStores(func(s *storage.Store) error {
-		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
-			return util.Errorf("unidentified store in store map: %s", s)
-		}
 		if n.ClusterID == "" {
 			n.ClusterID = s.Ident.ClusterID
 			n.Descriptor.NodeID = s.Ident.NodeID

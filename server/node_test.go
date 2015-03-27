@@ -42,7 +42,7 @@ import (
 // of engines. The server and node are returned. If gossipBS is not
 // nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *Node) {
+	*rpc.Server, *Node, error) {
 	tlsConfig, err := rpc.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -65,10 +65,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 	db := client.NewKV(kv.NewDistSender(g), nil)
 	node := NewNode(db, g, storage.TestStoreConfig)
-	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
-		t.Fatal(err)
-	}
-	return rpcServer, node
+	err = node.start(rpcServer, clock, engines, proto.Attributes{})
+	return rpcServer, node, err
 }
 
 func formatKeys(keys []proto.Key) string {
@@ -139,7 +137,10 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 	}
-	server, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	server, node, err := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer server.Close()
 
 	// Non-initialized stores (in this case the new in-memory-based
@@ -166,12 +167,18 @@ func TestNodeJoin(t *testing.T) {
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")
-	server1, node1 := createTestNode(addr1, engines1, addr1, t)
+	server1, node1, err := createTestNode(addr1, engines1, addr1, t)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer server1.Close()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
-	server2, node2 := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
+	server2, node2, err := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
@@ -197,4 +204,31 @@ func TestNodeJoin(t *testing.T) {
 	}, 50*time.Millisecond); err != nil {
 		t.Error(err)
 	}
+}
+
+// TestCorruptedClusterID verifies that a node fails to start when a
+// store's cluster ID is empty.
+func TestCorruptedClusterID(t *testing.T) {
+	e := engine.NewInMem(proto.Attributes{}, 1<<20)
+	db, err := BootstrapCluster("cluster-1", e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	// Set the cluster ID to an empty string.
+	sIdent := proto.StoreIdent{
+		ClusterID: "",
+		NodeID:    1,
+		StoreID:   1,
+	}
+	if err = engine.MVCCPutProto(e, nil, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &sIdent); err != nil {
+		t.Fatal(err)
+	}
+
+	server, _, err := createTestNode(util.CreateTestAddr("tcp"), []engine.Engine{e}, nil, t)
+	if err == nil {
+		t.Errorf("unexpected success")
+	}
+	server.Close()
 }
