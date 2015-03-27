@@ -466,6 +466,11 @@ func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplit
 	return n.executeCmd(proto.AdminSplit, args, reply)
 }
 
+// AdminMerge .
+func (n *Node) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
+	return n.executeCmd(proto.AdminMerge, args, reply)
+}
+
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(proto.InternalRangeLookup, args, reply)

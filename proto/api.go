@@ -127,6 +127,7 @@ var PublicMethods = stringSet{
 	EnqueueMessage: {},
 	Batch:          {},
 	AdminSplit:     {},
+	AdminMerge:     {},
 }
 
 // InternalMethods specifies the set of methods accessible only

@@ -32,7 +32,7 @@ import (
 // A CmdLsRanges command lists the ranges in a cluster.
 var CmdLsRanges = &commander.Command{
 	UsageLine: "ls-ranges [options] [<start-key>]",
-	Short:     "lists the ranges\n",
+	Short:     "lists the ranges",
 	Long: `
 Lists the ranges in a cluster.
 
@@ -81,9 +81,9 @@ func runLsRanges(cmd *commander.Command, args []string) {
 // A CmdSplitRange command splits a range.
 var CmdSplitRange = &commander.Command{
 	UsageLine: "split-range [options] <key> [<split-key>]",
-	Short:     "splits a range\n",
+	Short:     "splits a range",
 	Long: `
-Splits the range specified by <key>. If <split-key> is not specified a
+Splits the range containing <key>. If <split-key> is not specified a
 key to split the range approximately in half will be automatically
 chosen.
 `,
@@ -115,6 +115,65 @@ func runSplitRange(cmd *commander.Command, args []string) {
 	resp := &proto.AdminSplitResponse{}
 	if err := kv.Call(proto.AdminSplit, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// A CmdSplitMerge command merges a range.
+var CmdMergeRange = &commander.Command{
+	UsageLine: "merge-range [options] <key>",
+	Short:     "merges a range\n",
+	Long: `
+Merges the range containing <key> with the immediate successor range.
+`,
+	Run:  runMergeRange,
+	Flag: *flag.CommandLine,
+}
+
+func runMergeRange(cmd *commander.Command, args []string) {
+	if len(args) != 1 {
+		cmd.Usage()
+		return
+	}
+
+	key := proto.Key(args[0])
+
+	kv := makeKVClient()
+	defer kv.Close()
+
+	scanReq := proto.ScanArgs(engine.RangeMetaKey(key), engine.KeyMeta2Prefix.PrefixEnd(), 2)
+	scanResp := &proto.ScanResponse{}
+	if err := kv.Call(proto.Scan, scanReq, scanResp); err != nil {
+		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
+		os.Exit(1)
+	}
+	switch len(scanResp.Rows) {
+	case 0:
+		fmt.Fprintf(os.Stderr, "unable to find range descriptor containing: %s\n", key)
+		os.Exit(1)
+	case 1:
+		fmt.Fprintf(os.Stderr, "range containing %s is the last range\n", key)
+		os.Exit(1)
+	case 2:
+		break
+	default:
+		fmt.Fprintf(os.Stderr, "unexpected number of scanned rows: %d\n", len(scanResp.Rows))
+		os.Exit(1)
+	}
+
+	req := &proto.AdminMergeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: key,
+		},
+	}
+	if err := gogoproto.Unmarshal(scanResp.Rows[1].Value.Bytes, &req.SubsumedRange); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", scanResp.Rows[1].Key)
+		os.Exit(1)
+	}
+
+	resp := &proto.AdminMergeResponse{}
+	if err := kv.Call(proto.AdminMerge, req, resp); err != nil {
+		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		os.Exit(1)
 	}
 }
