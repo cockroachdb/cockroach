@@ -367,9 +367,22 @@ func (s *Store) String() string {
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start() error {
-	// Start engine (i.e. open and initialize RocksDB database).
-	if err := s.engine.Start(); err != nil {
-		return err
+	if s.Ident.NodeID == 0 {
+		// Start engine (i.e. open and initialize RocksDB
+		// database). "NodeID != 0" implies the engine has already been
+		// started.
+		if err := s.engine.Start(); err != nil {
+			return err
+		}
+		// Read store ident and return a not-bootstrapped error if necessary.
+		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
+		if err != nil {
+			s.engine.Stop()
+			return err
+		} else if !ok {
+			s.engine.Stop()
+			return &NotBootstrappedError{}
+		}
 	}
 
 	// Create ID allocators.
@@ -386,14 +399,6 @@ func (s *Store) Start() error {
 	minTxnTS := int64(0) // disable GC of transactions until we know minimum write intent age
 	minRCacheTS := now.WallTime - GCResponseCacheExpiration.Nanoseconds()
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
-
-	// Read store ident and return a not-bootstrapped error if necessary.
-	ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
-	if err != nil {
-		return err
-	} else if !ok {
-		return &NotBootstrappedError{}
-	}
 
 	// Iterator over all range-local key-based data.
 	start := engine.RangeDescriptorKey(engine.KeyMin)
@@ -542,6 +547,9 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
 func (s *Store) Bootstrap(ident proto.StoreIdent) error {
+	if s.Ident.NodeID != 0 {
+		return util.Errorf("engine already bootstrapped")
+	}
 	if err := s.engine.Start(); err != nil {
 		return err
 	}
