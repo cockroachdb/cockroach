@@ -65,8 +65,6 @@ type Node struct {
 	db          *client.KV             // KV DB client; used to access global id generators
 	lSender     *kv.LocalSender        // Local KV sender for access to node-local stores
 	closer      chan struct{}
-
-	maxAvailPrefix string // Prefix for max avail capacity gossip topic
 }
 
 // allocateNodeID increments the node id generator key to allocate
