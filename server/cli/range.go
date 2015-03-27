@@ -43,7 +43,7 @@ Caveat: Currently only lists up to 1000 rangges.
 }
 
 func runLsRanges(cmd *commander.Command, args []string) {
-	if len(args) > 2 {
+	if len(args) > 1 {
 		cmd.Usage()
 		return
 	}
@@ -75,5 +75,46 @@ func runLsRanges(cmd *commander.Command, args []string) {
 			fmt.Printf("\t%d: node-id=%d store-id=%d attrs=%v\n",
 				i, r.NodeID, r.StoreID, r.Attrs.Attrs)
 		}
+	}
+}
+
+// A CmdSplitRange command splits a range.
+var CmdSplitRange = &commander.Command{
+	UsageLine: "split-range [options] <key> [<split-key>]",
+	Short:     "splits a range\n",
+	Long: `
+Splits the range specified by <key>. If <split-key> is not specified a
+key to split the range approximately in half will be automatically
+chosen.
+`,
+	Run:  runSplitRange,
+	Flag: *flag.CommandLine,
+}
+
+func runSplitRange(cmd *commander.Command, args []string) {
+	if len(args) == 0 || len(args) > 2 {
+		cmd.Usage()
+		return
+	}
+
+	key := proto.Key(args[0])
+	var splitKey proto.Key
+	if len(args) >= 2 {
+		splitKey = proto.Key(args[1])
+	}
+
+	kv := makeKVClient()
+	defer kv.Close()
+
+	req := &proto.AdminSplitRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: key,
+		},
+		SplitKey: splitKey,
+	}
+	resp := &proto.AdminSplitResponse{}
+	if err := kv.Call(proto.AdminSplit, req, resp); err != nil {
+		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
+		os.Exit(1)
 	}
 }

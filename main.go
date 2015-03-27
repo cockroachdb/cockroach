@@ -107,7 +107,8 @@ Output build version information.
 
 			// Range commands.
 			cli.CmdLsRanges,
-			// TODO(pmattis): split-range
+			cli.CmdSplitRange,
+			// TODO(pmattis): merge-range
 
 			// Key/value commands.
 			cli.CmdGet,
