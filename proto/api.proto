@@ -167,8 +167,8 @@ message ConditionalPutResponse {
 // increments the value for key, and returns the new value. If no
 // value exists for a key, incrementing by 0 is not a noop, but will
 // create a zero value. IncrementRequest cannot be called on a key set
-// by Put() or ConditionalPut(). Similarly, Get(), Put() and
-// ConditionalPut() cannot be invoked on an incremented key.
+// by Put() or ConditionalPut(). Similarly, Put() and ConditionalPut()
+// cannot be invoked on an incremented key.
 message IncrementRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional int64 increment = 2 [(gogoproto.nullable) = false];

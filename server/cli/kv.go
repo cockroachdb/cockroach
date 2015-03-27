@@ -15,7 +15,7 @@
 //
 // Author: Peter Mattis (peter.mattis@gmail.com)
 //
-// TODO(pmattis): Increment, ConditionalPut, DeleteRange.
+// TODO(pmattis): ConditionalPut, DeleteRange.
 
 package cli
 
@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage/engine"
 
 	commander "code.google.com/p/go-commander"
 )
@@ -69,11 +71,14 @@ func runGet(cmd *commander.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "get failed: %s\n", err)
 		os.Exit(1)
 	}
-	if resp.Value == nil {
+	if resp.Value.Integer != nil {
+		fmt.Printf("%d\n", *resp.Value.Integer)
+	} else if resp.Value == nil {
 		fmt.Fprintf(os.Stderr, "%s not found\n", key)
 		os.Exit(1)
+	} else {
+		fmt.Printf("%s\n", resp.Value.Bytes)
 	}
-	fmt.Printf("%s\n", resp.Value.Bytes)
 }
 
 // A CmdPut command sets the value for one or more keys.
@@ -124,6 +129,50 @@ func runPut(cmd *commander.Command, args []string) {
 	}
 }
 
+// A CmdInc command increments the value for one or more keys.
+var CmdInc = &commander.Command{
+	UsageLine: "inc [options] <key> [<amount>]",
+	Short:     "increments the value for a key",
+	Long: `
+Increments the value for a key. The increment amount defaults to 1 if
+not specified. Displays the incremented value upon success.
+`,
+	Run:  runInc,
+	Flag: *flag.CommandLine,
+}
+
+func runInc(cmd *commander.Command, args []string) {
+	if len(args) > 2 {
+		cmd.Usage()
+		return
+	}
+
+	if strings.HasPrefix(args[0], "\x00") {
+		fmt.Fprintf(os.Stderr, "unable to increment system key: %s\n", proto.Key(args[0]))
+		os.Exit(1)
+	}
+
+	kv := makeKVClient()
+	defer kv.Close()
+
+	amount := 1
+	if len(args) >= 2 {
+		var err error
+		if amount, err = strconv.Atoi(args[1]); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid increment: %s: %s\n", args[1], err)
+			os.Exit(1)
+		}
+	}
+
+	key := proto.Key(args[0])
+	resp := &proto.IncrementResponse{}
+	if err := kv.Call(proto.Increment, proto.IncrementArgs(key, int64(amount)), resp); err != nil {
+		fmt.Fprintf(os.Stderr, "increment failed: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("%d\n", resp.NewValue)
+}
+
 // A CmdDel command sets the value for one or more keys.
 var CmdDel = &commander.Command{
 	UsageLine: "del [options] <key> [<key2>...]",
@@ -170,7 +219,7 @@ func runDel(cmd *commander.Command, args []string) {
 // range.
 var CmdScan = &commander.Command{
 	UsageLine: "scan [options] [<start-key> [<end-key>]]",
-	Short:     "scans a range of keys",
+	Short:     "scans a range of keys\n",
 	Long: `
 Fetches and display the key/value pairs for a range. If no <start-key>
 is specified then all (non-system) key/value pairs are retrieved. If no
@@ -198,7 +247,7 @@ func runScan(cmd *commander.Command, args []string) {
 		// Start with the first key after the system key range.
 		//
 		// TODO(pmattis): Add a flag for retrieving system keys as well.
-		startKey = proto.Key("\x01")
+		startKey = engine.KeySystemMax
 	}
 	if len(args) >= 2 {
 		endKey = proto.Key(args[1])
@@ -224,7 +273,10 @@ func runScan(cmd *commander.Command, args []string) {
 			continue
 		}
 
-		// TODO(pmattis): Handle r.Value.Integer if r.Value.Bytes == nil.
-		fmt.Printf("%s\t%s\n", r.Key, r.Value.Bytes)
+		if r.Value.Integer != nil {
+			fmt.Printf("%s\t%d\n", r.Key, *r.Value.Integer)
+		} else {
+			fmt.Printf("%s\t%s\n", r.Key, r.Value.Bytes)
+		}
 	}
 }

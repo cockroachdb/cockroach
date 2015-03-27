@@ -38,9 +38,9 @@ const (
 	// for existing means the value must not yet exist.
 	ConditionalPut = "ConditionalPut"
 	// Increment increments the value at the specified key. Once called
-	// for a key, Put & Get will return errors; only Increment will
-	// continue to be a valid command. The value must be deleted before
-	// it can be reset using Put.
+	// for a key, Put & ConditionalPut will return errors; only
+	// Increment will continue to be a valid command. The value must be
+	// deleted before it can be reset using Put.
 	Increment = "Increment"
 	// Delete removes the value for the specified key.
 	Delete = "Delete"
@@ -127,6 +127,7 @@ var PublicMethods = stringSet{
 	EnqueueMessage: {},
 	Batch:          {},
 	AdminSplit:     {},
+	AdminMerge:     {},
 }
 
 // InternalMethods specifies the set of methods accessible only
