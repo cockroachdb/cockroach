@@ -107,6 +107,7 @@ Output build version information.
 			// Key/value commands.
 			cli.CmdGet,
 			cli.CmdPut,
+			cli.CmdInc,
 			cli.CmdDel,
 			cli.CmdScan,
 
