@@ -68,7 +68,7 @@ func newMemRocksDB(attrs proto.Attributes, cacheSize int64) *RocksDB {
 
 // String formatter.
 func (r *RocksDB) String() string {
-	return fmt.Sprintf("%s=%s", r.attrs, r.dir)
+	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
 }
 
 // Start creates options and opens the database. If the database

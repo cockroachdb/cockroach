@@ -190,7 +190,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 		return err
 	}
 	go n.startGossip()
-	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs)
+	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
 
