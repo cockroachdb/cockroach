@@ -58,47 +58,61 @@ func main() {
 	rand.Seed(util.NewPseudoSeed())
 	log.V(1).Infof("running using %d processor cores", numCPU)
 
-	c := commander.Commander{
-		Name: "cockroach",
-		Commands: []*commander.Command{
-			cli.CmdInit,
-			cli.CmdGetZone,
-			cli.CmdLsZones,
-			cli.CmdRmZone,
-			cli.CmdSetZone,
-			cli.CmdStart,
-			{
-				UsageLine: "listparams",
-				Short:     "list all available parameters and their default values",
-				Long: `
+	listParamsCmd := &commander.Command{
+		UsageLine: "listparams",
+		Short:     "list all available parameters and their default values",
+		Long: `
 List all available parameters and their default values.
 Note that parameter parsing stops after the first non-
 option after the command name. Hence, the options need
 to precede any additional arguments,
 
   cockroach <command> [options] [arguments].`,
-				Run: func(cmd *commander.Command, args []string) {
-					flag.CommandLine.PrintDefaults()
-				},
-			},
-			{
-				UsageLine: "version",
-				Short:     "output version information",
-				Long: `
+		Run: func(cmd *commander.Command, args []string) {
+			flag.CommandLine.PrintDefaults()
+		},
+	}
+
+	versionCmd := &commander.Command{
+		UsageLine: "version",
+		Short:     "output version information",
+		Long: `
 Output build version information.
 `,
-				Run: func(cmd *commander.Command, args []string) {
-					info := util.GetBuildInfo()
-					w := &tabwriter.Writer{}
-					w.Init(os.Stdout, 2, 1, 2, ' ', 0)
-					fmt.Fprintf(w, "Build Vers:  %s\n", info.Vers)
-					fmt.Fprintf(w, "Build Tag:   %s\n", info.Tag)
-					fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
-					fmt.Fprintf(w, "Build Deps:\n\t%s\n",
-						strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
-					w.Flush()
-				},
-			},
+		Run: func(cmd *commander.Command, args []string) {
+			info := util.GetBuildInfo()
+			w := &tabwriter.Writer{}
+			w.Init(os.Stdout, 2, 1, 2, ' ', 0)
+			fmt.Fprintf(w, "Build Vers:  %s\n", info.Vers)
+			fmt.Fprintf(w, "Build Tag:   %s\n", info.Tag)
+			fmt.Fprintf(w, "Build Time:  %s\n", info.Time)
+			fmt.Fprintf(w, "Build Deps:\n\t%s\n",
+				strings.Replace(strings.Replace(info.Deps, " ", "\n\t", -1), ":", "\t", -1))
+			w.Flush()
+		},
+	}
+
+	c := commander.Commander{
+		Name: "cockroach",
+		Commands: []*commander.Command{
+			// Admin commands.
+			cli.CmdInit,
+			cli.CmdGetZone,
+			cli.CmdLsZones,
+			cli.CmdRmZone,
+			cli.CmdSetZone,
+			cli.CmdStart,
+			// TODO(pmattis): ls-ranges, split-range, stats
+
+			// Key/value commands.
+			cli.CmdGet,
+			cli.CmdPut,
+			cli.CmdDel,
+			cli.CmdScan,
+
+			// Miscellaneous commands.
+			listParamsCmd,
+			versionCmd,
 		},
 	}
 
@@ -108,6 +122,7 @@ Output build version information.
 		os.Args = append(os.Args, "help")
 	}
 	if err := c.Run(os.Args[1:]); err != nil {
-		log.Fatalf("Failed running command %q: %v\n", os.Args[1:], err)
+		fmt.Fprintf(os.Stderr, "Failed running command %q: %v\n", os.Args[1:], err)
+		os.Exit(1)
 	}
 }

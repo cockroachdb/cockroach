@@ -89,7 +89,7 @@ of using transactions with parallel writes:
 
   kv := client.NewKV(client.NewHTTPSender("localhost:8080", tlsConfig), nil)
 
-  opts := client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
+  opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
   err := kv.RunTransaction(opts, func(txn *client.KV) error {
     for i := 0; i < 100; i++ {
       key := proto.Key(fmt.Sprintf("testkey-%02d", i))
