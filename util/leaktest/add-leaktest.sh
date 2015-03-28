@@ -10,7 +10,7 @@
 # Usage: add-leaktest.sh pkg/*_test.go
 
 for i in "$@"; do
-    sed -i '' -e '
+    sed -i'~' -e '
         /^func Test.*(t \*testing.T) {/ {
             # Skip past the test declaration
             n

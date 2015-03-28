@@ -100,6 +100,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 
 // TestNewIDAllocatorInvalidArgs checks validation logic of NewIDAllocator.
 func TestNewIDAllocatorInvalidArgs(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	args := [][]int64{
 		{0, 10}, // minID <= 0
 		{2, 0},  // blockSize < 1
@@ -118,7 +119,9 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 // 4) Make IDAllocator valid again, the blocked allocations return correct ID.
 // 5) Check if the following allocations return correctly.
 func TestAllocateErrorAndRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
+	defer store.Stop()
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
@@ -175,4 +178,5 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 			t.Errorf("expected ID is %d, but got: %d", i+21, id)
 		}
 	}
+	idAlloc.Stop()
 }
