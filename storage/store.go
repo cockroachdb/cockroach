@@ -341,6 +341,10 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 
 // Stop calls Range.Stop() on all active ranges.
 func (s *Store) Stop() {
+	// Stop the id allocator first since it may need the ranges to be up to finish.
+	if s.raftIDAlloc != nil {
+		s.raftIDAlloc.Stop()
+	}
 	for _, rng := range s.ranges {
 		rng.stop()
 	}

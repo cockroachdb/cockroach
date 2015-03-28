@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -47,6 +48,7 @@ type IDAllocator struct {
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
 	ids       chan int64 // Channel of available IDs
+	stopper   *util.Stopper
 }
 
 // NewIDAllocator creates a new ID allocator which increments the
@@ -66,9 +68,16 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
+		stopper:   util.NewStopper(0),
 	}
 	ia.ids <- allocationTrigger
 	return ia, nil
+}
+
+// Stop an IDAllocator. This ensures that the allocator is in a quiescent state
+// and will not leave hanging commands on the Store.
+func (ia *IDAllocator) Stop() {
+	ia.stopper.Stop()
 }
 
 // Allocate allocates a new ID from the global KV DB.
@@ -76,7 +85,13 @@ func (ia *IDAllocator) Allocate() int64 {
 	for {
 		id := <-ia.ids
 		if id == allocationTrigger {
-			go ia.allocateBlock(ia.blockSize)
+			ia.stopper.Add(1)
+			go func() {
+				// allocateBlock may call itself to retry, so call stopper.SetStopped
+				// here to ensure Add and SetStopped are matched.
+				ia.allocateBlock(ia.blockSize)
+				ia.stopper.SetStopped()
+			}()
 		} else {
 			return id
 		}
@@ -90,12 +105,21 @@ func (ia *IDAllocator) Allocate() int64 {
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
 	retryOpts := IDAllocationRetryOpts
-	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		select {
+		case <-ia.stopper.ShouldStop():
+			return util.RetryBreak, errors.New("ShouldStop")
+		default:
+		}
 		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
-			return util.RetryContinue, nil
+			return util.RetryContinue, err
 		}
 		return util.RetryBreak, nil
 	})
+	if err != nil {
+		// The only way we exit with an error is if the stopper is triggered.
+		return
+	}
 
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
