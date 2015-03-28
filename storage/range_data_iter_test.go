@@ -44,7 +44,7 @@ func prevKey(k proto.Key) proto.Key {
 	// until the end of the key space.
 	return bytes.Join([][]byte{
 		k[0 : length-1],
-		[]byte{k[length-1] - 1},
+		{k[length-1] - 1},
 		bytes.Repeat([]byte{0xff}, engine.KeyMaxLength-length),
 	}, nil)
 }

@@ -219,10 +219,10 @@ type _bintree_t struct {
 }
 
 var _bintree = &_bintree_t{nil, map[string]*_bintree_t{
-	"test_certs": &_bintree_t{nil, map[string]*_bintree_t{
-		"ca.crt":   &_bintree_t{test_certs_ca_crt, map[string]*_bintree_t{}},
-		"node.crt": &_bintree_t{test_certs_node_crt, map[string]*_bintree_t{}},
-		"node.key": &_bintree_t{test_certs_node_key, map[string]*_bintree_t{}},
+	"test_certs": {nil, map[string]*_bintree_t{
+		"ca.crt":   {test_certs_ca_crt, map[string]*_bintree_t{}},
+		"node.crt": {test_certs_node_crt, map[string]*_bintree_t{}},
+		"node.key": {test_certs_node_key, map[string]*_bintree_t{}},
 	}},
 }}
 
