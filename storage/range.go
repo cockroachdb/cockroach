@@ -437,6 +437,21 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	return err
 }
 
+// getCmdID will create a ClientCmdId if it's empty in Request, otherwise
+// just return it.
+func (r *Range) getCmdID(args proto.Request) (cmdID proto.ClientCmdID) {
+	if !args.Header().CmdID.IsEmpty() {
+		cmdID = args.Header().CmdID
+	} else {
+		cmdID = proto.ClientCmdID{
+			WallTime: r.rm.Clock().PhysicalNow(),
+			Random:   rand.Int63(),
+		}
+	}
+
+	return
+}
+
 // addReadWriteCmd first consults the response cache to determine whether
 // this command has already been sent to the range. If a response is
 // found, it's returned immediately and not submitted to raft. Next,
@@ -513,15 +528,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	raftCmd := proto.InternalRaftCommand{
 		RaftID: r.Desc().RaftID,
 	}
-	var cmdID proto.ClientCmdID
-	if !args.Header().CmdID.IsEmpty() {
-		cmdID = args.Header().CmdID
-	} else {
-		cmdID = proto.ClientCmdID{
-			WallTime: r.rm.Clock().PhysicalNow(),
-			Random:   rand.Int63(),
-		}
-	}
+	cmdID := r.getCmdID(args)
 	ok := raftCmd.Cmd.SetValue(args)
 	if !ok {
 		log.Fatalf("unknown command type %T", args)
