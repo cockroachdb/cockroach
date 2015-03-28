@@ -20,6 +20,7 @@ package storage
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -36,7 +37,10 @@ func TestIDAllocator(t *testing.T) {
 	store, _ := createTestStore(t)
 	defer store.Stop()
 	allocd := make(chan int, 100)
-	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
 
 	for i := 0; i < 10; i++ {
 		go func() {
@@ -84,9 +88,91 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if newValue != -1024 {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
-	idAlloc := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
 	value := idAlloc.Allocate()
 	if value != 2 {
 		t.Errorf("expected id allocation to have value 2; got %d", value)
+	}
+}
+
+// TestNewIDAllocatorInvalidArgs checks validation logic of NewIDAllocator.
+func TestNewIDAllocatorInvalidArgs(t *testing.T) {
+	args := [][]int64{
+		{0, 10}, // minID <= 0
+		{2, 0},  // blockSize < 1
+	}
+	for i := range args {
+		if _, err := NewIDAllocator(nil, nil, args[i][0], args[i][1]); err == nil {
+			t.Errorf("expect to have error return, but got nil")
+		}
+	}
+}
+
+// TestAllocateErrorAndRecovery has several steps:
+// 1) Allocate a set of ID firstly and check.
+// 2) Then make IDAllocator invalid, should be able to return existing one.
+// 3) After channel becomes empty, allocation will be blocked.
+// 4) Make IDAllocator valid again, the blocked allocations return correct ID.
+// 5) Check if the following allocations return correctly.
+func TestAllocateErrorAndRecovery(t *testing.T) {
+	store, _ := createTestStore(t)
+	allocd := make(chan int, 10)
+
+	// Firstly create a valid IDAllocator to get some ID.
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	if err != nil {
+		t.Errorf("failed to create IDAllocator: %v", err)
+	}
+
+	if id := idAlloc.Allocate(); id != 2 {
+		t.Errorf("expected ID is 2, but got: %d", id)
+	}
+
+	// Make Allocator invalid.
+	idAlloc.idKey = nil
+
+	// Should be able to get the allocated IDs, and there will be one
+	// background allocateBlock to get ID continuously.
+	for i := 0; i < 8; i++ {
+		if id := int(idAlloc.Allocate()); id != i+3 {
+			t.Errorf("expected ID is %d, but got: %d", i+3, id)
+		}
+	}
+
+	// Then the paralleled allocations should be blocked until Allocator
+	// is recovered.
+	for i := 0; i < 10; i++ {
+		go func() {
+			allocd <- int(idAlloc.Allocate())
+		}()
+	}
+	// Make sure no allocation returns.
+	time.Sleep(10 * time.Millisecond)
+	if len(allocd) != 0 {
+		t.Errorf("Allocate() should be blocked until allocateBlock return ID")
+	}
+
+	// Make the IDAllocator valid again.
+	idAlloc.idKey = engine.KeyRaftIDGenerator
+	// Check if the blocked allocations return expected ID.
+	ids := make([]int, 10)
+	for i := 0; i < 10; i++ {
+		ids[i] = <-allocd
+	}
+	sort.Ints(ids)
+	for i := 0; i < 10; i++ {
+		if ids[i] != i+11 {
+			t.Errorf("expected \"%d\"th ID to be %d; got %d", i, i+11, ids[i])
+		}
+	}
+
+	// Check if the following allocations return expected ID.
+	for i := 0; i < 10; i++ {
+		if id := int(idAlloc.Allocate()); id != i+21 {
+			t.Errorf("expected ID is %d, but got: %d", i+21, id)
+		}
 	}
 }

@@ -361,7 +361,11 @@ func (s *Store) Start() error {
 	}
 
 	// Create ID allocators.
-	s.raftIDAlloc = NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	if err != nil {
+		return err
+	}
+	s.raftIDAlloc = idAlloc
 
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and

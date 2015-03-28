@@ -18,14 +18,26 @@
 package storage
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // allocationTrigger is a special ID which if encountered,
 // causes allocation of the next block of IDs.
 const allocationTrigger = 0
+
+// IDAllocationRetryOpts sets the retry options for handling RaftID
+// allocation errors.
+var IDAllocationRetryOpts = util.RetryOptions{
+	Backoff:     50 * time.Millisecond,
+	MaxBackoff:  5 * time.Second,
+	Constant:    2,
+	MaxAttempts: 0,
+}
 
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
@@ -41,12 +53,12 @@ type IDAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) *IDAllocator {
+func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) (*IDAllocator, error) {
 	if minID <= allocationTrigger {
-		log.Fatalf("minID must be > %d", allocationTrigger)
+		return nil, util.Errorf("minID must be > %d", allocationTrigger)
 	}
 	if blockSize < 1 {
-		log.Fatalf("blockSize must be a positive integer: %d", blockSize)
+		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &IDAllocator{
 		idKey:     idKey,
@@ -56,10 +68,10 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		ids:       make(chan int64, blockSize+blockSize/2+1),
 	}
 	ia.ids <- allocationTrigger
-	return ia
+	return ia, nil
 }
 
-// Allocate allocates a new ID from the global KV DB. If multiple
+// Allocate allocates a new ID from the global KV DB.
 func (ia *IDAllocator) Allocate() int64 {
 	for {
 		id := <-ia.ids
@@ -77,9 +89,14 @@ func (ia *IDAllocator) Allocate() int64 {
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
-	if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
-		log.Fatalf("unable to allocate %d %q IDs: %v", ia.blockSize, ia.idKey, err)
-	}
+	retryOpts := IDAllocationRetryOpts
+	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
+			return util.RetryContinue, nil
+		}
+		return util.RetryBreak, nil
+	})
+
 	if ir.NewValue <= ia.minID {
 		log.Warningf("allocator key is currently set at %d; minID is %d; allocating again to skip %d IDs",
 			ir.NewValue, ia.minID, ia.minID-ir.NewValue)
