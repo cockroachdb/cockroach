@@ -254,8 +254,8 @@ func TestGzip(t *testing.T) {
 	}
 }
 
-// TestMultiRangeScanDeleteRange tests that commands that commands which access
-// multiple ranges are carried out properly.
+// TestMultiRangeScanDeleteRange tests that commands which access multiple
+// ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
@@ -315,6 +315,29 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			t.Fatalf("expected %d rows, but got %d", i+1, len(rows))
 		}
 	}
+
+	// Verify scan with different MaxResults parameters.
+	for i := -1; i < 2; i++ {
+		scan := &client.Call{
+			Method: proto.Scan,
+			Args: proto.ScanArgs(writes[0], writes[len(writes)-1].Next(),
+				int64(len(writes)+i)),
+			Reply: &proto.ScanResponse{},
+		}
+		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
+		scan.Args.Header().User = storage.UserRoot
+		tds.Send(scan)
+		if err := scan.Reply.Header().GoError(); err != nil {
+			t.Fatal(err)
+		}
+		rows := scan.Reply.(*proto.ScanResponse).Rows
+		if i < 1 && len(rows) != len(writes)+i {
+			t.Fatalf("expected %d rows, but got %d", len(writes)+i, len(rows))
+		} else if i == 1 && len(rows) != len(writes) {
+			t.Fatalf("expected %d rows, but got %d", len(writes), len(rows))
+		}
+	}
+
 	del := &client.Call{
 		Method: proto.DeleteRange,
 		Args: &proto.DeleteRangeRequest{

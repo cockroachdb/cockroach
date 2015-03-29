@@ -323,6 +323,8 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 // individual ranges sequentially and combines the results
 // transparently.
 func (ds *DistSender) Send(call *client.Call) {
+
+	// TODO: Refactor this method into more manageable pieces.
 	// Verify permissions.
 	if err := ds.verifyPermissions(call.Method, call.Args.Header()); err != nil {
 		call.Reply.Header().SetGoError(err)
@@ -339,6 +341,9 @@ func (ds *DistSender) Send(call *client.Call) {
 	// args will be changed to point to a copy of call.Args if the request
 	// spans ranges since in that case we need to alter its contents.
 	args := call.Args
+	// accumulatedResults is used to track the received result number of
+	// multi-range response.
+	var accumulatedResults int64
 	for {
 		reply := call.Reply
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
@@ -397,6 +402,45 @@ func (ds *DistSender) Send(call *client.Call) {
 			} else if isMulti {
 				// If this request spans ranges, collect the replies.
 				responses = append(responses, reply)
+
+				// If this request is bounded with a positive MaxResults,
+				// check whether the existing rows are enough.
+				var maxResults int64
+				if args, ok := args.(proto.Bounded); ok && args.GetBound() > 0 {
+					maxResults = args.GetBound()
+					if reply, ok := reply.(proto.Truncatable); ok {
+						// Calculate the number of the existing rows.
+						accumulatedResults += reply.RowCount()
+
+						if accumulatedResults >= maxResults {
+							// Set flag to break loop.
+							descNext = nil
+						}
+					}
+				}
+
+				// descNext can be nil in two cases:
+				// 1. Got enough rows in the middle of the request.
+				// 2. It is the last range of the request.
+				// Then combine and truncate the responses.
+				if descNext == nil {
+					// Combine multiple responses into the first one.
+					for _, r := range responses[1:] {
+						// We've already ascertained earlier that we're dealing with a
+						// Combinable response type.
+						responses[0].(proto.Combinable).Combine(r)
+					}
+
+					// Truncate the response if MaxResults is specified.
+					if maxResults > 0 {
+						if firstReply, ok := responses[0].(proto.Truncatable); ok {
+							firstReply.Truncate(maxResults)
+						}
+					}
+
+					// Write the final response back.
+					gogoproto.Merge(call.Reply, responses[0])
+				}
 			}
 			return util.RetryBreak, err
 		})
@@ -415,18 +459,6 @@ func (ds *DistSender) Send(call *client.Call) {
 		args.Header().Key = descNext.StartKey
 		// "Untruncate" EndKey to original.
 		args.Header().EndKey = call.Args.Header().EndKey
-	}
-
-	// If this was a multi-range request, aggregate the individual range
-	// responses into one reply.
-	if len(responses) > 0 {
-		// We've already ascertained earlier that we're dealing with a
-		// Combinable response type.
-		firstReply := responses[0].(proto.Combinable)
-		for _, r := range responses[1:] {
-			firstReply.Combine(r)
-		}
-		gogoproto.Merge(call.Reply, responses[0])
 	}
 }
 

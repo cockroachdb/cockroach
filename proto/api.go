@@ -663,3 +663,33 @@ func (br *BatchResponse) Add(reply Response) {
 	union.SetValue(reply)
 	br.Responses = append(br.Responses, union)
 }
+
+// Bounded is implemented by request types which have a bounded number of
+// result rows, such as Scan.
+type Bounded interface {
+	GetBound() int64
+}
+
+// GetBound returns the MaxResults field in ScanRequest.
+func (sr *ScanRequest) GetBound() int64 {
+	return sr.GetMaxResults()
+}
+
+// Truncatable is implemented by response types whose corresponding
+// requests have a bounded number of result rows, such as Scan.
+type Truncatable interface {
+	Truncate(maxResults int64)
+	RowCount() int64
+}
+
+// Truncate truncates ScanResponse with maxResults.
+func (sr *ScanResponse) Truncate(maxResults int64) {
+	if maxResults < int64(len(sr.Rows)) {
+		sr.Rows = sr.Rows[:maxResults]
+	}
+}
+
+// RowCount returns the number of rows in ScanResponse.
+func (sr *ScanResponse) RowCount() int64 {
+	return int64(len(sr.Rows))
+}
