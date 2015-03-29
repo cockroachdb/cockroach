@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // An acctHandler implements the adminHandler interface.
@@ -33,21 +32,11 @@ type acctHandler struct {
 
 // Put writes an accounting config for the specified key prefix (which is
 // treated as a key). The accounting config is parsed from the input "body".
-// The accounting config is stored gob-encoded. The specified body must must
+// The accounting config is stored gob-encoded. The specified body must
 // validly parse into an acctConfig struct.
 func (ah *acctHandler) Put(path string, body []byte, r *http.Request) error {
-	if len(path) == 0 {
-		return util.Errorf("no path specified for accounting Put")
-	}
-	config := &proto.AcctConfig{}
-	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
-		return util.Errorf("accounting config has invalid format: %+v: %s", config, err)
-	}
-	acctKey := engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(path[1:]))
-	if err := ah.db.PutProto(acctKey, config); err != nil {
-		return err
-	}
-	return nil
+	return putConfig(ah.db, engine.KeyConfigAccountingPrefix, &proto.AcctConfig{},
+		path, body, r, nil)
 }
 
 // Get retrieves the accounting configuration for the specified key.

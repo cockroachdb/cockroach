@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
-	"github.com/cockroachdb/cockroach/util"
 )
 
 // A permHandler implements the adminHandler interface.
@@ -36,18 +35,8 @@ type permHandler struct {
 // stored gob-encoded. The specified body must validly parse into a
 // perm config struct.
 func (ph *permHandler) Put(path string, body []byte, r *http.Request) error {
-	if len(path) == 0 {
-		return util.Errorf("no path specified for permission Put")
-	}
-	config := &proto.PermConfig{}
-	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
-		return util.Errorf("permission config has invalid format: %s: %s", config, err)
-	}
-	permKey := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key(path[1:]))
-	if err := ph.db.PutProto(permKey, config); err != nil {
-		return err
-	}
-	return nil
+	return putConfig(ph.db, engine.KeyConfigPermissionPrefix, &proto.PermConfig{},
+		path, body, r, nil)
 }
 
 // Get retrieves the perm configuration for the specified key. If the

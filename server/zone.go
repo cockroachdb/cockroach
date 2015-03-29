@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -36,33 +37,29 @@ type zoneHandler struct {
 	db *client.KV // Key-value database client
 }
 
+// validateZoneConfig returns an error if a given zone config is invalid.
+func validateZoneConfig(config gogoproto.Message) error {
+	zConfig := config.(*proto.ZoneConfig)
+	if len(zConfig.ReplicaAttrs) == 0 {
+		return util.Errorf("attributes for at least one replica must be specified in zone config")
+	}
+	if zConfig.RangeMaxBytes < minRangeMaxBytes {
+		return util.Errorf("RangeMaxBytes %d less than minimum allowed %d", zConfig.RangeMaxBytes, minRangeMaxBytes)
+	}
+	if zConfig.RangeMinBytes >= zConfig.RangeMaxBytes {
+		return util.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
+			zConfig.RangeMinBytes, zConfig.RangeMaxBytes)
+	}
+	return nil
+}
+
 // Put writes a zone config for the specified key prefix (which is
 // treated as a key). The zone config is parsed from the input
 // "body". The specified body must validly parse into a zone config
 // struct.
 func (zh *zoneHandler) Put(path string, body []byte, r *http.Request) error {
-	if len(path) == 0 {
-		return util.Errorf("no path specified for zone Put")
-	}
-	config := &proto.ZoneConfig{}
-	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
-		return util.Errorf("zone config has invalid format: %q: %s", body, err)
-	}
-	if len(config.ReplicaAttrs) == 0 {
-		return util.Errorf("attributes for at least one replica must be specified in zone config")
-	}
-	if config.RangeMaxBytes < minRangeMaxBytes {
-		return util.Errorf("RangeMaxBytes %d less than minimum allowed %d", config.RangeMaxBytes, minRangeMaxBytes)
-	}
-	if config.RangeMinBytes >= config.RangeMaxBytes {
-		return util.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
-			config.RangeMinBytes, config.RangeMaxBytes)
-	}
-	zoneKey := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(path[1:]))
-	if err := zh.db.PutProto(zoneKey, config); err != nil {
-		return err
-	}
-	return nil
+	return putConfig(zh.db, engine.KeyConfigZonePrefix, &proto.ZoneConfig{},
+		path, body, r, validateZoneConfig)
 }
 
 // Get retrieves the zone configuration for the specified key. If the
