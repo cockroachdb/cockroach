@@ -19,6 +19,7 @@ package storage
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -43,7 +44,7 @@ var IDAllocationRetryOpts = util.RetryOptions{
 // An IDAllocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
 type IDAllocator struct {
-	idKey     proto.Key
+	idKey     atomic.Value
 	db        *client.KV
 	minID     int64      // Minimum ID to return
 	blockSize int64      // Block allocation size
@@ -63,13 +64,13 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		return nil, util.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
 	ia := &IDAllocator{
-		idKey:     idKey,
 		db:        db,
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
 		stopper:   util.NewStopper(0),
 	}
+	ia.idKey.Store(idKey)
 	ia.ids <- allocationTrigger
 	return ia, nil
 }
@@ -111,7 +112,8 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 			return util.RetryBreak, errors.New("ShouldStop")
 		default:
 		}
-		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(ia.idKey, incr), ir); err != nil {
+		idKey := ia.idKey.Load().(proto.Key)
+		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(idKey, incr), ir); err != nil {
 			return util.RetryContinue, err
 		}
 		return util.RetryBreak, nil

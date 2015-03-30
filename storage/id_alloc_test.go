@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -135,7 +136,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make Allocator invalid.
-	idAlloc.idKey = nil
+	idAlloc.idKey.Store(proto.Key([]byte{}))
 
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.
@@ -159,7 +160,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	}
 
 	// Make the IDAllocator valid again.
-	idAlloc.idKey = engine.KeyRaftIDGenerator
+	idAlloc.idKey.Store(engine.KeyRaftIDGenerator)
 	// Check if the blocked allocations return expected ID.
 	ids := make([]int, 10)
 	for i := 0; i < 10; i++ {
