@@ -568,11 +568,19 @@ func (rh *ResponseHeader) GoError() error {
 	if rh.Error == nil {
 		return nil
 	}
-	return rh.Error.GetValue().(error)
+	if rh.Error.Detail == nil {
+		return rh.Error
+	}
+	errVal := rh.Error.Detail.GetValue()
+	if errVal == nil {
+		// Unknown error detail; return the generic error.
+		return rh.Error
+	}
+	return errVal.(error)
 }
 
 // SetGoError converts the specified type into either one of the proto-
-// defined error types or into a GenericError for all other Go errors.
+// defined error types or into a Error for all other Go errors.
 func (rh *ResponseHeader) SetGoError(err error) {
 	if err == nil {
 		rh.Error = nil
@@ -581,15 +589,14 @@ func (rh *ResponseHeader) SetGoError(err error) {
 	if rh.Error == nil {
 		rh.Error = &Error{}
 	}
-	if !rh.Error.SetValue(err) {
-		var canRetry bool
-		if r, ok := err.(util.Retryable); ok {
-			canRetry = r.CanRetry()
-		}
-		rh.Error.SetValue(&GenericError{
-			Message:   err.Error(),
-			Retryable: canRetry,
-		})
+	rh.Error.Message = err.Error()
+	if r, ok := err.(util.Retryable); ok {
+		rh.Error.Retryable = r.CanRetry()
+	}
+	// If the specific error type exists in the detail union, set it.
+	detail := &ErrorDetail{}
+	if detail.SetValue(err) {
+		rh.Error.Detail = detail
 	}
 }
 
