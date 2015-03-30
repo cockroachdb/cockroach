@@ -119,7 +119,7 @@ func runSplitRange(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdSplitMerge command merges a range.
+// A CmdMergeRange command merges a range.
 var CmdMergeRange = &commander.Command{
 	UsageLine: "merge-range [options] <key>",
 	Short:     "merges a range\n",
