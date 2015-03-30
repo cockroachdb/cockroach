@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Timothy Chen
+// Author: Ben Darnell
 
 package server
 
@@ -36,8 +37,8 @@ const (
 	raftMessageName = raftServiceName + ".RaftMessage"
 )
 
-// RPCTransport handles the rpc messages for multiraft.
-type RPCTransport struct {
+// rpcTransport handles the rpc messages for multiraft.
+type rpcTransport struct {
 	gossip    *gossip.Gossip
 	rpcServer *crpc.Server
 	mu        sync.Mutex
@@ -45,16 +46,16 @@ type RPCTransport struct {
 	clients   map[multiraft.NodeID]*rpc.Client
 }
 
-// NewRPCTransport creates a new RPCTransport with existing gossip and rpc server.
-func NewRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.Transport, error) {
-	t := &RPCTransport{
+// newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
+func newRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.Transport, error) {
+	t := &rpcTransport{
 		gossip:    gossip,
 		rpcServer: rpcServer,
 		servers:   make(map[multiraft.NodeID]multiraft.ServerInterface),
 		clients:   make(map[multiraft.NodeID]*rpc.Client),
 	}
 
-	err := t.rpcServer.RegisterName("MultiRaft", (*transportRPCServer)(t))
+	err := t.rpcServer.RegisterName(raftServiceName, (*transportRPCServer)(t))
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +63,9 @@ func NewRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.T
 	return t, nil
 }
 
-// transportServer is a type alias to separate RPC methods
+// transportRPCServer is a type alias to separate RPC methods
 // (which net/rpc finds via reflection) from others.
-type transportRPCServer RPCTransport
+type transportRPCServer rpcTransport
 
 // RaftMessage proxies the incoming request to the listening server interface.
 func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
@@ -86,22 +87,23 @@ func (t *transportRPCServer) RaftMessage(protoReq *proto.RaftMessageRequest,
 	return util.Errorf("Unable to proxy message to node: %d", req.Message.To)
 }
 
-// Listen registers a ServerInterface to be proxied messages.
-func (t *RPCTransport) Listen(id multiraft.NodeID, server multiraft.ServerInterface) error {
+// Listen implements the multiraft.Transport interface by registering a ServerInterface
+// to receive proxied messages.
+func (t *rpcTransport) Listen(id multiraft.NodeID, server multiraft.ServerInterface) error {
 	t.mu.Lock()
 	t.servers[id] = server
 	t.mu.Unlock()
 	return nil
 }
 
-// Stop unregisters the server id from getting messages.
-func (t *RPCTransport) Stop(id multiraft.NodeID) {
+// Stop implements the multiraft.Transport interface by unregistering the server id.
+func (t *rpcTransport) Stop(id multiraft.NodeID) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.servers, id)
 }
 
-func (t *RPCTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
+func (t *rpcTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -129,7 +131,7 @@ func (t *RPCTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
 }
 
 // Send a message to the specified Node id.
-func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageRequest) error {
+func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageRequest) error {
 	// Convert internal to proto formats.
 	protoReq := &proto.RaftMessageRequest{GroupID: req.GroupID}
 	var err error
@@ -159,7 +161,7 @@ func (t *RPCTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 }
 
 // Close all outgoing client connections.
-func (t *RPCTransport) Close() {
+func (t *rpcTransport) Close() {
 	for _, c := range t.clients {
 		err := c.Close()
 		if err != nil {

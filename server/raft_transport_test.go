@@ -61,7 +61,7 @@ func TestSendAndReceive(t *testing.T) {
 		}
 		defer server.Close()
 
-		transport, err := NewRPCTransport(gossip, server)
+		transport, err := newRPCTransport(gossip, server)
 		if err != nil {
 			t.Fatalf("Unexpected error creating transport, Error: %s", err)
 		}
