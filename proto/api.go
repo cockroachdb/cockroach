@@ -18,6 +18,8 @@
 package proto
 
 import (
+	"log"
+
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -576,7 +578,26 @@ func (rh *ResponseHeader) GoError() error {
 		// Unknown error detail; return the generic error.
 		return rh.Error
 	}
-	return errVal.(error)
+	err := errVal.(error)
+	// Make sure that the flags in the generic portion of the error
+	// match the methods of the specific error type.
+	if rh.Error.Retryable {
+		if r, ok := err.(util.Retryable); !ok || !r.CanRetry() {
+			log.Fatalf("inconsistent error proto; expected %T to be retryable", err)
+		}
+	}
+	if r, ok := err.(TransactionRestartError); ok {
+		if r.CanRestartTransaction() != rh.Error.TransactionRestart {
+			log.Fatalf("inconsistent error proto; expected %T to have restart mode %v",
+				err, rh.Error.TransactionRestart)
+		}
+	} else {
+		// Error type doesn't implement TransactionRestartError, so expect it to have the default.
+		if rh.Error.TransactionRestart != TransactionRestart_ABORT {
+			log.Fatalf("inconsistent error proto; expected %T to have restart mode ABORT", err)
+		}
+	}
+	return err
 }
 
 // SetGoError converts the specified type into either one of the proto-
@@ -592,6 +613,9 @@ func (rh *ResponseHeader) SetGoError(err error) {
 	rh.Error.Message = err.Error()
 	if r, ok := err.(util.Retryable); ok {
 		rh.Error.Retryable = r.CanRetry()
+	}
+	if r, ok := err.(TransactionRestartError); ok {
+		rh.Error.TransactionRestart = r.CanRestartTransaction()
 	}
 	// If the specific error type exists in the detail union, set it.
 	detail := &ErrorDetail{}

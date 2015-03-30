@@ -13,6 +13,50 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// TransactionRestart indicates how an error should be handled in a
+// transactional context.
+type TransactionRestart int32
+
+const (
+	// ABORT (the default) is for errors that are considered permanent
+	// and should abort the transaction.
+	TransactionRestart_ABORT TransactionRestart = 0
+	// BACKOFF is for errors that can retried by restarting the transaction
+	// after an exponential backoff.
+	TransactionRestart_BACKOFF TransactionRestart = 1
+	// IMMEDIATE is for errors that can be retried by restarting the
+	// transaction immediately.
+	TransactionRestart_IMMEDIATE TransactionRestart = 2
+)
+
+var TransactionRestart_name = map[int32]string{
+	0: "ABORT",
+	1: "BACKOFF",
+	2: "IMMEDIATE",
+}
+var TransactionRestart_value = map[string]int32{
+	"ABORT":     0,
+	"BACKOFF":   1,
+	"IMMEDIATE": 2,
+}
+
+func (x TransactionRestart) Enum() *TransactionRestart {
+	p := new(TransactionRestart)
+	*p = x
+	return p
+}
+func (x TransactionRestart) String() string {
+	return proto1.EnumName(TransactionRestart_name, int32(x))
+}
+func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(TransactionRestart_value, data, "TransactionRestart")
+	if err != nil {
+		return err
+	}
+	*x = TransactionRestart(value)
+	return nil
+}
+
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 type NotLeaderError struct {
@@ -395,8 +439,11 @@ type Error struct {
 	// Message is a human-readable error message.
 	Message string `protobuf:"bytes,1,opt,name=message" json:"message"`
 	// If retryable is true, the error condition may be transient and the failed
-	// operation may be retried.
+	// operation may be retried (within the same transaction).
 	Retryable bool `protobuf:"varint,2,opt,name=retryable" json:"retryable"`
+	// If transaction_restart is not ABORT, the error condition may be handled by
+	// restarting the transaction (with or without a backoff).
+	TransactionRestart TransactionRestart `protobuf:"varint,4,opt,name=transaction_restart,enum=cockroach.proto.TransactionRestart" json:"transaction_restart"`
 	// If an ErrorDetail is present, it may contain additional structured data
 	// about the error.
 	Detail           *ErrorDetail `protobuf:"bytes,3,opt,name=detail" json:"detail,omitempty"`
@@ -421,6 +468,13 @@ func (m *Error) GetRetryable() bool {
 	return false
 }
 
+func (m *Error) GetTransactionRestart() TransactionRestart {
+	if m != nil {
+		return m.TransactionRestart
+	}
+	return TransactionRestart_ABORT
+}
+
 func (m *Error) GetDetail() *ErrorDetail {
 	if m != nil {
 		return m.Detail
@@ -429,6 +483,7 @@ func (m *Error) GetDetail() *ErrorDetail {
 }
 
 func init() {
+	proto1.RegisterEnum("cockroach.proto.TransactionRestart", TransactionRestart_name, TransactionRestart_value)
 }
 func (this *ErrorDetail) GetValue() interface{} {
 	if this.NotLeader != nil {

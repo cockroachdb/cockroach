@@ -238,25 +238,15 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			txnKV.Prepare(proto.EndTransaction, etArgs, etReply)
 			err = txnKV.Flush()
 		}
-		switch t := err.(type) {
-		case *proto.ReadWithinUncertaintyIntervalError:
-			// Retry immediately on read within uncertainty interval.
-			return util.RetryReset, nil
-		case *proto.TransactionAbortedError:
-			// If the transaction was aborted, the txnSender will have created
-			// a new txn. We allow backoff/retry in this case.
-			return util.RetryContinue, nil
-		case *proto.TransactionPushError:
-			// Backoff and retry on failure to push a conflicting transaction.
-			return util.RetryContinue, nil
-		case *proto.TransactionRetryError:
-			// Return RetryReset for an immediate retry (as in the case of
-			// an SSI txn whose timestamp was pushed).
-			return util.RetryReset, nil
-		default:
-			// For all other cases, finish retry loop, returning possible error.
-			return util.RetryBreak, t
+		if restartErr, ok := err.(proto.TransactionRestartError); ok {
+			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
+				return util.RetryReset, nil
+			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
+				return util.RetryContinue, nil
+			}
+			// By default, fall through and return RetryBreak.
 		}
+		return util.RetryBreak, err
 	}); err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
