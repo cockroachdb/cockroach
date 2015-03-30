@@ -196,11 +196,15 @@ func (tc *TxnCoordSender) Send(call *client.Call) {
 // TxnCoordSender has been managing.
 func (tc *TxnCoordSender) Close() {
 	tc.Lock()
-	defer tc.Unlock()
 	for _, txn := range tc.txns {
 		close(txn.closer)
 	}
 	tc.txns = map[string]*txnMetadata{}
+	tc.Unlock()
+	// TODO(bdarnell): closing the wrapped sender may close the underlying
+	// Store, which may call back into TxnCoordSender and cause deadlocks if
+	// the lock is held. The shutdown process needs to be refactored to clean
+	// this up.
 	tc.wrapped.Close()
 }
 

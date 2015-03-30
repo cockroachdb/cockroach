@@ -144,8 +144,8 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer transport.Close()
 	defer db.Close()
+	defer transport.Close()
 	setTestRetryOptions()
 
 	// Rewrite a zone config with low max bytes.
