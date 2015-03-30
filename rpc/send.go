@@ -104,6 +104,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 		}
 	}
 
+	// Get clients
 	var clients []*Client
 	switch opts.Ordering {
 	case OrderStable:
@@ -128,6 +129,12 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			clients = append(clients, unhealthy[idx])
 		}
 	}
+
+	return doSend(clients, opts, method, addrs, getArgs, getReply)
+}
+
+func doSend(clients []*Client, opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
+	getReply func() interface{}) ([]interface{}, error) {
 	// TODO(spencer): going to need to also sort by affinity; closest
 	// ping time should win. Makes sense to have the rpc client/server
 	// heartbeat measure ping times. With a bit of seasoning, each
