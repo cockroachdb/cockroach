@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strconv"
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/biogo/store/interval"
@@ -149,6 +150,13 @@ func (k Key) Compare(b interval.Comparable) int {
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
 	return fmt.Sprintf("%q", []byte(k))
+}
+
+// Format implements the fmt.Formatter interface.
+func (k Key) Format(f fmt.State, verb rune) {
+	// Note: this implementation doesn't handle the width and precision
+	// specifiers such as "%20.10s".
+	fmt.Fprint(f, strconv.Quote(string(k)))
 }
 
 // The following methods implement the custom marshalling and
