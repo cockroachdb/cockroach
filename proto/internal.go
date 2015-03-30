@@ -14,6 +14,7 @@
 // for names of contributors.
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Matt Tracy (matt@cockroachlabs.com)
 
 package proto
 
