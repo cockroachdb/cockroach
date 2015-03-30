@@ -71,11 +71,10 @@ func runGet(cmd *commander.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "get failed: %s\n", err)
 		os.Exit(1)
 	}
-	if resp.Value.Integer != nil {
-		fmt.Printf("%d\n", *resp.Value.Integer)
-	} else if resp.Value == nil {
+	if resp.Value == nil {
 		fmt.Fprintf(os.Stderr, "%s not found\n", key)
-		os.Exit(1)
+	} else if resp.Value.Integer != nil {
+		fmt.Printf("%d\n", *resp.Value.Integer)
 	} else {
 		fmt.Printf("%s\n", resp.Value.Bytes)
 	}
