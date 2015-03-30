@@ -63,6 +63,7 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* Error_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   Error_reflection_ = NULL;
+const ::google::protobuf::EnumDescriptor* TransactionRestart_descriptor_ = NULL;
 
 }  // namespace
 
@@ -287,9 +288,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ErrorDetail));
   Error_descriptor_ = file->message_type(13);
-  static const int Error_offsets_[3] = {
+  static const int Error_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, retryable_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, transaction_restart_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Error, detail_),
   };
   Error_reflection_ =
@@ -303,6 +305,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Error));
+  TransactionRestart_descriptor_ = file->enum_type(0);
 }
 
 namespace {
@@ -440,9 +443,13 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "uires_txn\030\013 \001(\0132#.cockroach.proto.OpRequ"
     "iresTxnError\022\?\n\020condition_failed\030\014 \001(\0132%"
     ".cockroach.proto.ConditionFailedError:\004\310"
-    "\240\037\001\"e\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\tr"
-    "etryable\030\002 \001(\010B\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.c"
-    "ockroach.proto.ErrorDetailB\007Z\005proto", 2195);
+    "\240\037\001\"\255\001\n\005Error\022\025\n\007message\030\001 \001(\tB\004\310\336\037\000\022\027\n\t"
+    "retryable\030\002 \001(\010B\004\310\336\037\000\022F\n\023transaction_res"
+    "tart\030\004 \001(\0162#.cockroach.proto.Transaction"
+    "RestartB\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.cockroac"
+    "h.proto.ErrorDetail*;\n\022TransactionRestar"
+    "t\022\t\n\005ABORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002"
+    "B\007Z\005proto", 2329);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();
@@ -482,6 +489,21 @@ struct StaticDescriptorInitializer_cockroach_2fproto_2ferrors_2eproto {
     protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   }
 } static_descriptor_initializer_cockroach_2fproto_2ferrors_2eproto_;
+const ::google::protobuf::EnumDescriptor* TransactionRestart_descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return TransactionRestart_descriptor_;
+}
+bool TransactionRestart_IsValid(int value) {
+  switch(value) {
+    case 0:
+    case 1:
+    case 2:
+      return true;
+    default:
+      return false;
+  }
+}
+
 
 // ===================================================================
 
@@ -4257,6 +4279,7 @@ void ErrorDetail::Swap(ErrorDetail* other) {
 #ifndef _MSC_VER
 const int Error::kMessageFieldNumber;
 const int Error::kRetryableFieldNumber;
+const int Error::kTransactionRestartFieldNumber;
 const int Error::kDetailFieldNumber;
 #endif  // !_MSC_VER
 
@@ -4282,6 +4305,7 @@ void Error::SharedCtor() {
   _cached_size_ = 0;
   message_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   retryable_ = false;
+  transaction_restart_ = 0;
   detail_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -4322,17 +4346,31 @@ Error* Error::New() const {
 }
 
 void Error::Clear() {
-  if (_has_bits_[0 / 32] & 7) {
+#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
+  &reinterpret_cast<Error*>(16)->f) - \
+   reinterpret_cast<char*>(16))
+
+#define ZR_(first, last) do {                              \
+    size_t f = OFFSET_OF_FIELD_(first);                    \
+    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
+    ::memset(&first, 0, n);                                \
+  } while (0)
+
+  if (_has_bits_[0 / 32] & 15) {
+    ZR_(retryable_, transaction_restart_);
     if (has_message()) {
       if (message_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
         message_->clear();
       }
     }
-    retryable_ = false;
     if (has_detail()) {
       if (detail_ != NULL) detail_->::cockroach::proto::ErrorDetail::Clear();
     }
   }
+
+#undef OFFSET_OF_FIELD_
+#undef ZR_
+
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -4387,6 +4425,26 @@ bool Error::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(32)) goto parse_transaction_restart;
+        break;
+      }
+
+      // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_transaction_restart:
+          int value;
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          if (::cockroach::proto::TransactionRestart_IsValid(value)) {
+            set_transaction_restart(static_cast< ::cockroach::proto::TransactionRestart >(value));
+          } else {
+            mutable_unknown_fields()->AddVarint(4, value);
+          }
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -4437,6 +4495,12 @@ void Error::SerializeWithCachedSizes(
       3, this->detail(), output);
   }
 
+  // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+  if (has_transaction_restart()) {
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      4, this->transaction_restart(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -4470,6 +4534,12 @@ void Error::SerializeWithCachedSizes(
         3, this->detail(), target);
   }
 
+  // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+  if (has_transaction_restart()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteEnumToArray(
+      4, this->transaction_restart(), target);
+  }
+
   if (!unknown_fields().empty()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -4492,6 +4562,12 @@ int Error::ByteSize() const {
     // optional bool retryable = 2;
     if (has_retryable()) {
       total_size += 1 + 1;
+    }
+
+    // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+    if (has_transaction_restart()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::EnumSize(this->transaction_restart());
     }
 
     // optional .cockroach.proto.ErrorDetail detail = 3;
@@ -4534,6 +4610,9 @@ void Error::MergeFrom(const Error& from) {
     if (from.has_retryable()) {
       set_retryable(from.retryable());
     }
+    if (from.has_transaction_restart()) {
+      set_transaction_restart(from.transaction_restart());
+    }
     if (from.has_detail()) {
       mutable_detail()->::cockroach::proto::ErrorDetail::MergeFrom(from.detail());
     }
@@ -4562,6 +4641,7 @@ void Error::Swap(Error* other) {
   if (other != this) {
     std::swap(message_, other->message_);
     std::swap(retryable_, other->retryable_);
+    std::swap(transaction_restart_, other->transaction_restart_);
     std::swap(detail_, other->detail_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);

@@ -139,6 +139,22 @@ message ErrorDetail {
   optional ConditionFailedError condition_failed = 12;
 }
 
+// TransactionRestart indicates how an error should be handled in a
+// transactional context.
+enum TransactionRestart {
+  // ABORT (the default) is for errors that are considered permanent
+  // and should abort the transaction.
+  ABORT = 0;
+
+  // BACKOFF is for errors that can retried by restarting the transaction
+  // after an exponential backoff.
+  BACKOFF = 1;
+
+  // IMMEDIATE is for errors that can be retried by restarting the
+  // transaction immediately.
+  IMMEDIATE = 2;
+}
+
 // Error is a generic represesentation including a string message
 // and information about retryability.
 message Error {
@@ -146,8 +162,12 @@ message Error {
   optional string message = 1 [(gogoproto.nullable) = false];
 
   // If retryable is true, the error condition may be transient and the failed
-  // operation may be retried.
+  // operation may be retried (within the same transaction).
   optional bool retryable = 2 [(gogoproto.nullable) = false];
+
+  // If transaction_restart is not ABORT, the error condition may be handled by
+  // restarting the transaction (with or without a backoff).
+  optional TransactionRestart transaction_restart = 4 [(gogoproto.nullable) = false];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.

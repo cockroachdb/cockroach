@@ -23,6 +23,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
+#include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 #include "cockroach/proto/config.pb.h"
 #include "cockroach/proto/data.pb.h"
@@ -52,6 +53,26 @@ class ConditionFailedError;
 class ErrorDetail;
 class Error;
 
+enum TransactionRestart {
+  ABORT = 0,
+  BACKOFF = 1,
+  IMMEDIATE = 2
+};
+bool TransactionRestart_IsValid(int value);
+const TransactionRestart TransactionRestart_MIN = ABORT;
+const TransactionRestart TransactionRestart_MAX = IMMEDIATE;
+const int TransactionRestart_ARRAYSIZE = TransactionRestart_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* TransactionRestart_descriptor();
+inline const ::std::string& TransactionRestart_Name(TransactionRestart value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    TransactionRestart_descriptor(), value);
+}
+inline bool TransactionRestart_Parse(
+    const ::std::string& name, TransactionRestart* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<TransactionRestart>(
+    TransactionRestart_descriptor(), name, value);
+}
 // ===================================================================
 
 class NotLeaderError : public ::google::protobuf::Message {
@@ -1403,6 +1424,13 @@ class Error : public ::google::protobuf::Message {
   inline bool retryable() const;
   inline void set_retryable(bool value);
 
+  // optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+  inline bool has_transaction_restart() const;
+  inline void clear_transaction_restart();
+  static const int kTransactionRestartFieldNumber = 4;
+  inline ::cockroach::proto::TransactionRestart transaction_restart() const;
+  inline void set_transaction_restart(::cockroach::proto::TransactionRestart value);
+
   // optional .cockroach.proto.ErrorDetail detail = 3;
   inline bool has_detail() const;
   inline void clear_detail();
@@ -1418,6 +1446,8 @@ class Error : public ::google::protobuf::Message {
   inline void clear_has_message();
   inline void set_has_retryable();
   inline void clear_has_retryable();
+  inline void set_has_transaction_restart();
+  inline void clear_has_transaction_restart();
   inline void set_has_detail();
   inline void clear_has_detail();
 
@@ -1426,8 +1456,9 @@ class Error : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::std::string* message_;
-  ::cockroach::proto::ErrorDetail* detail_;
   bool retryable_;
+  int transaction_restart_;
+  ::cockroach::proto::ErrorDetail* detail_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
@@ -2971,15 +3002,40 @@ inline void Error::set_retryable(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.Error.retryable)
 }
 
-// optional .cockroach.proto.ErrorDetail detail = 3;
-inline bool Error::has_detail() const {
+// optional .cockroach.proto.TransactionRestart transaction_restart = 4;
+inline bool Error::has_transaction_restart() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void Error::set_has_detail() {
+inline void Error::set_has_transaction_restart() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void Error::clear_has_detail() {
+inline void Error::clear_has_transaction_restart() {
   _has_bits_[0] &= ~0x00000004u;
+}
+inline void Error::clear_transaction_restart() {
+  transaction_restart_ = 0;
+  clear_has_transaction_restart();
+}
+inline ::cockroach::proto::TransactionRestart Error::transaction_restart() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Error.transaction_restart)
+  return static_cast< ::cockroach::proto::TransactionRestart >(transaction_restart_);
+}
+inline void Error::set_transaction_restart(::cockroach::proto::TransactionRestart value) {
+  assert(::cockroach::proto::TransactionRestart_IsValid(value));
+  set_has_transaction_restart();
+  transaction_restart_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Error.transaction_restart)
+}
+
+// optional .cockroach.proto.ErrorDetail detail = 3;
+inline bool Error::has_detail() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Error::set_has_detail() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Error::clear_has_detail() {
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void Error::clear_detail() {
   if (detail_ != NULL) detail_->::cockroach::proto::ErrorDetail::Clear();
@@ -3022,6 +3078,11 @@ inline void Error::set_allocated_detail(::cockroach::proto::ErrorDetail* detail)
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::TransactionRestart> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::TransactionRestart>() {
+  return ::cockroach::proto::TransactionRestart_descriptor();
+}
 
 }  // namespace google
 }  // namespace protobuf

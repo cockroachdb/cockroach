@@ -19,6 +19,12 @@ package proto
 
 import "fmt"
 
+// TransactionRestartError is an interface implemented by errors that cause
+// a transaction to be restarted.
+type TransactionRestartError interface {
+	CanRestartTransaction() TransactionRestart
+}
+
 // Error implements the Go error interface.
 func (e *Error) Error() string {
 	return e.Message
@@ -27,6 +33,11 @@ func (e *Error) Error() string {
 // CanRetry implements the util/Retryable interface.
 func (e *Error) CanRetry() bool {
 	return e.Retryable
+}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *Error) CanRestartTransaction() TransactionRestart {
+	return e.TransactionRestart
 }
 
 // Error formats error.
@@ -84,6 +95,11 @@ func (e *TransactionAbortedError) Error() string {
 	return fmt.Sprintf("txn aborted %s", e.Txn)
 }
 
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *TransactionAbortedError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_BACKOFF
+}
+
 // NewTransactionPushError initializes a new TransactionPushError.
 // Txn is the transaction which will be retried.
 func NewTransactionPushError(txn, pusheeTxn *Transaction) *TransactionPushError {
@@ -98,6 +114,11 @@ func (e *TransactionPushError) Error() string {
 	return fmt.Sprintf("txn %s failed to push %s", e.Txn, e.PusheeTxn)
 }
 
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *TransactionPushError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_BACKOFF
+}
+
 // NewTransactionRetryError initializes a new TransactionRetryError.
 // Txn is the transaction which will be retried.
 func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
@@ -107,6 +128,11 @@ func NewTransactionRetryError(txn *Transaction) *TransactionRetryError {
 // Error formats error.
 func (e *TransactionRetryError) Error() string {
 	return fmt.Sprintf("retry txn %s", e.Txn)
+}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *TransactionRetryError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
 }
 
 // NewTransactionStatusError initializes a new TransactionStatusError.
@@ -135,6 +161,11 @@ func (e *WriteTooOldError) Error() string {
 // Error formats error.
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
 	return fmt.Sprintf("read at time %s encountered previous write with future timestamp %s within uncertainty interval", e.Timestamp, e.ExistingTimestamp)
+}
+
+// CanRestartTransaction implements the TransactionRestartError interface.
+func (e *ReadWithinUncertaintyIntervalError) CanRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
 }
 
 // Error formats error.
