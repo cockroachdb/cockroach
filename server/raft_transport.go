@@ -20,14 +20,13 @@ package server
 
 import (
 	"net"
-	"net/rpc"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
-	crpc "github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/rpc/codec"
+	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -39,20 +38,21 @@ const (
 
 // rpcTransport handles the rpc messages for multiraft.
 type rpcTransport struct {
-	gossip    *gossip.Gossip
-	rpcServer *crpc.Server
-	mu        sync.Mutex
-	servers   map[multiraft.NodeID]multiraft.ServerInterface
-	clients   map[multiraft.NodeID]*rpc.Client
+	gossip     *gossip.Gossip
+	rpcServer  *rpc.Server
+	rpcContext *rpc.Context
+	mu         sync.Mutex
+	servers    map[multiraft.NodeID]multiraft.ServerInterface
 }
 
 // newRPCTransport creates a new rpcTransport with specified gossip and rpc server.
-func newRPCTransport(gossip *gossip.Gossip, rpcServer *crpc.Server) (multiraft.Transport, error) {
+func newRPCTransport(gossip *gossip.Gossip, rpcServer *rpc.Server, rpcContext *rpc.Context) (
+	multiraft.Transport, error) {
 	t := &rpcTransport{
-		gossip:    gossip,
-		rpcServer: rpcServer,
-		servers:   make(map[multiraft.NodeID]multiraft.ServerInterface),
-		clients:   make(map[multiraft.NodeID]*rpc.Client),
+		gossip:     gossip,
+		rpcServer:  rpcServer,
+		rpcContext: rpcContext,
+		servers:    make(map[multiraft.NodeID]multiraft.ServerInterface),
 	}
 
 	err := t.rpcServer.RegisterName(raftServiceName, (*transportRPCServer)(t))
@@ -103,31 +103,13 @@ func (t *rpcTransport) Stop(id multiraft.NodeID) {
 	delete(t.servers, id)
 }
 
-func (t *rpcTransport) getClient(id multiraft.NodeID) (*rpc.Client, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	client, ok := t.clients[id]
-	if ok {
-		return client, nil
-	}
-
-	nodeIDKey := gossip.MakeNodeIDGossipKey(proto.NodeID(id))
+func (t *rpcTransport) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
+	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
 	info, err := t.gossip.GetInfo(nodeIDKey)
 	if info == nil || err != nil {
-		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", id, err)
+		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
 	}
-	address := info.(net.Addr)
-
-	conn, err := net.Dial("tcp", address.String())
-	if err != nil {
-		return nil, err
-	}
-	client = rpc.NewClientWithCodec(codec.NewClientCodec(conn))
-
-	t.clients[id] = client
-
-	return client, err
+	return info.(net.Addr), nil
 }
 
 // Send a message to the specified Node id.
@@ -139,10 +121,19 @@ func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 		return err
 	}
 
-	client, err := t.getClient(id)
+	nodeID, _ := storage.DecodeRaftNodeID(id)
+	addr, err := t.nodeIDToAddr(nodeID)
 	if err != nil {
 		return err
 	}
+
+	client := rpc.NewClient(addr, nil, t.rpcContext)
+	select {
+	case <-client.Ready:
+	case <-client.Closed:
+		return util.Errorf("raft client failed to connect")
+	}
+
 	call := client.Go(raftMessageName, protoReq, &proto.RaftMessageResponse{}, nil)
 	select {
 	case <-call.Done:
@@ -160,12 +151,7 @@ func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 	}
 }
 
-// Close all outgoing client connections.
+// Close shuts down an rpcTransport.
 func (t *rpcTransport) Close() {
-	for _, c := range t.clients {
-		err := c.Close()
-		if err != nil {
-			log.Warningf("error stopping client: %s", err)
-		}
-	}
+	// No-op since we share the global cache of client connections.
 }

@@ -1489,7 +1489,7 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 
 	var cs raftpb.ConfState
 	for _, rep := range r.Desc().Replicas {
-		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
+		cs.Nodes = append(cs.Nodes, uint64(MakeRaftNodeID(rep.NodeID, rep.StoreID)))
 	}
 
 	return hs, cs, nil
@@ -1701,7 +1701,7 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState
 	for _, rep := range desc.Replicas {
-		cs.Nodes = append(cs.Nodes, uint64(makeRaftNodeID(rep.NodeID, rep.StoreID)))
+		cs.Nodes = append(cs.Nodes, uint64(MakeRaftNodeID(rep.NodeID, rep.StoreID)))
 	}
 
 	term, err := r.Term(appliedIndex)

@@ -122,10 +122,10 @@ func verifyKeys(start, end proto.Key) error {
 	return nil
 }
 
-// makeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
+// MakeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
 // Both values are int32s, but we only allocate 8 bits for StoreID so we have
 // the option of expanding proto.NodeID and being more "wasteful" of node IDs.
-func makeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
+func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 	if n < 0 || s <= 0 {
 		// Zeroes are likely the result of incomplete initialization.
 		// TODO(bdarnell): should we disallow NodeID==0? It should never occur in
@@ -138,7 +138,8 @@ func makeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 	return multiraft.NodeID(n)<<8 | multiraft.NodeID(s)
 }
 
-func decodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
+// DecodeRaftNodeID converts a multiraft NodeID into its component NodeID and StoreID.
+func DecodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
 	return proto.NodeID(n >> 8), proto.StoreID(n & 0xff)
 }
 
@@ -682,7 +683,7 @@ func (s *Store) StoreID() proto.StoreID { return s.Ident.StoreID }
 
 // RaftNodeID accessor.
 func (s *Store) RaftNodeID() multiraft.NodeID {
-	return makeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
+	return MakeRaftNodeID(s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // Clock accessor.
@@ -1037,7 +1038,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
 		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
-			makeRaftNodeID(crt.NodeID, crt.StoreID),
+			MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
 	} else {
 		s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)

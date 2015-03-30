@@ -24,7 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -50,8 +52,8 @@ func TestSendAndReceive(t *testing.T) {
 	// servers has length numServers.
 	servers := []*rpc.Server{}
 	// All the rest have length numStores (note that several stores share a transport).
-	nextNodeID := uint64(1)
-	nodeIDs := []uint64{}
+	nextNodeID := proto.NodeID(1)
+	nodeIDs := []multiraft.NodeID{}
 	transports := []multiraft.Transport{}
 	channels := []ChannelServer{}
 	for server := 0; server < numServers; server++ {
@@ -61,22 +63,23 @@ func TestSendAndReceive(t *testing.T) {
 		}
 		defer server.Close()
 
-		transport, err := newRPCTransport(gossip, server)
+		transport, err := newRPCTransport(gossip, server, rpcContext)
 		if err != nil {
 			t.Fatalf("Unexpected error creating transport, Error: %s", err)
 		}
 		defer transport.Close()
 
 		for store := 0; store < storesPerServer; store++ {
-			nodeID := nextNodeID
+			protoNodeID := nextNodeID
+			nodeID := storage.MakeRaftNodeID(protoNodeID, 1)
 			nextNodeID++
 
 			channel := make(ChannelServer, 10)
-			if err := transport.Listen(multiraft.NodeID(nodeID), channel); err != nil {
+			if err := transport.Listen(nodeID, channel); err != nil {
 				t.Fatal(err)
 			}
 
-			if err := gossip.AddInfo(fmt.Sprintf("node-%d", nodeID), server.Addr(), time.Hour); err != nil {
+			if err := gossip.AddInfo(fmt.Sprintf("node-%d", protoNodeID), server.Addr(), time.Hour); err != nil {
 				t.Fatal(err)
 			}
 
@@ -94,8 +97,8 @@ func TestSendAndReceive(t *testing.T) {
 			req := &multiraft.RaftMessageRequest{
 				GroupID: 1,
 				Message: raftpb.Message{
-					From: nodeIDs[from],
-					To:   nodeIDs[to],
+					From: uint64(nodeIDs[from]),
+					To:   uint64(nodeIDs[to]),
 					Type: raftpb.MsgHeartbeat,
 				},
 			}
@@ -113,7 +116,7 @@ func TestSendAndReceive(t *testing.T) {
 		for from := 0; from < numStores; from++ {
 			select {
 			case req := <-channels[to]:
-				if req.Message.To != nodeIDs[to] {
+				if req.Message.To != uint64(nodeIDs[to]) {
 					t.Errorf("invalid message received on channel %d (expected from %d): %+v",
 						nodeIDs[to], nodeIDs[from], req)
 				}
