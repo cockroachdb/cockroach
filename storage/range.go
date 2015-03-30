@@ -655,7 +655,7 @@ func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
 				// Check for a bad range split. This should never happen as ranges
 				// cannot be split mid-config.
 				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-					log.Fatalf("range splits configuration values for %q", cd.keyPrefix)
+					log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
 				}
 				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
 				if err != nil {
@@ -787,7 +787,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	case proto.InternalTruncateLog:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
 	default:
-		return util.Errorf("unrecognized command %q", method)
+		return util.Errorf("unrecognized command %s", method)
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
@@ -1195,7 +1195,7 @@ func (r *Range) InternalGC(batch engine.Engine, ms *engine.MVCCStats, args *prot
 // with priority one less than the pushee's higher priority.
 func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) {
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		reply.SetGoError(util.Errorf("request key %q should match pushee's txn key %q", args.Key, args.PusheeTxn.Key))
+		reply.SetGoError(util.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key))
 		return
 	}
 	key := engine.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
@@ -1371,7 +1371,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) error {
 	if !bytes.Equal(r.Desc().StartKey, split.UpdatedDesc.StartKey) ||
 		!bytes.Equal(r.Desc().EndKey, split.NewDesc.EndKey) {
-		return util.Errorf("range does not match splits: %q-%q + %q-%q != %q-%q", split.UpdatedDesc.StartKey,
+		return util.Errorf("range does not match splits: %s-%s + %s-%s != %s-%s", split.UpdatedDesc.StartKey,
 			split.UpdatedDesc.EndKey, split.NewDesc.StartKey, split.NewDesc.EndKey, r.Desc().StartKey, r.Desc().EndKey)
 	}
 
@@ -1427,12 +1427,12 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 // transaction. It recomputes stats for the receiving range.
 func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) error {
 	if !bytes.Equal(r.Desc().StartKey, merge.UpdatedDesc.StartKey) {
-		return util.Errorf("range and updated range start keys do not match: %q != %q",
+		return util.Errorf("range and updated range start keys do not match: %s != %s",
 			r.Desc().StartKey, merge.UpdatedDesc.StartKey)
 	}
 
 	if !r.Desc().EndKey.Less(merge.UpdatedDesc.EndKey) {
-		return util.Errorf("range end key is not less than the post merge end key: %q < %q",
+		return util.Errorf("range end key is not less than the post merge end key: %s < %s",
 			r.Desc().EndKey, merge.UpdatedDesc.StartKey)
 	}
 
@@ -1842,11 +1842,11 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		return
 	}
 	if !engine.IsValidSplitKey(splitKey) {
-		reply.SetGoError(util.Errorf("cannot split range at key %q", splitKey))
+		reply.SetGoError(util.Errorf("cannot split range at key %s", splitKey))
 		return
 	}
 	if splitKey.Equal(desc.StartKey) || splitKey.Equal(desc.EndKey) {
-		reply.SetGoError(util.Errorf("range has already been split by key %q", splitKey))
+		reply.SetGoError(util.Errorf("range has already been split by key %s", splitKey))
 		return
 	}
 
@@ -1861,11 +1861,11 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	updatedDesc := *desc
 	updatedDesc.EndKey = splitKey
 
-	log.Infof("initiating a split of range %d %q-%q at key %q", desc.RaftID,
+	log.Infof("initiating a split of range %d %s-%s at key %s", desc.RaftID,
 		proto.Key(desc.StartKey), proto.Key(desc.EndKey), splitKey)
 
 	txnOpts := &client.TransactionOptions{
-		Name: fmt.Sprintf("split range %d at %q", desc.RaftID, splitKey),
+		Name: fmt.Sprintf("split range %d at %s", desc.RaftID, splitKey),
 	}
 	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Create range descriptor for second half of split.
@@ -1895,7 +1895,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 			},
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
-		reply.SetGoError(util.Errorf("split at key %q failed: %s", splitKey, err))
+		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
 	}
 }
 
@@ -1960,7 +1960,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	updatedDesc := *desc
 	updatedDesc.EndKey = subsumedDesc.EndKey
 
-	log.Infof("initiating a merge of range %d %q-%q into range %d %q-%q",
+	log.Infof("initiating a merge of range %d %s-%s into range %d %s-%s",
 		subsumedDesc.RaftID, proto.Key(subsumedDesc.StartKey), proto.Key(subsumedDesc.EndKey),
 		desc.RaftID, desc.StartKey, desc.EndKey)
 
