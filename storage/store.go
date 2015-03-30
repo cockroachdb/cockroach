@@ -301,6 +301,10 @@ type Store struct {
 	verifyQueue *verifyQueue        // Checksum verification queue
 	scanner     *rangeScanner       // Range scanner
 	multiraft   *multiraft.MultiRaft
+	// scanStopper is used to stop background tasks that might be adding work to the
+	// store. stopper is used to stop the store itself. Deadlocks could result if
+	// the two used the same stopper.
+	scanStopper *util.Stopper
 	stopper     *util.Stopper
 
 	mu          sync.RWMutex     // Protects variables below...
@@ -324,6 +328,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		allocator:   &allocator{},
 		gossip:      gossip,
 		transport:   transport,
+		scanStopper: util.NewStopper(0),
 		stopper:     util.NewStopper(0),
 		ranges:      map[int64]*Range{},
 	}
@@ -339,9 +344,11 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	return s
 }
 
-// Stop calls Range.Stop() on all active ranges.
+// Stop shuts down the store.
 func (s *Store) Stop() {
-	// Stop the id allocator first since it may need the ranges to be up to finish.
+	// First, stop the scanner which might be generating new work in the background.
+	s.scanStopper.Stop()
+	// Second, stop the id allocator which may need the ranges to be up to finish.
 	if s.raftIDAlloc != nil {
 		s.raftIDAlloc.Stop()
 	}
@@ -449,7 +456,7 @@ func (s *Store) Start() error {
 	go s.processRaft()
 
 	// Start the scanner.
-	s.scanner.Start(s.clock, s.stopper)
+	s.scanner.Start(s.clock, s.scanStopper)
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
