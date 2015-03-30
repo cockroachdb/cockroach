@@ -235,6 +235,32 @@ func RunSetZone(ctx *Context, keyPrefix, configFileName string) {
 	runSetConfig(ctx, zonePathPrefix, keyPrefix, configFileName)
 }
 
+// putConfig writes a config for the specified key prefix (which is
+// treated as a key). The config is parsed from the input "body". The
+// config is stored proto-encoded. The specified body must validly
+// parse into a config struct and must pass a given validation check (if
+// validate is not nil).
+func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
+	path string, body []byte, r *http.Request,
+	validate func(gogoproto.Message) error) error {
+	if len(path) == 0 {
+		return util.Errorf("no path specified for Put")
+	}
+	if err := util.UnmarshalRequest(r, body, config, util.AllEncodings); err != nil {
+		return util.Errorf("config has invalid format: %+v: %s", config, err)
+	}
+	if validate != nil {
+		if err := validate(config); err != nil {
+			return err
+		}
+	}
+	key := engine.MakeKey(configPrefix, proto.Key(path[1:]))
+	if err := db.PutProto(key, config); err != nil {
+		return err
+	}
+	return nil
+}
+
 // getConfig retrieves the configuration for the specified key. If the
 // key is empty, all configurations are returned. Otherwise, the
 // leading "/" path delimiter is stripped and the configuration
