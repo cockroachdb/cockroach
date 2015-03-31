@@ -115,8 +115,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	return s, db
 }
 
-// TestMultiRangeScan verifies that a scan across ranges will
-// return an OpRequiresTxn error.
+// TestMultiRangeScan verifies operation of a scan across ranges.
 func TestMultiRangeScan(t *testing.T) {
 	s, db := setupMultipleRanges(t)
 	defer s.Stop()

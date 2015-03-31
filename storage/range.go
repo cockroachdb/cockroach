@@ -73,13 +73,14 @@ var (
 	ttlClusterIDGossip = 30 * time.Second
 )
 
-// TestingCommandFilter may be set in tests to intercept the handling of commands
-// and artificially generate errors. Return true to terminate processing with the
-// filled-in response, or false to continue with regular processing.
-// Note that in a multi-replica test this filter will be run once for each replica
-// and must produce consistent results each time.
-// Should only be used in tests in the storage package but needs to be exported
-// due to circular import issues.
+// TestingCommandFilter may be set in tests to intercept the handling
+// of commands and artificially generate errors. Return true to
+// terminate processing with the filled-in response, or false to
+// continue with regular processing. Note that in a multi-replica test
+// this filter will be run once for each replica and must produce
+// consistent results each time. Should only be used in tests in the
+// storage package but needs to be exported due to circular import
+// issues.
 var TestingCommandFilter func(string, proto.Request, proto.Response) bool
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
@@ -273,7 +274,7 @@ func (r *Range) IsLeader() bool {
 	return true
 }
 
-// canServiceCmd returns an error in the event thatthe range replica
+// canServiceCmd returns an error in the event that the range replica
 // cannot service the command as specified. This is of the case in
 // the event that the replica is not the leader.
 func (r *Range) canServiceCmd(method string, args proto.Request) error {
@@ -418,6 +419,11 @@ func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Respo
 // clear via the read queue.
 func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
 	header := args.Header()
+
+	// If read-consistency is set to INCONSISTENT, run directly.
+	if header.ReadConsistency == proto.INCONSISTENT {
+		return r.executeCmd(0, method, args, reply)
+	}
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping, commands until this command completes.
@@ -755,6 +761,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 		return err
 	}
 
+	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if TestingCommandFilter != nil && TestingCommandFilter(method, args, reply) {
 		return reply.Header().GoError()
 	}
@@ -831,6 +838,10 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 				r.stats.Update(ms)
 				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
+				// Maybe update gossip configs on a put.
+				if (method == proto.Put || method == proto.ConditionalPut) && header.Key.Less(engine.KeySystemMax) {
+					r.maybeUpdateGossipConfigs(header.Key)
+				}
 			}
 		}
 	} else if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
@@ -844,12 +855,6 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 		// remainder of the transaction.
 		// See the comment on proto.Transaction.CertainNodes.
 		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
-	}
-
-	// Maybe update gossip configs on a put if there was no error.
-	if (method == proto.Put || method == proto.ConditionalPut) &&
-		header.Key.Less(engine.KeySystemMax) && reply.Header().Error == nil {
-		r.maybeUpdateGossipConfigs(args.Header().Key)
 	}
 
 	// Propagate the request timestamp (which may have changed).

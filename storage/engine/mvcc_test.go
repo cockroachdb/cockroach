@@ -515,7 +515,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 }
 
 // TestMVCCGetInconsistent verifies the behavior of get with
-// inconsistent set to true.
+// consistent set to false.
 func TestMVCCGetInconsistent(t *testing.T) {
 	engine := createTestEngine()
 
