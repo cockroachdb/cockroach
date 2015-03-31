@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# Disallow pushes that include both master and any other branch.
+# This is intended to prevent accidental force-push to master
+# with git versions prior to 2.0 (which is what ships with OSX),
+# when "git push -f origin" without specifying a branch would
+# try to force-push all branches.
+# Individual pushes to the master branch (even force pushes)
+# are still allowed as long as only the master branch is pushed.
+
+awk '
+$3 == "refs/heads/master" { has_master = 1 }
+END {
+  if (NR > 1 && has_master) {
+    print "cannot push to master and another branch at the same time"
+    exit 1
+  }
+}
+'
