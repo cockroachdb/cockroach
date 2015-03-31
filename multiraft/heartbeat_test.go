@@ -37,8 +37,8 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper,
 	if stopper != nil {
 		defer stopper.SetStopped()
 	}
-	t := time.After(time.Second)
 	for {
+		t := time.After(time.Second)
 		select {
 		case e, ok := <-ch:
 			if !ok {
