@@ -125,18 +125,20 @@ message ConditionFailedError {
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.onlyone) = true;
-  optional NotLeaderError not_leader = 1;
-  optional RangeNotFoundError range_not_found = 2;
-  optional RangeKeyMismatchError range_key_mismatch = 3;
-  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-  optional TransactionAbortedError transaction_aborted = 5;
-  optional TransactionPushError transaction_push = 6;
-  optional TransactionRetryError transaction_retry = 7;
-  optional TransactionStatusError transaction_status = 8;
-  optional WriteIntentError write_intent = 9;
-  optional WriteTooOldError write_too_old = 10;
-  optional OpRequiresTxnError op_requires_txn = 11;
-  optional ConditionFailedError condition_failed = 12;
+  oneof value {
+    NotLeaderError not_leader = 1;
+    RangeNotFoundError range_not_found = 2;
+    RangeKeyMismatchError range_key_mismatch = 3;
+    ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
+    TransactionAbortedError transaction_aborted = 5;
+    TransactionPushError transaction_push = 6;
+    TransactionRetryError transaction_retry = 7;
+    TransactionStatusError transaction_status = 8;
+    WriteIntentError write_intent = 9;
+    WriteTooOldError write_too_old = 10;
+    OpRequiresTxnError op_requires_txn = 11;
+    ConditionFailedError condition_failed = 12;
+  }
 }
 
 // TransactionRestart indicates how an error should be handled in a

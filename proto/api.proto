@@ -302,35 +302,39 @@ message EnqueueMessageResponse {
 // A RequestUnion contains exactly one of the optional requests.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
-  optional ContainsRequest contains = 1;
-  optional GetRequest get = 2;
-  optional PutRequest put = 3;
-  optional ConditionalPutRequest conditional_put = 4;
-  optional IncrementRequest increment = 5;
-  optional DeleteRequest delete = 6;
-  optional DeleteRangeRequest delete_range = 7;
-  optional ScanRequest scan = 8;
-  optional EndTransactionRequest end_transaction = 9;
-  optional ReapQueueRequest reap_queue = 10;
-  optional EnqueueUpdateRequest enqueue_update = 11;
-  optional EnqueueMessageRequest enqueue_message = 12;
+  oneof value {
+    ContainsRequest contains = 1;
+    GetRequest get = 2;
+    PutRequest put = 3;
+    ConditionalPutRequest conditional_put = 4;
+    IncrementRequest increment = 5;
+    DeleteRequest delete = 6;
+    DeleteRangeRequest delete_range = 7;
+    ScanRequest scan = 8;
+    EndTransactionRequest end_transaction = 9;
+    ReapQueueRequest reap_queue = 10;
+    EnqueueUpdateRequest enqueue_update = 11;
+    EnqueueMessageRequest enqueue_message = 12;
+  }
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
-  optional ContainsResponse contains = 1;
-  optional GetResponse get = 2;
-  optional PutResponse put = 3;
-  optional ConditionalPutResponse conditional_put = 4;
-  optional IncrementResponse increment = 5;
-  optional DeleteResponse delete = 6;
-  optional DeleteRangeResponse delete_range = 7;
-  optional ScanResponse scan = 8;
-  optional EndTransactionResponse end_transaction = 9;
-  optional ReapQueueResponse reap_queue = 10;
-  optional EnqueueUpdateResponse enqueue_update = 11;
-  optional EnqueueMessageResponse enqueue_message = 12;
+  oneof value {
+    ContainsResponse contains = 1;
+    GetResponse get = 2;
+    PutResponse put = 3;
+    ConditionalPutResponse conditional_put = 4;
+    IncrementResponse increment = 5;
+    DeleteResponse delete = 6;
+    DeleteRangeResponse delete_range = 7;
+    ScanResponse scan = 8;
+    EndTransactionResponse end_transaction = 9;
+    ReapQueueResponse reap_queue = 10;
+    EnqueueUpdateResponse enqueue_update = 11;
+    EnqueueMessageResponse enqueue_message = 12;
+  }
 }
 
 // A BatchRequest contains one or more requests to be executed in
