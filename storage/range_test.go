@@ -23,7 +23,6 @@ import (
 	"math"
 	"reflect"
 	"regexp"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -239,6 +238,31 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
+func TestRangeCanService(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	gArgs, gReply := getArgs(proto.Key("a"), 1, tc.store.StoreID())
+	gArgs.Timestamp = tc.clock.Now()
+
+	// Try a consensus read and verify error.
+	gArgs.ReadConsistency = proto.CONSENSUS
+	if err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true); err == nil {
+		t.Errorf("expected error on consensus read")
+	}
+
+	// Try an inconsistent read within a transaction.
+	gArgs.ReadConsistency = proto.INCONSISTENT
+	gArgs.Txn = newTransaction("test", proto.Key("a"), 1, proto.SERIALIZABLE, tc.clock)
+	if err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true); err == nil {
+		t.Errorf("expected error on inconsistent read within a txn")
+	}
+
+	// TODO(spencer): verify non-leader inconsistent read works.
+}
+
 // TestRangeGossipFirstRange verifies that the first range gossips its
 // location and the cluster ID.
 func TestRangeGossipFirstRange(t *testing.T) {
@@ -381,66 +405,6 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	if !reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs) {
 		t.Errorf("expected gossiped configs to be equal %s vs %s", configMap, expConfigs)
 	}
-}
-
-// A blockingEngine allows us to delay get/put (but not other ops!).
-// It works by allowing a single key to be primed for a delay. When
-// a get/put ops arrives for that key, it's blocked via a mutex
-// until unblock() is invoked.
-type blockingEngine struct {
-	blocker sync.Mutex // blocks Get() and Put()
-	*engine.InMem
-	sync.Mutex // protects key
-	key        proto.EncodedKey
-}
-
-func newBlockingEngine() *blockingEngine {
-	be := &blockingEngine{
-		InMem: engine.NewInMem(proto.Attributes{}, 1<<20),
-	}
-	return be
-}
-
-func (be *blockingEngine) block(key proto.Key) {
-	be.Lock()
-	defer be.Unlock()
-	// Need to binary encode the key so it matches when accessed through MVCC.
-	be.key = engine.MVCCEncodeKey(key)
-	// Get() and Put() will try to get this lock, so they will wait.
-	be.blocker.Lock()
-}
-
-func (be *blockingEngine) unblock() {
-	be.blocker.Unlock()
-}
-
-func (be *blockingEngine) wait() {
-	be.blocker.Lock()
-	be.blocker.Unlock()
-}
-
-func (be *blockingEngine) Get(key proto.EncodedKey) ([]byte, error) {
-	be.Lock()
-	if bytes.Equal(key, be.key) {
-		be.key = nil
-		defer be.wait()
-	}
-	be.Unlock()
-	return be.InMem.Get(key)
-}
-
-func (be *blockingEngine) Put(key proto.EncodedKey, value []byte) error {
-	be.Lock()
-	if bytes.Equal(key, be.key) {
-		be.key = nil
-		defer be.wait()
-	}
-	be.Unlock()
-	return be.InMem.Put(key, value)
-}
-
-func (be *blockingEngine) NewBatch() engine.Engine {
-	return engine.NewBatch(be)
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
@@ -685,12 +649,19 @@ func TestRangeUpdateTSCache(t *testing.T) {
 // range.
 func TestRangeCommandQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	be := newBlockingEngine()
-	tc := testContext{
-		engine: be,
-	}
+	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
+	defer func() { TestingCommandFilter = nil }()
+
+	// Intercept commands with matching command IDs and block them.
+	blockingDone := make(chan struct{}, 1)
+	TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+		if args.Header().User == "Foo" {
+			<-blockingDone
+		}
+		return false
+	}
 
 	// Test all four combinations of reads & writes waiting.
 	testCases := []struct {
@@ -709,11 +680,10 @@ func TestRangeCommandQueue(t *testing.T) {
 		key1 := proto.Key(fmt.Sprintf("key1-%d", i))
 		key2 := proto.Key(fmt.Sprintf("key2-%d", i))
 		// Asynchronously put a value to the rng with blocking enabled.
-		be.block(key1)
 		cmd1Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RaftID,
-				tc.store.StoreID())
+			method, args, reply := readOrWriteArgs(key1, test.cmd1Read, tc.rng.Desc().RaftID, tc.store.StoreID())
+			args.Header().User = "Foo"
 			err := tc.rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -724,8 +694,7 @@ func TestRangeCommandQueue(t *testing.T) {
 		// First, try a command for same key as cmd1 to verify it blocks.
 		cmd2Done := make(chan struct{})
 		go func() {
-			method, args, reply := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RaftID,
-				tc.store.StoreID())
+			method, args, reply := readOrWriteArgs(key1, test.cmd2Read, tc.rng.Desc().RaftID, tc.store.StoreID())
 			err := tc.rng.AddCmd(method, args, reply, true)
 			if err != nil {
 				t.Fatalf("test %d: %s", i, err)
@@ -768,13 +737,71 @@ func TestRangeCommandQueue(t *testing.T) {
 			<-cmd3Done
 		}
 
-		be.unblock()
+		blockingDone <- struct{}{}
 		select {
 		case <-cmd2Done:
 			// success.
 		case <-time.After(500 * time.Millisecond):
 			t.Fatalf("test %d: waited 500ms for cmd2 of key1", i)
 		}
+	}
+}
+
+// TestRangeCommandQueueInconsistent verifies that inconsistent reads need
+// not wait for pending commands to complete through Raft.
+func TestRangeCommandQueueInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	defer func() { TestingCommandFilter = nil }()
+
+	key := proto.Key("key1")
+	blockingDone := make(chan struct{})
+	TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+		if args.Header().CmdID.Random == 1 {
+			<-blockingDone
+		}
+		return false
+	}
+	cmd1Done := make(chan struct{})
+	go func() {
+		args, reply := putArgs(key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
+		args.CmdID.Random = 1
+		err := tc.rng.AddCmd(proto.Put, args, reply, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		close(cmd1Done)
+	}()
+
+	// An inconsistent read to the key won't wait.
+	cmd2Done := make(chan struct{})
+	go func() {
+		args, reply := getArgs(key, tc.rng.Desc().RaftID, tc.store.StoreID())
+		args.ReadConsistency = proto.INCONSISTENT
+		err := tc.rng.AddCmd(proto.Get, args, reply, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		close(cmd2Done)
+	}()
+
+	select {
+	case <-cmd2Done:
+		// success.
+	case <-cmd1Done:
+		t.Fatalf("cmd1 should have been blocked")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("waited 500ms for cmd2 of key")
+	}
+
+	close(blockingDone)
+	select {
+	case <-cmd1Done:
+		// success.
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("waited 500ms for cmd2 of key")
 	}
 }
 
@@ -800,7 +827,34 @@ func TestRangeUseTSCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	if pReply.Timestamp.WallTime != tc.clock.Timestamp().WallTime {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %+v", pReply.Timestamp)
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", pReply.Timestamp)
+	}
+}
+
+// TestRangeNoTSCacheInconsistent verifies that the timestamp cache
+// is no affected by inconsistent reads.
+func TestRangeNoTSCacheInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	// Set clock to time 1s and do the read.
+	t0 := 1 * time.Second
+	tc.manualClock.Set(t0.Nanoseconds())
+	args, reply := getArgs([]byte("a"), 1, tc.store.StoreID())
+	args.Timestamp = tc.clock.Now()
+	args.ReadConsistency = proto.INCONSISTENT
+	err := tc.rng.AddCmd(proto.Get, args, reply, true)
+	if err != nil {
+		t.Error(err)
+	}
+	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
+	err = tc.rng.AddCmd(proto.Put, pArgs, pReply, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pReply.Timestamp.WallTime == tc.clock.Timestamp().WallTime {
+		t.Errorf("expected write timestamp not to upgrade to 1s; got %s", pReply.Timestamp)
 	}
 }
 

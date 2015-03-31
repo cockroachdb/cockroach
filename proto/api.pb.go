@@ -62,6 +62,53 @@ import math "math"
 var _ = proto1.Marshal
 var _ = math.Inf
 
+// ReadConsistencyType specifies what type of consistency is observed
+// during read operations.
+type ReadConsistencyType int32
+
+const (
+	// CONSISTENT reads are guaranteed to read committed data; the
+	// mechanism relies on clocks to determine lease expirations.
+	CONSISTENT ReadConsistencyType = 0
+	// CONSENSUS requires that reads must achieve consensus. This is a
+	// stronger guarantee of consistency than CONSISTENT.
+	//
+	// TODO(spencer): current unimplemented.
+	CONSENSUS ReadConsistencyType = 1
+	// INCONSISTENT reads return the latest available, committed values.
+	// They are more efficient, but may read stale values as pending
+	// intents are ignored.
+	INCONSISTENT ReadConsistencyType = 2
+)
+
+var ReadConsistencyType_name = map[int32]string{
+	0: "CONSISTENT",
+	1: "CONSENSUS",
+	2: "INCONSISTENT",
+}
+var ReadConsistencyType_value = map[string]int32{
+	"CONSISTENT":   0,
+	"CONSENSUS":    1,
+	"INCONSISTENT": 2,
+}
+
+func (x ReadConsistencyType) Enum() *ReadConsistencyType {
+	p := new(ReadConsistencyType)
+	*p = x
+	return p
+}
+func (x ReadConsistencyType) String() string {
+	return proto1.EnumName(ReadConsistencyType_name, int32(x))
+}
+func (x *ReadConsistencyType) UnmarshalJSON(data []byte) error {
+	value, err := proto1.UnmarshalJSONEnum(ReadConsistencyType_value, data, "ReadConsistencyType")
+	if err != nil {
+		return err
+	}
+	*x = ReadConsistencyType(value)
+	return nil
+}
+
 // ClientCmdID provides a unique ID for client commands. Clients which
 // provide ClientCmdID gain operation idempotence. In other words,
 // clients can submit the same command multiple times and always
@@ -141,8 +188,12 @@ type RequestHeader struct {
 	// isolation level set as desired. The response will contain the
 	// fully-initialized transaction with txn ID, priority, initial
 	// timestamp, and maximum timestamp.
-	Txn              *Transaction `protobuf:"bytes,9,opt,name=txn" json:"txn,omitempty"`
-	XXX_unrecognized []byte       `json:"-"`
+	Txn *Transaction `protobuf:"bytes,9,opt,name=txn" json:"txn,omitempty"`
+	// ReadConsistency specifies the consistency for read
+	// operations. The default is CONSISTENT. This value is ignored for
+	// write operations.
+	ReadConsistency  ReadConsistencyType `protobuf:"varint,10,opt,name=read_consistency,enum=cockroach.proto.ReadConsistencyType" json:"read_consistency"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -198,6 +249,13 @@ func (m *RequestHeader) GetTxn() *Transaction {
 		return m.Txn
 	}
 	return nil
+}
+
+func (m *RequestHeader) GetReadConsistency() ReadConsistencyType {
+	if m != nil {
+		return m.ReadConsistency
+	}
+	return CONSISTENT
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -1004,6 +1062,7 @@ func (m *AdminMergeResponse) String() string { return proto1.CompactTextString(m
 func (*AdminMergeResponse) ProtoMessage()    {}
 
 func init() {
+	proto1.RegisterEnum("cockroach.proto.ReadConsistencyType", ReadConsistencyType_name, ReadConsistencyType_value)
 }
 func (this *RequestUnion) GetValue() interface{} {
 	if this.Contains != nil {

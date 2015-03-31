@@ -56,6 +56,8 @@ type TestServer struct {
 	HTTPAddr, RPCAddr string
 	// server is the embedded Cockroach server struct.
 	*Server
+	// Engine underlying the test server.
+	Engine engine.Engine
 }
 
 // Gossip returns the gossip instance used by the TestServer.
@@ -77,7 +79,8 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.HTTPAddr after Start() for client connections.
+// TestServer.HTTPAddr after Start() for client connections. Use Stop()
+// to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
 	// We update these with the actual port once the servers
 	// have been launched for the purpose of this test.
@@ -100,11 +103,12 @@ func (ts *TestServer) Start() error {
 		return util.Errorf("could not init server: %s", err)
 	}
 
-	ctx.Engines = []engine.Engine{engine.NewInMem(proto.Attributes{}, 100<<20)}
+	ts.Engine = engine.NewInMem(proto.Attributes{}, 100<<20)
+	ctx.Engines = []engine.Engine{ts.Engine}
 	if _, err := BootstrapCluster("cluster-1", ctx.Engines[0]); err != nil {
 		return util.Errorf("could not bootstrap cluster: %s", err)
 	}
-	err = ts.Server.Start(true) // TODO(spencer): should shutdown server.
+	err = ts.Server.Start(true)
 	if err != nil {
 		return util.Errorf("could not start server: %s", err)
 	}

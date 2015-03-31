@@ -302,7 +302,7 @@ func MVCCComputeGCBytesAge(bytes, ageSeconds int64) int64 {
 // MVCCGetRangeStat returns the value for the specified range stat, by
 // Raft ID and stat name.
 func MVCCGetRangeStat(engine Engine, raftID int64, stat proto.Key) (int64, error) {
-	val, err := MVCCGet(engine, RangeStatKey(raftID, stat), proto.ZeroTimestamp, nil)
+	val, err := MVCCGet(engine, RangeStatKey(raftID, stat), proto.ZeroTimestamp, true, nil)
 	if err != nil || val == nil {
 		return 0, err
 	}
@@ -390,7 +390,7 @@ func MVCCGetRangeStats(engine Engine, raftID int64, ms *MVCCStats) error {
 // it using a protobuf decoder. Returns true on success or false if
 // the key was not found.
 func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) (bool, error) {
-	value, err := MVCCGet(engine, key, timestamp, txn)
+	value, err := MVCCGet(engine, key, timestamp, true, txn)
 	if err != nil {
 		return false, err
 	}
@@ -444,8 +444,11 @@ var getBufferPool = sync.Pool{
 // keyA_Timestamp_0 : value of version_0
 // keyB : MVCCMetadata of keyB
 // ...
-func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp,
-	txn *proto.Transaction) (*proto.Value, error) {
+//
+// The consistent parameter indicates that intents should cause
+// WriteIntentErrors. If set to false, intents are ignored; keys with
+// an intent but no earlier committed versions, will be skipped.
+func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent bool, txn *proto.Transaction) (*proto.Value, error) {
 	if len(key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -475,7 +478,7 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp,
 		return nil, err
 	}
 
-	value, err := mvccGetInternal(engine, key, metaKey, timestamp, txn, getValue, buf)
+	value, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 	var rvalue *proto.Value
 	if err == nil && value != nil {
 		rvalue = &proto.Value{}
@@ -496,13 +499,25 @@ type getValueFunc func(engine Engine, start, end proto.EncodedKey,
 // the transaction txn into account. getValue is a helper function to
 // get an earlier version of the value when doing historical reads.
 func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, timestamp proto.Timestamp,
-	txn *proto.Transaction, getValue getValueFunc, buf *getBuffer) (*proto.Value, error) {
-	var err error
+	consistent bool, txn *proto.Transaction, getValue getValueFunc, buf *getBuffer) (*proto.Value, error) {
+	if !consistent && txn != nil {
+		return nil, util.Errorf("cannot allow inconsistent reads within a transaction")
+	}
 
+	var err error
 	meta := &buf.meta
+
 	// If value is inline, return immediately; txn & timestamp are irrelevant.
 	if meta.IsInline() {
 		return meta.Value, nil
+	}
+	// If we're doing inconsistent reads and there's an intent, we
+	// ignore the intent by insisting that the timestamp we're reading
+	// at is an historical timestamp < the intent timestamp.
+	if !consistent && meta.Txn != nil {
+		if !timestamp.Less(meta.Timestamp) {
+			timestamp = meta.Timestamp.Prev()
+		}
 	}
 
 	var valueKey proto.EncodedKey
@@ -788,7 +803,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
-	value, err := MVCCGet(engine, key, proto.MaxTimestamp, txn)
+	value, err := MVCCGet(engine, key, proto.MaxTimestamp, true, txn)
 	if err != nil {
 		return 0, err
 	}
@@ -827,7 +842,7 @@ func MVCCConditionalPut(engine Engine, ms *MVCCStats, key proto.Key, timestamp p
 	// the potential write intent by another concurrent transaction
 	// with a newer timestamp, we need to use the max timestamp
 	// while reading.
-	existVal, err := MVCCGet(engine, key, proto.MaxTimestamp, txn)
+	existVal, err := MVCCGet(engine, key, proto.MaxTimestamp, true, txn)
 	if err != nil {
 		return err
 	}
@@ -882,7 +897,7 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max in
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	kvs, err := MVCCScan(engine, key, endKey, max, proto.MaxTimestamp, txn)
+	kvs, err := MVCCScan(engine, key, endKey, max, proto.MaxTimestamp, true, txn)
 	if err != nil {
 		return 0, err
 	}
@@ -901,9 +916,32 @@ func MVCCDeleteRange(engine Engine, ms *MVCCStats, key, endKey proto.Key, max in
 // MVCCScan scans the key range specified by start key through end key
 // up to some maximum number of results. Specify max=0 for unbounded
 // scans.
-func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.Timestamp, txn *proto.Transaction) ([]proto.KeyValue, error) {
+func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.Timestamp,
+	consistent bool, txn *proto.Transaction) ([]proto.KeyValue, error) {
+	res := []proto.KeyValue{}
+	if err := MVCCIterate(engine, key, endKey, timestamp, consistent, txn, func(kv proto.KeyValue) (bool, error) {
+		res = append(res, kv)
+		if max != 0 && max == int64(len(res)) {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// MVCCIterate iterates over the key range specified by start and end
+// keys, At each step of the iteration, f() is invoked with the
+// current key/value pair. If f returns true (done) or an error, the
+// iteration stops and the error is propagated.
+func MVCCIterate(engine Engine, key, endKey proto.Key, timestamp proto.Timestamp,
+	consistent bool, txn *proto.Transaction, f func(proto.KeyValue) (bool, error)) error {
+	if !consistent && txn != nil {
+		return util.Errorf("cannot allow inconsistent reads within a transaction")
+	}
 	if len(endKey) == 0 {
-		return nil, emptyKeyError()
+		return emptyKeyError()
 	}
 
 	buf := getBufferPool.Get().(*getBuffer)
@@ -931,99 +969,34 @@ func MVCCScan(engine Engine, key, endKey proto.Key, max int64, timestamp proto.T
 		return key, iter.ValueProto(msg)
 	}
 
-	res := []proto.KeyValue{}
 	for {
 		iter.Seek(encKey)
 		if !iter.Valid() {
-			return res, iter.Error()
+			return iter.Error()
 		}
 		metaKey := iter.Key()
 		if bytes.Compare(metaKey, encEndKey) >= 0 {
-			return res, iter.Error()
+			return iter.Error()
 		}
 		key, _, isValue := MVCCDecodeKey(metaKey)
 		if isValue {
-			return nil, util.Errorf("expected an MVCC metadata key: %q", metaKey)
+			return util.Errorf("expected an MVCC metadata key: %q", metaKey)
 		}
 		if err := iter.ValueProto(&buf.meta); err != nil {
-			return nil, err
+			return err
 		}
-		value, err := mvccGetInternal(engine, key, metaKey, timestamp, txn, getValue, buf)
+		value, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if value != nil {
-			res = append(res, proto.KeyValue{Key: key, Value: *value})
-			if max != 0 && max == int64(len(res)) {
-				return res, nil
+			done, err := f(proto.KeyValue{Key: key, Value: *value})
+			if done || err != nil {
+				return err
 			}
 		}
 		encKey = mvccEncodeKey(keyBuf, key.Next())
 	}
-}
-
-// MVCCIterateCommitted iterates over the key range specified by start
-// and end keys, returning only the most recently committed version of
-// each key/value pair. Intents are ignored. If a key has an intent
-// but no earlier, committed version, nothing is returned. At each
-// step of the iteration, f() is invoked with the current key/value
-// pair. If f returns true (done) or an error, the iteration stops and
-// the error is propagated.
-func MVCCIterateCommitted(engine Engine, key, endKey proto.Key, f func(proto.KeyValue) (bool, error)) error {
-	encKey := MVCCEncodeKey(key)
-	encEndKey := MVCCEncodeKey(endKey)
-
-	var currentKey proto.Key        // The current unencoded key
-	var versionKey proto.EncodedKey // Need to read this version of the key
-	nextKey := encKey               // The next key--no additional versions of currentKey past this
-	return engine.Iterate(encKey, encEndKey, func(rawKV proto.RawKeyValue) (bool, error) {
-		if bytes.Compare(nextKey, rawKV.Key) <= 0 {
-			var isValue bool
-			currentKey, _, isValue = MVCCDecodeKey(rawKV.Key)
-			if isValue {
-				return false, util.Errorf("expected an MVCC metadata key: %q", rawKV.Key)
-			}
-			meta := &proto.MVCCMetadata{}
-			if err := gogoproto.Unmarshal(rawKV.Value, meta); err != nil {
-				return false, err
-			}
-			nextKey = MVCCEncodeKey(currentKey.Next())
-			if meta.IsInline() {
-				versionKey = nextKey
-				return f(proto.KeyValue{Key: currentKey, Value: *meta.Value})
-			}
-			// If most recent value isn't an intent, the key to read will be next in iteration.
-			if meta.Txn == nil {
-				versionKey = rawKV.Key
-			} else {
-				// Otherwise, this is an intent; the version we want is one
-				// after the encoded MVCC intent key; this gives us the next
-				// version, if one exists.
-				versionKey = MVCCEncodeVersionKey(currentKey, meta.Timestamp).Next()
-			}
-		} else {
-			// If we encountered a version >= our version key, we're golden.
-			if bytes.Compare(rawKV.Key, versionKey) >= 0 {
-				// First, set our versionKey to nextKey so we don't try any older versions.
-				versionKey = nextKey
-				// Now, read the mvcc value and pull timestamp from encoded key.
-				_, ts, isValue := MVCCDecodeKey(rawKV.Key)
-				if !isValue {
-					return false, util.Errorf("expected an MVCC value at key %q", rawKV.Key)
-				}
-				value := &proto.MVCCValue{}
-				if err := gogoproto.Unmarshal(rawKV.Value, value); err != nil {
-					return false, err
-				}
-				if value.Deleted {
-					return false, nil
-				}
-				value.Value.Timestamp = &ts
-				return f(proto.KeyValue{Key: currentKey, Value: *value.Value})
-			}
-		}
-		return false, nil
-	})
 }
 
 // MVCCResolveWriteIntent either commits or aborts (rolls back) an

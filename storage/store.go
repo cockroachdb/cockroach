@@ -412,11 +412,11 @@ func (s *Store) Start() error {
 	}
 	s.multiraft = mr
 
-	// Iterate over all range descriptors, using just committed
-	// versions. Uncommitted intents which have been abandoned due to a
-	// split crashing halfway will simply be resolved on the next split
-	// attempt. They can otherwise be ignored.
-	if err := engine.MVCCIterateCommitted(s.engine, start, end, func(kv proto.KeyValue) (bool, error) {
+	// Iterate over all range descriptors, ignoring uncommitted versions
+	// (consistent=false). Uncommitted intents which have been abandoned
+	// due to a split crashing halfway will simply be resolved on the
+	// next split attempt. They can otherwise be ignored.
+	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _ := engine.DecodeRangeKey(kv.Key)
 		if !suffix.Equal(engine.KeyLocalRangeDescriptorSuffix) {
@@ -608,6 +608,7 @@ func (s *Store) BootstrapRange() error {
 	batch := s.engine.NewBatch()
 	ms := &engine.MVCCStats{}
 	now := s.clock.Now()
+
 	// Range descriptor.
 	if err := engine.MVCCPutProto(batch, ms, engine.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err

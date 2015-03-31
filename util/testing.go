@@ -78,7 +78,8 @@ func CreateTestAddr(network string) net.Addr {
 
 // IsTrueWithin returns an error if the supplied function fails to
 // evaluate to true within the specified duration. The function is
-// invoked at most 10 times over the course of the specified time
+// invoked immediately at first and then successively with an
+// exponential backoff starting at 1ns and ending at the specified
 // duration.
 func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 	total := time.Duration(0)

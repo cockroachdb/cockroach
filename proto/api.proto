@@ -45,6 +45,24 @@ message ClientCmdID {
   optional int64 random = 2 [(gogoproto.nullable) = false];
 }
 
+// ReadConsistencyType specifies what type of consistency is observed
+// during read operations.
+enum ReadConsistencyType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // CONSISTENT reads are guaranteed to read committed data; the
+  // mechanism relies on clocks to determine lease expirations.
+  CONSISTENT = 0;
+  // CONSENSUS requires that reads must achieve consensus. This is a
+  // stronger guarantee of consistency than CONSISTENT.
+  //
+  // TODO(spencer): current unimplemented.
+  CONSENSUS = 1;
+  // INCONSISTENT reads return the latest available, committed values.
+  // They are more efficient, but may read stale values as pending
+  // intents are ignored.
+  INCONSISTENT = 2;
+}
+
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   // Timestamp specifies time at which read or writes should be
@@ -85,6 +103,10 @@ message RequestHeader {
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
   optional Transaction txn = 9;
+  // ReadConsistency specifies the consistency for read
+  // operations. The default is CONSISTENT. This value is ignored for
+  // write operations.
+  optional ReadConsistencyType read_consistency = 10 [(gogoproto.nullable) = false];
 }
 
 // ResponseHeader is returned with every storage node response.

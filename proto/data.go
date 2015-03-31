@@ -234,6 +234,22 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	}
 }
 
+// Prev returns the next earliest timestamp.
+func (t *Timestamp) Prev() Timestamp {
+	if t.Logical > 0 {
+		return Timestamp{
+			WallTime: t.WallTime,
+			Logical:  t.Logical - 1,
+		}
+	} else if t.WallTime > 0 {
+		return Timestamp{
+			WallTime: t.WallTime - 1,
+			Logical:  math.MaxInt32,
+		}
+	}
+	panic("cannot take the previous value to a zero timestamp")
+}
+
 // Forward updates the timestamp from the one given, if that moves it
 // forwards in time.
 func (t *Timestamp) Forward(s Timestamp) {
@@ -267,11 +283,11 @@ func (v *Value) InitChecksum(key []byte) {
 func (v *Value) Verify(key []byte) error {
 	if v.Checksum != nil {
 		if v.GetChecksum() != v.computeChecksum(key) {
-			return util.Errorf("invalid checksum for key %q, value %+v", key, v)
+			return util.Errorf("invalid checksum for key %s, value %+v", key, v)
 		}
 	}
 	if v.Bytes != nil && v.Integer != nil {
-		return util.Errorf("both the value byte slice and integer fields are set for key %q: %+v", key, v)
+		return util.Errorf("both the value byte slice and integer fields are set for key %s: %+v", key, v)
 	}
 	return nil
 }

@@ -23,6 +23,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
+#include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 #include "cockroach/proto/config.pb.h"
 #include "cockroach/proto/data.pb.h"
@@ -74,6 +75,26 @@ class AdminSplitResponse;
 class AdminMergeRequest;
 class AdminMergeResponse;
 
+enum ReadConsistencyType {
+  CONSISTENT = 0,
+  CONSENSUS = 1,
+  INCONSISTENT = 2
+};
+bool ReadConsistencyType_IsValid(int value);
+const ReadConsistencyType ReadConsistencyType_MIN = CONSISTENT;
+const ReadConsistencyType ReadConsistencyType_MAX = INCONSISTENT;
+const int ReadConsistencyType_ARRAYSIZE = ReadConsistencyType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ReadConsistencyType_descriptor();
+inline const ::std::string& ReadConsistencyType_Name(ReadConsistencyType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ReadConsistencyType_descriptor(), value);
+}
+inline bool ReadConsistencyType_Parse(
+    const ::std::string& name, ReadConsistencyType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ReadConsistencyType>(
+    ReadConsistencyType_descriptor(), name, value);
+}
 // ===================================================================
 
 class ClientCmdID : public ::google::protobuf::Message {
@@ -304,6 +325,13 @@ class RequestHeader : public ::google::protobuf::Message {
   inline ::cockroach::proto::Transaction* release_txn();
   inline void set_allocated_txn(::cockroach::proto::Transaction* txn);
 
+  // optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
+  inline bool has_read_consistency() const;
+  inline void clear_read_consistency();
+  static const int kReadConsistencyFieldNumber = 10;
+  inline ::cockroach::proto::ReadConsistencyType read_consistency() const;
+  inline void set_read_consistency(::cockroach::proto::ReadConsistencyType value);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.RequestHeader)
  private:
   inline void set_has_timestamp();
@@ -324,6 +352,8 @@ class RequestHeader : public ::google::protobuf::Message {
   inline void clear_has_user_priority();
   inline void set_has_txn();
   inline void clear_has_txn();
+  inline void set_has_read_consistency();
+  inline void clear_has_read_consistency();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -338,6 +368,7 @@ class RequestHeader : public ::google::protobuf::Message {
   ::google::protobuf::int64 raft_id_;
   ::cockroach::proto::Transaction* txn_;
   ::google::protobuf::int32 user_priority_;
+  int read_consistency_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -4072,6 +4103,31 @@ inline void RequestHeader::set_allocated_txn(::cockroach::proto::Transaction* tx
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.RequestHeader.txn)
 }
 
+// optional .cockroach.proto.ReadConsistencyType read_consistency = 10;
+inline bool RequestHeader::has_read_consistency() const {
+  return (_has_bits_[0] & 0x00000200u) != 0;
+}
+inline void RequestHeader::set_has_read_consistency() {
+  _has_bits_[0] |= 0x00000200u;
+}
+inline void RequestHeader::clear_has_read_consistency() {
+  _has_bits_[0] &= ~0x00000200u;
+}
+inline void RequestHeader::clear_read_consistency() {
+  read_consistency_ = 0;
+  clear_has_read_consistency();
+}
+inline ::cockroach::proto::ReadConsistencyType RequestHeader::read_consistency() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.RequestHeader.read_consistency)
+  return static_cast< ::cockroach::proto::ReadConsistencyType >(read_consistency_);
+}
+inline void RequestHeader::set_read_consistency(::cockroach::proto::ReadConsistencyType value) {
+  assert(::cockroach::proto::ReadConsistencyType_IsValid(value));
+  set_has_read_consistency();
+  read_consistency_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.RequestHeader.read_consistency)
+}
+
 // -------------------------------------------------------------------
 
 // ResponseHeader
@@ -7316,6 +7372,11 @@ inline void AdminMergeResponse::set_allocated_header(::cockroach::proto::Respons
 namespace google {
 namespace protobuf {
 
+template <> struct is_proto_enum< ::cockroach::proto::ReadConsistencyType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::cockroach::proto::ReadConsistencyType>() {
+  return ::cockroach::proto::ReadConsistencyType_descriptor();
+}
 
 }  // namespace google
 }  // namespace protobuf
