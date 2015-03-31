@@ -41,8 +41,8 @@ the system with minimal total hops. The algorithm is as follows:
       connected peers < maxPeers, choose random peer from those
       originating info > maxToleratedHops, start it, and goto #2.
 
-   c. If sentinelGossip is missing or expired, node is considered
-      partitioned; goto #1.
+   c. If sentinel gossip keyed by KeySentinel is missing or expired,
+      node is considered partitioned; goto #1.
 
  3 On connect, if node has too many connected clients, gossip requests
    are returned immediately with an alternate address set to a random
