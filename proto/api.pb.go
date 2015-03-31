@@ -75,8 +75,9 @@ const (
 	//
 	// TODO(spencer): current unimplemented.
 	CONSENSUS ReadConsistencyType = 1
-	// INCONSISTENT reads are not guaranteed to read committed data,
-	// but are more efficient.
+	// INCONSISTENT reads return the latest available, committed values.
+	// They are more efficient, but may read stale values as pending
+	// intents are ignored.
 	INCONSISTENT ReadConsistencyType = 2
 )
 

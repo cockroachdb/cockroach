@@ -517,6 +517,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 // TestMVCCGetInconsistent verifies the behavior of get with
 // consistent set to false.
 func TestMVCCGetInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
 
 	// Put two values to key 1, the latest with a txn.

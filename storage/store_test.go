@@ -938,6 +938,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 // TestStoreReadInconsistent verifies that gets and scans with
 // read consistency set to INCONSISTENT ignore extant intents.
 func TestStoreReadInconsistent(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	store, _ := createTestStore(t)
 	defer store.Stop()
 

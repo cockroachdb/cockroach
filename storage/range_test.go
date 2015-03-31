@@ -239,6 +239,7 @@ func TestRangeContains(t *testing.T) {
 }
 
 func TestRangeCanService(t *testing.T) {
+	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
