@@ -663,6 +663,48 @@ func (m *InternalRaftCommand) GetCmd() InternalRaftCommandUnion {
 	return InternalRaftCommandUnion{}
 }
 
+// RaftMessageRequest is the request used to send raft messages using our
+// protobuf-based RPC codec. Unlike most of the requests defined in this file
+// and api.proto, this one is implemented in a separate service defined in
+// server/transport.go.
+//
+// This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
+type RaftMessageRequest struct {
+	GroupID uint64 `protobuf:"varint,1,opt,name=group_id" json:"group_id"`
+	// The raft payload, an encoded raftpb.Message. We transmit the message as
+	// an opaque blob to avoid the complexity of importing proto files across
+	// packages.
+	Msg              []byte `protobuf:"bytes,2,opt,name=msg" json:"msg,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RaftMessageRequest) Reset()         { *m = RaftMessageRequest{} }
+func (m *RaftMessageRequest) String() string { return proto1.CompactTextString(m) }
+func (*RaftMessageRequest) ProtoMessage()    {}
+
+func (m *RaftMessageRequest) GetGroupID() uint64 {
+	if m != nil {
+		return m.GroupID
+	}
+	return 0
+}
+
+func (m *RaftMessageRequest) GetMsg() []byte {
+	if m != nil {
+		return m.Msg
+	}
+	return nil
+}
+
+// RaftMessageResponse is an empty message returned by raft RPCs.
+type RaftMessageResponse struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *RaftMessageResponse) Reset()         { *m = RaftMessageResponse{} }
+func (m *RaftMessageResponse) String() string { return proto1.CompactTextString(m) }
+func (*RaftMessageResponse) ProtoMessage()    {}
+
 // InternalTimeSeriesData is a collection of data samples for some measurable
 // value, where each sample is taken over a uniform time interval.
 //

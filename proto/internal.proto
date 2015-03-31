@@ -222,6 +222,25 @@ message InternalRaftCommand {
   optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }
 
+// RaftMessageRequest is the request used to send raft messages using our
+// protobuf-based RPC codec. Unlike most of the requests defined in this file
+// and api.proto, this one is implemented in a separate service defined in
+// server/transport.go.
+//
+// This is the equivalent of the non-protobuf multiraft.RaftMessageRequest.
+message RaftMessageRequest {
+  optional uint64 group_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "GroupID"];
+
+  // The raft payload, an encoded raftpb.Message. We transmit the message as
+  // an opaque blob to avoid the complexity of importing proto files across
+  // packages.
+  optional bytes msg = 2;
+}
+
+// RaftMessageResponse is an empty message returned by raft RPCs.
+message RaftMessageResponse {
+}
+
 // InternalValueType defines a set of string constants placed in the "tag" field
 // of Value messages which are created internally. These are defined as a
 // protocol buffer enumeration so that they can be used portably between our Go
