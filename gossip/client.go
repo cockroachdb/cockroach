@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	// maxWaitForNewGossip is minimum wait for new gossip before a
+	// maxWaitForNewGossip is maximum wait for new gossip before a
 	// peer is considered a poor source of good gossip and is GC'd.
 	maxWaitForNewGossip = 1 * time.Minute
 )
