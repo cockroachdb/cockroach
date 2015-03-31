@@ -39,10 +39,10 @@ import (
 
 // createTestNode creates an rpc server using the specified address,
 // gossip instance, KV database and a node using the specified slice
-// of engines. The server and node are returned. If gossipBS is not
-// nil, the gossip bootstrap address is set to gossipBS.
+// of engines. The server, clock and node are returned. If gossipBS is
+// not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *Node, error) {
+	*rpc.Server, *hlc.Clock, *Node) {
 	tlsConfig, err := rpc.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +65,17 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	}
 	db := client.NewKV(kv.NewDistSender(g), nil)
 	node := NewNode(db, g, storage.TestStoreConfig)
-	err = node.start(rpcServer, clock, engines, proto.Attributes{})
-	return rpcServer, node, err
+	return rpcServer, clock, node
+}
+
+// createAndStartTestNode creates a new test node and starts it. The server and node are returned.
+func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
+	*rpc.Server, *Node) {
+	rpcServer, clock, node := createTestNode(addr, engines, gossipBS, t)
+	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
+		t.Fatal(err)
+	}
+	return rpcServer, node
 }
 
 func formatKeys(keys []proto.Key) string {
@@ -137,10 +146,7 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 	}
-	server, node, err := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, node := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
 	defer server.Close()
 
 	// Non-initialized stores (in this case the new in-memory-based
@@ -167,18 +173,12 @@ func TestNodeJoin(t *testing.T) {
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")
-	server1, node1, err := createTestNode(addr1, engines1, addr1, t)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server1, node1 := createAndStartTestNode(addr1, engines1, addr1, t)
 	defer server1.Close()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
-	server2, node2, err := createTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server2, node2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
 	defer server2.Close()
 
 	// Verify new node is able to bootstrap its store.
@@ -226,8 +226,9 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server, _, err := createTestNode(util.CreateTestAddr("tcp"), []engine.Engine{e}, nil, t)
-	if err == nil {
+	engines := []engine.Engine{e}
+	server, clock, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	if err := node.start(server, clock, engines, proto.Attributes{}); err == nil {
 		t.Errorf("unexpected success")
 	}
 	server.Close()
