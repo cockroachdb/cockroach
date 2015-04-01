@@ -58,13 +58,14 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID   string                 // UUID for Cockroach cluster
-	Descriptor  storage.NodeDescriptor // Node ID, network/physical topology
-	storeConfig storage.StoreConfig    // Store/Raft configuration.
-	gossip      *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
-	db          *client.KV             // KV DB client; used to access global id generators
-	lSender     *kv.LocalSender        // Local KV sender for access to node-local stores
-	closer      chan struct{}
+	ClusterID     string                 // UUID for Cockroach cluster
+	Descriptor    storage.NodeDescriptor // Node ID, network/physical topology
+	storeConfig   storage.StoreConfig    // Store/Raft configuration.
+	gossip        *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
+	db            *client.KV             // KV DB client; used to access global id generators
+	raftTransport multiraft.Transport
+	lSender       *kv.LocalSender // Local KV sender for access to node-local stores
+	closer        chan struct{}
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -155,13 +156,15 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConfig) *Node {
+func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConfig,
+	raftTransport multiraft.Transport) *Node {
 	return &Node{
-		storeConfig: storeConfig,
-		gossip:      gossip,
-		db:          db,
-		lSender:     kv.NewLocalSender(),
-		closer:      make(chan struct{}),
+		storeConfig:   storeConfig,
+		gossip:        gossip,
+		db:            db,
+		raftTransport: raftTransport,
+		lSender:       kv.NewLocalSender(),
+		closer:        make(chan struct{}),
 	}
 }
 
@@ -213,11 +216,8 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 		return util.Error("no engines")
 	}
 	for _, e := range engines {
-		// TODO(bdarnell): use a real transport here instead of NewLocalRPCTransport.
-		// TODO(bdarnell): arrange to have the transport closed.
 		// TODO(bdarnell): make StoreConfig configurable.
-		s := storage.NewStore(clock, e, n.db, n.gossip, multiraft.NewLocalRPCTransport(),
-			n.storeConfig)
+		s := storage.NewStore(clock, e, n.db, n.gossip, n.raftTransport, n.storeConfig)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(); err != nil {

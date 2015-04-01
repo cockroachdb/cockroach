@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/resource"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -61,6 +62,7 @@ type Server struct {
 	structuredDB   structured.DB
 	structuredREST *structured.RESTServer
 	httpListener   *net.Listener // holds http endpoint information
+	raftTransport  multiraft.Transport
 }
 
 // NewServer creates a Server from a server.Context.
@@ -114,10 +116,15 @@ func NewServer(ctx *Context) (*Server, error) {
 	s.kv = client.NewKV(sender, nil)
 	s.kv.User = storage.UserRoot
 
+	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)
+	if err != nil {
+		return nil, err
+	}
+
 	s.kvDB = kv.NewDBServer(sender)
 	s.kvREST = kv.NewRESTServer(s.kv)
 	// TODO(bdarnell): make StoreConfig configurable.
-	s.node = NewNode(s.kv, s.gossip, storage.StoreConfig{})
+	s.node = NewNode(s.kv, s.gossip, storage.StoreConfig{}, s.raftTransport)
 	s.admin = newAdminServer(s.kv)
 	s.status = newStatusServer(s.kv, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)
@@ -186,6 +193,7 @@ func (s *Server) Stop() {
 	s.gossip.Stop()
 	s.rpc.Close()
 	s.kv.Close()
+	s.raftTransport.Close()
 }
 
 type gzipResponseWriter struct {
