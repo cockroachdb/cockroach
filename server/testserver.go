@@ -54,6 +54,7 @@ type TestServer struct {
 	// HTTPAddr and RPCAddr default to localhost with port set
 	// at time of call to Start() to an available port.
 	HTTPAddr, RPCAddr string
+	SkipBootstrap     bool
 	// server is the embedded Cockroach server struct.
 	*Server
 	// Engine underlying the test server.
@@ -103,10 +104,16 @@ func (ts *TestServer) Start() error {
 		return util.Errorf("could not init server: %s", err)
 	}
 
-	ts.Engine = engine.NewInMem(proto.Attributes{}, 100<<20)
+	if ts.Engine == nil {
+		ts.Engine = engine.NewInMem(proto.Attributes{}, 100<<20)
+	}
 	ctx.Engines = []engine.Engine{ts.Engine}
-	if _, err := BootstrapCluster("cluster-1", ctx.Engines[0]); err != nil {
-		return util.Errorf("could not bootstrap cluster: %s", err)
+	if !ts.SkipBootstrap {
+		kv, err := BootstrapCluster("cluster-1", ts.Engine)
+		if err != nil {
+			return util.Errorf("could not bootstrap cluster: %s", err)
+		}
+		defer kv.Close()
 	}
 	err = ts.Server.Start(true)
 	if err != nil {

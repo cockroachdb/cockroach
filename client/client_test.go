@@ -24,7 +24,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
+	"os"
 	"reflect"
 	"sync"
 	"testing"
@@ -35,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -697,7 +701,6 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 	if total != 3 {
 		t.Fatalf("got unserializable values %v", results)
 	}
-
 }
 
 // TestConcurrentIncrements is a simple explicit test for serializability
@@ -719,4 +722,113 @@ func TestConcurrentIncrements(t *testing.T) {
 		}
 		concurrentIncrements(kvClient, t)
 	}
+}
+
+func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestServer, *client.KV) {
+	const cacheSize = 8 << 30 // 8 GB
+	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
+
+	exists := true
+	if _, err := os.Stat(loc); os.IsNotExist(err) {
+		exists = false
+	}
+
+	s := &server.TestServer{}
+	s.SkipBootstrap = exists
+	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
+	if err := s.Start(); err != nil {
+		b.Fatalf("Could not start server: %v", err)
+	}
+
+	kv := createTestClient(s.HTTPAddr)
+	kv.User = storage.UserRoot
+
+	if exists {
+		return s, kv
+	}
+
+	rng := util.NewPseudoRand()
+	keys := make([]proto.Key, numKeys)
+	nvs := make([]int, numKeys)
+	resp := &proto.PutResponse{}
+	for t := 1; t <= numVersions; t++ {
+		for i := 0; i < numKeys; i++ {
+			if t == 1 {
+				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
+				nvs[i] = int(rand.Int31n(int32(numVersions)) + 1)
+			}
+			// Only write values if this iteration is less than the random
+			// number of versions chosen for this key.
+			if t <= nvs[i] {
+				args := proto.PutArgs(proto.Key(keys[i]), util.RandBytes(rng, 1024))
+				args.Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
+				kv.Prepare(proto.Put, args, resp)
+			}
+			if (i+1)%1000 == 0 {
+				if err := kv.Flush(); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+		if err := kv.Flush(); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	if r, ok := s.Engine.(*engine.RocksDB); ok {
+		r.CompactRange(nil, nil)
+	}
+
+	return s, kv
+}
+
+// runClientScan first creates test data (and resets the benchmarking
+// timer). It then performs b.N client scans in increments of numRows
+// keys over all of the data, restarting at the beginning of the
+// keyspace, as many times as necessary.
+func runClientScan(numRows, numVersions int, b *testing.B) {
+	// TODO(pmattis): Bump this to 100K when scanning across ranges is fixed.
+	const numKeys = 10000
+	s, kv := setupClientBenchData(numVersions, numKeys, b)
+	defer s.Stop()
+
+	b.SetBytes(int64(numRows * 1024))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+		endKey := []byte("key.")
+		for pb.Next() {
+			// Choose a random key to start scan.
+			keyIdx := rand.Int31n(int32(numKeys - numRows))
+			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			args := proto.ScanArgs(proto.Key(startKey), proto.Key(endKey), int64(numRows))
+			args.Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
+			resp := &proto.ScanResponse{}
+			if err := kv.Call(proto.Scan, args, resp); err != nil {
+				b.Fatalf("failed scan: %s", err)
+			}
+			if len(resp.Rows) != numRows {
+				b.Fatalf("failed to scan: %d != %d", len(resp.Rows), numRows)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+func BenchmarkClientScan1Version1Row(b *testing.B) {
+	runClientScan(1, 1, b)
+}
+
+func BenchmarkClientScan1Version10Rows(b *testing.B) {
+	runClientScan(10, 1, b)
+}
+
+func BenchmarkClientScan1Version100Rows(b *testing.B) {
+	runClientScan(100, 1, b)
+}
+
+func BenchmarkClientScan1Version1000Rows(b *testing.B) {
+	runClientScan(1000, 1, b)
 }
