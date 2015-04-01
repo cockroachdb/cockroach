@@ -33,6 +33,9 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 
 ### Code review workflow
 
++ All contributors need to sign the
+  [Contributor License Agreement](https://www.clahub.com/agreements/cockroachdb/cockroach).
+
 + Create a local feature branch to do work on, ideally on one thing at a time.
   If you are working on your own fork, see 
   [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
