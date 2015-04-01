@@ -36,20 +36,6 @@ import (
 
 var testContext = NewContext()
 
-// TODO(DT): Don't use TestMain, in each test start and stop a TestServer.
-
-/*
-func TestMain(m *testing.M) {
-	s = &TestServer{}
-	if err := s.Start(); err != nil {
-		log.Fatalf("Could not start server: %v", err)
-	}
-	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
-	defer s.Stop()
-	os.Exit(m.Run())
-}
-*/
-
 // startTestServer starts a test server. The server will be initialized with an
 // in-memory engine and will execute a split at key "m" so that
 // it will end up having two logical ranges.
