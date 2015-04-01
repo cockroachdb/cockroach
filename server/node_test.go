@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
@@ -64,7 +65,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.Start(rpcServer)
 	}
 	db := client.NewKV(kv.NewDistSender(clock, g), nil)
-	node := NewNode(db, g, storage.TestStoreConfig)
+	// TODO(bdarnell): arrange to have the transport closed.
+	node := NewNode(db, g, storage.TestStoreConfig, multiraft.NewLocalRPCTransport())
 	return rpcServer, clock, node
 }
 
