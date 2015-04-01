@@ -38,7 +38,7 @@ import (
 // TODO(spencer): figure out a more deterministic setup, advancing the clock
 // manually and counting cycles accurately instead of relying on real-time sleeps.
 func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "unix", interval, gossip.TestBootstrap)
+	network := simulation.NewNetwork(numNodes, "unix", interval)
 
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
 		t.Errorf("expected a fully-connected network within %d cycles; took %d",

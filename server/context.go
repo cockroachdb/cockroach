@@ -18,6 +18,7 @@
 package server
 
 import (
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -104,6 +105,10 @@ type Context struct {
 
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes proto.Attributes
+
+	// GossipBootstrapAddrs is a list of node addresses that act
+	// as bootstrap hosts for connecting to the gossip network.
+	GossipBootstrapAddrs []net.Addr
 }
 
 // NewContext returns a Context with default values.
@@ -148,6 +153,8 @@ func (ctx *Context) Init() error {
 
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
+	ctx.GossipBootstrapAddrs = parseGossipBootstrapAddrs(ctx.GossipBootstrap)
+
 	return nil
 }
 
@@ -180,4 +187,19 @@ func parseAttributes(attrsStr string) proto.Attributes {
 	}
 	sort.Strings(filtered)
 	return proto.Attributes{Attrs: filtered}
+}
+
+// parseGossipBootstrapAddrs parses a comma-separated list of
+// gossip bootstrap addresses.
+func parseGossipBootstrapAddrs(gossipBootstrap string) []net.Addr {
+	var bootstrapAddrs []net.Addr
+	addresses := strings.Split(gossipBootstrap, ",")
+	for _, addr := range addresses {
+		addr = strings.TrimSpace(addr)
+		if len(addr) == 0 {
+			continue
+		}
+		bootstrapAddrs = append(bootstrapAddrs, util.MakeRawAddr("tcp", addr))
+	}
+	return bootstrapAddrs
 }

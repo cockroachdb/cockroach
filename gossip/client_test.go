@@ -30,8 +30,7 @@ import (
 const (
 	// With the default gossip interval, some tests
 	// may take longer than they need.
-	gossipInterval  = 20 * time.Millisecond
-	gossipBootstrap = ""
+	gossipInterval = 20 * time.Millisecond
 )
 
 // startGossip creates local and remote gossip instances.
@@ -46,7 +45,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Ser
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	local = New(lRPCContext, gossipInterval, gossipBootstrap)
+	local = New(lRPCContext, gossipInterval, TestBootstrap)
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
 	rRPCContext := rpc.NewContext(rclock, tlsConfig)
@@ -54,7 +53,7 @@ func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Ser
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
 	}
-	remote = New(rRPCContext, gossipInterval, gossipBootstrap)
+	remote = New(rRPCContext, gossipInterval, TestBootstrap)
 	local.start(lserver)
 	remote.start(rserver)
 	time.Sleep(time.Millisecond)
