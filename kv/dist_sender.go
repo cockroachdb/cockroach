@@ -365,7 +365,7 @@ func (ds *DistSender) Send(call *client.Call) {
 	for {
 		reply := call.Reply
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-			reply.Header().Error = nil
+			reply.Header().Reset()
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
 			if err == nil {
