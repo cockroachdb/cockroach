@@ -180,7 +180,7 @@ func PutProto(engine Engine, key proto.EncodedKey, msg gogoproto.Message) (keyBy
 		return
 	}
 	data := buf.Bytes()
-	if err = engine.Put(key, buf.Bytes()); err != nil {
+	if err = engine.Put(key, data); err != nil {
 		bufferPool.Put(buf)
 		return
 	}

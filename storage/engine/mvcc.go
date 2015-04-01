@@ -509,6 +509,9 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 
 	// If value is inline, return immediately; txn & timestamp are irrelevant.
 	if meta.IsInline() {
+		if err := meta.Value.Verify(key); err != nil {
+			return nil, err
+		}
 		return meta.Value, nil
 	}
 	// If we're doing inconsistent reads and there's an intent, we
@@ -608,6 +611,9 @@ func mvccGetInternal(engine Engine, key proto.Key, metaKey proto.EncodedKey, tim
 	// Set the timestamp if the value is not nil (i.e. not a deletion tombstone).
 	if value.Value != nil {
 		value.Value.Timestamp = &ts
+		if err := value.Value.Verify(key); err != nil {
+			return nil, err
+		}
 	} else if !value.Deleted {
 		// Sanity check.
 		panic(fmt.Sprintf("encountered MVCC value at key %q with a nil proto.Value but with !Deleted: %+v", key, value))
@@ -819,7 +825,7 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 
 	// Check for overflow and underflow.
 	if encoding.WillOverflow(int64Val, inc) {
-		return 0, util.Errorf("key %q with value %d incremented by %d results in overflow", key, int64Val, inc)
+		return 0, util.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
 	}
 
 	// Skip writing the value in the event the value already exists.
@@ -828,9 +834,9 @@ func MVCCIncrement(engine Engine, ms *MVCCStats, key proto.Key, timestamp proto.
 	}
 
 	r := int64Val + inc
-	value = &proto.Value{Integer: gogoproto.Int64(r)}
-	value.InitChecksum(key)
-	return r, MVCCPut(engine, ms, key, timestamp, *value, txn)
+	newValue := proto.Value{Integer: gogoproto.Int64(r)}
+	newValue.InitChecksum(key)
+	return r, MVCCPut(engine, ms, key, timestamp, newValue, txn)
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the
