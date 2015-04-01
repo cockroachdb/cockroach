@@ -65,7 +65,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -110,11 +109,6 @@ type Gossip struct {
 	disconnected chan *client       // Channel of disconnected clients
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
-	clock        *hlc.Clock         // The server hlc clock.
-
-	// GossipInterval is a time interval specifying how often gossip is
-	// communicated between hosts on the gossip network.
-	gossipInterval time.Duration
 
 	// GossipBootstrap is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
@@ -132,7 +126,6 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap 
 		clients:      map[string]*client{},
 		disconnected: make(chan *client, MaxPeers),
 
-		gossipInterval:  gossipInterval,
 		gossipBootstrap: gossipBootstrap,
 	}
 	g.stalled = sync.NewCond(&g.mu)
