@@ -61,7 +61,7 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	resp := &proto.ScanResponse{}
 	if err := kv.Call(proto.Scan, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	for _, r := range resp.Rows {
@@ -115,7 +115,7 @@ func runSplitRange(cmd *commander.Command, args []string) {
 	resp := &proto.AdminSplitResponse{}
 	if err := kv.Call(proto.AdminSplit, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
@@ -145,7 +145,7 @@ func runMergeRange(cmd *commander.Command, args []string) {
 	scanResp := &proto.ScanResponse{}
 	if err := kv.Call(proto.Scan, scanReq, scanResp); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 	switch len(scanResp.Rows) {
 	case 0:
@@ -174,6 +174,6 @@ func runMergeRange(cmd *commander.Command, args []string) {
 	resp := &proto.AdminMergeResponse{}
 	if err := kv.Call(proto.AdminMerge, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
