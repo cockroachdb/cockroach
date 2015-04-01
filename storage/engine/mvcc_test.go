@@ -20,11 +20,8 @@ package engine
 
 import (
 	"bytes"
-	crypto_rand "crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"math"
-	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1729,13 +1726,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 // underlying engine.
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	var seed int64
-	err := binary.Read(crypto_rand.Reader, binary.LittleEndian, &seed)
-	if err != nil {
-		t.Fatalf("could not read from crypto/rand: %s", err)
-	}
-	log.Infof("using pseudo random number generator with seed %d", seed)
-	rng := rand.New(rand.NewSource(seed))
+	rng := util.NewPseudoRand()
 	engine := createTestEngine()
 	ms := &MVCCStats{}
 
