@@ -38,7 +38,7 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper,
 		defer stopper.SetStopped()
 	}
 	for {
-		t := time.After(time.Second)
+		t := time.After(500 * time.Millisecond)
 		select {
 		case e, ok := <-ch:
 			if !ok {
@@ -49,8 +49,7 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper,
 				return
 			}
 		case <-t:
-			log.Error("timeout when reading from intercept channel")
-			return
+			log.Warning("timeout when reading from intercept channel")
 		case <-stopper.ShouldStop():
 			return
 		}
