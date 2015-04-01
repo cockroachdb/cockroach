@@ -352,9 +352,6 @@ func (ds *DistSender) Send(call *client.Call) {
 	// args will be changed to point to a copy of call.Args if the request
 	// spans ranges since in that case we need to alter its contents.
 	args := call.Args
-	// accumulatedResults is used to track the received result number of
-	// multi-range response.
-	var accumulatedResults int64
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
@@ -429,17 +426,16 @@ func (ds *DistSender) Send(call *client.Call) {
 				// If this request spans ranges, collect the replies.
 				responses = append(responses, reply)
 
-				// If this request is bounded with a positive MaxResults,
-				// check whether the existing rows are enough.
-				var maxResults int64
+				// If this request has a bound, such as MaxResults in ScanRequest,
+				// check whether enough rows are got in this round.
 				if args, ok := args.(proto.Bounded); ok && args.GetBound() > 0 {
-					maxResults = args.GetBound()
-					if reply, ok := reply.(proto.Truncatable); ok {
-						// Calculate the number of the existing rows.
-						accumulatedResults += reply.RowCount()
-
-						if accumulatedResults >= maxResults {
-							// Set flag to break loop.
+					bound := args.GetBound()
+					if reply, ok := reply.(proto.Countable); ok {
+						if nextBound := bound - reply.Count(); nextBound > 0 {
+							// Update bound for the next round.
+							args.SetBound(nextBound)
+						} else {
+							// Set flag to break the loop.
 							descNext = nil
 						}
 					}
@@ -448,20 +444,12 @@ func (ds *DistSender) Send(call *client.Call) {
 				// descNext can be nil in two cases:
 				// 1. Got enough rows in the middle of the request.
 				// 2. It is the last range of the request.
-				// Then combine and truncate the responses.
 				if descNext == nil {
 					// Combine multiple responses into the first one.
 					for _, r := range responses[1:] {
 						// We've already ascertained earlier that we're dealing with a
 						// Combinable response type.
 						responses[0].(proto.Combinable).Combine(r)
-					}
-
-					// Truncate the response if MaxResults is specified.
-					if maxResults > 0 {
-						if firstReply, ok := responses[0].(proto.Truncatable); ok {
-							firstReply.Truncate(maxResults)
-						}
 					}
 
 					// Write the final response back.
