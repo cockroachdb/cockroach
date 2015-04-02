@@ -52,8 +52,9 @@ func TestSetupRangeTree(t *testing.T) {
 
 	// Check to make sure the first range tree node is stored correctly.
 	expectedNode := &proto.RangeTreeNode{
-		Key:   engine.KeyMin,
-		Black: true,
+		Key:       engine.KeyMin,
+		Black:     true,
+		ParentKey: engine.KeyMin,
 	}
 	// To read the local key, we need to use MVCCGetProto.
 	actualNode := &proto.RangeTreeNode{}

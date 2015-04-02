@@ -184,9 +184,17 @@ func (k EncodedKey) Marshal() ([]byte, error) {
 	return []byte(k), nil
 }
 
-// Unmarshal implements the gogoproto Unmarshaler interface.
+// Unmarshal implements the gogoproto Unmarshaler interface.  It should never
+// set k to be nil as a nil value should never have unmarshall called for it.
+// Futhermore, appending a 0 length byte slice to a 0 length byte slice will
+// produce a nil byte slice, which can cause problems when unmarshalling the
+// engine.MinKey of "".
 func (k *Key) Unmarshal(bytes []byte) error {
-	*k = Key(append([]byte(nil), bytes...))
+	if len(bytes) == 0 {
+		*k = []byte{}
+	} else {
+		*k = Key(append([]byte(nil), bytes...))
+	}
 	return nil
 }
 
@@ -209,6 +217,16 @@ func (k *Key) UnmarshalJSON(bytes []byte) error {
 func (k *EncodedKey) UnmarshalJSON(bytes []byte) error {
 	*k = EncodedKey(append([]byte(nil), bytes...))
 	return nil
+}
+
+// Size is required for gogoproto's marshaller.
+func (k Key) Size() int {
+	return len(k)
+}
+
+// MarshalTo is required for gogoproto's mashaller.
+func (k *Key) MarshalTo(data []byte) (int, error) {
+	return copy(data, []byte(*k)), nil
 }
 
 // Timestamp constant values.
