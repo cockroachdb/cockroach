@@ -607,9 +607,7 @@ func (rh *ResponseHeader) SetGoError(err error) {
 		rh.Error = nil
 		return
 	}
-	if rh.Error == nil {
-		rh.Error = &Error{}
-	}
+	rh.Error = &Error{}
 	rh.Error.Message = err.Error()
 	if r, ok := err.(util.Retryable); ok {
 		rh.Error.Retryable = r.CanRetry()
