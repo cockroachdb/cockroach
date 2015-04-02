@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// A SystemClock is an implementation of the Clock interface that
+// A systemClock is an implementation of the Clock interface that
 // returns the node's wall time.
 // It is used by default when creating a new Context.
-type SystemClock struct{}
+type systemClock struct{}
 
 // Now implements the Clock interface, returning the node's wall time.
-func (*SystemClock) Now() int64 {
+func (systemClock) Now() int64 {
 	return time.Now().UnixNano()
 }
 
@@ -44,7 +44,7 @@ var (
 		Constant:    2,
 		MaxAttempts: 0, // retry indefinitely
 	}
-	defaultClock = Clock(&SystemClock{})
+	DefaultClock = systemClock{}
 )
 
 // A Context stores configuration to be used when creating a KV object.
@@ -58,7 +58,7 @@ type Context struct {
 // NewContext creates a new context with default values.
 func NewContext() *Context {
 	return &Context{
-		Clock:           defaultClock,
+		Clock:           DefaultClock,
 		TxnRetryOptions: DefaultTxnRetryOptions,
 	}
 }
