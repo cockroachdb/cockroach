@@ -3,4 +3,8 @@ set -e
 if [ -f ./test.sh ]; then
   ./test.sh || exit $?
 fi
-/cockroach/cockroach "$@"
+if [ "$1" = "shell" ]; then
+  /bin/bash
+else
+  /cockroach/cockroach "$@"
+fi

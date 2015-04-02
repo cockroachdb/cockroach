@@ -157,9 +157,6 @@ func (s *Server) Start(selfBootstrap bool) error {
 	// TODO(spencer): add tls to the HTTP server.
 	s.initHTTP()
 	httpAddr := s.ctx.HTTP
-	if strings.HasPrefix(httpAddr, ":") {
-		httpAddr = s.host + httpAddr
-	}
 	ln, err := net.Listen("tcp", httpAddr)
 	if err != nil {
 		return util.Errorf("could not listen on %s: %s", httpAddr, err)
