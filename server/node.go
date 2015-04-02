@@ -116,7 +116,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(kv.NewTxnCoordSender(lSender, clock, false), nil)
+	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, clock, false))
 	// TODO(bdarnell): arrange to have the transport closed.
 	// The bootstrapping store will not connect to other nodes so its StoreConfig
 	// doesn't really matter.

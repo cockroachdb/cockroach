@@ -41,14 +41,16 @@ import (
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
 func setCorrectnessRetryOptions(lSender *LocalSender) {
+	client.DefaultTxnRetryOptions = util.RetryOptions{
+		Backoff:     1 * time.Millisecond,
+		MaxBackoff:  5 * time.Millisecond,
+		Constant:    2,
+		MaxAttempts: 3,
+		UseV1Info:   true,
+	}
+
 	lSender.VisitStores(func(s *storage.Store) error {
-		s.RetryOpts = util.RetryOptions{
-			Backoff:     1 * time.Millisecond,
-			MaxBackoff:  10 * time.Millisecond,
-			Constant:    2,
-			MaxAttempts: 3,
-			UseV1Info:   true,
-		}
+		s.RetryOpts = client.DefaultTxnRetryOptions
 		return nil
 	})
 }

@@ -19,7 +19,6 @@ package client
 
 import (
 	"math/rand"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 )
@@ -31,15 +30,6 @@ type Call struct {
 	Reply  proto.Response // The reply from the command
 }
 
-// now returns clock.Now() if clock is not nil; otherwise uses the
-// system wall time.
-func now(clock Clock) int64 {
-	if clock == nil {
-		return time.Now().UnixNano()
-	}
-	return clock.Now()
-}
-
 // resetClientCmdID sets the client command ID if the call is for a
 // read-write method. The client command ID provides idempotency
 // protection in conjunction with the server.
@@ -48,7 +38,7 @@ func (c *Call) resetClientCmdID(clock Clock) {
 	// mutations from being run multiple times on retries.
 	if proto.IsReadWrite(c.Method) {
 		c.Args.Header().CmdID = proto.ClientCmdID{
-			WallTime: now(clock),
+			WallTime: clock.Now(),
 			Random:   rand.Int63(),
 		}
 	}

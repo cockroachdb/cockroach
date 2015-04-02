@@ -103,7 +103,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock) {
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
 		t.Fatal(err)
 	}
-	store.db = client.NewKV(&testSender{store: store}, nil)
+	store.db = client.NewKV(nil, &testSender{store: store})
 	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}

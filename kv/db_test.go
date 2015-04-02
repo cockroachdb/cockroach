@@ -34,7 +34,7 @@ import (
 
 func createTestClient(addr string) *client.KV {
 	transport := &http.Transport{TLSClientConfig: rpc.LoadInsecureTLSConfig().Config()}
-	return client.NewKV(client.NewHTTPSender(addr, transport), nil)
+	return client.NewKV(nil, client.NewHTTPSender(addr, transport))
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the

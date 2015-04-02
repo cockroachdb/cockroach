@@ -209,7 +209,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			txnClock.SetMaxOffset(maxOffset)
 
 			sender := NewTxnCoordSender(lSender, txnClock, false)
-			txnDB := client.NewKV(sender, nil)
+			txnDB := client.NewKV(nil, sender)
 			txnDB.User = storage.UserRoot
 
 			if err := txnDB.RunTransaction(txnOpts, func(txn *client.KV) error {
@@ -251,12 +251,12 @@ func TestTxnDBUncertainty(t *testing.T) {
 	// Make sure that we notice immediately if any kind of backing off is
 	// happening. Restore the previous options after this test is done to avoid
 	// interfering with other tests.
-	defaultRetryOptions := client.TxnRetryOptions
+	defaultRetryOptions := client.DefaultTxnRetryOptions
 	defer func() {
-		client.TxnRetryOptions = defaultRetryOptions
+		client.DefaultTxnRetryOptions = defaultRetryOptions
 	}()
-	client.TxnRetryOptions.Backoff = 100 * time.Second
-	client.TxnRetryOptions.MaxBackoff = 100 * time.Second
+	client.DefaultTxnRetryOptions.Backoff = 100 * time.Second
+	client.DefaultTxnRetryOptions.MaxBackoff = 100 * time.Second
 
 	// < 5ns means no uncertainty & no restarts.
 	verifyUncertainty(1, 3*time.Nanosecond, t)

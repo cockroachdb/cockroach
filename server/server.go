@@ -113,7 +113,7 @@ func NewServer(ctx *Context) (*Server, error) {
 	// client to the key value database as well as
 	ds := kv.NewDistSender(s.clock, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable)
-	s.kv = client.NewKV(sender, nil)
+	s.kv = client.NewKV(nil, sender)
 	s.kv.User = storage.UserRoot
 
 	s.raftTransport, err = newRPCTransport(s.gossip, s.rpc, rpcContext)

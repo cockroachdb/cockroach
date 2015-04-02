@@ -260,6 +260,8 @@ func (c *Client) heartbeat() error {
 		c.mu.Unlock()
 		c.remoteClocks.UpdateOffset(c.addr.String(), c.offset)
 		log.Warningf("client %s unhealthy after %s", c.Addr(), heartbeatInterval)
+	case <-c.Closed:
+		return util.Errorf("client is closed")
 	}
 
 	<-call.Done

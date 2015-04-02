@@ -49,7 +49,7 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	lSender = NewLocalSender()
 	sender := NewTxnCoordSender(lSender, clock, false)
-	db = client.NewKV(sender, nil)
+	db = client.NewKV(nil, sender)
 	db.User = storage.UserRoot
 	transport = multiraft.NewLocalRPCTransport()
 	store := storage.NewStore(clock, eng, db, g, transport, storage.TestStoreConfig)
