@@ -151,10 +151,21 @@ func (rc *ResponseCache) CopyInto(e engine.Engine, destRaftID int64) error {
 		// write it to the corresponding key in the new cache.
 		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
 		if err != nil {
-			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
+			return false, util.Errorf("could not decode a response cache key %s: %s",
+				proto.Key(kv.Key), err)
 		}
-		encKey := engine.MVCCEncodeKey(engine.ResponseCacheKey(destRaftID, &cmdID))
-		return false, e.Put(encKey, kv.Value)
+		key := engine.ResponseCacheKey(destRaftID, &cmdID)
+		encKey := engine.MVCCEncodeKey(key)
+		// Decode the value, update the checksum and re-encode.
+		meta := &proto.MVCCMetadata{}
+		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
+				proto.Key(kv.Key), kv.Value, err)
+		}
+		meta.Value.Checksum = nil
+		meta.Value.InitChecksum(key)
+		_, _, err = engine.PutProto(e, encKey, meta)
+		return false, err
 	})
 }
 
@@ -173,10 +184,21 @@ func (rc *ResponseCache) CopyFrom(e engine.Engine, originRaftID int64) error {
 		// write it to the corresponding key in the new cache.
 		cmdID, err := rc.decodeResponseCacheKey(kv.Key)
 		if err != nil {
-			return false, util.Errorf("could not decode a response cache key %q: %s", kv.Key, err)
+			return false, util.Errorf("could not decode a response cache key %s: %s",
+				proto.Key(kv.Key), err)
 		}
-		encKey := engine.MVCCEncodeKey(engine.ResponseCacheKey(rc.raftID, &cmdID))
-		return false, rc.engine.Put(encKey, kv.Value)
+		key := engine.ResponseCacheKey(rc.raftID, &cmdID)
+		encKey := engine.MVCCEncodeKey(key)
+		// Decode the value, update the checksum and re-encode.
+		meta := &proto.MVCCMetadata{}
+		if err := gogoproto.Unmarshal(kv.Value, meta); err != nil {
+			return false, util.Errorf("could not decode response cache value %s [% x]: %s",
+				proto.Key(kv.Key), kv.Value, err)
+		}
+		meta.Value.Checksum = nil
+		meta.Value.InitChecksum(key)
+		_, _, err = engine.PutProto(rc.engine, encKey, meta)
+		return false, err
 	})
 }
 
@@ -247,16 +269,17 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	ret := proto.ClientCmdID{}
 	key, _, isValue := engine.MVCCDecodeKey(encKey)
 	if isValue {
-		return ret, util.Errorf("key %q is not a raw MVCC value", encKey)
+		return ret, util.Errorf("key %s is not a raw MVCC value", encKey)
 	}
 	if !bytes.HasPrefix(key, engine.KeyLocalRangeIDPrefix) {
-		return ret, util.Errorf("key %q does not have %q prefix", key, engine.KeyLocalRangeIDPrefix)
+		return ret, util.Errorf("key %s does not have %s prefix", key, engine.KeyLocalRangeIDPrefix)
 	}
 	// Cut the prefix and the Raft ID.
 	b := key[len(engine.KeyLocalRangeIDPrefix):]
 	b, _ = encoding.DecodeUvarint(b)
 	if !bytes.HasPrefix(b, engine.KeyLocalResponseCacheSuffix) {
-		return ret, util.Errorf("key %q does not contain the response cache suffix %q", key, engine.KeyLocalResponseCacheSuffix)
+		return ret, util.Errorf("key %s does not contain the response cache suffix %s",
+			key, engine.KeyLocalResponseCacheSuffix)
 	}
 	// Cut the response cache suffix.
 	b = b[len(engine.KeyLocalResponseCacheSuffix):]
@@ -264,7 +287,8 @@ func (rc *ResponseCache) decodeResponseCacheKey(encKey proto.EncodedKey) (proto.
 	b, wt := encoding.DecodeUvarint(b)
 	b, rd := encoding.DecodeUint64(b)
 	if len(b) > 0 {
-		return ret, util.Errorf("key %q has leftover bytes after decode: %q; indicates corrupt key", encKey, b)
+		return ret, util.Errorf("key %s has leftover bytes after decode: %s; indicates corrupt key",
+			encKey, b)
 	}
 	ret.WallTime = int64(wt)
 	ret.Random = int64(rd)

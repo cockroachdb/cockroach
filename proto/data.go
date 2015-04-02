@@ -152,8 +152,20 @@ func (k Key) String() string {
 	return fmt.Sprintf("%q", []byte(k))
 }
 
+// String returns a string-formatted version of the key.
+func (k EncodedKey) String() string {
+	return fmt.Sprintf("%q", []byte(k))
+}
+
 // Format implements the fmt.Formatter interface.
 func (k Key) Format(f fmt.State, verb rune) {
+	// Note: this implementation doesn't handle the width and precision
+	// specifiers such as "%20.10s".
+	fmt.Fprint(f, strconv.Quote(string(k)))
+}
+
+// Format implements the fmt.Formatter interface.
+func (k EncodedKey) Format(f fmt.State, verb rune) {
 	// Note: this implementation doesn't handle the width and precision
 	// specifiers such as "%20.10s".
 	fmt.Fprint(f, strconv.Quote(string(k)))
@@ -282,12 +294,15 @@ func (v *Value) InitChecksum(key []byte) {
 // and Integer are not both set.
 func (v *Value) Verify(key []byte) error {
 	if v.Checksum != nil {
-		if v.GetChecksum() != v.computeChecksum(key) {
-			return util.Errorf("invalid checksum for key %s, value %+v", key, v)
+		cksum := v.computeChecksum(key)
+		if v.GetChecksum() != cksum {
+			return util.Errorf("invalid checksum (%d) for key %s, value [% x]",
+				cksum, Key(key), v)
 		}
 	}
 	if v.Bytes != nil && v.Integer != nil {
-		return util.Errorf("both the value byte slice and integer fields are set for key %s: %+v", key, v)
+		return util.Errorf("both the value byte slice and integer fields are set for key %s: [% x]",
+			Key(key), v)
 	}
 	return nil
 }
