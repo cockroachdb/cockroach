@@ -24,6 +24,7 @@ import (
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 type testDescriptorDB struct {
@@ -37,12 +38,13 @@ type testDescriptorNode struct {
 }
 
 func (a testDescriptorNode) Compare(b llrb.Comparable) int {
-	aKey := engine.RangeMetaLookupKey(a.RangeDescriptor)
-	bKey := engine.RangeMetaLookupKey(b.(testDescriptorNode).RangeDescriptor)
+	aKey := a.RangeDescriptor.EndKey
+	bKey := b.(testDescriptorNode).RangeDescriptor.EndKey
 	return bytes.Compare(aKey, bKey)
 }
 
 func (db *testDescriptorDB) getDescriptor(key proto.Key) []proto.RangeDescriptor {
+	log.Infof("getDescriptor: %s", key)
 	response := make([]proto.RangeDescriptor, 0, 3)
 	for i := 0; i < 3; i++ {
 		v := db.data.Ceil(testDescriptorNode{
@@ -130,6 +132,7 @@ func doLookup(t *testing.T, rc *RangeDescriptorCache, key string) {
 	if !r.ContainsKey(engine.KeyAddress(proto.Key(key))) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
+	log.Infof("doLookup: %s %+v", key, r)
 }
 
 // TestRangeCache is a simple test which verifies that metadata ranges
@@ -145,44 +148,48 @@ func TestRangeCache(t *testing.T) {
 		}
 	}
 
-	rangeCache := NewRangeDescriptorCache(db)
-	db.cache = rangeCache
+	db.cache = NewRangeDescriptorCache(db)
 
-	doLookup(t, rangeCache, "aa")
+	doLookup(t, db.cache, "aa")
 	db.assertHitCount(t, 2)
 
 	// Descriptors for the following ranges should be cached
-	doLookup(t, rangeCache, "ab")
+	doLookup(t, db.cache, "ab")
 	db.assertHitCount(t, 0)
-	doLookup(t, rangeCache, "ba")
+	doLookup(t, db.cache, "ba")
 	db.assertHitCount(t, 0)
-	doLookup(t, rangeCache, "cz")
+	doLookup(t, db.cache, "cz")
 	db.assertHitCount(t, 0)
 
 	// Metadata two ranges weren't cached, same metadata 1 range
-	doLookup(t, rangeCache, "d")
+	doLookup(t, db.cache, "d")
 	db.assertHitCount(t, 1)
-	doLookup(t, rangeCache, "fa")
+	doLookup(t, db.cache, "fa")
 	db.assertHitCount(t, 0)
 
 	// Metadata two ranges weren't cached, metadata 1 was aggressively cached
-	doLookup(t, rangeCache, "ij")
+	doLookup(t, db.cache, "ij")
 	db.assertHitCount(t, 1)
-	doLookup(t, rangeCache, "jk")
+	doLookup(t, db.cache, "jk")
 	db.assertHitCount(t, 0)
-	doLookup(t, rangeCache, "pn")
+	doLookup(t, db.cache, "pn")
 	db.assertHitCount(t, 1)
 
 	// Totally uncached ranges
-	doLookup(t, rangeCache, "vu")
+	doLookup(t, db.cache, "vu")
 	db.assertHitCount(t, 2)
-	doLookup(t, rangeCache, "xx")
+	doLookup(t, db.cache, "xx")
 	db.assertHitCount(t, 0)
 
 	// Evict clears one level 1 and one level 2 cache
-	rangeCache.EvictCachedRangeDescriptor(proto.Key("da"))
-	doLookup(t, rangeCache, "fa")
+	db.cache.EvictCachedRangeDescriptor(proto.Key("da"))
+	doLookup(t, db.cache, "fa")
 	db.assertHitCount(t, 0)
-	doLookup(t, rangeCache, "da")
+	doLookup(t, db.cache, "da")
 	db.assertHitCount(t, 2)
+
+	// Looking up a descriptor that lands on an end-key should work
+	// without a cache miss.
+	doLookup(t, db.cache, "a")
+	db.assertHitCount(t, 0)
 }
