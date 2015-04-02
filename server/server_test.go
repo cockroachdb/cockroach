@@ -303,28 +303,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		}
 	}
 
-	// Verify scan with different MaxResults parameters.
-	for i := -1; i < 2; i++ {
-		scan := &client.Call{
-			Method: proto.Scan,
-			Args: proto.ScanArgs(writes[0], writes[len(writes)-1].Next(),
-				int64(len(writes)+i)),
-			Reply: &proto.ScanResponse{},
-		}
-		scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
-		scan.Args.Header().User = storage.UserRoot
-		tds.Send(scan)
-		if err := scan.Reply.Header().GoError(); err != nil {
-			t.Fatal(err)
-		}
-		rows := scan.Reply.(*proto.ScanResponse).Rows
-		if i < 1 && len(rows) != len(writes)+i {
-			t.Fatalf("expected %d rows, but got %d", len(writes)+i, len(rows))
-		} else if i == 1 && len(rows) != len(writes) {
-			t.Fatalf("expected %d rows, but got %d", len(writes), len(rows))
-		}
-	}
-
 	del := &client.Call{
 		Method: proto.DeleteRange,
 		Args: &proto.DeleteRangeRequest{
@@ -366,5 +344,80 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	if rows := scan.Reply.(*proto.ScanResponse).Rows; len(rows) > 0 {
 		t.Fatalf("scan after delete returned rows: %v", rows)
+	}
+}
+
+// TestMultiRangeScanWithMaxResults tests that commands which access multiple
+// ranges with MaxResults parameter are carried out properly.
+func TestMultiRangeScanWithMaxResults(t *testing.T) {
+
+	testCases := []struct {
+		splitKeys []proto.Key
+		keys      []proto.Key
+	}{
+		{[]proto.Key{proto.Key("m")},
+			[]proto.Key{proto.Key("a"), proto.Key("z")}},
+		{[]proto.Key{proto.Key("h"), proto.Key("q")},
+			[]proto.Key{proto.Key("b"), proto.Key("f"), proto.Key("k"),
+				proto.Key("r"), proto.Key("w"), proto.Key("y")}},
+	}
+
+	for _, tc := range testCases {
+		s := startTestServer(t)
+		ds := kv.NewDistSender(s.Clock(), s.Gossip())
+		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
+
+		for _, sk := range tc.splitKeys {
+			if err := s.node.db.Call(proto.AdminSplit,
+				&proto.AdminSplitRequest{
+					RequestHeader: proto.RequestHeader{
+						Key: sk,
+					},
+					SplitKey: sk,
+				}, &proto.AdminSplitResponse{}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		var call *client.Call
+		for _, k := range tc.keys {
+			call = &client.Call{
+				Method: proto.Put,
+				Args:   proto.PutArgs(k, k),
+				Reply:  &proto.PutResponse{},
+			}
+			call.Args.Header().User = storage.UserRoot
+			tds.Send(call)
+			if err := call.Reply.Header().GoError(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Try every possible ScanRequest startKey.
+		for start := 0; start < len(tc.keys); start++ {
+			// Try every possible maxResults, from 1 to beyond the size of key array.
+			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
+				scan := &client.Call{
+					Method: proto.Scan,
+					Args: proto.ScanArgs(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
+						int64(maxResults)),
+					Reply: &proto.ScanResponse{},
+				}
+				scan.Args.Header().Timestamp = call.Reply.Header().Timestamp
+				scan.Args.Header().User = storage.UserRoot
+				tds.Send(scan)
+				if err := scan.Reply.Header().GoError(); err != nil {
+					t.Fatal(err)
+				}
+				rows := scan.Reply.(*proto.ScanResponse).Rows
+				if start+maxResults <= len(tc.keys) && len(rows) != maxResults {
+					t.Fatalf("expected %d rows, but got %d", maxResults, len(rows))
+				} else if start+maxResults == len(tc.keys)+1 && len(rows) != maxResults-1 {
+					t.Fatalf("expected %d rows, but got %d", maxResults-1, len(rows))
+				}
+			}
+		}
+		defer tds.Close()
+		defer s.Stop()
 	}
 }
