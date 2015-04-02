@@ -120,7 +120,8 @@ func (rc *ResponseCache) GetResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	// If the response is in the cache or we experienced an error, return.
 	rwResp := proto.ReadWriteCmdResponse{}
 	key := engine.ResponseCacheKey(rc.raftID, &cmdID)
-	if ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp, nil, &rwResp); ok || err != nil {
+	if ok, err := engine.MVCCGetProto(rc.engine, key, proto.ZeroTimestamp,
+		true, nil, &rwResp); ok || err != nil {
 		rc.Lock() // Take lock after fetching response from cache.
 		defer rc.Unlock()
 		rc.removeInflightLocked(cmdID)

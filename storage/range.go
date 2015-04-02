@@ -336,7 +336,7 @@ func (r *Range) ContainsKeyRange(start, end proto.Key) bool {
 func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
 	key := engine.RangeGCMetadataKey(r.Desc().RaftID)
 	gcMeta := &proto.GCMetadata{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, gcMeta)
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, gcMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +348,7 @@ func (r *Range) GetGCMetadata() (*proto.GCMetadata, error) {
 func (r *Range) GetLastVerificationTimestamp() (proto.Timestamp, error) {
 	key := engine.RangeLastVerificationTimestampKey(r.Desc().RaftID)
 	timestamp := proto.Timestamp{}
-	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, nil, &timestamp)
+	_, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, &timestamp)
 	if err != nil {
 		return proto.ZeroTimestamp, err
 	}
@@ -952,7 +952,7 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, existTxn)
+	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1140,7 +1140,7 @@ func (r *Range) InternalHeartbeatTxn(batch engine.Engine, args *proto.InternalHe
 	key := engine.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	var txn proto.Transaction
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, &txn)
+	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, &txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1224,7 +1224,7 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 
 	// Fetch existing transaction if possible.
 	existTxn := &proto.Transaction{}
-	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, nil, existTxn)
+	ok, err := engine.MVCCGetProto(batch, key, proto.ZeroTimestamp, true, nil, existTxn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
@@ -1490,7 +1490,7 @@ func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error
 func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	var hs raftpb.HardState
 	found, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftHardStateKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, nil, &hs)
+		proto.ZeroTimestamp, true, nil, &hs)
 	if err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
@@ -1628,7 +1628,7 @@ func (r *Range) LastIndex() (uint64, error) {
 func (r *Range) raftTruncatedState() (proto.RaftTruncatedState, error) {
 	ts := proto.RaftTruncatedState{}
 	ok, err := engine.MVCCGetProto(r.rm.Engine(), engine.RaftTruncatedStateKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, nil, &ts)
+		proto.ZeroTimestamp, true, nil, &ts)
 	if err != nil {
 		return ts, err
 	}
