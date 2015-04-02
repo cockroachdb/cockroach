@@ -117,8 +117,8 @@ func (rmc *RangeDescriptorCache) String() string {
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
 func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
-	log.V(1).Infof("lookup range descriptor: %s\n%s", key, rmc)
 	_, r := rmc.getCachedRangeDescriptor(key)
+	log.V(1).Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
 	if r != nil {
 		return r, nil
 	}
@@ -129,7 +129,12 @@ func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.Ra
 	}
 	rmc.rangeCacheMu.Lock()
 	for i := range rs {
-		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetaLookupKey(&rs[i])), &rs[i])
+		// Note: we append the end key of each range to meta[12] records
+		// so that calls to rmc.rangeCache.Ceil() for a key will return
+		// the correct range. Using the start key would require using
+		// Floor() which is a possibility for our llrb-based OrderedCache
+		// but not possible for RocksDB.
+		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetaKey(rs[i].EndKey)), &rs[i])
 	}
 	rmc.rangeCacheMu.Unlock()
 	return &rs[0], nil
@@ -141,11 +146,12 @@ func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.Ra
 // discovered to be stale.
 func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 	for {
-		k, _ := rmc.getCachedRangeDescriptor(key)
+		k, rd := rmc.getCachedRangeDescriptor(key)
 		if k != nil {
 			rmc.rangeCacheMu.Lock()
 			rmc.rangeCache.Del(k)
 			rmc.rangeCacheMu.Unlock()
+			log.V(1).Infof("evict cached descriptor: key=%s desc=%+v\n%s", key, rd, rmc)
 		}
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which

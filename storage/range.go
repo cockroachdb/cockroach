@@ -1077,6 +1077,13 @@ func (r *Range) EnqueueMessage(batch engine.Engine, args *proto.EnqueueMessageRe
 // ordinary key which was originally used to generate the Range Metadata Key
 // sent to InternalRangeLookup.
 //
+// The "Range Metadata Key" for a range is built by appending the end key of
+// the range to the meta[12] prefix because the RocksDB iterator only supports
+// a Seek() interface which acts as a Ceil(). Using the start key of the range
+// would cause Seek() to find the key after the meta indexing record we're
+// looking for, which would result in having to back the iterator up, an option
+// which is both less efficient and not available in all cases.
+//
 // This method has an important optimization: instead of just returning the
 // request RangeDescriptor, it also returns a slice of additional range
 // descriptors immediately consecutive to the desired RangeDescriptor. This is
