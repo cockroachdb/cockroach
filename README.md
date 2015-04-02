@@ -58,7 +58,7 @@ root@82cb657cdc42:/cockroach#
 Now we're in an environment that has everything set up, and we start by firing up a node:
 
 ```bash
-$ ./cockroach init -http 0.0.0.0:8080 -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
+$ ./cockroach init -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
 [...]
 ```
 This bootstraps and starts a single-node cluster in the background, with logs sent to `node.log`.
@@ -75,7 +75,7 @@ $ ./cockroach scan
 "b"     2
 "c"     3
 "d"     4
-# Scans do not include the right endpoint.
+# Scans do not include the end key.
 $ ./cockroach scan b d
 "b"     2
 "c"     3
