@@ -103,6 +103,9 @@ message RangeTree {
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 message RangeTreeNode {
+  option (gogoproto.marshaler) = true;
+  option (gogoproto.sizer) = true;
+  option (gogoproto.unmarshaler) = true;
   optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
 
   // Color is black if true, red if false.

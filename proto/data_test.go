@@ -229,6 +229,25 @@ func TestValueBothBytesAndIntegerSet(t *testing.T) {
 	}
 }
 
+// TestUnmarshal expects key unmarshaling to never return nil.
+func TestUnmarshal(t *testing.T) {
+	testCases := []struct {
+		input       []byte
+		expectedNil bool
+	}{
+		{[]byte(nil), false},
+		{[]byte(""), false},
+		{[]byte("test"), false},
+	}
+	for i, c := range testCases {
+		key := &Key{}
+		key.Unmarshal(c.input)
+		if (key == nil) != c.expectedNil {
+			t.Errorf("%d: Expect result to not to be %v.", i, c.expectedNil)
+		}
+	}
+}
+
 // TestValueZeroIntegerSerialization verifies that a value with
 // integer=0 set can be marshalled and unmarshalled successfully.
 // This tests exists because gob serialization treats integers

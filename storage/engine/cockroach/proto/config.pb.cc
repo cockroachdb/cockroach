@@ -294,11 +294,11 @@ void protobuf_AddDesc_cockroach_2fproto_2fconfig_2eproto() {
     "\"range_max_bytes,omitempty\"\022D\n\002gc\030\004 \001(\0132"
     "\031.cockroach.proto.GCPolicyB\035\342\336\037\002GC\362\336\037\023ya"
     "ml:\"gc,omitempty\"\"*\n\tRangeTree\022\035\n\010root_k"
-    "ey\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\"\226\001\n\rRangeTreeNode\022"
+    "ey\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\"\244\001\n\rRangeTreeNode\022"
     "\030\n\003key\030\001 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\023\n\005black\030\002 \001(\010"
     "B\004\310\336\037\000\022\037\n\nparent_key\030\003 \001(\014B\013\310\336\037\000\332\336\037\003Key\022"
     "\031\n\010left_key\030\004 \001(\014B\007\332\336\037\003Key\022\032\n\tright_key\030"
-    "\005 \001(\014B\007\332\336\037\003KeyB\007Z\005proto", 1183);
+    "\005 \001(\014B\007\332\336\037\003Key:\014\210\241\037\001\240\241\037\001\220\241\037\001B\007Z\005proto", 1197);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/config.proto", &protobuf_RegisterTypes);
   Attributes::default_instance_ = new Attributes();
