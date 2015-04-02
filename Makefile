@@ -49,7 +49,8 @@ STANDARDTESTFLAGS := -logtostderr
 TESTFLAGS         :=
 
 ifeq ($(STATIC),1)
-GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
+GOFLAGS  += -tags netgo
+LDFLAGS += -extldflags "-lm -lstdc++ -static"
 endif
 
 .PHONY: all
