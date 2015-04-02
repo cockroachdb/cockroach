@@ -112,6 +112,14 @@ type testQueue struct {
 	ranges     []*Range
 	done       bool
 	processed  int
+	disabled   bool
+}
+
+// setDisabled suspends processing of items from the queue.
+func (tq *testQueue) setDisabled(d bool) {
+	tq.Lock()
+	defer tq.Unlock()
+	tq.disabled = d
 }
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
@@ -121,7 +129,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 			select {
 			case <-time.After(1 * time.Millisecond):
 				tq.Lock()
-				if len(tq.ranges) > 0 {
+				if !tq.disabled && len(tq.ranges) > 0 {
 					tq.ranges = tq.ranges[1:]
 					tq.processed++
 				}
@@ -181,6 +189,9 @@ func TestScannerAddToQueues(t *testing.T) {
 	const count = 3
 	iter := newTestIterator(count)
 	q1, q2 := &testQueue{}, &testQueue{}
+	// We don't want to actually consume entries from the queues during this test.
+	q1.setDisabled(true)
+	q2.setDisabled(true)
 	s := newRangeScanner(1*time.Millisecond, iter)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
