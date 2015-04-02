@@ -1904,6 +1904,10 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
 			return err
 		}
+		// Update the RangeTree.
+		if err := InsertRange(txn, newDesc.StartKey); err != nil {
+			return err
+		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
 		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{

@@ -15,57 +15,34 @@
 //
 // Author: Bram Gruneir (bram.gruneir@gmail.com)
 
-package storage_test
+package storage
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range tree and first node.
-// SetupRangeTree is called via store.BootstrapRange.
-func TestSetupRangeTree(t *testing.T) {
+// TestIsRed ensures that the isRed function is correct.
+func TestIsRed(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, clock := createTestStoreWithClock(t)
-	defer store.Stop()
-
-	// Check to make sure the range tree is stored correctly.
-	expectedTree := &proto.RangeTree{
-		RootKey: engine.KeyMin,
+	testCases := []struct {
+		node     *proto.RangeTreeNode
+		expected bool
+	}{
+		// normal black node
+		{&proto.RangeTreeNode{Black: true}, false},
+		// normal red node
+		{&proto.RangeTreeNode{Black: false}, true},
+		// nil
+		{nil, false},
 	}
-	treeArgs, treeReply := getArgs(engine.KeyRangeTreeRoot, 1, store.StoreID())
-	if err := store.ExecuteCmd(proto.Get, treeArgs, treeReply); err != nil {
-		t.Fatal(err)
-	}
-	actualTree := &proto.RangeTree{}
-	if err := gogoproto.Unmarshal(treeReply.Value.Bytes, actualTree); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(expectedTree, actualTree) {
-		t.Errorf("expected range tree and actual range tree are not equal - expected:%s actual:%s", expectedTree, actualTree)
-	}
-
-	// Check to make sure the first range tree node is stored correctly.
-	expectedNode := &proto.RangeTreeNode{
-		Key:       engine.KeyMin,
-		Black:     true,
-		ParentKey: engine.KeyMin,
-	}
-	// To read the local key, we need to use MVCCGetProto.
-	actualNode := &proto.RangeTreeNode{}
-	ok, err := engine.MVCCGetProto(store.Engine(), engine.RangeTreeNodeKey(engine.KeyMin), clock.Now(), nil, actualNode)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Errorf("Could not find the first range's node:%s", engine.RangeTreeNodeKey(engine.KeyMin))
-	}
-	if !reflect.DeepEqual(expectedNode, actualNode) {
-		t.Errorf("expected range tree node and actual range tree node are not equal - expected:%s actual:%s", expectedNode, actualNode)
+	for i, test := range testCases {
+		node := (*rangeTreeNode)(test.node)
+		actual := node.isRed()
+		if actual != test.expected {
+			t.Errorf("%d: %+v expect %v; got %v", i, node, test.expected, actual)
+		}
 	}
 }
