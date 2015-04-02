@@ -139,3 +139,13 @@ func TestCombinable(t *testing.T) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)
 	}
 }
+
+func TestSetGoErrorCopy(t *testing.T) {
+	rh := ResponseHeader{}
+	err := &Error{Message: "test123"}
+	rh.SetGoError(err)
+	err.Message = "321tset"
+	if rh.Error.Message != "test123" {
+		t.Fatalf("SetGoError did not create a new error")
+	}
+}
