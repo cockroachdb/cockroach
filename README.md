@@ -139,6 +139,15 @@ Once you've built your image, you may want to run the tests:
 * `docker run "cockroachdb/cockroach-dev" test`
 * `make acceptance`
 
+Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
+
+```bash
+$ docker run -p 8080:8080 -d cockroachdb/cockroach init \
+    -stores ssd="$(mktemp -d /tmp/dbXXX)"
+```
+
+Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
+
 ## Get in touch
 
 + cockroach-db@googlegroups.com
