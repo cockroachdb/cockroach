@@ -19,12 +19,14 @@ package kv
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 
 	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
 )
 
 const (
@@ -91,6 +93,16 @@ func NewRangeDescriptorCache(db rangeDescriptorDB) *RangeDescriptorCache {
 	}
 }
 
+func (rmc *RangeDescriptorCache) String() string {
+	var buf bytes.Buffer
+	rmc.rangeCacheMu.Lock()
+	rmc.rangeCache.Do(func(k, v interface{}) {
+		fmt.Fprintf(&buf, "key=%s desc=%+v\n", proto.Key(k.(rangeCacheKey)), v)
+	})
+	rmc.rangeCacheMu.Unlock()
+	return buf.String()
+}
+
 // LookupRangeDescriptor attempts to locate a descriptor for the range
 // containing the given Key. This is done by querying the two-level
 // lookup table of range descriptors which cockroach maintains.
@@ -105,6 +117,7 @@ func NewRangeDescriptorCache(db rangeDescriptorDB) *RangeDescriptorCache {
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
 func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
+	log.V(1).Infof("lookup range descriptor: %s\n%s", key, rmc)
 	_, r := rmc.getCachedRangeDescriptor(key)
 	if r != nil {
 		return r, nil
@@ -149,7 +162,10 @@ func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 // the cache.
 func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
-	metaKey := engine.RangeMetaKey(key)
+	// We want to look up the range descriptor for key. The cache is
+	// indexed using the end-key of the range, but the end-key is
+	// non-inclusive. So we access the cache using key.Next().
+	metaKey := engine.RangeMetaKey(key.Next())
 	rmc.rangeCacheMu.RLock()
 	defer rmc.rangeCacheMu.RUnlock()
 
