@@ -314,7 +314,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		}
 		// Must not call Close() on this KV - that would call
 		// tc.Close().
-		tmpKV := client.NewKV(tc, nil)
+		tmpKV := client.NewKV(nil, tc)
 		tmpKV.User = call.Args.Header().User
 		tmpKV.UserPriority = call.Args.Header().GetUserPriority()
 		call.Reply.Reset()

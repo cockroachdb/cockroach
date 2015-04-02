@@ -139,7 +139,7 @@ func (tc *testContext) Start(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		tc.store.db = client.NewKV(&testSender{store: tc.store}, nil)
+		tc.store.db = client.NewKV(nil, &testSender{store: tc.store})
 		if err := tc.store.Start(); err != nil {
 			t.Fatal(err)
 		}

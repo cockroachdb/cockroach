@@ -64,7 +64,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetBootstrap([]net.Addr{gossipBS})
 		g.Start(rpcServer)
 	}
-	db := client.NewKV(kv.NewDistSender(clock, g), nil)
+	db := client.NewKV(nil, kv.NewDistSender(clock, g))
 	// TODO(bdarnell): arrange to have the transport closed.
 	node := NewNode(db, g, storage.TestStoreConfig, multiraft.NewLocalRPCTransport())
 	return rpcServer, clock, node

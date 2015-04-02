@@ -30,9 +30,9 @@ import (
 // calls is a noop.
 func TestKVEmptyFlush(t *testing.T) {
 	count := 0
-	client := NewKV(newTestSender(func(call *Call) {
+	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
-	}), nil)
+	}))
 	if err := client.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +45,12 @@ func TestKVEmptyFlush(t *testing.T) {
 // on call.
 func TestKVClientCommandID(t *testing.T) {
 	count := 0
-	client := NewKV(newTestSender(func(call *Call) {
+	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 		if call.Args.Header().CmdID.WallTime == 0 {
 			t.Errorf("expected client command ID to be initialized")
 		}
-	}), nil)
+	}))
 	client.Call(proto.Put, testPutReq, &proto.PutResponse{})
 	if count != 1 {
 		t.Errorf("expected test sender to be invoked once; got %d", count)
@@ -62,7 +62,7 @@ func TestKVClientCommandID(t *testing.T) {
 func TestKVPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
 		count := 0
-		client := NewKV(newTestSender(func(call *Call) {
+		client := NewKV(nil, newTestSender(func(call *Call) {
 			count++
 			if i == 1 && call.Method == proto.Batch {
 				t.Error("expected non-batch for a single buffered call")
@@ -74,7 +74,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 					t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
 				}
 			}
-		}), nil)
+		}))
 
 		for j := 0; j < i; j++ {
 			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
@@ -94,7 +94,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 func TestKVPrepareAndCall(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		count := 0
-		client := NewKV(newTestSender(func(call *Call) {
+		client := NewKV(nil, newTestSender(func(call *Call) {
 			count++
 			if i == 0 && call.Method == proto.Batch {
 				t.Error("expected non-batch for a single call")
@@ -106,7 +106,7 @@ func TestKVPrepareAndCall(t *testing.T) {
 					t.Errorf("expected batch to contain %d requests; got %d", i+1, l)
 				}
 			}
-		}), nil)
+		}))
 
 		for j := 0; j < i; j++ {
 			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
@@ -125,7 +125,7 @@ func TestKVPrepareAndCall(t *testing.T) {
 // Also verifies that User and UserPriority are propagated to the
 // transactional client.
 func TestKVTransactionSender(t *testing.T) {
-	client := NewKV(newTestSender(func(call *Call) {}), nil)
+	client := NewKV(nil, newTestSender(func(call *Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
 	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
@@ -147,7 +147,7 @@ func TestKVTransactionSender(t *testing.T) {
 // TestKVNestedTransactions verifies that trying to create nested
 // transactions returns an error.
 func TestKVNestedTransactions(t *testing.T) {
-	client := NewKV(newTestSender(func(call *Call) {}), nil)
+	client := NewKV(nil, newTestSender(func(call *Call) {}))
 	client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 		if err := txn.RunTransaction(&TransactionOptions{}, func(txn *KV) error { return nil }); err == nil {
 			t.Errorf("expected error starting a nested transaction")
@@ -160,7 +160,7 @@ func TestKVNestedTransactions(t *testing.T) {
 // upon successful invocation of the retryable func.
 func TestKVCommitTransaction(t *testing.T) {
 	count := 0
-	client := NewKV(newTestSender(func(call *Call) {
+	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 		if call.Method != proto.EndTransaction {
 			t.Errorf("expected call to EndTransaction; got %s", call.Method)
@@ -168,7 +168,7 @@ func TestKVCommitTransaction(t *testing.T) {
 		if commit := call.Args.(*proto.EndTransactionRequest).Commit; !commit {
 			t.Errorf("expected commit to be true; got %t", commit)
 		}
-	}), nil)
+	}))
 	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 		return nil
 	}); err != nil {
@@ -184,9 +184,9 @@ func TestKVCommitTransaction(t *testing.T) {
 // ended a second time at completion of retryable func.
 func TestKVCommitTransactionOnce(t *testing.T) {
 	count := 0
-	client := NewKV(newTestSender(func(call *Call) {
+	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
-	}), nil)
+	}))
 	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 		reply := &proto.EndTransactionResponse{}
 		txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{Commit: true}, reply)
@@ -206,7 +206,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 // upon failed invocation of the retryable func.
 func TestKVAbortTransaction(t *testing.T) {
 	count := 0
-	client := NewKV(newTestSender(func(call *Call) {
+	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 		if call.Method != proto.EndTransaction {
 			t.Errorf("expected call to EndTransaction; got %s", call.Method)
@@ -214,7 +214,7 @@ func TestKVAbortTransaction(t *testing.T) {
 		if commit := call.Args.(*proto.EndTransactionRequest).Commit; commit {
 			t.Errorf("expected commit to be false; got %t", commit)
 		}
-	}), nil)
+	}))
 	err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 		return errors.New("foo")
 	})
@@ -229,7 +229,8 @@ func TestKVAbortTransaction(t *testing.T) {
 // TestKVRunTransactionRetryOnErrors verifies that the transaction
 // is retried on the correct errors.
 func TestKVRunTransactionRetryOnErrors(t *testing.T) {
-	TxnRetryOptions.Backoff = 1 * time.Millisecond
+	ctx := NewContext()
+	ctx.TxnRetryOptions.Backoff = 1 * time.Millisecond
 
 	testCases := []struct {
 		err   error
@@ -247,14 +248,14 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 
 	for i, test := range testCases {
 		count := 0
-		client := NewKV(newTestSender(func(call *Call) {
+		client := NewKV(ctx, newTestSender(func(call *Call) {
 			if call.Method == proto.Put {
 				count++
 				if count == 1 {
 					call.Reply.Header().SetGoError(test.err)
 				}
 			}
-		}), nil)
+		}))
 		err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 			reply := &proto.PutResponse{}
 			return client.Call(proto.Put, testPutReq, reply)

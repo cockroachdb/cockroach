@@ -92,7 +92,7 @@ func createTestClient(addr string) *client.KV {
 	sender := newNotifyingSender(client.NewHTTPSender(addr, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	}))
-	return client.NewKV(sender, nil)
+	return client.NewKV(nil, sender)
 }
 
 // TestKVClientRetryNonTxn verifies that non-transactional client will
@@ -216,11 +216,10 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 // TestKVClientRunTransaction verifies some simple transaction isolation
 // semantics.
 func TestKVClientRunTransaction(t *testing.T) {
-	client.TxnRetryOptions.Backoff = 1 * time.Millisecond
-
 	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.HTTPAddr)
+	kvClient.TxnRetryOptions.Backoff = 1 * time.Millisecond
 	kvClient.User = storage.UserRoot
 
 	for _, commit := range []bool{true, false} {
@@ -452,7 +451,7 @@ func ExampleKV_Call() {
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	})
-	kvClient := client.NewKV(sender, nil)
+	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 	defer kvClient.Close()
 
@@ -498,7 +497,7 @@ func ExampleKV_Prepare() {
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	})
-	kvClient := client.NewKV(sender, nil)
+	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 	defer kvClient.Close()
 
@@ -569,7 +568,7 @@ func ExampleKV_RunTransaction() {
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	})
-	kvClient := client.NewKV(sender, nil)
+	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 	defer kvClient.Close()
 

@@ -40,7 +40,7 @@ func makeKVClient() *client.KV {
 	transport := &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	}
-	kv := client.NewKV(client.NewHTTPSender(Context.HTTP, transport), nil)
+	kv := client.NewKV(nil, client.NewHTTPSender(Context.HTTP, transport))
 	// TODO(pmattis): Initialize this to something more reasonable
 	kv.User = "root"
 	return kv

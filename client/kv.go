@@ -20,21 +20,12 @@ package client
 import (
 	"bytes"
 	"encoding/gob"
-	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
-
-// TxnRetryOptions sets the retry options for handling write conflicts.
-var TxnRetryOptions = util.RetryOptions{
-	Backoff:     50 * time.Millisecond,
-	MaxBackoff:  5 * time.Second,
-	Constant:    2,
-	MaxAttempts: 0, // retry indefinitely
-}
 
 // TransactionOptions are parameters for use with KV.RunTransaction.
 type TransactionOptions struct {
@@ -67,7 +58,8 @@ type KV struct {
 	// UserPriority is the default user priority to set on API calls. If
 	// UserPriority is set non-zero in call arguments, this value is
 	// ignored.
-	UserPriority int32
+	UserPriority    int32
+	TxnRetryOptions util.RetryOptions
 
 	sender   KVSender
 	clock    Clock
@@ -78,12 +70,28 @@ type KV struct {
 // create a transactional client, the KV struct should be manually
 // initialized in order to utilize a txnSender. Clock is used to
 // formulate client command IDs, which provide idempotency on API
-// calls. If clock is nil, uses time.UnixNanos as default
+// calls and defaults to the system clock.
 // implementation.
-func NewKV(sender KVSender, clock Clock) *KV {
+func NewKV(ctx *Context, sender KVSender) *KV {
+	if ctx == nil {
+		ctx = NewContext()
+	}
 	return &KV{
-		sender: sender,
-		clock:  clock,
+		sender:          sender,
+		User:            ctx.User,
+		UserPriority:    ctx.UserPriority,
+		TxnRetryOptions: ctx.TxnRetryOptions,
+		clock:           ctx.Clock,
+	}
+}
+
+// Context returns a new Context that represents the current configuration.
+func (kv *KV) Context() *Context {
+	return &Context{
+		User:            kv.User,
+		UserPriority:    kv.UserPriority,
+		TxnRetryOptions: kv.TxnRetryOptions,
+		Clock:           kv.clock,
 	}
 }
 
@@ -214,14 +222,13 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 
 	// Create a new KV for the transaction using a transactional KV sender.
 	txnSender := newTxnSender(kv.Sender(), opts)
-	txnKV := NewKV(txnSender, kv.clock)
-	txnKV.User = kv.User
-	txnKV.UserPriority = kv.UserPriority
+	curCtx := kv.Context()
+	txnKV := NewKV(curCtx, txnSender)
 	defer txnKV.Close()
 
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	retryOpts := TxnRetryOptions
+	retryOpts := kv.TxnRetryOptions
 	retryOpts.Tag = opts.Name
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		txnSender.txnEnd = false // always reset before [re]starting txn
