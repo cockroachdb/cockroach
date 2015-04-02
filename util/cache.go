@@ -317,6 +317,14 @@ func (oc *OrderedCache) Floor(key interface{}) (k, v interface{}, ok bool) {
 	return
 }
 
+// Do invokes f on all of the entries in the cache.
+func (oc *OrderedCache) Do(f func(k, v interface{})) {
+	oc.llrb.Do(func(e llrb.Comparable) (done bool) {
+		f(e.(*entry).key, e.(*entry).value)
+		return
+	})
+}
+
 // IntervalCache is a cache which supports querying of intervals which
 // match a key or range of keys. It is backed by an interval tree. See
 // comments in UnorderedCache for more details on cache functionality.
