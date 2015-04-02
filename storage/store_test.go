@@ -644,7 +644,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			}
 			txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
 			var txn proto.Transaction
-			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
+			ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn)
 			if !ok || err != nil {
 				t.Fatalf("not found or err: %s", err)
 			}
@@ -901,7 +901,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	// Read pushee's txn.
 	txnKey := engine.TransactionKey(pushee.Key, pushee.ID)
 	var txn proto.Transaction
-	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, nil, &txn)
+	ok, err := engine.MVCCGetProto(store.Engine(), txnKey, proto.ZeroTimestamp, true, nil, &txn)
 	if !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)
 	}

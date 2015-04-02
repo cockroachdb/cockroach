@@ -375,7 +375,8 @@ func (s *Store) Start() error {
 			return err
 		}
 		// Read store ident and return a not-bootstrapped error if necessary.
-		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
+		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true,
+			nil, &s.Ident)
 		if err != nil {
 			s.engine.Stop()
 			return err

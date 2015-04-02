@@ -389,8 +389,8 @@ func MVCCGetRangeStats(engine Engine, raftID int64, ms *MVCCStats) error {
 // MVCCGetProto fetches the value at the specified key and unmarshals
 // it using a protobuf decoder. Returns true on success or false if
 // the key was not found.
-func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, txn *proto.Transaction, msg gogoproto.Message) (bool, error) {
-	value, err := MVCCGet(engine, key, timestamp, true, txn)
+func MVCCGetProto(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent bool, txn *proto.Transaction, msg gogoproto.Message) (bool, error) {
+	value, err := MVCCGet(engine, key, timestamp, consistent, txn)
 	if err != nil {
 		return false, err
 	}
