@@ -103,6 +103,9 @@ message RangeTree {
 
 // RangeTreeNode holds the configuration for each node of the Red-Black Tree that references all ranges.
 message RangeTreeNode {
+  // Using gogoproto's marshaler is needed here as there is a bug in the default 
+  // marshalling using reflection that does not handle the Key custom type as 
+  // nullable correctly.
   option (gogoproto.marshaler) = true;
   option (gogoproto.sizer) = true;
   option (gogoproto.unmarshaler) = true;

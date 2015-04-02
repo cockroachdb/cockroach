@@ -185,7 +185,7 @@ func (k EncodedKey) Marshal() ([]byte, error) {
 }
 
 // Unmarshal implements the gogoproto Unmarshaler interface.  It should never
-// set k to be nil as a nil value should never have unmarshall called for it.
+// set k to be nil as a nil value should never have unmarshal called for it.
 // Futhermore, appending a 0 length byte slice to a 0 length byte slice will
 // produce a nil byte slice, which can cause problems when unmarshalling the
 // engine.MinKey of "".
