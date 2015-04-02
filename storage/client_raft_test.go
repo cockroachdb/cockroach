@@ -274,6 +274,23 @@ func TestFailedReplicaChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Wait for the range to sync to both replicas (mainly so leaktest doesn't
+	// complain about goroutines involved in the process).
+	if err := util.IsTrueWithin(func() bool {
+		for _, store := range mtc.stores {
+			rng, err := store.GetRange(1)
+			if err != nil {
+				return false
+			}
+			if len(rng.Desc().Replicas) == 1 {
+				return false
+			}
+		}
+		return true
+	}, 1*time.Second); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
