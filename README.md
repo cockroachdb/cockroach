@@ -34,29 +34,81 @@ See [TODO.md](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
 
 ## Running Cockroach
 
-Don't have (a recent version > 1.2 of) Docker? Follow the [instructions for installing Docker on your host system](http://docs.docker.com/installation/). If you run into trouble below, check first that you're not running an old version.
+Getting started is most convenient using a recent version (>1.2) of [Docker](http://docs.docker.com/installation/).
 
 If you don't want to use Docker,
 * set up the dev environment (see [CONTRIBUTING.md](CONTRIBUTING.md))
 * `make build`
-* replace `docker [...] [run|build] [...]` by `./cockroach` below.
+* ignore the initial calls to `docker` below.
 
 #### Bootstrap and talk to a single node
 
+Getting a Cockroach node up and running is easy. If you have the `cockroach` binary, skip over the next shell session. Most users however will want to run the following:
+
 ```bash
-$ docker run -d -p 8080:8080 "cockroachdb/cockroach" \
-    init -rpc="localhost:0" \
-    -stores="ssd=$(mktemp -d)"
+# Get the latest image from the registry. Skip if you already have an image
+# or if you built it yourself.
+$ docker pull cockroachdb/cockroach
+[...]
+# Open a shell on a Cockroach container.
+$ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
+root@82cb657cdc42:/cockroach#
 ```
-This bootstraps and starts a single node with one temporary RocksDB instance in the background (remove the `-d` flag if you want to see stdout).
-Now let's talk to this node. You can use the [REST Explorer at
-localhost:8080](http://localhost:8080) or talk directly to the API:
+
+Now we're in an environment that has everything set up, and we start by firing up a node:
+
+```bash
+$ ./cockroach init -http 0.0.0.0:8080 -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
+[...]
+```
+This bootstraps and starts a single-node cluster in the background, with logs sent to `node.log`.
+
+##### Built-in client
+
+Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a simple built-in client:
+
+```
+# Put the values a->1, b->2, c->3, d->4.
+$ ./cockroach put a 1 b 2 c 3 d 4
+$ ./cockroach scan
+"a"     1
+"b"     2
+"c"     3
+"d"     4
+# Scans do not include the right endpoint.
+$ ./cockroach scan b d
+"b"     2
+"c"     3
+$ ./cockroach del c
+$ ./cockroach scan
+"a"     1
+"b"     2
+"d"     4
+# Counters are also available:
+$ ./cockroach inc mycnt 5
+5
+$ ./cockroach inc mycnt -3
+2
+$ ./cockroach get mycnt
+2
+```
+
+Check out `./cockroach help` to see all available commands.
+
+##### REST
+
+Cockroach also exposes a REST API. You can use the [REST Explorer at
+localhost:8080](http://localhost:8080/#rest-explorer) or talk directly to it.
+Note that if you're using the Docker container, you want to do this in a new shell
+and not inside the container, which does not have cURL installed.
+
 ```bash
 $ curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416616834949813367,"logical":0}}}
 ```
+
 ```bash
 $ curl http://localhost:8080/kv/rest/entry/Cockroach
 ```
@@ -73,10 +125,6 @@ $ curl "http://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
 {"header":{"timestamp":{"wall_time":1416617120031733436,"logical":0}},"rows":[{"key":"Q29ja3JvYWNo","value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}]}
 ```
 Note that `Q29ja3JvYWNo` equals `base64("Cockroach")`.
-
-#### Local Cluster Setup
-
-*        (cd run; ./local-cluster.sh [start|stop])
 
 #### Building the Docker images yourself
 See [build/README.md](build/) for more information on the available Docker
