@@ -86,25 +86,9 @@ func (s SendError) Error() string {
 // CanRetry implements the Retryable interface.
 func (s SendError) CanRetry() bool { return s.canRetry }
 
-// Send sends one or more method RPCs to clients specified by the
-// slice of endpoint addrs. Arguments for methods are obtained using
-// the supplied getArgs function. The number of required replies is
-// given by opts.N. Reply structs are obtained through the getReply()
-// function. On success, Send returns a slice of replies of length
-// opts.N. Otherwise, Send returns an error if and as soon as the
-// number of failed RPCs exceeds the available endpoints less the
-// number of required replies.
-func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
-	getReply func() interface{}, context *Context) ([]interface{}, error) {
-
-	if len(addrs) < opts.N {
-		return nil, SendError{
-			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
-			canRetry: false,
-		}
-	}
-
-	var clients []*Client
+// filterClients return all clients if opts.Ordering is OrderStable.
+// return healthy clients and unhealthy clients when opts.Ordering is OrderRandom
+func filterClients(opts Options, addrs []net.Addr, context *Context) (clients []*Client) {
 	switch opts.Ordering {
 	case OrderStable:
 		for _, addr := range addrs {
@@ -128,6 +112,37 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			clients = append(clients, unhealthy[idx])
 		}
 	}
+
+	return
+}
+
+// Send sends one or more method RPCs to clients specified by the
+// slice of endpoint addrs. We get clients first, then send to clients.
+// Arguments for methods are obtained using the supplied getArgs function.
+// The number of required replies is given by opts.N. Reply structs
+// are obtained through the getReply() function. On success, Send
+// returns a slice of replies of length opts.N. Otherwise,
+// Send returns an error if and as soon as the number of failed RPCs
+// exceeds the available endpoints less the number of required replies.
+func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
+	getReply func() interface{}, context *Context) ([]interface{}, error) {
+
+	if len(addrs) < opts.N {
+		return nil, SendError{
+			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
+			canRetry: false,
+		}
+	}
+
+	// Get clients first
+	clients := filterClients(opts, addrs, context)
+
+	return sendClients(clients, opts, method, getArgs, getReply)
+}
+
+// sendclients do the actual works specified by opts.
+func sendClients(clients []*Client, opts Options, method string, getArgs func(addr net.Addr) interface{},
+	getReply func() interface{}) ([]interface{}, error) {
 	// TODO(spencer): going to need to also sort by affinity; closest
 	// ping time should win. Makes sense to have the rpc client/server
 	// heartbeat measure ping times. With a bit of seasoning, each
