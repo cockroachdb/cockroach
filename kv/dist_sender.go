@@ -193,8 +193,9 @@ func (ds *DistSender) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
 func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
+			Key:             key,
+			User:            storage.UserRoot,
+			ReadConsistency: proto.INCONSISTENT,
 		},
 		MaxRanges: rangeLookupMaxRanges,
 	}
@@ -378,7 +379,7 @@ func (ds *DistSender) Send(call *client.Call) {
 						return util.RetryBreak, util.Error("illegal cross-range operation", call)
 					}
 					// If there's no transaction and op spans ranges, possibly
-					// re-run as part of a transaction for consistency.  The
+					// re-run as part of a transaction for consistency. The
 					// case where we don't need to re-run is if the read
 					// consistency is not required.
 					if call.Args.Header().Txn == nil && args.Header().ReadConsistency != proto.INCONSISTENT {
