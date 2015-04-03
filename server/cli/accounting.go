@@ -27,9 +27,9 @@ import (
 // TODO:(bram) change this api to not require a file, just set (no file),
 //   get(true/false), ls, rm
 
-// A CmdGetAcct command displays the acct config for the specified
+// A getAcctCmd command displays the acct config for the specified
 // prefix.
-var CmdGetAcct = &commander.Command{
+var getAcctCmd = &commander.Command{
 	UsageLine: "get-acct [options] <key-prefix>",
 	Short:     "fetches and displays an accounting config",
 	Long: `
@@ -50,8 +50,8 @@ func runGetAcct(cmd *commander.Command, args []string) {
 	server.RunGetAcct(Context, args[0])
 }
 
-// A CmdLsAccts command displays a list of acct configs by prefix.
-var CmdLsAccts = &commander.Command{
+// A lsAcctsCmd command displays a list of acct configs by prefix.
+var lsAcctsCmd = &commander.Command{
 	UsageLine: "ls-accts [options] [key-regexp]",
 	Short:     "list all accounting configs by key prefix",
 	Long: `
@@ -81,8 +81,8 @@ func runLsAccts(cmd *commander.Command, args []string) {
 
 }
 
-// A CmdRmAcct command removes an acct config by prefix.
-var CmdRmAcct = &commander.Command{
+// A rmAcctCmd command removes an acct config by prefix.
+var rmAcctCmd = &commander.Command{
 	UsageLine: "rm-acct [options] <key-prefix>",
 	Short:     "remove an accounting config by key prefix",
 	Long: `
@@ -106,11 +106,11 @@ func runRmAcct(cmd *commander.Command, args []string) {
 	server.RunRmAcct(Context, args[0])
 }
 
-// A CmdSetAcct command creates a new or updates an existing acct
+// A setAcctCmd command creates a new or updates an existing acct
 // config.
-var CmdSetAcct = &commander.Command{
+var setAcctCmd = &commander.Command{
 	UsageLine: "set-acct [options] <key-prefix> <acct-config-file>",
-	Short:     "create or update an accounting config for key prefix",
+	Short:     "create or update an accounting config for key prefix\n",
 	Long: `
 Create or update a accounting config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file

@@ -59,8 +59,8 @@ A node exports an HTTP API with the following endpoints:
   Key-value REST:         ` + kv.RESTPrefix + `
   Structured Schema REST: ` + structured.StructuredKeyPrefix
 
-// A CmdInit command initializes a new Cockroach cluster.
-var CmdInit = &commander.Command{
+// A initCmd command initializes a new Cockroach cluster.
+var initCmd = &commander.Command{
 	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>,mem=<capacity-in-bytes>)[,...]",
@@ -115,8 +115,8 @@ func runInit(cmd *commander.Command, args []string) {
 	runStart(cmd, args)
 }
 
-// A CmdStart command starts nodes by joining the gossip network.
-var CmdStart = &commander.Command{
+// A startCmd command starts nodes by joining the gossip network.
+var startCmd = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",

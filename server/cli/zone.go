@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 )
 
-// A CmdGetZone command displays the zone config for the specified
+// A getZoneCmd command displays the zone config for the specified
 // prefix.
-var CmdGetZone = &commander.Command{
+var getZoneCmd = &commander.Command{
 	UsageLine: "get-zone [options] <key-prefix>",
 	Short:     "fetches and displays the zone config",
 	Long: `
@@ -48,8 +48,8 @@ func runGetZone(cmd *commander.Command, args []string) {
 	server.RunGetZone(Context, args[0])
 }
 
-// A CmdLsZones command displays a list of zone configs by prefix.
-var CmdLsZones = &commander.Command{
+// A lsZonesCmd command displays a list of zone configs by prefix.
+var lsZonesCmd = &commander.Command{
 	UsageLine: "ls-zones [options] [key-regexp]",
 	Short:     "list all zone configs by key prefix",
 	Long: `
@@ -78,8 +78,8 @@ func runLsZones(cmd *commander.Command, args []string) {
 	server.RunLsZone(Context, pattern)
 }
 
-// A CmdRmZone command removes a zone config by prefix.
-var CmdRmZone = &commander.Command{
+// A rmZoneCmd command removes a zone config by prefix.
+var rmZoneCmd = &commander.Command{
 	UsageLine: "rm-zone [options] <key-prefix>",
 	Short:     "remove a zone config by key prefix",
 	Long: `
@@ -103,9 +103,9 @@ func runRmZone(cmd *commander.Command, args []string) {
 	server.RunRmZone(Context, args[0])
 }
 
-// A CmdSetZone command creates a new or updates an existing zone
+// A setZoneCmd command creates a new or updates an existing zone
 // config.
-var CmdSetZone = &commander.Command{
+var setZoneCmd = &commander.Command{
 	UsageLine: "set-zone [options] <key-prefix> <zone-config-file>",
 	Short:     "create or update zone config for key prefix\n",
 	Long: `
