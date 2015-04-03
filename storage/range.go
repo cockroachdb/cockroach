@@ -1064,7 +1064,7 @@ func (r *Range) EnqueueMessage(batch engine.Engine, args *proto.EnqueueMessageRe
 //
 // RangeDescriptors are stored as values in the cockroach cluster's key-value
 // store. However, they are always stored using special "Range Metadata keys",
-// which are "ordinary" keys with a special prefix appended. The Range Metadata
+// which are "ordinary" keys with a special prefix prepended. The Range Metadata
 // Key for an ordinary key can be generated with the `engine.RangeMetaKey(key)`
 // function. The RangeDescriptor for the range which contains a given key can be
 // retrieved by generating its Range Metadata Key and dispatching it to
@@ -1101,7 +1101,9 @@ func (r *Range) InternalRangeLookup(batch engine.Engine, args *proto.InternalRan
 	// MaxRanges.
 	metaPrefix := proto.Key(args.Key[:len(engine.KeyMeta1Prefix)])
 	nextKey := proto.Key(args.Key).Next()
-	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, false, args.Txn)
+	// Always false, at least when called from the DistSender.
+	consistent := args.ReadConsistency != proto.INCONSISTENT
+	kvs, err := engine.MVCCScan(batch, nextKey, metaPrefix.PrefixEnd(), rangeCount, args.Timestamp, consistent, args.Txn)
 	if err != nil {
 		reply.SetGoError(err)
 		return
