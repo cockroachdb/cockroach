@@ -478,13 +478,7 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent
 		return nil, err
 	}
 
-	value, err := mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
-	var rvalue *proto.Value
-	if err == nil && value != nil {
-		rvalue = &proto.Value{}
-		*rvalue = *value
-	}
-	return rvalue, err
+	return mvccGetInternal(engine, key, metaKey, timestamp, consistent, txn, getValue, buf)
 }
 
 // getEarlierFunc fetches an earlier version of a key starting at
