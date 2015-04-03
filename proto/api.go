@@ -84,6 +84,9 @@ func (s stringSet) keys() []string {
 	return keys
 }
 
+// A RaftID is a unique ID associated to a Raft consensus group.
+type RaftID int64
+
 // TODO(spencer): replaces these individual maps with a bitmask or
 //   equivalent listing each method's attributes.
 
