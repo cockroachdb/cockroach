@@ -631,12 +631,14 @@ func (s *Store) BootstrapRange() error {
 	if err := engine.MVCCPutProto(batch, ms, engine.RangeLastVerificationTimestampKey(desc.RaftID), proto.ZeroTimestamp, nil, &now); err != nil {
 		return err
 	}
-	// Range addressing for meta1.
-	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), now, nil, desc); err != nil {
+	// Range addressing for meta2.
+	meta2Key := engine.RangeMetaKey(engine.KeyMax)
+	if err := engine.MVCCPutProto(batch, ms, meta2Key, now, nil, desc); err != nil {
 		return err
 	}
-	// Range addressing for meta2.
-	if err := engine.MVCCPutProto(batch, ms, engine.MakeKey(engine.KeyMeta2Prefix, engine.KeyMax), now, nil, desc); err != nil {
+	// Range addressing for meta1.
+	meta1Key := engine.RangeMetaKey(meta2Key)
+	if err := engine.MVCCPutProto(batch, ms, meta1Key, now, nil, desc); err != nil {
 		return err
 	}
 	// Accounting config.

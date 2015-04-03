@@ -220,12 +220,6 @@ func RangeMetaKey(key proto.Key) proto.Key {
 	return KeyMin
 }
 
-// RangeMetaLookupKey returns the metadata key at which this range
-// descriptor should be stored as a value.
-func RangeMetaLookupKey(r *proto.RangeDescriptor) proto.Key {
-	return RangeMetaKey(r.EndKey)
-}
-
 // ValidateRangeMetaKey validates that the given key is a valid Range Metadata
 // key. It must have an appropriate metadata range prefix, and the original key
 // value must be less than KeyMax. As a special case, KeyMin is considered a

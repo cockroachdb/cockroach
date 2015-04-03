@@ -291,6 +291,11 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 		return noNodeAddrsAvailError{}
 	}
 
+	// TODO(pmattis): This needs to be tested. If it isn't set we'll
+	// still route the request appropriately by key, but won't receive
+	// RangeNotFoundErrors.
+	args.Header().RaftID = desc.RaftID
+
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
 		N:               1,
