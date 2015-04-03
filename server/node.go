@@ -289,7 +289,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 		}
 		// Gossip node address keyed by node ID.
 		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
+		if err := n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
 			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
@@ -342,7 +342,7 @@ func (n *Node) connectGossip() {
 	// Gossip node address keyed by node ID.
 	if n.Descriptor.NodeID != 0 {
 		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
+		if err := n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
 			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}

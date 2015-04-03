@@ -184,6 +184,16 @@ type NodeDescriptor struct {
 	Attrs   proto.Attributes // node specific attributes (e.g. datacenter, machine info)
 }
 
+// NodeIDToAddress looks up the address of the node from the given Gossip instance.
+func NodeIDToAddress(g *gossip.Gossip, nodeID proto.NodeID) (net.Addr, error) {
+	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
+	info, err := g.GetInfo(nodeIDKey)
+	if info == nil || err != nil {
+		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
+	}
+	return info.(*NodeDescriptor).Address, nil
+}
+
 // StoreDescriptor holds store information including store attributes,
 // node descriptor and store capacity.
 type StoreDescriptor struct {

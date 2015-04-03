@@ -173,17 +173,6 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 		})
 }
 
-// nodeIDToAddr uses the gossip network to translate from node ID
-// to a host:port address pair.
-func (ds *DistSender) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
-	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
-	info, err := ds.gossip.GetInfo(nodeIDKey)
-	if info == nil || err != nil {
-		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
-	}
-	return info.(net.Addr), nil
-}
-
 // internalRangeLookup dispatches an InternalRangeLookup request for
 // the given metadata key to the replicas of the given range. Note
 // that we allow inconsistent reads when doing range lookups for
@@ -279,7 +268,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
-		addr, err := ds.nodeIDToAddr(desc.Replicas[i].NodeID)
+		addr, err := storage.NodeIDToAddress(ds.gossip, desc.Replicas[i].NodeID)
 		if err != nil {
 			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
 			continue

@@ -194,13 +194,13 @@ func TestNodeJoin(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
 			return false
-		} else if val.(net.Addr).String() != server2.Addr().String() {
-			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", val.(net.Addr).String(), server2.Addr().String())
+		} else if addr2 := val.(*storage.NodeDescriptor).Address.String(); addr2 != server2.Addr().String() {
+			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
 		if val, err := node2.gossip.GetInfo(node1Key); err != nil {
 			return false
-		} else if val.(net.Addr).String() != server1.Addr().String() {
-			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", val.(net.Addr).String(), server1.Addr().String())
+		} else if addr1 := val.(*storage.NodeDescriptor).Address.String(); addr1 != server1.Addr().String() {
+			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())
 		}
 		return true
 	}, 50*time.Millisecond); err != nil {
