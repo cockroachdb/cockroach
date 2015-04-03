@@ -18,7 +18,6 @@
 package server
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -42,7 +41,7 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 
 func TestSendAndReceive(t *testing.T) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	gossip := gossip.New(rpcContext, gossip.TestInterval, "")
+	g := gossip.New(rpcContext, gossip.TestInterval, "")
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses
 	// a store).
@@ -63,7 +62,7 @@ func TestSendAndReceive(t *testing.T) {
 		}
 		defer server.Close()
 
-		transport, err := newRPCTransport(gossip, server, rpcContext)
+		transport, err := newRPCTransport(g, server, rpcContext)
 		if err != nil {
 			t.Fatalf("Unexpected error creating transport, Error: %s", err)
 		}
@@ -79,7 +78,7 @@ func TestSendAndReceive(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := gossip.AddInfo(fmt.Sprintf("node-%d", protoNodeID), server.Addr(), time.Hour); err != nil {
+			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID), server.Addr(), time.Hour); err != nil {
 				t.Fatal(err)
 			}
 

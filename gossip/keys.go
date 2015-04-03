@@ -18,10 +18,17 @@
 package gossip
 
 import (
-	"strconv"
+	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/proto"
 )
+
+// separator is used to separate the non-prefix components of a
+// Gossip key, facilitating the automated generation of regular
+// expressions for various prefixes.
+// It must not be contained in any of the other keys defined here.
+const separator = ":"
 
 // Constants for gossip keys.
 const (
@@ -41,7 +48,7 @@ const (
 	// KeyMaxAvailCapacityPrefix is the key prefix for gossiping available
 	// store capacity. The suffix is composed of: <node ID>-<store ID>.
 	// The value is a storage.StoreDescriptor struct.
-	KeyMaxAvailCapacityPrefix = "max-avail-capacity-"
+	KeyMaxAvailCapacityPrefix = "max-avail-capacity"
 
 	// KeyNodeCount is the count of gossip nodes in the network. The
 	// value is an int64 containing the count of nodes in the cluster.
@@ -50,10 +57,10 @@ const (
 	KeyNodeCount = "node-count"
 
 	// KeyNodeIDPrefix is the key prefix for gossiping node id
-	// addresses. The actual key is suffixed with the hexadecimal
+	// addresses. The actual key is suffixed with the decimal
 	// representation of the node id and the value is the host:port
-	// string address of the node. E.g. node-1bfa: fwd56.sjcb1:24001
-	KeyNodeIDPrefix = "node-"
+	// string address of the node. E.g. node:1 => 127.0.0.1:24001
+	KeyNodeIDPrefix = "node"
 
 	// KeySentinel is a key for gossip which must not expire or else the
 	// node considers itself partitioned and will retry with bootstrap hosts.
@@ -66,7 +73,27 @@ const (
 	KeyFirstRangeDescriptor = "first-range"
 )
 
-// MakeNodeIDGossipKey returns the gossip key for node ID info.
-func MakeNodeIDGossipKey(nodeID proto.NodeID) string {
-	return KeyNodeIDPrefix + strconv.FormatInt(int64(nodeID), 16)
+// MakeKey creates a canonical key under which to gossip a piece of
+// information. The first argument will typically be one of the key constants
+// defined in this package.
+func MakeKey(components ...string) string {
+	return strings.Join(components, separator)
+}
+
+// MakePrefixPattern returns a regular expression pattern that
+// matches precisely the Gossip keys created by invocations of
+// MakeKey with multiple arguments for which the first argument
+// is equal to the given prefix.
+func MakePrefixPattern(prefix string) string {
+	return regexp.QuoteMeta(prefix+separator) + ".*"
+}
+
+// MakeNodeIDKey returns the gossip key for node ID info.
+func MakeNodeIDKey(nodeID proto.NodeID) string {
+	return MakeKey(KeyNodeIDPrefix, nodeID.String())
+}
+
+// MakeMaxAvailCapacityKey returns the gossip key for the given store's capacity.
+func MakeMaxAvailCapacityKey(nodeID proto.NodeID, storeID proto.StoreID) string {
+	return MakeKey(KeyNodeIDPrefix, nodeID.String(), storeID.String())
 }

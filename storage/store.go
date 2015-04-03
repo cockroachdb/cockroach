@@ -472,7 +472,7 @@ func (s *Store) Start() error {
 		s.gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
 		s.gossip.RegisterCallback(gossip.KeyConfigZone, s.configGossipUpdate)
 		// Callback triggers on capacity gossip from all stores.
-		capacityRegex := fmt.Sprintf("%s.*", gossip.KeyMaxAvailCapacityPrefix)
+		capacityRegex := gossip.MakePrefixPattern(gossip.KeyMaxAvailCapacityPrefix)
 		s.gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 	}
 

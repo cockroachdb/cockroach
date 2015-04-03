@@ -176,7 +176,7 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 // nodeIDToAddr uses the gossip network to translate from node ID
 // to a host:port address pair.
 func (ds *DistSender) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
-	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
+	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
 	info, err := ds.gossip.GetInfo(nodeIDKey)
 	if info == nil || err != nil {
 		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)

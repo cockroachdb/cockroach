@@ -104,7 +104,7 @@ func (t *rpcTransport) Stop(id multiraft.NodeID) {
 }
 
 func (t *rpcTransport) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
-	nodeIDKey := gossip.MakeNodeIDGossipKey(nodeID)
+	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
 	info, err := t.gossip.GetInfo(nodeIDKey)
 	if info == nil || err != nil {
 		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)

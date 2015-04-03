@@ -42,7 +42,7 @@ else
 fi
 
 # Make sure to clean up any remaining containers
-$0 stop
+./$(basename $0) stop
 # Doing this here only so that after a cluster has been started and stopped,
 # the containers are still available for debugging.
 echo "Removing any old containers..."
@@ -165,7 +165,7 @@ for ATTEMPT in $(seq 1 $MAX_WAIT); do
     GOSSIP_URL="$DOCKERHOST:${HTTP_PORTS[$i]}/_status/gossip"
     GOSSIP=$(curl --noproxy '*' -s $GOSSIP_URL)
     for j in $(seq 1 $((2*NODES))); do
-      if [[ ! -z $(echo $GOSSIP | grep "node-$j") ]]; then
+      if [[ ! -z $(echo $GOSSIP | grep "node:$j") ]]; then
         FOUND=$((FOUND+1))
         FOUND_NAMES="$FOUND_NAMES node-$j"
       fi

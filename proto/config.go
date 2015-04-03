@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -30,6 +31,12 @@ import (
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
 type NodeID int32
+
+// String implements the fmt.Stringer interface.
+// It is used to format the ID for use in Gossip keys.
+func (n NodeID) String() string {
+	return strconv.FormatInt(int64(n), 10)
+}
 
 // Marshal implements the gogoproto Marshaler interface.
 func (n NodeID) Marshal() ([]byte, error) {
@@ -48,6 +55,12 @@ func (n *NodeID) Unmarshal(bytes []byte) error {
 
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
+
+// String implements the fmt.Stringer interface.
+// It is used to format the ID for use in Gossip keys.
+func (n StoreID) String() string {
+	return strconv.FormatInt(int64(n), 10)
+}
 
 // Marshal implements the gogoproto Marshaler interface.
 func (n StoreID) Marshal() ([]byte, error) {

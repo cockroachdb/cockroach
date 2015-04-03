@@ -189,8 +189,8 @@ func TestNodeJoin(t *testing.T) {
 	}
 
 	// Verify node1 sees node2 via gossip and vice versa.
-	node1Key := gossip.MakeNodeIDGossipKey(node1.Descriptor.NodeID)
-	node2Key := gossip.MakeNodeIDGossipKey(node2.Descriptor.NodeID)
+	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
+	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
 		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
 			return false
