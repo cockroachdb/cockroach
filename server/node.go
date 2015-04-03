@@ -288,7 +288,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 			log.Fatal(err)
 		}
 		// Gossip node address keyed by node ID.
-		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
+		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
 		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
 			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
@@ -341,7 +341,7 @@ func (n *Node) connectGossip() {
 
 	// Gossip node address keyed by node ID.
 	if n.Descriptor.NodeID != 0 {
-		nodeIDKey := gossip.MakeNodeIDGossipKey(n.Descriptor.NodeID)
+		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
 		if err := n.gossip.AddInfo(nodeIDKey, n.Descriptor.Address, ttlNodeIDGossip); err != nil {
 			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
@@ -374,9 +374,7 @@ func (n *Node) gossipCapacities() {
 			return nil
 		}
 		// Unique gossip key per store.
-		keyMaxCapacity := gossip.KeyMaxAvailCapacityPrefix +
-			strconv.FormatInt(int64(storeDesc.Node.NodeID), 10) + "-" +
-			strconv.FormatInt(int64(storeDesc.StoreID), 10)
+		keyMaxCapacity := gossip.MakeMaxAvailCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
 		// Gossip store descriptor.
 		n.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
 		return nil
