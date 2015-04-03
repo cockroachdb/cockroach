@@ -50,9 +50,9 @@ const (
 	KeyNodeCount = "node-count"
 
 	// KeyNodeIDPrefix is the key prefix for gossiping node id
-	// addresses. The actual key is suffixed with the hexadecimal
+	// addresses. The actual key is suffixed with the decimal
 	// representation of the node id and the value is the host:port
-	// string address of the node. E.g. node-1bfa: fwd56.sjcb1:24001
+	// string address of the node. E.g. node-1002: fwd56.sjcb1:24001
 	KeyNodeIDPrefix = "node-"
 
 	// KeySentinel is a key for gossip which must not expire or else the
@@ -68,5 +68,5 @@ const (
 
 // MakeNodeIDGossipKey returns the gossip key for node ID info.
 func MakeNodeIDGossipKey(nodeID proto.NodeID) string {
-	return KeyNodeIDPrefix + strconv.FormatInt(int64(nodeID), 16)
+	return KeyNodeIDPrefix + strconv.FormatInt(int64(nodeID), 10)
 }
