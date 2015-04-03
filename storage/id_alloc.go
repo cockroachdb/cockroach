@@ -114,6 +114,7 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 		}
 		idKey := ia.idKey.Load().(proto.Key)
 		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(idKey, incr), ir); err != nil {
+			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
 			return util.RetryContinue, err
 		}
 		return util.RetryBreak, nil
