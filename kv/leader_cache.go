@@ -24,18 +24,18 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-// A LeaderCache is a cache used to keep track of the leader
+// A leaderCache is a cache used to keep track of the leader
 // replica of Raft consensus groups.
-type LeaderCache struct {
+type leaderCache struct {
 	mu    sync.RWMutex
 	cache *util.UnorderedCache
 }
 
-// NewLeaderCache creates a new LeaderCache of the given size.
+// newLeaderCache creates a new leaderCache of the given size.
 // The underlying cache internally uses a hash map, so lookups
 // are cheap.
-func NewLeaderCache(size int) *LeaderCache {
-	return &LeaderCache{
+func newLeaderCache(size int) *leaderCache {
+	return &leaderCache{
 		cache: util.NewUnorderedCache(util.CacheConfig{
 			Policy: util.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
@@ -47,7 +47,7 @@ func NewLeaderCache(size int) *LeaderCache {
 
 // Lookup consults the cache for the replica cached as the leader of
 // the given Raft consensus group.
-func (lc *LeaderCache) Lookup(group proto.RaftID) *proto.Replica {
+func (lc *leaderCache) Lookup(group proto.RaftID) *proto.Replica {
 	lc.mu.RLock()
 	v, ok := lc.cache.Get(group)
 	lc.mu.RUnlock()
@@ -57,14 +57,12 @@ func (lc *LeaderCache) Lookup(group proto.RaftID) *proto.Replica {
 	return v.(*proto.Replica)
 }
 
-// EvictOrUpdate invalidates the cached leader for the given Raft group.
-// If a new replica is passed in, and that replica does not match the
-// freshly evicted one's StoreID, it is inserted into the cache.
-func (lc *LeaderCache) EvictOrUpdate(group proto.RaftID, r *proto.Replica) {
-	old := lc.Lookup(group)
+// Update invalidates the cached leader for the given Raft group.
+// If a replica is passed in, it is inserted into the cache.
+func (lc *leaderCache) Update(group proto.RaftID, r *proto.Replica) {
 	lc.mu.Lock()
 	lc.cache.Del(group)
-	if r != nil && (old == nil || old.StoreID != r.StoreID) {
+	if r != nil {
 		lc.cache.Add(group, r)
 	}
 	lc.mu.Unlock()
