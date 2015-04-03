@@ -78,7 +78,9 @@ func TestSendAndReceive(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID), server.Addr(), time.Hour); err != nil {
+			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
+				&storage.NodeDescriptor{Address: server.Addr()},
+				time.Hour); err != nil {
 				t.Fatal(err)
 			}
 

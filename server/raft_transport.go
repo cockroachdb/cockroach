@@ -19,7 +19,6 @@
 package server
 
 import (
-	"net"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -103,15 +102,6 @@ func (t *rpcTransport) Stop(id multiraft.NodeID) {
 	delete(t.servers, id)
 }
 
-func (t *rpcTransport) nodeIDToAddr(nodeID proto.NodeID) (net.Addr, error) {
-	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
-	info, err := t.gossip.GetInfo(nodeIDKey)
-	if info == nil || err != nil {
-		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
-	}
-	return info.(net.Addr), nil
-}
-
 // Send a message to the specified Node id.
 func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageRequest) error {
 	// Convert internal to proto formats.
@@ -122,7 +112,7 @@ func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 	}
 
 	nodeID, _ := storage.DecodeRaftNodeID(id)
-	addr, err := t.nodeIDToAddr(nodeID)
+	addr, err := storage.NodeIDToAddress(t.gossip, nodeID)
 	if err != nil {
 		return err
 	}
