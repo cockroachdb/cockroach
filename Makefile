@@ -40,7 +40,7 @@ export CGO_LDFLAGS :=-g
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
 PKG          := "./..."
 TESTS        := ".*"
-TESTTIMEOUT  := 10s
+TESTTIMEOUT  := 15s
 RACETIMEOUT  := 1m
 BENCHTIMEOUT := 5m
 # STANDARDTESTFLAGS contains flags that you probably don't want to override;
