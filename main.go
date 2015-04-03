@@ -124,8 +124,6 @@ Output build version information.
 		},
 	}
 
-	cli.InitFlags(cli.Context)
-
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
 	}

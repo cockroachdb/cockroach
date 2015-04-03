@@ -36,6 +36,9 @@ import (
 	commander "code.google.com/p/go-commander"
 )
 
+var osExit = os.Exit
+var osStderr = os.Stderr
+
 func makeKVClient() *client.KV {
 	transport := &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
@@ -68,14 +71,17 @@ func runGet(cmd *commander.Command, args []string) {
 	key := proto.Key(args[0])
 	resp := &proto.GetResponse{}
 	if err := kv.Call(proto.Get, proto.GetArgs(key), resp); err != nil {
-		fmt.Fprintf(os.Stderr, "get failed: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "get failed: %s\n", err)
+		osExit(1)
+		return
+	}
+	if resp.Value == nil {
+		fmt.Fprintf(osStderr, "%s not found\n", key)
+		osExit(1)
+		return
 	}
 	if resp.Value.Integer != nil {
 		fmt.Printf("%d\n", *resp.Value.Integer)
-	} else if resp.Value == nil {
-		fmt.Fprintf(os.Stderr, "%s not found\n", key)
-		os.Exit(1)
 	} else {
 		fmt.Printf("%s\n", resp.Value.Bytes)
 	}
@@ -106,8 +112,9 @@ func runPut(cmd *commander.Command, args []string) {
 	// Do not allow system keys to be put.
 	for i := 0; i < len(args); i += 2 {
 		if strings.HasPrefix(args[i], "\x00") {
-			fmt.Fprintf(os.Stderr, "unable to put system key: %s\n", proto.Key(args[i]))
-			os.Exit(1)
+			fmt.Fprintf(osStderr, "unable to put system key: %s\n", proto.Key(args[i]))
+			osExit(1)
+			return
 		}
 	}
 
@@ -124,8 +131,9 @@ func runPut(cmd *commander.Command, args []string) {
 		return nil
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "put failed: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "put failed: %s\n", err)
+		osExit(1)
+		return
 	}
 }
 
@@ -148,8 +156,9 @@ func runInc(cmd *commander.Command, args []string) {
 	}
 
 	if strings.HasPrefix(args[0], "\x00") {
-		fmt.Fprintf(os.Stderr, "unable to increment system key: %s\n", proto.Key(args[0]))
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "unable to increment system key: %s\n", proto.Key(args[0]))
+		osExit(1)
+		return
 	}
 
 	kv := makeKVClient()
@@ -159,16 +168,18 @@ func runInc(cmd *commander.Command, args []string) {
 	if len(args) >= 2 {
 		var err error
 		if amount, err = strconv.Atoi(args[1]); err != nil {
-			fmt.Fprintf(os.Stderr, "invalid increment: %s: %s\n", args[1], err)
-			os.Exit(1)
+			fmt.Fprintf(osStderr, "invalid increment: %s: %s\n", args[1], err)
+			osExit(1)
+			return
 		}
 	}
 
 	key := proto.Key(args[0])
 	resp := &proto.IncrementResponse{}
 	if err := kv.Call(proto.Increment, proto.IncrementArgs(key, int64(amount)), resp); err != nil {
-		fmt.Fprintf(os.Stderr, "increment failed: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "increment failed: %s\n", err)
+		osExit(1)
+		return
 	}
 	fmt.Printf("%d\n", resp.NewValue)
 }
@@ -193,8 +204,9 @@ func runDel(cmd *commander.Command, args []string) {
 	// Do not allow system keys to be deleted.
 	for i := 0; i < len(args); i++ {
 		if strings.HasPrefix(args[i], "\x00") {
-			fmt.Fprintf(os.Stderr, "unable to delete system key: %s\n", proto.Key(args[i]))
-			os.Exit(1)
+			fmt.Fprintf(osStderr, "unable to delete system key: %s\n", proto.Key(args[i]))
+			osExit(1)
+			return
 		}
 	}
 
@@ -210,8 +222,9 @@ func runDel(cmd *commander.Command, args []string) {
 		return nil
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "delete failed: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "delete failed: %s\n", err)
+		osExit(1)
+		return
 	}
 }
 
@@ -262,8 +275,9 @@ func runScan(cmd *commander.Command, args []string) {
 	req := proto.ScanArgs(startKey, endKey, 1000)
 	resp := &proto.ScanResponse{}
 	if err := kv.Call(proto.Scan, req, resp); err != nil {
-		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
+		fmt.Fprintf(osStderr, "scan failed: %s\n", err)
+		osExit(1)
+		return
 	}
 
 	for _, r := range resp.Rows {
