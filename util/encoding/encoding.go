@@ -24,15 +24,28 @@ import (
 	"hash"
 	"hash/crc32"
 	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
 )
 
+var crc32Pool = sync.Pool{
+	New: func() interface{} {
+		return crc32.NewIEEE()
+	},
+}
+
 // NewCRC32Checksum returns a CRC32 checksum computed from the input byte slice.
 func NewCRC32Checksum(b []byte) hash.Hash32 {
-	crc := crc32.NewIEEE()
+	crc := crc32Pool.Get().(hash.Hash32)
 	crc.Write(b)
 	return crc
+}
+
+// ReleaseCRC32Checksum releases a CRC32 back to the allocation pool.
+func ReleaseCRC32Checksum(crc hash.Hash32) {
+	crc.Reset()
+	crc32Pool.Put(crc)
 }
 
 // unwrapChecksum assumes that the input byte slice b ends with a checksum, splits

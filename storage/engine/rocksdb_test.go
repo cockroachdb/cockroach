@@ -184,6 +184,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
 				value := proto.Value{Bytes: util.RandBytes(rng, 1024)}
+				value.InitChecksum(keys[i])
 				if err := MVCCPut(batch, nil, keys[i], ts, value, nil); err != nil {
 					b.Fatal(err)
 				}

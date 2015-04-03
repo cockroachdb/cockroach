@@ -30,12 +30,6 @@ COCKROACH_IMAGE :=
 
 RUN := run
 
-# TODO(pmattis): Figure out where to clear the CGO_* variables when
-# building "release" binaries.
-export CGO_CFLAGS :=-g
-export CGO_CXXFLAGS :=-g
-export CGO_LDFLAGS :=-g
-
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
 PKG          := "./..."

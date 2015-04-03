@@ -336,7 +336,9 @@ func (v *Value) computeChecksum(key []byte) uint32 {
 	} else if v.Integer != nil {
 		c.Write(encoding.EncodeUint64(nil, uint64(v.GetInteger())))
 	}
-	return c.Sum32()
+	sum := c.Sum32()
+	encoding.ReleaseCRC32Checksum(c)
+	return sum
 }
 
 // KeyGetter is a hack to allow Compare() to work for the batch
