@@ -21,9 +21,15 @@ trap cleanup EXIT
 
 mkdir -p build
 docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
-  rm -rf /build/*
-  make build testbuild && \
-  cp -r resource cockroach *.test /build/"
+  rm -rf /build/* && \
+  make testbuild && \
+  make STATIC=1 build && \
+  cp -r cockroach *.test /build/"
+
+# Make sure the created binary is statically linked.
+# Seems awkward to do this programmatically, but
+# this should work.
+file build/cockroach | grep 'statically linked' &>/dev/null
 
 docker build -t cockroachdb/cockroach .
 docker run -v "${DIR}/build":/build cockroachdb/cockroach
