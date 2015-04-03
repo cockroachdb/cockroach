@@ -666,6 +666,7 @@ func (br *BatchResponse) Add(reply Response) {
 // result rows, such as Scan.
 type Bounded interface {
 	GetBound() int64
+	SetBound(bound int64)
 }
 
 // GetBound returns the MaxResults field in ScanRequest.
@@ -673,21 +674,18 @@ func (sr *ScanRequest) GetBound() int64 {
 	return sr.GetMaxResults()
 }
 
-// Truncatable is implemented by response types whose corresponding
-// requests have a bounded number of result rows, such as Scan.
-type Truncatable interface {
-	Truncate(maxResults int64)
-	RowCount() int64
+// SetBound sets the MaxResults field in ScanRequest.
+func (sr *ScanRequest) SetBound(bound int64) {
+	sr.MaxResults = bound
 }
 
-// Truncate truncates ScanResponse with maxResults.
-func (sr *ScanResponse) Truncate(maxResults int64) {
-	if maxResults < int64(len(sr.Rows)) {
-		sr.Rows = sr.Rows[:maxResults]
-	}
+// Countable is implemented by response types which have a number of
+// result rows, such as Scan.
+type Countable interface {
+	Count() int64
 }
 
-// RowCount returns the number of rows in ScanResponse.
-func (sr *ScanResponse) RowCount() int64 {
+// Count returns the number of rows in ScanResponse.
+func (sr *ScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
 }
