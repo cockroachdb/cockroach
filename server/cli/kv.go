@@ -69,13 +69,13 @@ func runGet(cmd *commander.Command, args []string) {
 	resp := &proto.GetResponse{}
 	if err := kv.Call(proto.Get, proto.GetArgs(key), resp); err != nil {
 		fmt.Fprintf(os.Stderr, "get failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
-	if resp.Value.Integer != nil {
-		fmt.Printf("%d\n", *resp.Value.Integer)
-	} else if resp.Value == nil {
+	if resp.Value == nil {
 		fmt.Fprintf(os.Stderr, "%s not found\n", key)
 		os.Exit(1)
+	} else if resp.Value.Integer != nil {
+		fmt.Printf("%d\n", *resp.Value.Integer)
 	} else {
 		fmt.Printf("%s\n", resp.Value.Bytes)
 	}
@@ -125,7 +125,7 @@ func runPut(cmd *commander.Command, args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "put failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
@@ -168,7 +168,7 @@ func runInc(cmd *commander.Command, args []string) {
 	resp := &proto.IncrementResponse{}
 	if err := kv.Call(proto.Increment, proto.IncrementArgs(key, int64(amount)), resp); err != nil {
 		fmt.Fprintf(os.Stderr, "increment failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 	fmt.Printf("%d\n", resp.NewValue)
 }
@@ -211,7 +211,7 @@ func runDel(cmd *commander.Command, args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delete failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
@@ -263,7 +263,7 @@ func runScan(cmd *commander.Command, args []string) {
 	resp := &proto.ScanResponse{}
 	if err := kv.Call(proto.Scan, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	for _, r := range resp.Rows {
