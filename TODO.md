@@ -66,3 +66,5 @@
 
 * Implement split / merge range queue and remove check for split on
   every read/write range command.
+
+* Gossip should be changed to send only protobufs.
