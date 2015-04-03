@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 )
 
-// A CmdGetPerms command displays the perm config for the specified
+// A getPermsCmd command displays the perm config for the specified
 // prefix.
-var CmdGetPerms = &commander.Command{
+var getPermsCmd = &commander.Command{
 	UsageLine: "get-perms [options] <key-prefix>",
 	Short:     "fetches and displays the permission config",
 	Long: `
@@ -47,8 +47,8 @@ func runGetPerms(cmd *commander.Command, args []string) {
 	server.RunGetPerm(Context, args[0])
 }
 
-// A CmdLsPerms command displays a list of perm configs by prefix.
-var CmdLsPerms = &commander.Command{
+// A lsPermsCmd command displays a list of perm configs by prefix.
+var lsPermsCmd = &commander.Command{
 	UsageLine: "ls-perms [options] [key-regexp]",
 	Short:     "list all permisison configs by key prefix",
 	Long: `
@@ -78,8 +78,8 @@ func runLsPerms(cmd *commander.Command, args []string) {
 
 }
 
-// A CmdRmPerms command removes a perm config by prefix.
-var CmdRmPerms = &commander.Command{
+// A rmPermsCmd command removes a perm config by prefix.
+var rmPermsCmd = &commander.Command{
 	UsageLine: "rm-perms [options] <key-prefix>",
 	Short:     "remove a permission config by key prefix",
 	Long: `
@@ -103,11 +103,11 @@ func runRmPerms(cmd *commander.Command, args []string) {
 	server.RunRmPerm(Context, args[0])
 }
 
-// A CmdSetPerms command creates a new or updates an existing perm
+// A setPermsCmd command creates a new or updates an existing perm
 // config.
-var CmdSetPerms = &commander.Command{
+var setPermsCmd = &commander.Command{
 	UsageLine: "set-perm [options] <key-prefix> <perm-config-file>",
-	Short:     "create or update permission config for key prefix",
+	Short:     "create or update permission config for key prefix\n",
 	Long: `
 Create or update a perm config for the specified key prefix (first
 argument: <key-prefix>) to the contents of the specified file

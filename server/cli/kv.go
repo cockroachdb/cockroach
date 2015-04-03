@@ -49,8 +49,8 @@ func makeKVClient() *client.KV {
 	return kv
 }
 
-// A CmdGet command gets the value for the specified key.
-var CmdGet = &commander.Command{
+// A getCmd command gets the value for the specified key.
+var getCmd = &commander.Command{
 	UsageLine: "get [options] <key>",
 	Short:     "gets the value for a key",
 	Long: `
@@ -87,8 +87,8 @@ func runGet(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdPut command sets the value for one or more keys.
-var CmdPut = &commander.Command{
+// A putCmd command sets the value for one or more keys.
+var putCmd = &commander.Command{
 	UsageLine: "put [options] <key> <value> [<key2> <value2>...]",
 	Short:     "sets the value for a key",
 	Long: `
@@ -137,8 +137,8 @@ func runPut(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdInc command increments the value for one or more keys.
-var CmdInc = &commander.Command{
+// A incCmd command increments the value for one or more keys.
+var incCmd = &commander.Command{
 	UsageLine: "inc [options] <key> [<amount>]",
 	Short:     "increments the value for a key",
 	Long: `
@@ -184,8 +184,8 @@ func runInc(cmd *commander.Command, args []string) {
 	fmt.Printf("%d\n", resp.NewValue)
 }
 
-// A CmdDel command sets the value for one or more keys.
-var CmdDel = &commander.Command{
+// A delCmd command sets the value for one or more keys.
+var delCmd = &commander.Command{
 	UsageLine: "del [options] <key> [<key2>...]",
 	Short:     "deletes the value for a key",
 	Long: `
@@ -228,9 +228,9 @@ func runDel(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdScan command fetches the key/value pairs for a specified
+// A scanCmd command fetches the key/value pairs for a specified
 // range.
-var CmdScan = &commander.Command{
+var scanCmd = &commander.Command{
 	UsageLine: "scan [options] [<start-key> [<end-key>]]",
 	Short:     "scans a range of keys\n",
 	Long: `

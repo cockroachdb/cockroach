@@ -23,13 +23,11 @@ import (
 	"os"
 	"strings"
 
-	"code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/server"
 )
 
 type cliTest struct {
 	*server.TestServer
-	commander.Commander
 }
 
 func newCLITest() cliTest {
@@ -41,37 +39,7 @@ func newCLITest() cliTest {
 		log.Fatalf("Could not start server: %v", err)
 	}
 
-	c := commander.Commander{
-		Name: "cockroach",
-		Commands: []*commander.Command{
-			// Initialization commands.
-			CmdInit,
-			CmdStart,
-
-			// Zone commands.
-			CmdGetZone,
-			CmdLsZones,
-			CmdRmZone,
-			CmdSetZone,
-
-			// Range commands.
-			CmdLsRanges,
-			CmdSplitRange,
-			CmdMergeRange,
-
-			// Key/value commands.
-			CmdGet,
-			CmdPut,
-			CmdInc,
-			CmdDel,
-			CmdScan,
-		},
-	}
-
-	return cliTest{
-		TestServer: s,
-		Commander:  c,
-	}
+	return cliTest{TestServer: s}
 }
 
 func (c cliTest) Run(line string) {
@@ -84,7 +52,7 @@ func (c cliTest) Run(line string) {
 	args = append(args, a[1:]...)
 
 	fmt.Printf("%s\n", line)
-	if err := c.Commander.Run(args); err != nil {
+	if err := Run(args); err != nil {
 		fmt.Printf("%s\n", err)
 	}
 }

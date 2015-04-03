@@ -29,8 +29,8 @@ import (
 	"code.google.com/p/go-commander"
 )
 
-// A CmdLsRanges command lists the ranges in a cluster.
-var CmdLsRanges = &commander.Command{
+// A lsRangesCmd command lists the ranges in a cluster.
+var lsRangesCmd = &commander.Command{
 	UsageLine: "ls-ranges [options] [<start-key>]",
 	Short:     "lists the ranges",
 	Long: `
@@ -78,8 +78,8 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdSplitRange command splits a range.
-var CmdSplitRange = &commander.Command{
+// A splitRangeCmd command splits a range.
+var splitRangeCmd = &commander.Command{
 	UsageLine: "split-range [options] <key> [<split-key>]",
 	Short:     "splits a range",
 	Long: `
@@ -119,8 +119,8 @@ func runSplitRange(cmd *commander.Command, args []string) {
 	}
 }
 
-// A CmdMergeRange command merges a range.
-var CmdMergeRange = &commander.Command{
+// A mergeRangeCmd command merges a range.
+var mergeRangeCmd = &commander.Command{
 	UsageLine: "merge-range [options] <key>",
 	Short:     "merges a range\n",
 	Long: `
