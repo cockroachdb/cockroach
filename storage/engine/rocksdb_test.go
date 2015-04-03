@@ -168,7 +168,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 		return rocksdb
 	}
 
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
@@ -350,7 +350,7 @@ func BenchmarkMVCCGet100Versions(b *testing.B) {
 }
 
 func runMVCCPut(valueSize int, b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
@@ -388,7 +388,7 @@ func BenchmarkMVCCPut10000(b *testing.B) {
 }
 
 func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 	value := proto.Value{Bytes: util.RandBytes(rng, valueSize)}
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 

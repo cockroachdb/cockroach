@@ -22,8 +22,8 @@ import "testing"
 func TestPseudoRand(t *testing.T) {
 	numbers := make(map[int]bool)
 	// Make two random number generators and pull two numbers from each.
-	rand1 := NewPseudoRand()
-	rand2 := NewPseudoRand()
+	rand1, _ := NewPseudoRand()
+	rand2, _ := NewPseudoRand()
 	numbers[rand1.Int()] = true
 	numbers[rand1.Int()] = true
 	numbers[rand2.Int()] = true
@@ -35,7 +35,7 @@ func TestPseudoRand(t *testing.T) {
 }
 
 func TestRandIntInRange(t *testing.T) {
-	rand := NewPseudoRand()
+	rand, _ := NewPseudoRand()
 	for i := 0; i < 100; i++ {
 		x := RandIntInRange(rand, 20, 40)
 		if x < 20 || x >= 40 {
@@ -45,7 +45,7 @@ func TestRandIntInRange(t *testing.T) {
 }
 
 func TestRandBytes(t *testing.T) {
-	rand := NewPseudoRand()
+	rand, _ := NewPseudoRand()
 	for i := 0; i < 100; i++ {
 		x := RandBytes(rand, i)
 		if len(x) != i {

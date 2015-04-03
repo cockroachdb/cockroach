@@ -425,7 +425,7 @@ func TestDecodeInvalidBytes(t *testing.T) {
 }
 
 func BenchmarkEncodeUint32(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([]uint32, 10000)
 	for i := range vals {
@@ -441,7 +441,7 @@ func BenchmarkEncodeUint32(b *testing.B) {
 }
 
 func BenchmarkDecodeUint32(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -455,7 +455,7 @@ func BenchmarkDecodeUint32(b *testing.B) {
 }
 
 func BenchmarkEncodeUint64(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([]uint64, 10000)
 	for i := range vals {
@@ -471,7 +471,7 @@ func BenchmarkEncodeUint64(b *testing.B) {
 }
 
 func BenchmarkDecodeUint64(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -485,7 +485,7 @@ func BenchmarkDecodeUint64(b *testing.B) {
 }
 
 func BenchmarkEncodeVarint(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([]int64, 10000)
 	for i := range vals {
@@ -501,7 +501,7 @@ func BenchmarkEncodeVarint(b *testing.B) {
 }
 
 func BenchmarkDecodeVarint(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -515,7 +515,7 @@ func BenchmarkDecodeVarint(b *testing.B) {
 }
 
 func BenchmarkEncodeUvarint(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([]uint64, 10000)
 	for i := range vals {
@@ -531,7 +531,7 @@ func BenchmarkEncodeUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeUvarint(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -545,7 +545,7 @@ func BenchmarkDecodeUvarint(b *testing.B) {
 }
 
 func BenchmarkEncodeBytes(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {
@@ -561,7 +561,7 @@ func BenchmarkEncodeBytes(b *testing.B) {
 }
 
 func BenchmarkDecodeBytes(b *testing.B) {
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 
 	vals := make([][]byte, 10000)
 	for i := range vals {

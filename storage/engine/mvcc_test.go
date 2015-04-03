@@ -1726,7 +1726,8 @@ func TestMVCCStatsBasic(t *testing.T) {
 // underlying engine.
 func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	rng := util.NewPseudoRand()
+	rng, seed := util.NewPseudoRand()
+	log.Infof("using pseudo random number generator with seed %d", seed)
 	engine := createTestEngine()
 	ms := &MVCCStats{}
 

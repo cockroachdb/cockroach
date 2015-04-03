@@ -703,7 +703,7 @@ func TestApproximateSize(t *testing.T) {
 			count    = 10000
 			keys     = make([]proto.EncodedKey, count)
 			values   = make([][]byte, count) // Random values to prevent compression
-			rand     = util.NewPseudoRand()
+			rand, _  = util.NewPseudoRand()
 			valueLen = 10
 		)
 		for i := 0; i < count; i++ {
