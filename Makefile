@@ -49,7 +49,10 @@ STANDARDTESTFLAGS := -logtostderr
 TESTFLAGS         :=
 
 ifeq ($(STATIC),1)
-GOFLAGS  += -a -tags netgo -ldflags '-extldflags "-lm -lstdc++ -static"'
+# The installsuffix makes sure we actually get the netgo build, see
+# https://github.com/golang/go/issues/9369#issuecomment-69864440
+GOFLAGS  += -a -tags netgo -installsuffix netgo
+LDFLAGS += -extldflags "-lm -lstdc++ -static"
 endif
 
 .PHONY: all
