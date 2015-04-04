@@ -133,6 +133,11 @@ func TestReplicateRange(t *testing.T) {
 		}); err != nil {
 		t.Fatal(err)
 	}
+	// Verify no intent remain on range descriptor key.
+	key := engine.RangeDescriptorKey(rng.Desc().StartKey)
+	if _, err := engine.MVCCGet(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify that the same data is available on the replica.
 	// TODO(bdarnell): relies on the fact that we allow reads from followers.

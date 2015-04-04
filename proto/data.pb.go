@@ -410,7 +410,11 @@ type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
 	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
 	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
-	XXX_unrecognized      []byte                 `json:"-"`
+	// List of intents to resolve on commit or abort. Note that keys
+	// listed here will only be resolved if they fall on the same range
+	// that the transaction was started on.
+	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,customtype=Key" json:"intents,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }

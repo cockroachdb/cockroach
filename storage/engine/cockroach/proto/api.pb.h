@@ -2072,6 +2072,22 @@ class EndTransactionResponse : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 commit_wait() const;
   inline void set_commit_wait(::google::protobuf::int64 value);
 
+  // repeated bytes resolved = 3;
+  inline int resolved_size() const;
+  inline void clear_resolved();
+  static const int kResolvedFieldNumber = 3;
+  inline const ::std::string& resolved(int index) const;
+  inline ::std::string* mutable_resolved(int index);
+  inline void set_resolved(int index, const ::std::string& value);
+  inline void set_resolved(int index, const char* value);
+  inline void set_resolved(int index, const void* value, size_t size);
+  inline ::std::string* add_resolved();
+  inline void add_resolved(const ::std::string& value);
+  inline void add_resolved(const char* value);
+  inline void add_resolved(const void* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& resolved() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_resolved();
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.EndTransactionResponse)
  private:
   inline void set_has_header();
@@ -2085,6 +2101,7 @@ class EndTransactionResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::ResponseHeader* header_;
   ::google::protobuf::int64 commit_wait_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> resolved_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -5490,6 +5507,60 @@ inline void EndTransactionResponse::set_commit_wait(::google::protobuf::int64 va
   set_has_commit_wait();
   commit_wait_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.EndTransactionResponse.commit_wait)
+}
+
+// repeated bytes resolved = 3;
+inline int EndTransactionResponse::resolved_size() const {
+  return resolved_.size();
+}
+inline void EndTransactionResponse::clear_resolved() {
+  resolved_.Clear();
+}
+inline const ::std::string& EndTransactionResponse::resolved(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_.Get(index);
+}
+inline ::std::string* EndTransactionResponse::mutable_resolved(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_.Mutable(index);
+}
+inline void EndTransactionResponse::set_resolved(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.proto.EndTransactionResponse.resolved)
+  resolved_.Mutable(index)->assign(value);
+}
+inline void EndTransactionResponse::set_resolved(int index, const char* value) {
+  resolved_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::set_resolved(int index, const void* value, size_t size) {
+  resolved_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline ::std::string* EndTransactionResponse::add_resolved() {
+  return resolved_.Add();
+}
+inline void EndTransactionResponse::add_resolved(const ::std::string& value) {
+  resolved_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::add_resolved(const char* value) {
+  resolved_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::add_resolved(const void* value, size_t size) {
+  resolved_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+EndTransactionResponse::resolved() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+EndTransactionResponse::mutable_resolved() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.EndTransactionResponse.resolved)
+  return &resolved_;
 }
 
 // -------------------------------------------------------------------

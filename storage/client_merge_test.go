@@ -128,6 +128,13 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify no intents remains on range descriptor keys.
+	for _, key := range []proto.Key{engine.RangeDescriptorKey(aDesc.StartKey), engine.RangeDescriptorKey(bDesc.StartKey)} {
+		if _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Verify the merge by looking up keys from both ranges.
 	rangeA := store.LookupRange([]byte("a"), nil)
 	rangeB := store.LookupRange([]byte("c"), nil)
