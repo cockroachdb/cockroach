@@ -30,7 +30,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
-var testRand = util.NewPseudoRand()
+var testRand, _ = util.NewPseudoRand()
 
 func makeCommandID() string {
 	return string(util.RandBytes(testRand, commandIDLen))

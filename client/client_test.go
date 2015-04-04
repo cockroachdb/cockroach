@@ -746,7 +746,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 		return s, kv
 	}
 
-	rng := util.NewPseudoRand()
+	rng, _ := util.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	resp := &proto.PutResponse{}

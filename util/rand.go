@@ -34,10 +34,11 @@ func NewPseudoSeed() int64 {
 }
 
 // NewPseudoRand returns an instance of math/rand.Rand seeded from crypto/rand
-// so we can easily and cheaply generate unique streams of numbers.
-// The created object is not safe for concurrent access.
-func NewPseudoRand() *rand.Rand {
-	return rand.New(rand.NewSource(NewPseudoSeed()))
+// and its seed so we can easily and cheaply generate unique streams of
+// numbers. The created object is not safe for concurrent access.
+func NewPseudoRand() (*rand.Rand, int64) {
+	seed := NewPseudoSeed()
+	return rand.New(rand.NewSource(seed)), seed
 }
 
 // RandIntInRange returns a value in [min, max)
