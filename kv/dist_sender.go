@@ -265,6 +265,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	}
 
 	// Build a slice of replica addresses (if gossiped).
+	// A node may have multiple stores, so the addr of store should include net addr and storeID
 	var addrs []rpc.StoreAddr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
