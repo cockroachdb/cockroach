@@ -44,9 +44,13 @@ const (
 	retryBackoff           = 1 * time.Second
 	maxRetryBackoff        = 30 * time.Second
 
-	// Maximum number of ranges to return from an internal range lookup.
-	// TODO(mrtracy): This value should be configurable.
-	rangeLookupMaxRanges = 8
+	// The default maximum number of ranges to return
+	// from an internal range lookup.
+	defaultRangeLookupMaxRanges = 8
+	// The default size of the leader cache.
+	defaultLeaderCacheSize = 1 << 20
+	// The default size of the range descriptor cache.
+	defaultRangeDescriptorCacheSize = 1 << 20
 )
 
 var rpcRetryOpts = util.RetryOptions{
@@ -87,6 +91,9 @@ func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
 type DistSender struct {
+	// NodeID, if set, is used to look up node attributes from the
+	// Gossip network when deciding where to send RPCs.
+	nodeID proto.NodeID
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -95,17 +102,57 @@ type DistSender struct {
 	// ranges.
 	gossip *gossip.Gossip
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache *RangeDescriptorCache
+	rangeCache           *rangeDescriptorCache
+	rangeLookupMaxRanges int32
+	// leaderCache caches the last known leader replica for range
+	// consensus groups.
+	leaderCache *leaderCache
+}
+
+// DistSenderContext holds auxiliary objects that can be passed to
+// NewDistSender.
+type DistSenderContext struct {
+	Clock *hlc.Clock
+	// NodeID, if provided, is used to look up node attributes from the Gossip
+	// network when deciding where to send RPCs.
+	NodeID                   proto.NodeID
+	RangeDescriptorCacheSize int32
+	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
+	// range descriptor cache when dispatching a range lookup request.
+	RangeLookupMaxRanges int32
+	LeaderCacheSize      int32
 }
 
 // NewDistSender returns a client.KVSender instance which connects to the
-// Cockroach cluster via the supplied gossip instance.
-func NewDistSender(clock *hlc.Clock, gossip *gossip.Gossip) *DistSender {
+// Cockroach cluster via the supplied gossip instance. Supplying a
+// DistSenderContext or the fields within is optional. For omitted values, sane
+// defaults will be used.
+func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
+	if ctx == nil {
+		ctx = &DistSenderContext{}
+	}
+	clock := ctx.Clock
+	if clock == nil {
+		clock = hlc.NewClock(hlc.UnixNano)
+	}
 	ds := &DistSender{
 		clock:  clock,
 		gossip: gossip,
 	}
-	ds.rangeCache = NewRangeDescriptorCache(ds)
+	ds.nodeID = ctx.NodeID
+	rcSize := ctx.RangeDescriptorCacheSize
+	if rcSize <= 0 {
+		rcSize = defaultRangeDescriptorCacheSize
+	}
+	ds.rangeCache = newRangeDescriptorCache(ds, int(rcSize))
+	lcSize := ctx.LeaderCacheSize
+	if lcSize <= 0 {
+		lcSize = defaultLeaderCacheSize
+	}
+	ds.leaderCache = newLeaderCache(int(lcSize))
+	if ctx.RangeLookupMaxRanges <= 0 {
+		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
+	}
 	return ds
 }
 
@@ -186,7 +233,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescri
 			User:            storage.UserRoot,
 			ReadConsistency: proto.INCONSISTENT,
 		},
-		MaxRanges: rangeLookupMaxRanges,
+		MaxRanges: ds.rangeLookupMaxRanges,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
 	if err := ds.sendRPC(info, "InternalRangeLookup", args, reply); err != nil {
@@ -320,7 +367,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	return err
 }
 
-// Send implements the clent.KVSender interface. It verifies
+// Send implements the client.KVSender interface. It verifies
 // permissions and looks up the appropriate range based on the
 // supplied key and sends the RPC according to the specified
 // options.
@@ -371,7 +418,8 @@ func (ds *DistSender) Send(call *client.Call) {
 					// re-run as part of a transaction for consistency. The
 					// case where we don't need to re-run is if the read
 					// consistency is not required.
-					if call.Args.Header().Txn == nil && args.Header().ReadConsistency != proto.INCONSISTENT {
+					if call.Args.Header().Txn == nil &&
+						args.Header().ReadConsistency != proto.INCONSISTENT {
 						return util.RetryBreak, &proto.OpRequiresTxnError{}
 					}
 					// This next lookup is likely for free since we've read the

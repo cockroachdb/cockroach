@@ -29,12 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-const (
-	// rangeCacheSize is the number of entries held in the range cache.
-	// TODO(mrtracy): This value should be a command-line option.
-	rangeCacheSize = 1 << 20
-)
-
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
 type rangeCacheKey proto.Key
@@ -45,14 +39,8 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 	return bytes.Compare(a, b.(rangeCacheKey))
 }
 
-// rangeCacheShouldEvict is a function that determines when range cache
-// entries are evicted.
-func rangeCacheShouldEvict(size int, k, v interface{}) bool {
-	return size > rangeCacheSize
-}
-
 // rangeDescriptorDB is a type which can query range descriptors from an
-// underlying datastore. This interface is used by RangeDescriptorCache to
+// underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type rangeDescriptorDB interface {
 	// getRangeDescriptor retrieves a descriptor for the range
@@ -65,10 +53,10 @@ type rangeDescriptorDB interface {
 	getRangeDescriptor(proto.Key) ([]proto.RangeDescriptor, error)
 }
 
-// RangeDescriptorCache is used to retrieve range descriptors for
+// rangeDescriptorCache is used to retrieve range descriptors for
 // arbitrary keys. Descriptors are initially queried from storage
 // using a rangeDescriptorDB, but is cached for subsequent lookups.
-type RangeDescriptorCache struct {
+type rangeDescriptorCache struct {
 	// rangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db rangeDescriptorDB
@@ -80,20 +68,22 @@ type RangeDescriptorCache struct {
 	rangeCacheMu sync.RWMutex
 }
 
-// NewRangeDescriptorCache returns a new RangeDescriptorCache which
+// newRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given rangeDescriptorDB as the underlying source of range
 // descriptors.
-func NewRangeDescriptorCache(db rangeDescriptorDB) *RangeDescriptorCache {
-	return &RangeDescriptorCache{
+func newRangeDescriptorCache(db rangeDescriptorDB, size int) *rangeDescriptorCache {
+	return &rangeDescriptorCache{
 		db: db,
 		rangeCache: util.NewOrderedCache(util.CacheConfig{
-			Policy:      util.CacheLRU,
-			ShouldEvict: rangeCacheShouldEvict,
+			Policy: util.CacheLRU,
+			ShouldEvict: func(n int, k, v interface{}) bool {
+				return n > size
+			},
 		}),
 	}
 }
 
-func (rmc *RangeDescriptorCache) String() string {
+func (rmc *rangeDescriptorCache) String() string {
 	var buf bytes.Buffer
 	rmc.rangeCacheMu.Lock()
 	rmc.rangeCache.Do(func(k, v interface{}) {
@@ -116,7 +106,7 @@ func (rmc *RangeDescriptorCache) String() string {
 //
 // This method returns the RangeDescriptor for the range containing
 // the key's data, or an error if any occurred.
-func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
+func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.RangeDescriptor, error) {
 	_, r := rmc.getCachedRangeDescriptor(key)
 	log.V(1).Infof("lookup range descriptor: key=%s desc=%+v\n%s", key, r, rmc)
 	if r != nil {
@@ -142,9 +132,9 @@ func (rmc *RangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.Ra
 
 // EvictCachedRangeDescriptor will evict any cached range descriptors
 // for the given key. It is intended that this method be called from a
-// consumer of RangeDescriptorCache if the returned range descriptor is
+// consumer of rangeDescriptorCache if the returned range descriptor is
 // discovered to be stale.
-func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
+func (rmc *rangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 	for {
 		k, rd := rmc.getCachedRangeDescriptor(key)
 		if k != nil {
@@ -166,7 +156,7 @@ func (rmc *RangeDescriptorCache) EvictCachedRangeDescriptor(key proto.Key) {
 // getCachedRangeDescriptor is a helper function to retrieve the
 // descriptor of the range which contains the given key, if present in
 // the cache.
-func (rmc *RangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
+func (rmc *rangeDescriptorCache) getCachedRangeDescriptor(key proto.Key) (
 	rangeCacheKey, *proto.RangeDescriptor) {
 	// We want to look up the range descriptor for key. The cache is
 	// indexed using the end-key of the range, but the end-key is

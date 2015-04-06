@@ -68,3 +68,5 @@
   every read/write range command.
 
 * Gossip should be changed to send only protobufs.
+* persist Gossip and the kv.leaderCache to make sure that restarting
+  a node is harmless.

@@ -111,7 +111,7 @@ func NewServer(ctx *Context) (*Server, error) {
 
 	// Create a client.KVSender instance for use with this node's
 	// client to the key value database as well as
-	ds := kv.NewDistSender(s.clock, s.gossip)
+	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable)
 	s.kv = client.NewKV(nil, sender)
 	s.kv.User = storage.UserRoot
