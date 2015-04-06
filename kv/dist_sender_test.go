@@ -20,15 +20,113 @@ package kv
 
 import (
 	"bytes"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
+
+var testRangeDescriptor = proto.RangeDescriptor{
+	RaftID:   1,
+	StartKey: proto.Key("a"),
+	EndKey:   proto.Key("z"),
+	Replicas: []proto.Replica{
+		{
+			NodeID:  1,
+			StoreID: 1,
+			Attrs:   proto.Attributes{Attrs: []string{"test"}},
+		},
+	},
+}
+
+var testAddress = util.MakeRawAddr("tcp", "node1:8080")
+
+func makeTestGossip(t *testing.T) *gossip.Gossip {
+	n := simulation.NewNetwork(1, "unix", gossip.TestInterval, gossip.TestBootstrap)
+	g := n.Nodes[0].Gossip
+	permConfig := &proto.PermConfig{
+		Read:  []string{""},
+		Write: []string{""},
+	}
+
+	configMap, err := storage.NewPrefixConfigMap([]*storage.PrefixConfig{
+		{engine.KeyMin, nil, permConfig},
+	})
+	if err != nil {
+		t.Fatalf("failed to make prefix config map, err: %s", err.Error())
+	}
+	g.AddInfo(gossip.KeySentinel, "cluster1", time.Hour)
+	g.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
+	g.AddInfo(gossip.KeyFirstRangeDescriptor, testRangeDescriptor, time.Hour)
+	nodeIDKey := gossip.MakeNodeIDKey(1)
+	g.AddInfo(nodeIDKey, &storage.NodeDescriptor{
+		NodeID:  1,
+		Address: testAddress,
+		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
+	}, time.Hour)
+	return g
+}
+
+// TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
+// network and a mock of rpc.Send, and verifies that the DistSender correctly
+// retries upon encountering a stale entry in its range descriptor cache.
+func TestRetryOnWrongReplicaError(t *testing.T) {
+	g := makeTestGossip(t)
+	// Updated below, after it has first been returned.
+	newRangeDescriptor := testRangeDescriptor
+	newEndKey := proto.Key("m")
+	descStale := true
+
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		header := getArgs(testAddress).(proto.Request).Header()
+		if method == "Node.InternalRangeLookup" {
+			// If the non-broken descriptor has already been returned, that's
+			// an error.
+			if !descStale && bytes.HasPrefix(header.Key, engine.KeyMeta2Prefix) {
+				t.Errorf("unexpected extra lookup for non-stale replica descriptor at %s",
+					header.Key)
+			}
+
+			r := getReply().(*proto.InternalRangeLookupResponse)
+			// The fresh descriptor is about to be returned.
+			if bytes.HasPrefix(header.Key, engine.KeyMeta2Prefix) &&
+				newRangeDescriptor.StartKey.Equal(newEndKey) {
+				descStale = false
+			}
+			r.Ranges = append(r.Ranges, newRangeDescriptor)
+			return nil, nil
+		}
+		// When the Scan first turns up, update the descriptor for future
+		// range descriptor lookups.
+		if !newRangeDescriptor.StartKey.Equal(newEndKey) {
+			newRangeDescriptor = *gogoproto.Clone(&testRangeDescriptor).(*proto.RangeDescriptor)
+			newRangeDescriptor.StartKey = newEndKey
+			return nil, &proto.RangeKeyMismatchError{RequestStartKey: header.Key,
+				RequestEndKey: header.EndKey}
+		}
+		return nil, nil
+	}
+
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+	}
+	ds := NewDistSender(ctx, g)
+	sa := proto.ScanArgs(proto.Key("a"), proto.Key("d"), 0)
+	sr := &proto.ScanResponse{}
+	ds.Send(&client.Call{Method: proto.Scan, Args: sa, Reply: sr})
+	if err := sr.GoError(); err != nil {
+		t.Errorf("scan encountered error: %s", err)
+	}
+}
 
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	n := simulation.NewNetwork(3, "unix", gossip.TestInterval, gossip.TestBootstrap)

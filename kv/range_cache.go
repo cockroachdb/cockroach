@@ -126,6 +126,9 @@ func (rmc *rangeDescriptorCache) LookupRangeDescriptor(key proto.Key) (*proto.Ra
 		// but not possible for RocksDB.
 		rmc.rangeCache.Add(rangeCacheKey(engine.RangeMetaKey(rs[i].EndKey)), &rs[i])
 	}
+	if len(rs) == 0 {
+		log.Fatalf("no range descriptors returned for %s", key)
+	}
 	rmc.rangeCacheMu.Unlock()
 	return &rs[0], nil
 }

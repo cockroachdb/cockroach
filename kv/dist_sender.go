@@ -53,7 +53,7 @@ const (
 	defaultRangeDescriptorCacheSize = 1 << 20
 )
 
-var rpcRetryOpts = util.RetryOptions{
+var defaultRPCRetryOptions = util.RetryOptions{
 	Backoff:     retryBackoff,
 	MaxBackoff:  maxRetryBackoff,
 	Constant:    2,
@@ -107,7 +107,16 @@ type DistSender struct {
 	// leaderCache caches the last known leader replica for range
 	// consensus groups.
 	leaderCache *leaderCache
+	// rpcSend is used to send RPC calls and defaults to rpc.Send
+	// outside of tests.
+	rpcSend         rpcSendFn
+	rpcRetryOptions util.RetryOptions
 }
+
+// rpcSendFn is the function type used to dispatch RPC calls.
+type rpcSendFn func(rpc.Options, string, []net.Addr,
+	func(addr net.Addr) interface{}, func() interface{},
+	*rpc.Context) ([]interface{}, error)
 
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
@@ -121,6 +130,11 @@ type DistSenderContext struct {
 	// range descriptor cache when dispatching a range lookup request.
 	RangeLookupMaxRanges int32
 	LeaderCacheSize      int32
+	RPCRetryOptions      *util.RetryOptions
+	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
+	// for testing purposes.
+	rpcSend    rpcSendFn
+	rangeCache *rangeDescriptorCache
 }
 
 // NewDistSender returns a client.KVSender instance which connects to the
@@ -144,7 +158,10 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
 	}
-	ds.rangeCache = newRangeDescriptorCache(ds, int(rcSize))
+	ds.rangeCache = ctx.rangeCache
+	if ctx.rangeCache == nil {
+		ds.rangeCache = newRangeDescriptorCache(ds, int(rcSize))
+	}
 	lcSize := ctx.LeaderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaderCacheSize
@@ -152,6 +169,14 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	ds.leaderCache = newLeaderCache(int(lcSize))
 	if ctx.RangeLookupMaxRanges <= 0 {
 		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
+	}
+	ds.rpcSend = rpc.Send
+	if ctx.rpcSend != nil {
+		ds.rpcSend = ctx.rpcSend
+	}
+	ds.rpcRetryOptions = defaultRPCRetryOptions
+	if ctx.RPCRetryOptions != nil {
+		ds.rpcRetryOptions = *ctx.RPCRetryOptions
 	}
 	return ds
 }
@@ -363,7 +388,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 		}
 		return gogoproto.Clone(reply)
 	}
-	_, err := rpc.Send(rpcOpts, "Node."+method, addrs, getArgs, getReply, ds.gossip.RPCContext)
+	_, err := ds.rpcSend(rpcOpts, "Node."+method, addrs, getArgs, getReply, ds.gossip.RPCContext)
 	return err
 }
 
@@ -385,7 +410,7 @@ func (ds *DistSender) Send(call *client.Call) {
 	}
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
-	retryOpts := rpcRetryOpts
+	retryOpts := ds.rpcRetryOptions
 	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method)
 
 	// responses and descNext are only used when executing across ranges.
