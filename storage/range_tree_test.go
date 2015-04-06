@@ -39,8 +39,8 @@ func TestIsRed(t *testing.T) {
 		{nil, false},
 	}
 	for i, test := range testCases {
-		node := (*rangeTreeNode)(test.node)
-		actual := node.isRed()
+		node := test.node
+		actual := isRed(node)
 		if actual != test.expected {
 			t.Errorf("%d: %+v expect %v; got %v", i, node, test.expected, actual)
 		}

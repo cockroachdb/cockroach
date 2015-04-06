@@ -34,7 +34,7 @@ type testRangeTree struct {
 }
 
 // nodesEqual is a replacement for reflect.DeepEqual as it was having issues
-// determining similarites between the types.
+// determining similarities between the types.
 func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
 	// Check that Key is equal.
 	if !expected.Key.Equal(actual.Key) {
@@ -60,7 +60,7 @@ func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
 	} else if !(*expected.RightKey).Equal(*actual.RightKey) {
 		return util.Errorf("Range tree node's RightKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
 	}
-	// Check that PArentKey are equal.
+	// Check that ParentKey are equal.
 	if !expected.ParentKey.Equal(actual.ParentKey) {
 		return util.Errorf("Range tree node's LeftKey is not as expected for range:%s\nexpected:%+v\nactual:%+v", key, expected, actual)
 	}
@@ -161,21 +161,21 @@ func TestSetupRangeTree(t *testing.T) {
 	}
 }
 
-// TestInsert tests inserting a collection of 5 nodes, forcing left rotations
-// and flips.
-func TestInsert(t *testing.T) {
+// TestInsertRight tests inserting a collection of 5 nodes, forcing left
+// rotations and flips.
+func TestInsertRight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 	db := store.DB()
 
-	// Prepare the expected tree
 	keyA := proto.Key("a")
 	keyB := proto.Key("b")
 	keyC := proto.Key("c")
 	keyD := proto.Key("d")
 	keyE := proto.Key("e")
 
+	// Test single split (with a left rotation).
 	tree := proto.RangeTree{
 		RootKey: keyA,
 	}
@@ -196,8 +196,6 @@ func TestInsert(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-
-	// Test single split (with a left rotation).
 	if err := splitRange(db, engine.KeyMin, keyA); err != nil {
 		t.Fatal(err)
 	}
@@ -371,6 +369,222 @@ func TestInsert(t *testing.T) {
 		Nodes: nodes,
 	}
 	if err := splitRange(db, keyD, keyE); err != nil {
+		t.Fatal(err)
+	}
+	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestInsertLeft tests inserting a collection of 5 nodes, forcing right
+// rotations, left rotations and flips.
+func TestInsertLeft(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store := createTestStore(t)
+	defer store.Stop()
+	db := store.DB()
+
+	keyE := proto.Key("e")
+	keyD := proto.Key("d")
+	keyC := proto.Key("c")
+	keyB := proto.Key("b")
+	keyA := proto.Key("a")
+
+	// Test single split (with a left rotation).
+	tree := proto.RangeTree{
+		RootKey: keyE,
+	}
+	nodes := map[string]proto.RangeTreeNode{
+		string(keyE): proto.RangeTreeNode{
+			Key:       keyE,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &engine.KeyMin,
+		},
+		string(engine.KeyMin): proto.RangeTreeNode{
+			Key:       engine.KeyMin,
+			ParentKey: engine.KeyMin,
+			Black:     false,
+		},
+	}
+	expectedTree := testRangeTree{
+		Tree:  tree,
+		Nodes: nodes,
+	}
+	if err := splitRange(db, engine.KeyMin, keyE); err != nil {
+		t.Fatal(err)
+	}
+	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test two splits (with a left, right and flip).
+	tree = proto.RangeTree{
+		RootKey: keyD,
+	}
+	nodes = map[string]proto.RangeTreeNode{
+		string(keyD): proto.RangeTreeNode{
+			Key:       keyD,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &engine.KeyMin,
+			RightKey:  &keyE,
+		},
+		string(engine.KeyMin): proto.RangeTreeNode{
+			Key:       engine.KeyMin,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+		string(keyE): proto.RangeTreeNode{
+			Key:       keyE,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+	}
+	expectedTree = testRangeTree{
+		Tree:  tree,
+		Nodes: nodes,
+	}
+	if err := splitRange(db, engine.KeyMin, keyD); err != nil {
+		t.Fatal(err)
+	}
+	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test three splits (with a left rotation).
+	tree = proto.RangeTree{
+		RootKey: keyD,
+	}
+	nodes = map[string]proto.RangeTreeNode{
+		string(keyD): proto.RangeTreeNode{
+			Key:       keyD,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &keyC,
+			RightKey:  &keyE,
+		},
+		string(keyC): proto.RangeTreeNode{
+			Key:       keyC,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &engine.KeyMin,
+		},
+		string(engine.KeyMin): proto.RangeTreeNode{
+			Key:       engine.KeyMin,
+			ParentKey: engine.KeyMin,
+			Black:     false,
+		},
+
+		string(keyE): proto.RangeTreeNode{
+			Key:       keyE,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+	}
+	expectedTree = testRangeTree{
+		Tree:  tree,
+		Nodes: nodes,
+	}
+	if err := splitRange(db, engine.KeyMin, keyC); err != nil {
+		t.Fatal(err)
+	}
+	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test four splits (with a flip and a right and left rotation).
+	tree = proto.RangeTree{
+		RootKey: keyD,
+	}
+	nodes = map[string]proto.RangeTreeNode{
+		string(keyD): proto.RangeTreeNode{
+			Key:       keyD,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &keyB,
+			RightKey:  &keyE,
+		},
+		string(keyB): proto.RangeTreeNode{
+			Key:       keyB,
+			ParentKey: engine.KeyMin,
+			Black:     false,
+			LeftKey:   &engine.KeyMin,
+			RightKey:  &keyC,
+		},
+		string(engine.KeyMin): proto.RangeTreeNode{
+			Key:       engine.KeyMin,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+		string(keyC): proto.RangeTreeNode{
+			Key:       keyC,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+		string(keyE): proto.RangeTreeNode{
+			Key:       keyE,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+	}
+	expectedTree = testRangeTree{
+		Tree:  tree,
+		Nodes: nodes,
+	}
+	if err := splitRange(db, engine.KeyMin, keyB); err != nil {
+		t.Fatal(err)
+	}
+	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test four splits (with a left rotation).
+	tree = proto.RangeTree{
+		RootKey: keyD,
+	}
+	nodes = map[string]proto.RangeTreeNode{
+		string(keyD): proto.RangeTreeNode{
+			Key:       keyD,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &keyB,
+			RightKey:  &keyE,
+		},
+		string(keyB): proto.RangeTreeNode{
+			Key:       keyB,
+			ParentKey: engine.KeyMin,
+			Black:     false,
+			LeftKey:   &keyA,
+			RightKey:  &keyC,
+		},
+		string(keyA): proto.RangeTreeNode{
+			Key:       keyA,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+			LeftKey:   &engine.KeyMin,
+		},
+		string(engine.KeyMin): proto.RangeTreeNode{
+			Key:       engine.KeyMin,
+			ParentKey: engine.KeyMin,
+			Black:     false,
+		},
+		string(keyC): proto.RangeTreeNode{
+			Key:       keyC,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+		string(keyE): proto.RangeTreeNode{
+			Key:       keyE,
+			ParentKey: engine.KeyMin,
+			Black:     true,
+		},
+	}
+	expectedTree = testRangeTree{
+		Tree:  tree,
+		Nodes: nodes,
+	}
+	if err := splitRange(db, engine.KeyMin, keyA); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
