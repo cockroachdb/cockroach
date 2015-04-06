@@ -124,7 +124,8 @@ var mergeRangeCmd = &commander.Command{
 	UsageLine: "merge-range [options] <key>",
 	Short:     "merges a range\n",
 	Long: `
-Merges the range containing <key> with the immediate successor range.
+Extends the range containing <key> to contain its immediate successor range.
+The two ranges must be co-located on the same set of replicas.
 `,
 	Run:  runMergeRange,
 	Flag: *flag.CommandLine,

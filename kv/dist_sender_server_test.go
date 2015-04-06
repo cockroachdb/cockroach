@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -113,6 +114,92 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	}
 
 	return s, db
+}
+
+// TestMultiRangeScanStaleDescriptor verifies that a stale leader cache entry
+// is evicted and updated and the request retried appropriately.
+func TestStaleDescriptorRetry(t *testing.T) {
+	s, db := setupMultipleRanges(t)
+	defer s.Stop()
+	defer db.Close()
+
+	// Write keys "a", "u" and "z". The two range descriptors are cached in the process.
+	for _, key := range []proto.Key{proto.Key("a"), proto.Key("u"), proto.Key("z")} {
+		pr := &proto.PutResponse{}
+		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Split the keyspace at "x". The range descriptor cache now holds a
+	// stale entry for the second range, and doesn't know about the third.
+	if err := db.Call(proto.AdminSplit,
+		&proto.AdminSplitRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: proto.Key("x"),
+			},
+			SplitKey: proto.Key("x"),
+		}, &proto.AdminSplitResponse{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan that hits all three ranges. It should trip over the stale descriptor
+	// for range two, restart, and then complete successfully.
+	sr := &proto.ScanResponse{}
+	sa := proto.ScanArgs(proto.Key("a"), proto.Key("zz"), 0)
+	if err := db.Call(proto.Scan, sa, sr); err != nil {
+		t.Fatalf("unexpected error on scan: %s", err)
+	}
+	if l := len(sr.Rows); l != 3 {
+		t.Errorf("expected 3 rows; got %d", l)
+	}
+
+	sr = &proto.ScanResponse{}
+	sa = proto.ScanArgs(engine.RangeMetaKey(proto.Key("a")), engine.KeyMeta2Prefix.PrefixEnd(), 2)
+	if err := db.Call(proto.Scan, sa, sr); err != nil {
+		t.Errorf("scan failed: %s", err)
+	}
+	if len(sr.Rows) != 2 {
+		t.Errorf("expected 2 rows, got %d", len(sr.Rows))
+	}
+
+	ma := &proto.AdminMergeRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: proto.Key("a"),
+		},
+	}
+	if err := gogoproto.Unmarshal(sr.Rows[1].Value.Bytes, &ma.SubsumedRange); err != nil {
+		t.Fatalf("could not unmarshal range descriptor for %s", sr.Rows[1].Key)
+	}
+
+	// Merge the first into second range, causing the first cached descriptor
+	// to have too restrictive boundary, and the second one to refer to a non-
+	// existing range.
+	if err := db.Call(proto.AdminMerge, ma, &proto.AdminMergeResponse{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Scan that hits only the first range. It should clean up the stale
+	// descriptor for that range and complete successfully.
+	sr = &proto.ScanResponse{}
+	sa = proto.ScanArgs(proto.Key("a"), proto.Key("ab"), 0)
+	if err := db.Call(proto.Scan, sa, sr); err != nil {
+		t.Fatalf("unexpected error on scan: %s", err)
+	}
+	if l := len(sr.Rows); l != 1 {
+		t.Errorf("expected 1 rows; got %d", l)
+	}
+
+	// Scan that hits all ranges. This is a multi-range scan in which the
+	// first range is not stale, but the second one is.
+	sr = &proto.ScanResponse{}
+	sa = proto.ScanArgs(proto.Key("a"), proto.Key("zz"), 0)
+	if err := db.Call(proto.Scan, sa, sr); err != nil {
+		t.Fatalf("unexpected error on scan: %s", err)
+	}
+	if l := len(sr.Rows); l != 3 {
+		t.Errorf("expected 1 rows; got %d", l)
+	}
 }
 
 // TestMultiRangeScan verifies operation of a scan across ranges.
