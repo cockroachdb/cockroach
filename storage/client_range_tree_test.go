@@ -18,9 +18,12 @@
 package storage_test
 
 import (
+	"bytes"
 	"reflect"
+	"strconv"
 	"testing"
 
+	"github.com/biogo/store/llrb"
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -28,10 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
+// TODO(bram): Increase TotalSplits drastically if performance allows.
+const TotalSplits = 10
+
 type testRangeTree struct {
 	Tree  proto.RangeTree
 	Nodes map[string]proto.RangeTreeNode
 }
+
+type Key proto.Key
 
 // nodesEqual is a replacement for reflect.DeepEqual as it was having issues
 // determining similarities between the types.
@@ -118,13 +126,13 @@ func treesEqual(db *client.KV, expected testRangeTree) error {
 	return treeNodesEqual(db, expected, expected.Tree.RootKey)
 }
 
-// splitRange splits whichever range contains the split key on the split key.
-func splitRange(db *client.KV, key proto.Key, splitKey proto.Key) error {
+// splitRange splits whichever range contains the key on that key.
+func splitRange(db *client.KV, key proto.Key) error {
 	req := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
 		},
-		SplitKey: splitKey,
+		SplitKey: key,
 	}
 	resp := &proto.AdminSplitResponse{}
 	if err := db.Call(proto.AdminSplit, req, resp); err != nil {
@@ -196,7 +204,7 @@ func TestInsertRight(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyA); err != nil {
+	if err := splitRange(db, keyA); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -230,7 +238,7 @@ func TestInsertRight(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, keyA, keyB); err != nil {
+	if err := splitRange(db, keyB); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -270,7 +278,7 @@ func TestInsertRight(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, keyB, keyC); err != nil {
+	if err := splitRange(db, keyC); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -316,7 +324,7 @@ func TestInsertRight(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, keyC, keyD); err != nil {
+	if err := splitRange(db, keyD); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -368,7 +376,7 @@ func TestInsertRight(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, keyD, keyE); err != nil {
+	if err := splitRange(db, keyE); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -411,7 +419,7 @@ func TestInsertLeft(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyE); err != nil {
+	if err := splitRange(db, keyE); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -445,7 +453,7 @@ func TestInsertLeft(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyD); err != nil {
+	if err := splitRange(db, keyD); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -486,7 +494,7 @@ func TestInsertLeft(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyC); err != nil {
+	if err := splitRange(db, keyC); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -532,7 +540,7 @@ func TestInsertLeft(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyB); err != nil {
+	if err := splitRange(db, keyB); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
@@ -584,10 +592,125 @@ func TestInsertLeft(t *testing.T) {
 		Tree:  tree,
 		Nodes: nodes,
 	}
-	if err := splitRange(db, engine.KeyMin, keyA); err != nil {
+	if err := splitRange(db, keyA); err != nil {
 		t.Fatal(err)
 	}
 	if err := treesEqual(db, expectedTree); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Compare implements the llrbComparable interface for keys.
+func (k Key) Compare(b llrb.Comparable) int {
+	return bytes.Compare(k, b.(Key))
+}
+
+// compareBiogoNode compares a biogo node and a range tree node to determine if both
+// contain the same values in the same order.  It recursively calls itself on
+// both children if they exist.
+func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error {
+	// Retrieve the node form the range tree.
+	rtNode := &proto.RangeTreeNode{}
+	ok, _, err := db.GetProto(engine.RangeTreeNodeKey(*key), rtNode)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return util.Errorf("Could not find the range tree node for range:%s", key)
+	}
+
+	bNode := &proto.RangeTreeNode{
+		Key:       proto.Key(biogoNode.Elem.(Key)),
+		ParentKey: engine.KeyMin,
+		Black:     bool(biogoNode.Color),
+	}
+	if biogoNode.Left != nil {
+		leftKey := proto.Key(biogoNode.Left.Elem.(Key))
+		bNode.LeftKey = &leftKey
+	}
+	if biogoNode.Right != nil {
+		rightKey := proto.Key(biogoNode.Right.Elem.(Key))
+		bNode.RightKey = &rightKey
+	}
+	if err = nodesEqual(*key, *bNode, *rtNode); err != nil {
+		return err
+	}
+	if rtNode.LeftKey != nil {
+		if err = compareBiogoNode(db, biogoNode.Left, rtNode.LeftKey); err != nil {
+			return err
+		}
+	}
+	if rtNode.RightKey != nil {
+		if err = compareBiogoNode(db, biogoNode.Right, rtNode.RightKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// compareBiogoTree walks both a biogo tree and the range tree to determine if both
+// contain the same values in the same order.
+func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
+	rt := &proto.RangeTree{}
+	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, rt)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return util.Errorf("Could not find the range tree root:%s", engine.KeyRangeTreeRoot)
+	}
+
+	if err = compareBiogoNode(db, biogoTree.Root, &rt.RootKey); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// TestRandomSplits splits the keyspace a total of TotalSplits number of times.
+// At the same time, a biogo LLRB tree is also maintained and at the end of the
+// test, the range tree and the biogo tree are compared to ensure they are
+// equal.
+func TestRandomSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store := createTestStore(t)
+	defer store.Stop()
+	db := store.DB()
+	rng, seed := util.NewPseudoRand()
+	t.Logf("using pseudo random number generator with seed %d", seed)
+
+	tree := &llrb.Tree{}
+	tree.Insert(Key(engine.KeyMin))
+
+	// Test an unsplit tree.
+	if err := compareBiogoTree(db, tree); err != nil {
+		t.Fatalf("Unsplit trees are not equal:%v", err)
+	}
+
+	for i := 0; i < TotalSplits; i++ {
+		keyInt := rng.Int31()
+		keyString := strconv.Itoa(int(keyInt))
+		keyProto := proto.Key(keyString)
+		key := Key(keyProto)
+		// Make sure we avoid collisions.
+		for tree.Get(key) != nil {
+			keyInt = rng.Int31()
+			keyString = strconv.Itoa(int(keyInt))
+			keyProto = proto.Key(keyString)
+			key = Key(keyProto)
+		}
+
+		t.Logf("Inserting %d:%d", i, keyInt)
+		tree.Insert(key)
+
+		// Split the range.
+		if err := splitRange(db, keyProto); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Compare the trees
+	if err := compareBiogoTree(db, tree); err != nil {
 		t.Fatal(err)
 	}
 }
