@@ -245,12 +245,14 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 		})
 }
 
-// internalRangeLookup dispatches an InternalRangeLookup request for
-// the given metadata key to the replicas of the given range. Note
-// that we allow inconsistent reads when doing range lookups for
-// effiency. Getting stale data is not a correctness problem but
-// instead may infrequently result in additional latency as additional
-// range lookups may be required.
+// internalRangeLookup dispatches an InternalRangeLookup request for the given
+// metadata key to the replicas of the given range. Note that we allow
+// inconsistent reads when doing range lookups for effiency. Getting stale data
+// is not a correctness problem but instead may infrequently result in
+// additional latency as additional range lookups may be required. Note also
+// that internalRangeLookup bypasses the DistSender's Send() method, so there
+// is no error inspection and retry logic here; this is not an issue here since
+// the lookup performs a single inconsistent read only.
 func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
