@@ -18,7 +18,6 @@
 package simulation
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -82,7 +81,7 @@ func NewNetwork(nodeCount int, networkType string,
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
-		node.Name = fmt.Sprintf("Node%d", i)
+		node.NodeID = int32(i)
 		node.Start(servers[i], stopper)
 		stopper.AddCloser(servers[i])
 		// Node 0 gossips node count.

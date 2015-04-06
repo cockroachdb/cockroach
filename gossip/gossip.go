@@ -97,7 +97,7 @@ var (
 // During bootstrapping, the bootstrap list contains candidates for
 // entry to the gossip network.
 type Gossip struct {
-	Name         string             // Optional node name
+	NodeID       int32              // Optional node ID
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
