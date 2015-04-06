@@ -170,6 +170,13 @@ func TestInitEngines(t *testing.T) {
 	}
 }
 
+// TestSelfBootstrap verifies operation when no bootstrap hosts have
+// been specified.
+func TestSelfBootstrap(t *testing.T) {
+	s := startTestServer(t)
+	s.Stop()
+}
+
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {

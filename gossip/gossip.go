@@ -318,7 +318,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 	}
 
 	// If we have no bootstrap hosts, fatal exit.
-	if len(addresses) == 0 && g.bootstraps.len() == 0 {
+	if g.gossipBootstrap == "" && g.bootstraps.len() == 0 && !g.isBootstrap {
 		log.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
