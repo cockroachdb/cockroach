@@ -29,7 +29,7 @@ import (
 
 type testDescriptorDB struct {
 	data     llrb.Tree
-	cache    *RangeDescriptorCache
+	cache    *rangeDescriptorCache
 	hitCount int
 }
 
@@ -124,7 +124,7 @@ func (db *testDescriptorDB) assertHitCount(t *testing.T, expected int) {
 	db.hitCount = 0
 }
 
-func doLookup(t *testing.T, rc *RangeDescriptorCache, key string) {
+func doLookup(t *testing.T, rc *rangeDescriptorCache, key string) {
 	r, err := rc.LookupRangeDescriptor(proto.Key(key))
 	if err != nil {
 		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err.Error())
@@ -148,7 +148,7 @@ func TestRangeCache(t *testing.T) {
 		}
 	}
 
-	db.cache = NewRangeDescriptorCache(db)
+	db.cache = newRangeDescriptorCache(db, 2<<10)
 
 	doLookup(t, db.cache, "aa")
 	db.assertHitCount(t, 2)
