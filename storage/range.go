@@ -1980,6 +1980,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 	// Make sure the range being subsumed follows this one.
 	if !bytes.Equal(desc.EndKey, subsumedDesc.StartKey) {
+		// TODO why is %d used for printing here?
 		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %d = %d",
 			desc.EndKey, subsumedDesc.StartKey))
 		return
@@ -1988,7 +1989,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	// Ensure that both ranges are collocate by intersecting the store ids from
 	// their replicas.
 	if !ReplicaSetsEqual(subsumedDesc.GetReplicas(), desc.GetReplicas()) {
-		reply.SetGoError(util.Error("The two ranges replicas are not collocate"))
+		reply.SetGoError(util.Error("The two ranges replicas are not collocated"))
 		return
 	}
 
