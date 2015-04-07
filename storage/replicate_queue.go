@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -39,14 +40,17 @@ type replicateQueue struct {
 	*baseQueue
 	gossip    *gossip.Gossip
 	allocator *allocator
+	clock     *hlc.Clock
 	disabled  bool
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(gossip *gossip.Gossip, allocator *allocator) *replicateQueue {
+func newReplicateQueue(gossip *gossip.Gossip, allocator *allocator,
+	clock *hlc.Clock) *replicateQueue {
 	rq := &replicateQueue{
 		gossip:    gossip,
 		allocator: allocator,
+		clock:     clock,
 	}
 	rq.baseQueue = newBaseQueue("replicate", rq, replicateQueueMaxSize)
 	return rq
@@ -108,7 +112,11 @@ func (rq *replicateQueue) process(now proto.Timestamp, rng *Range) error {
 			StoreID: newReplica.StoreID,
 			Attrs:   newReplica.Attrs,
 		})
-	return nil
+
+	// Enqueue this range again to see if there are more changes to be made.
+	go rq.MaybeAdd(rng, rq.clock.Now())
+
+	return err
 }
 
 func (rq *replicateQueue) timer() time.Duration {

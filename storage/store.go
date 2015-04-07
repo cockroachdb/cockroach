@@ -353,7 +353,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	s.gcQueue = newGCQueue()
 	s.splitQueue = newSplitQueue(db, gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
-	s.replicateQueue = newReplicateQueue(gossip, s.allocator)
+	s.replicateQueue = newReplicateQueue(gossip, s.allocator, clock)
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue)
 
 	return s
@@ -753,9 +753,6 @@ func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
 
 // SplitQueue accessor.
 func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
-
-// ReplicateQueue accessor.
-func (s *Store) ReplicateQueue() *replicateQueue { return s.replicateQueue }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
