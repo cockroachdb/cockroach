@@ -21,6 +21,7 @@ import (
 	"container/list"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -282,6 +283,10 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
 		}
 	}
+	// Setting the NodeID as the name of the gossip instance
+	// allows the DistSender to look up the own node's descriptor
+	// from the gossip network.
+	atomic.StoreInt32(&n.gossip.NodeID, int32(n.Descriptor.NodeID))
 
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
