@@ -265,6 +265,18 @@ func TestGoMerge(t *testing.T) {
 			}...),
 		},
 		{
+			nil,
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{2, 1, 5, 5, 5},
+				{1, 1, 5, 5, 5},
+				{2, 1, 5, 5, 5},
+			}...),
+			timeSeriesInt(testtime, 1000, []tsIntSample{
+				{1, 1, 5, 5, 5},
+				{2, 2, 10, 5, 5},
+			}...),
+		},
+		{
 			timeSeriesInt(testtime, 1000, []tsIntSample{
 				{1, 1, 5, 5, 5},
 			}...),
@@ -353,20 +365,53 @@ func TestGoMerge(t *testing.T) {
 	}
 
 	for i, c := range testCasesTimeSeries {
+		expectedTS := unmarshalTimeSeries(t, c.expected)
+		existingTS := unmarshalTimeSeries(t, c.existing)
+		updateTS := unmarshalTimeSeries(t, c.update)
+
+		// Directly test the C++ implementation of merging using goMerge.  goMerge
+		// operates directly on marshalled bytes.
 		result, err := goMerge(c.existing, c.update)
 		if err != nil {
-			t.Errorf("goMerge error: %d: %v", i, err)
+			t.Errorf("goMerge error on case %d: %s", i, err.Error())
 			continue
 		}
+		resultTS := unmarshalTimeSeries(t, result)
+		if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+			t.Errorf("goMerge returned wrong result on case %d: expected %v, returned %v", i, e, a)
+		}
 
-		// Extract the time series and compare.
-		var resultV, expectedV proto.MVCCMetadata
-		gogoproto.Unmarshal(result, &resultV)
-		gogoproto.Unmarshal(c.expected, &expectedV)
-		resultTS, _ := proto.InternalTimeSeriesDataFromValue(resultV.Value)
-		expectedTS, _ := proto.InternalTimeSeriesDataFromValue(expectedV.Value)
-		if !reflect.DeepEqual(resultTS, expectedTS) {
-			t.Errorf("goMerge error: %d: want %v, got %v", i, expectedTS, resultTS)
+		// Test the MergeInternalTimeSeriesData method separately.
+		if existingTS == nil {
+			resultTS, err = MergeInternalTimeSeriesData(updateTS)
+		} else {
+			resultTS, err = MergeInternalTimeSeriesData(existingTS, updateTS)
+		}
+		if err != nil {
+			t.Errorf("MergeInternalTimeSeriesData error on case %d: %s", i, err.Error())
+			continue
+		}
+		if a, e := resultTS, expectedTS; !reflect.DeepEqual(a, e) {
+			t.Errorf("MergeInternalTimeSeriesData returned wrong result on case %d: expected %v, returned %v",
+				i, e, a)
 		}
 	}
+}
+
+// unmarshalTimeSeries unmarshals the time series value stored in the given byte
+// array. It is assumed that the time series value was originally marshalled as
+// a proto.MVCCMetadata with an inline value.
+func unmarshalTimeSeries(t testing.TB, b []byte) *proto.InternalTimeSeriesData {
+	if b == nil {
+		return nil
+	}
+	var mvccValue proto.MVCCMetadata
+	if err := gogoproto.Unmarshal(b, &mvccValue); err != nil {
+		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+	}
+	valueTS, err := proto.InternalTimeSeriesDataFromValue(mvccValue.Value)
+	if err != nil {
+		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
+	}
+	return valueTS
 }
