@@ -41,12 +41,16 @@ func initFlags(ctx *server.Context) {
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
 		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
 
-	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify a colon-separated list of node "+
+	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
 		"attributes. Attributes are arbitrary strings specifying topography or "+
-		"machine capabilities. Topography might include datacenter designation (e.g. "+
-		"\"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
+		"machine capabilities. Topography might include datacenter designation "+
+		"(e.g. \"us-west-1a\", \"us-west-1b\", \"us-east-1c\"). Machine capabilities "+
 		"might include specialized hardware or number of cores (e.g. \"gpu\", "+
-		"\"x16c\"). For example: -attrs=us-west-1b,gpu")
+		"\"x16c\"). "+
+		"The relative geographic proximity of two nodes is inferred from the "+
+		"common prefix of the attributes list, so topographic attributes should be "+
+		"specified first and in the same order for all nodes. "+
+		"For example: -attrs=us-west-1b,gpu.")
 
 	flag.DurationVar(&ctx.MaxOffset, "max_offset", ctx.MaxOffset, "specify "+
 		"the maximum clock offset for the cluster. Clock offset is measured on all "+
