@@ -27,6 +27,8 @@ import (
 	"strings"
 	"sync"
 
+	"code.google.com/p/snappy-go/snappy"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/kv"
@@ -41,8 +43,12 @@ import (
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 )
 
-// Allocation pool for gzip writers.
-var gzipWriterPool sync.Pool
+var (
+	// Allocation pool for gzip writers.
+	gzipWriterPool sync.Pool
+	// Allocation pool for snappy writers.
+	snappyWriterPool sync.Pool
+)
 
 // Server is the cockroach server node.
 type Server struct {
@@ -179,6 +185,35 @@ func (s *Server) Stop() {
 	s.stopper.Stop()
 }
 
+// ServeHTTP is necessary to implement the http.Handler interface. It
+// will snappy a response if the appropriate request headers are set.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check if we're draining; if so return 503, service unavailable.
+	if !s.stopper.StartTask() {
+		http.Error(w, "service is draining", http.StatusServiceUnavailable)
+		return
+	}
+	defer s.stopper.FinishTask()
+
+	// Disable caching of responses.
+	w.Header().Set("Cache-control", "no-cache")
+
+	ae := r.Header.Get("Accept-Encoding")
+	switch {
+	case strings.Contains(ae, "snappy"):
+		w.Header().Set("Content-Encoding", "snappy")
+		s := newSnappyResponseWriter(w)
+		defer s.Close()
+		w = s
+	case strings.Contains(ae, "gzip"):
+		w.Header().Set("Content-Encoding", "gzip")
+		gzw := newGzipResponseWriter(w)
+		defer gzw.Close()
+		w = gzw
+	}
+	s.mux.ServeHTTP(w, r)
+}
+
 type gzipResponseWriter struct {
 	io.WriteCloser
 	http.ResponseWriter
@@ -207,22 +242,32 @@ func (w *gzipResponseWriter) Close() {
 	}
 }
 
-// ServeHTTP is necessary to implement the http.Handler interface. It
-// will gzip a response if the appropriate request headers are set.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Check if we're draining; if so return 503, service unavailable.
-	if !s.stopper.StartTask() {
-		http.Error(w, "service is draining", http.StatusServiceUnavailable)
-		return
-	}
-	defer s.stopper.FinishTask()
+type snappyResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
 
-	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		s.mux.ServeHTTP(w, r)
-		return
+func newSnappyResponseWriter(w http.ResponseWriter) *snappyResponseWriter {
+	var s *snappy.Writer
+	if sI := snappyWriterPool.Get(); sI == nil {
+		// TODO(pmattis): It would be better to use the C++ snappy code
+		// like rpc/codec is doing. Would have to copy the snappy.Writer
+		// implementation from snappy-go.
+		s = snappy.NewWriter(w)
+	} else {
+		s = sI.(*snappy.Writer)
+		s.Reset(w)
 	}
-	w.Header().Set("Content-Encoding", "gzip")
-	gzw := newGzipResponseWriter(w)
-	defer gzw.Close()
-	s.mux.ServeHTTP(gzw, r)
+	return &snappyResponseWriter{Writer: s, ResponseWriter: w}
+}
+
+func (w *snappyResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func (w *snappyResponseWriter) Close() {
+	if w.Writer != nil {
+		snappyWriterPool.Put(w.Writer)
+		w.Writer = nil
+	}
 }

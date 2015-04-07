@@ -21,9 +21,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"code.google.com/p/snappy-go/snappy"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -149,6 +152,7 @@ func (s *HTTPSender) post(call *Call) (*http.Response, error) {
 	}
 	req.Header.Add("Content-Type", "application/x-protobuf")
 	req.Header.Add("Accept", "application/x-protobuf")
+	req.Header.Add("Accept-Encoding", "snappy")
 	resp, err := s.client.Do(req)
 	if resp == nil {
 		return nil, &httpSendError{util.Errorf("http client was closed: %s", err)}
@@ -156,6 +160,9 @@ func (s *HTTPSender) post(call *Call) (*http.Response, error) {
 	defer resp.Body.Close()
 	if err != nil {
 		return nil, &httpSendError{err}
+	}
+	if resp.Header.Get("Content-Encoding") == "snappy" {
+		resp.Body = &snappyReader{body: resp.Body}
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -169,4 +176,22 @@ func (s *HTTPSender) post(call *Call) (*http.Response, error) {
 		return nil, &httpSendError{err}
 	}
 	return resp, nil
+}
+
+// snappyReader wraps a response body so it can lazily
+// call snappy.NewReader on the first call to Read
+type snappyReader struct {
+	body io.ReadCloser // underlying Response.Body
+	sr   io.Reader     // lazily-initialized snappy reader
+}
+
+func (s *snappyReader) Read(p []byte) (n int, err error) {
+	if s.sr == nil {
+		s.sr = snappy.NewReader(s.body)
+	}
+	return s.sr.Read(p)
+}
+
+func (s *snappyReader) Close() error {
+	return s.body.Close()
 }
