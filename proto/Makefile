@@ -39,8 +39,15 @@ PROTOC_GEN_GOGO := $(PWD)/../../../../../bin/protoc-gen-gogo
 # (and these directories must be in the include path), but cgo can only compile
 # a single directory so we symlink the generated pb.cc files into the storage/engine
 # directory.
+#
+# The gogoprotobuf customtype and unmarshaller extensions do not play nicely with integer
+# types. Manually wack the generate code to make it compile.
 all:
 	(cd ../.. && $(PROTOC) --plugin=protoc-gen-gogo=$(PROTOC_GEN_GOGO) --gogo_out=. --cpp_out=cockroach/storage/engine --proto_path=.:$(PROTO_PATH) $(PROTOS:%=cockroach/proto/%))
 	(cd ../.. && $(PROTOC) --cpp_out=cockroach/storage/engine --proto_path=$(PROTO_PATH) $(GOGO_PROTOS))
 	(cd ../storage/engine && ln -sf gogoproto/gogo.pb.cc .)
 	(cd ../storage/engine && ln -sf cockroach/proto/*.pb.cc .)
+	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < config.pb.go > config.pb.go.new && \
+	  mv config.pb.go.new config.pb.go
+	sed -E 's/(Node|Store)ID \|= \(int32/\1ID |= (\1ID/g' < data.pb.go > data.pb.go.new && \
+	  mv data.pb.go.new data.pb.go

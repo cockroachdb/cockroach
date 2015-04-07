@@ -22,6 +22,10 @@ option go_package = "proto";
 
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 // Attributes specifies a list of arbitrary strings describing
 // node topology, store type, and machine capabilities.
 message Attributes {
@@ -106,9 +110,6 @@ message RangeTreeNode {
   // Using gogoproto's marshaler is needed here as there is a bug in the default 
   // marshalling using reflection that does not handle the Key custom type as 
   // nullable correctly.
-  option (gogoproto.marshaler) = true;
-  option (gogoproto.sizer) = true;
-  option (gogoproto.unmarshaler) = true;
   optional bytes key = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "Key"];
 
   // Color is black if true, red if false.

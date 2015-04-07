@@ -467,8 +467,8 @@ void protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto() {
     "\001(\0162#.cockroach.proto.TransactionRestart"
     "B\004\310\336\037\000\022,\n\006detail\030\003 \001(\0132\034.cockroach.proto"
     ".ErrorDetail*;\n\022TransactionRestart\022\t\n\005AB"
-    "ORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\007Z\005pro"
-    "to", 2362);
+    "ORT\020\000\022\013\n\007BACKOFF\020\001\022\r\n\tIMMEDIATE\020\002B\023Z\005pro"
+    "to\340\342\036\001\310\342\036\001\320\342\036\001", 2374);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/errors.proto", &protobuf_RegisterTypes);
   NotLeaderError::default_instance_ = new NotLeaderError();

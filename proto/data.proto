@@ -23,10 +23,13 @@ option go_package = "proto";
 import "cockroach/proto/config.proto";
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+
 // Timestamp represents a state of the hybrid logical clock.
 message Timestamp {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.unmarshaler) = true;
 
   // Holds a wall time, typically a unix epoch time
   // expressed in nanoseconds.
@@ -43,8 +46,6 @@ message Timestamp {
 // basic types: a "bag o' bytes" generic byte slice and an incrementable
 // int64, for use with the Increment API call.
 message Value {
-  option (gogoproto.unmarshaler) = true;
-
   // Bytes is the byte slice value. If this field is set, the integer field
   // should not be.
   optional bytes bytes = 1;
@@ -70,8 +71,6 @@ message Value {
 // MVCCValue differentiates between normal versioned values and
 // deletion tombstones.
 message MVCCValue {
-  option (gogoproto.unmarshaler) = true;
-
   // True to indicate a deletion tombstone. If false, value should not
   // be nil.
   optional bool deleted = 1 [(gogoproto.nullable) = false];
@@ -185,8 +184,6 @@ enum TransactionStatus {
 // NodeList keeps a growing set of NodeIDs as a sorted slice, with Add()
 // adding to the set and Contains() verifying membership.
 message NodeList {
-  option (gogoproto.unmarshaler) = true;
-
   // Note that this does not use the NodeID custom type because that appears
   // to interact badly with the repeated and/or packed options.
   repeated int32 nodes = 1 [packed=true];
@@ -200,7 +197,6 @@ message NodeList {
 // contention.
 message Transaction {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.unmarshaler) = true;
 
   optional string name = 1 [(gogoproto.nullable) = false];
   // Key is the key which anchors the transaction. This is typically
@@ -273,8 +269,6 @@ message Lease {
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
-  option (gogoproto.unmarshaler) = true;
-
   optional Transaction txn = 1;
   // The timestamp of the most recent versioned value.
   optional Timestamp timestamp = 2 [(gogoproto.nullable) = false];
@@ -295,8 +289,6 @@ message MVCCMetadata {
 // GCMetadata holds information about the last complete key/value
 // garbage collection scan of a range.
 message GCMetadata {
-  option (gogoproto.unmarshaler) = true;
-
   // The last GC scan timestamp in nanoseconds since the Unix epoch.
   optional int64 last_scan_nanos = 1 [(gogoproto.nullable) = false];
   // The oldest unresolved write intent in nanoseconds since epoch.
@@ -307,8 +299,6 @@ message GCMetadata {
 // TimeSeriesDatapoint is a single point of time series data; a value associated
 // with a timestamp.
 message TimeSeriesDatapoint {
-  option (gogoproto.unmarshaler) = true;
-
   // The timestamp when this datapoint is located, expressed in nanoseconds
   // since the unix epoch.
   optional int64 timestamp_nanos = 1 [(gogoproto.nullable) = false];
@@ -325,8 +315,6 @@ message TimeSeriesDatapoint {
 // identifies the source variable, and a repeated set of TimeSeriesDatapoint
 // messages representing distinct measurements of that variable.
 message TimeSeriesData {
-  option (gogoproto.unmarshaler) = true;
-
   // A string which uniquely identifies the variable from which this data was
   // measured.
   optional string name = 1 [(gogoproto.nullable) = false];
