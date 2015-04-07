@@ -328,28 +328,74 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 	return ds.internalRangeLookup(metadataKey, desc)
 }
 
-// sendRPC sends one or more RPCs to replicas from the supplied
-// proto.Replica slice. First, replicas which have gossiped addresses
-// are corralled and then sent via rpc.Send, with requirement that one
-// RPC to a server must succeed. Returns an RPC error if the request
-// could not be sent. Note that the reply may contain a higher level
-// error and must be checked in addition to the RPC error.
-func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args proto.Request, reply proto.Response) error {
+// sendRPC sends one or more RPCs to replicas from the supplied proto.Replica
+// slice. First, replicas which have gossiped addresses are corralled (and
+// rearranged depending on proximity and whether the request needs to go to a
+// leader) and then sent via rpc.Send, with requirement that one RPC to a
+// server must succeed. Returns an RPC error if the request could not be sent.
+// Note that the reply may contain a higher level error and must be checked in
+// addition to the RPC error.
+func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
+	args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
 		return util.Errorf("%s: replicas set is empty", method)
+	}
+
+	// Unless we know better, send the RPCs randomly.
+	order := rpc.OrderingPolicy(rpc.OrderRandom)
+	// Try to look up our own NodeDescriptor and sort replicas by proximity.
+	if nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(
+		proto.NodeID(ds.gossip.NodeID))); err == nil && ds.gossip.NodeID > 0 {
+		// Rearrange the replicas so that those replicas with long common prefix of
+		// attributes end up first. If there's no prefix, this is a no-op.
+		ownAttrs := nodeDesc.(*storage.NodeDescriptor).Attrs.Attrs
+		if proto.ReplicaSlice(desc.Replicas).
+			SortByCommonAttributePrefix(ownAttrs) > 0 {
+			// There's at least some attribute prefix, and we hope that the
+			// replicas that come early in the slice are now located close to
+			// us and hence better candidates.
+			order = rpc.OrderStable
+		}
+	} else {
+		// A normal node should always have that information set in Gossip when
+		// booting, so this is worth complaining about.
+		log.Warningf("own NodeDescriptor node available via Gossip, rpcs will be sent randomly")
+	}
+
+	// If this request needs to go to a leader and we know who that is, move
+	// it to the front and send requests in order.
+	if args.Header().ReadConsistency != proto.INCONSISTENT ||
+		proto.IsReadWrite(method) {
+		leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
+		if leader != nil {
+			for i := range desc.Replicas {
+				if desc.Replicas[i].StoreID == leader.StoreID {
+					// We have found the leader, so move it to the front
+					// and make sure that we query the replicas in that order.
+					proto.ReplicaSlice(desc.Replicas).MoveToFront(i)
+					order = rpc.OrderStable
+					break
+				}
+			}
+		}
 	}
 
 	// Build a slice of replica addresses (if gossiped).
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
-		addr, err := storage.NodeIDToAddress(ds.gossip, desc.Replicas[i].NodeID)
+		nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(desc.Replicas[i].NodeID))
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
+			log.V(1).Infof("node %d descriptor is not gossiped", desc.Replicas[i].NodeID)
+			continue
+		}
+		addr := nodeDesc.(*storage.NodeDescriptor).Address
+		if addr == nil {
+			log.V(1).Infof("node %d descriptor has no address", desc.Replicas[i].NodeID)
 			continue
 		}
 		addrs = append(addrs, addr)
-		replicaMap[addr.String()] = &desc.Replicas[i]
+		replicaMap[addrs[len(addrs)-1].String()] = &desc.Replicas[i]
 	}
 	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}
@@ -363,7 +409,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	// Set RPC opts with stipulation that one of N RPCs must succeed.
 	rpcOpts := rpc.Options{
 		N:               1,
-		Ordering:        rpc.OrderRandom, // TODO(spencer): change this to order stable if we know leader
+		Ordering:        order,
 		SendNextTimeout: defaultSendNextTimeout,
 		Timeout:         defaultRPCTimeout,
 	}

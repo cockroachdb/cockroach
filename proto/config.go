@@ -154,3 +154,48 @@ func (p *PermConfig) CanWrite(user string) bool {
 	}
 	return false
 }
+
+// A ReplicaSlice is a slice of Replicas.
+type ReplicaSlice []Replica
+
+// Swap interchanges the replicas stored at the given indices.
+func (rs ReplicaSlice) Swap(i, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+// SortByCommonAttributePrefix rearranges the ReplicaSlice by comparing the
+// attributes to the given reference attributes. The basis for the comparison
+// is that of the common prefix of replica attributes (i.e. the number of equal
+// attributes, starting at the first), with a longer prefix sorting first.
+func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
+	if len(rs) < 2 {
+		return 0
+	}
+	topIndex := len(rs) - 1
+	for bucket := 0; bucket < len(attrs); bucket++ {
+		firstNotOrdered := 0
+		for i := 0; i <= topIndex; i++ {
+			if len(rs[i].Attrs.Attrs)-1 >= bucket && rs[i].Attrs.Attrs[bucket] == attrs[bucket] {
+				rs.Swap(firstNotOrdered, i)
+				firstNotOrdered++
+			}
+		}
+		if firstNotOrdered == 0 {
+			return bucket
+		}
+		topIndex = firstNotOrdered - 1
+	}
+	return len(attrs)
+}
+
+// MoveToFront moves the replica at the given index to the front
+// of the slice, keeping the order of the remaining elements stable.
+// The function will panic when invoked with an invalid index.
+func (rs ReplicaSlice) MoveToFront(i int) {
+	l := len(rs) - 1
+	if i > l {
+		panic("out of bound index")
+	}
+	front := rs[i]
+	rs[0], rs = front, append(append(rs[0:1], rs[:i]...), rs[i+1:]...)
+}
