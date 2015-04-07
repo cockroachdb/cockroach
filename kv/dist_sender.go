@@ -48,7 +48,7 @@ const (
 	// from an internal range lookup.
 	defaultRangeLookupMaxRanges = 8
 	// The default size of the leader cache.
-	defaultLeaderCacheSize = 1 << 20
+	defaultLeaderCacheSize = 1 << 16
 	// The default size of the range descriptor cache.
 	defaultRangeDescriptorCacheSize = 1 << 20
 )
