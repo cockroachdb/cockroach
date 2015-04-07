@@ -53,3 +53,13 @@ func TestLeaderCache(t *testing.T) {
 		t.Errorf("unexpected policy used in cache")
 	}
 }
+
+func TestLeaderCachePointers(t *testing.T) {
+	lc := newLeaderCache(3)
+	r := &proto.Replica{StoreID: 1}
+	lc.Update(1, r)
+	r.StoreID = 2
+	if lc.Lookup(1).StoreID != 1 {
+		t.Errorf("leader cache did not copy the supplied replica")
+	}
+}

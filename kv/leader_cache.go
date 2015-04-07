@@ -63,7 +63,10 @@ func (lc *leaderCache) Update(group proto.RaftID, r *proto.Replica) {
 	lc.mu.Lock()
 	lc.cache.Del(group)
 	if r != nil {
-		lc.cache.Add(group, r)
+		// Replicas reside inside of slices that are subject to rearrangements,
+		// so let's avoid trouble here.
+		rCopy := *r
+		lc.cache.Add(group, &rCopy)
 	}
 	lc.mu.Unlock()
 }
