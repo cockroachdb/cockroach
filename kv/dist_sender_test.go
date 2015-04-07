@@ -20,6 +20,7 @@ package kv
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -74,6 +75,169 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
 	}, time.Hour)
 	return g
+}
+
+// TestSendRPCOrder verifies that sendRPC correctly takes into account the
+// leader, attributes and required consistency to determine where to send
+// remote requests.
+func TestSendRPCOrder(t *testing.T) {
+	g := makeTestGossip(t)
+	g.NodeID = 1
+	raftID := int64(99)
+
+	nodeAttrs := map[int32][]string{
+		1: []string{}, // The local node, set in each test case.
+		2: []string{"us", "west", "gpu"},
+		3: []string{"eu", "dublin", "pdu2", "gpu"},
+		4: []string{"us", "east", "gpu"},
+		5: []string{"us", "east", "gpu", "flaky"},
+	}
+
+	// Gets filled below to identify the replica by its address.
+	addrToNode := make(map[string]int32)
+	makeVerifier := func(expOrder rpc.OrderingPolicy,
+		expAddrs []int32) func(rpc.Options, []net.Addr) error {
+		return func(o rpc.Options, addrs []net.Addr) error {
+			if o.Ordering != expOrder {
+				return util.Errorf("unexpected ordering, wanted %v, got %v",
+					expOrder, o.Ordering)
+			}
+			for i, a := range addrs {
+				if len(addrs) != len(expAddrs) || (expAddrs[i] > 0 &&
+					addrToNode[a.String()] != int32(expAddrs[i])) {
+					return util.Errorf("addresses changed: %s", addrs)
+				}
+			}
+			return nil
+		}
+	}
+
+	testCases := []struct {
+		method string
+		attrs  []string
+		fn     func(rpc.Options, []net.Addr) error
+		leader int32 // 0 for not caching a leader.
+		// Naming is somewhat off, as eventually consistent reads usually
+		// do not have to go to the leader when a node has a read lease.
+		// Would really want CONSENSUS here, but that is not implemented.
+		// Likely a test setup here will never have a read lease, but good
+		// to keep in mind.
+		consistent bool
+	}{
+		// Inconsistent Scan without matching attributes.
+		{
+			method: "Scan",
+			attrs:  []string{},
+			fn:     makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+		},
+		// Inconsistent Scan with matching attributes.
+		// Should move the two nodes matching the attributes to the front and
+		// go stable.
+		{
+			method: "Scan",
+			attrs:  nodeAttrs[5],
+			// Compare only the first two resulting addresses.
+			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
+		},
+
+		// Scan without matching attributes that requires but does not find
+		// a leader.
+		{
+			method:     "Scan",
+			attrs:      []string{},
+			fn:         makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			consistent: true,
+		},
+		// Put without matching attributes that requires but does not find leader.
+		// Should go random and not change anything.
+		{
+			method: "Put",
+			attrs:  []string{"nomatch"},
+			fn:     makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+		},
+		// Put with matching attributes but no leader.
+		// Should move the two nodes matching the attributes to the front and
+		// go stable.
+		{
+			method: "Put",
+			attrs:  append(nodeAttrs[5], "irrelevant"),
+			// Compare only the first two resulting addresses.
+			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
+		},
+
+		// Put with matching attributes that finds the leader (node 3).
+		// Should address the leader and the two nodes matching the attributes
+		// (the last and second to last) in that order.
+		{
+			method: "Put",
+			attrs:  append(nodeAttrs[5], "irrelevant"),
+			// Compare only the first three resulting addresses.
+			fn:     makeVerifier(rpc.OrderStable, []int32{2, 5, 4, 0, 0}),
+			leader: 2,
+		},
+	}
+
+	// Stub to be changed in each test case.
+	verifyCall := func(o rpc.Options, addrs []net.Addr) error {
+		return util.Errorf("was not supposed to be invoked")
+	}
+
+	var testFn rpcSendFn = func(opts rpc.Options, method string,
+		addrs []net.Addr, _ func(addr net.Addr) interface{},
+		_ func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		return nil, verifyCall(opts, addrs)
+	}
+
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+	}
+
+	ds := NewDistSender(ctx, g)
+
+	for n, tc := range testCases {
+		verifyCall = tc.fn
+		// We don't need to do all of it for each test case, but we need the
+		// replica slice so might as well do it all.
+		descriptor := proto.RangeDescriptor{
+			RaftID:   raftID,
+			Replicas: nil,
+		}
+		for i := int32(1); i <= 5; i++ {
+			addr := util.MakeRawAddr("tcp", fmt.Sprintf("%d", i))
+			addrToNode[addr.String()] = i
+			nd := &storage.NodeDescriptor{
+				NodeID:  proto.NodeID(i),
+				Address: util.MakeRawAddr("tcp", fmt.Sprintf("%d", i)),
+			}
+			// First (= local) node needs to get its attributes during sendRPC.
+			if i == 1 {
+				nd.Attrs = proto.Attributes{Attrs: tc.attrs}
+			}
+			g.AddInfo(gossip.MakeNodeIDKey(proto.NodeID(i)), nd, time.Hour)
+
+			descriptor.Replicas = append(descriptor.Replicas, proto.Replica{
+				NodeID:  proto.NodeID(i),
+				StoreID: proto.StoreID(i),
+				Attrs:   proto.Attributes{Attrs: nodeAttrs[i]},
+			})
+		}
+		ds.leaderCache.Update(proto.RaftID(raftID), nil)
+		if tc.leader > 0 {
+			ds.leaderCache.Update(proto.RaftID(raftID), &descriptor.Replicas[tc.leader-1])
+		}
+
+		// Always create the parameters for Scan, only the Header() is used
+		// anyways so it doesn't matter.
+		args := proto.ScanArgs(proto.Key("b"), proto.Key("y"), 0)
+		args.Header().RaftID = raftID // Not used in this test, but why not.
+		if !tc.consistent {
+			args.Header().ReadConsistency = proto.INCONSISTENT
+		}
+		reply := &proto.ScanResponse{}
+		if err := ds.sendRPC(&descriptor, tc.method, args, reply); err != nil {
+			t.Errorf("%d: %s", n, err)
+		}
+	}
 }
 
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
