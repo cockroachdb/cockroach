@@ -6,12 +6,15 @@ package codec
 
 import (
 	"errors"
+	"io"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"testing"
 
 	// can not import xxx.pb with rpc stub here,
 	// because it will cause import cycle.
+
 	msg "github.com/cockroachdb/cockroach/rpc/codec/message.pb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -249,4 +252,94 @@ func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 			echoCall.Reply.(*msg.EchoResponse).GetMsg(),
 		)
 	}
+}
+
+func randString(n int) string {
+	var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	s := make([]byte, n)
+	for i := 0; i < len(s); i++ {
+		s[i] = randLetters[rand.Intn(len(randLetters))]
+	}
+	return string(s)
+}
+
+func listenAndServeEchoService(network, addr string,
+	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Addr, error) {
+	clients, err := net.Listen(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	srv := rpc.NewServer()
+	if err := srv.RegisterName("EchoService", new(Echo)); err != nil {
+		return nil, err
+	}
+	go func() {
+		for {
+			conn, err := clients.Accept()
+			if err != nil {
+				log.Infof("clients.Accept(): %v\n", err)
+				continue
+			}
+			serveConn(srv, conn)
+		}
+	}()
+	return clients.Addr(), nil
+}
+
+func benchmarkEcho(b *testing.B, newClient func() *rpc.Client) {
+	echoMsg := randString(64 << 10)
+
+	b.SetBytes(2 * int64(len(echoMsg)))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		client := newClient()
+		defer client.Close()
+
+		for pb.Next() {
+			args := &msg.EchoRequest{Msg: echoMsg}
+			reply := &msg.EchoResponse{}
+			if err := client.Call("EchoService.Echo", args, reply); err != nil {
+				b.Fatalf(`EchoService.Echo: %v`, err)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+func BenchmarkEchoGobRPC(b *testing.B) {
+	srvAddr, err := listenAndServeEchoService("tcp", "127.0.0.1:0",
+		func(srv *rpc.Server, conn io.ReadWriteCloser) {
+			go srv.ServeConn(conn)
+		})
+	if err != nil {
+		b.Fatal("could not start server")
+	}
+
+	benchmarkEcho(b, func() *rpc.Client {
+		conn, err := net.Dial(srvAddr.Network(), srvAddr.String())
+		if err != nil {
+			b.Fatalf("could not dial client to %s: %s", srvAddr, err)
+		}
+		return rpc.NewClient(conn)
+	})
+}
+
+func BenchmarkEchoProtobufRPC(b *testing.B) {
+	srvAddr, err := listenAndServeEchoService("tcp", "127.0.0.1:0",
+		func(srv *rpc.Server, conn io.ReadWriteCloser) {
+			go srv.ServeCodec(NewServerCodec(conn))
+		})
+	if err != nil {
+		b.Fatal("could not start server")
+	}
+
+	benchmarkEcho(b, func() *rpc.Client {
+		conn, err := net.Dial(srvAddr.Network(), srvAddr.String())
+		if err != nil {
+			b.Fatalf("could not dial client to %s: %s", srvAddr, err)
+		}
+		return rpc.NewClientWithCodec(NewClientCodec(conn))
+	})
 }

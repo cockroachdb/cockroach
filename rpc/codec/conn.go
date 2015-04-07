@@ -5,77 +5,83 @@
 package codec
 
 import (
+	"bufio"
 	"encoding/binary"
-	"errors"
 	"io"
 	"net"
+	"sync"
+
+	"github.com/gogo/protobuf/proto"
 )
+
+type frameBuf struct {
+	size [binary.MaxVarintLen64]byte
+}
+
+var framePool = sync.Pool{
+	New: func() interface{} {
+		return &frameBuf{}
+	},
+}
 
 func sendFrame(w io.Writer, data []byte) (err error) {
 	// Allocate enough space for the biggest uvarint
-	var size [binary.MaxVarintLen64]byte
+	buf := framePool.Get().(*frameBuf)
+	size := buf.size[:]
 
 	if data == nil || len(data) == 0 {
-		n := binary.PutUvarint(size[:], uint64(0))
-		if err = write(w, size[:n], false); err != nil {
-			return
-		}
+		n := binary.PutUvarint(size, uint64(0))
+		err = write(w, size[:n])
+		framePool.Put(buf)
 		return
 	}
 
 	// Write the size and data
-	n := binary.PutUvarint(size[:], uint64(len(data)))
-	if err = write(w, size[:n], false); err != nil {
+	n := binary.PutUvarint(size, uint64(len(data)))
+	err = write(w, size[:n])
+	framePool.Put(buf)
+	if err != nil {
 		return
 	}
-	if err = write(w, data, false); err != nil {
-		return
-	}
+	err = write(w, data)
 	return
 }
 
-func recvFrame(r io.Reader) (data []byte, err error) {
-	size, err := readUvarint(r)
+func recvProto(r *bufio.Reader, m proto.Message) (err error) {
+	size, err := binary.ReadUvarint(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if size != 0 {
-		data = make([]byte, size)
-		if err = read(r, data); err != nil {
-			return nil, err
-		}
-	}
-	return data, nil
-}
-
-// ReadUvarint reads an encoded unsigned integer from r and returns it as a uint64.
-func readUvarint(r io.Reader) (uint64, error) {
-	var x uint64
-	var s uint
-	for i := 0; ; i++ {
-		var b byte
-		b, err := readByte(r)
-		if err != nil {
-			return 0, err
-		}
-		if b < 0x80 {
-			if i > 9 || i == 9 && b > 1 {
-				return x, errors.New("protorpc: varint overflows a 64-bit integer")
+		if r.Buffered() >= int(size) {
+			// Parse proto directly from the buffered data.
+			data, err := r.Peek(int(size))
+			if err != nil {
+				return err
 			}
-			return x | uint64(b)<<s, nil
-		}
-		x |= uint64(b&0x7f) << s
-		s += 7
-	}
-}
-
-func write(w io.Writer, data []byte, onePacket bool) error {
-	if onePacket {
-		if _, err := w.Write(data); err != nil {
+			if err := proto.Unmarshal(data, m); err != nil {
+				return err
+			}
+			// TODO(pmattis): This is a hack to advance the bufio pointer by
+			// reading into the same slice that bufio.Reader.Peek
+			// returned. In Go 1.5 we'll be able to use
+			// bufio.Reader.Discard.
+			_, err = io.ReadFull(r, data)
 			return err
 		}
-		return nil
+
+		data := make([]byte, size)
+		if _, err := io.ReadFull(r, data); err != nil {
+			return err
+		}
+		if err := proto.Unmarshal(data, m); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func write(w io.Writer, data []byte) error {
 	for index := 0; index < len(data); {
 		n, err := w.Write(data[index:])
 		if err != nil {
@@ -86,26 +92,4 @@ func write(w io.Writer, data []byte, onePacket bool) error {
 		index += n
 	}
 	return nil
-}
-
-func read(r io.Reader, data []byte) error {
-	for index := 0; index < len(data); {
-		n, err := r.Read(data[index:])
-		if err != nil {
-			if nerr, ok := err.(net.Error); !ok || !nerr.Temporary() {
-				return err
-			}
-		}
-		index += n
-	}
-	return nil
-}
-
-func readByte(r io.Reader) (c byte, err error) {
-	data := make([]byte, 1)
-	if err = read(r, data); err != nil {
-		return 0, err
-	}
-	c = data[0]
-	return
 }

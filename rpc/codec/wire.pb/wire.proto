@@ -10,45 +10,33 @@
 //
 //	1. Client Send Request
 //	Send RequestHeader: sendFrame(conn, hdr, len(hdr))
-//	Send Request: sendFrame(conn, body, hdr.snappy_compressed_request_len)
+//	Send Request: sendFrame(conn, body, len(body))
 //
 //	2. Server Recv Request
 //	Recv RequestHeader: recvFrame(conn, hdr, max_hdr_len, 0)
-//	Recv Request: recvFrame(conn, body, hdr.snappy_compressed_request_len, 0)
+//	Recv Request: recvFrame(conn, body)
 //
 //	3. Server Send Response
 //	Send ResponseHeader: sendFrame(conn, hdr, len(hdr))
-//	Send Response: sendFrame(conn, body, hdr.snappy_compressed_response_len)
+//	Send Response: sendFrame(conn, body, len(body))
 //
 //	4. Client Recv Response
 //	Recv ResponseHeader: recvFrame(conn, hdr, max_hdr_len, 0)
-//	Recv Response: recvFrame(conn, body, hdr.snappy_compressed_response_len, 0)
-//
-//	5. Header Size
-//	len(RequestHeader)  < Const.max_header_len.default
-//	len(ResponseHeader) < Const.max_header_len.default
+//	Recv Response: recvFrame(conn, body)
 package wire;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-message Const {
-  optional uint32 max_header_len = 1 [default = 1024];
-}
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 message RequestHeader {
 	optional uint64 id = 1 [(gogoproto.nullable) = false];
 	optional string method = 2 [(gogoproto.nullable) = false];
-
-	optional uint32 raw_request_len = 3 [(gogoproto.nullable) = false];
-	optional uint32 snappy_compressed_request_len = 4 [(gogoproto.nullable) = false];
-	optional uint32 checksum = 5 [(gogoproto.nullable) = false];
 }
 
 message ResponseHeader {
 	optional uint64 id = 1 [(gogoproto.nullable) = false];
 	optional string error = 2 [(gogoproto.nullable) = false];
-
-	optional uint32 raw_response_len = 3 [(gogoproto.nullable) = false];
-	optional uint32 snappy_compressed_response_len = 4 [(gogoproto.nullable) = false];
-	optional uint32 checksum = 5 [(gogoproto.nullable) = false];
 }
