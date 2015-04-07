@@ -1033,8 +1033,8 @@ func (*AdminSplitResponse) ProtoMessage()    {}
 // sort first). This range will be the subsuming range and the right
 // hand range will be subsumed. After the merge operation, the
 // subsumed_range will no longer exist and the subsuming range will
-// now encompass all keys from its original start_key to the end_key
-// of the subsumed_range. If AdminMerge is called on the final range
+// now encompass all keys from its original start key to the end key
+// of the subsumed range. If AdminMerge is called on the final range
 // in the key space, it is a noop.
 type AdminMergeRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
