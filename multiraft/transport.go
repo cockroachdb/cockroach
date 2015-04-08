@@ -150,6 +150,12 @@ func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 
+	select {
+	case <-lt.closed:
+		return nil, util.Errorf("transport is closed")
+	default:
+	}
+
 	client, ok := lt.clients[id]
 	if ok {
 		return client, nil
