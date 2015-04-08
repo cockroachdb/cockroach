@@ -20,6 +20,7 @@ package kv
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -337,8 +338,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	}
 
 	// Build a slice of replica addresses (if gossiped).
-	// A node may have multiple stores, so the addr of store should include net addr and storeID
-	var addrs []rpc.StoreAddr
+	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
 		addr, err := storage.NodeIDToAddress(ds.gossip, desc.Replicas[i].NodeID)
@@ -346,13 +346,8 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
 			continue
 		}
-
-		storeAddr := rpc.StoreAddr{
-			Addr:    addr,
-			StoreID: desc.Replicas[i].StoreID,
-		}
-		addrs = append(addrs, storeAddr)
-		replicaMap[storeAddr.String()] = &desc.Replicas[i]
+		addrs = append(addrs, addr)
+		replicaMap[addr.String()] = &desc.Replicas[i]
 	}
 	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}
@@ -372,7 +367,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string, args p
 	}
 	// getArgs clones the arguments on demand for all but the first replica.
 	firstArgs := true
-	getArgs := func(addr rpc.StoreAddr) interface{} {
+	getArgs := func(addr net.Addr) interface{} {
 		var a proto.Request
 		// Use the supplied args proto if this is our first address.
 		if firstArgs {
