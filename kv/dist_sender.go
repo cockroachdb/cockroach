@@ -356,10 +356,10 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 			// us and hence better candidates.
 			order = rpc.OrderStable
 		}
-	} else {
+	} else if ds.gossip.NodeID > 0 {
 		// A normal node should always have that information set in Gossip when
-		// booting, so this is worth complaining about.
-		log.Warningf("own NodeDescriptor node available via Gossip, rpcs will be sent randomly")
+		// bootstrapped, so this is worth complaining about.
+		log.Warningf("own NodeDescriptor %d not available via Gossip", ds.gossip.NodeID)
 	}
 
 	// If this request needs to go to a leader and we know who that is, move

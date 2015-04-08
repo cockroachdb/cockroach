@@ -111,8 +111,6 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
 
-	// Create a client.KVSender instance for use with this node's
-	// client to the key value database as well as
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.stopper)
 	s.kv = client.NewKV(nil, sender)
