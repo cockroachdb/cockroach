@@ -353,6 +353,7 @@ func (g *Gossip) bootstrap() {
 		g.mu.Lock()
 		g.initializeBootstrapAddresses()
 		if g.closed {
+			g.mu.Unlock()
 			break
 		}
 		// Find list of available bootstrap hosts.
@@ -444,6 +445,7 @@ func (g *Gossip) manage() {
 
 		// The exit condition.
 		if g.closed && g.outgoing.len() == 0 {
+			g.mu.Unlock()
 			break
 		}
 		g.mu.Unlock()
