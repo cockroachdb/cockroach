@@ -622,7 +622,9 @@ func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigge
 type EndTransactionResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Remaining time (ns).
-	CommitWait       int64  `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
+	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
+	// List of intents resolved by EndTransaction call.
+	Resolved         []Key  `protobuf:"bytes,3,rep,name=resolved,customtype=Key" json:"resolved,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 

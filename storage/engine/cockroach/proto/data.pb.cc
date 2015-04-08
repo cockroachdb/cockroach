@@ -233,10 +233,11 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ChangeReplicasTrigger));
   InternalCommitTrigger_descriptor_ = file->message_type(9);
-  static const int InternalCommitTrigger_offsets_[3] = {
+  static const int InternalCommitTrigger_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, split_trigger_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, merge_trigger_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, change_replicas_trigger_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(InternalCommitTrigger, intents_),
   };
   InternalCommitTrigger_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -483,44 +484,45 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "\037\007StoreID\022=\n\013change_type\030\003 \001(\0162\".cockroa"
     "ch.proto.ReplicaChangeTypeB\004\310\336\037\000\0228\n\020upda"
     "ted_replicas\030\004 \003(\0132\030.cockroach.proto.Rep"
-    "licaB\004\310\336\037\000\"\314\001\n\025InternalCommitTrigger\0224\n\r"
+    "licaB\004\310\336\037\000\"\346\001\n\025InternalCommitTrigger\0224\n\r"
     "split_trigger\030\001 \001(\0132\035.cockroach.proto.Sp"
     "litTrigger\0224\n\rmerge_trigger\030\002 \001(\0132\035.cock"
     "roach.proto.MergeTrigger\022G\n\027change_repli"
     "cas_trigger\030\003 \001(\0132&.cockroach.proto.Chan"
-    "geReplicasTrigger\"#\n\010NodeList\022\021\n\005nodes\030\001"
-    " \003(\005B\002\020\001:\004\220\241\037\001\"\221\004\n\013Transaction\022\022\n\004name\030\001"
-    " \001(\tB\004\310\336\037\000\022\030\n\003key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002"
-    "id\030\003 \001(\014B\n\310\336\037\000\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004"
-    "\310\336\037\000\0227\n\tisolation\030\005 \001(\0162\036.cockroach.prot"
-    "o.IsolationTypeB\004\310\336\037\000\0228\n\006status\030\006 \001(\0162\"."
-    "cockroach.proto.TransactionStatusB\004\310\336\037\000\022"
-    "\023\n\005epoch\030\007 \001(\005B\004\310\336\037\000\0222\n\016last_heartbeat\030\010"
-    " \001(\0132\032.cockroach.proto.Timestamp\0223\n\ttime"
-    "stamp\030\t \001(\0132\032.cockroach.proto.TimestampB"
-    "\004\310\336\037\000\0228\n\016orig_timestamp\030\n \001(\0132\032.cockroac"
-    "h.proto.TimestampB\004\310\336\037\000\0227\n\rmax_timestamp"
-    "\030\013 \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000"
-    "\0226\n\rcertain_nodes\030\014 \001(\0132\031.cockroach.prot"
-    "o.NodeListB\004\310\336\037\000:\010\230\240\037\000\220\241\037\001\"\344\001\n\014MVCCMetad"
-    "ata\022)\n\003txn\030\001 \001(\0132\034.cockroach.proto.Trans"
-    "action\0223\n\ttimestamp\030\002 \001(\0132\032.cockroach.pr"
-    "oto.TimestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336"
-    "\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes"
-    "\030\005 \001(\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach."
-    "proto.Value:\004\220\241\037\001\"N\n\nGCMetadata\022\035\n\017last_"
-    "scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_"
-    "nanos\030\002 \001(\003:\004\220\241\037\001\"b\n\023TimeSeriesDatapoint"
-    "\022\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_v"
-    "alue\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002:\004\220\241\037\001\"d\n"
-    "\016TimeSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\0228\n\nd"
-    "atapoints\030\002 \003(\0132$.cockroach.proto.TimeSe"
-    "riesDatapoint:\004\220\241\037\001*>\n\021ReplicaChangeType"
-    "\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210"
-    "\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014"
-    "\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022"
-    "\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002"
-    "\032\004\210\243\036\000B\007Z\005proto", 2655);
+    "geReplicasTrigger\022\030\n\007intents\030\004 \003(\014B\007\332\336\037\003"
+    "Key\"#\n\010NodeList\022\021\n\005nodes\030\001 \003(\005B\002\020\001:\004\220\241\037\001"
+    "\"\221\004\n\013Transaction\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\030\n\003"
+    "key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\022\026\n\002id\030\003 \001(\014B\n\310\336\037\000"
+    "\342\336\037\002ID\022\026\n\010priority\030\004 \001(\005B\004\310\336\037\000\0227\n\tisolat"
+    "ion\030\005 \001(\0162\036.cockroach.proto.IsolationTyp"
+    "eB\004\310\336\037\000\0228\n\006status\030\006 \001(\0162\".cockroach.prot"
+    "o.TransactionStatusB\004\310\336\037\000\022\023\n\005epoch\030\007 \001(\005"
+    "B\004\310\336\037\000\0222\n\016last_heartbeat\030\010 \001(\0132\032.cockroa"
+    "ch.proto.Timestamp\0223\n\ttimestamp\030\t \001(\0132\032."
+    "cockroach.proto.TimestampB\004\310\336\037\000\0228\n\016orig_"
+    "timestamp\030\n \001(\0132\032.cockroach.proto.Timest"
+    "ampB\004\310\336\037\000\0227\n\rmax_timestamp\030\013 \001(\0132\032.cockr"
+    "oach.proto.TimestampB\004\310\336\037\000\0226\n\rcertain_no"
+    "des\030\014 \001(\0132\031.cockroach.proto.NodeListB\004\310\336"
+    "\037\000:\010\230\240\037\000\220\241\037\001\"\344\001\n\014MVCCMetadata\022)\n\003txn\030\001 \001"
+    "(\0132\034.cockroach.proto.Transaction\0223\n\ttime"
+    "stamp\030\002 \001(\0132\032.cockroach.proto.TimestampB"
+    "\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_byte"
+    "s\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022%"
+    "\n\005value\030\006 \001(\0132\026.cockroach.proto.Value:\004\220"
+    "\241\037\001\"N\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001"
+    "(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003:\004\220"
+    "\241\037\001\"b\n\023TimeSeriesDatapoint\022\035\n\017timestamp_"
+    "nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022\023\n\013"
+    "float_value\030\003 \001(\002:\004\220\241\037\001\"d\n\016TimeSeriesDat"
+    "a\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\002 \003("
+    "\0132$.cockroach.proto.TimeSeriesDatapoint:"
+    "\004\220\241\037\001*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLIC"
+    "A\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolati"
+    "onType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004"
+    "\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r"
+    "\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\007Z\005prot"
+    "o", 2681);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -3360,6 +3362,7 @@ void ChangeReplicasTrigger::Swap(ChangeReplicasTrigger* other) {
 const int InternalCommitTrigger::kSplitTriggerFieldNumber;
 const int InternalCommitTrigger::kMergeTriggerFieldNumber;
 const int InternalCommitTrigger::kChangeReplicasTriggerFieldNumber;
+const int InternalCommitTrigger::kIntentsFieldNumber;
 #endif  // !_MSC_VER
 
 InternalCommitTrigger::InternalCommitTrigger()
@@ -3382,6 +3385,7 @@ InternalCommitTrigger::InternalCommitTrigger(const InternalCommitTrigger& from)
 }
 
 void InternalCommitTrigger::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   split_trigger_ = NULL;
   merge_trigger_ = NULL;
@@ -3435,6 +3439,7 @@ void InternalCommitTrigger::Clear() {
       if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::cockroach::proto::ChangeReplicasTrigger::Clear();
     }
   }
+  intents_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -3483,6 +3488,20 @@ bool InternalCommitTrigger::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_intents;
+        break;
+      }
+
+      // repeated bytes intents = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_intents:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->add_intents()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(34)) goto parse_intents;
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -3530,6 +3549,12 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
       3, this->change_replicas_trigger(), output);
   }
 
+  // repeated bytes intents = 4;
+  for (int i = 0; i < this->intents_size(); i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytes(
+      4, this->intents(i), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -3559,6 +3584,12 @@ void InternalCommitTrigger::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         3, this->change_replicas_trigger(), target);
+  }
+
+  // repeated bytes intents = 4;
+  for (int i = 0; i < this->intents_size(); i++) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteBytesToArray(4, this->intents(i), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -3595,6 +3626,13 @@ int InternalCommitTrigger::ByteSize() const {
     }
 
   }
+  // repeated bytes intents = 4;
+  total_size += 1 * this->intents_size();
+  for (int i = 0; i < this->intents_size(); i++) {
+    total_size += ::google::protobuf::internal::WireFormatLite::BytesSize(
+      this->intents(i));
+  }
+
   if (!unknown_fields().empty()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -3620,6 +3658,7 @@ void InternalCommitTrigger::MergeFrom(const ::google::protobuf::Message& from) {
 
 void InternalCommitTrigger::MergeFrom(const InternalCommitTrigger& from) {
   GOOGLE_CHECK_NE(&from, this);
+  intents_.MergeFrom(from.intents_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_split_trigger()) {
       mutable_split_trigger()->::cockroach::proto::SplitTrigger::MergeFrom(from.split_trigger());
@@ -3656,6 +3695,7 @@ void InternalCommitTrigger::Swap(InternalCommitTrigger* other) {
     std::swap(split_trigger_, other->split_trigger_);
     std::swap(merge_trigger_, other->merge_trigger_);
     std::swap(change_replicas_trigger_, other->change_replicas_trigger_);
+    intents_.Swap(&other->intents_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

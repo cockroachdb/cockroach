@@ -793,7 +793,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	case proto.Scan:
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case proto.EndTransaction:
-		r.EndTransaction(batch, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
+		r.EndTransaction(batch, &ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
 	case proto.ReapQueue:
 		r.ReapQueue(batch, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
 	case proto.EnqueueUpdate:
@@ -947,7 +947,7 @@ func (r *Range) Scan(batch engine.Engine, args *proto.ScanRequest, reply *proto.
 
 // EndTransaction either commits or aborts (rolls back) an extant
 // transaction according to the args.Commit parameter.
-func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
+func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) {
 	if args.Txn == nil {
 		reply.SetGoError(util.Errorf("no transaction specified to EndTransaction"))
 		return
@@ -1028,8 +1028,18 @@ func (r *Range) EndTransaction(batch engine.Engine, args *proto.EndTransactionRe
 
 	// Run triggers if successfully committed. Any failures running
 	// triggers will set an error and prevent the batch from committing.
-	if reply.Txn.Status == proto.COMMITTED {
-		if ct := args.InternalCommitTrigger; ct != nil {
+	if ct := args.InternalCommitTrigger; ct != nil {
+		// Resolve any explicit intents.
+		for _, key := range ct.Intents {
+			log.V(1).Infof("resolving intent at %s on end transaction [%s]", key, reply.Txn.Status)
+			if err := engine.MVCCResolveWriteIntent(batch, ms, key, reply.Txn.Timestamp, reply.Txn); err != nil {
+				reply.SetGoError(err)
+				return
+			}
+			reply.Resolved = append(reply.Resolved, key)
+		}
+		// Run appropriate trigger.
+		if reply.Txn.Status == proto.COMMITTED {
 			if ct.SplitTrigger != nil {
 				reply.SetGoError(r.splitTrigger(batch, ct.SplitTrigger))
 			} else if ct.MergeTrigger != nil {
@@ -1906,11 +1916,13 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(newDesc.StartKey), newDesc); err != nil {
+		desc1Key := engine.RangeDescriptorKey(newDesc.StartKey)
+		if err := txn.PreparePutProto(desc1Key, newDesc); err != nil {
 			return err
 		}
 		// Update existing range descriptor for first half of split.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		if err := txn.PreparePutProto(desc2Key, &updatedDesc); err != nil {
 			return err
 		}
 		// Update range descriptor addressing record(s).
@@ -1931,6 +1943,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 					UpdatedDesc: updatedDesc,
 					NewDesc:     *newDesc,
 				},
+				Intents: []proto.Key{desc1Key, desc2Key},
 			},
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
@@ -2008,13 +2021,15 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	}
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Update the range descriptor for the receiving range.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		if err := txn.PreparePutProto(desc1Key, &updatedDesc); err != nil {
 			return err
 		}
 
 		// Remove the range descriptor for the deleted range.
+		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
 		deleteResponse := &proto.DeleteResponse{}
-		txn.Prepare(proto.Delete, proto.DeleteArgs(engine.RangeDescriptorKey(subsumedDesc.StartKey)),
+		txn.Prepare(proto.Delete, proto.DeleteArgs(desc2Key),
 			deleteResponse)
 
 		if err := MergeRangeAddressing(txn, desc, &updatedDesc); err != nil {
@@ -2031,6 +2046,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 					UpdatedDesc:    updatedDesc,
 					SubsumedRaftID: subsumedDesc.RaftID,
 				},
+				Intents: []proto.Key{desc1Key, desc2Key},
 			},
 		}, &proto.EndTransactionResponse{})
 	}); err != nil {
@@ -2079,7 +2095,8 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
-		if err := txn.PreparePutProto(engine.RangeDescriptorKey(updatedDesc.StartKey), &updatedDesc); err != nil {
+		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
+		if err := txn.PreparePutProto(descKey, &updatedDesc); err != nil {
 			return err
 		}
 
@@ -2097,6 +2114,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 					ChangeType:      changeType,
 					UpdatedReplicas: updatedDesc.Replicas,
 				},
+				Intents: []proto.Key{descKey},
 			},
 		}, &proto.EndTransactionResponse{})
 	})

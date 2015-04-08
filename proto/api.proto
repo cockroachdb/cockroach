@@ -252,7 +252,6 @@ message EndTransactionRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   optional bool commit = 2 [(gogoproto.nullable) = false];
-
   // Optional commit triggers. Note that commit triggers are for
   // internal use only and will be ignored if requested through the
   // public-facing KV API.
@@ -273,6 +272,8 @@ message EndTransactionResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Remaining time (ns).
   optional int64 commit_wait = 2 [(gogoproto.nullable) = false];
+  // List of intents resolved by EndTransaction call.
+  repeated bytes resolved = 3 [(gogoproto.customtype) = "Key"];
 }
 
 // A ReapQueueRequest is arguments to the ReapQueue() method. It

@@ -1100,6 +1100,22 @@ class InternalCommitTrigger : public ::google::protobuf::Message {
   inline ::cockroach::proto::ChangeReplicasTrigger* release_change_replicas_trigger();
   inline void set_allocated_change_replicas_trigger(::cockroach::proto::ChangeReplicasTrigger* change_replicas_trigger);
 
+  // repeated bytes intents = 4;
+  inline int intents_size() const;
+  inline void clear_intents();
+  static const int kIntentsFieldNumber = 4;
+  inline const ::std::string& intents(int index) const;
+  inline ::std::string* mutable_intents(int index);
+  inline void set_intents(int index, const ::std::string& value);
+  inline void set_intents(int index, const char* value);
+  inline void set_intents(int index, const void* value, size_t size);
+  inline ::std::string* add_intents();
+  inline void add_intents(const ::std::string& value);
+  inline void add_intents(const char* value);
+  inline void add_intents(const void* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& intents() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_intents();
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalCommitTrigger)
  private:
   inline void set_has_split_trigger();
@@ -1116,6 +1132,7 @@ class InternalCommitTrigger : public ::google::protobuf::Message {
   ::cockroach::proto::SplitTrigger* split_trigger_;
   ::cockroach::proto::MergeTrigger* merge_trigger_;
   ::cockroach::proto::ChangeReplicasTrigger* change_replicas_trigger_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> intents_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
@@ -3001,6 +3018,60 @@ inline void InternalCommitTrigger::set_allocated_change_replicas_trigger(::cockr
     clear_has_change_replicas_trigger();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalCommitTrigger.change_replicas_trigger)
+}
+
+// repeated bytes intents = 4;
+inline int InternalCommitTrigger::intents_size() const {
+  return intents_.size();
+}
+inline void InternalCommitTrigger::clear_intents() {
+  intents_.Clear();
+}
+inline const ::std::string& InternalCommitTrigger::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalCommitTrigger.intents)
+  return intents_.Get(index);
+}
+inline ::std::string* InternalCommitTrigger::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalCommitTrigger.intents)
+  return intents_.Mutable(index);
+}
+inline void InternalCommitTrigger::set_intents(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalCommitTrigger.intents)
+  intents_.Mutable(index)->assign(value);
+}
+inline void InternalCommitTrigger::set_intents(int index, const char* value) {
+  intents_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.InternalCommitTrigger.intents)
+}
+inline void InternalCommitTrigger::set_intents(int index, const void* value, size_t size) {
+  intents_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.InternalCommitTrigger.intents)
+}
+inline ::std::string* InternalCommitTrigger::add_intents() {
+  return intents_.Add();
+}
+inline void InternalCommitTrigger::add_intents(const ::std::string& value) {
+  intents_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.proto.InternalCommitTrigger.intents)
+}
+inline void InternalCommitTrigger::add_intents(const char* value) {
+  intents_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.proto.InternalCommitTrigger.intents)
+}
+inline void InternalCommitTrigger::add_intents(const void* value, size_t size) {
+  intents_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.InternalCommitTrigger.intents)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+InternalCommitTrigger::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.InternalCommitTrigger.intents)
+  return intents_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+InternalCommitTrigger::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.InternalCommitTrigger.intents)
+  return &intents_;
 }
 
 // -------------------------------------------------------------------
