@@ -489,7 +489,7 @@ type Transaction struct {
 	OrigTimestamp Timestamp `protobuf:"bytes,10,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between Timestamp and MaxTimestamp trigger a txn
-	// retry error, unless the node being read is listed in nodes_read
+	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
 	// The case MaxTimestamp < Timestamp is possible for transactions which have
 	// been pushed; in this case, MaxTimestamp should be ignored.
