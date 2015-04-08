@@ -208,7 +208,17 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	r.SetDesc(desc)
 
-	err := r.loadLastIndex()
+	var zoneConfig *proto.ZoneConfig
+	key := engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin)
+	ok, err := engine.MVCCGetProto(r.rm.Engine(), key, proto.ZeroTimestamp, true, nil, zoneConfig)
+	if err != nil {
+		return nil, err
+	} else if !ok {
+		r.SetMaxBytes(67108864)
+	}
+	r.SetMaxBytes(zoneConfig.GetRangeMaxBytes())
+
+	err = r.loadLastIndex()
 	if err != nil {
 		return nil, err
 	}
