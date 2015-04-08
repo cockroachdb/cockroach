@@ -162,7 +162,7 @@ type RangeManager interface {
 	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
-	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand)
+	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
 	SplitRange(origRng, newRng *Range) error
 }
@@ -568,12 +568,17 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// TODO(bdarnell): In certain raft failover scenarios, proposed
 	// commands may be abandoned. We need to re-propose the command
 	// if too much time passes with no response on the done channel.
-	r.rm.ProposeRaftCommand(idKey, raftCmd)
+	raftChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
-		err := <-pendingCmd.done
+		// First wait for raft to commit or abort the command.
+		err := <-raftChan
+		if err == nil {
+			// Next if the command was commited, wait for the range to apply it.
+			err = <-pendingCmd.done
+		}
 
 		// As for reads, update timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher

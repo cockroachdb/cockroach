@@ -1066,8 +1066,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	return wiErr
 }
 
-// ProposeRaftCommand submits a command to raft.
-func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) {
+// ProposeRaftCommand submits a command to raft. The command is processed
+// asynchronously and an error or nil will be written to the returned
+// channel when it is committed or aborted (but note that committed does
+// mean that it has been applied to the range yet).
+func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) <-chan error {
 	value := cmd.Cmd.GetValue()
 	if value == nil {
 		panic("proposed a nil command")
@@ -1088,13 +1091,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 		// needs to understand it; it cannot simply be an opaque command.
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
+		return s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
 			MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
-	} else {
-		s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 	}
+	return s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 }
 
 // processRaft processes read/write commands that have been committed
