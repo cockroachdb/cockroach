@@ -22,7 +22,6 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"testing"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -602,6 +602,53 @@ func TestStoreRangesByKey(t *testing.T) {
 	}
 	if store.LookupRange(engine.KeyMax, nil) != nil {
 		t.Errorf("expected engine.KeyMax to not have an associated range")
+	}
+}
+
+// TestStoreSetRangesMaxBytes creates a set of ranges via splitting
+// and then sets the config zone to a custom max bytes value to
+// verify the ranges' max bytes are updated appropriately.
+func TestStoreSetRangesMaxBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	store, _ := createTestStore(t)
+	defer store.Stop()
+
+	testData := []struct {
+		rng         *Range
+		expMaxBytes int64
+	}{
+		{store.LookupRange(engine.KeyMin, engine.KeyMin), 64 << 20},
+		{splitTestRange(store, engine.KeyMin, proto.Key("a"), t), 1 << 20},
+		{splitTestRange(store, proto.Key("a"), proto.Key("aa"), t), 1 << 20},
+		{splitTestRange(store, proto.Key("aa"), proto.Key("b"), t), 64 << 20},
+	}
+
+	// Now set a new zone config for the prefix "a" with a different max bytes.
+	zoneConfig := &proto.ZoneConfig{
+		ReplicaAttrs:  []proto.Attributes{{}, {}, {}},
+		RangeMinBytes: 1 << 8,
+		RangeMaxBytes: 1 << 20,
+	}
+	data, err := gogoproto.Marshal(zoneConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key("a"))
+	pArgs, pReply := putArgs(key, data, 1, store.StoreID())
+	pArgs.Timestamp = store.clock.Now()
+	if err := store.ExecuteCmd(proto.Put, pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := util.IsTrueWithin(func() bool {
+		for _, test := range testData {
+			if test.rng.GetMaxBytes() != test.expMaxBytes {
+				return false
+			}
+		}
+		return true
+	}, 500*time.Millisecond); err != nil {
+		t.Errorf("range max bytes values did not change as expected: %s", err)
 	}
 }
 

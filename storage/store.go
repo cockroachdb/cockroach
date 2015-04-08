@@ -571,7 +571,9 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 	defer s.mu.Unlock()
 	zone := zoneMap[0].Config.(*proto.ZoneConfig)
 	idx := 0
-	for _, rng := range s.ranges {
+	// Note that we must iterate through the ranges in lexicographic
+	// order to match the ordering of the zoneMap.
+	for _, rng := range s.rangesByKey {
 		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
 			idx++
 			zone = zoneMap[idx].Config.(*proto.ZoneConfig)
