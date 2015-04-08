@@ -3511,28 +3511,16 @@ class AdminMergeRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::RequestHeader* release_header();
   inline void set_allocated_header(::cockroach::proto::RequestHeader* header);
 
-  // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-  inline bool has_subsumed_range() const;
-  inline void clear_subsumed_range();
-  static const int kSubsumedRangeFieldNumber = 2;
-  inline const ::cockroach::proto::RangeDescriptor& subsumed_range() const;
-  inline ::cockroach::proto::RangeDescriptor* mutable_subsumed_range();
-  inline ::cockroach::proto::RangeDescriptor* release_subsumed_range();
-  inline void set_allocated_subsumed_range(::cockroach::proto::RangeDescriptor* subsumed_range);
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.AdminMergeRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
-  inline void set_has_subsumed_range();
-  inline void clear_has_subsumed_range();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
-  ::cockroach::proto::RangeDescriptor* subsumed_range_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -7345,47 +7333,6 @@ inline void AdminMergeRequest::set_allocated_header(::cockroach::proto::RequestH
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.AdminMergeRequest.header)
-}
-
-// optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-inline bool AdminMergeRequest::has_subsumed_range() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void AdminMergeRequest::set_has_subsumed_range() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void AdminMergeRequest::clear_has_subsumed_range() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void AdminMergeRequest::clear_subsumed_range() {
-  if (subsumed_range_ != NULL) subsumed_range_->::cockroach::proto::RangeDescriptor::Clear();
-  clear_has_subsumed_range();
-}
-inline const ::cockroach::proto::RangeDescriptor& AdminMergeRequest::subsumed_range() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.AdminMergeRequest.subsumed_range)
-  return subsumed_range_ != NULL ? *subsumed_range_ : *default_instance_->subsumed_range_;
-}
-inline ::cockroach::proto::RangeDescriptor* AdminMergeRequest::mutable_subsumed_range() {
-  set_has_subsumed_range();
-  if (subsumed_range_ == NULL) subsumed_range_ = new ::cockroach::proto::RangeDescriptor;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminMergeRequest.subsumed_range)
-  return subsumed_range_;
-}
-inline ::cockroach::proto::RangeDescriptor* AdminMergeRequest::release_subsumed_range() {
-  clear_has_subsumed_range();
-  ::cockroach::proto::RangeDescriptor* temp = subsumed_range_;
-  subsumed_range_ = NULL;
-  return temp;
-}
-inline void AdminMergeRequest::set_allocated_subsumed_range(::cockroach::proto::RangeDescriptor* subsumed_range) {
-  delete subsumed_range_;
-  subsumed_range_ = subsumed_range;
-  if (subsumed_range) {
-    set_has_subsumed_range();
-  } else {
-    clear_has_subsumed_range();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.AdminMergeRequest.subsumed_range)
 }
 
 // -------------------------------------------------------------------

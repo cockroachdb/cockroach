@@ -158,6 +158,7 @@ type RangeManager interface {
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
+	LookupRange(start, end proto.Key) *Range
 	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
@@ -1991,12 +1992,22 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	r.metaLock.Lock()
 	defer r.metaLock.Unlock()
 
+	// Lookup subsumed range.
 	desc := r.Desc()
-	subsumedDesc := args.SubsumedRange
+	if desc.EndKey.Equal(proto.KeyMax) {
+		// Noop.
+		return
+	}
+	subsumedRng := r.rm.LookupRange(desc.EndKey, desc.EndKey)
+	if subsumedRng == nil {
+		reply.SetGoError(util.Errorf("ranges not collocated; migration of ranges in anticipation of merge not yet implemented"))
+		return
+	}
+	subsumedDesc := subsumedRng.Desc()
 
 	// Make sure the range being subsumed follows this one.
 	if !bytes.Equal(desc.EndKey, subsumedDesc.StartKey) {
-		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %d = %d",
+		reply.SetGoError(util.Errorf("Ranges that are not adjacent cannot be merged, %s != %s",
 			desc.EndKey, subsumedDesc.StartKey))
 		return
 	}
