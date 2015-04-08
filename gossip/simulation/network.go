@@ -53,7 +53,7 @@ type Network struct {
 // in order to yield accurate estimates of how old data actually ends
 // up being at the various nodes (e.g. DefaultTestGossipInterval).
 func NewNetwork(nodeCount int, networkType string,
-	gossipInterval time.Duration, gossipBootstrap string) *Network {
+	gossipInterval time.Duration) *Network {
 
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	clock := hlc.NewClock(hlc.UnixNano)
@@ -79,10 +79,8 @@ func NewNetwork(nodeCount int, networkType string,
 
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
-		node := gossip.New(rpcContext, gossipInterval, gossipBootstrap)
+		node := gossip.New(rpcContext, gossipInterval, bootstrap)
 		node.Name = fmt.Sprintf("Node%d", i)
-		node.SetBootstrap(bootstrap)
-		node.SetInterval(gossipInterval)
 		node.Start(servers[i])
 		// Node 0 gossips node count.
 		if i == 0 {

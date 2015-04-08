@@ -59,7 +59,6 @@ import (
 	"encoding/json"
 	"math"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -87,9 +86,11 @@ const (
 
 	// TestInterval is the default gossip interval used for running tests.
 	TestInterval = 10 * time.Millisecond
+)
 
+var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
-	TestBootstrap = ""
+	TestBootstrap = []net.Addr{}
 )
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -110,13 +111,13 @@ type Gossip struct {
 	exited       chan error         // Channel to signal exit
 	stalled      *sync.Cond         // Indicates bootstrap is required
 
-	// GossipBootstrap is a comma-separated list of node addresses that
-	// act as bootstrap hosts for connecting to the gossip network.
-	gossipBootstrap string
+	// gossipBootstrap is a list of node addresses that act as
+	// bootstrap hosts for connecting to the gossip network.
+	gossipBootstrap []net.Addr
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap string) *Gossip {
+func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap []net.Addr) *Gossip {
 	g := &Gossip{
 		Connected:    make(chan struct{}),
 		RPCContext:   rpcContext,
@@ -300,25 +301,25 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 	return g.incoming.hasAddr(addr)
 }
 
-// parseBootstrapAddresses parses the gossip bootstrap addresses
-// passed via -gossip command line flag.
-func (g *Gossip) parseBootstrapAddresses() {
-	addresses := strings.Split(g.gossipBootstrap, ",")
-	for _, addr := range addresses {
-		addr = strings.TrimSpace(addr)
-		if len(addr) == 0 {
-			continue
+// initializeBootstrapAddresses resolves TCP addresses supplied to the
+// constructor or set using setBootstrap(). Non-TCP and resolvable TCP
+// addresses are added to the bootstraps addrSet, except for the local
+// node, which is removed, if listed as a bootstrap host.
+func (g *Gossip) initializeBootstrapAddresses() {
+	for _, addr := range g.gossipBootstrap {
+		if addr.Network() == "tcp" {
+			_, err := net.ResolveTCPAddr("tcp", addr.String())
+			if err != nil {
+				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
+				continue
+			}
 		}
-		_, err := net.ResolveTCPAddr("tcp", addr)
-		if err != nil {
-			log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
-			continue
-		}
-		g.bootstraps.addAddr(util.MakeRawAddr("tcp", addr))
+
+		g.bootstraps.addAddr(addr)
 	}
 
 	// If we have no bootstrap hosts, fatal exit.
-	if g.gossipBootstrap == "" && g.bootstraps.len() == 0 && !g.isBootstrap {
+	if len(g.gossipBootstrap) == 0 && g.bootstraps.len() == 0 && !g.isBootstrap {
 		log.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
@@ -350,7 +351,7 @@ func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 func (g *Gossip) bootstrap() {
 	for {
 		g.mu.Lock()
-		g.parseBootstrapAddresses()
+		g.initializeBootstrapAddresses()
 		if g.closed {
 			break
 		}

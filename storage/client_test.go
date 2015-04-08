@@ -59,7 +59,7 @@ func createTestStore(t *testing.T) *storage.Store {
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool) *storage.Store {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossip.TestInterval, "")
+	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock, false)
 	db := client.NewKV(nil, sender)
@@ -104,7 +104,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	}
 	if m.gossip == nil {
 		rpcContext := rpc.NewContext(m.clock, rpc.LoadInsecureTLSConfig())
-		m.gossip = gossip.New(rpcContext, gossip.TestInterval, "")
+		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if m.transport == nil {
 		m.transport = multiraft.NewLocalRPCTransport()

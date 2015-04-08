@@ -18,8 +18,11 @@
 package server
 
 import (
+	"net"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/util"
 )
 
 func TestParseNodeAttributes(t *testing.T) {
@@ -32,5 +35,23 @@ func TestParseNodeAttributes(t *testing.T) {
 	expected := []string{"attr1=val1", "attr2=val2"}
 	if !reflect.DeepEqual(ctx.NodeAttributes.GetAttrs(), expected) {
 		t.Fatalf("Unexpected attributes: %v", ctx.NodeAttributes.GetAttrs())
+	}
+}
+
+// TestParseGossipBootstrapAddrs verifies that GossipBootstrap is
+// parsed correctly.
+func TestParseGossipBootstrapAddrs(t *testing.T) {
+	ctx := NewContext()
+	ctx.GossipBootstrap = "localhost:12345,,localhost:23456"
+	ctx.Stores = "mem=1"
+	if err := ctx.Init(); err != nil {
+		t.Fatalf("Failed to initialize the context: %v", err)
+	}
+	expected := []net.Addr{
+		util.MakeRawAddr("tcp", "localhost:12345"),
+		util.MakeRawAddr("tcp", "localhost:23456"),
+	}
+	if !reflect.DeepEqual(ctx.GossipBootstrapAddrs, expected) {
+		t.Fatalf("Unexpected bootstrap addresses: %v", ctx.GossipBootstrapAddrs)
 	}
 }
