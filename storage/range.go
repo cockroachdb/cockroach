@@ -228,6 +228,9 @@ func (r *Range) String() string {
 // range in the map and gossips config information if the range
 // contains any of the configuration maps.
 func (r *Range) start() {
+	// TODO(spencer): gossiping should only commence when the range gains
+	// the leader lease and it should stop when the range no longer holds
+	// the leader lease.
 	r.maybeGossipClusterID()
 	r.maybeGossipFirstRange()
 	r.maybeGossipConfigs(configDescriptors...)
