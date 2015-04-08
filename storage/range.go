@@ -183,8 +183,7 @@ type Range struct {
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
-	// Last index applied to the state machine. Only used in the raft processing
-	// thread to assert that it is monotonically increasing.
+	// Last index applied to the state machine.
 	appliedIndex uint64
 	closer       chan struct{} // Channel for closing the range
 
@@ -213,6 +212,12 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	r.appliedIndex, err = loadAppliedIndex(r.rm.Engine(), desc.RaftID)
+	if err != nil {
+		return nil, err
+	}
+
 	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
 	}
@@ -1680,6 +1685,19 @@ func (r *Range) FirstIndex() (uint64, error) {
 	return ts.Index + 1, nil
 }
 
+func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
+	appliedIndex := uint64(0)
+	v, err := engine.MVCCGet(eng, engine.RaftAppliedIndexKey(raftID),
+		proto.ZeroTimestamp, true, nil)
+	if err != nil {
+		return 0, err
+	}
+	if v != nil {
+		_, appliedIndex = encoding.DecodeUint64(v.Bytes)
+	}
+	return appliedIndex, nil
+}
+
 // Snapshot implements the raft.Storage interface.
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
@@ -1689,14 +1707,9 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex := uint64(raftInitialLogIndex)
-	v, err := engine.MVCCGet(snap, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-		proto.ZeroTimestamp, true, nil)
+	appliedIndex, err := loadAppliedIndex(snap, r.Desc().RaftID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
-	}
-	if v != nil {
-		_, appliedIndex = encoding.DecodeUint64(v.Bytes)
 	}
 	var desc proto.RangeDescriptor
 	// We ignore intents on the range descriptor (consistent=false) because we know

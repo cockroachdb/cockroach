@@ -43,6 +43,15 @@ type Storage interface {
 	GroupStorage(groupID uint64) WriteableGroupStorage
 }
 
+// The StateMachine interface is supplied by the application to manage a persistent
+// state machine (in Cockroach the StateMachine and the Storage are the same thing
+// but they are logically distinct and systems like etcd keep them separate).
+type StateMachine interface {
+	// AppliedIndex returns the last index which has been applied to the given group's
+	// state machine.
+	AppliedIndex(groupID uint64) (uint64, error)
+}
+
 // MemoryStorage is an in-memory implementation of Storage for testing.
 type MemoryStorage struct {
 	groups map[uint64]WriteableGroupStorage

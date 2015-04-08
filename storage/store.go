@@ -422,6 +422,7 @@ func (s *Store) Start() error {
 	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.transport,
 		Storage:                s,
+		StateMachine:           s,
 		TickInterval:           s.RaftTickInterval,
 		ElectionTimeoutTicks:   s.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.RaftHeartbeatIntervalTicks,
@@ -1198,6 +1199,17 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 		}
 	}
 	return r
+}
+
+// AppliedIndex implements the multiraft.StateMachine interface.
+func (s *Store) AppliedIndex(groupID uint64) (uint64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.ranges[int64(groupID)]
+	if !ok {
+		return 0, util.Errorf("range %d not found", groupID)
+	}
+	return r.appliedIndex, nil
 }
 
 func raftEntryFormatter(data []byte) string {

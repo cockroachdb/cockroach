@@ -103,6 +103,17 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	store := createTestStoreWithEngine(t, eng, clock, false)
 	defer store.Stop()
 
+	// Raft processing is initialized lazily; issue a no-op write request on each key to
+	// ensure that is has been started.
+	incArgs, incReply := incrementArgs(key1, 0, raftID, store.StoreID())
+	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+		t.Fatal(err)
+	}
+	incArgs, incReply = incrementArgs(key2, 0, raftID2, store.StoreID())
+	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+		t.Fatal(err)
+	}
+
 	validate(store)
 }
 
@@ -168,6 +179,13 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Perform an increment before replication to ensure that commands are not
+	// repeated on restarts.
+	incArgs, incResp := incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
 		proto.Replica{
 			NodeID:  mtc.stores[1].Ident.NodeID,
@@ -191,7 +209,7 @@ func TestRestoreReplicas(t *testing.T) {
 
 	// Send a command on each store. The follower will forward to the leader and both
 	// commands will eventually commit.
-	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
+	incArgs, incResp = incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +223,8 @@ func TestRestoreReplicas(t *testing.T) {
 		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
 			return false
 		}
-		return getResp.Value.GetInteger() == 16
+		log.Infof("got value %d", getResp.Value.GetInteger())
+		return getResp.Value.GetInteger() == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
