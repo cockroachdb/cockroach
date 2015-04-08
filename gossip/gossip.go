@@ -412,7 +412,7 @@ func (g *Gossip) manage() {
 			distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
 			if distant.len() > 0 {
 				// If we have space, start a client immediately.
-				if g.outgoing.len() < MaxPeers {
+				if g.outgoing.hasSpace() {
 					g.startClient(distant.selectRandom())
 				} else {
 					// Otherwise, find least useful peer and close it. Make sure
