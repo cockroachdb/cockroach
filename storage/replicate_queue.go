@@ -58,8 +58,8 @@ func newReplicateQueue(gossip *gossip.Gossip, allocator *allocator,
 
 func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Range) (
 	shouldQ bool, priority float64) {
-	// Only queue for replication if this replica is the leader.
-	if !rng.IsLeader() {
+	// Only queue for replication if this replica has the leader lease.
+	if !rng.HasLeaderLease() {
 		return
 	}
 

@@ -125,14 +125,14 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 }
 
 // FindReplica returns the replica which matches the specified store
-// ID. Panic in the event that no replica matches.
+// ID. Returns nil in he event that no replica matches.
 func (r *RangeDescriptor) FindReplica(storeID StoreID) *Replica {
 	for i := range r.Replicas {
 		if r.Replicas[i].StoreID == storeID {
 			return &r.Replicas[i]
 		}
 	}
-	panic(fmt.Sprintf("unable to find matching replica for store %d: %v", storeID, r.Replicas))
+	return nil
 }
 
 // CanRead does a linear search for user to verify read permission.

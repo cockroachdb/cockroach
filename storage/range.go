@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -155,6 +156,7 @@ type RangeManager interface {
 	Allocator() *allocator
 	Gossip() *gossip.Gossip
 	SplitQueue() *splitQueue
+	Stopper() *util.Stopper
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
@@ -185,6 +187,7 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine.
 	appliedIndex uint64
+	lease        unsafe.Pointer // Information for leader lease
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -228,20 +231,18 @@ func (r *Range) String() string {
 	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
-// start begins gossiping loop in the event this is the first
-// range in the map and gossips config information if the range
-// contains any of the configuration maps.
-func (r *Range) start(stopper *util.Stopper) {
-	// TODO(spencer): gossiping should only commence when the range gains
-	// the leader lease and it should stop when the range no longer holds
-	// the leader lease.
-	r.maybeGossipClusterID()
-	r.maybeGossipFirstRange()
-	r.maybeGossipConfigs(configDescriptors...)
-	// Only start gossiping if this range is the first range.
+// start begins by gossiping the cluster ID (only happens if the range
+// is the first in the key space). This is necessary to get the cluster
+// started from scratch.
+func (r *Range) start() {
 	if r.IsFirstRange() {
-		r.startGossip(stopper)
+		r.maybeGossipClusterID()
 	}
+	// TODO(spencer): need to properly seed all unittests.
+	r.grantLeaderLease(&proto.Lease{
+		Expiration: math.MaxInt64,
+		StoreID:    r.rm.StoreID(),
+	})
 }
 
 // Destroy cleans up all data associated with this range.
@@ -271,20 +272,81 @@ func (r *Range) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, engine.KeyMin)
 }
 
-// IsLeader returns true if this range replica is the raft leader.
-// TODO(spencer): this is always true for now.
-func (r *Range) IsLeader() bool {
-	return true
+// getLease returns the current leader lease.
+func (r *Range) getLease() *proto.Lease {
+	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
+}
+
+// HasLeaderLease returns true if this range replica currently holds
+// the Raft leader lease. It's possible that the replica is not in
+// fact the leader, but holding the lease means that no other replica
+// may be the leader either. Leases may not overlap, though a gap
+// between successive lease holders is expected.
+func (r *Range) HasLeaderLease() bool {
+	if l := r.getLease(); l != nil &&
+		l.StoreID == r.rm.StoreID() && r.rm.Clock().PhysicalNow() < r.getLease().Expiration {
+		return true
+	}
+	return false
+}
+
+// grantLeaderLease sets the lease expiration for this range replica,
+// until which, subsequent calls to HasLeaderLease() will return
+// true. If this range replica is already the lease holder, the
+// expiration will be extended as indicated. Otherwise, all duties
+// required of the range leader are commenced, including gossiping
+// cluster and config info where appropriate and clearing the command
+// and timestamp caches.
+//
+// TODO(tobias): call this method when processing the lease command
+// in Range.executeCmd().
+func (r *Range) grantLeaderLease(lease *proto.Lease) {
+	r.Lock()
+	defer r.Unlock()
+
+	// Set the new leader lease.
+	var oldTerm uint64
+	if l := r.getLease(); l != nil {
+		oldTerm = l.Term
+	}
+	if lease.Term >= oldTerm {
+		atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+	}
+
+	// If this replica holds the lease and it's being granted as part of
+	// a new term, as opposed to renewed before having expired, clear
+	// the timestamp and command caches and maybe start gossiping (if
+	// we're the first range).
+	if r.HasLeaderLease() && lease.Term > oldTerm {
+		if r.closer != nil {
+			close(r.closer)
+		}
+		r.closer = make(chan struct{})
+		r.tsCache.Clear(r.rm.Clock())
+		r.cmdQ.Clear()
+
+		// Gossip configs in the event this range contains config info.
+		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+			return r.ContainsKey(configPrefix)
+		})
+		// Only start gossiping if this range is the first range.
+		if r.IsFirstRange() {
+			go r.startGossip(r.rm.Stopper())
+		}
+	}
 }
 
 // canServiceCmd returns an error in the event that the range replica
 // cannot service the command as specified. This is of the case in
 // the event that the replica is not the leader.
 func (r *Range) canServiceCmd(method string, args proto.Request) error {
-	if !r.IsLeader() {
+	if !r.HasLeaderLease() {
 		if !proto.IsReadOnly(method) || args.Header().ReadConsistency == proto.CONSISTENT {
-			// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-			return &proto.NotLeaderError{}
+			err := &proto.NotLeaderError{}
+			if l := r.getLease(); l != nil {
+				err.Leader = r.Desc().FindReplica(l.StoreID)
+			}
+			return err
 		}
 	}
 	if proto.IsReadOnly(method) {
@@ -319,7 +381,11 @@ func (r *Range) SetDesc(desc *proto.RangeDescriptor) {
 
 // GetReplica returns the replica for this range from the range descriptor.
 func (r *Range) GetReplica() *proto.Replica {
-	return r.Desc().FindReplica(r.rm.StoreID())
+	replica := r.Desc().FindReplica(r.rm.StoreID())
+	if replica == nil {
+		panic(fmt.Sprintf("unable to find matching replica for store %d: %v", r.rm.StoreID(), r.Desc().Replicas))
+	}
+	return replica
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -640,17 +706,25 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 	return err
 }
 
-// startGossip periodically gossips the cluster ID if it's the
-// first range and the raft leader.
+// startGossip periodically gossips the cluster ID if it's the first
+// range. This function should only be called if this range replica is
+// the raft leader.
 func (r *Range) startGossip(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
+		r.maybeGossipClusterID()
+		r.maybeGossipFirstRange()
+
 		ticker := time.NewTicker(ttlClusterIDGossip / 2)
 		for {
 			select {
 			case <-ticker.C:
-				r.maybeGossipClusterID()
-				r.maybeGossipFirstRange()
-			case <-stopper.ShouldStop():
+				if r.HasLeaderLease() {
+					r.maybeGossipClusterID()
+					r.maybeGossipFirstRange()
+				} else {
+					return
+				}
+			case <-stopper().ShouldStop():
 				return
 			}
 		}
@@ -658,9 +732,9 @@ func (r *Range) startGossip(stopper *util.Stopper) {
 }
 
 // maybeGossipClusterID gossips the cluster ID if this range is
-// the start of the key space and the raft leader.
+// the start of the key space.
 func (r *Range) maybeGossipClusterID() {
-	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
+	if r.rm.Gossip() != nil {
 		if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
 			log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 		}
@@ -668,9 +742,9 @@ func (r *Range) maybeGossipClusterID() {
 }
 
 // maybeGossipFirstRange gossips the range locations if this range is
-// the start of the key space and the raft leader.
+// the start of the key space.
 func (r *Range) maybeGossipFirstRange() {
-	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
+	if r.rm.Gossip() != nil {
 		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
 			log.Errorf("failed to gossip first range metadata: %s", err)
 		}
@@ -678,13 +752,12 @@ func (r *Range) maybeGossipFirstRange() {
 }
 
 // maybeGossipConfigs gossips configuration maps if their data falls
-// within the range, this replica is the raft leader, and their
-// contents are marked dirty. Configuration maps include accounting,
-// permissions, and zones.
-func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
-	if r.rm.Gossip() != nil && r.IsLeader() {
-		for _, cd := range dirtyConfigs {
-			if r.ContainsKey(cd.keyPrefix) {
+// within the range, and their contents are marked dirty.
+// Configuration maps include accounting, permissions, and zones.
+func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
+	if r.rm.Gossip() != nil && r.HasLeaderLease() {
+		for _, cd := range configDescriptors {
+			if match(cd.keyPrefix) {
 				// Check for a bad range split. This should never happen as ranges
 				// cannot be split mid-config.
 				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
@@ -726,24 +799,10 @@ func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixC
 	return NewPrefixConfigMap(configs)
 }
 
-// maybeUpdateGossipConfigs is used to update gossip configs.
-func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
-	// Check whether this put has modified a configuration map.
-	for _, cd := range configDescriptors {
-		if bytes.HasPrefix(key, cd.keyPrefix) {
-			r.maybeGossipConfigs(cd)
-			break
-		}
-	}
-}
-
 // maybeSplit checks whether the current size of the range exceeds the
 // max size specified in the zone config. If yes, the range is added
 // to the split queue.
 func (r *Range) maybeSplit() {
-	if !r.IsLeader() {
-		return
-	}
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
@@ -850,7 +909,9 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 				r.maybeSplit()
 				// Maybe update gossip configs on a put.
 				if (method == proto.Put || method == proto.ConditionalPut) && header.Key.Less(engine.KeySystemMax) {
-					r.maybeUpdateGossipConfigs(header.Key)
+					r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+						return bytes.HasPrefix(header.Key, configPrefix)
+					})
 				}
 			}
 		}

@@ -60,8 +60,8 @@ func newSplitQueue(db *client.KV, gossip *gossip.Gossip) *splitQueue {
 // accounting or zone config prefix or if the range's size in
 // bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
-	// Only queue for Split if this replica is leader.
-	if !rng.IsLeader() || sq.disabled {
+	// Only queue for Split if this replica has the leader lease.
+	if !rng.HasLeaderLease() || sq.disabled {
 		return
 	}
 
@@ -87,7 +87,7 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
-	if !rng.IsLeader() {
+	if !rng.HasLeaderLease() {
 		log.Infof("not leader of range %s; skipping split", rng)
 		return nil
 	}

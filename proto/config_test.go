@@ -78,13 +78,10 @@ func TestRangeDescriptorFindReplica(t *testing.T) {
 }
 
 func TestRangeDescriptorMissingReplica(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to no matching replica")
-		}
-	}()
 	desc := RangeDescriptor{}
-	desc.FindReplica(0)
+	if r := desc.FindReplica(0); r != nil {
+		t.Errorf("expected nil replica; got %s", r)
+	}
 }
 
 // TestRangeDescriptorContains verifies methods to check whether a key

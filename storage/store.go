@@ -526,7 +526,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		})
 		// If the config doesn't split the range or the range isn't the
 		// leader of its consensus group, continue.
-		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) {
 			continue
 		}
 		s.splitQueue.MaybeAdd(s.rangesByKey[n], s.clock.Now())
@@ -740,6 +740,9 @@ func (s *Store) Gossip() *gossip.Gossip { return s.gossip }
 
 // SplitQueue accessor.
 func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
+
+// Stopper accessor.
+func (s *Store) Stopper() *util.Stopper { return s.stopper }
 
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
