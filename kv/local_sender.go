@@ -31,12 +31,16 @@ import (
 type LocalSender struct {
 	mu       sync.RWMutex                     // Protects storeMap and addrs
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
+	closer   chan struct{}
 }
 
 // NewLocalSender returns a local-only sender which directly accesses
 // a collection of stores.
 func NewLocalSender() *LocalSender {
-	return &LocalSender{storeMap: map[proto.StoreID]*storage.Store{}}
+	return &LocalSender{
+		storeMap: map[proto.StoreID]*storage.Store{},
+		closer:   make(chan struct{}),
+	}
 }
 
 // GetStoreCount returns the number of stores this node is exporting.
@@ -104,6 +108,13 @@ func (ls *LocalSender) Send(call *client.Call) {
 		MaxAttempts: 2,
 	}
 	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		select {
+		case <-ls.closer:
+			call.Reply.Header().SetGoError(
+				proto.NewTransactionRetryError(call.Args.Header().Txn))
+			return util.RetryBreak, nil
+		default:
+		}
 		call.Reply.Header().Error = nil
 		var err error
 		var store *storage.Store
@@ -168,6 +179,7 @@ func (ls *LocalSender) Send(call *client.Call) {
 func (ls *LocalSender) Close() {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
+	close(ls.closer)
 	for _, store := range ls.storeMap {
 		store.Stop()
 	}
