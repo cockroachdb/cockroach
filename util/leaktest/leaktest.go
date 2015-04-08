@@ -117,7 +117,7 @@ func AfterTest(t testing.TB) {
 		"(*Range).AddCmd":                              "a range command",
 	}
 	var stacks string
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		bad = ""
 		stacks = strings.Join(interestingGoroutines(), "\n\n")
 		for substr, what := range badSubstring {
