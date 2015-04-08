@@ -86,29 +86,6 @@ func (s SendError) Error() string {
 // CanRetry implements the Retryable interface.
 func (s SendError) CanRetry() bool { return s.canRetry }
 
-//StoreAddr is used to identify the address of replication
-//One node may have multiple stores, so StoreID is needed
-type StoreAddr struct {
-	Addr    net.Addr
-	StoreID proto.StoreID
-}
-
-func (addr *StoreAddr) String() string {
-	return addr.Addr.String() + fmt.Sprint(addr.StoreID)
-}
-
-type storeClient struct {
-	*Client
-	storeID proto.StoreID
-}
-
-func (client *storeClient) getStoreAddr() *StoreAddr {
-	return &StoreAddr{
-		Addr:    client.Addr(),
-		StoreID: client.storeID,
-	}
-}
-
 // Send sends one or more method RPCs to clients specified by the
 // slice of endpoint addrs. Arguments for methods are obtained using
 // the supplied getArgs function. The number of required replies is
@@ -117,7 +94,7 @@ func (client *storeClient) getStoreAddr() *StoreAddr {
 // opts.N. Otherwise, Send returns an error if and as soon as the
 // number of failed RPCs exceeds the available endpoints less the
 // number of required replies.
-func Send(opts Options, method string, addrs []StoreAddr, getArgs func(addr StoreAddr) interface{},
+func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
 	getReply func() interface{}, context *Context) ([]interface{}, error) {
 
 	if len(addrs) < opts.N {
@@ -127,23 +104,17 @@ func Send(opts Options, method string, addrs []StoreAddr, getArgs func(addr Stor
 		}
 	}
 
-	var clients []*storeClient
+	var clients []*Client
 	switch opts.Ordering {
 	case OrderStable:
 		for _, addr := range addrs {
-			clients = append(clients, &storeClient{
-				Client:  NewClient(addr.Addr, nil, context),
-				storeID: addr.StoreID,
-			})
+			clients = append(clients, NewClient(addr, nil, context))
 		}
 	case OrderRandom:
 		// Randomly permute order, but keep known-unhealthy clients last.
-		var healthy, unhealthy []*storeClient
+		var healthy, unhealthy []*Client
 		for _, addr := range addrs {
-			client := &storeClient{
-				Client:  NewClient(addr.Addr, nil, context),
-				storeID: addr.StoreID,
-			}
+			client := NewClient(addr, nil, context)
 			if client.IsHealthy() {
 				healthy = append(healthy, client)
 			} else {
@@ -174,7 +145,7 @@ func Send(opts Options, method string, addrs []StoreAddr, getArgs func(addr Stor
 	for {
 		// Start clients up to N.
 		for ; index < N; index++ {
-			args := getArgs(*(clients[index].getStoreAddr()))
+			args := getArgs(clients[index].Addr())
 			if args == nil {
 				helperChan <- util.Errorf("nil arguments returned for client %s", clients[index].Addr())
 				continue
@@ -183,7 +154,7 @@ func Send(opts Options, method string, addrs []StoreAddr, getArgs func(addr Stor
 			if log.V(1) {
 				log.Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
 			}
-			go sendOne(clients[index].Client, opts.Timeout, method, args, reply, helperChan)
+			go sendOne(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
 		// Wait for completions.
 		select {
