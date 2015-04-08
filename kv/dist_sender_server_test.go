@@ -163,7 +163,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	// the first key to verify it's used to read only key "a".
 	manual := hlc.NewManualClock(ts[1].WallTime - 1)
 	clock := hlc.NewClock(manual.UnixNano)
-	ds := kv.NewDistSender(clock, s.Gossip())
+	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
 	sa := proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0)
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot

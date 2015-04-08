@@ -42,8 +42,6 @@ const (
 	gossipGroupLimit = 100
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
-	// ttlCapacityGossip is time-to-live for capacity-related info.
-	ttlCapacityGossip = 2 * time.Minute
 	// ttlNodeIDGossip is time-to-live for node ID -> address.
 	ttlNodeIDGossip = 0 * time.Second
 )
@@ -368,15 +366,7 @@ func (n *Node) startGossip() {
 // gossip network.
 func (n *Node) gossipCapacities() {
 	n.lSender.VisitStores(func(s *storage.Store) error {
-		storeDesc, err := s.Descriptor(&n.Descriptor)
-		if err != nil {
-			log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
-			return nil
-		}
-		// Unique gossip key per store.
-		keyMaxCapacity := gossip.MakeMaxAvailCapacityKey(storeDesc.Node.NodeID, storeDesc.StoreID)
-		// Gossip store descriptor.
-		n.gossip.AddInfo(keyMaxCapacity, *storeDesc, ttlCapacityGossip)
+		s.GossipCapacity(&n.Descriptor)
 		return nil
 	})
 }

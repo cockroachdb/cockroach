@@ -35,6 +35,15 @@ type allocator struct {
 	rand        rand.Rand
 }
 
+// newAllocator creates a new allocator.
+func newAllocator(f FindStoreFunc) *allocator {
+	return &allocator{
+		storeFinder: f,
+		// TODO(bdarnell): use a real random seed.
+		rand: *rand.New(rand.NewSource(0)),
+	}
+}
+
 // allocate returns a suitable store based on the supplied
 // attributes list. If none are available / suitable, returns an
 // error. It uses the allocator's StoreFinder to select the set of

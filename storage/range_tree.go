@@ -24,38 +24,27 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type (
-	// RangeTree represents holds the metadata about the RangeTree.  There is
-	// only one for the whole cluster.
-	rangeTree proto.RangeTree
-	// RangeTreeNode represents a node in the RangeTree, each range
-	// has only a single node.
-	rangeTreeNode proto.RangeTreeNode
-)
+// cachedNode is an in memory cache for use during range tree manipulations.
+type cachedNode struct {
+	node  *proto.RangeTreeNode
+	dirty bool
+}
 
-// TODO(bram): Add a cache
-// TODO(bram): Add parent keys
+// RangeTree is used to hold the relevant context information for any
+// operations on the range tree.
+type treeContext struct {
+	db    *client.KV
+	tree  *proto.RangeTree
+	dirty bool
+	nodes map[string]cachedNode
+}
+
 // TODO(bram): Add delete for merging ranges.
+// TODO(bram): Add parent keys
 // TODO(bram): Add more elaborate testing.
 
-// set saves the RangeTree node to the db.
-func (n *rangeTreeNode) set(db *client.KV) error {
-	if err := db.PutProto(engine.RangeTreeNodeKey(n.Key), (*proto.RangeTreeNode)(n)); err != nil {
-		return err
-	}
-	return nil
-}
-
-// set saves the RangeTreeRoot to the db.
-func (t *rangeTree) set(db *client.KV) error {
-	if err := db.PutProto(engine.KeyRangeTreeRoot, (*proto.RangeTree)(t)); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetupRangeTree creates a new RangeTree.  This should only be called as part of
-// store.BootstrapRange.
+// SetupRangeTree creates a new RangeTree. This should only be called as part
+// of store.BootstrapRange.
 func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp proto.Timestamp, startKey proto.Key) error {
 	tree := &proto.RangeTree{
 		RootKey: startKey,
@@ -73,8 +62,25 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp proto.T
 	return nil
 }
 
-// GetRangeTree fetches the RangeTree proto.
-func getRangeTree(db *client.KV) (*rangeTree, error) {
+// flush writes all dirty nodes and the tree to the transaction.
+func (tc *treeContext) flush() error {
+	if tc.dirty {
+		if err := tc.db.PreparePutProto(engine.KeyRangeTreeRoot, tc.tree); err != nil {
+			return err
+		}
+	}
+	for _, cachedNode := range tc.nodes {
+		if cachedNode.dirty {
+			if err := tc.db.PreparePutProto(engine.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// GetRangeTree fetches the RangeTree proto and sets up the range tree context.
+func getRangeTree(db *client.KV) (*treeContext, error) {
 	tree := &proto.RangeTree{}
 	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, tree)
 	if err != nil {
@@ -83,151 +89,172 @@ func getRangeTree(db *client.KV) (*rangeTree, error) {
 	if !ok {
 		return nil, util.Errorf("Could not find the range tree:%s", engine.KeyRangeTreeRoot)
 	}
-	return (*rangeTree)(tree), nil
+
+	return &treeContext{
+		db:    db,
+		tree:  tree,
+		dirty: false,
+		nodes: map[string]cachedNode{},
+	}, nil
 }
 
-// getRangeTreeNode return the RangeTree node for the given key.  If the key is
-// nil, an empty RangeTreeNode is returned.
-func getRangeTreeNode(db *client.KV, key *proto.Key) (*rangeTreeNode, error) {
+// setRoot sets the tree root key in the cache. It also marks the root for
+// writing during a flush.
+func (tc *treeContext) setRootKey(key *proto.Key) {
+	tc.tree.RootKey = *key
+	tc.dirty = true
+}
+
+// setNode sets the node in the cache so all subsequent reads will read this
+// upated value. It also marks the node as dirty for writing during a flush.
+func (tc *treeContext) setNode(node *proto.RangeTreeNode) {
+	tc.nodes[string(node.Key)] = cachedNode{
+		node:  node,
+		dirty: true,
+	}
+}
+
+// getNode returns the RangeTreeNode for the given key. If the key is nil, nil
+// is returned.
+func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 	if key == nil {
 		return nil, nil
 	}
+
+	// First check to see if we have the node cached.
+	keyString := string(*key)
+	cached, ok := tc.nodes[keyString]
+	if ok {
+		return cached.node, nil
+	}
+
+	// We don't have it cached so fetch it and add it to the cache.
 	node := &proto.RangeTreeNode{}
-	ok, _, err := db.GetProto(engine.RangeTreeNodeKey(*key), node)
+	ok, _, err := tc.db.GetProto(engine.RangeTreeNodeKey(*key), node)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, util.Errorf("Could not find the range tree node:%s",
-			engine.RangeTreeNodeKey(*key))
+		return nil, util.Errorf("Could not find the range tree node:%s", engine.RangeTreeNodeKey(*key))
 	}
-	return (*rangeTreeNode)(node), nil
+	tc.nodes[keyString] = cachedNode{
+		node:  node,
+		dirty: false,
+	}
+	return node, nil
 }
 
-// getRootNode returns the RangeTree node for the root of the RangeTree.
-func (t *rangeTree) getRootNode(db *client.KV) (*rangeTreeNode, error) {
-	return getRangeTreeNode(db, &t.RootKey)
-}
-
-// InsertRange adds a new range to the RangeTree.  This should only be called
+// InsertRange adds a new range to the RangeTree. This should only be called
 // from operations that create new ranges, such as range.splitTrigger.
+// TODO(bram): Can we optimize this by inserting as a child of the range being
+// split?
 func InsertRange(db *client.KV, key proto.Key) error {
-	tree, err := getRangeTree(db)
+	tc, err := getRangeTree(db)
 	if err != nil {
 		return err
 	}
-	root, err := tree.getRootNode(db)
+	root, err := tc.getNode(&tc.tree.RootKey)
 	if err != nil {
 		return err
 	}
-	root, err = tree.insert(db, root, key)
+	root, err = tc.insert(root, key)
 	if err != nil {
 		return err
 	}
 	if !root.Black {
 		// Always set the root back to black.
 		root.Black = true
-		if err = root.set(db); err != nil {
-			return err
-		}
+		tc.setNode(root)
 	}
-	if !tree.RootKey.Equal(root.Key) {
+	if !tc.tree.RootKey.Equal(root.Key) {
 		// If the root has changed, update the tree to point to it.
-		tree.RootKey = root.Key
-		if err = tree.set(db); err != nil {
-			return err
-		}
+		tc.setRootKey(&root.Key)
 	}
+	tc.flush()
 	return nil
 }
 
-// insert performs the insertion of a new range into the RangeTree.  It will
-// recursivly call insert until it finds the correct location.  It will not
-// overwite an already existing key, but that case should not occur.
-func (t *rangeTree) insert(db *client.KV, node *rangeTreeNode, key proto.Key) (*rangeTreeNode, error) {
+// insert performs the insertion of a new range into the RangeTree. It will
+// recursively call insert until it finds the correct location. It will not
+// overwrite an already existing key, but that case should not occur.
+func (tc *treeContext) insert(node *proto.RangeTreeNode, key proto.Key) (*proto.RangeTreeNode, error) {
 	if node == nil {
 		// Insert the new node here.
-		node = (*rangeTreeNode)(&proto.RangeTreeNode{
+		node = &proto.RangeTreeNode{
 			Key: key,
-		})
-		if err := node.set(db); err != nil {
-			return nil, err
 		}
+		tc.setNode(node)
 	} else if key.Less(node.Key) {
 		// Walk down the tree to the left.
-		left, err := getRangeTreeNode(db, node.LeftKey)
+		left, err := tc.getNode(node.LeftKey)
 		if err != nil {
 			return nil, err
 		}
-		left, err = t.insert(db, left, key)
+		left, err = tc.insert(left, key)
 		if err != nil {
 			return nil, err
 		}
 		if node.LeftKey == nil || !(*node.LeftKey).Equal(left.Key) {
 			node.LeftKey = &left.Key
-			if err := node.set(db); err != nil {
-				return nil, err
-			}
+			tc.setNode(node)
 		}
 	} else {
 		// Walk down the tree to the right.
-		right, err := getRangeTreeNode(db, node.RightKey)
+		right, err := tc.getNode(node.RightKey)
 		if err != nil {
 			return nil, err
 		}
-		right, err = t.insert(db, right, key)
+		right, err = tc.insert(right, key)
 		if err != nil {
 			return nil, err
 		}
 		if node.RightKey == nil || !(*node.RightKey).Equal(right.Key) {
 			node.RightKey = &right.Key
-			if err := node.set(db); err != nil {
-				return nil, err
-			}
+			tc.setNode(node)
 		}
 	}
-	return node.walkUpRot23(db)
+	return tc.walkUpRot23(node)
 }
 
-// isRed will return true only if n exists and is not set to black.
-func (n *rangeTreeNode) isRed() bool {
-	if n == nil {
+// isRed will return true only if node exists and is not set to black.
+func isRed(node *proto.RangeTreeNode) bool {
+	if node == nil {
 		return false
 	}
-	return !n.Black
+	return !node.Black
 }
 
-// walkUpRot23 walks up and rotates the tree using the Left Leaning Red
-// Black 2-3 algorithm.
-func (n *rangeTreeNode) walkUpRot23(db *client.KV) (*rangeTreeNode, error) {
+// walkUpRot23 walks up and rotates the tree using the Left Leaning Red Black
+// 2-3 algorithm.
+func (tc *treeContext) walkUpRot23(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
 	// Should we rotate left?
-	right, err := getRangeTreeNode(db, n.RightKey)
+	right, err := tc.getNode(node.RightKey)
 	if err != nil {
 		return nil, err
 	}
-	left, err := getRangeTreeNode(db, n.LeftKey)
+	left, err := tc.getNode(node.LeftKey)
 	if err != nil {
 		return nil, err
 	}
-	if right.isRed() && !left.isRed() {
-		n, err = n.rotateLeft(db)
+	if isRed(right) && !isRed(left) {
+		node, err = tc.rotateLeft(node)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Should we rotate right?
-	left, err = getRangeTreeNode(db, n.LeftKey)
+	left, err = tc.getNode(node.LeftKey)
 	if err != nil {
 		return nil, err
 	}
 	if left != nil {
-		leftLeft, err := getRangeTreeNode(db, left.LeftKey)
+		leftLeft, err := tc.getNode(left.LeftKey)
 		if err != nil {
 			return nil, err
 		}
-		if left.isRed() && leftLeft.isRed() {
-			n, err = n.rotateRight(db)
+		if isRed(left) && isRed(leftLeft) {
+			node, err = tc.rotateRight(node)
 			if err != nil {
 				return nil, err
 			}
@@ -235,89 +262,75 @@ func (n *rangeTreeNode) walkUpRot23(db *client.KV) (*rangeTreeNode, error) {
 	}
 
 	// Should we flip?
-	right, err = getRangeTreeNode(db, n.RightKey)
+	right, err = tc.getNode(node.RightKey)
 	if err != nil {
 		return nil, err
 	}
-	left, err = getRangeTreeNode(db, n.LeftKey)
+	left, err = tc.getNode(node.LeftKey)
 	if err != nil {
 		return nil, err
 	}
-	if left.isRed() && right.isRed() {
-		n, err = n.flip(db)
+	if isRed(left) && isRed(right) {
+		node, err = tc.flip(node)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return n, nil
+	return node, nil
 }
 
-// rotateLeft performs a left rotation around the node n.
-func (n *rangeTreeNode) rotateLeft(db *client.KV) (*rangeTreeNode, error) {
-	right, err := getRangeTreeNode(db, n.RightKey)
+// rotateLeft performs a left rotation around the node.
+func (tc *treeContext) rotateLeft(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	right, err := tc.getNode(node.RightKey)
 	if err != nil {
 		return nil, err
 	}
 	if right.Black {
 		return nil, util.Error("rotating a black node")
 	}
-	n.RightKey = right.LeftKey
-	right.LeftKey = &n.Key
-	right.Black = n.Black
-	n.Black = false
-	if err = n.set(db); err != nil {
-		return nil, err
-	}
-	if err = right.set(db); err != nil {
-		return nil, err
-	}
+	node.RightKey = right.LeftKey
+	right.LeftKey = &node.Key
+	right.Black = node.Black
+	node.Black = false
+	tc.setNode(node)
+	tc.setNode(right)
 	return right, nil
 }
 
-// rotateRight performs a right rotation around the node n.
-func (n *rangeTreeNode) rotateRight(db *client.KV) (*rangeTreeNode, error) {
-	left, err := getRangeTreeNode(db, n.LeftKey)
+// rotateRight performs a right rotation around the node.
+func (tc *treeContext) rotateRight(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	left, err := tc.getNode(node.LeftKey)
 	if err != nil {
 		return nil, err
 	}
 	if left.Black {
 		return nil, util.Error("rotating a black node")
 	}
-	n.LeftKey = left.RightKey
-	left.RightKey = &n.Key
-	left.Black = n.Black
-	n.Black = false
-	if err = n.set(db); err != nil {
-		return nil, err
-	}
-	if err = left.set(db); err != nil {
-		return nil, err
-	}
+	node.LeftKey = left.RightKey
+	left.RightKey = &node.Key
+	left.Black = node.Black
+	node.Black = false
+	tc.setNode(node)
+	tc.setNode(left)
 	return left, nil
 }
 
-// flip swaps the color of the node n and both of its children.  Both those
+// flip swaps the color of the node and both of its children. Both those
 // children must exist.
-func (n *rangeTreeNode) flip(db *client.KV) (*rangeTreeNode, error) {
-	left, err := getRangeTreeNode(db, n.LeftKey)
+func (tc *treeContext) flip(node *proto.RangeTreeNode) (*proto.RangeTreeNode, error) {
+	left, err := tc.getNode(node.LeftKey)
 	if err != nil {
 		return nil, err
 	}
-	right, err := getRangeTreeNode(db, n.RightKey)
+	right, err := tc.getNode(node.RightKey)
 	if err != nil {
 		return nil, err
 	}
-	n.Black = !n.Black
+	node.Black = !node.Black
 	left.Black = !left.Black
 	right.Black = !right.Black
-	if err = n.set(db); err != nil {
-		return nil, err
-	}
-	if err = left.set(db); err != nil {
-		return nil, err
-	}
-	if err = right.set(db); err != nil {
-		return nil, err
-	}
-	return n, nil
+	tc.setNode(node)
+	tc.setNode(left)
+	tc.setNode(right)
+	return node, nil
 }

@@ -32,7 +32,7 @@ const (
 	// splitQueueMaxSize is the max size of the split queue.
 	splitQueueMaxSize = 100
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
-	splitQueueTimerDuration = 0 * time.Second // zero duration to process splits greedily
+	splitQueueTimerDuration = 0 * time.Second // zero duration to process splits greedily.
 )
 
 // splitQueue manages a queue of ranges slated to be split due to size
@@ -66,14 +66,14 @@ func (sq *splitQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool
 	}
 
 	// Set priority to 1 in the event the range is split by acct or zone configs.
-	if len(sq.computeSplitKeys(rng)) > 0 {
+	if len(computeSplitKeys(sq.gossip, rng)) > 0 {
 		priority = 1
 		shouldQ = true
 	}
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	zone, err := sq.lookupZoneConfig(rng)
+	zone, err := lookupZoneConfig(sq.gossip, rng)
 	if err != nil {
 		log.Error(err)
 		return
@@ -92,7 +92,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		return nil
 	}
 	// First handle case of splitting due to accounting and zone config maps.
-	splitKeys := sq.computeSplitKeys(rng)
+	splitKeys := computeSplitKeys(sq.gossip, rng)
 	if len(splitKeys) > 0 {
 		log.Infof("splitting range %q-%q at keys %v", rng.Desc().StartKey, rng.Desc().EndKey, splitKeys)
 		for _, splitKey := range splitKeys {
@@ -107,7 +107,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 		return nil
 	}
 	// Next handle case of splitting due to size.
-	zone, err := sq.lookupZoneConfig(rng)
+	zone, err := lookupZoneConfig(sq.gossip, rng)
 	if err != nil {
 		return err
 	}
@@ -127,12 +127,12 @@ func (sq *splitQueue) timer() time.Duration {
 // computeSplitKeys returns an array of keys at which the supplied
 // range should be split, as computed by intersecting the range with
 // accounting and zone config map boundaries.
-func (sq *splitQueue) computeSplitKeys(rng *Range) []proto.Key {
+func computeSplitKeys(g *gossip.Gossip, rng *Range) []proto.Key {
 	// Now split the range into pieces by intersecting it with the
 	// boundaries of the config map.
 	splitKeys := proto.KeySlice{}
 	for _, configKey := range []string{gossip.KeyConfigAccounting, gossip.KeyConfigZone} {
-		info, err := sq.gossip.GetInfo(configKey)
+		info, err := g.GetInfo(configKey)
 		if err != nil {
 			log.Errorf("unable to fetch %s config from gossip: %s", configKey, err)
 			continue
@@ -164,8 +164,8 @@ func (sq *splitQueue) computeSplitKeys(rng *Range) []proto.Key {
 }
 
 // lookupZoneConfig returns the zone config matching the range.
-func (sq *splitQueue) lookupZoneConfig(rng *Range) (proto.ZoneConfig, error) {
-	zoneMap, err := sq.gossip.GetInfo(gossip.KeyConfigZone)
+func lookupZoneConfig(g *gossip.Gossip, rng *Range) (proto.ZoneConfig, error) {
+	zoneMap, err := g.GetInfo(gossip.KeyConfigZone)
 	if err != nil || zoneMap == nil {
 		return proto.ZoneConfig{}, util.Errorf("unable to lookup zone config for range %s: %s", rng, err)
 	}

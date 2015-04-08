@@ -318,7 +318,7 @@ func (g *Gossip) parseBootstrapAddresses() {
 	}
 
 	// If we have no bootstrap hosts, fatal exit.
-	if len(addresses) == 0 && g.bootstraps.len() == 0 {
+	if g.gossipBootstrap == "" && g.bootstraps.len() == 0 && !g.isBootstrap {
 		log.Fatalf("no hosts specified for gossip network (use -gossip)")
 	}
 	// Remove our own node address.
@@ -412,7 +412,7 @@ func (g *Gossip) manage() {
 			distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
 			if distant.len() > 0 {
 				// If we have space, start a client immediately.
-				if g.outgoing.len() < MaxPeers {
+				if g.outgoing.hasSpace() {
 					g.startClient(distant.selectRandom())
 				} else {
 					// Otherwise, find least useful peer and close it. Make sure

@@ -170,6 +170,13 @@ func TestInitEngines(t *testing.T) {
 	}
 }
 
+// TestSelfBootstrap verifies operation when no bootstrap hosts have
+// been specified.
+func TestSelfBootstrap(t *testing.T) {
+	s := startTestServer(t)
+	s.Stop()
+}
+
 // TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
 // as expected.
 func TestHealthz(t *testing.T) {
@@ -245,7 +252,7 @@ func TestGzip(t *testing.T) {
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	ds := kv.NewDistSender(s.Clock(), s.Gossip())
+	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
 	defer tds.Close()
 
@@ -364,7 +371,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 
 	for _, tc := range testCases {
 		s := startTestServer(t)
-		ds := kv.NewDistSender(s.Clock(), s.Gossip())
+		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
 
 		for _, sk := range tc.splitKeys {
