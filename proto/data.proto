@@ -251,20 +251,14 @@ message Transaction {
 // Lease contains information about leader leases including the
 // expiration and lease holder.
 message Lease {
-  // The expiration is a unix nanos timestamp and is set when requesting the
-  // lease according to the wall clock plus the Duration below at the lease
-  // requestor / grantee, which is also the only node that uses it directly.
-  // Granters must always substitute their local walltime plus the Duration
-  // below instead.
-  optional int64 expiration = 1 [(gogoproto.nullable) = false];
-  // The duration, specified in nanoseconds, is the duration for which lease
-  // granters guarantee not to participate in elections, beginning right after
-  // the command has been accepted.
-  optional int64 duration = 2 [(gogoproto.nullable) = false];
-  // The leadership term for this lease.
-  optional uint64 term = 3 [(gogoproto.nullable) = false];
+  // The start is a timestamp at which the lease begins. This value
+  // must be greater than the last lease expiration or this call will
+  // fail.
+  optional Timestamp start = 1 [(gogoproto.nullable) = false];
+  // The expiration is a timestamp at which the lease will expire.
+  optional Timestamp expiration = 2 [(gogoproto.nullable) = false];
   // The Raft NodeID on which the would-be lease holder lives.
-  optional uint64 raft_node_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID" ];
+  optional uint64 raft_node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID" ];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

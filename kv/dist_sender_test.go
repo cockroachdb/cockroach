@@ -267,7 +267,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
 		if first {
 			getReply().(proto.Response).Header().SetGoError(
-				&proto.NotLeaderError{Leader: leader})
+				&proto.NotLeaderError{Leader: &leader})
 		}
 		first = false
 		return nil, nil

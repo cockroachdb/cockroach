@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 	"unsafe"
 
@@ -154,18 +155,17 @@ type RangeManager interface {
 	Allocator() *allocator
 	Gossip() *gossip.Gossip
 	SplitQueue() *splitQueue
+	Stopper() *util.Stopper
 
 	// Range manipulation methods.
 	AddRange(rng *Range) error
 	LookupRange(start, end proto.Key) *Range
-	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) (*Range, error)
+	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
 	SplitRange(origRng, newRng *Range) error
-
-	startGroup(raftID int64) error
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -186,12 +186,10 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
-	lease        unsafe.Pointer // Information for leader lease
-	stopper      *util.Stopper
-	// TODO(tschottdorf)
-	election chan struct{}
+	lease        unsafe.Pointer // Information for leader lease, updated atomically
+	llMu         sync.Mutex     // Synchronizes readers' requests for leader lease
 
-	sync.RWMutex                 // Protects the following fields (and Desc)
+	sync.RWMutex                 // Protects the following fields:
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
 	tsCache      *TimestampCache // Most recent timestamps for keys / key ranges
 	respCache    *ResponseCache  // Provides idempotence for retries
@@ -208,7 +206,6 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
-		election:    make(chan struct{}, 100),
 	}
 	r.SetDesc(desc)
 
@@ -223,6 +220,12 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	}
 	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
+	lease, err := loadLeaderLease(r.rm.Engine(), desc.RaftID)
+	if err != nil {
+		return nil, err
+	}
+	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+
 	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
 	}
@@ -235,20 +238,17 @@ func (r *Range) String() string {
 	return fmt.Sprintf("range=%d (%s-%s)", r.Desc().RaftID, r.Desc().StartKey, r.Desc().EndKey)
 }
 
-// start begins gossiping loop in the event this is the first
-// range in the map and gossips config information if the range
-// contains any of the configuration maps.
-func (r *Range) start(stopper *util.Stopper) {
-	r.stopper = stopper
-	// TODO(spencer): gossiping should only commence when the range gains
-	// the leader lease and it should stop when the range no longer holds
-	// the leader lease.
-	r.maybeGossipClusterID()
-	r.maybeGossipFirstRange()
-	r.maybeGossipConfigs(configDescriptors...)
-	// Only start gossiping if this range is the first range.
+// start begins by gossiping the cluster ID (only happens if the range
+// is the first in the key space). This is necessary to get the cluster
+// started from scratch.
+func (r *Range) start() {
 	if r.IsFirstRange() {
-		r.startGossip()
+		r.startGossip(r.rm.Stopper())
+	}
+	if r.Desc().StartKey.Less(engine.KeySystemMax) {
+		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+			return r.ContainsKey(configPrefix)
+		})
 	}
 }
 
@@ -279,42 +279,120 @@ func (r *Range) IsFirstRange() bool {
 	return bytes.Equal(r.Desc().StartKey, engine.KeyMin)
 }
 
-// IsLeader returns true if this range replica is the raft leader.
-// TODO(spencer): this is always true for now.
-func (r *Range) IsLeader() bool {
-	return true
-}
-
-func (r *Range) setLease(l *proto.Lease) {
-	atomic.StorePointer(&r.lease, unsafe.Pointer(l))
-}
-
+// getLease returns the current leader lease.
 func (r *Range) getLease() *proto.Lease {
 	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
-// canServiceCmd returns an error in the event that the range replica
-// cannot service the command as specified. This is of the case in
-// the event that the replica is not the leader.
-func (r *Range) canServiceCmd(args proto.Request) error {
-	header := args.Header()
-	if !r.IsLeader() {
-		if !proto.IsReadOnly(args) || header.ReadConsistency == proto.CONSISTENT {
-			// TODO(spencer): when we happen to know the leader, fill it in here via replica.
-			return &proto.NotLeaderError{}
-		}
+// newNotLeaderError returns a NotLeaderError intialized with the
+// replica for the last known holder of the leader lease.
+func (r *Range) newNotLeaderError() error {
+	err := &proto.NotLeaderError{}
+	if l := r.getLease(); l.RaftNodeID != 0 {
+		_, err.Replica = r.Desc().FindReplica(r.rm.StoreID())
+		_, storeID := DecodeRaftNodeID(multiraft.NodeID(l.RaftNodeID))
+		_, err.Leader = r.Desc().FindReplica(storeID)
 	}
-	if proto.IsReadOnly(args) {
-		if header.ReadConsistency == proto.CONSENSUS {
-			return util.Errorf("consensus reads not implemented")
-		} else if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
-			return util.Errorf("cannot allow inconsistent reads within a transaction")
-		}
+	return err
+}
+
+// requestLeaderLease sends a request to obtain or extend a leader lease for
+// this replica.
+func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
+	// TODO(Tobias): get duration from configuration, either as a config flag
+	// or, later, dynamically adjusted.
+	duration := int64(defaultLeaderLeaseDuration)
+	// Prepare a Raft command to get a leader lease for this replica.
+	expiration := timestamp.Add(duration, 0)
+	args := &proto.InternalLeaderLeaseRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:       r.Desc().StartKey,
+			Timestamp: timestamp,
+			CmdID: proto.ClientCmdID{
+				WallTime: r.rm.Clock().Now().WallTime,
+				Random:   rand.Int63(),
+			},
+		},
+		Lease: proto.Lease{
+			Start:      timestamp,
+			Expiration: expiration,
+			RaftNodeID: uint64(r.rm.RaftNodeID()),
+		},
 	}
-	if !r.ContainsKeyRange(header.Key, header.EndKey) {
-		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
+	return r.AddCmd(args, &proto.InternalLeaderLeaseResponse{}, true)
+}
+
+// redirectOnOrAcquireLeaderLease checks whether this replica has the
+// leader lease at the specified timestamp. If it does, returns
+// success. If another replica currently holds the lease, redirects by
+// returning NotLeaderError. If the lease is expired, a renewal is
+// synchronously requested. This method uses the leader lease mutex
+// to guarantee only one request to grant the lease is pending.
+//
+// TODO(spencer): implement threshold regrants to avoid latency in
+//  the presence of read or write pressure sufficiently close to the
+//  current lease's expiration.
+//
+// TODO(spencer): for write commands, don't wait while requesting
+//  the leader lease. If the lease acquisition fails, the write cmd
+//  will fail as well. If it succeeds, as is likely, then the write
+//  will not incur latency waiting for the command to complete.
+//  Reads, however, must wait.
+func (r *Range) redirectOnOrAcquireLeaderLease(args proto.Request) error {
+	// Skip check for a lease acquisition request.
+	if _, ok := args.(*proto.InternalLeaderLeaseRequest); ok {
+		return nil
+	}
+	r.llMu.Lock()
+	defer r.llMu.Unlock()
+	// If lease is currently held by another, redirect to holder.
+	timestamp := args.Header().Timestamp
+	if held, expired := r.HasLeaderLease(timestamp); !held && !expired {
+		return r.newNotLeaderError()
+	} else if !held || expired {
+		// Otherwise, if not held by this replica or expired, request renewal.
+		if err := r.requestLeaderLease(timestamp); err != nil {
+			return util.Errorf("failed to acquire lease on read pressure: %s", err)
+		}
 	}
 	return nil
+}
+
+// verifyLeaderLease checks whether the requesting replica (by raft
+// node ID) holds the leader lease covering the specified timestamp.
+func (r *Range) verifyLeaderLease(originRaftNodeID multiraft.NodeID, timestamp proto.Timestamp) bool {
+	l := r.getLease()
+	return uint64(originRaftNodeID) == l.RaftNodeID && timestamp.Less(l.Expiration)
+}
+
+// HasLeaderLease returns whether this replica holds or was the last
+// holder of the leader lease, and whether the lease has expired.
+// Leases may not overlap, and a gap between successive lease holders
+// is expected.
+func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
+	if l := r.getLease(); l.RaftNodeID != 0 {
+		held := l.RaftNodeID == uint64(r.rm.RaftNodeID())
+		var expired bool
+		if held {
+			// Held by us; compare to expiration.
+			expired = !timestamp.Less(l.Expiration)
+		} else {
+			// Held by another; compare to expiration + max clock offset.
+			otherExpiration := l.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0)
+			expired = !timestamp.Less(otherExpiration)
+		}
+		return held, expired
+	}
+	// The lease has never been held.
+	return false, true
+}
+
+// WaitForLeaderLease is used from unittests to wait until this range
+// has the leader lease.
+func (r *Range) WaitForLeaderLease(t *testing.T) {
+	util.SucceedsWithin(t, 1*time.Second, func() error {
+		return r.requestLeaderLease(r.rm.Clock().Now())
+	})
 }
 
 // isInitialized is true if we know the metadata of this range, either
@@ -345,6 +423,11 @@ func (r *Range) GetReplica() *proto.Replica {
 		log.Fatalf("own replica missing in range at store %d", r.rm.StoreID())
 	}
 	return replica
+}
+
+// GetMVCC returns a copy of the MVCC stats object for this range.
+func (r *Range) GetMVCC() proto.MVCCStats {
+	return r.stats.GetMVCC()
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -397,12 +480,7 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
-	if err := r.canServiceCmd(args); err != nil {
-		reply.Header().SetGoError(err)
-		return err
-	}
-
-	// Differentiate between read-only and read-write.
+	// Differentiate between admin, read-only and read-write.
 	if proto.IsAdmin(args) {
 		return r.addAdminCmd(args, reply)
 	} else if proto.IsReadOnly(args) {
@@ -430,7 +508,14 @@ func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
 // addAdminCmd executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
+// Admin commands must run on the leader replica.
 func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
+	// Admin commands always require the leader lease.
+	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+		reply.Header().SetGoError(err)
+		return err
+	}
+
 	switch args.(type) {
 	case *proto.AdminSplitRequest:
 		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
@@ -450,32 +535,29 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
-		return r.executeCmd(0, args, reply)
+		// But disallow any inconsistent reads within txns.
+		if header.Txn != nil {
+			reply.Header().SetGoError(util.Errorf("cannot allow inconsistent reads within a transaction"))
+			return reply.Header().GoError()
+		}
+		return r.executeCmd(r.rm.Engine(), nil, args, reply)
+	} else if header.ReadConsistency == proto.CONSENSUS {
+		reply.Header().SetGoError(util.Errorf("consensus reads not implemented"))
+		return reply.Header().GoError()
+	}
+
+	// This replica must have leader lease to process a consistent read.
+	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+		reply.Header().SetGoError(err)
+		return err
 	}
 
 	// Add the read to the command queue to gate subsequent
-	// overlapping, commands until this command completes.
+	// overlapping commands until this command completes.
 	cmdKey := r.beginCmd(header.Key, header.EndKey, true)
 
-	// It's possible that arbitrary delays (e.g. major GC, VM
-	// de-prioritization, etc.) could cause the execution of this read
-	// command to occur AFTER the range replica has lost leadership.
-	//
-	// There is a chance that we waited on writes, and although they
-	// were committed to the log, they weren't successfully applied to
-	// this replica's state machine. We re-verify leadership before
-	// reading to make sure that all pending writes are persisted.
-	//
-	// There are some elaborate cases where we might have lost
-	// leadership and then regained it during the delay, but this is ok
-	// because any writes during that period necessarily had higher
-	// timestamps. This is because the read-timestamp-cache prevents it
-	// for the active leader and leadership changes force the
-	// read-timestamp-cache to reset its low water mark.
-	if err := r.canServiceCmd(args); err != nil {
-		return err
-	}
-	err := r.executeCmd(0, args, reply)
+	// Execute read-only command.
+	err := r.executeCmd(r.rm.Engine(), nil, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
@@ -486,21 +568,6 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 	r.Unlock()
 
 	return err
-}
-
-// getCmdID will create a ClientCmdId if it's empty in Request, otherwise
-// just return it.
-func (r *Range) getCmdID(args proto.Request) (cmdID proto.ClientCmdID) {
-	if !args.Header().CmdID.IsEmpty() {
-		cmdID = args.Header().CmdID
-	} else {
-		cmdID = proto.ClientCmdID{
-			WallTime: r.rm.Clock().PhysicalNow(),
-			Random:   rand.Int63(),
-		}
-	}
-
-	return
 }
 
 // addReadWriteCmd first consults the response cache to determine whether
@@ -518,19 +585,15 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	// may block if the same command is already underway.
 	header := args.Header()
 	txnMD5 := header.Txn.MD5()
-	if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
-		if ok { // this is a replay! extract error for return
-			return reply.Header().GoError()
-		}
-		// In this case there was an error reading from the response
-		// cache. Instead of failing the request just because we can't
-		// decode the reply in the response cache, we proceed as though
-		// idempotence has expired.
-		log.Errorf("unable to read result for %+v from the response cache: %s", args, err)
+
+	// This replica must have leader lease to process a write.
+	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+		reply.Header().SetGoError(err)
+		return err
 	}
 
 	// Add the write to the command queue to gate subsequent overlapping
-	// commands until this command completes. Note that this must be
+	// Commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
@@ -576,9 +639,10 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		done:  make(chan error, 1),
 	}
 	raftCmd := proto.InternalRaftCommand{
-		RaftID: r.Desc().RaftID,
+		RaftID:       r.Desc().RaftID,
+		OriginNodeID: uint64(r.rm.RaftNodeID()),
 	}
-	cmdID := r.getCmdID(args)
+	cmdID := header.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
 	ok := raftCmd.Cmd.SetValue(args)
 	if !ok {
 		log.Fatalf("unknown command type %T", args)
@@ -590,24 +654,23 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	// TODO(bdarnell): In certain raft failover scenarios, proposed
 	// commands may be abandoned. We need to re-propose the command
 	// if too much time passes with no response on the done channel.
-	raftChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
+	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
 		// First wait for raft to commit or abort the command.
 		var err error
-		if err = <-raftChan; err == nil {
+		if err = <-errChan; err == nil {
 			// Next if the command was commited, wait for the range to apply it.
 			err = <-pendingCmd.done
 		}
-
 		// As for reads, update timestamp cache with the timestamp
 		// of this write on success. This ensures a strictly higher
 		// timestamp for successive writes to the same key or key range.
 		r.Lock()
 		if err == nil && usesTimestampCache(args) {
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false)
 		}
 		r.cmdQ.Remove(cmdKey)
 		r.Unlock()
@@ -628,8 +691,19 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	return nil
 }
 
-func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
-	raftCmd proto.InternalRaftCommand) error {
+// processRaftCommand processes a raft command by unpacking the command
+// struct to get args and reply and then applying the command to the
+// state machine via applyRaftCommand(). The error result is sent on
+// the command's done channel, if available.
+//
+// TODO(spencer): Differentiate between errors caused by the normal culprits --
+// bad inputs from clients, stale information, etc. and errors which might
+// cause the range replicas to diverge -- running out of disk space, underlying
+// rocksdb corruption, etc. Do a careful code audit to make sure we identify
+// errors which should be classified as a ReplicaCorruptionError--when those
+// bubble up to the point where we've just tried to execute a Raft command, the
+// Raft replica would need to stall itself.
+func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64, raftCmd proto.InternalRaftCommand) error {
 	if index == 0 {
 		log.Fatal("processRaftCommand requires a non-zero index")
 	}
@@ -639,8 +713,6 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 	r.Unlock()
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
-	method := args.Method()
-
 	var reply proto.Response
 	if cmd != nil {
 		// We initiated this command, so use the caller-supplied reply.
@@ -649,26 +721,132 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 		// This command originated elsewhere so we must create a new reply buffer.
 		reply = args.CreateReply()
 	}
-	err := r.executeCmd(index, args, reply)
+
+	err := r.applyRaftCommand(index, multiraft.NodeID(raftCmd.OriginNodeID), args, reply)
+
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
-		log.Errorf("error executing raft command %s: %s", method, err)
+		log.Errorf("error executing raft command %s: %s", args.Method(), err)
 	}
 	return err
 }
 
-// startGossip periodically gossips the cluster ID if it's the
-// first range and the raft leader.
-func (r *Range) startGossip() {
-	r.stopper.RunWorker(func() {
+// applyRaftCommand applies a raft command from the replicated log to
+// the underlying state machine (i.e. the engine).
+func (r *Range) applyRaftCommand(index uint64, originNodeID multiraft.NodeID, args proto.Request, reply proto.Response) error {
+	if index <= 0 {
+		log.Fatalf("raft command index is <= 0")
+	}
+	header := args.Header()
+
+	// Check the response cache to ensure idempotency.
+	if proto.IsWrite(args) {
+		if ok, err := r.respCache.GetResponse(header.CmdID, reply); ok || err != nil {
+			if ok { // this is a replay! extract error for return
+				log.V(1).Infof("found response cache entry for %+v", args.Header().CmdID)
+				return reply.Header().GoError()
+			}
+			// In this case there was an error reading from the response
+			// cache. Instead of failing the request just because we can't
+			// decode the reply in the response cache, we proceed as though
+			// idempotence has expired.
+			log.Errorf("unable to read result for %+v from the response cache: %s", args, err)
+		}
+	}
+
+	// Verify the leader lease is held; Note that we don't require the
+	// leader lease when trying to grant the leader lease!
+	if _, ok := args.(*proto.InternalLeaderLeaseRequest); !ok {
+		if !r.verifyLeaderLease(originNodeID, header.Timestamp) {
+			err := r.newNotLeaderError()
+			reply.Header().SetGoError(err)
+			return err
+		}
+	}
+
+	// Create a new batch for the command to ensure all or nothing semantics.
+	batch := r.rm.Engine().NewBatch()
+	// Create an proto.MVCCStats instance.
+	ms := proto.MVCCStats{}
+
+	err := r.executeCmd(batch, &ms, args, reply)
+	if err == nil {
+		// If we are applying a raft command, update the applied index.
+		if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+			log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
+		}
+		atomic.StoreUint64(&r.appliedIndex, index)
+		err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+			proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
+		if err != nil {
+			reply.Header().SetGoError(err)
+		}
+
+		if proto.IsWrite(args) {
+			// On success, flush the MVCC stats to the batch and commit.
+			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
+			if err := batch.Commit(); err != nil {
+				log.Fatalf("failed to commit batch from Raft command execution: %s", err)
+			} else {
+				// After successful commit, update cached stats values.
+				r.stats.Update(ms)
+				// If the commit succeeded, potentially add range to split queue.
+				r.maybeSplit()
+				// Maybe update gossip configs on a put.
+				switch args.(type) {
+				case *proto.PutRequest, *proto.DeleteRequest, *proto.DeleteRangeRequest:
+					if header.Key.Less(engine.KeySystemMax) {
+						r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+							return bytes.HasPrefix(header.Key, configPrefix)
+						})
+					}
+				}
+			}
+		}
+	} else {
+		atomic.StoreUint64(&r.appliedIndex, index)
+		// On failure, abandon the batch we've built up, but still update the
+		// applied index so we won't retry this command on restart.
+		if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+			proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil); err != nil {
+			// The reply header already contains an error which is going to be more useful
+			// to the caller than this one, so just log it.
+			log.Errorf("failed to advance applied index: %s", err)
+		}
+	}
+
+	// Add this command's result to the response cache if this is a
+	// read/write method. This must be done as part of the execution of
+	// raft commands so that every replica maintains the same responses
+	// to continue request idempotence when leadership changes.
+	if proto.IsWrite(args) {
+		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
+			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
+				args, reply, putErr)
+		}
+	}
+
+	return reply.Header().GoError()
+}
+
+// startGossip periodically gossips the cluster ID if it's the first
+// range. This function should only be called if this range replica is
+// the raft leader.
+func (r *Range) startGossip(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		r.maybeGossipClusterID()
+		r.maybeGossipFirstRange()
+
 		ticker := time.NewTicker(ttlClusterIDGossip / 2)
 		for {
 			select {
 			case <-ticker.C:
-				r.maybeGossipClusterID()
-				r.maybeGossipFirstRange()
-			case <-r.stopper.ShouldStop():
+				if held, expired := r.HasLeaderLease(r.rm.Clock().Now()); held && !expired {
+					r.maybeGossipClusterID()
+					r.maybeGossipFirstRange()
+				}
+			case <-stopper.ShouldStop():
 				return
 			}
 		}
@@ -676,9 +854,9 @@ func (r *Range) startGossip() {
 }
 
 // maybeGossipClusterID gossips the cluster ID if this range is
-// the start of the key space and the raft leader.
+// the start of the key space.
 func (r *Range) maybeGossipClusterID() {
-	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
+	if r.rm.Gossip() != nil {
 		if err := r.rm.Gossip().AddInfo(gossip.KeyClusterID, r.rm.ClusterID(), ttlClusterIDGossip); err != nil {
 			log.Errorf("failed to gossip cluster ID %s: %s", r.rm.ClusterID(), err)
 		}
@@ -686,9 +864,9 @@ func (r *Range) maybeGossipClusterID() {
 }
 
 // maybeGossipFirstRange gossips the range locations if this range is
-// the start of the key space and the raft leader.
+// the start of the key space.
 func (r *Range) maybeGossipFirstRange() {
-	if r.rm.Gossip() != nil && r.IsFirstRange() && r.IsLeader() {
+	if r.rm.Gossip() != nil {
 		if err := r.rm.Gossip().AddInfo(gossip.KeyFirstRangeDescriptor, *r.Desc(), 0*time.Second); err != nil {
 			log.Errorf("failed to gossip first range metadata: %s", err)
 		}
@@ -696,26 +874,28 @@ func (r *Range) maybeGossipFirstRange() {
 }
 
 // maybeGossipConfigs gossips configuration maps if their data falls
-// within the range, this replica is the raft leader, and their
-// contents are marked dirty. Configuration maps include accounting,
-// permissions, and zones.
-func (r *Range) maybeGossipConfigs(dirtyConfigs ...*configDescriptor) {
-	if r.rm.Gossip() != nil && r.IsLeader() {
-		for _, cd := range dirtyConfigs {
-			if r.ContainsKey(cd.keyPrefix) {
-				// Check for a bad range split. This should never happen as ranges
-				// cannot be split mid-config.
-				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-					log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
-				}
-				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
-				if err != nil {
-					log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
-					continue
-				} else {
-					if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
-						log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
+// within the range, and their contents are marked dirty.
+// Configuration maps include accounting, permissions, and zones.
+func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
+	if r.rm.Gossip() != nil {
+		held, expired := r.HasLeaderLease(r.rm.Clock().Now())
+		if r.getLease().RaftNodeID == 0 || (held && !expired) {
+			for _, cd := range configDescriptors {
+				if match(cd.keyPrefix) {
+					// Check for a bad range split. This should never happen as ranges
+					// cannot be split mid-config.
+					if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
+						log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
+					}
+					configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+					if err != nil {
+						log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 						continue
+					} else {
+						if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+							log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
+							continue
+						}
 					}
 				}
 			}
@@ -744,24 +924,10 @@ func (r *Range) loadConfigMap(keyPrefix proto.Key, configI interface{}) (PrefixC
 	return NewPrefixConfigMap(configs)
 }
 
-// maybeUpdateGossipConfigs is used to update gossip configs.
-func (r *Range) maybeUpdateGossipConfigs(key proto.Key) {
-	// Check whether this put has modified a configuration map.
-	for _, cd := range configDescriptors {
-		if bytes.HasPrefix(key, cd.keyPrefix) {
-			r.maybeGossipConfigs(cd)
-			break
-		}
-	}
-}
-
 // maybeSplit checks whether the current size of the range exceeds the
 // max size specified in the zone config. If yes, the range is added
 // to the split queue.
 func (r *Range) maybeSplit() {
-	if !r.IsLeader() {
-		return
-	}
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && r.stats.KeyBytes+r.stats.ValBytes > maxBytes {
 		r.rm.SplitQueue().MaybeAdd(r, r.rm.Clock().Now())
@@ -770,16 +936,7 @@ func (r *Range) maybeSplit() {
 
 // executeCmd switches over the method and multiplexes to execute the
 // appropriate storage API command.
-//
-// TODO(Spencer): Differentiate between errors caused by the normal culprits --
-// bad inputs from clients, stale information, etc. and errors which might
-// cause the range replicas to diverge -- running out of disk space, underlying
-// rocksdb corruption, etc. Do a careful code audit to make sure we identify
-// errors which should be classified as a ReplicaCorruptionError--when those
-// bubble up to the point where we've just tried to execute a Raft command, the
-// Raft replica would need to stall itself.
-func (r *Range) executeCmd(index uint64, args proto.Request,
-	reply proto.Response) error {
+func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.Request, reply proto.Response) error {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
 	header := args.Header()
@@ -794,124 +951,61 @@ func (r *Range) executeCmd(index uint64, args proto.Request,
 		return reply.Header().GoError()
 	}
 
-	// Create a new batch for the command to ensure all or nothing semantics.
-	batch := r.rm.Engine().NewBatch()
-	// Create an proto.MVCCStats instance.
-	ms := proto.MVCCStats{}
-
 	switch args.(type) {
 	case *proto.ContainsRequest:
 		r.Contains(batch, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
 	case *proto.GetRequest:
 		r.Get(batch, args.(*proto.GetRequest), reply.(*proto.GetResponse))
 	case *proto.PutRequest:
-		r.Put(batch, &ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
+		r.Put(batch, ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
 	case *proto.ConditionalPutRequest:
-		r.ConditionalPut(batch, &ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
+		r.ConditionalPut(batch, ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
 	case *proto.IncrementRequest:
-		r.Increment(batch, &ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
+		r.Increment(batch, ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
 	case *proto.DeleteRequest:
-		r.Delete(batch, &ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
+		r.Delete(batch, ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
 	case *proto.DeleteRangeRequest:
-		r.DeleteRange(batch, &ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
+		r.DeleteRange(batch, ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
 	case *proto.ScanRequest:
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case *proto.EndTransactionRequest:
-		r.EndTransaction(batch, &ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
+		r.EndTransaction(batch, ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
 	case *proto.InternalRangeLookupRequest:
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case *proto.InternalHeartbeatTxnRequest:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
 	case *proto.InternalGCRequest:
-		r.InternalGC(batch, &ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
+		r.InternalGC(batch, ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
 	case *proto.InternalPushTxnRequest:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
 	case *proto.InternalResolveIntentRequest:
-		r.InternalResolveIntent(batch, &ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
+		r.InternalResolveIntent(batch, ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
 	case *proto.InternalMergeRequest:
-		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
+		r.InternalMerge(batch, ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	case *proto.InternalTruncateLogRequest:
-		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
+		r.InternalTruncateLog(batch, ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
 	case *proto.InternalLeaderLeaseRequest:
-		r.InternalLeaderLease(args.(*proto.InternalLeaderLeaseRequest), reply.(*proto.InternalLeaderLeaseResponse))
+		r.InternalLeaderLease(batch, ms, args.(*proto.InternalLeaderLeaseRequest), reply.(*proto.InternalLeaderLeaseResponse))
 	default:
 		return util.Errorf("unrecognized command %s", args.Method())
 	}
 
-	// On success, flush the MVCC stats to the batch and commit.
-	if err := reply.Header().GoError(); err == nil {
-		// If we are applying a raft command, update the applied index.
-		if index > 0 {
-			if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
-				log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
-			}
-			atomic.StoreUint64(&r.appliedIndex, index)
-			err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
-			if err != nil {
-				reply.Header().SetGoError(err)
-			}
-		}
-
-		if proto.IsWrite(args) {
-			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
-			if err := batch.Commit(); err != nil {
-				reply.Header().SetGoError(err)
-			} else {
-				// After successful commit, update cached stats values.
-				r.stats.Update(ms)
-				// If the commit succeeded, potentially add range to split queue.
-				r.maybeSplit()
-				// Maybe update gossip configs on a put.
-				switch args.(type) {
-				case *proto.PutRequest, *proto.ConditionalPutRequest:
-					if header.Key.Less(engine.KeySystemMax) {
-						r.maybeUpdateGossipConfigs(header.Key)
-					}
-				}
-			}
-		}
-	} else {
-		if index > 0 {
-			atomic.StoreUint64(&r.appliedIndex, index)
-			// On failure, abandon the batch we've built up, but still update the
-			// applied index so we won't retry this command on restart.
-			if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
-				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil); err != nil {
-				// The reply header already contains an error which is going to be more useful
-				// to the caller than this one, so just log it.
-				log.Errorf("failed to advance applied index: %s", err)
-			}
-		}
-
-		if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
-			// A ReadUncertaintyIntervalError contains the timestamp of the value
-			// that provoked the conflict. However, we forward the timestamp to the
-			// node's time here. The reason is that the caller (which is always
-			// transactional when this error occurs) in our implementation wants to
-			// use this information to extract a timestamp after which reads from
-			// the nodes are causally consistent with the transaction. This allows
-			// the node to be classified as without further uncertain reads for the
-			// remainder of the transaction.
-			// See the comment on proto.Transaction.CertainNodes.
-			err.ExistingTimestamp.Forward(r.rm.Clock().Now())
-		}
-	}
+	log.V(1).Infof("executed %s command %+v: %+v", args.Method(), args, reply)
 
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = args.Header().Timestamp
 
-	log.V(1).Infof("executed %s command %+v: %+v", args.Method(), args, reply)
-
-	// Add this command's result to the response cache if this is a
-	// read/write method. This must be done as part of the execution of
-	// raft commands so that every replica maintains the same responses
-	// to continue request idempotence when leadership changes.
-	if proto.IsWrite(args) {
-		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
-			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
-				args, reply, putErr)
-		}
+	// A ReadUncertaintyIntervalError contains the timestamp of the value
+	// that provoked the conflict. However, we forward the timestamp to the
+	// node's time here. The reason is that the caller (which is always
+	// transactional when this error occurs) in our implementation wants to
+	// use this information to extract a timestamp after which reads from
+	// the nodes are causally consistent with the transaction. This allows
+	// the node to be classified as without further uncertain reads for the
+	// remainder of the transaction.
+	// See the comment on proto.Transaction.CertainNodes.
+	if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
 	}
 
 	// Return the error (if any) set in the reply.
@@ -1425,62 +1519,55 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 	reply.SetGoError(err)
 }
 
-// InternalLeaderLease evaluates and responds to a request to grant a leader lease.
-func (r *Range) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
-	// TODO(tschottdorf) stub for now to get tests working.
-	r.setLease(&args.Lease)
-	// r.grantLeaderLease(args.Lease)
-}
+// InternalLeaderLease sets the leader lease for this range. After a
+// lease has been set, calls to HasLeaderLease() will return true if
+// this replica is the lease holder and the lease has not yet
+// expired. If this range replica is already the lease holder, the
+// expiration will be extended as indicated. Otherwise, all duties
+// required of the range leader are commenced, including gossiping
+// cluster and config info where appropriate and clearing the command
+// queue and timestamp cache.
+func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
+	r.Lock()
+	defer r.Unlock()
 
-// requestLeaderLease sends a request to obtain or extend a leader lease for
-// this replica. Being a first mover, it registers itself as a task with the
-// stopper.
-func (r *Range) requestLeaderLease(term uint64) {
-	if !r.stopper.StartTask() {
+	// Verify details of new lease request. The start of this lease must
+	// be afer the prior lease's expiration.
+	oldLease := r.getLease()
+	if !args.Lease.Start.Less(args.Lease.Expiration) {
+		reply.SetGoError(util.Errorf("lease %s - %s invalid", args.Lease.Start, args.Lease.Expiration))
 		return
-	}
-	defer r.stopper.FinishTask()
-	// Prepare a Raft command to get a leader lease for the replica
-	// of that group that lives in our store.
-	wallTime := r.rm.Clock().PhysicalNow()
-	// TODO: get this from configuration, either as a config flag
-	// or, later, dynamically adjusted.
-	duration := int64(defaultLeaderLeaseDuration)
-	idKey := makeCmdIDKey(proto.ClientCmdID{
-		WallTime: wallTime,
-		Random:   rand.Int63(),
-	})
-	cmd := proto.InternalRaftCommand{
-		RaftID: r.Desc().RaftID,
-	}
-	args := &proto.InternalLeaderLeaseRequest{
-		RequestHeader: proto.RequestHeader{Key: r.Desc().StartKey},
-		Lease: proto.Lease{
-			Expiration: wallTime + duration,
-			Duration:   duration,
-			Term:       term,
-			RaftNodeID: uint64(r.rm.RaftNodeID()),
-		},
-	}
-
-	if !cmd.Cmd.SetValue(args) {
-		log.Fatalf("%T is not a raft command", args)
-	}
-
-	// Propose the Raft command.
-	errCh := r.rm.ProposeRaftCommand(idKey, cmd)
-
-	// Make sure we log a potential error from Raft.
-	r.stopper.RunWorker(func() {
-		select {
-		case err := <-errCh:
-			if err != nil {
-				log.Warning(err)
-			}
-		case <-r.stopper.ShouldStop():
+	} else if oldLease.RaftNodeID == args.Lease.RaftNodeID {
+		if !oldLease.Start.Less(args.Lease.Start) {
+			reply.SetGoError(util.Errorf("lease renewal %s - %s invalid; prior lease %s - %s",
+				args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 			return
 		}
-	})
+	} else if args.Lease.Start.Less(oldLease.Expiration) {
+		reply.SetGoError(util.Errorf("lease %s - %s invalid; prior lease %s - %s",
+			args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
+		return
+	}
+
+	// Store the lease to disk & in-memory.
+	if err := engine.MVCCPutProto(batch, nil, engine.RaftLeaderLeaseKey(r.Desc().RaftID), proto.ZeroTimestamp, nil, &args.Lease); err != nil {
+		reply.SetGoError(err)
+		return
+	}
+	atomic.StorePointer(&r.lease, unsafe.Pointer(&args.Lease))
+
+	// If this replica is a new holder of the lease, gossip configs as
+	// necessary. Update the low water mark in the timestamp cache. We
+	// add the maximum clock offset to account for any difference in
+	// clocks between the expiration (set by a remote node) and this
+	// node.
+	if r.getLease().RaftNodeID == uint64(r.rm.RaftNodeID()) && oldLease.RaftNodeID != r.getLease().RaftNodeID {
+		// Gossip configs in the event this range contains config info.
+		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+			return r.ContainsKey(configPrefix)
+		})
+		r.tsCache.SetLowWater(oldLease.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0))
+	}
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
@@ -1532,6 +1619,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	if err != nil {
 		return err
 	}
+
 	// Compute stats for new range.
 	ms, err = engine.MVCCComputeStats(r.rm.Engine(), split.NewDesc.StartKey, split.NewDesc.EndKey, now.WallTime)
 	if err != nil {
@@ -1578,14 +1666,13 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	}
 	r.stats.SetMVCCStats(batch, ms)
 
-	subsumedRng, err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
-	if err == nil {
-		// Merge the timestamp caches from both ranges.
-		r.Lock()
-		subsumedRng.tsCache.MergeInto(r.tsCache, false /* clear */)
-		r.Unlock()
-	}
-	return err
+	// Clear the timestamp cache. In the case that this replica and the
+	// subsumed replica each held their respective leader leases, we
+	// could merge the timestamp caches for efficiency. But it's unlikely
+	// and not worth the extra logic and potential for error.
+	r.tsCache.Clear(r.rm.Clock())
+
+	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
 }
 
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {
@@ -1781,6 +1868,14 @@ func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
 	return appliedIndex, nil
 }
 
+func loadLeaderLease(eng engine.Engine, raftID int64) (*proto.Lease, error) {
+	lease := &proto.Lease{}
+	if _, err := engine.MVCCGetProto(eng, engine.RaftLeaderLeaseKey(raftID), proto.ZeroTimestamp, true, nil, lease); err != nil {
+		return nil, err
+	}
+	return lease, nil
+}
+
 // Snapshot implements the raft.Storage interface.
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
@@ -1910,13 +2005,27 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		return err
 	}
 
+	// Read the leader lease.
+	lease, err := loadLeaderLease(batch, desc.RaftID)
+	if err != nil {
+		return err
+	}
+
+	// Read range stats.
+	stats, err := newRangeStats(desc.RaftID, batch)
+	if err != nil {
+		return err
+	}
+
 	if err := batch.Commit(); err != nil {
 		return err
 	}
 
-	// Save the descriptor and applied index to our member variables.
+	// Save the descriptor, applied index, lease and stats to our member variables.
 	r.SetDesc(&desc)
 	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
+	atomic.StorePointer(&r.lease, unsafe.Pointer(lease))
+	r.stats = stats
 
 	// TODO(bdarnell): extract the real last index.
 	// snap.Metadata.Index is the last applied index, but our snapshot may have given us
@@ -2265,13 +2374,4 @@ func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeD
 		},
 		Reply: &proto.ConditionalPutResponse{},
 	}
-}
-
-// WaitForElection waits for an election event to reach this Range.
-// It is mostly useful for testing.
-func (r *Range) WaitForElection() {
-	// Make sure the group is active before trying this.
-	r.rm.startGroup(r.Desc().RaftID)
-	<-r.election
-	return
 }

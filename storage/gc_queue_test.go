@@ -177,7 +177,7 @@ func TestGCQueueProcess(t *testing.T) {
 		{key9, ts3, true, false},
 	}
 
-	for _, datum := range data {
+	for i, datum := range data {
 		if datum.del {
 			dArgs, dReply := deleteArgs(datum.key, tc.rng.Desc().RaftID, tc.store.StoreID())
 			dArgs.Timestamp = datum.ts
@@ -186,7 +186,7 @@ func TestGCQueueProcess(t *testing.T) {
 				dArgs.Txn.Timestamp = datum.ts
 			}
 			if err := tc.rng.AddCmd(dArgs, dReply, true); err != nil {
-				t.Fatal(err)
+				t.Fatalf("%d: could not delete data: %s", err)
 			}
 		} else {
 			pArgs, pReply := putArgs(datum.key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())
@@ -196,7 +196,7 @@ func TestGCQueueProcess(t *testing.T) {
 				pArgs.Txn.Timestamp = datum.ts
 			}
 			if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
-				t.Fatal(err)
+				t.Fatalf("%d: could not put data: %s", i, err)
 			}
 		}
 	}

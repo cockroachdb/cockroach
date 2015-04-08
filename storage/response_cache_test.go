@@ -82,10 +82,6 @@ func TestResponseCacheEmptyCmdID(t *testing.T) {
 	if err := rc.PutResponse(cmdID, &incR); err != nil {
 		t.Errorf("unexpected error putting response: %v", err)
 	}
-	// Add inflight, which would otherwise block the get.
-	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected success getting response: %v, %v, %+v", ok, err, val)
-	}
 	// Get should return !ok.
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("unexpected success getting response: %v, %v, %+v", ok, err, val)
@@ -142,8 +138,8 @@ func TestResponseCacheCopyFrom(t *testing.T) {
 	}
 }
 
-// TestResponseCacheInflight verifies GetResponse invocations block on
-// inflight requests.
+// TestResponseCacheInflight verifies concurrent GetResponse
+// invocations do not block on same keys.
 func TestResponseCacheInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	rc := createTestResponseCache(t, 1)
@@ -153,80 +149,27 @@ func TestResponseCacheInflight(t *testing.T) {
 	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
 		t.Errorf("unexpected response or error: %t, %v", ok, err)
 	}
-	// Make two blocking requests for response from cmdID, which is inflight.
+	// Make two requests for response from cmdID, which is inflight.
 	doneChans := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	for _, done := range doneChans {
 		doneChan := done
 		go func() {
 			val2 := proto.IncrementResponse{}
-			if ok, err := rc.GetResponse(cmdID, &val2); !ok || err != nil || val2.NewValue != 1 {
-				t.Errorf("unexpected error: %t, %v, %+v", ok, err, val2)
+			if ok, err := rc.GetResponse(cmdID, &val2); ok || err != nil {
+				t.Errorf("unexpectedly found value for response cache entry %+v: %s", cmdID, err)
 			}
 			close(doneChan)
 		}()
 	}
-	// Wait for 2ms to verify both gets are blocked.
-	select {
-	case <-doneChans[0]:
-		t.Fatal("1st get should not complete; it blocks until we put")
-	case <-doneChans[1]:
-		t.Fatal("2nd get should not complete; it blocks until we put")
-	case <-time.After(2 * time.Millisecond):
-		if err := rc.PutResponse(cmdID, &incR); err != nil {
-			t.Fatalf("unexpected error putting responpse: %v", err)
-		}
-	}
-	// After putting response, verify that get is unblocked.
-	for _, done := range doneChans {
+	for count := 0; count < 2; count++ {
 		select {
-		case <-done:
-			// Success!
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("get response failed to complete in 500ms")
+		case <-doneChans[0]:
+			count++
+		case <-doneChans[1]:
+			count++
+		case <-time.After(100 * time.Millisecond):
+			t.Fatalf("concurrent gets to cache did not complete")
 		}
-	}
-}
-
-// TestResponseCacheTwoInflights verifies panic in the event
-// that AddInflight is called twice for same command ID.
-func TestResponseCacheTwoInflights(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to two successive calls to AddInflight")
-		}
-	}()
-	rc := createTestResponseCache(t, 1)
-	cmdID := makeCmdID(1, 1)
-	rc.addInflightLocked(cmdID)
-	rc.addInflightLocked(cmdID)
-}
-
-// TestResponseCacheClear verifies that inflight waiters are
-// signaled in the event the cache is cleared.
-func TestResponseCacheClear(t *testing.T) {
-	defer leaktest.AfterTest(t)
-	rc := createTestResponseCache(t, 1)
-	cmdID := makeCmdID(1, 1)
-	val := proto.IncrementResponse{}
-	// Add inflight for cmdID.
-	if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-		t.Errorf("unexpected error: %t, %v", ok, err)
-	}
-	done := make(chan struct{})
-	go func() {
-		if ok, err := rc.GetResponse(cmdID, &val); ok || err != nil {
-			t.Errorf("unexpected error: %t, %v", ok, err)
-		}
-		close(done)
-	}()
-	// Clear the response cache, which should unblock request.
-	rc.ClearInflight()
-	select {
-	case <-done:
-		// Success!
-	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("get response failed to complete in 500ms")
 	}
 }
 

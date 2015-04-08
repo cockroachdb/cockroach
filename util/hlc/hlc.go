@@ -174,8 +174,6 @@ func (c *Clock) Now() (result proto.Timestamp) {
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock
 // provided at instantiation. For a timestamp value, use Now() instead.
 func (c *Clock) PhysicalNow() int64 {
-	c.Lock()
-	defer c.Unlock()
 	wallTime := c.physicalClock()
 	return wallTime
 }

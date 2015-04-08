@@ -30,7 +30,8 @@ option (gogoproto.unmarshaler_all) = true;
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 message NotLeaderError {
-  optional Replica leader = 1 [(gogoproto.nullable) = false];
+  optional Replica replica = 1;
+  optional Replica leader = 2;
 }
 
 // A RangeNotFoundError indicates that a command was sent to a range

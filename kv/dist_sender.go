@@ -214,7 +214,7 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	}
 	permMap := configMap.(storage.PrefixConfigMap)
 	headerEnd := header.EndKey
-	if headerEnd == nil {
+	if len(headerEnd) == 0 {
 		headerEnd = header.Key
 	}
 	// Visit PermConfig(s) which apply to the method's key range.
@@ -243,8 +243,10 @@ func (ds *DistSender) verifyPermissions(args proto.Request) error {
 				return true, nil
 			})
 			if !hasPerm {
-				return false, util.Errorf("user %q cannot invoke %s at %q-%q",
-					header.User, args.Method(), start, end)
+				if len(header.EndKey) == 0 {
+					return false, util.Errorf("user %q cannot invoke %s at %q", header.User, args.Method(), start)
+				}
+				return false, util.Errorf("user %q cannot invoke %s at %q-%q", header.User, args.Method(), start, end)
 			}
 			return false, nil
 		})
@@ -542,8 +544,10 @@ func (ds *DistSender) Send(call client.Call) {
 					// On addressing errors, don't backoff; retry immediately.
 					return util.RetryReset, nil
 				case *proto.NotLeaderError:
-					ds.updateLeaderCache(proto.RaftID(desc.RaftID),
-						err.(*proto.NotLeaderError).GetLeader())
+					leader := err.(*proto.NotLeaderError).GetLeader()
+					if leader != nil {
+						ds.updateLeaderCache(proto.RaftID(desc.RaftID), *leader)
+					}
 					return util.RetryReset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {

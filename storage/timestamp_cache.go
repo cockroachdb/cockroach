@@ -81,6 +81,14 @@ func (tc *TimestampCache) Clear(clock *hlc.Clock) {
 	tc.latest = tc.lowWater
 }
 
+// SetLowWater sets the cache's low water mark, which is the minimum
+// value the cache will return from calls to GetMax().
+func (tc *TimestampCache) SetLowWater(lowWater proto.Timestamp) {
+	if tc.lowWater.Less(lowWater) {
+		tc.lowWater = lowWater
+	}
+}
+
 // Add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnMD5 is empty for no transaction. readOnly specifies
@@ -172,6 +180,11 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 // longer within the MinTSCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
 	ce := value.(cacheEntry)
+	// In case low water mark was set higher, evict any entries
+	// which occurred before it.
+	if ce.timestamp.Less(tc.lowWater) {
+		return true
+	}
 	// Compute the edge of the cache window.
 	edge := tc.latest
 	edge.WallTime -= MinTSCacheWindow.Nanoseconds()

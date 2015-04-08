@@ -61,9 +61,7 @@ func newTestModel(t *testing.T) *testModel {
 // Start constructs and starts the local test server and creates a
 // time series DB.
 func (tm *testModel) Start() {
-	if err := tm.LocalTestCluster.Start(); err != nil {
-		tm.t.Fatal(err)
-	}
+	tm.LocalTestCluster.Start(tm.t)
 	tm.DB = NewDB(tm.KV)
 }
 

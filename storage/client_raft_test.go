@@ -204,19 +204,16 @@ func TestReplicateRange(t *testing.T) {
 		}); err != nil {
 		t.Fatal(err)
 	}
-	// Verify no intent remain on range descriptor key.
+	// Verify no intent remains on range descriptor key.
 	key := engine.RangeDescriptorKey(rng.Desc().StartKey)
 	if _, err := engine.MVCCGet(mtc.stores[0].Engine(), key, mtc.stores[0].Clock().Now(), true, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the same data is available on the replica.
-	// TODO(bdarnell): relies on the fact that we allow reads from followers.
-	// When we enforce reads from leader/quorum leases, we'll need to introduce a
-	// non-transactional local read for tests like this.
-	// Also applies to other tests in this file.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		getArgs.ReadConsistency = proto.INCONSISTENT
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
@@ -267,19 +264,27 @@ func TestRestoreReplicas(t *testing.T) {
 
 	mtc.restart()
 
-	// Send a command on each store. The follower will forward to the leader and both
-	// commands will eventually commit.
+	// Send a command on each store. The original store (the leader still)
+	// will succeed.
 	incArgs, incResp = incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
 	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
+	// The follower will return a not leader error, indicating the command
+	// should be forwarded to the leader.
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	if err := mtc.stores[1].ExecuteCmd(incArgs, incResp); err != nil {
+	err = mtc.stores[1].ExecuteCmd(incArgs, incResp)
+	if _, ok := err.(*proto.NotLeaderError); !ok {
+		t.Fatalf("expected not leader error; got %s", err)
+	}
+	incArgs.Replica.StoreID = mtc.stores[0].StoreID()
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		getArgs.ReadConsistency = proto.INCONSISTENT
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
@@ -412,6 +417,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
+	mvcc := rng.GetMVCCStats()
 
 	// Now add the second replica.
 	if err := rng.ChangeReplicas(proto.ADD_REPLICA,
@@ -426,13 +432,22 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Once it catches up, the effects of both commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		getArgs.ReadConsistency = proto.INCONSISTENT
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
-		log.Infof("read value %d", getResp.Value.GetInteger())
+		log.V(1).Infof("read value %d", getResp.Value.GetInteger())
 		return getResp.Value.GetInteger() == 16
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
+	}
+
+	rng2, err := mtc.stores[1].GetRange(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mvcc2 := rng2.GetMVCCStats(); !reflect.DeepEqual(mvcc, mvcc2) {
+		log.Errorf("expected stats on new range to equal old; %+v != %+v", mvcc2, mvcc)
 	}
 
 	// Send a third command to verify that the log states are synced up so the
@@ -444,6 +459,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
+		getArgs.ReadConsistency = proto.INCONSISTENT
 		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
@@ -469,7 +485,7 @@ func TestStoreRangeReplicate(t *testing.T) {
 	mtc.stores[0].WaitForNodes(3)
 
 	// Once we know our peers, trigger a scan.
-	mtc.stores[0].ForceReplicationScan()
+	mtc.stores[0].ForceReplicationScan(t)
 
 	// The range should become available on every node.
 	if err := util.IsTrueWithin(func() bool {

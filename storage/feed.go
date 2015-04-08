@@ -25,9 +25,8 @@ import (
 // NewRangeEvent occurs when a new range is added to a store.  This event
 // includes the Range's RangeDescriptor and current MVCCStats.
 type NewRangeEvent struct {
-	Desc     *proto.RangeDescriptor
-	IsLeader bool
-	Stats    proto.MVCCStats
+	Desc  *proto.RangeDescriptor
+	Stats proto.MVCCStats
 }
 
 // UpdateRangeEvent occurs whenever a Range is modified. This structure includes
@@ -35,19 +34,17 @@ type NewRangeEvent struct {
 // MVCCStats containing the difference from the Range's previous stats. If the
 // update did not modify any statistics, this diff may be nil.
 type UpdateRangeEvent struct {
-	Desc     *proto.RangeDescriptor
-	IsLeader bool
-	Stats    proto.MVCCStats
-	Diff     proto.MVCCStats
+	Desc  *proto.RangeDescriptor
+	Stats proto.MVCCStats
+	Diff  proto.MVCCStats
 }
 
 // RemoveRangeEvent occurs whenever a Range is removed from a store. This
 // structure includes the Range's RangeDescriptor and the Range's previous
 // MVCCStats before it was removed.
 type RemoveRangeEvent struct {
-	Desc     *proto.RangeDescriptor
-	IsLeader bool
-	Stats    proto.MVCCStats
+	Desc  *proto.RangeDescriptor
+	Stats proto.MVCCStats
 }
 
 // SplitRangeEvent occurs whenever a range is split in two. This Event actually
@@ -161,41 +158,36 @@ func (sef StoreEventFeed) endScanRanges() {
 
 func makeNewRangeEvent(rng *Range) *NewRangeEvent {
 	return &NewRangeEvent{
-		Desc:     rng.Desc(),
-		IsLeader: rng.IsLeader(),
-		Stats:    rng.stats.GetMVCC(),
+		Desc:  rng.Desc(),
+		Stats: rng.stats.GetMVCC(),
 	}
 }
 
 func makeUpdateRangeEvent(rng *Range, diff *proto.MVCCStats) *UpdateRangeEvent {
 	return &UpdateRangeEvent{
-		Desc:     rng.Desc(),
-		IsLeader: rng.IsLeader(),
-		Stats:    rng.stats.GetMVCC(),
-		Diff:     *diff,
+		Desc:  rng.Desc(),
+		Stats: rng.stats.GetMVCC(),
+		Diff:  *diff,
 	}
 }
 
 func makeRemoveRangeEvent(rng *Range) *RemoveRangeEvent {
 	return &RemoveRangeEvent{
-		Desc:     rng.Desc(),
-		IsLeader: rng.IsLeader(),
-		Stats:    rng.stats.GetMVCC(),
+		Desc:  rng.Desc(),
+		Stats: rng.stats.GetMVCC(),
 	}
 }
 
 func makeSplitRangeEvent(rngOrig, rngNew *Range, diffOrig *proto.MVCCStats) *SplitRangeEvent {
 	return &SplitRangeEvent{
 		Original: UpdateRangeEvent{
-			Desc:     rngOrig.Desc(),
-			IsLeader: rngOrig.IsLeader(),
-			Stats:    rngOrig.stats.GetMVCC(),
-			Diff:     *diffOrig,
+			Desc:  rngOrig.Desc(),
+			Stats: rngOrig.stats.GetMVCC(),
+			Diff:  *diffOrig,
 		},
 		New: NewRangeEvent{
-			Desc:     rngNew.Desc(),
-			IsLeader: rngNew.IsLeader(),
-			Stats:    rngNew.stats.GetMVCC(),
+			Desc:  rngNew.Desc(),
+			Stats: rngNew.stats.GetMVCC(),
 		},
 	}
 }
@@ -203,15 +195,13 @@ func makeSplitRangeEvent(rngOrig, rngNew *Range, diffOrig *proto.MVCCStats) *Spl
 func makeMergeRangeEvent(rngMerged, rngRemoved *Range, diffMerged *proto.MVCCStats) *MergeRangeEvent {
 	return &MergeRangeEvent{
 		Merged: UpdateRangeEvent{
-			Desc:     rngMerged.Desc(),
-			IsLeader: rngMerged.IsLeader(),
-			Stats:    rngMerged.stats.GetMVCC(),
-			Diff:     *diffMerged,
+			Desc:  rngMerged.Desc(),
+			Stats: rngMerged.stats.GetMVCC(),
+			Diff:  *diffMerged,
 		},
 		Removed: RemoveRangeEvent{
-			Desc:     rngRemoved.Desc(),
-			IsLeader: rngRemoved.IsLeader(),
-			Stats:    rngRemoved.stats.GetMVCC(),
+			Desc:  rngRemoved.Desc(),
+			Stats: rngRemoved.stats.GetMVCC(),
 		},
 	}
 }

@@ -101,7 +101,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
-	// TODO(bdarnell): arrange to have the transport closed.
+	stopper.AddCloser(ctx.Transport)
 	store := NewStore(ctx, eng)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
@@ -469,9 +469,9 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	}
 	// The Logical time will increase over the course of the command
 	// execution so we can only rely on comparing the WallTime.
-	if reply.Timestamp.WallTime != store.ctx.Clock.Timestamp().WallTime {
+	if reply.Timestamp.WallTime != store.ctx.Clock.Now().WallTime {
 		t.Errorf("expected reply to have store clock time %s; got %s",
-			store.ctx.Clock.Timestamp(), reply.Timestamp)
+			store.ctx.Clock.Now(), reply.Timestamp)
 	}
 }
 
@@ -540,7 +540,7 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	// This shouldn't be necessary, but without it, the range sometimes
 	// gets removed before the election is finished, and then Raft panics.
 	// See #702.
-	rng.WaitForElection()
+	rng.WaitForLeaderLease(t)
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)
 	}

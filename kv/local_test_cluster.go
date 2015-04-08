@@ -89,9 +89,7 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 // usage of a LocalTestCluster follows:
 //
 //   s := &server.LocalTestCluster{}
-//   if err := s.Start(); err != nil {
-//     t.Fatal(err)
-//   }
+//   s.Start(t)
 //   defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
@@ -113,7 +111,7 @@ type LocalTestCluster struct {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start() error {
+func (ltc *LocalTestCluster) Start(t testing.TB) {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = util.NewStopper()
@@ -133,24 +131,15 @@ func (ltc *LocalTestCluster) Start() error {
 	sCtx.Transport = transport
 	ltc.Store = storage.NewStore(sCtx, ltc.Eng)
 	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
-		return err
+		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.lSender.AddStore(ltc.Store)
 	if err := ltc.Store.BootstrapRange(); err != nil {
-		return err
+		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	if err := ltc.Store.Start(ltc.Stopper); err != nil {
-		return err
+		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-	rng, err := ltc.Store.GetRange(1)
-	if err != nil {
-		return err
-	}
-	// Without this, we'll very sporadically have test failures here since
-	// Raft commands are retried, bypassing the response cache.
-	// TODO(tschottdorf): remove the trigger when we've fixed the above.
-	rng.WaitForElection()
-	return nil
 }
 
 // Stop stops the cluster.

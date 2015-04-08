@@ -131,7 +131,6 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
-				IsLeader: true,
 				Stats: proto.MVCCStats{
 					LiveBytes: 400,
 					KeyBytes:  40,
@@ -150,7 +149,6 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("a"),
 					EndKey:   proto.Key("b"),
 				},
-				IsLeader: true,
 				Stats: proto.MVCCStats{
 					LiveBytes: 400,
 					KeyBytes:  40,
@@ -173,7 +171,6 @@ func TestStoreEventFeed(t *testing.T) {
 					StartKey: proto.Key("b"),
 					EndKey:   proto.Key("c"),
 				},
-				IsLeader: true,
 				Stats: proto.MVCCStats{
 					LiveBytes: 200,
 					KeyBytes:  30,
@@ -193,7 +190,6 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
-					IsLeader: true,
 					Stats: proto.MVCCStats{
 						LiveBytes: 400,
 						KeyBytes:  40,
@@ -210,7 +206,6 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},
-					IsLeader: true,
 					Stats: proto.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,
@@ -231,7 +226,6 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("a"),
 						EndKey:   proto.Key("b"),
 					},
-					IsLeader: true,
 					Stats: proto.MVCCStats{
 						LiveBytes: 400,
 						KeyBytes:  40,
@@ -248,7 +242,6 @@ func TestStoreEventFeed(t *testing.T) {
 						StartKey: proto.Key("b"),
 						EndKey:   proto.Key("c"),
 					},
-					IsLeader: true,
 					Stats: proto.MVCCStats{
 						LiveBytes: 200,
 						KeyBytes:  30,

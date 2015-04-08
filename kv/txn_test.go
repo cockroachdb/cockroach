@@ -151,6 +151,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 
 	// Initial high offset to allow for future writes.
 	s.Clock.SetMaxOffset(999 * time.Nanosecond)
+	s.Manual.Set(s.Clock.MaxOffset().Nanoseconds() + 1)
 	for i := 0; i < concurrency; i++ {
 		value := []byte(fmt.Sprintf("value-%d", i))
 		// Values will be written with 5ns spacing.
@@ -172,19 +173,18 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			},
 			Reply: &pr})
 		if err := pr.GoError(); err != nil {
-			t.Errorf("%d: got write error: %v", i, err)
+			t.Errorf("%d: got write error: %s", i, err)
 		}
 		gr := proto.GetResponse{}
 		s.KV.Run(client.Call{
 			Args: &proto.GetRequest{
 				RequestHeader: proto.RequestHeader{
-					Key:       key,
-					Timestamp: s.Clock.Now(),
+					Key: key,
 				},
 			},
 			Reply: &gr})
 		if gr.GoError() != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-			t.Fatalf("%d: expected success reading value %+v: %v", i, gr.Value, gr.GoError())
+			t.Fatalf("%d: expected success reading value %+v: %s", i, gr.Value, gr.GoError())
 		}
 
 		go func(i int) {
@@ -224,13 +224,13 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 					if _, ok := gr.GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
 						return err
 					}
-					return util.Errorf("unexpected read error of type %s: %v", reflect.TypeOf(err), err)
+					return util.Errorf("unexpected read error of type %s: %s", reflect.TypeOf(err), err)
 				}
 				if gr.Value == nil || gr.Value.Bytes == nil {
 					return util.Errorf("no value read")
 				}
 				if !bytes.Equal(gr.Value.Bytes, readValue) {
-					return util.Errorf("%d: read wrong value %q at %v, wanted %q", i, gr.Value.Bytes, futureTS, readValue)
+					return util.Errorf("%d: read wrong value %q at %s, wanted %q", i, gr.Value.Bytes, futureTS, readValue)
 				}
 				return nil
 			}); err != nil {
@@ -323,8 +323,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 			return err
 		}
 		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, wantedBytes) {
-			t.Fatalf("%d: read wrong value: %v, wanted %q", i,
-				gr.Value, wantedBytes)
+			t.Fatalf("%d: read wrong value: %v, wanted %q", i, gr.Value, wantedBytes)
 		}
 		return nil
 	})
@@ -336,11 +335,12 @@ func TestUncertaintyRestarts(t *testing.T) {
 	}
 }
 
-// TestUncertaintyMaxTimestampForwarding checks that we correctly read from
-// hosts which for which we control the uncertainty by checking that when a
-// transaction restarts after an uncertain read, it will also take into account
-// the target node's clock at the time of the failed read when forwarding the
-// read timestamp.
+// TestUncertaintyMaxTimestampForwarding checks that we correctly read
+// from hosts for which we control the uncertainty by checking that
+// when a transaction restarts after an uncertain read, it will also
+// take into account the target node's clock at the time of the failed
+// read when forwarding the read timestamp.
+//
 // This is a prerequisite for being able to prevent further uncertainty
 // restarts for that node and transaction without sacrificing correctness.
 // See proto.Transaction.CertainNodes for details.
@@ -350,7 +350,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't
 	// actually wind up in the past.
-	s.Clock.SetMaxOffset(50000 * time.Millisecond)
+	s.Clock.SetMaxOffset(50 * time.Second)
 
 	txnOpts := &client.TransactionOptions{
 		Name: "uncertainty",
@@ -365,14 +365,12 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	// Write keySlow at now+offset, keyFast at now+2*offset
 	futureTS := s.Clock.Now()
 	futureTS.WallTime += offsetNS
-	err := engine.MVCCPut(s.Eng, nil, keySlow, futureTS,
-		proto.Value{Bytes: valSlow}, nil)
+	err := engine.MVCCPut(s.Eng, nil, keySlow, futureTS, proto.Value{Bytes: valSlow}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	futureTS.WallTime += offsetNS
-	err = engine.MVCCPut(s.Eng, nil, keyFast, futureTS,
-		proto.Value{Bytes: valFast}, nil)
+	err = engine.MVCCPut(s.Eng, nil, keyFast, futureTS, proto.Value{Bytes: valFast}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +386,6 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		}
 
 		// The server's clock suddenly jumps ahead of keyFast's timestamp.
-		// There will be a restart, but this is idempotent.
 		s.Manual.Set(2*offsetNS + 1)
 
 		// Now read slowKey first. It should read at 0, catch an uncertainty error,
@@ -400,13 +397,12 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		gr := call.Reply.(*proto.GetResponse)
 		if err = txn.Run(call); err != nil {
 			if i != 1 {
-				t.Errorf("unexpected transaction error: %v", err)
+				t.Errorf("unexpected transaction error: %s", err)
 			}
 			return err
 		}
 		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, valSlow) {
-			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value,
-				valSlow)
+			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
 		}
 
 		call = client.GetCall(keyFast)
@@ -414,7 +410,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		// The node should already be certain, so we expect no restart here
 		// and to read the correct key.
 		if err = txn.Run(call); err != nil {
-			t.Errorf("second Get failed with %v", err)
+			t.Errorf("second Get failed with %s", err)
 		}
 		if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, valFast) {
 			t.Errorf("read of %q returned %v, wanted value %q", keyFast, gr.Value,

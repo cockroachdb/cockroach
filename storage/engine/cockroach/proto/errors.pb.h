@@ -128,10 +128,19 @@ class NotLeaderError : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.proto.Replica leader = 1;
+  // optional .cockroach.proto.Replica replica = 1;
+  inline bool has_replica() const;
+  inline void clear_replica();
+  static const int kReplicaFieldNumber = 1;
+  inline const ::cockroach::proto::Replica& replica() const;
+  inline ::cockroach::proto::Replica* mutable_replica();
+  inline ::cockroach::proto::Replica* release_replica();
+  inline void set_allocated_replica(::cockroach::proto::Replica* replica);
+
+  // optional .cockroach.proto.Replica leader = 2;
   inline bool has_leader() const;
   inline void clear_leader();
-  static const int kLeaderFieldNumber = 1;
+  static const int kLeaderFieldNumber = 2;
   inline const ::cockroach::proto::Replica& leader() const;
   inline ::cockroach::proto::Replica* mutable_leader();
   inline ::cockroach::proto::Replica* release_leader();
@@ -139,6 +148,8 @@ class NotLeaderError : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.NotLeaderError)
  private:
+  inline void set_has_replica();
+  inline void clear_has_replica();
   inline void set_has_leader();
   inline void clear_has_leader();
 
@@ -146,6 +157,7 @@ class NotLeaderError : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
+  ::cockroach::proto::Replica* replica_;
   ::cockroach::proto::Replica* leader_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
@@ -1486,15 +1498,56 @@ class Error : public ::google::protobuf::Message {
 
 // NotLeaderError
 
-// optional .cockroach.proto.Replica leader = 1;
-inline bool NotLeaderError::has_leader() const {
+// optional .cockroach.proto.Replica replica = 1;
+inline bool NotLeaderError::has_replica() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void NotLeaderError::set_has_leader() {
+inline void NotLeaderError::set_has_replica() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void NotLeaderError::clear_has_leader() {
+inline void NotLeaderError::clear_has_replica() {
   _has_bits_[0] &= ~0x00000001u;
+}
+inline void NotLeaderError::clear_replica() {
+  if (replica_ != NULL) replica_->::cockroach::proto::Replica::Clear();
+  clear_has_replica();
+}
+inline const ::cockroach::proto::Replica& NotLeaderError::replica() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.NotLeaderError.replica)
+  return replica_ != NULL ? *replica_ : *default_instance_->replica_;
+}
+inline ::cockroach::proto::Replica* NotLeaderError::mutable_replica() {
+  set_has_replica();
+  if (replica_ == NULL) replica_ = new ::cockroach::proto::Replica;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.NotLeaderError.replica)
+  return replica_;
+}
+inline ::cockroach::proto::Replica* NotLeaderError::release_replica() {
+  clear_has_replica();
+  ::cockroach::proto::Replica* temp = replica_;
+  replica_ = NULL;
+  return temp;
+}
+inline void NotLeaderError::set_allocated_replica(::cockroach::proto::Replica* replica) {
+  delete replica_;
+  replica_ = replica;
+  if (replica) {
+    set_has_replica();
+  } else {
+    clear_has_replica();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.NotLeaderError.replica)
+}
+
+// optional .cockroach.proto.Replica leader = 2;
+inline bool NotLeaderError::has_leader() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void NotLeaderError::set_has_leader() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void NotLeaderError::clear_has_leader() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void NotLeaderError::clear_leader() {
   if (leader_ != NULL) leader_->::cockroach::proto::Replica::Clear();

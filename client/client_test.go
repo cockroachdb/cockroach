@@ -737,7 +737,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 	}
 	s.Engines = []engine.Engine{engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)}
 	if err := s.Start(); err != nil {
-		b.Fatalf("Could not start server: %v", err)
+		b.Fatal(err)
 	}
 
 	var kv *client.KV

@@ -84,7 +84,11 @@ func (r *RocksDB) Open() error {
 		return nil
 	}
 
-	log.Infof("opening rocksdb instance at %q", r.dir)
+	if len(r.dir) == 0 {
+		log.Infof("opening in-memory rocksdb instance")
+	} else {
+		log.Infof("opening rocksdb instance at %q", r.dir)
+	}
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache_size:      C.int64_t(r.cacheSize),
