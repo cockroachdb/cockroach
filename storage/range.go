@@ -1687,54 +1687,32 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	defer snap.Stop()
 	var snapData proto.RaftSnapshotData
 
-	// Certain keys are treated specially while building the snapshot;
-	// see the switch statement below for details.
-	hardStateKey := engine.RaftHardStateKey(r.Desc().RaftID)
-	appliedKey := engine.RaftAppliedIndexKey(r.Desc().RaftID)
-	descKey := engine.RangeDescriptorKey(r.Desc().StartKey)
-
-	// Save the range metadata while iterating. Use the values read from
-	// the snapshot instead of the members of the Range struct because
-	// they might be changed concurrently.
+	// Read the range metadata from the snapshot instead of the members
+	// of the Range struct because they might be changed concurrently.
 	appliedIndex := uint64(raftInitialLogIndex)
+	v, err := engine.MVCCGet(snap, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, true, nil)
+	if err != nil {
+		return raftpb.Snapshot{}, err
+	}
+	if v != nil {
+		_, appliedIndex = encoding.DecodeUint64(v.Bytes)
+	}
 	var desc proto.RangeDescriptor
-	seenDesc := false
+	// We ignore intents on the range descriptor (consistent=false) because we know
+	// they cannot be committed yet. (operations that modify range descriptors resolve their
+	// own intents when they commit).
+	ok, err := engine.MVCCGetProto(snap, engine.RangeDescriptorKey(r.Desc().StartKey),
+		r.rm.Clock().Now(), false, nil, &desc)
+	if err != nil {
+		return raftpb.Snapshot{}, util.Errorf("failed to get desc: %s", err)
+	} else if !ok {
+		return raftpb.Snapshot{}, util.Errorf("couldn't find range descriptor")
+	}
 
 	// Iterate over all the data in the range, including local-only data like
 	// the response cache.
 	for iter := newRangeDataIterator(r, snap); iter.Valid(); iter.Next() {
-		key, _, isValue := engine.MVCCDecodeKey(iter.Key())
-		switch {
-		case bytes.Equal(key, hardStateKey):
-			// The raft HardState must not be transmitted via snapshot,
-			// because the receiving node may have already cast a vote in this term.
-			continue
-		case bytes.Equal(key, appliedKey):
-			// Raft uses the applied index to synchronize the snapshot with the log.
-			var v proto.MVCCMetadata
-			err := gogoproto.Unmarshal(iter.Value(), &v)
-			if err != nil {
-				return raftpb.Snapshot{}, err
-			}
-			_, appliedIndex = encoding.DecodeUint64(v.Value.Bytes)
-		case bytes.Equal(key, descKey) && isValue && !seenDesc:
-			// Extract the descriptor so we can tell raft about the range membership at
-			// the time of the snapshot.
-			// TODO(bdarnell): Correctly handle pending transactions on the descriptor.
-			// Should we just skip the descriptor while iterating and call engine.MVCCGet
-			// on the snapshot?
-			seenDesc = true
-			var v proto.MVCCValue
-			err := gogoproto.Unmarshal(iter.Value(), &v)
-			if err != nil {
-				return raftpb.Snapshot{}, err
-			}
-			err = gogoproto.Unmarshal(v.Value.Bytes, &desc)
-			if err != nil {
-				return raftpb.Snapshot{}, err
-			}
-		}
-
 		snapData.KV = append(snapData.KV,
 			&proto.RaftSnapshotData_KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
@@ -1792,55 +1770,58 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 		return nil
 	}
 
+	// First, save the HardState.  The HardState must not be changed
+	// because it may record a previous vote cast by this node.
 	hardStateKey := engine.RaftHardStateKey(r.Desc().RaftID)
-	encodedHardStateKey := engine.MVCCEncodeKey(hardStateKey)
-	descKey := engine.RangeDescriptorKey(r.Desc().StartKey)
-	var desc proto.RangeDescriptor
-	seenDesc := false
+	hardState, err := engine.MVCCGet(r.rm.Engine(), hardStateKey, proto.ZeroTimestamp, true, nil)
+	if err != nil {
+		return nil
+	}
+
 	batch := engine.NewBatch(r.rm.Engine())
 
 	// Delete everything in the range and recreate it from the snapshot.
 	for iter := newRangeDataIterator(r, r.rm.Engine()); iter.Valid(); iter.Next() {
-		if bytes.Equal(encodedHardStateKey, iter.Key()) {
-			// Don't replace the raft HardState.
-			continue
-		}
 		if err := batch.Clear(iter.Key()); err != nil {
 			return err
 		}
 	}
 
+	// Write the snapshot into the range.
 	for _, kv := range snapData.KV {
-		key, _, isValue := engine.MVCCDecodeKey(kv.Key)
-		switch {
-		case bytes.Equal(descKey, key) && isValue && !seenDesc:
-			// Save the descriptor so we can assign it to r.Desc.
-			// TODO(bdarnell): handle pending transactions on the descriptor.
-			seenDesc = true
-			var v proto.MVCCValue
-			err := gogoproto.Unmarshal(kv.Value, &v)
-			if err != nil {
-				return err
-			}
-			err = gogoproto.Unmarshal(v.Value.Bytes, &desc)
-			if err != nil {
-				return err
-			}
-		case bytes.Equal(hardStateKey, key):
-			// Don't replace the raft HardState. The leader shouldn't be sending a
-			// HardState in the snapshot, but just in case reject it on the receiving
-			// side as well.
-			continue
-		}
 		if err := batch.Put(kv.Key, kv.Value); err != nil {
 			return err
 		}
 	}
 
+	// Restore the saved HardState.
+	if hardState == nil {
+		err := engine.MVCCDelete(batch, nil, hardStateKey, proto.ZeroTimestamp, nil)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := engine.MVCCPut(batch, nil, hardStateKey, proto.ZeroTimestamp, *hardState, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Read the updated range descriptor.
+	var desc proto.RangeDescriptor
+	if _, err := engine.MVCCGetProto(batch, engine.RangeDescriptorKey(r.Desc().StartKey),
+		r.rm.Clock().Now(), false, nil, &desc); err != nil {
+		return err
+	}
+
 	if err := batch.Commit(); err != nil {
 		return err
 	}
+
+	// Save the descriptor and applied index to our member variables.
 	r.SetDesc(&desc)
+	r.appliedIndex = snap.Metadata.Index
+
 	// TODO(bdarnell): extract the real last index.
 	// snap.Metadata.Index is the last applied index, but our snapshot may have given us
 	// some unapplied entries too. It's safe to set lastIndex too low (the entries will
