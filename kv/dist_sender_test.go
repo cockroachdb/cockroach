@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -237,6 +238,57 @@ func TestSendRPCOrder(t *testing.T) {
 		if err := ds.sendRPC(&descriptor, tc.method, args, reply); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
+	}
+}
+
+type mockRangeDescriptorDB func(proto.Key) ([]proto.RangeDescriptor, error)
+
+func (mdb mockRangeDescriptorDB) getRangeDescriptor(k proto.Key) ([]proto.RangeDescriptor, error) {
+	return mdb(k)
+}
+
+// TestRetryOnNotLeaderError verifies that the DistSender correctly updates the
+// leader cache and retries when receiving a NotLeaderError.
+func TestRetryOnNotLeaderError(t *testing.T) {
+	g := makeTestGossip(t)
+	leader := proto.Replica{
+		NodeID:  99,
+		StoreID: 999,
+	}
+	first := true
+
+	var testFn rpcSendFn = func(_ rpc.Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{}, getReply func() interface{}, _ *rpc.Context) ([]interface{}, error) {
+		if first {
+			getReply().(proto.Response).Header().SetGoError(
+				&proto.NotLeaderError{Leader: leader})
+		}
+		first = false
+		return nil, nil
+	}
+
+	ctx := &DistSenderContext{
+		rpcSend: testFn,
+		rangeDescriptorDB: mockRangeDescriptorDB(func(_ proto.Key) ([]proto.RangeDescriptor, error) {
+			return []proto.RangeDescriptor{testRangeDescriptor}, nil
+		}),
+	}
+	ds := NewDistSender(ctx, g)
+	args := proto.PutArgs(proto.Key("a"), []byte("value"))
+	reply := &proto.PutResponse{}
+	ds.Send(&client.Call{Method: proto.Put, Args: args, Reply: reply})
+	if err := reply.GoError(); err != nil {
+		t.Errorf("put encountered error: %s", err)
+	}
+	if first {
+		t.Errorf("The command did not retry")
+	}
+	if cur := ds.leaderCache.Lookup(1); !reflect.DeepEqual(cur, &leader) {
+		t.Errorf("leader cache was not updated: expected %v, got %v",
+			&leader, cur)
+	}
+	ds.updateLeaderCache(1, leader)
+	if ds.leaderCache.Lookup(1) != nil {
+		t.Errorf("update with same replica did not evict the cache")
 	}
 }
 

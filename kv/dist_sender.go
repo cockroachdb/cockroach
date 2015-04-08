@@ -133,8 +133,8 @@ type DistSenderContext struct {
 	RPCRetryOptions      *util.RetryOptions
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
-	rpcSend    rpcSendFn
-	rangeCache *rangeDescriptorCache
+	rpcSend           rpcSendFn
+	rangeDescriptorDB rangeDescriptorDB
 }
 
 // NewDistSender returns a client.KVSender instance which connects to the
@@ -158,10 +158,11 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
 	}
-	ds.rangeCache = ctx.rangeCache
-	if ctx.rangeCache == nil {
-		ds.rangeCache = newRangeDescriptorCache(ds, int(rcSize))
+	rdb := ctx.rangeDescriptorDB
+	if rdb == nil {
+		rdb = ds
 	}
+	ds.rangeCache = newRangeDescriptorCache(rdb, int(rcSize))
 	lcSize := ctx.LeaderCacheSize
 	if lcSize <= 0 {
 		lcSize = defaultLeaderCacheSize
@@ -533,6 +534,10 @@ func (ds *DistSender) Send(call *client.Call) {
 					ds.rangeCache.EvictCachedRangeDescriptor(args.Header().Key)
 					// On addressing errors, don't backoff; retry immediately.
 					return util.RetryReset, nil
+				case *proto.NotLeaderError:
+					ds.updateLeaderCache(proto.RaftID(desc.RaftID),
+						err.(*proto.NotLeaderError).Leader)
+					return util.RetryReset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
 						return util.RetryContinue, nil
@@ -589,5 +594,25 @@ func (ds *DistSender) Send(call *client.Call) {
 		args.Header().Key = descNext.StartKey
 		// "Untruncate" EndKey to original.
 		args.Header().EndKey = call.Args.Header().EndKey
+	}
+}
+
+// updateLeaderCache updates the cached leader for the given Raft group,
+// evicting any previous value in the process.
+// The new leader is cached only if it isn't equal to the newly evicted value.
+func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) {
+	// Slight overhead here since we want to make sure that when the new
+	// proposed leader equals the old, we only evict.
+	oldLeader := ds.leaderCache.Lookup(rid)
+	ds.leaderCache.Update(rid, nil)
+	if oldLeader != nil {
+		log.V(1).Infof("raft %d: evicted cached leader %d", rid, oldLeader.StoreID)
+	}
+	if leader.StoreID == 0 {
+		return
+	}
+	if oldLeader == nil || leader.StoreID != oldLeader.StoreID {
+		log.V(1).Infof("raft %d: new cached leader %d", rid, leader.StoreID)
+		ds.leaderCache.Update(rid, &leader)
 	}
 }
