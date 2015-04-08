@@ -95,5 +95,5 @@ func MakeNodeIDKey(nodeID proto.NodeID) string {
 
 // MakeMaxAvailCapacityKey returns the gossip key for the given store's capacity.
 func MakeMaxAvailCapacityKey(nodeID proto.NodeID, storeID proto.StoreID) string {
-	return MakeKey(KeyNodeIDPrefix, nodeID.String(), storeID.String())
+	return MakeKey(KeyMaxAvailCapacityPrefix, nodeID.String(), storeID.String())
 }
