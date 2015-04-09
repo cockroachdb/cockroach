@@ -31,12 +31,20 @@ option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
+enum CompressionType {
+  NONE = 0;
+  SNAPPY = 1;
+}
+
 message RequestHeader {
 	optional uint64 id = 1 [(gogoproto.nullable) = false];
 	optional string method = 2 [(gogoproto.nullable) = false];
+	optional CompressionType compression = 3 [(gogoproto.nullable) = false];
 }
 
 message ResponseHeader {
 	optional uint64 id = 1 [(gogoproto.nullable) = false];
-	optional string error = 2 [(gogoproto.nullable) = false];
+	optional string method = 2 [(gogoproto.nullable) = false];
+	optional string error = 3 [(gogoproto.nullable) = false];
+	optional CompressionType compression = 4 [(gogoproto.nullable) = false];
 }

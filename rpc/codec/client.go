@@ -6,11 +6,11 @@ package codec
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
 	"net/rpc"
-	"sync"
 	"time"
 
 	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
@@ -18,30 +18,22 @@ import (
 )
 
 type clientCodec struct {
-	r *bufio.Reader
-	w *bufio.Writer
-	c io.Closer
+	baseConn
 
 	// temporary work space
+	reqBuf     bytes.Buffer
+	reqHeader  wire.RequestHeader
 	respHeader wire.ResponseHeader
-
-	// Protobuf-RPC responses include the request id but not the request method.
-	// Package rpc expects both.
-	// We save the request method in pending when sending a request
-	// and then look it up by request ID when filling out the rpc Response.
-	mutex   sync.Mutex        // protects pending
-	pending map[uint64]string // map request id to method name
-
-	writeMutex sync.Mutex // protects connection writes
 }
 
 // NewClientCodec returns a new rpc.ClientCodec using Protobuf-RPC on conn.
 func NewClientCodec(conn io.ReadWriteCloser) rpc.ClientCodec {
 	return &clientCodec{
-		r:       bufio.NewReader(conn),
-		w:       bufio.NewWriter(conn),
-		c:       conn,
-		pending: make(map[uint64]string),
+		baseConn: baseConn{
+			r: bufio.NewReader(conn),
+			w: bufio.NewWriter(conn),
+			c: conn,
+		},
 	}
 }
 
@@ -57,32 +49,20 @@ func (c *clientCodec) WriteRequest(r *rpc.Request, param interface{}) error {
 		}
 	}
 
-	c.mutex.Lock()
-	c.pending[r.Seq] = r.ServiceMethod
-	c.mutex.Unlock()
-
-	c.writeMutex.Lock()
-	err := writeRequest(c.w, r.Seq, r.ServiceMethod, request)
-	c.writeMutex.Unlock()
-	if err != nil {
+	if err := c.writeRequest(r.Seq, r.ServiceMethod, request); err != nil {
 		return err
 	}
-
 	return c.w.Flush()
 }
 
 func (c *clientCodec) ReadResponseHeader(r *rpc.Response) error {
-	if err := readResponseHeader(c.r, &c.respHeader); err != nil {
+	if err := c.readResponseHeader(&c.respHeader); err != nil {
 		return err
 	}
 
-	c.mutex.Lock()
 	r.Seq = c.respHeader.GetId()
+	r.ServiceMethod = c.respHeader.GetMethod()
 	r.Error = c.respHeader.GetError()
-	r.ServiceMethod = c.pending[r.Seq]
-	delete(c.pending, r.Seq)
-	c.mutex.Unlock()
-
 	return nil
 }
 
@@ -99,7 +79,7 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 		}
 	}
 
-	err := readResponseBody(c.r, response)
+	err := c.readResponseBody(&c.respHeader, response)
 	if err != nil {
 		return nil
 	}
@@ -108,9 +88,49 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 	return nil
 }
 
-// Close closes the underlying connection.
-func (c *clientCodec) Close() error {
-	return c.c.Close()
+func (c *clientCodec) writeRequest(id uint64, method string, request proto.Message) error {
+	// generate header
+	header := &c.reqHeader
+	*header = wire.RequestHeader{
+		Id:          id,
+		Method:      method,
+		Compression: wire.CompressionType_NONE,
+	}
+	if enableSnappy {
+		header.Compression = wire.CompressionType_SNAPPY
+	}
+
+	// marshal header
+	pbHeader, err := marshal(&c.reqBuf, header)
+	if err != nil {
+		return err
+	}
+
+	// send header (more)
+	if err := c.sendFrame(pbHeader); err != nil {
+		return err
+	}
+
+	// marshal request
+	pbRequest, err := marshal(&c.reqBuf, request)
+	if err != nil {
+		return err
+	}
+
+	// send body (end)
+	if enableSnappy {
+		return snappyEncode(pbRequest, c.sendFrame)
+	}
+	return c.sendFrame(pbRequest)
+}
+
+func (c *clientCodec) readResponseHeader(header *wire.ResponseHeader) error {
+	return c.recvProto(header, proto.Unmarshal)
+}
+
+func (c *clientCodec) readResponseBody(header *wire.ResponseHeader,
+	response proto.Message) error {
+	return c.recvProto(response, decompressors[header.Compression])
 }
 
 // NewClient returns a new rpc.Client to handle requests to the

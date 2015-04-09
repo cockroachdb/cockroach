@@ -289,8 +289,8 @@ func listenAndServeEchoService(network, addr string,
 	return l, nil
 }
 
-func benchmarkEcho(b *testing.B, newClient func() *rpc.Client) {
-	echoMsg := randString(512)
+func benchmarkEcho(b *testing.B, size int, newClient func() *rpc.Client) {
+	echoMsg := randString(size)
 
 	b.SetBytes(2 * int64(len(echoMsg)))
 	b.ResetTimer()
@@ -327,7 +327,7 @@ var onlyEchoServer = flag.Bool("only-echo-server", false,
 //
 //   go test -run= -bench=BenchmarkEchoGobRPC -echoAddr <machine-1-ip>:9999 -start-echo-server=false
 
-func BenchmarkEchoGobRPC(b *testing.B) {
+func benchmarkEchoGobRPC(b *testing.B, size int) {
 	var addr string
 	if *startEchoServer {
 		l, err := listenAndServeEchoService("tcp", *echoAddr,
@@ -343,7 +343,7 @@ func BenchmarkEchoGobRPC(b *testing.B) {
 		addr = *echoAddr
 	}
 
-	benchmarkEcho(b, func() *rpc.Client {
+	benchmarkEcho(b, size, func() *rpc.Client {
 		conn, err := net.Dial("tcp", addr)
 		if err != nil {
 			b.Fatalf("could not dial client to %s: %s", addr, err)
@@ -352,7 +352,15 @@ func BenchmarkEchoGobRPC(b *testing.B) {
 	})
 }
 
-func BenchmarkEchoProtobufRPC(b *testing.B) {
+func BenchmarkEchoGobRPC1K(b *testing.B) {
+	benchmarkEchoGobRPC(b, 1<<10)
+}
+
+func BenchmarkEchoGobRPC64K(b *testing.B) {
+	benchmarkEchoGobRPC(b, 64<<10)
+}
+
+func benchmarkEchoProtoRPC(b *testing.B, size int) {
 	var addr string
 	if *startEchoServer {
 		l, err := listenAndServeEchoService("tcp", *echoAddr,
@@ -368,11 +376,19 @@ func BenchmarkEchoProtobufRPC(b *testing.B) {
 		addr = *echoAddr
 	}
 
-	benchmarkEcho(b, func() *rpc.Client {
+	benchmarkEcho(b, size, func() *rpc.Client {
 		conn, err := net.Dial("tcp", addr)
 		if err != nil {
 			b.Fatalf("could not dial client to %s: %s", addr, err)
 		}
 		return rpc.NewClientWithCodec(NewClientCodec(conn))
 	})
+}
+
+func BenchmarkEchoProtoRPC1K(b *testing.B) {
+	benchmarkEchoProtoRPC(b, 1<<10)
+}
+
+func BenchmarkEchoProtoRPC64K(b *testing.B) {
+	benchmarkEchoProtoRPC(b, 64<<10)
 }

@@ -6,60 +6,44 @@ package codec
 
 import (
 	"bufio"
-	"errors"
+	"bytes"
 	"fmt"
 	"io"
 	"net/rpc"
-	"sync"
 
 	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
 	"github.com/gogo/protobuf/proto"
 )
 
 type serverCodec struct {
-	r *bufio.Reader
-	w *bufio.Writer
-	c io.Closer
+	baseConn
 
 	// temporary work space
-	reqHeader wire.RequestHeader
-
-	// Package rpc expects uint64 request IDs.
-	// We assign uint64 sequence numbers to incoming requests
-	// but save the original request ID in the pending map.
-	// When rpc responds, we use the sequence number in
-	// the response to find the original request ID.
-	mutex   sync.Mutex // protects seq, pending
-	seq     uint64
-	pending map[uint64]uint64
-
-	writeMutex sync.Mutex // protects connection writes
+	respBuf    bytes.Buffer
+	respHeader wire.ResponseHeader
+	reqHeader  wire.RequestHeader
 }
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
 // on the other end of the given conn.
 func NewServerCodec(conn io.ReadWriteCloser) rpc.ServerCodec {
 	return &serverCodec{
-		r:       bufio.NewReader(conn),
-		w:       bufio.NewWriter(conn),
-		c:       conn,
-		pending: make(map[uint64]uint64),
+		baseConn: baseConn{
+			r: bufio.NewReader(conn),
+			w: bufio.NewWriter(conn),
+			c: conn,
+		},
 	}
 }
 
 func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
-	err := readRequestHeader(c.r, &c.reqHeader)
+	err := c.readRequestHeader(c.r, &c.reqHeader)
 	if err != nil {
 		return err
 	}
 
-	c.mutex.Lock()
-	c.seq++
-	c.pending[c.seq] = c.reqHeader.GetId()
+	r.Seq = c.reqHeader.GetId()
 	r.ServiceMethod = c.reqHeader.GetMethod()
-	r.Seq = c.seq
-	c.mutex.Unlock()
-
 	return nil
 }
 
@@ -75,7 +59,7 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 		)
 	}
 
-	err := readRequestBody(c.r, request)
+	err := c.readRequestBody(c.r, &c.reqHeader, request)
 	if err != nil {
 		return nil
 	}
@@ -84,20 +68,12 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 	return nil
 }
 
-// A value sent as a placeholder for the server's response value when the server
-// receives an invalid request. It is never decoded by the client since the Response
-// contains an error when it is used.
-var invalidRequest = struct{}{}
-
 func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {
 	var response proto.Message
 	if x != nil {
 		var ok bool
 		if response, ok = x.(proto.Message); !ok {
 			if _, ok = x.(struct{}); !ok {
-				c.mutex.Lock()
-				delete(c.pending, r.Seq)
-				c.mutex.Unlock()
 				return fmt.Errorf(
 					"protorpc.ServerCodec.WriteResponse: %T does not implement proto.Message",
 					x,
@@ -106,27 +82,64 @@ func (c *serverCodec) WriteResponse(r *rpc.Response, x interface{}) error {
 		}
 	}
 
-	c.mutex.Lock()
-	id, ok := c.pending[r.Seq]
-	if !ok {
-		c.mutex.Unlock()
-		return errors.New("protorpc: invalid sequence number in response")
+	if err := c.writeResponse(r, response); err != nil {
+		return err
 	}
-	delete(c.pending, r.Seq)
-	c.mutex.Unlock()
+	return c.w.Flush()
+}
 
-	c.writeMutex.Lock()
-	err := writeResponse(c.w, id, r.Error, response)
-	c.writeMutex.Unlock()
+func (c *serverCodec) writeResponse(r *rpc.Response, response proto.Message) error {
+	// clear response if error
+	if r.Error != "" {
+		response = nil
+	}
+
+	// generate header
+	header := &c.respHeader
+	*header = wire.ResponseHeader{
+		Id: r.Seq,
+		// The net/rpc interface asks for the Response.ServiceMethod to be
+		// returned from the server, but it is never used.
+		//
+		// Method: r.ServiceMethod,
+		Error:       r.Error,
+		Compression: wire.CompressionType_NONE,
+	}
+	if enableSnappy {
+		header.Compression = wire.CompressionType_SNAPPY
+	}
+
+	// marshal header
+	pbHeader, err := marshal(&c.respBuf, header)
 	if err != nil {
 		return err
 	}
 
-	return c.w.Flush()
+	// send header (more)
+	if err := c.sendFrame(pbHeader); err != nil {
+		return err
+	}
+
+	// marshal response
+	pbResponse, err := marshal(&c.respBuf, response)
+	if err != nil {
+		return err
+	}
+
+	// send body (end)
+	if enableSnappy {
+		return snappyEncode(pbResponse, c.sendFrame)
+	}
+	return c.sendFrame(pbResponse)
 }
 
-func (c *serverCodec) Close() error {
-	return c.c.Close()
+func (c *serverCodec) readRequestHeader(r *bufio.Reader, header *wire.RequestHeader) error {
+	return c.recvProto(header, proto.Unmarshal)
+}
+
+func (c *serverCodec) readRequestBody(r *bufio.Reader, header *wire.RequestHeader,
+	request proto.Message) error {
+	return c.recvProto(request, decompressors[header.Compression])
 }
 
 // ServeConn runs the Protobuf-RPC server on a single connection.
@@ -134,4 +147,24 @@ func (c *serverCodec) Close() error {
 // The caller typically invokes ServeConn in a go statement.
 func ServeConn(conn io.ReadWriteCloser) {
 	rpc.ServeCodec(NewServerCodec(conn))
+}
+
+type marshalTo interface {
+	Size() int
+	MarshalTo([]byte) (int, error)
+}
+
+func marshal(buf *bytes.Buffer, m proto.Message) ([]byte, error) {
+	if m == nil {
+		return nil, nil
+	}
+	if mt, ok := m.(marshalTo); ok {
+		buf.Reset()
+		size := mt.Size()
+		buf.Grow(size)
+		b := buf.Bytes()[:size]
+		n, err := mt.MarshalTo(b)
+		return b[:n], err
+	}
+	return proto.Marshal(m)
 }
