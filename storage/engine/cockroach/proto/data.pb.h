@@ -49,6 +49,7 @@ class ChangeReplicasTrigger;
 class InternalCommitTrigger;
 class NodeList;
 class Transaction;
+class Lease;
 class MVCCMetadata;
 class GCMetadata;
 class TimeSeriesDatapoint;
@@ -1436,6 +1437,125 @@ class Transaction : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static Transaction* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class Lease : public ::google::protobuf::Message {
+ public:
+  Lease();
+  virtual ~Lease();
+
+  Lease(const Lease& from);
+
+  inline Lease& operator=(const Lease& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const Lease& default_instance();
+
+  void Swap(Lease* other);
+
+  // implements Message ----------------------------------------------
+
+  Lease* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const Lease& from);
+  void MergeFrom(const Lease& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional int64 expiration = 1;
+  inline bool has_expiration() const;
+  inline void clear_expiration();
+  static const int kExpirationFieldNumber = 1;
+  inline ::google::protobuf::int64 expiration() const;
+  inline void set_expiration(::google::protobuf::int64 value);
+
+  // optional int64 duration = 2;
+  inline bool has_duration() const;
+  inline void clear_duration();
+  static const int kDurationFieldNumber = 2;
+  inline ::google::protobuf::int64 duration() const;
+  inline void set_duration(::google::protobuf::int64 value);
+
+  // optional uint64 term = 3;
+  inline bool has_term() const;
+  inline void clear_term();
+  static const int kTermFieldNumber = 3;
+  inline ::google::protobuf::uint64 term() const;
+  inline void set_term(::google::protobuf::uint64 value);
+
+  // optional int32 node_id = 4;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 4;
+  inline ::google::protobuf::int32 node_id() const;
+  inline void set_node_id(::google::protobuf::int32 value);
+
+  // optional int32 store_id = 5;
+  inline bool has_store_id() const;
+  inline void clear_store_id();
+  static const int kStoreIdFieldNumber = 5;
+  inline ::google::protobuf::int32 store_id() const;
+  inline void set_store_id(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.Lease)
+ private:
+  inline void set_has_expiration();
+  inline void clear_has_expiration();
+  inline void set_has_duration();
+  inline void clear_has_duration();
+  inline void set_has_term();
+  inline void clear_has_term();
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
+  inline void set_has_store_id();
+  inline void clear_has_store_id();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::google::protobuf::int64 expiration_;
+  ::google::protobuf::int64 duration_;
+  ::google::protobuf::uint64 term_;
+  ::google::protobuf::int32 node_id_;
+  ::google::protobuf::int32 store_id_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto();
+
+  void InitAsDefaultInstance();
+  static Lease* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -3641,6 +3761,130 @@ inline void Transaction::set_allocated_certain_nodes(::cockroach::proto::NodeLis
     clear_has_certain_nodes();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Transaction.certain_nodes)
+}
+
+// -------------------------------------------------------------------
+
+// Lease
+
+// optional int64 expiration = 1;
+inline bool Lease::has_expiration() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void Lease::set_has_expiration() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void Lease::clear_has_expiration() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void Lease::clear_expiration() {
+  expiration_ = GOOGLE_LONGLONG(0);
+  clear_has_expiration();
+}
+inline ::google::protobuf::int64 Lease::expiration() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.expiration)
+  return expiration_;
+}
+inline void Lease::set_expiration(::google::protobuf::int64 value) {
+  set_has_expiration();
+  expiration_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.expiration)
+}
+
+// optional int64 duration = 2;
+inline bool Lease::has_duration() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void Lease::set_has_duration() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void Lease::clear_has_duration() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void Lease::clear_duration() {
+  duration_ = GOOGLE_LONGLONG(0);
+  clear_has_duration();
+}
+inline ::google::protobuf::int64 Lease::duration() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.duration)
+  return duration_;
+}
+inline void Lease::set_duration(::google::protobuf::int64 value) {
+  set_has_duration();
+  duration_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.duration)
+}
+
+// optional uint64 term = 3;
+inline bool Lease::has_term() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void Lease::set_has_term() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void Lease::clear_has_term() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void Lease::clear_term() {
+  term_ = GOOGLE_ULONGLONG(0);
+  clear_has_term();
+}
+inline ::google::protobuf::uint64 Lease::term() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.term)
+  return term_;
+}
+inline void Lease::set_term(::google::protobuf::uint64 value) {
+  set_has_term();
+  term_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.term)
+}
+
+// optional int32 node_id = 4;
+inline bool Lease::has_node_id() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void Lease::set_has_node_id() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void Lease::clear_has_node_id() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void Lease::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 Lease::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.node_id)
+  return node_id_;
+}
+inline void Lease::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.node_id)
+}
+
+// optional int32 store_id = 5;
+inline bool Lease::has_store_id() const {
+  return (_has_bits_[0] & 0x00000010u) != 0;
+}
+inline void Lease::set_has_store_id() {
+  _has_bits_[0] |= 0x00000010u;
+}
+inline void Lease::clear_has_store_id() {
+  _has_bits_[0] &= ~0x00000010u;
+}
+inline void Lease::clear_store_id() {
+  store_id_ = 0;
+  clear_has_store_id();
+}
+inline ::google::protobuf::int32 Lease::store_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.store_id)
+  return store_id_;
+}
+inline void Lease::set_store_id(::google::protobuf::int32 value) {
+  set_has_store_id();
+  store_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.store_id)
 }
 
 // -------------------------------------------------------------------

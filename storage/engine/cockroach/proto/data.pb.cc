@@ -57,6 +57,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* Transaction_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   Transaction_reflection_ = NULL;
+const ::google::protobuf::Descriptor* Lease_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  Lease_reflection_ = NULL;
 const ::google::protobuf::Descriptor* MVCCMetadata_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   MVCCMetadata_reflection_ = NULL;
@@ -291,7 +294,26 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Transaction));
-  MVCCMetadata_descriptor_ = file->message_type(12);
+  Lease_descriptor_ = file->message_type(12);
+  static const int Lease_offsets_[5] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, duration_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, term_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, node_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, store_id_),
+  };
+  Lease_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      Lease_descriptor_,
+      Lease::default_instance_,
+      Lease_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(Lease));
+  MVCCMetadata_descriptor_ = file->message_type(13);
   static const int MVCCMetadata_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, timestamp_),
@@ -311,7 +333,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(MVCCMetadata));
-  GCMetadata_descriptor_ = file->message_type(13);
+  GCMetadata_descriptor_ = file->message_type(14);
   static const int GCMetadata_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, last_scan_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GCMetadata, oldest_intent_nanos_),
@@ -327,7 +349,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(GCMetadata));
-  TimeSeriesDatapoint_descriptor_ = file->message_type(14);
+  TimeSeriesDatapoint_descriptor_ = file->message_type(15);
   static const int TimeSeriesDatapoint_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, timestamp_nanos_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesDatapoint, int_value_),
@@ -344,7 +366,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesDatapoint));
-  TimeSeriesData_descriptor_ = file->message_type(15);
+  TimeSeriesData_descriptor_ = file->message_type(16);
   static const int TimeSeriesData_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, datapoints_),
@@ -400,6 +422,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     Transaction_descriptor_, &Transaction::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    Lease_descriptor_, &Lease::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     MVCCMetadata_descriptor_, &MVCCMetadata::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     GCMetadata_descriptor_, &GCMetadata::default_instance());
@@ -436,6 +460,8 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fdata_2eproto() {
   delete NodeList_reflection_;
   delete Transaction::default_instance_;
   delete Transaction_reflection_;
+  delete Lease::default_instance_;
+  delete Lease_reflection_;
   delete MVCCMetadata::default_instance_;
   delete MVCCMetadata_reflection_;
   delete GCMetadata::default_instance_;
@@ -504,25 +530,29 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "ampB\004\310\336\037\000\0227\n\rmax_timestamp\030\013 \001(\0132\032.cockr"
     "oach.proto.TimestampB\004\310\336\037\000\0226\n\rcertain_no"
     "des\030\014 \001(\0132\031.cockroach.proto.NodeListB\004\310\336"
-    "\037\000:\010\230\240\037\000\220\241\037\001\"\344\001\n\014MVCCMetadata\022)\n\003txn\030\001 \001"
-    "(\0132\034.cockroach.proto.Transaction\0223\n\ttime"
-    "stamp\030\002 \001(\0132\032.cockroach.proto.TimestampB"
-    "\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n\tkey_byte"
-    "s\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001(\003B\004\310\336\037\000\022%"
-    "\n\005value\030\006 \001(\0132\026.cockroach.proto.Value:\004\220"
-    "\241\037\001\"N\n\nGCMetadata\022\035\n\017last_scan_nanos\030\001 \001"
-    "(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003:\004\220"
-    "\241\037\001\"b\n\023TimeSeriesDatapoint\022\035\n\017timestamp_"
-    "nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022\023\n\013"
-    "float_value\030\003 \001(\002:\004\220\241\037\001\"d\n\016TimeSeriesDat"
-    "a\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\002 \003("
-    "\0132$.cockroach.proto.TimeSeriesDatapoint:"
-    "\004\220\241\037\001*>\n\021ReplicaChangeType\022\017\n\013ADD_REPLIC"
-    "A\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolati"
-    "onType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004"
-    "\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PENDING\020\000\022\r"
-    "\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\007Z\005prot"
-    "o", 2681);
+    "\037\000:\010\230\240\037\000\220\241\037\001\"\246\001\n\005Lease\022\030\n\nexpiration\030\001 \001"
+    "(\003B\004\310\336\037\000\022\026\n\010duration\030\002 \001(\003B\004\310\336\037\000\022\022\n\004term"
+    "\030\003 \001(\004B\004\310\336\037\000\022)\n\007node_id\030\004 \001(\005B\030\310\336\037\000\342\336\037\006N"
+    "odeID\332\336\037\006NodeID\022,\n\010store_id\030\005 \001(\005B\032\310\336\037\000\342"
+    "\336\037\007StoreID\332\336\037\007StoreID\"\344\001\n\014MVCCMetadata\022)"
+    "\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transactio"
+    "n\0223\n\ttimestamp\030\002 \001(\0132\032.cockroach.proto.T"
+    "imestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n"
+    "\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001("
+    "\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach.proto"
+    ".Value:\004\220\241\037\001\"N\n\nGCMetadata\022\035\n\017last_scan_"
+    "nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos"
+    "\030\002 \001(\003:\004\220\241\037\001\"b\n\023TimeSeriesDatapoint\022\035\n\017t"
+    "imestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030"
+    "\002 \001(\003\022\023\n\013float_value\030\003 \001(\002:\004\220\241\037\001\"d\n\016Time"
+    "SeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\0228\n\ndatapo"
+    "ints\030\002 \003(\0132$.cockroach.proto.TimeSeriesD"
+    "atapoint:\004\220\241\037\001*>\n\021ReplicaChangeType\022\017\n\013A"
+    "DD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*5"
+    "\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SNA"
+    "PSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007PE"
+    "NDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036"
+    "\000B\007Z\005proto", 2850);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -537,6 +567,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   InternalCommitTrigger::default_instance_ = new InternalCommitTrigger();
   NodeList::default_instance_ = new NodeList();
   Transaction::default_instance_ = new Transaction();
+  Lease::default_instance_ = new Lease();
   MVCCMetadata::default_instance_ = new MVCCMetadata();
   GCMetadata::default_instance_ = new GCMetadata();
   TimeSeriesDatapoint::default_instance_ = new TimeSeriesDatapoint();
@@ -553,6 +584,7 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
   InternalCommitTrigger::default_instance_->InitAsDefaultInstance();
   NodeList::default_instance_->InitAsDefaultInstance();
   Transaction::default_instance_->InitAsDefaultInstance();
+  Lease::default_instance_->InitAsDefaultInstance();
   MVCCMetadata::default_instance_->InitAsDefaultInstance();
   GCMetadata::default_instance_->InitAsDefaultInstance();
   TimeSeriesDatapoint::default_instance_->InitAsDefaultInstance();
@@ -4693,6 +4725,396 @@ void Transaction::Swap(Transaction* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = Transaction_descriptor_;
   metadata.reflection = Transaction_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int Lease::kExpirationFieldNumber;
+const int Lease::kDurationFieldNumber;
+const int Lease::kTermFieldNumber;
+const int Lease::kNodeIdFieldNumber;
+const int Lease::kStoreIdFieldNumber;
+#endif  // !_MSC_VER
+
+Lease::Lease()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.proto.Lease)
+}
+
+void Lease::InitAsDefaultInstance() {
+}
+
+Lease::Lease(const Lease& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+  // @@protoc_insertion_point(copy_constructor:cockroach.proto.Lease)
+}
+
+void Lease::SharedCtor() {
+  _cached_size_ = 0;
+  expiration_ = GOOGLE_LONGLONG(0);
+  duration_ = GOOGLE_LONGLONG(0);
+  term_ = GOOGLE_ULONGLONG(0);
+  node_id_ = 0;
+  store_id_ = 0;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+Lease::~Lease() {
+  // @@protoc_insertion_point(destructor:cockroach.proto.Lease)
+  SharedDtor();
+}
+
+void Lease::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void Lease::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* Lease::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return Lease_descriptor_;
+}
+
+const Lease& Lease::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
+  return *default_instance_;
+}
+
+Lease* Lease::default_instance_ = NULL;
+
+Lease* Lease::New() const {
+  return new Lease;
+}
+
+void Lease::Clear() {
+#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
+  &reinterpret_cast<Lease*>(16)->f) - \
+   reinterpret_cast<char*>(16))
+
+#define ZR_(first, last) do {                              \
+    size_t f = OFFSET_OF_FIELD_(first);                    \
+    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
+    ::memset(&first, 0, n);                                \
+  } while (0)
+
+  if (_has_bits_[0 / 32] & 31) {
+    ZR_(expiration_, store_id_);
+  }
+
+#undef OFFSET_OF_FIELD_
+#undef ZR_
+
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool Lease::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  // @@protoc_insertion_point(parse_start:cockroach.proto.Lease)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional int64 expiration = 1;
+      case 1: {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &expiration_)));
+          set_has_expiration();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(16)) goto parse_duration;
+        break;
+      }
+
+      // optional int64 duration = 2;
+      case 2: {
+        if (tag == 16) {
+         parse_duration:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &duration_)));
+          set_has_duration();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(24)) goto parse_term;
+        break;
+      }
+
+      // optional uint64 term = 3;
+      case 3: {
+        if (tag == 24) {
+         parse_term:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
+                 input, &term_)));
+          set_has_term();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(32)) goto parse_node_id;
+        break;
+      }
+
+      // optional int32 node_id = 4;
+      case 4: {
+        if (tag == 32) {
+         parse_node_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &node_id_)));
+          set_has_node_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(40)) goto parse_store_id;
+        break;
+      }
+
+      // optional int32 store_id = 5;
+      case 5: {
+        if (tag == 40) {
+         parse_store_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &store_id_)));
+          set_has_store_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectAtEnd()) goto success;
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.proto.Lease)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.proto.Lease)
+  return false;
+#undef DO_
+}
+
+void Lease::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.proto.Lease)
+  // optional int64 expiration = 1;
+  if (has_expiration()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->expiration(), output);
+  }
+
+  // optional int64 duration = 2;
+  if (has_duration()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->duration(), output);
+  }
+
+  // optional uint64 term = 3;
+  if (has_term()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(3, this->term(), output);
+  }
+
+  // optional int32 node_id = 4;
+  if (has_node_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->node_id(), output);
+  }
+
+  // optional int32 store_id = 5;
+  if (has_store_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(5, this->store_id(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+  // @@protoc_insertion_point(serialize_end:cockroach.proto.Lease)
+}
+
+::google::protobuf::uint8* Lease::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.Lease)
+  // optional int64 expiration = 1;
+  if (has_expiration()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->expiration(), target);
+  }
+
+  // optional int64 duration = 2;
+  if (has_duration()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->duration(), target);
+  }
+
+  // optional uint64 term = 3;
+  if (has_term()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(3, this->term(), target);
+  }
+
+  // optional int32 node_id = 4;
+  if (has_node_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(4, this->node_id(), target);
+  }
+
+  // optional int32 store_id = 5;
+  if (has_store_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(5, this->store_id(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.Lease)
+  return target;
+}
+
+int Lease::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional int64 expiration = 1;
+    if (has_expiration()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->expiration());
+    }
+
+    // optional int64 duration = 2;
+    if (has_duration()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->duration());
+    }
+
+    // optional uint64 term = 3;
+    if (has_term()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt64Size(
+          this->term());
+    }
+
+    // optional int32 node_id = 4;
+    if (has_node_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
+    }
+
+    // optional int32 store_id = 5;
+    if (has_store_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->store_id());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void Lease::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const Lease* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const Lease*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void Lease::MergeFrom(const Lease& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_expiration()) {
+      set_expiration(from.expiration());
+    }
+    if (from.has_duration()) {
+      set_duration(from.duration());
+    }
+    if (from.has_term()) {
+      set_term(from.term());
+    }
+    if (from.has_node_id()) {
+      set_node_id(from.node_id());
+    }
+    if (from.has_store_id()) {
+      set_store_id(from.store_id());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void Lease::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void Lease::CopyFrom(const Lease& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool Lease::IsInitialized() const {
+
+  return true;
+}
+
+void Lease::Swap(Lease* other) {
+  if (other != this) {
+    std::swap(expiration_, other->expiration_);
+    std::swap(duration_, other->duration_);
+    std::swap(term_, other->term_);
+    std::swap(node_id_, other->node_id_);
+    std::swap(store_id_, other->store_id_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata Lease::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = Lease_descriptor_;
+  metadata.reflection = Lease_reflection_;
   return metadata;
 }
 

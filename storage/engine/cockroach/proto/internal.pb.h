@@ -54,6 +54,8 @@ class InternalMergeRequest;
 class InternalMergeResponse;
 class InternalTruncateLogRequest;
 class InternalTruncateLogResponse;
+class InternalLeaderLeaseRequest;
+class InternalLeaderLeaseResponse;
 class ReadWriteCmdResponse;
 class InternalRaftCommandUnion;
 class InternalRaftCommand;
@@ -1421,6 +1423,180 @@ class InternalTruncateLogResponse : public ::google::protobuf::Message {
 };
 // -------------------------------------------------------------------
 
+class InternalLeaderLeaseRequest : public ::google::protobuf::Message {
+ public:
+  InternalLeaderLeaseRequest();
+  virtual ~InternalLeaderLeaseRequest();
+
+  InternalLeaderLeaseRequest(const InternalLeaderLeaseRequest& from);
+
+  inline InternalLeaderLeaseRequest& operator=(const InternalLeaderLeaseRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalLeaderLeaseRequest& default_instance();
+
+  void Swap(InternalLeaderLeaseRequest* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalLeaderLeaseRequest* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalLeaderLeaseRequest& from);
+  void MergeFrom(const InternalLeaderLeaseRequest& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.RequestHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::cockroach::proto::RequestHeader& header() const;
+  inline ::cockroach::proto::RequestHeader* mutable_header();
+  inline ::cockroach::proto::RequestHeader* release_header();
+  inline void set_allocated_header(::cockroach::proto::RequestHeader* header);
+
+  // optional .cockroach.proto.Lease lease = 2;
+  inline bool has_lease() const;
+  inline void clear_lease();
+  static const int kLeaseFieldNumber = 2;
+  inline const ::cockroach::proto::Lease& lease() const;
+  inline ::cockroach::proto::Lease* mutable_lease();
+  inline ::cockroach::proto::Lease* release_lease();
+  inline void set_allocated_lease(::cockroach::proto::Lease* lease);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalLeaderLeaseRequest)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+  inline void set_has_lease();
+  inline void clear_has_lease();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::RequestHeader* header_;
+  ::cockroach::proto::Lease* lease_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalLeaderLeaseRequest* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class InternalLeaderLeaseResponse : public ::google::protobuf::Message {
+ public:
+  InternalLeaderLeaseResponse();
+  virtual ~InternalLeaderLeaseResponse();
+
+  InternalLeaderLeaseResponse(const InternalLeaderLeaseResponse& from);
+
+  inline InternalLeaderLeaseResponse& operator=(const InternalLeaderLeaseResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const InternalLeaderLeaseResponse& default_instance();
+
+  void Swap(InternalLeaderLeaseResponse* other);
+
+  // implements Message ----------------------------------------------
+
+  InternalLeaderLeaseResponse* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const InternalLeaderLeaseResponse& from);
+  void MergeFrom(const InternalLeaderLeaseResponse& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.ResponseHeader header = 1;
+  inline bool has_header() const;
+  inline void clear_header();
+  static const int kHeaderFieldNumber = 1;
+  inline const ::cockroach::proto::ResponseHeader& header() const;
+  inline ::cockroach::proto::ResponseHeader* mutable_header();
+  inline ::cockroach::proto::ResponseHeader* release_header();
+  inline void set_allocated_header(::cockroach::proto::ResponseHeader* header);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.InternalLeaderLeaseResponse)
+ private:
+  inline void set_has_header();
+  inline void clear_has_header();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::ResponseHeader* header_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2finternal_2eproto();
+
+  void InitAsDefaultInstance();
+  static InternalLeaderLeaseResponse* default_instance_;
+};
+// -------------------------------------------------------------------
+
 class ReadWriteCmdResponse : public ::google::protobuf::Message {
  public:
   ReadWriteCmdResponse();
@@ -1727,6 +1903,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     kInternalMergeResponse = 35,
     kInternalTruncateLog = 36,
     kInternalGc = 37,
+    kInternalLease = 38,
     VALUE_NOT_SET = 0,
   };
 
@@ -1940,6 +2117,15 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalGCRequest* release_internal_gc();
   inline void set_allocated_internal_gc(::cockroach::proto::InternalGCRequest* internal_gc);
 
+  // optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 38;
+  inline bool has_internal_lease() const;
+  inline void clear_internal_lease();
+  static const int kInternalLeaseFieldNumber = 38;
+  inline const ::cockroach::proto::InternalLeaderLeaseRequest& internal_lease() const;
+  inline ::cockroach::proto::InternalLeaderLeaseRequest* mutable_internal_lease();
+  inline ::cockroach::proto::InternalLeaderLeaseRequest* release_internal_lease();
+  inline void set_allocated_internal_lease(::cockroach::proto::InternalLeaderLeaseRequest* internal_lease);
+
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.InternalRaftCommandUnion)
  private:
@@ -1963,6 +2149,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline void set_has_internal_merge_response();
   inline void set_has_internal_truncate_log();
   inline void set_has_internal_gc();
+  inline void set_has_internal_lease();
 
   inline bool has_value();
   void clear_value();
@@ -1993,6 +2180,7 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     ::cockroach::proto::InternalMergeRequest* internal_merge_response_;
     ::cockroach::proto::InternalTruncateLogRequest* internal_truncate_log_;
     ::cockroach::proto::InternalGCRequest* internal_gc_;
+    ::cockroach::proto::InternalLeaderLeaseRequest* internal_lease_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -3842,6 +4030,137 @@ inline void InternalTruncateLogResponse::set_allocated_header(::cockroach::proto
 
 // -------------------------------------------------------------------
 
+// InternalLeaderLeaseRequest
+
+// optional .cockroach.proto.RequestHeader header = 1;
+inline bool InternalLeaderLeaseRequest::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalLeaderLeaseRequest::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalLeaderLeaseRequest::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalLeaderLeaseRequest::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::RequestHeader& InternalLeaderLeaseRequest::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalLeaderLeaseRequest.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalLeaderLeaseRequest::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::cockroach::proto::RequestHeader;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalLeaderLeaseRequest.header)
+  return header_;
+}
+inline ::cockroach::proto::RequestHeader* InternalLeaderLeaseRequest::release_header() {
+  clear_has_header();
+  ::cockroach::proto::RequestHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalLeaderLeaseRequest::set_allocated_header(::cockroach::proto::RequestHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalLeaderLeaseRequest.header)
+}
+
+// optional .cockroach.proto.Lease lease = 2;
+inline bool InternalLeaderLeaseRequest::has_lease() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void InternalLeaderLeaseRequest::set_has_lease() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void InternalLeaderLeaseRequest::clear_has_lease() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void InternalLeaderLeaseRequest::clear_lease() {
+  if (lease_ != NULL) lease_->::cockroach::proto::Lease::Clear();
+  clear_has_lease();
+}
+inline const ::cockroach::proto::Lease& InternalLeaderLeaseRequest::lease() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalLeaderLeaseRequest.lease)
+  return lease_ != NULL ? *lease_ : *default_instance_->lease_;
+}
+inline ::cockroach::proto::Lease* InternalLeaderLeaseRequest::mutable_lease() {
+  set_has_lease();
+  if (lease_ == NULL) lease_ = new ::cockroach::proto::Lease;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalLeaderLeaseRequest.lease)
+  return lease_;
+}
+inline ::cockroach::proto::Lease* InternalLeaderLeaseRequest::release_lease() {
+  clear_has_lease();
+  ::cockroach::proto::Lease* temp = lease_;
+  lease_ = NULL;
+  return temp;
+}
+inline void InternalLeaderLeaseRequest::set_allocated_lease(::cockroach::proto::Lease* lease) {
+  delete lease_;
+  lease_ = lease;
+  if (lease) {
+    set_has_lease();
+  } else {
+    clear_has_lease();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalLeaderLeaseRequest.lease)
+}
+
+// -------------------------------------------------------------------
+
+// InternalLeaderLeaseResponse
+
+// optional .cockroach.proto.ResponseHeader header = 1;
+inline bool InternalLeaderLeaseResponse::has_header() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void InternalLeaderLeaseResponse::set_has_header() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void InternalLeaderLeaseResponse::clear_has_header() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void InternalLeaderLeaseResponse::clear_header() {
+  if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
+  clear_has_header();
+}
+inline const ::cockroach::proto::ResponseHeader& InternalLeaderLeaseResponse::header() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalLeaderLeaseResponse.header)
+  return header_ != NULL ? *header_ : *default_instance_->header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalLeaderLeaseResponse::mutable_header() {
+  set_has_header();
+  if (header_ == NULL) header_ = new ::cockroach::proto::ResponseHeader;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.InternalLeaderLeaseResponse.header)
+  return header_;
+}
+inline ::cockroach::proto::ResponseHeader* InternalLeaderLeaseResponse::release_header() {
+  clear_has_header();
+  ::cockroach::proto::ResponseHeader* temp = header_;
+  header_ = NULL;
+  return temp;
+}
+inline void InternalLeaderLeaseResponse::set_allocated_header(::cockroach::proto::ResponseHeader* header) {
+  delete header_;
+  header_ = header;
+  if (header) {
+    set_has_header();
+  } else {
+    clear_has_header();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.InternalLeaderLeaseResponse.header)
+}
+
+// -------------------------------------------------------------------
+
 // ReadWriteCmdResponse
 
 // optional .cockroach.proto.PutResponse put = 1;
@@ -5359,6 +5678,49 @@ inline void InternalRaftCommandUnion::set_allocated_internal_gc(::cockroach::pro
   if (internal_gc) {
     set_has_internal_gc();
     value_.internal_gc_ = internal_gc;
+  }
+}
+
+// optional .cockroach.proto.InternalLeaderLeaseRequest internal_lease = 38;
+inline bool InternalRaftCommandUnion::has_internal_lease() const {
+  return value_case() == kInternalLease;
+}
+inline void InternalRaftCommandUnion::set_has_internal_lease() {
+  _oneof_case_[0] = kInternalLease;
+}
+inline void InternalRaftCommandUnion::clear_internal_lease() {
+  if (has_internal_lease()) {
+    delete value_.internal_lease_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalLeaderLeaseRequest& InternalRaftCommandUnion::internal_lease() const {
+  return has_internal_lease() ? *value_.internal_lease_
+                      : ::cockroach::proto::InternalLeaderLeaseRequest::default_instance();
+}
+inline ::cockroach::proto::InternalLeaderLeaseRequest* InternalRaftCommandUnion::mutable_internal_lease() {
+  if (!has_internal_lease()) {
+    clear_value();
+    set_has_internal_lease();
+    value_.internal_lease_ = new ::cockroach::proto::InternalLeaderLeaseRequest;
+  }
+  return value_.internal_lease_;
+}
+inline ::cockroach::proto::InternalLeaderLeaseRequest* InternalRaftCommandUnion::release_internal_lease() {
+  if (has_internal_lease()) {
+    clear_has_value();
+    ::cockroach::proto::InternalLeaderLeaseRequest* temp = value_.internal_lease_;
+    value_.internal_lease_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void InternalRaftCommandUnion::set_allocated_internal_lease(::cockroach::proto::InternalLeaderLeaseRequest* internal_lease) {
+  clear_value();
+  if (internal_lease) {
+    set_has_internal_lease();
+    value_.internal_lease_ = internal_lease;
   }
 }
 
