@@ -176,6 +176,17 @@ func TestInitialLeaderElection(t *testing.T) {
 	}
 }
 
+// TestProposeBadGroup ensures that unknown group IDs are an error, not a panic.
+func TestProposeBadGroup(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	cluster := newTestCluster(nil, 3, t)
+	defer cluster.stop()
+	err := <-cluster.nodes[1].SubmitCommand(7, "asdf", []byte{})
+	if err == nil {
+		t.Fatal("did not get expected error")
+	}
+}
+
 func TestLeaderElectionEvent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Leader election events are fired when the leader commits an entry, not when it
