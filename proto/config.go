@@ -125,7 +125,7 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 }
 
 // FindReplica returns the replica which matches the specified store
-// ID. Returns nil in he event that no replica matches.
+// ID. Returns nil in the event that no replica matches.
 func (r *RangeDescriptor) FindReplica(storeID StoreID) *Replica {
 	for i := range r.Replicas {
 		if r.Replicas[i].StoreID == storeID {

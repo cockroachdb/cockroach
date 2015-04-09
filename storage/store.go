@@ -524,8 +524,7 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		n := sort.Search(len(s.rangesByKey), func(i int) bool {
 			return config.Prefix.Less(s.rangesByKey[i].Desc().EndKey)
 		})
-		// If the config doesn't split the range or the range isn't the
-		// leader of its consensus group, continue.
+		// If the config doesn't split the range, continue.
 		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) {
 			continue
 		}

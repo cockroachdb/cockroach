@@ -202,6 +202,7 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		rm:          rm,
+		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
@@ -242,6 +243,7 @@ func (r *Range) start() {
 	r.grantLeaderLease(&proto.Lease{
 		Expiration: math.MaxInt64,
 		StoreID:    r.rm.StoreID(),
+		Term:       1,
 	})
 }
 
@@ -303,7 +305,6 @@ func (r *Range) HasLeaderLease() bool {
 func (r *Range) grantLeaderLease(lease *proto.Lease) {
 	r.Lock()
 	defer r.Unlock()
-
 	// Set the new leader lease.
 	var oldTerm uint64
 	if l := r.getLease(); l != nil {
@@ -318,10 +319,6 @@ func (r *Range) grantLeaderLease(lease *proto.Lease) {
 	// the timestamp and command caches and maybe start gossiping (if
 	// we're the first range).
 	if r.HasLeaderLease() && lease.Term > oldTerm {
-		if r.closer != nil {
-			close(r.closer)
-		}
-		r.closer = make(chan struct{})
 		r.tsCache.Clear(r.rm.Clock())
 		r.cmdQ.Clear()
 
@@ -718,12 +715,11 @@ func (r *Range) startGossip(stopper *util.Stopper) {
 		for {
 			select {
 			case <-ticker.C:
-				if r.HasLeaderLease() {
-					r.maybeGossipClusterID()
-					r.maybeGossipFirstRange()
-				} else {
+				if !r.HasLeaderLease() {
 					return
 				}
+				r.maybeGossipClusterID()
+				r.maybeGossipFirstRange()
 			case <-stopper().ShouldStop():
 				return
 			}
