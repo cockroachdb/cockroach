@@ -125,8 +125,6 @@ func verifyKeys(start, end proto.Key) error {
 }
 
 // MakeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
-// Both values are int32s, but we only allocate 8 bits for StoreID so we have
-// the option of expanding proto.NodeID and being more "wasteful" of node IDs.
 func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 	if n < 0 || s <= 0 {
 		// Zeroes are likely the result of incomplete initialization.
@@ -134,15 +132,12 @@ func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 		// production but many tests use it.
 		panic("NodeID must be >= 0 and StoreID must be > 0")
 	}
-	if s > 0xff {
-		panic("StoreID must be <= 0xff")
-	}
-	return multiraft.NodeID(n)<<8 | multiraft.NodeID(s)
+	return multiraft.NodeID(n)<<32 | multiraft.NodeID(s)
 }
 
 // DecodeRaftNodeID converts a multiraft NodeID into its component NodeID and StoreID.
 func DecodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
-	return proto.NodeID(n >> 8), proto.StoreID(n & 0xff)
+	return proto.NodeID(n >> 32), proto.StoreID(n & 0xffffffff)
 }
 
 type rangeAlreadyExists struct {

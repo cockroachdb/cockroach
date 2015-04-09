@@ -1049,9 +1049,9 @@ func TestRaftNodeID(t *testing.T) {
 		expected multiraft.NodeID
 	}{
 		{0, 1, 1},
-		{1, 1, 257},
-		{2, 3, 515},
-		{math.MaxInt32, 0xff, 549755813887},
+		{1, 1, 0x100000001},
+		{2, 3, 0x200000003},
+		{math.MaxInt32, math.MaxInt32, 0x7fffffff7fffffff},
 	}
 	for _, c := range cases {
 		x := MakeRaftNodeID(c.nodeID, c.storeID)
@@ -1071,7 +1071,6 @@ func TestRaftNodeID(t *testing.T) {
 		storeID proto.StoreID
 	}{
 		{1, 0},
-		{1, 0x100},
 		{1, -1},
 		{-1, 1},
 	}
