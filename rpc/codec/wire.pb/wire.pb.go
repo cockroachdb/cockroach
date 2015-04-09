@@ -3,78 +3,56 @@
 // DO NOT EDIT!
 
 /*
-Package google_protobuf_rpc_wire is a generated protocol buffer package.
+	Package wire is a generated protocol buffer package.
 
-	protorpc wire format wrapper
+		protorpc wire format wrapper
 
-	0. Frame Format
-	len : uvarint64
-	data: byte[len]
+		0. Frame Format
+		len : uvarint64
+		data: byte[len]
 
-	1. Client Send Request
-	Send RequestHeader: sendFrame(conn, hdr, len(hdr))
-	Send Request: sendFrame(conn, body, hdr.snappy_compressed_request_len)
+		1. Client Send Request
+		Send RequestHeader: sendFrame(conn, hdr, len(hdr))
+		Send Request: sendFrame(conn, body, len(body))
 
-	2. Server Recv Request
-	Recv RequestHeader: recvFrame(conn, hdr, max_hdr_len, 0)
-	Recv Request: recvFrame(conn, body, hdr.snappy_compressed_request_len, 0)
+		2. Server Recv Request
+		Recv RequestHeader: recvFrame(conn, hdr, max_hdr_len, 0)
+		Recv Request: recvFrame(conn, body)
 
-	3. Server Send Response
-	Send ResponseHeader: sendFrame(conn, hdr, len(hdr))
-	Send Response: sendFrame(conn, body, hdr.snappy_compressed_response_len)
+		3. Server Send Response
+		Send ResponseHeader: sendFrame(conn, hdr, len(hdr))
+		Send Response: sendFrame(conn, body, len(body))
 
-	4. Client Recv Response
-	Recv ResponseHeader: recvFrame(conn, hdr, max_hdr_len, 0)
-	Recv Response: recvFrame(conn, body, hdr.snappy_compressed_response_len, 0)
+		4. Client Recv Response
+		Recv ResponseHeader: recvFrame(conn, hdr, max_hdr_len, 0)
+		Recv Response: recvFrame(conn, body)
 
-	5. Header Size
-	len(RequestHeader)  < Const.max_header_len.default
-	len(ResponseHeader) < Const.max_header_len.default
+	It is generated from these files:
+		wire.proto
 
-It is generated from these files:
-	wire.proto
-
-It has these top-level messages:
-	Const
-	RequestHeader
-	ResponseHeader
+	It has these top-level messages:
+		RequestHeader
+		ResponseHeader
 */
-package google_protobuf_rpc_wire
+package wire
 
 import proto "github.com/gogo/protobuf/proto"
 import math "math"
 
-// discarding unused import gogoproto "code.google.com/p/gogoprotobuf/gogoproto/gogo.pb"
+// discarding unused import gogoproto "github.com/gogo/protobuf/gogoproto/gogo.pb"
+
+import io "io"
+import fmt "fmt"
+import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
 var _ = math.Inf
 
-type Const struct {
-	MaxHeaderLen     *uint32 `protobuf:"varint,1,opt,name=max_header_len,def=1024" json:"max_header_len,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
-}
-
-func (m *Const) Reset()         { *m = Const{} }
-func (m *Const) String() string { return proto.CompactTextString(m) }
-func (*Const) ProtoMessage()    {}
-
-const Default_Const_MaxHeaderLen uint32 = 1024
-
-func (m *Const) GetMaxHeaderLen() uint32 {
-	if m != nil && m.MaxHeaderLen != nil {
-		return *m.MaxHeaderLen
-	}
-	return Default_Const_MaxHeaderLen
-}
-
 type RequestHeader struct {
-	Id                         uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
-	Method                     string `protobuf:"bytes,2,opt,name=method" json:"method"`
-	RawRequestLen              uint32 `protobuf:"varint,3,opt,name=raw_request_len" json:"raw_request_len"`
-	SnappyCompressedRequestLen uint32 `protobuf:"varint,4,opt,name=snappy_compressed_request_len" json:"snappy_compressed_request_len"`
-	Checksum                   uint32 `protobuf:"varint,5,opt,name=checksum" json:"checksum"`
-	XXX_unrecognized           []byte `json:"-"`
+	Id               uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
+	Method           string `protobuf:"bytes,2,opt,name=method" json:"method"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -95,34 +73,10 @@ func (m *RequestHeader) GetMethod() string {
 	return ""
 }
 
-func (m *RequestHeader) GetRawRequestLen() uint32 {
-	if m != nil {
-		return m.RawRequestLen
-	}
-	return 0
-}
-
-func (m *RequestHeader) GetSnappyCompressedRequestLen() uint32 {
-	if m != nil {
-		return m.SnappyCompressedRequestLen
-	}
-	return 0
-}
-
-func (m *RequestHeader) GetChecksum() uint32 {
-	if m != nil {
-		return m.Checksum
-	}
-	return 0
-}
-
 type ResponseHeader struct {
-	Id                          uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
-	Error                       string `protobuf:"bytes,2,opt,name=error" json:"error"`
-	RawResponseLen              uint32 `protobuf:"varint,3,opt,name=raw_response_len" json:"raw_response_len"`
-	SnappyCompressedResponseLen uint32 `protobuf:"varint,4,opt,name=snappy_compressed_response_len" json:"snappy_compressed_response_len"`
-	Checksum                    uint32 `protobuf:"varint,5,opt,name=checksum" json:"checksum"`
-	XXX_unrecognized            []byte `json:"-"`
+	Id               uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
+	Error            string `protobuf:"bytes,2,opt,name=error" json:"error"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
@@ -143,26 +97,283 @@ func (m *ResponseHeader) GetError() string {
 	return ""
 }
 
-func (m *ResponseHeader) GetRawResponseLen() uint32 {
-	if m != nil {
-		return m.RawResponseLen
-	}
-	return 0
-}
-
-func (m *ResponseHeader) GetSnappyCompressedResponseLen() uint32 {
-	if m != nil {
-		return m.SnappyCompressedResponseLen
-	}
-	return 0
-}
-
-func (m *ResponseHeader) GetChecksum() uint32 {
-	if m != nil {
-		return m.Checksum
-	}
-	return 0
-}
-
 func init() {
+}
+func (m *RequestHeader) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Id |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Method", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Method = string(data[index:postIndex])
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
+func (m *ResponseHeader) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Id |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Error = string(data[index:postIndex])
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
+func (m *RequestHeader) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.Id))
+	l = len(m.Method)
+	n += 1 + l + sovWire(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ResponseHeader) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovWire(uint64(m.Id))
+	l = len(m.Error)
+	n += 1 + l + sovWire(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func sovWire(x uint64) (n int) {
+	for {
+		n++
+		x >>= 7
+		if x == 0 {
+			break
+		}
+	}
+	return n
+}
+func sozWire(x uint64) (n int) {
+	return sovWire(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *RequestHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Id))
+	data[i] = 0x12
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Method)))
+	i += copy(data[i:], m.Method)
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ResponseHeader) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0x8
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Id))
+	data[i] = 0x12
+	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Error)))
+	i += copy(data[i:], m.Error)
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func encodeFixed64Wire(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
+	return offset + 8
+}
+func encodeFixed32Wire(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	return offset + 4
+}
+func encodeVarintWire(data []byte, offset int, v uint64) int {
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return offset + 1
 }

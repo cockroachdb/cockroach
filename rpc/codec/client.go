@@ -5,6 +5,7 @@
 package codec
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
@@ -17,8 +18,8 @@ import (
 )
 
 type clientCodec struct {
-	r io.Reader
-	w io.Writer
+	r *bufio.Reader
+	w *bufio.Writer
 	c io.Closer
 
 	// temporary work space
@@ -30,23 +31,21 @@ type clientCodec struct {
 	// and then look it up by request ID when filling out the rpc Response.
 	mutex   sync.Mutex        // protects pending
 	pending map[uint64]string // map request id to method name
+
+	writeMutex sync.Mutex // protects connection writes
 }
 
 // NewClientCodec returns a new rpc.ClientCodec using Protobuf-RPC on conn.
 func NewClientCodec(conn io.ReadWriteCloser) rpc.ClientCodec {
 	return &clientCodec{
-		r:       conn,
-		w:       conn,
+		r:       bufio.NewReader(conn),
+		w:       bufio.NewWriter(conn),
 		c:       conn,
 		pending: make(map[uint64]string),
 	}
 }
 
 func (c *clientCodec) WriteRequest(r *rpc.Request, param interface{}) error {
-	c.mutex.Lock()
-	c.pending[r.Seq] = r.ServiceMethod
-	c.mutex.Unlock()
-
 	var request proto.Message
 	if param != nil {
 		var ok bool
@@ -57,29 +56,33 @@ func (c *clientCodec) WriteRequest(r *rpc.Request, param interface{}) error {
 			)
 		}
 	}
+
+	c.mutex.Lock()
+	c.pending[r.Seq] = r.ServiceMethod
+	c.mutex.Unlock()
+
+	c.writeMutex.Lock()
 	err := writeRequest(c.w, r.Seq, r.ServiceMethod, request)
+	c.writeMutex.Unlock()
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return c.w.Flush()
 }
 
 func (c *clientCodec) ReadResponseHeader(r *rpc.Response) error {
-	header := wire.ResponseHeader{}
-	err := readResponseHeader(c.r, &header)
-	if err != nil {
+	if err := readResponseHeader(c.r, &c.respHeader); err != nil {
 		return err
 	}
 
 	c.mutex.Lock()
-	r.Seq = header.GetId()
-	r.Error = header.GetError()
+	r.Seq = c.respHeader.GetId()
+	r.Error = c.respHeader.GetError()
 	r.ServiceMethod = c.pending[r.Seq]
 	delete(c.pending, r.Seq)
 	c.mutex.Unlock()
 
-	c.respHeader = header
 	return nil
 }
 
@@ -96,12 +99,12 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 		}
 	}
 
-	err := readResponseBody(c.r, &c.respHeader, response)
+	err := readResponseBody(c.r, response)
 	if err != nil {
 		return nil
 	}
 
-	c.respHeader = wire.ResponseHeader{}
+	c.respHeader.Reset()
 	return nil
 }
 

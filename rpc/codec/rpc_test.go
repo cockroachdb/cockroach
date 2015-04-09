@@ -5,13 +5,18 @@
 package codec
 
 import (
+	"bytes"
 	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"testing"
 
 	// can not import xxx.pb with rpc stub here,
 	// because it will cause import cycle.
+
 	msg "github.com/cockroachdb/cockroach/rpc/codec/message.pb"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -249,4 +254,125 @@ func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 			echoCall.Reply.(*msg.EchoResponse).GetMsg(),
 		)
 	}
+}
+
+func randString(n int) string {
+	var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$")
+	return string(bytes.Repeat(randLetters, n/len(randLetters)))
+}
+
+func listenAndServeEchoService(network, addr string,
+	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Listener, error) {
+	l, err := net.Listen(network, addr)
+	if err != nil {
+		fmt.Printf("failed to listen on %s: %s\n", addr, err)
+		return nil, err
+	}
+	srv := rpc.NewServer()
+	if err := srv.RegisterName("EchoService", new(Echo)); err != nil {
+		return nil, err
+	}
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				log.Infof("accept: %v\n", err)
+				break
+			}
+			serveConn(srv, conn)
+		}
+	}()
+
+	if *onlyEchoServer {
+		select {}
+	}
+	return l, nil
+}
+
+func benchmarkEcho(b *testing.B, newClient func() *rpc.Client) {
+	echoMsg := randString(512)
+
+	b.SetBytes(2 * int64(len(echoMsg)))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		client := newClient()
+		defer client.Close()
+
+		for pb.Next() {
+			args := &msg.EchoRequest{Msg: echoMsg}
+			reply := &msg.EchoResponse{}
+			if err := client.Call("EchoService.Echo", args, reply); err != nil {
+				b.Fatalf(`EchoService.Echo: %v`, err)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+var echoAddr = flag.String("echo-addr", "127.0.0.1:0",
+	"host:port to bind for the echo server used in benchmarks")
+var startEchoServer = flag.Bool("start-echo-server", true,
+	"start the echo server; false to connect to an already running server")
+var onlyEchoServer = flag.Bool("only-echo-server", false,
+	"only run the echo server; looping forever")
+
+// To run these benchmarks between machines, on machine 1 start the
+// echo server:
+//
+//   go test -run= -bench=BenchmarkEchoGobRPC -echoAddr :9999 -only-echo-server
+//
+// On machine 2:
+//
+//   go test -run= -bench=BenchmarkEchoGobRPC -echoAddr <machine-1-ip>:9999 -start-echo-server=false
+
+func BenchmarkEchoGobRPC(b *testing.B) {
+	var addr string
+	if *startEchoServer {
+		l, err := listenAndServeEchoService("tcp", *echoAddr,
+			func(srv *rpc.Server, conn io.ReadWriteCloser) {
+				go srv.ServeConn(conn)
+			})
+		if err != nil {
+			b.Fatal("could not start server")
+		}
+		defer l.Close()
+		addr = l.Addr().String()
+	} else {
+		addr = *echoAddr
+	}
+
+	benchmarkEcho(b, func() *rpc.Client {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			b.Fatalf("could not dial client to %s: %s", addr, err)
+		}
+		return rpc.NewClient(conn)
+	})
+}
+
+func BenchmarkEchoProtobufRPC(b *testing.B) {
+	var addr string
+	if *startEchoServer {
+		l, err := listenAndServeEchoService("tcp", *echoAddr,
+			func(srv *rpc.Server, conn io.ReadWriteCloser) {
+				go srv.ServeCodec(NewServerCodec(conn))
+			})
+		if err != nil {
+			b.Fatal("could not start server")
+		}
+		defer l.Close()
+		addr = l.Addr().String()
+	} else {
+		addr = *echoAddr
+	}
+
+	benchmarkEcho(b, func() *rpc.Client {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			b.Fatalf("could not dial client to %s: %s", addr, err)
+		}
+		return rpc.NewClientWithCodec(NewClientCodec(conn))
+	})
 }
