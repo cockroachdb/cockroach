@@ -537,6 +537,21 @@ func (s *state) coalescedHeartbeat() {
 func (s *state) stop() {
 	log.V(6).Infof("node %v stopping", s.nodeID)
 	s.writeTask.stop()
+
+	// Drain the create/remove group channels because other threads may be blocking
+	// on these operations.
+	done := false
+	for !done {
+		select {
+		case op := <-s.createGroupChan:
+			op.ch <- util.Errorf("shutting down")
+		case op := <-s.removeGroupChan:
+			op.ch <- util.Errorf("shutting down")
+		default:
+			done = true
+		}
+	}
+
 	s.stopper.SetStopped()
 }
 

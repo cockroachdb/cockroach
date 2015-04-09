@@ -1079,7 +1079,9 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	// Lazily create group. TODO(bdarnell): make this non-lazy
 	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
 	if err != nil {
-		log.Fatal(err)
+		ch := make(chan error, 1)
+		ch <- err
+		return ch
 	}
 
 	data, err := gogoproto.Marshal(&cmd)

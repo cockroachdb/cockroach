@@ -578,11 +578,20 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
+		var err error
 		// First wait for raft to commit or abort the command.
-		err := <-raftChan
+		select {
+		case err = <-raftChan:
+		case <-r.closer:
+			err = util.Errorf("range is closing")
+		}
 		if err == nil {
 			// Next if the command was commited, wait for the range to apply it.
-			err = <-pendingCmd.done
+			select {
+			case err = <-pendingCmd.done:
+			case <-r.closer:
+				err = util.Errorf("range is closing")
+			}
 		}
 
 		// As for reads, update timestamp cache with the timestamp

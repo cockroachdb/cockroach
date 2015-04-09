@@ -57,11 +57,7 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "created by runtime.gc") ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/leaktest.interestingGoroutines") ||
 			strings.Contains(stack, "runtime.MHeap_Scavenger") ||
-			strings.Contains(stack, "golang/glog.init") ||
-			// Fire-and-forget write intent cleanups. These end up deadlocked
-			// because the store is already stopped by the time they run.
-			// TODO(bdarnell): clean these up better.
-			strings.Contains(stack, "*txnMetadata).close") {
+			strings.Contains(stack, "golang/glog.init") {
 			continue
 		}
 		gs = append(gs, stack)
