@@ -536,7 +536,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// write intents accordingly.
 			if reply.GoError() != nil {
 				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
-			} else if reply.Txn.Status != proto.PENDING {
+			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
 				tc.cleanupTxn(reply.Txn, nil)
 				return
 			}

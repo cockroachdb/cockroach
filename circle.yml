@@ -54,6 +54,10 @@ test:
       else
         echo "Not posting an issue."
       fi
+      # Fail the test if there's anything in the excerpt. This will usually
+      # be a data race warning (which does not generally fail `make testrace`
+      # for some reason).
+      test -s "${CIRCLE_ARTIFACTS}/excerpt.txt"
 
 
 deployment:
@@ -69,8 +73,11 @@ deployment:
             make COCKROACH_IMAGE="cockroachdb/cockroach" acceptance && \
             docker tag cockroachdb/cockroach:latest cockroachdb/cockroach:${VERSION} && \
             docker tag cockroachdb/cockroach-dev:latest cockroachdb/cockroach-dev:${VERSION} && \
-            docker push cockroachdb/cockroach:latest && \
-            docker push cockroachdb/cockroach:${VERSION} && \
-            docker push cockroachdb/cockroach-dev:latest && \
-            docker push cockroachdb/cockroach-dev:${VERSION}
+            # Pushing to the registry just fails sometimes, so for the time
+            # being just make this a best-effort action.
+            (docker push cockroachdb/cockroach:latest; \
+            docker push cockroachdb/cockroach:${VERSION}; \
+            docker push cockroachdb/cockroach-dev:latest; \
+            docker push cockroachdb/cockroach-dev:${VERSION}; \
+            true)
           fi
