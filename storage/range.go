@@ -242,7 +242,7 @@ func (r *Range) start() {
 	// TODO(spencer): need to properly seed all unittests.
 	r.grantLeaderLease(&proto.Lease{
 		Expiration: math.MaxInt64,
-		StoreID:    r.rm.StoreID(),
+		RaftNodeID: uint64(r.rm.RaftNodeID()),
 		Term:       1,
 	})
 }
@@ -286,7 +286,7 @@ func (r *Range) getLease() *proto.Lease {
 // between successive lease holders is expected.
 func (r *Range) HasLeaderLease() bool {
 	if l := r.getLease(); l != nil &&
-		l.StoreID == r.rm.StoreID() && r.rm.Clock().PhysicalNow() < r.getLease().Expiration {
+		l.RaftNodeID == uint64(r.rm.RaftNodeID()) && r.rm.Clock().PhysicalNow() < r.getLease().Expiration {
 		return true
 	}
 	return false
@@ -341,7 +341,8 @@ func (r *Range) canServiceCmd(method string, args proto.Request) error {
 		if !proto.IsReadOnly(method) || args.Header().ReadConsistency == proto.CONSISTENT {
 			err := &proto.NotLeaderError{}
 			if l := r.getLease(); l != nil {
-				err.Leader = r.Desc().FindReplica(l.StoreID)
+				_, storeID := DecodeRaftNodeID(multiraft.NodeID(l.RaftNodeID))
+				err.Leader = r.Desc().FindReplica(storeID)
 			}
 			return err
 		}
