@@ -68,5 +68,45 @@
   every read/write range command.
 
 * Gossip should be changed to send only protobufs.
-* persist Gossip and the kv.leaderCache to make sure that restarting
+* Persist Gossip and the kv.leaderCache to make sure that restarting
   a node is harmless.
+
+* Security
+
+  - Authentication
+
+    - Username/password
+    - X.509 Certificate
+    - Kerberos
+    - LDAP
+    - PAM
+
+  - ACLs (Database, Table, Column)
+  - Fine-grained permissions (macaroons)
+
+* Documentation
+
+  - Architecture
+  - API Docs
+  - Developer Docs
+  - Marketing Docs
+  - Jepsen Test
+
+* Structured Data
+
+  - Schema definition
+  - Basic indexes
+  - Full-text indexes
+  - Geospatial indexes
+  - SQL interface
+  - Schema change
+  - Query planner/optimizer
+
+* Management tools
+
+  - Backup/Restore
+  - Continuous backup/Point-in-time restore
+  - Monitoring
+  - Alerting
+  - Multi-tenancy
+  - Provisioning
