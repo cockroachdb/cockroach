@@ -21,7 +21,6 @@ import (
 	"container/list"
 	"net"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -206,13 +205,11 @@ func (n *Node) initNodeID(id proto.NodeID) {
 
 	nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
 	if err = n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
-		log.Fatalf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
+		log.Fatalf("couldn't gossip descriptor for node %d: %v", n.Descriptor.NodeID, err)
 	}
 	// Setting the NodeID as the name of the gossip instance allows the
 	// DistSender to look up the own node's descriptor from the gossip network.
-	// The field is touched only once, so the atomic update isn't necessary but
-	// it feels better.
-	atomic.StoreInt32(&n.gossip.NodeID, int32(n.Descriptor.NodeID))
+	n.gossip.SetNodeID(n.Descriptor.NodeID)
 }
 
 // start starts the node by registering the storage instance for the
@@ -280,7 +277,8 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *ut
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
-		// If no NodeID has been assigned yet, make sure this happens first.
+		// If no NodeID has been assigned yet, allocate a new node ID by
+		// supplying 0 to initNodeID.
 		n.initNodeID(0)
 		go n.bootstrapStores(bootstraps, stopper)
 	}

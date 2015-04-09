@@ -83,7 +83,7 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	g := makeTestGossip(t)
-	g.NodeID = 1
+	g.SetNodeID(1)
 	raftID := int64(99)
 
 	nodeAttrs := map[int32][]string{
@@ -208,7 +208,7 @@ func TestSendRPCOrder(t *testing.T) {
 			addrToNode[addr.String()] = i
 			nd := &storage.NodeDescriptor{
 				NodeID:  proto.NodeID(i),
-				Address: util.MakeRawAddr("tcp", fmt.Sprintf("%d", i)),
+				Address: addr,
 			}
 			// First (= local) node needs to get its attributes during sendRPC.
 			if i == 1 {
@@ -222,9 +222,9 @@ func TestSendRPCOrder(t *testing.T) {
 				Attrs:   proto.Attributes{Attrs: nodeAttrs[i]},
 			})
 		}
-		ds.leaderCache.Update(proto.RaftID(raftID), nil)
+		ds.leaderCache.Update(proto.RaftID(raftID), proto.Replica{})
 		if tc.leader > 0 {
-			ds.leaderCache.Update(proto.RaftID(raftID), &descriptor.Replicas[tc.leader-1])
+			ds.leaderCache.Update(proto.RaftID(raftID), descriptor.Replicas[tc.leader-1])
 		}
 
 		// Always create the parameters for Scan, only the Header() is used
@@ -235,6 +235,8 @@ func TestSendRPCOrder(t *testing.T) {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
 		reply := &proto.ScanResponse{}
+		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
+		ds.nodeDescriptor = nil
 		if err := ds.sendRPC(&descriptor, tc.method, args, reply); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}

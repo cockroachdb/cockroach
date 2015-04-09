@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -81,7 +82,7 @@ func NewNetwork(nodeCount int, networkType string,
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
-		node.NodeID = int32(i)
+		node.SetNodeID(proto.NodeID(i))
 		node.Start(servers[i], stopper)
 		stopper.AddCloser(servers[i])
 		// Node 0 gossips node count.

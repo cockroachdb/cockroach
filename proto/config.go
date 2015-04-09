@@ -125,14 +125,14 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 }
 
 // FindReplica returns the replica which matches the specified store
-// ID. Panic in the event that no replica matches.
-func (r *RangeDescriptor) FindReplica(storeID StoreID) *Replica {
+// ID. If no replica matches, (-1, nil) is returned.
+func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *Replica) {
 	for i := range r.Replicas {
 		if r.Replicas[i].StoreID == storeID {
-			return &r.Replicas[i]
+			return i, &r.Replicas[i]
 		}
 	}
-	panic(fmt.Sprintf("unable to find matching replica for store %d: %v", storeID, r.Replicas))
+	return -1, nil
 }
 
 // CanRead does a linear search for user to verify read permission.
@@ -175,7 +175,10 @@ func (rs ReplicaSlice) SortByCommonAttributePrefix(attrs []string) int {
 	for bucket := 0; bucket < len(attrs); bucket++ {
 		firstNotOrdered := 0
 		for i := 0; i <= topIndex; i++ {
-			if len(rs[i].Attrs.Attrs)-1 >= bucket && rs[i].Attrs.Attrs[bucket] == attrs[bucket] {
+			if bucket < len(rs[i].Attrs.Attrs) && rs[i].Attrs.Attrs[bucket] == attrs[bucket] {
+				// Move replica which matches this attribute to an earlier
+				// place in the array, just behind the last matching replica.
+				// This packs all matching replicas together.
 				rs.Swap(firstNotOrdered, i)
 				firstNotOrdered++
 			}
@@ -197,5 +200,7 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 		panic("out of bound index")
 	}
 	front := rs[i]
-	rs[0], rs = front, append(append(rs[0:1], rs[:i]...), rs[i+1:]...)
+	// Move the first i-1 elements to the right
+	copy(rs[1:i+1], rs[0:i])
+	rs[0] = front
 }

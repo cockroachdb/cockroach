@@ -59,14 +59,11 @@ func (lc *leaderCache) Lookup(group proto.RaftID) *proto.Replica {
 
 // Update invalidates the cached leader for the given Raft group.
 // If a replica is passed in, it is inserted into the cache.
-func (lc *leaderCache) Update(group proto.RaftID, r *proto.Replica) {
+func (lc *leaderCache) Update(group proto.RaftID, r proto.Replica) {
 	lc.mu.Lock()
 	lc.cache.Del(group)
-	if r != nil {
-		// Replicas reside inside of slices that are subject to rearrangements,
-		// so let's avoid trouble here.
-		rCopy := *r
-		lc.cache.Add(group, &rCopy)
+	if r.StoreID != 0 {
+		lc.cache.Add(group, &r)
 	}
 	lc.mu.Unlock()
 }

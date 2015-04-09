@@ -318,8 +318,13 @@ func (r *Range) SetDesc(desc *proto.RangeDescriptor) {
 }
 
 // GetReplica returns the replica for this range from the range descriptor.
+// A fatal error occurs if the replica is not found.
 func (r *Range) GetReplica() *proto.Replica {
-	return r.Desc().FindReplica(r.rm.StoreID())
+	_, replica := r.Desc().FindReplica(r.rm.StoreID())
+	if replica == nil {
+		log.Fatalf("own replica missing in range at store %d", r.rm.StoreID())
+	}
+	return replica
 }
 
 // ContainsKey returns whether this range contains the specified key.

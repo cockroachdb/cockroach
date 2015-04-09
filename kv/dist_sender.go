@@ -91,9 +91,11 @@ func (n noNodeAddrsAvailError) CanRetry() bool { return true }
 // ranges. RPCs are sent to one or more of the replicas to satisfy
 // the method invocation.
 type DistSender struct {
-	// NodeID, if set, is used to look up node attributes from the
-	// Gossip network when deciding where to send RPCs.
-	nodeID proto.NodeID
+	// nodeDescriptor, if set, holds the descriptor of the node the
+	// DistSender lives on. It should be accessed via getNodeDescriptor(),
+	// which tries to obtain the value from the Gossip network if the
+	// descriptor is unknown.
+	nodeDescriptor *storage.NodeDescriptor
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -121,16 +123,17 @@ type rpcSendFn func(rpc.Options, string, []net.Addr,
 // DistSenderContext holds auxiliary objects that can be passed to
 // NewDistSender.
 type DistSenderContext struct {
-	Clock *hlc.Clock
-	// NodeID, if provided, is used to look up node attributes from the Gossip
-	// network when deciding where to send RPCs.
-	NodeID                   proto.NodeID
+	Clock                    *hlc.Clock
 	RangeDescriptorCacheSize int32
 	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
 	// range descriptor cache when dispatching a range lookup request.
 	RangeLookupMaxRanges int32
 	LeaderCacheSize      int32
 	RPCRetryOptions      *util.RetryOptions
+	// nodeDescriptor, if provided, is used to describe which node the DistSender
+	// lives on, for instance when deciding where to send RPCs.
+	// Usually it is filled in from the Gossip network on demand.
+	nodeDescriptor *storage.NodeDescriptor
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
 	rpcSend           rpcSendFn
@@ -153,7 +156,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 		clock:  clock,
 		gossip: gossip,
 	}
-	ds.nodeID = ctx.NodeID
+	ds.nodeDescriptor = ctx.nodeDescriptor
 	rcSize := ctx.RangeDescriptorCacheSize
 	if rcSize <= 0 {
 		rcSize = defaultRangeDescriptorCacheSize
@@ -248,8 +251,8 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 
 // internalRangeLookup dispatches an InternalRangeLookup request for the given
 // metadata key to the replicas of the given range. Note that we allow
-// inconsistent reads when doing range lookups for effiency. Getting stale data
-// is not a correctness problem but instead may infrequently result in
+// inconsistent reads when doing range lookups for efficiency. Getting stale
+// data is not a correctness problem but instead may infrequently result in
 // additional latency as additional range lookups may be required. Note also
 // that internalRangeLookup bypasses the DistSender's Send() method, so there
 // is no error inspection and retry logic here; this is not an issue here since
@@ -329,6 +332,51 @@ func (ds *DistSender) getRangeDescriptor(key proto.Key) ([]proto.RangeDescriptor
 	return ds.internalRangeLookup(metadataKey, desc)
 }
 
+func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.OrderingPolicy {
+	// Unless we know better, send the RPCs randomly.
+	order := rpc.OrderingPolicy(rpc.OrderRandom)
+	nodeDesc := ds.getNodeDescriptor()
+	// If we don't know which node we're on, don't optimize anything.
+	if nodeDesc == nil {
+		return order
+	}
+	// Sort replicas by attribute affinity, which we treat as a stand-in for
+	// proximity (for now).
+	if replicas.SortByCommonAttributePrefix(nodeDesc.Attrs.Attrs) > 0 {
+		// There's at least some attribute prefix, and we hope that the
+		// replicas that come early in the slice are now located close to
+		// us and hence better candidates.
+		order = rpc.OrderStable
+	}
+	return order
+}
+
+// getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
+// it from the Gossip network if a nil value is found.
+// This can only succeed after the initial bootstrap is done, but a descriptor
+// will always be available during normal operation.
+func (ds *DistSender) getNodeDescriptor() *storage.NodeDescriptor {
+	if ds.nodeDescriptor != nil {
+		return ds.nodeDescriptor
+	}
+	ownNodeID := ds.gossip.GetNodeID()
+	if nodeDesc, err := ds.gossip.GetInfo(
+		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
+		// Rearrange the replicas so that those replicas with long common
+		// prefix of attributes end up first. If there's no prefix, this is a
+		// no-op.
+		ds.nodeDescriptor = nodeDesc.(*storage.NodeDescriptor)
+	} else if ownNodeID > 0 {
+		// A normal node should always have that information set in Gossip when
+		// bootstrapped, so this is worth complaining about.
+		log.Warningf("own NodeDescriptor %d not available via Gossip",
+			ownNodeID)
+	} else {
+		log.V(1).Infof("gossip unaware of NodeID, node likely still bootstrapping")
+	}
+	return ds.nodeDescriptor
+}
+
 // sendRPC sends one or more RPCs to replicas from the supplied proto.Replica
 // slice. First, replicas which have gossiped addresses are corralled (and
 // rearranged depending on proximity and whether the request needs to go to a
@@ -342,41 +390,18 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 		return util.Errorf("%s: replicas set is empty", method)
 	}
 
-	// Unless we know better, send the RPCs randomly.
-	order := rpc.OrderingPolicy(rpc.OrderRandom)
-	// Try to look up our own NodeDescriptor and sort replicas by proximity.
-	if nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(
-		proto.NodeID(ds.gossip.NodeID))); err == nil && ds.gossip.NodeID > 0 {
-		// Rearrange the replicas so that those replicas with long common prefix of
-		// attributes end up first. If there's no prefix, this is a no-op.
-		ownAttrs := nodeDesc.(*storage.NodeDescriptor).Attrs.Attrs
-		if proto.ReplicaSlice(desc.Replicas).
-			SortByCommonAttributePrefix(ownAttrs) > 0 {
-			// There's at least some attribute prefix, and we hope that the
-			// replicas that come early in the slice are now located close to
-			// us and hence better candidates.
-			order = rpc.OrderStable
-		}
-	} else if ds.gossip.NodeID > 0 {
-		// A normal node should always have that information set in Gossip when
-		// bootstrapped, so this is worth complaining about.
-		log.Warningf("own NodeDescriptor %d not available via Gossip", ds.gossip.NodeID)
-	}
+	// Rearrange the replicas suitably, and return the desired order.
+	order := ds.optimizeReplicaOrder(proto.ReplicaSlice(desc.Replicas))
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front and send requests in order.
 	if args.Header().ReadConsistency != proto.INCONSISTENT ||
 		proto.IsReadWrite(method) {
-		leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID))
-		if leader != nil {
-			for i := range desc.Replicas {
-				if desc.Replicas[i].StoreID == leader.StoreID {
-					// We have found the leader, so move it to the front
-					// and make sure that we query the replicas in that order.
-					proto.ReplicaSlice(desc.Replicas).MoveToFront(i)
-					order = rpc.OrderStable
-					break
-				}
+		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
+			i, _ := desc.FindReplica(leader.StoreID)
+			if i >= 0 {
+				proto.ReplicaSlice(desc.Replicas).MoveToFront(i)
+				order = rpc.OrderStable
 			}
 		}
 	}
@@ -385,18 +410,13 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range desc.Replicas {
-		nodeDesc, err := ds.gossip.GetInfo(gossip.MakeNodeIDKey(desc.Replicas[i].NodeID))
+		addr, err := storage.NodeIDToAddress(ds.gossip, desc.Replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d descriptor is not gossiped", desc.Replicas[i].NodeID)
-			continue
-		}
-		addr := nodeDesc.(*storage.NodeDescriptor).Address
-		if addr == nil {
-			log.V(1).Infof("node %d descriptor has no address", desc.Replicas[i].NodeID)
+			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
 			continue
 		}
 		addrs = append(addrs, addr)
-		replicaMap[addrs[len(addrs)-1].String()] = &desc.Replicas[i]
+		replicaMap[addr.String()] = &desc.Replicas[i]
 	}
 	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}
@@ -602,9 +622,10 @@ func (ds *DistSender) Send(call *client.Call) {
 // The new leader is cached only if it isn't equal to the newly evicted value.
 func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) {
 	// Slight overhead here since we want to make sure that when the new
-	// proposed leader equals the old, we only evict.
+	// proposed leader equals the old, we only evict so that the next call
+	// picks a random replica, avoiding getting stuck in a loop.
 	oldLeader := ds.leaderCache.Lookup(rid)
-	ds.leaderCache.Update(rid, nil)
+	ds.leaderCache.Update(rid, proto.Replica{})
 	if oldLeader != nil {
 		log.V(1).Infof("raft %d: evicted cached leader %d", rid, oldLeader.StoreID)
 	}
@@ -613,6 +634,6 @@ func (ds *DistSender) updateLeaderCache(rid proto.RaftID, leader proto.Replica) 
 	}
 	if oldLeader == nil || leader.StoreID != oldLeader.StoreID {
 		log.V(1).Infof("raft %d: new cached leader %d", rid, leader.StoreID)
-		ds.leaderCache.Update(rid, &leader)
+		ds.leaderCache.Update(rid, leader)
 	}
 }

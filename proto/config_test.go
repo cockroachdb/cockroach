@@ -72,20 +72,18 @@ func TestRangeDescriptorFindReplica(t *testing.T) {
 		},
 	}
 	for i, r := range desc.Replicas {
-		if nID := desc.FindReplica(r.StoreID).NodeID; nID != r.NodeID {
-			t.Errorf("%d: expected to find node %d for store %d; got %d", i, r.NodeID, r.StoreID, nID)
+		if i2, r2 := desc.FindReplica(r.StoreID); r2.NodeID != r.NodeID || i2 != i {
+			t.Errorf("%d: expected to find node %d for store %d; got %d", i, r.NodeID, r.StoreID, r2.StoreID)
 		}
 	}
 }
 
 func TestRangeDescriptorMissingReplica(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic due to no matching replica")
-		}
-	}()
 	desc := RangeDescriptor{}
-	desc.FindReplica(0)
+	i, r := desc.FindReplica(0)
+	if i >= 0 || r != nil {
+		t.Fatalf("unexpected return (%s, %s) on missing replica", i, r)
+	}
 }
 
 // TestRangeDescriptorContains verifies methods to check whether a key
