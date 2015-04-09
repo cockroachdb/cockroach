@@ -333,6 +333,37 @@ func (m *InternalTruncateLogResponse) Reset()         { *m = InternalTruncateLog
 func (m *InternalTruncateLogResponse) String() string { return proto1.CompactTextString(m) }
 func (*InternalTruncateLogResponse) ProtoMessage()    {}
 
+// An InternalLeaderLeaseRequest is arguments to the InternalLeaderLease()
+// method. It is sent by the store on behalf of one of its ranges upon receipt
+// of a leader election event for that range.
+type InternalLeaderLeaseRequest struct {
+	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Lease            Lease  `protobuf:"bytes,2,opt,name=lease" json:"lease"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *InternalLeaderLeaseRequest) Reset()         { *m = InternalLeaderLeaseRequest{} }
+func (m *InternalLeaderLeaseRequest) String() string { return proto1.CompactTextString(m) }
+func (*InternalLeaderLeaseRequest) ProtoMessage()    {}
+
+func (m *InternalLeaderLeaseRequest) GetLease() Lease {
+	if m != nil {
+		return m.Lease
+	}
+	return Lease{}
+}
+
+// An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
+// operation.
+type InternalLeaderLeaseResponse struct {
+	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *InternalLeaderLeaseResponse) Reset()         { *m = InternalLeaderLeaseResponse{} }
+func (m *InternalLeaderLeaseResponse) String() string { return proto1.CompactTextString(m) }
+func (*InternalLeaderLeaseResponse) ProtoMessage()    {}
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in storage/engine/db.cc in GetResponseHeader().
@@ -489,7 +520,8 @@ type InternalRaftCommandUnion struct {
 	InternalResolveIntent *InternalResolveIntentRequest `protobuf:"bytes,34,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	InternalMergeResponse *InternalMergeRequest         `protobuf:"bytes,35,opt,name=internal_merge_response" json:"internal_merge_response,omitempty"`
 	InternalTruncateLog   *InternalTruncateLogRequest   `protobuf:"bytes,36,opt,name=internal_truncate_log" json:"internal_truncate_log,omitempty"`
-	InternalGc            *InternalGCRequest            `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
+	InternalGC            *InternalGCRequest            `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
+	InternalLease         *InternalLeaderLeaseRequest   `protobuf:"bytes,38,opt,name=internal_lease" json:"internal_lease,omitempty"`
 	XXX_unrecognized      []byte                        `json:"-"`
 }
 
@@ -630,9 +662,16 @@ func (m *InternalRaftCommandUnion) GetInternalTruncateLog() *InternalTruncateLog
 	return nil
 }
 
-func (m *InternalRaftCommandUnion) GetInternalGc() *InternalGCRequest {
+func (m *InternalRaftCommandUnion) GetInternalGC() *InternalGCRequest {
 	if m != nil {
-		return m.InternalGc
+		return m.InternalGC
+	}
+	return nil
+}
+
+func (m *InternalRaftCommandUnion) GetInternalLease() *InternalLeaderLeaseRequest {
+	if m != nil {
+		return m.InternalLease
 	}
 	return nil
 }
@@ -1096,8 +1135,11 @@ func (this *InternalRaftCommandUnion) GetValue() interface{} {
 	if this.InternalTruncateLog != nil {
 		return this.InternalTruncateLog
 	}
-	if this.InternalGc != nil {
-		return this.InternalGc
+	if this.InternalGC != nil {
+		return this.InternalGC
+	}
+	if this.InternalLease != nil {
+		return this.InternalLease
 	}
 	return nil
 }
@@ -1143,7 +1185,9 @@ func (this *InternalRaftCommandUnion) SetValue(value interface{}) bool {
 	case *InternalTruncateLogRequest:
 		this.InternalTruncateLog = vt
 	case *InternalGCRequest:
-		this.InternalGc = vt
+		this.InternalGC = vt
+	case *InternalLeaderLeaseRequest:
+		this.InternalLease = vt
 	default:
 		return false
 	}

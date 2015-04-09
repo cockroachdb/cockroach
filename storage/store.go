@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"math/rand"
 	"net"
 	"sort"
 	"sync"
@@ -51,7 +52,8 @@ const (
 	// command line flag.
 	defaultScanInterval = 10 * time.Minute
 	// ttlCapacityGossip is time-to-live for capacity-related info.
-	ttlCapacityGossip = 2 * time.Minute
+	ttlCapacityGossip          = 2 * time.Minute
+	defaultLeaderLeaseDuration = time.Second
 )
 
 var (
@@ -1150,6 +1152,74 @@ func (s *Store) processRaft() {
 				if err != nil {
 					log.Fatal(err)
 				}
+
+			case *multiraft.EventLeaderElection:
+				if e.NodeID == 0 {
+					// Election in progress.
+					continue
+				}
+				// Only the store housing the election winner gets to
+				// proceed.
+				groupID = int64(e.GroupID)
+				_, err := s.GetRange(groupID)
+				if err != nil {
+					log.Warning(err)
+					continue
+				}
+				if e.NodeID != s.RaftNodeID() {
+					// TODO(tschottdorf): Can and should still immediately revoke any
+					// pending leader lease on our local range:
+					// r.dropLeaderLease()
+					continue
+				}
+
+				// Prepare a Raft command to get a leader lease for the replica
+				// of that group that lives in our store.
+				wallTime := s.clock.PhysicalNow()
+				// TODO: get this from configuration, either as a config flag
+				// or, later, dynamically adjusted.
+				duration := int64(defaultLeaderLeaseDuration)
+				idKey := makeCmdIDKey(proto.ClientCmdID{
+					WallTime: wallTime,
+					Random:   rand.Int63(),
+				})
+				cmd := proto.InternalRaftCommand{
+					RaftID: groupID,
+				}
+				args := &proto.InternalLeaderLeaseRequest{
+					Lease: proto.Lease{
+						// TODO would be less redundant to have the
+						// RaftID here. Then the range executing this
+						// could just check it against its own RaftID.
+						NodeID:     s.Ident.NodeID,
+						StoreID:    s.Ident.StoreID,
+						Expiration: wallTime + duration,
+						Duration:   duration,
+						Term:       e.Term,
+					},
+				}
+
+				cmd.Cmd.SetValue(args)
+
+				// TODO(tschottdorf): this is WIP, so let's stop here.
+				if true {
+					continue
+				}
+
+				// Propose the Raft command.
+				errCh := s.ProposeRaftCommand(idKey, cmd)
+				// Make sure we log a potential error from Raft.
+				go func() {
+					s.stopper.Add(1)
+					select {
+					case err := <-errCh:
+						log.Warning(err)
+					case <-s.stopper.ShouldStop():
+						s.stopper.SetStopped()
+					}
+				}()
+				// Done with this event, go back to listening on the channel.
+				continue
 
 			default:
 				continue
