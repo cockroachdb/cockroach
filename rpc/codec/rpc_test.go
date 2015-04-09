@@ -5,9 +5,11 @@
 package codec
 
 import (
+	"bytes"
 	"errors"
+	"flag"
+	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/rpc"
 	"testing"
@@ -255,18 +257,15 @@ func testEchoClientAsync(t *testing.T, client *rpc.Client) {
 }
 
 func randString(n int) string {
-	var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	s := make([]byte, n)
-	for i := 0; i < len(s); i++ {
-		s[i] = randLetters[rand.Intn(len(randLetters))]
-	}
-	return string(s)
+	var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$")
+	return string(bytes.Repeat(randLetters, n/len(randLetters)))
 }
 
 func listenAndServeEchoService(network, addr string,
-	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Addr, error) {
-	clients, err := net.Listen(network, addr)
+	serveConn func(srv *rpc.Server, conn io.ReadWriteCloser)) (net.Listener, error) {
+	l, err := net.Listen(network, addr)
 	if err != nil {
+		fmt.Printf("failed to listen on %s: %s\n", addr, err)
 		return nil, err
 	}
 	srv := rpc.NewServer()
@@ -275,19 +274,23 @@ func listenAndServeEchoService(network, addr string,
 	}
 	go func() {
 		for {
-			conn, err := clients.Accept()
+			conn, err := l.Accept()
 			if err != nil {
-				log.Infof("clients.Accept(): %v\n", err)
-				continue
+				log.Infof("accept: %v\n", err)
+				break
 			}
 			serveConn(srv, conn)
 		}
 	}()
-	return clients.Addr(), nil
+
+	if *onlyEchoServer {
+		select {}
+	}
+	return l, nil
 }
 
 func benchmarkEcho(b *testing.B, newClient func() *rpc.Client) {
-	echoMsg := randString(64 << 10)
+	echoMsg := randString(512)
 
 	b.SetBytes(2 * int64(len(echoMsg)))
 	b.ResetTimer()
@@ -308,37 +311,67 @@ func benchmarkEcho(b *testing.B, newClient func() *rpc.Client) {
 	b.StopTimer()
 }
 
+var echoAddr = flag.String("echo-addr", "127.0.0.1:0",
+	"host:port to bind for the echo server used in benchmarks")
+var startEchoServer = flag.Bool("start-echo-server", true,
+	"start the echo server; false to connect to an already running server")
+var onlyEchoServer = flag.Bool("only-echo-server", false,
+	"only run the echo server; looping forever")
+
+// To run these benchmarks between machines, on machine 1 start the
+// echo server:
+//
+//   go test -run= -bench=BenchmarkEchoGobRPC -echoAddr :9999 -only-echo-server
+//
+// On machine 2:
+//
+//   go test -run= -bench=BenchmarkEchoGobRPC -echoAddr <machine-1-ip>:9999 -start-echo-server=false
+
 func BenchmarkEchoGobRPC(b *testing.B) {
-	srvAddr, err := listenAndServeEchoService("tcp", "127.0.0.1:0",
-		func(srv *rpc.Server, conn io.ReadWriteCloser) {
-			go srv.ServeConn(conn)
-		})
-	if err != nil {
-		b.Fatal("could not start server")
+	var addr string
+	if *startEchoServer {
+		l, err := listenAndServeEchoService("tcp", *echoAddr,
+			func(srv *rpc.Server, conn io.ReadWriteCloser) {
+				go srv.ServeConn(conn)
+			})
+		if err != nil {
+			b.Fatal("could not start server")
+		}
+		defer l.Close()
+		addr = l.Addr().String()
+	} else {
+		addr = *echoAddr
 	}
 
 	benchmarkEcho(b, func() *rpc.Client {
-		conn, err := net.Dial(srvAddr.Network(), srvAddr.String())
+		conn, err := net.Dial("tcp", addr)
 		if err != nil {
-			b.Fatalf("could not dial client to %s: %s", srvAddr, err)
+			b.Fatalf("could not dial client to %s: %s", addr, err)
 		}
 		return rpc.NewClient(conn)
 	})
 }
 
 func BenchmarkEchoProtobufRPC(b *testing.B) {
-	srvAddr, err := listenAndServeEchoService("tcp", "127.0.0.1:0",
-		func(srv *rpc.Server, conn io.ReadWriteCloser) {
-			go srv.ServeCodec(NewServerCodec(conn))
-		})
-	if err != nil {
-		b.Fatal("could not start server")
+	var addr string
+	if *startEchoServer {
+		l, err := listenAndServeEchoService("tcp", *echoAddr,
+			func(srv *rpc.Server, conn io.ReadWriteCloser) {
+				go srv.ServeCodec(NewServerCodec(conn))
+			})
+		if err != nil {
+			b.Fatal("could not start server")
+		}
+		defer l.Close()
+		addr = l.Addr().String()
+	} else {
+		addr = *echoAddr
 	}
 
 	benchmarkEcho(b, func() *rpc.Client {
-		conn, err := net.Dial(srvAddr.Network(), srvAddr.String())
+		conn, err := net.Dial("tcp", addr)
 		if err != nil {
-			b.Fatalf("could not dial client to %s: %s", srvAddr, err)
+			b.Fatalf("could not dial client to %s: %s", addr, err)
 		}
 		return rpc.NewClientWithCodec(NewClientCodec(conn))
 	})

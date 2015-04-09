@@ -9,6 +9,8 @@ import (
 	"io"
 	"sync"
 
+	"code.google.com/p/snappy-go/snappy"
+
 	wire "github.com/cockroachdb/cockroach/rpc/codec/wire.pb"
 	"github.com/gogo/protobuf/proto"
 )
@@ -36,6 +38,14 @@ var (
 	}
 )
 
+// TODO(pmattis): Snappy compression using go-snappy benchmarks as a
+// loss. With compressible data, sending 64KB echo messages using 16
+// threads between 2 machines in google's cloud benchmarks at 434 MB/s
+// with snappy disabled and 280 MB/s with snappy enabled. We've got
+// the C++ snappy library linked in to the library. Should benchmark
+// whether it is significantly faster than the go version.
+const enableSnappy = false
+
 func writeRequest(w io.Writer, id uint64, method string, request proto.Message) error {
 	// marshal request
 	pbRequest := []byte(nil)
@@ -47,10 +57,13 @@ func writeRequest(w io.Writer, id uint64, method string, request proto.Message) 
 		}
 	}
 
-	// TODO(pmattis): Snappy compression using go-snappy benchmarks as a
-	// loss. We've got the C++ snappy library linked in to the
-	// library. Should benchmark whether it is significantly faster than
-	// the go version.
+	if enableSnappy {
+		var err error
+		pbRequest, err = snappy.Encode(nil, pbRequest)
+		if err != nil {
+			return err
+		}
+	}
 
 	// generate header
 	buf := reqHeaderPool.Get().(*reqHeaderBuf)
@@ -91,11 +104,11 @@ func writeRequest(w io.Writer, id uint64, method string, request proto.Message) 
 }
 
 func readRequestHeader(r *bufio.Reader, header *wire.RequestHeader) error {
-	return recvProto(r, header)
+	return recvProto(r, header, false)
 }
 
 func readRequestBody(r *bufio.Reader, request proto.Message) error {
-	return recvProto(r, request)
+	return recvProto(r, request, enableSnappy)
 }
 
 func writeResponse(w io.Writer, id uint64, serr string, response proto.Message) error {
@@ -109,6 +122,14 @@ func writeResponse(w io.Writer, id uint64, serr string, response proto.Message) 
 	if response != nil {
 		var err error
 		pbResponse, err = proto.Marshal(response)
+		if err != nil {
+			return err
+		}
+	}
+
+	if enableSnappy {
+		var err error
+		pbResponse, err = snappy.Encode(nil, pbResponse)
 		if err != nil {
 			return err
 		}
@@ -153,9 +174,9 @@ func writeResponse(w io.Writer, id uint64, serr string, response proto.Message) 
 }
 
 func readResponseHeader(r *bufio.Reader, header *wire.ResponseHeader) error {
-	return recvProto(r, header)
+	return recvProto(r, header, false)
 }
 
 func readResponseBody(r *bufio.Reader, response proto.Message) error {
-	return recvProto(r, response)
+	return recvProto(r, response, enableSnappy)
 }

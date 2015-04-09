@@ -11,6 +11,8 @@ import (
 	"net"
 	"sync"
 
+	"code.google.com/p/snappy-go/snappy"
+
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -47,7 +49,7 @@ func sendFrame(w io.Writer, data []byte) (err error) {
 	return
 }
 
-func recvProto(r *bufio.Reader, m proto.Message) (err error) {
+func recvProto(r *bufio.Reader, m proto.Message, compressed bool) (err error) {
 	size, err := binary.ReadUvarint(r)
 	if err != nil {
 		return err
@@ -59,7 +61,14 @@ func recvProto(r *bufio.Reader, m proto.Message) (err error) {
 			if err != nil {
 				return err
 			}
-			if err := proto.Unmarshal(data, m); err != nil {
+			uncompressedData := data
+			if compressed {
+				uncompressedData, err = snappy.Decode(nil, data)
+				if err != nil {
+					return err
+				}
+			}
+			if err := proto.Unmarshal(uncompressedData, m); err != nil {
 				return err
 			}
 			// TODO(pmattis): This is a hack to advance the bufio pointer by
@@ -73,6 +82,12 @@ func recvProto(r *bufio.Reader, m proto.Message) (err error) {
 		data := make([]byte, size)
 		if _, err := io.ReadFull(r, data); err != nil {
 			return err
+		}
+		if compressed {
+			data, err = snappy.Decode(nil, data)
+			if err != nil {
+				return err
+			}
 		}
 		if err := proto.Unmarshal(data, m); err != nil {
 			return err
