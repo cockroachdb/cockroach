@@ -127,12 +127,7 @@ func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 // FindReplica returns the replica which matches the specified store
 // ID. If no replica matches, (-1, nil) is returned.
 func (r *RangeDescriptor) FindReplica(storeID StoreID) (int, *Replica) {
-	for i := range r.Replicas {
-		if r.Replicas[i].StoreID == storeID {
-			return i, &r.Replicas[i]
-		}
-	}
-	return -1, nil
+	return ReplicaSlice(r.Replicas).FindReplica(storeID)
 }
 
 // CanRead does a linear search for user to verify read permission.
@@ -161,6 +156,17 @@ type ReplicaSlice []Replica
 // Swap interchanges the replicas stored at the given indices.
 func (rs ReplicaSlice) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
+}
+
+// FindReplica returns the replica which matches the specified store
+// ID. If no replica matches, (-1, nil) is returned.
+func (rs ReplicaSlice) FindReplica(storeID StoreID) (int, *Replica) {
+	for i := range rs {
+		if rs[i].StoreID == storeID {
+			return i, &rs[i]
+		}
+	}
+	return -1, nil
 }
 
 // SortByCommonAttributePrefix rearranges the ReplicaSlice by comparing the

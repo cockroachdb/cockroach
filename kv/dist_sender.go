@@ -353,8 +353,9 @@ func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.Orde
 
 // getNodeDescriptor returns ds.nodeDescriptor, but makes an attempt to load
 // it from the Gossip network if a nil value is found.
-// This can only succeed after the initial bootstrap is done, but a descriptor
-// will always be available during normal operation.
+// We must jump through hoops here to get the node descriptor because it's not available
+// until after the node has joined the gossip network and been allowed to initialize
+// its stores.
 func (ds *DistSender) getNodeDescriptor() *storage.NodeDescriptor {
 	if ds.nodeDescriptor != nil {
 		return ds.nodeDescriptor
@@ -366,13 +367,9 @@ func (ds *DistSender) getNodeDescriptor() *storage.NodeDescriptor {
 		// prefix of attributes end up first. If there's no prefix, this is a
 		// no-op.
 		ds.nodeDescriptor = nodeDesc.(*storage.NodeDescriptor)
-	} else if ownNodeID > 0 {
-		// A normal node should always have that information set in Gossip when
-		// bootstrapped, so this is worth complaining about.
-		log.Warningf("own NodeDescriptor %d not available via Gossip",
-			ownNodeID)
 	} else {
-		log.V(1).Infof("gossip unaware of NodeID, node likely still bootstrapping")
+		log.Infof("unable to determine this node's attributes for replica " +
+			"selection; node is most likely bootstrapping")
 	}
 	return ds.nodeDescriptor
 }
@@ -390,17 +387,19 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 		return util.Errorf("%s: replicas set is empty", method)
 	}
 
-	// Rearrange the replicas suitably, and return the desired order.
-	order := ds.optimizeReplicaOrder(proto.ReplicaSlice(desc.Replicas))
+	// Copy and rearrange the replicas suitably, then return the desired order.
+	replicas := proto.ReplicaSlice(append(make([]proto.Replica,
+		len(desc.Replicas)), desc.Replicas...))
+	order := ds.optimizeReplicaOrder(replicas)
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front and send requests in order.
 	if args.Header().ReadConsistency != proto.INCONSISTENT ||
 		proto.IsReadWrite(method) {
 		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
-			i, _ := desc.FindReplica(leader.StoreID)
+			i, _ := replicas.FindReplica(leader.StoreID)
 			if i >= 0 {
-				proto.ReplicaSlice(desc.Replicas).MoveToFront(i)
+				proto.ReplicaSlice(replicas).MoveToFront(i)
 				order = rpc.OrderStable
 			}
 		}
@@ -409,14 +408,14 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 	// Build a slice of replica addresses (if gossiped).
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
-	for i := range desc.Replicas {
-		addr, err := storage.NodeIDToAddress(ds.gossip, desc.Replicas[i].NodeID)
+	for i := range replicas {
+		addr, err := storage.NodeIDToAddress(ds.gossip, replicas[i].NodeID)
 		if err != nil {
-			log.V(1).Infof("node %d address is not gossiped", desc.Replicas[i].NodeID)
+			log.V(1).Infof("node %d address is not gossiped", replicas[i].NodeID)
 			continue
 		}
 		addrs = append(addrs, addr)
-		replicaMap[addr.String()] = &desc.Replicas[i]
+		replicaMap[addr.String()] = &replicas[i]
 	}
 	if len(addrs) == 0 {
 		return noNodeAddrsAvailError{}

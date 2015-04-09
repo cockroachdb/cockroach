@@ -136,8 +136,8 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap 
 // GetNodeID returns the instance's saved NodeID.
 func (g *Gossip) GetNodeID() proto.NodeID {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	id := g.nodeID
-	g.mu.Unlock()
 	return id
 }
 
@@ -146,8 +146,8 @@ func (g *Gossip) GetNodeID() proto.NodeID {
 // after creating the instance.
 func (g *Gossip) SetNodeID(id proto.NodeID) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.nodeID = id
-	g.mu.Unlock()
 }
 
 // SetBootstrap initializes the set of gossip node addresses used to

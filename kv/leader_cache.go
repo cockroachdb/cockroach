@@ -59,6 +59,7 @@ func (lc *leaderCache) Lookup(group proto.RaftID) *proto.Replica {
 
 // Update invalidates the cached leader for the given Raft group.
 // If a replica is passed in, it is inserted into the cache.
+// A StoreID of 0 (empty replica) means evict.
 func (lc *leaderCache) Update(group proto.RaftID, r proto.Replica) {
 	lc.mu.Lock()
 	lc.cache.Del(group)
