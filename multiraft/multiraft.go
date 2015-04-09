@@ -290,13 +290,11 @@ func (m *MultiRaft) RemoveGroup(groupID uint64) error {
 
 // SubmitCommand sends a command (a binary blob) to the cluster. This method returns
 // when the command has been successfully sent, not when it has been committed.
-// The returned channel is closed when the command is committed.
-// As long as this node is alive, the command will be retried until committed
-// (e.g. in the event of leader failover). There is no guarantee that commands will be
-// committed in the same order as they were originally submitted.
-func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) chan struct{} {
+// An error or nil will be written to the returned channel when the command has
+// been committed or aborted.
+func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []byte) <-chan error {
 	log.V(6).Infof("node %v submitting command to group %v", m.nodeID, groupID)
-	ch := make(chan struct{})
+	ch := make(chan error, 1)
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
@@ -315,9 +313,9 @@ func (m *MultiRaft) SubmitCommand(groupID uint64, commandID string, command []by
 // ChangeGroupMembership submits a proposed membership change to the cluster.
 // Payload is an opaque blob that will be returned in EventMembershipChangeCommitted.
 func (m *MultiRaft) ChangeGroupMembership(groupID uint64, commandID string,
-	changeType raftpb.ConfChangeType, nodeID NodeID, payload []byte) chan struct{} {
+	changeType raftpb.ConfChangeType, nodeID NodeID, payload []byte) <-chan error {
 	log.V(6).Infof("node %v proposing membership change to group %v", m.nodeID, groupID)
-	ch := make(chan struct{})
+	ch := make(chan error, 1)
 	m.proposalChan <- &proposal{
 		groupID:   groupID,
 		commandID: commandID,
@@ -343,7 +341,7 @@ type proposal struct {
 	groupID   uint64
 	commandID string
 	fn        func()
-	ch        chan struct{}
+	ch        chan<- error
 }
 
 // group represents the state of a consensus group.
@@ -356,8 +354,9 @@ type group struct {
 	leader NodeID
 
 	// pending contains all commands that have been proposed but not yet
-	// committed. When a proposal is committed, proposal.ch is closed
-	// and it is removed from this map.
+	// committed in the current term. When a proposal is committed, nil
+	// is written to proposal.ch and it is removed from this
+	// map.
 	pending map[string]*proposal
 }
 
@@ -634,7 +633,11 @@ func (s *state) removeGroup(op *removeGroupOp) {
 }
 
 func (s *state) propose(p *proposal) {
-	g := s.groups[p.groupID]
+	g, ok := s.groups[p.groupID]
+	if !ok {
+		p.ch <- util.Errorf("group %d not found", p.groupID)
+		return
+	}
 	g.pending[p.commandID] = p
 	p.fn()
 }
@@ -795,15 +798,15 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			}
 			if p, ok := g.pending[commandID]; ok {
 				// TODO(bdarnell): the command is now committed, but not applied until the
-				// application consumes EventCommandCommitted. Is closing the channel
+				// application consumes EventCommandCommitted. Is returning via the channel
 				// at this point useful or do we need to wait for the command to be
 				// applied too?
 				// This could be done with a Callback as in EventMembershipChangeCommitted
 				// or perhaps we should move away from a channel to a callback-based system.
 				if p.ch != nil {
 					// Because of the way we re-queue proposals during leadership
-					// changes, we may close the same proposal object twice.
-					close(p.ch)
+					// changes, we may finish the same proposal object twice.
+					p.ch <- nil
 					p.ch = nil
 				}
 				delete(g.pending, commandID)
