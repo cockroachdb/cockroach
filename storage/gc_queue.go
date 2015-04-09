@@ -74,7 +74,7 @@ func newGCQueue() *gcQueue {
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
 	// Only queue for GC if this replica has the leader lease.
-	if !rng.HasLeaderLease() {
+	if held, _ := rng.HasLeaderLease(); !held {
 		return
 	}
 	// Lookup GC policy for this range.
@@ -107,7 +107,7 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, 
 // batched into InternalGC calls. Extant intents are resolved if
 // intents are older than intentAgeThreshold.
 func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
-	if !rng.HasLeaderLease() {
+	if held, _ := rng.HasLeaderLease(); !held {
 		log.Infof("not leader of range %s; skipping GC", rng)
 		return nil
 	}

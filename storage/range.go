@@ -94,6 +94,11 @@ const (
 	raftInitialLogTerm  = 5
 )
 
+// leaderLeaseGracePeriodNanos is the additional duration in
+// nanoseconds to add to another replica's lease expiration before
+// trying to propose new Raft commands from this replica.
+const leaderLeaseGracePeriodNanos = 1 * 1E9 // 1s
+
 // configDescriptor describes administrative configuration maps
 // affecting ranges of the key-value map by key prefix.
 type configDescriptor struct {
@@ -279,15 +284,42 @@ func (r *Range) getLease() *proto.Lease {
 	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
-// HasLeaderLease returns true if this range replica currently holds
-// the Raft leader lease. It's possible that the replica is not in
-// fact the leader, but holding the lease means that no other replica
-// may be the leader either. Leases may not overlap, though a gap
-// between successive lease holders is expected.
-func (r *Range) HasLeaderLease() bool {
-	if l := r.getLease(); l != nil &&
-		l.RaftNodeID == uint64(r.rm.RaftNodeID()) && r.rm.Clock().PhysicalNow() < r.getLease().Expiration {
-		return true
+// newNotLeaderError returns a NotLeaderError intialized with the
+// replica for the last known holder of the leader lease.
+func (r *Range) newNotLeaderError() error {
+	err := &proto.NotLeaderError{}
+	if l := r.getLease(); l != nil {
+		_, storeID := DecodeRaftNodeID(multiraft.NodeID(l.RaftNodeID))
+		err.Leader = r.Desc().FindReplica(storeID)
+	}
+	return err
+}
+
+// HasLeaderLease returns whether the leader lease is held by this
+// replica and the term in which it was held. It's possible that the
+// replica is not in fact the leader, but holding the lease means that
+// no other replica may be the leader either. Leases may not overlap,
+// though a gap between successive lease holders is expected.
+func (r *Range) HasLeaderLease() (bool, uint64) {
+	if l := r.getLease(); l != nil {
+		if l.RaftNodeID == uint64(r.rm.RaftNodeID()) &&
+			r.rm.Clock().PhysicalNow() < l.Expiration {
+			return true, l.Term
+		}
+		return false, l.Term
+	}
+	return false, 0
+}
+
+// AnotherHasLeaderLease returns whether a replica other than this one
+// is reasonably expected to be the holder of the lease. We use a grace
+// period to drown out clock offsets and provide hysteresis.
+func (r *Range) AnotherHasLeaderLease() bool {
+	if l := r.getLease(); l != nil {
+		if l.RaftNodeID != uint64(r.rm.RaftNodeID()) &&
+			r.rm.Clock().PhysicalNow() < l.Expiration+leaderLeaseGracePeriodNanos {
+			return true
+		}
 	}
 	return false
 }
@@ -318,7 +350,7 @@ func (r *Range) grantLeaderLease(lease *proto.Lease) {
 	// a new term, as opposed to renewed before having expired, clear
 	// the timestamp and command caches and maybe start gossiping (if
 	// we're the first range).
-	if r.HasLeaderLease() && lease.Term > oldTerm {
+	if held, _ := r.HasLeaderLease(); held && lease.Term > oldTerm {
 		r.tsCache.Clear(r.rm.Clock())
 		r.cmdQ.Clear()
 
@@ -331,30 +363,6 @@ func (r *Range) grantLeaderLease(lease *proto.Lease) {
 			go r.startGossip(r.rm.Stopper())
 		}
 	}
-}
-
-// canServiceCmd returns an error in the event that the range replica
-// cannot service the command as specified. This is of the case in
-// the event that the replica is not the leader.
-func (r *Range) canServiceCmd(method string, args proto.Request) error {
-	if !r.HasLeaderLease() {
-		if !proto.IsReadOnly(method) || args.Header().ReadConsistency == proto.CONSISTENT {
-			err := &proto.NotLeaderError{}
-			if l := r.getLease(); l != nil {
-				_, storeID := DecodeRaftNodeID(multiraft.NodeID(l.RaftNodeID))
-				err.Leader = r.Desc().FindReplica(storeID)
-			}
-			return err
-		}
-	}
-	if proto.IsReadOnly(method) {
-		if args.Header().ReadConsistency == proto.CONSENSUS {
-			return util.Errorf("consensus reads not implemented")
-		} else if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Txn != nil {
-			return util.Errorf("cannot allow inconsistent reads within a transaction")
-		}
-	}
-	return nil
 }
 
 // isInitialized is true if we know the metadata of this range, either
@@ -436,11 +444,6 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
-	if err := r.canServiceCmd(method, args); err != nil {
-		reply.Header().SetGoError(err)
-		return err
-	}
-
 	// Differentiate between read-only and read-write.
 	if proto.IsAdmin(method) {
 		return r.addAdminCmd(method, args, reply)
@@ -469,7 +472,13 @@ func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
 // addAdminCmd executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
+// Admin commands must run on the leader replica.
 func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Response) error {
+	if held, _ := r.HasLeaderLease(); !held {
+		reply.Header().SetGoError(r.newNotLeaderError())
+		return reply.Header().GoError()
+	}
+
 	switch method {
 	case proto.AdminSplit:
 		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
@@ -489,32 +498,39 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
+		// But disallow any inconsistent reads within txns.
+		if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Txn != nil {
+			reply.Header().SetGoError(util.Errorf("cannot allow inconsistent reads within a transaction"))
+			return reply.Header().GoError()
+		}
 		return r.executeCmd(0, method, args, reply)
+	} else if args.Header().ReadConsistency == proto.CONSENSUS {
+		reply.Header().SetGoError(util.Errorf("consensus reads not implemented"))
+		return reply.Header().GoError()
+	}
+
+	held, prevTerm := r.HasLeaderLease()
+	if !held {
+		if !r.AnotherHasLeaderLease() {
+			// TODO(bdarnell): start an election asynchronously for this node.
+		}
+		reply.Header().SetGoError(r.newNotLeaderError())
+		return reply.Header().GoError()
 	}
 
 	// Add the read to the command queue to gate subsequent
-	// overlapping, commands until this command completes.
+	// overlapping commands until this command completes.
 	cmdKey := r.beginCmd(header.Key, header.EndKey, true)
 
-	// It's possible that arbitrary delays (e.g. major GC, VM
-	// de-prioritization, etc.) could cause the execution of this read
-	// command to occur AFTER the range replica has lost leadership.
-	//
-	// There is a chance that we waited on writes, and although they
-	// were committed to the log, they weren't successfully applied to
-	// this replica's state machine. We re-verify leadership before
-	// reading to make sure that all pending writes are persisted.
-	//
-	// There are some elaborate cases where we might have lost
-	// leadership and then regained it during the delay, but this is ok
-	// because any writes during that period necessarily had higher
-	// timestamps. This is because the read-timestamp-cache prevents it
-	// for the active leader and leadership changes force the
-	// read-timestamp-cache to reset its low water mark.
-	if err := r.canServiceCmd(method, args); err != nil {
-		return err
-	}
+	// Execute read-only command and verify we still have the leader lease afterwards.
 	err := r.executeCmd(0, method, args, reply)
+	if err == nil {
+		if held, term := r.HasLeaderLease(); !held || term != prevTerm {
+			err = r.newNotLeaderError()
+			reply.Reset() // clear read-only response
+			reply.Header().SetGoError(err)
+		}
+	}
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
@@ -566,6 +582,26 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// decode the reply in the response cache, we proceed as though
 		// idempotence has expired.
 		log.Errorf("unable to read result for %+v from the response cache: %s", args, err)
+	}
+
+	// For read/write commands, we check the leader lease. If we know of
+	// a lease and the holder is not this replica, and we're within the
+	// lease grace period of its expiration, return NotLeaderError. In
+	// all other cases, we want to continue. Either we're the lease
+	// holder, or were the last lease holder, or we weren't the last but
+	// we'd like to become the leader because this replica is where the
+	// write pressure is happening.
+	if r.AnotherHasLeaderLease() {
+		reply.Header().SetGoError(r.newNotLeaderError())
+		return reply.Header().GoError()
+	}
+	// If we don't have the lease and nobody else does, propose the
+	// command to force an election. We want this write pressure to
+	// reorient the leader to be closer to the requesting clients.
+	if held, _ := r.HasLeaderLease(); !held {
+		// TODO(bdarnell): will proposing the command if we don't have
+		// leadership just throw out the command? Do we have to start an
+		// election on behalf of this replica somehow?
 	}
 
 	// Add the write to the command queue to gate subsequent overlapping
@@ -716,7 +752,7 @@ func (r *Range) startGossip(stopper *util.Stopper) {
 		for {
 			select {
 			case <-ticker.C:
-				if !r.HasLeaderLease() {
+				if held, _ := r.HasLeaderLease(); !held {
 					return
 				}
 				r.maybeGossipClusterID()
@@ -752,22 +788,24 @@ func (r *Range) maybeGossipFirstRange() {
 // within the range, and their contents are marked dirty.
 // Configuration maps include accounting, permissions, and zones.
 func (r *Range) maybeGossipConfigs(match func(configPrefix proto.Key) bool) {
-	if r.rm.Gossip() != nil && r.HasLeaderLease() {
-		for _, cd := range configDescriptors {
-			if match(cd.keyPrefix) {
-				// Check for a bad range split. This should never happen as ranges
-				// cannot be split mid-config.
-				if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
-					log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
-				}
-				configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
-				if err != nil {
-					log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
-					continue
-				} else {
-					if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
-						log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
+	if r.rm.Gossip() != nil {
+		if held, _ := r.HasLeaderLease(); held {
+			for _, cd := range configDescriptors {
+				if match(cd.keyPrefix) {
+					// Check for a bad range split. This should never happen as ranges
+					// cannot be split mid-config.
+					if !r.ContainsKey(cd.keyPrefix.PrefixEnd()) {
+						log.Fatalf("range splits configuration values for %s", cd.keyPrefix)
+					}
+					configMap, err := r.loadConfigMap(cd.keyPrefix, cd.configI)
+					if err != nil {
+						log.Errorf("failed loading %s config map: %s", cd.gossipKey, err)
 						continue
+					} else {
+						if err := r.rm.Gossip().AddInfo(cd.gossipKey, configMap, 0*time.Second); err != nil {
+							log.Errorf("failed to gossip %s configMap: %s", cd.gossipKey, err)
+							continue
+						}
 					}
 				}
 			}
