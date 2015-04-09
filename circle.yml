@@ -57,7 +57,7 @@ test:
       # Fail the test if there's anything in the excerpt. This will usually
       # be a data race warning (which does not generally fail `make testrace`
       # for some reason).
-      test -s "${CIRCLE_ARTIFACTS}/excerpt.txt"
+      test ! -s "${CIRCLE_ARTIFACTS}/excerpt.txt"
 
 
 deployment:
