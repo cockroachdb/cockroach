@@ -133,7 +133,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
 	store := storage.NewStore(clock, eng, db, nil, transport, storage.TestStoreConfig)
-	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	ls.AddStore(store)
@@ -164,7 +164,7 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		defer transport.Close()
 		s[i] = storage.NewStore(clock, e[i], db, nil, transport, storage.TestStoreConfig)
 		s[i].Ident.StoreID = rng.storeID
-		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}); err != nil {
+		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}, stopper); err != nil {
 			t.Fatal(err)
 		}
 		if err := s[i].Start(stopper); err != nil {

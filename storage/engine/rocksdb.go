@@ -84,6 +84,7 @@ func (r *RocksDB) Open() error {
 		return nil
 	}
 
+	log.Infof("opening rocksdb instance at %q", r.dir)
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.dir)),
 		C.DBOptions{
 			cache_size:      C.int64_t(r.cacheSize),
@@ -92,7 +93,7 @@ func (r *RocksDB) Open() error {
 		})
 	err := statusToError(status)
 	if err != nil {
-		return util.Errorf("could not open RocksDB instance: %s", err)
+		return util.Errorf("could not open rocksdb instance: %s", err)
 	}
 
 	atomic.AddInt32(&r.refcount, 1)
@@ -104,6 +105,7 @@ func (r *RocksDB) Close() {
 	if atomic.AddInt32(&r.refcount, -1) > 0 {
 		return
 	}
+	log.Infof("closing rocksdb instance at %q", r.dir)
 	if r.rdb != nil {
 		C.DBClose(r.rdb)
 		r.rdb = nil

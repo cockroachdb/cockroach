@@ -132,7 +132,7 @@ func (tc *testContext) Start(t *testing.T) {
 
 	if tc.store == nil {
 		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport, TestStoreConfig)
-		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, tc.stopper); err != nil {
 			t.Fatal(err)
 		}
 		// We created the store without a real KV client, so it can't perform splits.

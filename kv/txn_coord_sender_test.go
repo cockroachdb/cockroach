@@ -54,7 +54,7 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	transport := multiraft.NewLocalRPCTransport()
 	stopper.AddCloser(transport)
 	store := storage.NewStore(clock, eng, db, g, transport, storage.TestStoreConfig)
-	if err = store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err = store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		return
 	}
 	lSender.AddStore(store)

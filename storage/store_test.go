@@ -99,7 +99,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := NewStore(clock, eng, nil, g, multiraft.NewLocalRPCTransport(), TestStoreConfig)
-	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	store.db = client.NewKV(nil, &testSender{store: store})
@@ -131,7 +131,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Bootstrap with a fake ident.
-	if err := store.Bootstrap(testIdent); err != nil {
+	if err := store.Bootstrap(testIdent, stopper); err != nil {
 		t.Errorf("error bootstrapping store: %s", err)
 	}
 
@@ -180,7 +180,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	if err := store.Bootstrap(testIdent); err == nil {
+	if err := store.Bootstrap(testIdent, stopper); err == nil {
 		t.Error("expected bootstrap error on non-empty store")
 	}
 }

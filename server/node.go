@@ -114,7 +114,6 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
 	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, clock, false, stopper))
-	// TODO(bdarnell): arrange to have the transport closed.
 	// The bootstrapping store will not connect to other nodes so its StoreConfig
 	// doesn't really matter.
 	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport(), storage.StoreConfig{})
@@ -125,7 +124,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 	}
 
 	// Bootstrap store to persist the store ident.
-	if err := s.Bootstrap(sIdent); err != nil {
+	if err := s.Bootstrap(sIdent, stopper); err != nil {
 		return nil, err
 	}
 	// Create first range, writing directly to engine. Note this does
@@ -298,7 +297,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
-		if err := s.Bootstrap(sIdent); err != nil {
+		if err := s.Bootstrap(sIdent, stopper); err != nil {
 			log.Fatal(err)
 		}
 		if err := s.Start(stopper); err != nil {

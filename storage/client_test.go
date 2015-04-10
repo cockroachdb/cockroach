@@ -70,7 +70,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport(),
 		storage.TestStoreConfig)
 	if bootstrap {
-		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,7 +152,7 @@ func (m *multiTestContext) addStore(t *testing.T) {
 		err := store.Bootstrap(proto.StoreIdent{
 			NodeID:  proto.NodeID(idx + 1),
 			StoreID: proto.StoreID(idx + 1),
-		})
+		}, m.stopper)
 		if err != nil {
 			t.Fatal(err)
 		}

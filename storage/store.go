@@ -369,17 +369,16 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		if err := s.engine.Open(); err != nil {
 			return err
 		}
+		s.stopper.AddCloser(s.engine)
+
 		// Read store ident and return a not-bootstrapped error if necessary.
 		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true,
 			nil, &s.Ident)
 		if err != nil {
-			s.engine.Close()
 			return err
 		} else if !ok {
-			s.engine.Close()
 			return &NotBootstrappedError{}
 		}
-		s.stopper.AddCloser(s.engine)
 	}
 
 	// Create ID allocators.
@@ -570,13 +569,14 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident proto.StoreIdent) error {
+func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 	if s.Ident.NodeID != 0 {
 		return util.Errorf("engine already bootstrapped")
 	}
 	if err := s.engine.Open(); err != nil {
 		return err
 	}
+	stopper.AddCloser(s.engine)
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine, proto.EncodedKey(engine.KeyMin), proto.EncodedKey(engine.KeyMax), 1)
 	if err != nil {
