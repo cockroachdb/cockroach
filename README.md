@@ -30,7 +30,9 @@
 * Raft consensus
 * Rebalancing
 
-See [TODO.md](https://github.com/cockroachdb/cockroach/blob/master/TODO.md)
+See our
+[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) and
+[Issues](https://github.com/cockroachdb/cockroach/issues)
 
 ## Running Cockroach
 
