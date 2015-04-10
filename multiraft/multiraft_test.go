@@ -45,12 +45,16 @@ type testCluster struct {
 	transport Transport
 }
 
-func newTestCluster(transport Transport, size int, t *testing.T) *testCluster {
+func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *testing.T) *testCluster {
 	if transport == nil {
 		transport = NewLocalRPCTransport()
 	}
-	cluster := &testCluster{t: t}
-	cluster.transport = transport
+	stopper.AddCloser(transport)
+	cluster := &testCluster{
+		t:         t,
+		transport: transport,
+	}
+
 	for i := 0; i < size; i++ {
 		ticker := newManualTicker()
 		storage := &BlockableStorage{storage: NewMemoryStorage()}
@@ -69,31 +73,21 @@ func newTestCluster(transport Transport, size int, t *testing.T) *testCluster {
 		}
 		state := newState(mr)
 		demux := newEventDemux(state.Events)
-		demux.start()
+		demux.start(stopper)
 		cluster.nodes = append(cluster.nodes, state)
 		cluster.tickers = append(cluster.tickers, ticker)
 		cluster.events = append(cluster.events, demux)
 		cluster.storages = append(cluster.storages, storage)
 	}
-	cluster.start()
+	cluster.start(stopper)
 	return cluster
 }
 
-func (c *testCluster) start() {
+func (c *testCluster) start(stopper *util.Stopper) {
 	// Let all the states listen before starting any.
 	for _, node := range c.nodes {
-		go node.start()
+		go node.start(stopper)
 	}
-}
-
-func (c *testCluster) stop() {
-	for _, node := range c.nodes {
-		node.Stop()
-	}
-	for _, demux := range c.events {
-		demux.stop()
-	}
-	c.transport.Close()
 }
 
 // createGroup replicates a group consisting of numReplicas members,
@@ -159,7 +153,8 @@ func TestInitialLeaderElection(t *testing.T) {
 	// The node that requests an election first should win.
 	for leaderIndex := 0; leaderIndex < 3; leaderIndex++ {
 		log.Infof("testing leader election for node %v", leaderIndex)
-		cluster := newTestCluster(nil, 3, t)
+		stopper := util.NewStopper()
+		cluster := newTestCluster(nil, 3, stopper, t)
 		groupID := uint64(1)
 		cluster.createGroup(groupID, 0, 3)
 
@@ -172,15 +167,16 @@ func TestInitialLeaderElection(t *testing.T) {
 			t.Fatalf("expected %v to win election, but was %v", cluster.nodes[leaderIndex].nodeID,
 				event.NodeID)
 		}
-		cluster.stop()
+		stopper.Stop()
 	}
 }
 
 // TestProposeBadGroup ensures that unknown group IDs are an error, not a panic.
 func TestProposeBadGroup(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cluster := newTestCluster(nil, 3, t)
-	defer cluster.stop()
+	stopper := util.NewStopper()
+	cluster := newTestCluster(nil, 3, stopper, t)
+	defer stopper.Stop()
 	err := <-cluster.nodes[1].SubmitCommand(7, "asdf", []byte{})
 	if err == nil {
 		t.Fatal("did not get expected error")
@@ -191,8 +187,9 @@ func TestLeaderElectionEvent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	// Leader election events are fired when the leader commits an entry, not when it
 	// issues a call for votes.
-	cluster := newTestCluster(nil, 3, t)
-	defer cluster.stop()
+	stopper := util.NewStopper()
+	cluster := newTestCluster(nil, 3, stopper, t)
+	defer stopper.Stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 
@@ -243,8 +240,9 @@ func TestLeaderElectionEvent(t *testing.T) {
 
 func TestCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cluster := newTestCluster(nil, 3, t)
-	defer cluster.stop()
+	stopper := util.NewStopper()
+	cluster := newTestCluster(nil, 3, stopper, t)
+	defer stopper.Stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 	cluster.triggerElection(0, groupID)
@@ -265,8 +263,9 @@ func TestCommand(t *testing.T) {
 
 func TestSlowStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cluster := newTestCluster(nil, 3, t)
-	defer cluster.stop()
+	stopper := util.NewStopper()
+	cluster := newTestCluster(nil, 3, stopper, t)
+	defer stopper.Stop()
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 3)
 
@@ -311,8 +310,9 @@ func TestSlowStorage(t *testing.T) {
 
 func TestMembershipChange(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cluster := newTestCluster(nil, 4, t)
-	defer cluster.stop()
+	stopper := util.NewStopper()
+	cluster := newTestCluster(nil, 4, stopper, t)
+	defer stopper.Stop()
 
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := uint64(1)

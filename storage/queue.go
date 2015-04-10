@@ -128,7 +128,6 @@ func (bq *baseQueue) Length() int {
 // Start launches a goroutine to process entries in the queue. The
 // provided stopper is used to finish processing.
 func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.Add(1)
 	go bq.processLoop(clock, stopper)
 }
 
@@ -181,6 +180,9 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 //
 // TODO(spencer): current load should factor into range processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	// nextTime is set arbitrarily far into the future so that we don't
 	// unecessarily check for a range to dequeue if the timer function
 	// returns a short duration but the priority queue is empty.
@@ -198,6 +200,9 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 			}
 		// Process ranges as the timer expires.
 		case <-time.After(nextTime.Sub(time.Now())):
+			if !stopper.StartTask() {
+				continue
+			}
 			start := time.Now()
 			nextTime = start.Add(bq.impl.timer())
 			bq.Lock()
@@ -214,9 +219,10 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				emptyQueue = true
 				nextTime = time.Now().Add(24 * time.Hour)
 			}
+			stopper.FinishTask()
+
 		// Exit on stopper.
 		case <-stopper.ShouldStop():
-			stopper.SetStopped()
 			bq.Lock()
 			bq.ranges = map[int64]*rangeItem{}
 			bq.priorityQ = nil

@@ -328,3 +328,19 @@ func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Re
 		},
 	}, &proto.DeleteResponse{})
 }
+
+// RunQuit fetches the admin quitquitquit path to drain and shutdown
+// the server.
+func RunQuit(ctx *Context) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, ctx.Addr, quitPath), nil)
+	if err != nil {
+		log.Errorf("unable to create request to admin REST endpoint: %s", err)
+		return
+	}
+	b, err := sendAdminRequest(req)
+	if err != nil {
+		log.Errorf("admin REST request failed: %s", err)
+		return
+	}
+	fmt.Fprintf(os.Stdout, "node drain and shutdown: %s", string(b))
+}

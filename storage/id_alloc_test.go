@@ -35,10 +35,10 @@ import (
 // from 2 to 101 are present.
 func TestIDAllocator(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, _ := createTestStore(t)
-	defer store.Stop()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 	allocd := make(chan int, 100)
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestIDAllocator(t *testing.T) {
 // and push the id allocation into positive integers.
 func TestIDAllocatorNegativeValue(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, _ := createTestStore(t)
-	defer store.Stop()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	// Increment our key to a negative value.
 	newValue, err := engine.MVCCIncrement(store.Engine(), nil, engine.KeyRaftIDGenerator, store.clock.Now(), nil, -1024)
@@ -89,7 +89,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if newValue != -1024 {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 		{2, 0},  // blockSize < 1
 	}
 	for i := range args {
-		if _, err := NewIDAllocator(nil, nil, args[i][0], args[i][1]); err == nil {
+		if _, err := NewIDAllocator(nil, nil, args[i][0], args[i][1], nil); err == nil {
 			t.Errorf("expect to have error return, but got nil")
 		}
 	}
@@ -121,12 +121,12 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 // 5) Check if the following allocations return correctly.
 func TestAllocateErrorAndRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, _ := createTestStore(t)
-	defer store.Stop()
+	store, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 	allocd := make(chan int, 10)
 
 	// Firstly create a valid IDAllocator to get some ID.
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, store.db, 2, 10, stopper)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
@@ -179,5 +179,4 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 			t.Errorf("expected ID is %d, but got: %d", i+21, id)
 		}
 	}
-	idAlloc.Stop()
 }

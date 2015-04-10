@@ -43,13 +43,14 @@ func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
 	}
-	stopper.Add(1)
 	go lt.start()
 	return lt
 }
 
 func (lt *localInterceptableTransport) start() {
+	lt.stopper.AddWorker()
 	defer lt.stopper.SetStopped()
+
 	for {
 		select {
 		case msg := <-lt.messages:

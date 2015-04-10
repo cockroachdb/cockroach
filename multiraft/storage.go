@@ -116,7 +116,6 @@ type writeResponse struct {
 // writeTask manages a goroutine that interacts with the storage system.
 type writeTask struct {
 	storage Storage
-	stopper *util.Stopper
 
 	// ready is an unbuffered channel used for synchronization. If writes to this channel do not
 	// block, the writeTask is ready to receive a request.
@@ -131,7 +130,6 @@ type writeTask struct {
 func newWriteTask(storage Storage) *writeTask {
 	return &writeTask{
 		storage: storage,
-		stopper: util.NewStopper(1),
 		ready:   make(chan struct{}),
 		in:      make(chan *writeRequest, 1),
 		out:     make(chan *writeResponse, 1),
@@ -139,14 +137,16 @@ func newWriteTask(storage Storage) *writeTask {
 }
 
 // start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
-func (w *writeTask) start() {
+func (w *writeTask) start(stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	for {
 		var request *writeRequest
 		select {
 		case <-w.ready:
 			continue
-		case <-w.stopper.ShouldStop():
-			w.stopper.SetStopped()
+		case <-stopper.ShouldStop():
 			return
 		case request = <-w.in:
 		}
@@ -183,9 +183,4 @@ func (w *writeTask) start() {
 		}
 		w.out <- response
 	}
-}
-
-// stop the running task.
-func (w *writeTask) stop() {
-	w.stopper.Stop()
 }

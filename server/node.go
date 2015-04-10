@@ -63,7 +63,6 @@ type Node struct {
 	db            *client.KV             // KV DB client; used to access global id generators
 	raftTransport multiraft.Transport
 	lSender       *kv.LocalSender // Local KV sender for access to node-local stores
-	closer        chan struct{}
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -105,7 +104,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 //
 // Returns a KV client for unittest purposes. Caller should close
 // the returned client.
-func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
+func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper) (*client.KV, error) {
 	sIdent := proto.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
@@ -114,12 +113,11 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, clock, false))
+	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, clock, false, stopper))
 	// TODO(bdarnell): arrange to have the transport closed.
 	// The bootstrapping store will not connect to other nodes so its StoreConfig
 	// doesn't really matter.
-	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport(),
-		storage.StoreConfig{})
+	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport(), storage.StoreConfig{})
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {
@@ -130,11 +128,12 @@ func BootstrapCluster(clusterID string, eng engine.Engine) (*client.KV, error) {
 	if err := s.Bootstrap(sIdent); err != nil {
 		return nil, err
 	}
-	// Create first range.
+	// Create first range, writing directly to engine. Note this does
+	// not create the range, just its data.
 	if err := s.BootstrapRange(); err != nil {
 		return nil, err
 	}
-	if err := s.Start(); err != nil {
+	if err := s.Start(stopper); err != nil {
 		return nil, err
 	}
 	lSender.AddStore(s)
@@ -162,7 +161,6 @@ func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConf
 		db:            db,
 		raftTransport: raftTransport,
 		lSender:       kv.NewLocalSender(),
-		closer:        make(chan struct{}),
 	}
 }
 
@@ -180,25 +178,19 @@ func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
 func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
-	engines []engine.Engine, attrs proto.Attributes) error {
+	engines []engine.Engine, attrs proto.Attributes, stopper *util.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	if err := rpcServer.RegisterName("Node", n); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(clock, engines); err != nil {
+	if err := n.initStores(clock, engines, stopper); err != nil {
 		return err
 	}
-	go n.startGossip()
+	go n.startGossip(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
-}
-
-// stop cleanly stops the node.
-func (n *Node) stop() {
-	close(n.closer)
-	n.lSender.Close()
 }
 
 // initStores initializes the Stores map from id to Store. Stores are
@@ -207,7 +199,7 @@ func (n *Node) stop() {
 // the Store doesn't yet have a valid ident, it's added to the
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
-func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
+func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *util.Stopper) error {
 	bootstraps := list.New()
 
 	if len(engines) == 0 {
@@ -218,7 +210,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 		s := storage.NewStore(clock, e, n.db, n.gossip, n.raftTransport, n.storeConfig)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
-		if err := s.Start(); err != nil {
+		if err := s.Start(stopper); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
 				bootstraps.PushBack(s)
 				continue
@@ -247,7 +239,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine) error {
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
-		go n.bootstrapStores(bootstraps)
+		go n.bootstrapStores(bootstraps, stopper)
 	}
 
 	return nil
@@ -274,7 +266,7 @@ func (n *Node) validateStores() error {
 // and node IDs have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per
 // node.
-func (n *Node) bootstrapStores(bootstraps *list.List) {
+func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	log.Infof("bootstrapping %d store(s)", bootstraps.Len())
 
 	// Allocate a new node ID if necessary.
@@ -309,7 +301,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 		if err := s.Bootstrap(sIdent); err != nil {
 			log.Fatal(err)
 		}
-		if err := s.Start(); err != nil {
+		if err := s.Start(stopper); err != nil {
 			log.Fatal(err)
 		}
 		n.lSender.AddStore(s)
@@ -354,14 +346,19 @@ func (n *Node) connectGossip() {
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Loops until the node is closed and should be
 // invoked via goroutine.
-func (n *Node) startGossip() {
+func (n *Node) startGossip(stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	ticker := time.NewTicker(gossipInterval)
 	for {
 		select {
 		case <-ticker.C:
-			n.gossipCapacities()
-		case <-n.closer:
-			ticker.Stop()
+			if stopper.StartTask() {
+				n.gossipCapacities()
+				stopper.FinishTask()
+			}
+		case <-stopper.ShouldStop():
 			return
 		}
 	}

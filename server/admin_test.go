@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -35,21 +36,24 @@ import (
 // and local database setup. Returns the new http test server, which
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
-func startAdminServer() *httptest.Server {
-	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20))
+func startAdminServer() (string, *util.Stopper) {
+	stopper := util.NewStopper()
+	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20), stopper)
 	if err != nil {
 		log.Fatal(err)
 	}
-	admin := newAdminServer(db)
+	admin := newAdminServer(db, stopper)
 	mux := http.NewServeMux()
 	admin.registerHandlers(mux)
 	httpServer := httptest.NewServer(mux)
+	stopper.AddCloser(httpServer)
+
 	if strings.HasPrefix(httpServer.URL, "http://") {
 		testContext.Addr = strings.TrimPrefix(httpServer.URL, "http://")
 	} else if strings.HasPrefix(httpServer.URL, "https://") {
 		testContext.Addr = strings.TrimPrefix(httpServer.URL, "https://")
 	}
-	return httpServer
+	return httpServer.URL, stopper
 }
 
 // getText fetches the HTTP response body as text in the form of a
@@ -81,8 +85,10 @@ func getJSON(url string) (interface{}, error) {
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
 // available via the /debug/vars link.
 func TestAdminDebugExpVar(t *testing.T) {
-	s := startAdminServer()
-	jI, err := getJSON(s.URL + debugEndpoint + "vars")
+	url, stopper := startAdminServer()
+	defer stopper.Stop()
+
+	jI, err := getJSON(url + debugEndpoint + "vars")
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -98,8 +104,10 @@ func TestAdminDebugExpVar(t *testing.T) {
 // TestAdminDebugPprof verifies that pprof tools are available.
 // via the /debug/pprof/* links.
 func TestAdminDebugPprof(t *testing.T) {
-	s := startAdminServer()
-	body, err := getText(s.URL + debugEndpoint + "pprof/block")
+	url, stopper := startAdminServer()
+	defer stopper.Stop()
+
+	body, err := getText(url + debugEndpoint + "pprof/block")
 	if err != nil {
 		t.Fatal(err)
 	}

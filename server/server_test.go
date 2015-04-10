@@ -177,15 +177,14 @@ func TestSelfBootstrap(t *testing.T) {
 	s.Stop()
 }
 
-// TestHealthz verifies that /_admin/healthz does, in fact, return "ok"
-// as expected.
-func TestHealthz(t *testing.T) {
+// TestHealth verifies that health endpoint return "ok".
+func TestHealth(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	url := "http://" + s.HTTPAddr + "/_admin/healthz"
+	url := "http://" + s.HTTPAddr + healthPath
 	resp, err := http.Get(url)
 	if err != nil {
-		t.Fatalf("error requesting healthz at %s: %s", url, err)
+		t.Fatalf("error requesting health at %s: %s", url, err)
 	}
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
@@ -198,7 +197,7 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-// TestGzip hits the /_admin/healthz endpoint while explicitly disabling
+// TestGzip hits the health endpoint while explicitly disabling
 // decompression on a custom client's Transport and setting it
 // conditionally via the request's Accept-Encoding headers.
 func TestGzip(t *testing.T) {
@@ -210,7 +209,7 @@ func TestGzip(t *testing.T) {
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+s.HTTPAddr+"/_admin/healthz", nil)
+	req, err := http.NewRequest("GET", "http://"+s.HTTPAddr+healthPath, nil)
 	if err != nil {
 		t.Fatalf("could not create request: %s", err)
 	}
@@ -253,8 +252,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
-	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
-	defer tds.Close()
+	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
 	if err := s.node.db.Call(proto.AdminSplit,
 		&proto.AdminSplitRequest{
@@ -357,7 +355,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 // TestMultiRangeScanWithMaxResults tests that commands which access multiple
 // ranges with MaxResults parameter are carried out properly.
 func TestMultiRangeScanWithMaxResults(t *testing.T) {
-
 	testCases := []struct {
 		splitKeys []proto.Key
 		keys      []proto.Key
@@ -372,7 +369,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	for _, tc := range testCases {
 		s := startTestServer(t)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
-		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable)
+		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
 		for _, sk := range tc.splitKeys {
 			if err := s.node.db.Call(proto.AdminSplit,
@@ -424,7 +421,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 				}
 			}
 		}
-		defer tds.Close()
 		defer s.Stop()
 	}
 }

@@ -69,9 +69,6 @@ type txnMetadata struct {
 	// current_timestamp > lastUpdateTS + timeoutDuration If this value
 	// is set to 0, a default timeout will be used.
 	timeoutDuration time.Duration
-
-	// This is the closer to close the heartbeat goroutine.
-	closer chan struct{}
 }
 
 // addKeyRange adds the specified key range to the interval cache,
@@ -104,7 +101,7 @@ func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 // transaction has covered, clears the keys cache and closes the
 // metadata heartbeat. Any keys listed in the resolved slice have
 // already been resolved and do not receive resolve intent commands.
-func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender) {
+func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender, stopper *util.Stopper) {
 	if tm.keys.Len() > 0 {
 		log.V(1).Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 	}
@@ -140,16 +137,18 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		}
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
-		go func() {
-			log.V(1).Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
-			sender.Send(call)
-			if call.Reply.Header().Error != nil {
-				log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
-			}
-		}()
+		if stopper.StartTask() {
+			go func() {
+				log.V(1).Infof("cleaning up intent %q for txn %s", call.Args.Header().Key, txn)
+				sender.Send(call)
+				if call.Reply.Header().Error != nil {
+					log.Warningf("failed to cleanup %q intent: %s", call.Args.Header().Key, call.Reply.Header().GoError())
+				}
+				stopper.FinishTask()
+			}()
+		}
 	}
 	tm.keys.Clear()
-	close(tm.closer)
 }
 
 // A TxnCoordSender is an implementation of client.KVSender which
@@ -169,13 +168,14 @@ type TxnCoordSender struct {
 	sync.Mutex                                // Protects the txns map.
 	txns              map[string]*txnMetadata // txn key to metadata
 	linearizable      bool                    // Enables linearizable behaviour.
+	stopper           *util.Stopper
 }
 
 // NewTxnCoordSender creates a new TxnCoordSender for use from a KV
 // distributed DB instance. A TxnCoordSender should be closed when no
 // longer in use via Close(), which also closes the wrapped sender
 // supplied here.
-func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable bool) *TxnCoordSender {
+func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable bool, stopper *util.Stopper) *TxnCoordSender {
 	tc := &TxnCoordSender{
 		wrapped:           wrapped,
 		clock:             clock,
@@ -183,6 +183,7 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable b
 		clientTimeout:     defaultClientTimeout,
 		txns:              map[string]*txnMetadata{},
 		linearizable:      linearizable,
+		stopper:           stopper,
 	}
 	return tc
 }
@@ -200,24 +201,6 @@ func (tc *TxnCoordSender) Send(call *client.Call) {
 	} else {
 		tc.sendOne(call)
 	}
-}
-
-// Close implements the client.KVSender interface by stopping ongoing
-// heartbeats for extant transactions. Close does not attempt to
-// resolve existing write intents for transactions which this
-// TxnCoordSender has been managing.
-func (tc *TxnCoordSender) Close() {
-	tc.Lock()
-	for _, txn := range tc.txns {
-		close(txn.closer)
-	}
-	tc.txns = map[string]*txnMetadata{}
-	tc.Unlock()
-	// TODO(bdarnell): closing the wrapped sender may close the underlying
-	// Store, which may call back into TxnCoordSender and cause deadlocks if
-	// the lock is held. The shutdown process needs to be refactored to clean
-	// this up.
-	tc.wrapped.Close()
 }
 
 // maybeBeginTxn begins a new transaction if a txn has been specified
@@ -298,7 +281,6 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 				keys:            util.NewIntervalCache(util.CacheConfig{Policy: util.CacheNone}),
 				lastUpdateTS:    tc.clock.Now(),
 				timeoutDuration: tc.clientTimeout,
-				closer:          make(chan struct{}),
 			}
 			tc.txns[string(header.Txn.ID)] = txnMeta
 
@@ -306,7 +288,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 			// for each active transaction. Spencer suggests a heap
 			// containing next heartbeat timeouts which is processed by a
 			// single goroutine.
-			go tc.heartbeat(header.Txn, txnMeta.closer)
+			go tc.heartbeat(header.Txn)
 		}
 		txnMeta.lastUpdateTS = tc.clock.Now()
 		txnMeta.addKeyRange(header.Key, header.EndKey)
@@ -476,7 +458,7 @@ func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction, resolved []proto.Ke
 	if !ok {
 		return
 	}
-	txnMeta.close(txn, resolved, tc.wrapped)
+	txnMeta.close(txn, resolved, tc.wrapped, tc.stopper)
 	delete(tc.txns, string(txn.ID))
 }
 
@@ -503,7 +485,10 @@ func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 // heartbeat periodically sends an InternalHeartbeatTxn RPC to an
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
-func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}) {
+func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
+	tc.stopper.AddWorker()
+	defer tc.stopper.SetStopped()
+
 	ticker := time.NewTicker(tc.heartbeatInterval)
 	request := &proto.InternalHeartbeatTxnRequest{
 		RequestHeader: proto.RequestHeader{
@@ -517,10 +502,14 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 	for {
 		select {
 		case <-ticker.C:
+			if !tc.stopper.StartTask() {
+				continue
+			}
 			// Before we send a heartbeat, determine whether this transaction
 			// should be considered abandoned. If so, exit heartbeat.
 			if tc.hasClientAbandonedCoord(txn.ID) {
 				log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
+				tc.stopper.FinishTask()
 				return
 			}
 			request.Header().Timestamp = tc.clock.Now()
@@ -538,9 +527,12 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
 			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
 				tc.cleanupTxn(reply.Txn, nil)
+				tc.stopper.FinishTask()
 				return
 			}
-		case <-closer:
+			tc.stopper.FinishTask()
+
+		case <-tc.stopper.ShouldStop():
 			return
 		}
 	}

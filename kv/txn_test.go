@@ -41,11 +41,11 @@ import (
 // uncommitted writes cannot be read outside of the txn but can be
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
-	db, _, _, _, _, transport, err := createTestDB()
+	db, _, _, _, _, stopper, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer transport.Close()
+	defer stopper.Stop()
 	value := []byte("value")
 
 	for _, commit := range []bool{true, false} {
@@ -109,11 +109,11 @@ func TestTxnDBBasics(t *testing.T) {
 // BenchmarkTxnWrites benchmarks a number of transactions writing to the
 // same key back to back, without using Prepare/Flush.
 func BenchmarkTxnWrites(b *testing.B) {
-	db, _, _, mClock, _, transport, err := createTestDB()
+	db, _, _, mClock, _, stopper, err := createTestDB()
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer transport.Close()
+	defer stopper.Stop()
 	key := proto.Key("key")
 	txnOpts := &client.TransactionOptions{
 		Name: "benchWrite",
@@ -139,11 +139,11 @@ func BenchmarkTxnWrites(b *testing.B) {
 // the maximumOffset given, verifying in the process that the correct values
 // are read (usually after one transaction restart).
 func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
-	db, _, clock, _, lSender, transport, err := createTestDB()
+	db, _, clock, _, lSender, stopper, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer transport.Close()
+	defer stopper.Stop()
 
 	txnOpts := &client.TransactionOptions{
 		Name: "test",
@@ -208,7 +208,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			// higher values require roughly offset/5 restarts.
 			txnClock.SetMaxOffset(maxOffset)
 
-			sender := NewTxnCoordSender(lSender, txnClock, false)
+			sender := NewTxnCoordSender(lSender, txnClock, false, stopper)
 			txnDB := client.NewKV(nil, sender)
 			txnDB.User = storage.UserRoot
 
@@ -288,11 +288,11 @@ func TestTxnDBUncertainty(t *testing.T) {
 // test timeout.
 func TestUncertaintyRestarts(t *testing.T) {
 	{
-		db, eng, clock, mClock, _, transport, err := createTestDB()
+		db, eng, clock, mClock, _, stopper, err := createTestDB()
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer transport.Close()
+		defer stopper.Stop()
 		// Set a large offset so that a busy restart-loop
 		// really shows. Also makes sure that the values
 		// we write in the future below don't actually
@@ -351,8 +351,8 @@ func TestUncertaintyRestarts(t *testing.T) {
 // restarts for that node and transaction without sacrificing correctness.
 // See proto.Transaction.CertainNodes for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
-	db, eng, clock, mClock, _, transport, err := createTestDB()
-	defer transport.Close()
+	db, eng, clock, mClock, _, stopper, err := createTestDB()
+	defer stopper.Stop()
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't
 	// actually wind up in the past.

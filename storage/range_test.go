@@ -102,6 +102,7 @@ type testContext struct {
 	engine        engine.Engine
 	manualClock   *hlc.ManualClock
 	clock         *hlc.Clock
+	stopper       *util.Stopper
 	bootstrapMode bootstrapMode
 }
 
@@ -121,10 +122,13 @@ func (tc *testContext) Start(t *testing.T) {
 	if tc.engine == nil {
 		tc.engine = engine.NewInMem(proto.Attributes{Attrs: []string{"dc1", "mem"}}, 1<<20)
 	}
-
 	if tc.transport == nil {
 		tc.transport = multiraft.NewLocalRPCTransport()
 	}
+	if tc.stopper == nil {
+		tc.stopper = util.NewStopper()
+	}
+	tc.stopper.AddCloser(tc.transport)
 
 	if tc.store == nil {
 		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport, TestStoreConfig)
@@ -140,7 +144,7 @@ func (tc *testContext) Start(t *testing.T) {
 			}
 		}
 		tc.store.db = client.NewKV(nil, &testSender{store: tc.store})
-		if err := tc.store.Start(); err != nil {
+		if err := tc.store.Start(tc.stopper); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -167,8 +171,7 @@ func (tc *testContext) Start(t *testing.T) {
 }
 
 func (tc *testContext) Stop() {
-	tc.store.Stop()
-	tc.transport.Close()
+	tc.stopper.Stop()
 }
 
 // initConfigs creates default configuration entries.
@@ -218,7 +221,6 @@ func TestRangeContains(t *testing.T) {
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
 	store := NewStore(clock, e, nil, nil, multiraft.NewLocalRPCTransport(), TestStoreConfig)
-	defer store.Stop()
 	r, err := NewRange(desc, store)
 	if err != nil {
 		t.Fatal(err)

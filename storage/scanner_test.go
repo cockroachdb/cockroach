@@ -123,7 +123,8 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.Add(1)
+	stopper.AddWorker()
+	defer stopper.SetStopped()
 	go func() {
 		for {
 			select {
@@ -138,7 +139,6 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 				tq.Lock()
 				tq.done = true
 				tq.Unlock()
-				stopper.SetStopped()
 				return
 			}
 		}
@@ -196,7 +196,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	stopper := util.NewStopper(0)
+	stopper := util.NewStopper()
 
 	// Start queue and verify that all ranges are added to both queues.
 	s.Start(clock, stopper)
@@ -240,7 +240,7 @@ func TestScannerTiming(t *testing.T) {
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
-		stopper := util.NewStopper(0)
+		stopper := util.NewStopper()
 		defer stopper.Stop()
 		s.Start(clock, stopper)
 		time.Sleep(runTime)
@@ -263,7 +263,7 @@ func TestScannerEmptyIterator(t *testing.T) {
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
-	stopper := util.NewStopper(0)
+	stopper := util.NewStopper()
 	defer stopper.Stop()
 	s.Start(clock, stopper)
 	time.Sleep(3 * time.Millisecond)
@@ -278,7 +278,7 @@ func TestScannerStats(t *testing.T) {
 	const count = 3
 	iter := newTestIterator(count)
 	q := &testQueue{}
-	stopper := util.NewStopper(0)
+	stopper := util.NewStopper()
 	defer stopper.Stop()
 	s := newRangeScanner(1*time.Millisecond, iter)
 	s.AddQueues(q)

@@ -24,7 +24,7 @@ import (
 )
 
 func TestRetry(t *testing.T) {
-	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 10, false}
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 10, false, nil}
 	var retries int
 	err := RetryWithBackoff(opts, func() (RetryStatus, error) {
 		retries++
@@ -42,7 +42,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	timer := time.AfterFunc(time.Second, func() {
 		t.Error("max backoff not respected")
 	})
-	opts := RetryOptions{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3, false}
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Microsecond * 10, 1000, 3, false, nil}
 	err := RetryWithBackoff(opts, func() (RetryStatus, error) {
 		return RetryContinue, nil
 	})
@@ -54,7 +54,7 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 
 func TestRetryExceedsMaxAttempts(t *testing.T) {
 	var retries int
-	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 3, false}
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 3, false, nil}
 	err := RetryWithBackoff(opts, func() (RetryStatus, error) {
 		retries++
 		return RetryContinue, nil
@@ -68,7 +68,7 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 }
 
 func TestRetryFunctionReturnsError(t *testing.T) {
-	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 0 /* indefinite */, false}
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 0 /* indefinite */, false, nil}
 	err := RetryWithBackoff(opts, func() (RetryStatus, error) {
 		return RetryBreak, fmt.Errorf("something went wrong")
 	})
@@ -78,7 +78,7 @@ func TestRetryFunctionReturnsError(t *testing.T) {
 }
 
 func TestRetryReset(t *testing.T) {
-	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 1, false}
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 1, false, nil}
 	var count int
 	// Backoff loop has 1 allowed retry; we always return RetryReset, so
 	// just make sure we get to 2 retries and then break.
@@ -93,5 +93,17 @@ func TestRetryReset(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("expected 2 retries; got %d", count)
+	}
+}
+
+func TestRetryStop(t *testing.T) {
+	stopper := NewStopper()
+	// Create a retry loop which will never stop without stopper.
+	opts := RetryOptions{"test", time.Microsecond * 10, time.Second, 2, 0, false, stopper}
+	if err := RetryWithBackoff(opts, func() (RetryStatus, error) {
+		go stopper.Stop()
+		return RetryContinue, nil
+	}); err == nil {
+		t.Errorf("expected retry loop to exit from being stopped")
 	}
 }

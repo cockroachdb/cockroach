@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -47,7 +48,7 @@ import (
 
 // createTestStore creates a test store using an in-memory
 // engine. The caller is responsible for closing the store on exit.
-func createTestStore(t *testing.T) *storage.Store {
+func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 	return createTestStoreWithEngine(t,
 		engine.NewInMem(proto.Attributes{}, 10<<20),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
@@ -57,11 +58,12 @@ func createTestStore(t *testing.T) *storage.Store {
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool) *storage.Store {
+	bootstrap bool) (*storage.Store, *util.Stopper) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	stopper := util.NewStopper()
 	lSender := kv.NewLocalSender()
-	sender := kv.NewTxnCoordSender(lSender, clock, false)
+	sender := kv.NewTxnCoordSender(lSender, clock, false, stopper)
 	db := client.NewKV(nil, sender)
 	db.User = storage.UserRoot
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -78,10 +80,10 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 			t.Fatal(err)
 		}
 	}
-	if err := store.Start(); err != nil {
+	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
-	return store
+	return store, stopper
 }
 
 type multiTestContext struct {
@@ -93,6 +95,7 @@ type multiTestContext struct {
 	db          *client.KV
 	engines     []engine.Engine
 	stores      []*storage.Store
+	stopper     *util.Stopper
 }
 
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
@@ -112,8 +115,11 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.sender == nil {
 		m.sender = kv.NewLocalSender()
 	}
+	if m.stopper == nil {
+		m.stopper = util.NewStopper()
+	}
 	if m.db == nil {
-		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false)
+		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false, m.stopper)
 		m.db = client.NewKV(nil, txnSender)
 		m.db.User = storage.UserRoot
 	}
@@ -121,61 +127,71 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	for i := 0; i < numStores; i++ {
 		m.addStore(t)
 	}
+	m.stopper.AddCloser(m.transport)
 }
 
 func (m *multiTestContext) Stop() {
-	for _, eng := range m.engines {
-		eng.Stop() // Remove extra engine reference count. See addStore() for details.
-	}
-	for _, store := range m.stores {
-		store.Stop()
-	}
-	m.transport.Close()
+	m.stopper.Stop()
 }
 
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore(t *testing.T) {
-	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport, storage.TestStoreConfig)
-	err := store.Bootstrap(proto.StoreIdent{
-		NodeID:  proto.NodeID(len(m.stores) + 1),
-		StoreID: proto.StoreID(len(m.stores) + 1),
-	})
-	if err != nil {
-		t.Fatal(err)
+	idx := len(m.stores)
+	var eng engine.Engine
+	var needBootstrap bool
+	if len(m.engines) > len(m.stores) {
+		eng = m.engines[idx]
+	} else {
+		eng = engine.NewInMem(proto.Attributes{}, 1<<20)
+		m.engines = append(m.engines, eng)
+		needBootstrap = true
 	}
 
-	if len(m.stores) == 0 {
-		// Bootstrap the initial range on the first store
-		if err := store.BootstrapRange(); err != nil {
+	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport, storage.TestStoreConfig)
+	if needBootstrap {
+		err := store.Bootstrap(proto.StoreIdent{
+			NodeID:  proto.NodeID(idx + 1),
+			StoreID: proto.StoreID(idx + 1),
+		})
+		if err != nil {
 			t.Fatal(err)
 		}
+
+		// Bootstrap the initial range on the first store
+		if idx == 0 {
+			if err := store.BootstrapRange(); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	if err := store.Start(); err != nil {
+	if err := store.Start(m.stopper); err != nil {
 		t.Fatal(err)
 	}
-	// Add an extra reference count to the engine so that the underlying
-	// rocksdb instance is not closed when stopping and restarting the
-	// engine.
-	eng.Start()
-	m.engines = append(m.engines, eng)
 	m.stores = append(m.stores, store)
 	m.sender.AddStore(store)
 }
 
-// StopStore stops a store but leaves the engine intact.
-// All stopped stores must be restarted before multiTestContext.Stop is called.
-func (m *multiTestContext) StopStore(i int) {
-	m.stores[i].Stop()
-	m.stores[i] = nil
-}
-
-// RetartStore restarts a store previously stopped with StopStore.
-func (m *multiTestContext) RestartStore(i int, t *testing.T) {
-	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport,
-		storage.TestStoreConfig)
-	if err := m.stores[i].Start(); err != nil {
-		t.Fatal(err)
+// Restart stops and restarts all stores but leaves the engines intact,
+// so the stores should contain the same persistent storage as before.
+func (m *multiTestContext) Restart(t *testing.T) {
+	// Add extra ref counts to engines so the underlying rocksdb instances
+	// aren't closed when stopping and restarting the stores.
+	for _, e := range m.engines {
+		if err := e.Open(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nanos := m.manualClock.UnixNano() + 1
+	engines := m.engines
+	m.Stop()
+	*m = multiTestContext{
+		manualClock: hlc.NewManualClock(nanos),
+		engines:     engines,
+	}
+	m.Start(t, len(engines))
+	// Remove extra ref counts.
+	for _, e := range m.engines {
+		e.Close()
 	}
 }
 
@@ -261,8 +277,8 @@ func meta2Key(key proto.Key) proto.Key {
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	// When split is false, merging treats the right range as the merged
 	// range. With merging, expNewLeft indicates the addressing keys we
@@ -401,8 +417,8 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 	left := &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
 	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
 	if err := storage.SplitRangeAddressing(store.DB(), left, right); err == nil {

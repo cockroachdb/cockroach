@@ -115,7 +115,7 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng, snap)
 	defer iter.Close()
-	defer snap.Stop()
+	defer snap.Close()
 
 	// Lookup the GC policy for the zone containing this key range.
 	policy, err := gcq.lookupGCPolicy(rng)
@@ -171,7 +171,6 @@ func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
 					// Resolve intent asynchronously in a goroutine if the intent
 					// is older than the intent expiration threshold.
 					if meta.Timestamp.Less(intentExp) {
-						log.Infof("base=%q, now=%s, meta ts=%s, intentExp=%s", expBaseKey, now, meta.Timestamp, intentExp)
 						wg.Add(1)
 						go gcq.resolveIntent(rng, expBaseKey, meta, updateOldestIntent, &wg)
 					} else {

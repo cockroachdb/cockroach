@@ -125,7 +125,10 @@ func (s *server) jitteredGossipInterval() time.Duration {
 // then begins processing connecting clients in an infinite select
 // loop via goroutine. Periodically, clients connected and awaiting
 // the next round of gossip are awoken via the conditional variable.
-func (s *server) start(rpcServer *rpc.Server) {
+func (s *server) start(rpcServer *rpc.Server, stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	s.is.NodeAddr = rpcServer.Addr()
 	if err := rpcServer.RegisterName("Gossip", s); err != nil {
 		log.Fatalf("unable to register gossip service with RPC server: %s", err)
@@ -140,6 +143,9 @@ func (s *server) start(rpcServer *rpc.Server) {
 			case <-gossipTimeout:
 				// Wakeup all blocked gossip requests.
 				s.ready.Broadcast()
+			case <-stopper.ShouldStop():
+				s.stop()
+				return
 			}
 		}
 	}()

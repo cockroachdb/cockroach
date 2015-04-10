@@ -146,8 +146,8 @@ func splitRange(db *client.KV, key proto.Key) error {
 // tree and first node.  SetupRangeTree is called via store.BootstrapRange.
 func TestSetupRangeTree(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	// Check to make sure the range tree is stored correctly.
 	tree := proto.RangeTree{
@@ -173,8 +173,8 @@ func TestSetupRangeTree(t *testing.T) {
 // rotations and flips.
 func TestInsertRight(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 	db := store.DB()
 
 	keyA := proto.Key("a")
@@ -388,8 +388,8 @@ func TestInsertRight(t *testing.T) {
 // rotations, left rotations and flips.
 func TestInsertLeft(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 	db := store.DB()
 
 	keyE := proto.Key("e")
@@ -673,8 +673,8 @@ func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
 // equal.
 func TestRandomSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 	db := store.DB()
 	rng, seed := util.NewPseudoRand()
 	t.Logf("using pseudo random number generator with seed %d", seed)
@@ -700,7 +700,7 @@ func TestRandomSplits(t *testing.T) {
 			key = Key(keyProto)
 		}
 
-		t.Logf("Inserting %d:%d", i, keyInt)
+		//t.Logf("Inserting %d:%d", i, keyInt)
 		tree.Insert(key)
 
 		// Split the range.

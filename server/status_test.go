@@ -36,8 +36,9 @@ import (
 // and local database setup. Returns the new http test server, which
 // should be cleaned up by caller via httptest.Server.Close(). The
 // Cockroach KV client address is set to the address of the test server.
-func startStatusServer() *httptest.Server {
-	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20))
+func startStatusServer() (*httptest.Server, *util.Stopper) {
+	stopper := util.NewStopper()
+	db, err := BootstrapCluster("cluster-1", engine.NewInMem(proto.Attributes{}, 1<<20), stopper)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,14 +46,15 @@ func startStatusServer() *httptest.Server {
 	mux := http.NewServeMux()
 	status.registerHandlers(mux)
 	httpServer := httptest.NewServer(mux)
-	return httpServer
+	stopper.AddCloser(httpServer)
+	return httpServer, stopper
 }
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
 // via the /_status/local/stacks endpoint.
 func TestStatusLocalStacks(t *testing.T) {
-	s := startStatusServer()
-	defer s.Close()
+	s, stopper := startStatusServer()
+	defer stopper.Stop()
 	body, err := getText(s.URL + statusLocalStacksKey)
 	if err != nil {
 		t.Fatal(err)
@@ -67,8 +69,8 @@ func TestStatusLocalStacks(t *testing.T) {
 // Json results. The content type of the responses is always
 // "application/json".
 func TestStatusJson(t *testing.T) {
-	s := startStatusServer()
-	defer s.Close()
+	s, stopper := startStatusServer()
+	defer stopper.Stop()
 
 	type TestCase struct {
 		keyPrefix string

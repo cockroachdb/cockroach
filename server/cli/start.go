@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// Context is the CLI contexted used for the server.
+// Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
 var cmdStartLongDescription = `
@@ -59,7 +59,7 @@ A node exports an HTTP API with the following endpoints:
   Key-value REST:         ` + kv.RESTPrefix + `
   Structured Schema REST: ` + structured.StructuredKeyPrefix
 
-// A initCmd command initializes a new Cockroach cluster.
+// An initCmd command initializes a new Cockroach cluster.
 var initCmd = &commander.Command{
 	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
@@ -98,14 +98,12 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	localDB, err := server.BootstrapCluster(clusterID, e)
-	if err != nil {
+	stopper := util.NewStopper()
+	if _, err = server.BootstrapCluster(clusterID, e, stopper); err != nil {
 		log.Errorf("Failed to bootstrap cluster: %v", err)
 		return
 	}
-	// Close localDB and bootstrap engine.
-	localDB.Close()
-	e.Stop()
+	stopper.Stop()
 
 	fmt.Printf("Cockroach cluster %s has been initialized\n", clusterID)
 	if Context.BootstrapOnly {
@@ -120,7 +118,7 @@ var startCmd = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network\n",
+	Short: "start node by joining the gossip network",
 	Long:  cmdStartLongDescription,
 	Run:   runStart,
 	Flag:  *flag.CommandLine,
@@ -164,4 +162,23 @@ func runStart(cmd *commander.Command, args []string) {
 
 	// Block until one of the signals above is received.
 	<-c
+}
+
+// A quitCmd command shuts down the node server.
+var quitCmd = &commander.Command{
+	UsageLine: "quit",
+	Short: "shutdown node by entering it into draining mode first, followed " +
+		"by exit\n",
+	Long: `
+Shutdown the server. The first stage is drain, where any new requests
+will be ignored by the server. When all extant requests have been
+completed, the server exits.
+`,
+	Run:  runQuit,
+	Flag: *flag.CommandLine,
+}
+
+// runQuit accesses the quitquitquit shutdown path.
+func runQuit(cmd *commander.Command, args []string) {
+	server.RunQuit(Context)
 }

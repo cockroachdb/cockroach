@@ -58,7 +58,7 @@ var (
 // invokes the supplied test func with each instance.
 func runWithAllEngines(test func(e Engine, t *testing.T), t *testing.T) {
 	inMem := NewInMem(inMemAttrs, testCacheSize)
-	defer inMem.Stop()
+	defer inMem.Close()
 	test(inMem, t)
 }
 
@@ -505,7 +505,7 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 
 		val2 := []byte("2")
 		engine.Put(key, val2)
@@ -550,7 +550,7 @@ func TestSnapshotMethods(t *testing.T) {
 			engine.Put(keys[i], vals[i])
 		}
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 
 		// Verify Attrs.
 		var attrs proto.Attributes
@@ -676,7 +676,7 @@ func TestSnapshotNewSnapshot(t *testing.T) {
 			}
 		}()
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 		snap.NewSnapshot()
 	}, t)
 }
@@ -691,7 +691,7 @@ func TestSnapshotNewBatch(t *testing.T) {
 			}
 		}()
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 		snap.NewBatch()
 	}, t)
 }

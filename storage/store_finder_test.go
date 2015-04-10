@@ -48,8 +48,8 @@ func TestCapacityGossipUpdate(t *testing.T) {
 
 func TestStoreFinder(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, _ := createTestStore(t)
-	defer s.Stop()
+	s, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
 	if stores, _ := s.findStores(proto.Attributes{Attrs: required}); stores != nil {
@@ -100,8 +100,8 @@ func TestStoreFinder(t *testing.T) {
 // the map, if their gossip does not exist when we try to retrieve them.
 func TestStoreFinderGarbageCollection(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	s, _ := createTestStore(t)
-	defer s.Stop()
+	s, _, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	s.capacityKeys = stringSet{
 		"key0": struct{}{},

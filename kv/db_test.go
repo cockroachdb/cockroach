@@ -40,8 +40,8 @@ func createTestClient(addr string) *client.KV {
 // TestKVDBCoverage verifies that all methods may be invoked on the
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	kvClient := createTestClient(addr)
 	key := proto.Key("a")
@@ -158,8 +158,8 @@ func TestKVDBCoverage(t *testing.T) {
 // TestKVDBInternalMethods verifies no internal methods are available
 // HTTP DB interface.
 func TestKVDBInternalMethods(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	testCases := []struct {
 		method string
@@ -190,8 +190,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 // TestKVDBEndTransactionWithTriggers verifies that triggers are
 // disallowed on call to EndTransaction.
 func TestKVDBEndTransactionWithTriggers(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	kvClient := createTestClient(addr)
 	txnOpts := &client.TransactionOptions{Name: "test"}
@@ -217,8 +217,8 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 // TestKVDBContentTypes verifies all combinations of request /
 // response content encodings are supported.
 func TestKVDBContentType(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	putReq := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{
@@ -288,8 +288,8 @@ func TestKVDBContentType(t *testing.T) {
 // TestKVDBTransaction verifies that transactions work properly over
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	kvClient := createTestClient(addr)
 

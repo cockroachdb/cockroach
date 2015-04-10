@@ -91,7 +91,6 @@ type MultiRaft struct {
 	proposalChan    chan *proposal
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
-	stopper      *util.Stopper
 }
 
 // multiraftServer is a type alias to separate RPC methods
@@ -135,7 +134,6 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan *proposal, 100),
 		callbackChan:    make(chan func(), 100),
-		stopper:         util.NewStopper(1),
 	}
 
 	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
@@ -147,18 +145,11 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start() error {
+func (m *MultiRaft) Start(stopper *util.Stopper) error {
 	s := newState(m)
-	go s.start()
+	go s.start(stopper)
 
 	return nil
-}
-
-// Stop terminates the running raft instance and shuts down all network interfaces.
-func (m *MultiRaft) Stop() {
-	m.Transport.Stop(m.nodeID)
-	m.stopper.Stop()
-	m.multiNode.Stop()
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc
@@ -394,6 +385,7 @@ type state struct {
 	nodes         map[NodeID]*node
 	electionTimer *time.Timer
 	writeTask     *writeTask
+	stopper       *util.Stopper
 }
 
 func newState(m *MultiRaft) *state {
@@ -405,9 +397,13 @@ func newState(m *MultiRaft) *state {
 	}
 }
 
-func (s *state) start() {
+func (s *state) start(stopper *util.Stopper) {
+	s.stopper = stopper
+	s.stopper.AddWorker()
+	defer s.stopper.SetStopped()
+
 	log.V(1).Infof("node %v starting", s.nodeID)
-	go s.writeTask.start()
+	go s.writeTask.start(s.stopper)
 	// These maps form a kind of state machine: We don't want to read from the
 	// ready channel until the groups we got from the last read have made their
 	// way through the rest of the pipeline.
@@ -536,7 +532,7 @@ func (s *state) coalescedHeartbeat() {
 
 func (s *state) stop() {
 	log.V(6).Infof("node %v stopping", s.nodeID)
-	s.writeTask.stop()
+	s.MultiRaft.Transport.Stop(s.nodeID)
 
 	// Drain the create/remove group channels because other threads may be blocking
 	// on these operations.
@@ -551,8 +547,7 @@ func (s *state) stop() {
 			done = true
 		}
 	}
-
-	s.stopper.SetStopped()
+	s.MultiRaft.multiNode.Stop()
 }
 
 // addNode creates a node and registers the given groupIDs for that
@@ -769,6 +764,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if len(cc.Context) > 0 {
 					commandID, payload = decodeCommand(cc.Context)
 				}
+				s.stopper.StartTask()
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
@@ -807,6 +803,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 							for _, prop := range g.pending {
 								s.proposalChan <- prop
 							}
+							s.stopper.FinishTask()
 						}
 					},
 				})

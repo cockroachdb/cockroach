@@ -23,7 +23,8 @@ import (
 )
 
 func TestStopper(t *testing.T) {
-	s := NewStopper(1)
+	s := NewStopper()
+	s.AddWorker()
 
 	waiting := make(chan struct{})
 	go func() {
@@ -49,9 +50,10 @@ func TestStopper(t *testing.T) {
 
 func TestStopperMultipleStopees(t *testing.T) {
 	const count = 3
-	s := NewStopper(count)
+	s := NewStopper()
 
 	for i := 0; i < count; i++ {
+		s.AddWorker()
 		go func() {
 			<-s.ShouldStop()
 			s.SetStopped()
@@ -68,5 +70,47 @@ func TestStopperMultipleStopees(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Millisecond):
 		t.Errorf("timed out waiting for stop")
+	}
+}
+
+func TestStopperStartFinishTasks(t *testing.T) {
+	s := NewStopper()
+	s.AddWorker()
+
+	if !s.StartTask() {
+		t.Error("expected StartTask to succeed")
+	}
+	go s.Stop()
+
+	select {
+	case <-s.ShouldStop():
+		t.Fatal("expected stopper to be draining")
+	case <-time.After(1 * time.Millisecond):
+		// Expected.
+	}
+	s.FinishTask()
+	select {
+	case <-s.ShouldStop():
+		// Success.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stopper should be ready to stop")
+	}
+	s.SetStopped()
+}
+
+type testCloser bool
+
+func (tc *testCloser) Close() {
+	*tc = true
+}
+
+func TestStopperClosers(t *testing.T) {
+	s := NewStopper()
+	var tc1, tc2 testCloser
+	s.AddCloser(&tc1)
+	s.AddCloser(&tc2)
+	s.Stop()
+	if bool(tc1) != true || bool(tc2) != true {
+		t.Errorf("expected true & true; got %t & %t", tc1, tc2)
 	}
 }

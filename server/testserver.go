@@ -95,6 +95,7 @@ func (ts *TestServer) Start() error {
 	ctx := NewContext()
 	ctx.RPC = ts.RPCAddr
 	ctx.HTTP = ts.HTTPAddr
+	ctx.Addr = ts.HTTPAddr
 	ctx.Certs = ts.CertDir
 	ctx.MaxOffset = ts.MaxOffset
 
@@ -109,11 +110,12 @@ func (ts *TestServer) Start() error {
 	}
 	ctx.Engines = []engine.Engine{ts.Engine}
 	if !ts.SkipBootstrap {
-		kv, err := BootstrapCluster("cluster-1", ts.Engine)
+		stopper := util.NewStopper()
+		_, err := BootstrapCluster("cluster-1", ts.Engine, stopper)
 		if err != nil {
 			return util.Errorf("could not bootstrap cluster: %s", err)
 		}
-		defer kv.Close()
+		stopper.Stop()
 	}
 	err = ts.Server.Start(true)
 	if err != nil {

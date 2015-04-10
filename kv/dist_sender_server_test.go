@@ -52,7 +52,6 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	})
 	db := client.NewKV(nil, sender)
 	db.User = storage.UserRoot
-	defer db.Close()
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -119,7 +118,6 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 func TestMultiRangeScan(t *testing.T) {
 	s, db := setupMultipleRanges(t)
 	defer s.Stop()
-	defer db.Close()
 
 	// Write keys "a" and "b".
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
@@ -144,7 +142,6 @@ func TestMultiRangeScan(t *testing.T) {
 func TestMultiRangeScanInconsistent(t *testing.T) {
 	s, db := setupMultipleRanges(t)
 	defer s.Stop()
-	defer db.Close()
 
 	// Write keys "a" and "b".
 	keys := []proto.Key{proto.Key("a"), proto.Key("b")}

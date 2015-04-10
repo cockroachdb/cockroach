@@ -54,8 +54,6 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	req := proto.ScanArgs(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
 	resp := &proto.ScanResponse{}
 	if err := kv.Call(proto.Scan, req, resp); err != nil {
@@ -103,8 +101,6 @@ func runSplitRange(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	req := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
@@ -136,8 +132,6 @@ func runMergeRange(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	req := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: proto.Key(args[0]),

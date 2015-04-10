@@ -212,13 +212,13 @@ func (b *Batch) Commit() error {
 	return b.engine.WriteBatch(batch)
 }
 
-// Start returns an error if called on a Batch.
-func (b *Batch) Start() error {
-	return util.Errorf("cannot start a batch")
+// Open returns an error if called on a Batch.
+func (b *Batch) Open() error {
+	return util.Errorf("cannot open a batch")
 }
 
-// Stop is a noop for Batch.
-func (b *Batch) Stop() {
+// Close is a noop for Batch.
+func (b *Batch) Close() {
 }
 
 // Attrs is a noop for Batch.

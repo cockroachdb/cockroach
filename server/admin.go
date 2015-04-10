@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 const (
@@ -47,8 +48,10 @@ const (
 	// debugEndpoint is the prefix of golang's standard debug functionality
 	// for access to exported vars and pprof tools.
 	debugEndpoint = "/debug/"
-	// healthzPath is the healthz endpoint.
-	healthzPath = adminEndpoint + "healthz"
+	// healthPath is the health endpoint.
+	healthPath = adminEndpoint + "health"
+	// quitPath is the quit endpoint.
+	quitPath = adminEndpoint + "quit"
 	// acctPathPrefix is the prefix for accounting configuration changes.
 	acctPathPrefix = adminEndpoint + "acct"
 	// permPathPrefix is the prefix for permission configuration changes.
@@ -68,20 +71,22 @@ type actionHandler interface {
 // A adminServer provides a RESTful HTTP API to administration of
 // the cockroach cluster.
 type adminServer struct {
-	db   *client.KV // Key-value database client
-	acct *acctHandler
-	perm *permHandler
-	zone *zoneHandler
+	db      *client.KV    // Key-value database client
+	stopper *util.Stopper // Used to shutdown the server
+	acct    *acctHandler
+	perm    *permHandler
+	zone    *zoneHandler
 }
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(db *client.KV) *adminServer {
+func newAdminServer(db *client.KV, stopper *util.Stopper) *adminServer {
 	return &adminServer{
-		db:   db,
-		acct: &acctHandler{db: db},
-		perm: &permHandler{db: db},
-		zone: &zoneHandler{db: db},
+		db:      db,
+		stopper: stopper,
+		acct:    &acctHandler{db: db},
+		perm:    &permHandler{db: db},
+		zone:    &zoneHandler{db: db},
 	}
 }
 
@@ -93,17 +98,26 @@ func (s *adminServer) registerHandlers(mux *http.ServeMux) {
 	mux.HandleFunc(acctPathPrefix, s.handleAcctAction)
 	mux.HandleFunc(acctPathPrefix+"/", s.handleAcctAction)
 	mux.HandleFunc(debugEndpoint, s.handleDebug)
-	mux.HandleFunc(healthzPath, s.handleHealthz)
+	mux.HandleFunc(healthPath, s.handleHealth)
+	mux.HandleFunc(quitPath, s.handleQuit)
 	mux.HandleFunc(permPathPrefix, s.handlePermAction)
 	mux.HandleFunc(permPathPrefix+"/", s.handlePermAction)
 	mux.HandleFunc(zonePathPrefix, s.handleZoneAction)
 	mux.HandleFunc(zonePathPrefix+"/", s.handleZoneAction)
 }
 
-// handleHealthz responds to health requests from monitoring services.
-func (s *adminServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
+// handleHealth responds to health requests from monitoring services.
+func (s *adminServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintln(w, "ok")
+}
+
+// handleQuit is the shutdown hook. The server is first placed into a
+// draining mode, followed by exit.
+func (s *adminServer) handleQuit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprintln(w, "ok")
+	go s.stopper.Stop()
 }
 
 // handleDebug passes requests with the debugPathPrefix onto the default

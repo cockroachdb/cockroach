@@ -447,7 +447,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := NewInMem(proto.Attributes{}, 1<<20)
-	defer engine.Stop()
+	defer engine.Close()
 
 	if err := MVCCDelete(engine, nil, testKey1, makeTS(1, 0), nil); err != nil {
 		t.Fatal(err)
@@ -1323,7 +1323,7 @@ func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	raftID := int64(1)
 	engine := NewInMem(proto.Attributes{}, 1<<20)
-	defer engine.Stop()
+	defer engine.Close()
 
 	ms := &MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
@@ -1342,7 +1342,7 @@ func TestFindSplitKey(t *testing.T) {
 	}
 	ms.MergeStats(engine, raftID) // write stats
 	snap := engine.NewSnapshot()
-	defer snap.Stop()
+	defer snap.Close()
 	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
 	if err != nil {
 		t.Fatal(err)
@@ -1433,7 +1433,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 
 	for i, test := range testCases {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
-		defer engine.Stop()
+		defer engine.Close()
 
 		ms := &MVCCStats{}
 		val := proto.Value{Bytes: []byte(strings.Repeat("X", 10))}
@@ -1444,7 +1444,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 		}
 		ms.MergeStats(engine, raftID) // write stats
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 		rangeStart := test.keys[0]
 		rangeEnd := test.keys[len(test.keys)-1].Next()
 		splitKey, err := MVCCFindSplitKey(snap, raftID, rangeStart, rangeEnd)
@@ -1514,7 +1514,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 
 	for i, test := range testCases {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
-		defer engine.Stop()
+		defer engine.Close()
 
 		ms := &MVCCStats{}
 		var expKey proto.Key
@@ -1530,7 +1530,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		}
 		ms.MergeStats(engine, raftID) // write stats
 		snap := engine.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)

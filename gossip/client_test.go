@@ -35,13 +35,13 @@ const (
 
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
-func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Server) {
+func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
 	tlsConfig := rpc.LoadInsecureTLSConfig()
 	lclock := hlc.NewClock(hlc.UnixNano)
 	lRPCContext := rpc.NewContext(lclock, tlsConfig)
 
 	laddr := util.CreateTestAddr("unix")
-	lserver = rpc.NewServer(laddr, lRPCContext)
+	lserver := rpc.NewServer(laddr, lRPCContext)
 	if err := lserver.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -49,26 +49,29 @@ func startGossip(t *testing.T) (local, remote *Gossip, lserver, rserver *rpc.Ser
 	rclock := hlc.NewClock(hlc.UnixNano)
 	raddr := util.CreateTestAddr("unix")
 	rRPCContext := rpc.NewContext(rclock, tlsConfig)
-	rserver = rpc.NewServer(raddr, rRPCContext)
+	rserver := rpc.NewServer(raddr, rRPCContext)
 	if err := rserver.Start(); err != nil {
 		t.Fatal(err)
 	}
 	remote = New(rRPCContext, gossipInterval, TestBootstrap)
-	local.start(lserver)
-	remote.start(rserver)
+	stopper = util.NewStopper()
+	stopper.AddCloser(lserver)
+	stopper.AddCloser(rserver)
+	local.start(lserver, stopper)
+	remote.start(rserver, stopper)
 	time.Sleep(time.Millisecond)
 	return
 }
 
 // TestClientGossip verifies a client can gossip a delta to the server.
 func TestClientGossip(t *testing.T) {
-	local, remote, lserver, rserver := startGossip(t)
+	local, remote, stopper := startGossip(t)
 	local.AddInfo("local-key", "local value", time.Second)
 	remote.AddInfo("remote-key", "remote value", time.Second)
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
-	go client.start(local, disconnected)
+	go client.start(local, disconnected, stopper)
 
 	if err := util.IsTrueWithin(func() bool {
 		_, lerr := remote.GetInfo("local-key")
@@ -78,10 +81,7 @@ func TestClientGossip(t *testing.T) {
 		t.Errorf("gossip exchange failed or taking too long")
 	}
 
-	remote.stop()
-	local.stop()
-	lserver.Close()
-	rserver.Close()
+	stopper.Stop()
 	log.Info("done serving")
 	if client != <-disconnected {
 		t.Errorf("expected client disconnect after remote close")
@@ -92,19 +92,20 @@ func TestClientGossip(t *testing.T) {
 // will drop an outgoing client connection that is already an
 // inbound client connection of another node.
 func TestClientDisconnectRedundant(t *testing.T) {
-	local, remote, _, _ := startGossip(t)
+	local, remote, stopper := startGossip(t)
+	defer stopper.Stop()
 	// startClient doesn't lock the underlying gossip
 	// object, so we acquire those locks here.
 	local.mu.Lock()
 	remote.mu.Lock()
 	rAddr := remote.is.NodeAddr
 	lAddr := local.is.NodeAddr
-	local.startClient(rAddr)
-	remote.startClient(lAddr)
+	local.startClient(rAddr, stopper)
+	remote.startClient(lAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	go local.manage()
-	go remote.manage()
+	go local.manage(stopper)
+	go remote.manage(stopper)
 	wasConnected1, wasConnected2 := false, false
 	if err := util.IsTrueWithin(func() bool {
 		// Check which of the clients is connected to the other.

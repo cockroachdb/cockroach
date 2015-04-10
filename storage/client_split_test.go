@@ -62,8 +62,8 @@ func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t
 // at illegal keys.
 func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	for _, key := range []proto.Key{
 		engine.KeyMeta1Prefix,
@@ -88,8 +88,8 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 // to split at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	args, reply := adminSplitArgs(engine.KeyMin, []byte("a"), 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminSplit, args, reply); err != nil {
@@ -111,8 +111,8 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 // because the split key is invalid after the first split succeeds.
 func TestStoreRangeSplitConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	concurrentCount := int32(10)
 	wg := sync.WaitGroup{}
@@ -143,8 +143,8 @@ func TestStoreRangeSplitConcurrent(t *testing.T) {
 // and response caches have been properly accounted for.
 func TestStoreRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 	raftID := int64(1)
 	splitKey := proto.Key("m")
 	content := proto.Key("asdvb")
@@ -278,8 +278,8 @@ func TestStoreRangeSplit(t *testing.T) {
 // the pre-split.
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	// Split the range at the first user key.
 	args, reply := adminSplitArgs(engine.KeyMin, proto.Key("\x01"), 1, store.StoreID())
@@ -371,8 +371,8 @@ func fillRange(store *storage.Store, raftID int64, prefix proto.Key, bytes int64
 // exceeding zone's RangeMaxBytes.
 func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	maxBytes := int64(1 << 16)
 	rng := store.LookupRange(engine.KeyMin, nil)
@@ -416,8 +416,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 // boundaries.
 func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store := createTestStore(t)
-	defer store.Stop()
+	store, stopper := createTestStore(t)
+	defer stopper.Stop()
 
 	acctConfig := &proto.AcctConfig{}
 	zoneConfig := &proto.ZoneConfig{}

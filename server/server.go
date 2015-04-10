@@ -63,6 +63,7 @@ type Server struct {
 	structuredREST *structured.RESTServer
 	httpListener   *net.Listener // holds http endpoint information
 	raftTransport  multiraft.Transport
+	stopper        *util.Stopper
 }
 
 // NewServer creates a Server from a server.Context.
@@ -96,10 +97,11 @@ func NewServer(ctx *Context) (*Server, error) {
 	}
 
 	s := &Server{
-		ctx:   ctx,
-		host:  host,
-		mux:   http.NewServeMux(),
-		clock: hlc.NewClock(hlc.UnixNano),
+		ctx:     ctx,
+		host:    host,
+		mux:     http.NewServeMux(),
+		clock:   hlc.NewClock(hlc.UnixNano),
+		stopper: util.NewStopper(),
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
@@ -107,12 +109,13 @@ func NewServer(ctx *Context) (*Server, error) {
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", rpcAddr), rpcContext)
+	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
 
 	// Create a client.KVSender instance for use with this node's
 	// client to the key value database as well as
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
-	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable)
+	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.stopper)
 	s.kv = client.NewKV(nil, sender)
 	s.kv.User = storage.UserRoot
 
@@ -120,12 +123,13 @@ func NewServer(ctx *Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.stopper.AddCloser(s.raftTransport)
 
 	s.kvDB = kv.NewDBServer(sender)
 	s.kvREST = kv.NewRESTServer(s.kv)
 	// TODO(bdarnell): make StoreConfig configurable.
 	s.node = NewNode(s.kv, s.gossip, storage.StoreConfig{}, s.raftTransport)
-	s.admin = newAdminServer(s.kv)
+	s.admin = newAdminServer(s.kv, s.stopper)
 	s.status = newStatusServer(s.kv, s.gossip)
 	s.structuredDB = structured.NewDB(s.kv)
 	s.structuredREST = structured.NewRESTServer(s.structuredDB)
@@ -147,10 +151,10 @@ func (s *Server) Start(selfBootstrap bool) error {
 	if selfBootstrap {
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
 	}
-	s.gossip.Start(s.rpc)
+	s.gossip.Start(s.rpc, s.stopper)
 	log.Infoln("Started gossip instance")
 
-	if err := s.node.start(s.rpc, s.clock, s.ctx.Engines, s.ctx.NodeAttributes); err != nil {
+	if err := s.node.start(s.rpc, s.clock, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err
 	}
 
@@ -165,6 +169,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 	// http.ListenAndServe(), so we are storing it with the server.
 	s.httpListener = &ln
 	log.Infof("Starting HTTP server at %s", ln.Addr())
+	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
 	go http.Serve(ln, s)
 	return nil
 }
@@ -186,11 +191,7 @@ func (s *Server) initHTTP() {
 
 // Stop stops the server.
 func (s *Server) Stop() {
-	s.node.stop()
-	s.gossip.Stop()
-	s.rpc.Close()
-	s.kv.Close()
-	s.raftTransport.Close()
+	s.stopper.Stop()
 }
 
 type gzipResponseWriter struct {
@@ -224,6 +225,13 @@ func (w *gzipResponseWriter) Close() {
 // ServeHTTP is necessary to implement the http.Handler interface. It
 // will gzip a response if the appropriate request headers are set.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check if we're draining; if so return 503, service unavailable.
+	if !s.stopper.StartTask() {
+		http.Error(w, "service is draining", http.StatusServiceUnavailable)
+		return
+	}
+	defer s.stopper.FinishTask()
+
 	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		s.mux.ServeHTTP(w, r)
 		return

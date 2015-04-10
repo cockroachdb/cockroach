@@ -129,10 +129,6 @@ func (s *HTTPSender) Send(call *Call) {
 	}
 }
 
-// Close implements the KVSender interface.
-func (s *HTTPSender) Close() {
-}
-
 // post posts the call using the HTTP client. The call's method is
 // appended to KVDBEndpoint and set as the URL path. The call's arguments
 // are protobuf-serialized and written as the POST body. The content

@@ -41,16 +41,18 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // startServer returns the server, server address and a KV client for
 // access to the underlying database. The server should be closed by
 // the caller.
-func startServer(t *testing.T) (string, *httptest.Server, *client.KV) {
+func startServer(t *testing.T) (string, *client.KV, *util.Stopper) {
 	// Initialize engine, store, and localDB.
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	db, err := server.BootstrapCluster("test-cluster", e)
+	stopper := util.NewStopper()
+	db, err := server.BootstrapCluster("test-cluster", e, stopper)
 	if err != nil {
 		t.Fatalf("could not bootstrap test cluster: %s", err)
 	}
@@ -58,8 +60,9 @@ func startServer(t *testing.T) (string, *httptest.Server, *client.KV) {
 	mux.Handle(RESTPrefix, NewRESTServer(db))
 	mux.Handle(DBPrefix, NewDBServer(db.Sender()))
 	server := httptest.NewServer(mux)
+	stopper.AddCloser(server)
 	addr := server.Listener.Addr().String()
-	return addr, server, db
+	return addr, db, stopper
 }
 
 // HTTP methods, defined in RFC 2616.
@@ -78,8 +81,8 @@ type protoResp struct {
 }
 
 func TestMethods(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	testKey, testVal := "Hello, 世界", "世界 is cool"
 	testCases := []struct {
@@ -151,8 +154,8 @@ func TestMethods(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	// Create range of keys (with counters interspersed).
 	baseURL := "http://" + addr
@@ -285,8 +288,8 @@ func checkStatus(resp *http.Response, t *testing.T) {
 }
 
 func TestIncrement(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	testKey := "Hello, 世界"
 	testCases := []struct {
@@ -342,8 +345,8 @@ func TestIncrement(t *testing.T) {
 }
 
 func TestMixingCounters(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	entryKey := "value"
 	counterKey := "counter"
@@ -402,8 +405,8 @@ func TestMixingCounters(t *testing.T) {
 // TODO(spencer): we need to ensure proper permissions through the
 // HTTP API.
 func TestSystemKeys(t *testing.T) {
-	addr, server, _ := startServer(t)
-	defer server.Close()
+	addr, _, stopper := startServer(t)
+	defer stopper.Stop()
 
 	// Compute expected system key.
 	desc := &proto.RangeDescriptor{
@@ -447,8 +450,8 @@ func TestSystemKeys(t *testing.T) {
 }
 
 func TestKeysAndBodyArePreserved(t *testing.T) {
-	addr, server, db := startServer(t)
-	defer server.Close()
+	addr, db, stopper := startServer(t)
+	defer stopper.Stop()
 
 	encKey := "%00some%2Fkey%20that%20encodes%E4%B8%96%E7%95%8C"
 	encBody := "%00some%2FBODY%20that%20encodes"

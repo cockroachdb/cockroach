@@ -185,7 +185,6 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine.
 	appliedIndex uint64
-	closer       chan struct{} // Channel for closing the range
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -200,7 +199,6 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		rm:          rm,
-		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
@@ -233,7 +231,7 @@ func (r *Range) String() string {
 // start begins gossiping loop in the event this is the first
 // range in the map and gossips config information if the range
 // contains any of the configuration maps.
-func (r *Range) start() {
+func (r *Range) start(stopper *util.Stopper) {
 	// TODO(spencer): gossiping should only commence when the range gains
 	// the leader lease and it should stop when the range no longer holds
 	// the leader lease.
@@ -242,13 +240,8 @@ func (r *Range) start() {
 	r.maybeGossipConfigs(configDescriptors...)
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
-		go r.startGossip()
+		go r.startGossip(stopper)
 	}
-}
-
-// Stop ends the log processing loop.
-func (r *Range) stop() {
-	close(r.closer)
 }
 
 // Destroy cleans up all data associated with this range.
@@ -578,20 +571,11 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
 	completionFunc := func() error {
-		var err error
 		// First wait for raft to commit or abort the command.
-		select {
-		case err = <-raftChan:
-		case <-r.closer:
-			err = util.Errorf("range is closing")
-		}
-		if err == nil {
+		var err error
+		if err = <-raftChan; err == nil {
 			// Next if the command was commited, wait for the range to apply it.
-			select {
-			case err = <-pendingCmd.done:
-			case <-r.closer:
-				err = util.Errorf("range is closing")
-			}
+			err = <-pendingCmd.done
 		}
 
 		// As for reads, update timestamp cache with the timestamp
@@ -658,14 +642,17 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 
 // startGossip periodically gossips the cluster ID if it's the
 // first range and the raft leader.
-func (r *Range) startGossip() {
+func (r *Range) startGossip(stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	ticker := time.NewTicker(ttlClusterIDGossip / 2)
 	for {
 		select {
 		case <-ticker.C:
 			r.maybeGossipClusterID()
 			r.maybeGossipFirstRange()
-		case <-r.closer:
+		case <-stopper.ShouldStop():
 			return
 		}
 	}
@@ -1716,7 +1703,7 @@ func loadAppliedIndex(eng engine.Engine, raftID int64) (uint64, error) {
 func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 	// Copy all the data from a consistent RocksDB snapshot into a RaftSnapshotData.
 	snap := r.rm.NewSnapshot()
-	defer snap.Stop()
+	defer snap.Close()
 	var snapData proto.RaftSnapshotData
 
 	// Read the range metadata from the snapshot instead of the members
@@ -1882,7 +1869,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	splitKey := proto.Key(args.SplitKey)
 	if len(splitKey) == 0 {
 		snap := r.rm.NewSnapshot()
-		defer snap.Stop()
+		defer snap.Close()
 		var err error
 		if splitKey, err = engine.MVCCFindSplitKey(snap, desc.RaftID, desc.StartKey, desc.EndKey); err != nil {
 			reply.SetGoError(util.Errorf("unable to determine split key: %s", err))

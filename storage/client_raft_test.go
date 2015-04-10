@@ -65,8 +65,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// First, populate the store with data across two ranges. Each range contains commands
 	// that both predate and postdate the split.
 	func() {
-		store := createTestStoreWithEngine(t, eng, clock, true)
-		defer store.Stop()
+		store, stopper := createTestStoreWithEngine(t, eng, clock, true)
+		defer stopper.Stop()
 
 		increment := func(raftID int64, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args, resp := incrementArgs(key, value, raftID, store.StoreID())
@@ -100,8 +100,8 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store := createTestStoreWithEngine(t, eng, clock, false)
-	defer store.Stop()
+	store, stopper := createTestStoreWithEngine(t, eng, clock, false)
+	defer stopper.Stop()
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
@@ -195,17 +195,17 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Let the range propagate to the second replica.
-	// TODO(bdarnell): we need an observable indication that this has completed.
+	// TODO(bdarnell): use the stopper.Quiesce() method. The problem
+	//   right now is that raft / multiraft isn't creating a task for
+	//   high-level work it's creating while snapshotting and catching
+	//   up. Ideally we'll be able to capture that and then can just
+	//   invoke mtc.stopper.Quiesce() here.
+
 	// TODO(bdarnell): initial creation and replication needs to be atomic;
 	// cutting off the process too soon currently results in a corrupted range.
-	// We need 500ms to be safe in -race tests.
 	time.Sleep(500 * time.Millisecond)
 
-	mtc.StopStore(0)
-	mtc.StopStore(1)
-	mtc.RestartStore(0, t)
-	mtc.RestartStore(1, t)
+	mtc.Restart(t)
 
 	// Send a command on each store. The follower will forward to the leader and both
 	// commands will eventually commit.
@@ -223,7 +223,6 @@ func TestRestoreReplicas(t *testing.T) {
 		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
 			return false
 		}
-		log.Infof("got value %d", getResp.Value.GetInteger())
 		return getResp.Value.GetInteger() == 39
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)

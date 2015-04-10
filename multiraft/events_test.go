@@ -31,8 +31,7 @@ type eventDemux struct {
 	CommandCommitted          chan *EventCommandCommitted
 	MembershipChangeCommitted chan *EventMembershipChangeCommitted
 
-	events  <-chan interface{}
-	stopper *util.Stopper
+	events <-chan interface{}
 }
 
 func newEventDemux(events <-chan interface{}) *eventDemux {
@@ -41,11 +40,13 @@ func newEventDemux(events <-chan interface{}) *eventDemux {
 		make(chan *EventCommandCommitted, 1000),
 		make(chan *EventMembershipChangeCommitted, 1000),
 		events,
-		util.NewStopper(1),
 	}
 }
 
-func (e *eventDemux) start() {
+func (e *eventDemux) start(stopper *util.Stopper) {
+	stopper.AddWorker()
+	defer stopper.SetStopped()
+
 	go func() {
 		for {
 			select {
@@ -64,17 +65,12 @@ func (e *eventDemux) start() {
 					panic(fmt.Sprintf("got unknown event type %T", event))
 				}
 
-			case <-e.stopper.ShouldStop():
-				e.stopper.SetStopped()
+			case <-stopper.ShouldStop():
+				close(e.CommandCommitted)
+				close(e.MembershipChangeCommitted)
+				close(e.LeaderElection)
 				return
 			}
 		}
 	}()
-}
-
-func (e *eventDemux) stop() {
-	e.stopper.Stop()
-	close(e.CommandCommitted)
-	close(e.MembershipChangeCommitted)
-	close(e.LeaderElection)
 }

@@ -71,14 +71,14 @@ func (r *RocksDB) String() string {
 	return fmt.Sprintf("%s=%s", r.attrs.Attrs, r.dir)
 }
 
-// Start creates options and opens the database. If the database
+// Open creates options and opens the database. If the database
 // doesn't yet exist at the specified directory, one is initialized
-// from scratch. The RocksDB Start and Stop methods are reference
-// counted such that subsequent Start calls to an already started
+// from scratch. The RocksDB Open and Close methods are reference
+// counted such that subsequent Open calls to an already opened
 // RocksDB instance only bump the reference count. The RocksDB is only
-// closed when a sufficient number of Stop calls are performed to
+// closed when a sufficient number of Close calls are performed to
 // bring the reference count down to 0.
-func (r *RocksDB) Start() error {
+func (r *RocksDB) Open() error {
 	if r.rdb != nil {
 		atomic.AddInt32(&r.refcount, 1)
 		return nil
@@ -105,8 +105,8 @@ func (r *RocksDB) Start() error {
 	return nil
 }
 
-// Stop closes the database by deallocating the underlying handle.
-func (r *RocksDB) Stop() {
+// Close closes the database by deallocating the underlying handle.
+func (r *RocksDB) Close() {
 	if atomic.AddInt32(&r.refcount, -1) > 0 {
 		return
 	}
@@ -449,13 +449,13 @@ type rocksDBSnapshot struct {
 	handle *C.DBSnapshot
 }
 
-// Start is a noop.
-func (r *rocksDBSnapshot) Start() error {
+// Open is a noop.
+func (r *rocksDBSnapshot) Open() error {
 	return nil
 }
 
-// Stop releases the snapshot handle.
-func (r *rocksDBSnapshot) Stop() {
+// Close releases the snapshot handle.
+func (r *rocksDBSnapshot) Close() {
 	C.DBSnapshotRelease(r.handle)
 }
 
@@ -616,6 +616,6 @@ func (r *rocksDBIterator) Error() error {
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
 	// Note that rocksdb logging is only enabled if log.V(1) is true
-	// when RocksDB.Start() is called.
+	// when RocksDB.Open() is called.
 	log.Infof("%s", C.GoStringN(s, n))
 }
