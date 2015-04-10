@@ -215,14 +215,14 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *ut
 				bootstraps.PushBack(s)
 				continue
 			}
-			return err
+			return util.Errorf("failed to start store: %s", err)
 		}
 		if s.Ident.ClusterID == "" || s.Ident.NodeID == 0 {
 			return util.Errorf("unidentified store: %s", s)
 		}
 		capacity, err := s.Capacity()
 		if err != nil {
-			return err
+			return util.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof("initialized store %s: %+v", s, capacity)
 		n.lSender.AddStore(s)

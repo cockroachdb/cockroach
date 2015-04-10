@@ -151,11 +151,11 @@ func runStart(cmd *commander.Command, args []string) {
 
 	isBootstrap := cmd.Name() == "init"
 	err = s.Start(isBootstrap)
-	defer s.Stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)
 		return
 	}
+	defer s.Stop()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)

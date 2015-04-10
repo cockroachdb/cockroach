@@ -92,15 +92,9 @@ func (r *RocksDB) Open() error {
 		})
 	err := statusToError(status)
 	if err != nil {
-		return err
+		return util.Errorf("could not open RocksDB instance: %s", err)
 	}
 
-	if _, err := r.Capacity(); err != nil {
-		if err := r.Destroy(); err != nil {
-			log.Warningf("could not destroy db at %s", r.dir)
-		}
-		return err
-	}
 	atomic.AddInt32(&r.refcount, 1)
 	return nil
 }
