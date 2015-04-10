@@ -10,7 +10,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"net/rpc"
 	"testing"
 
@@ -19,6 +21,7 @@ import (
 
 	msg "github.com/cockroachdb/cockroach/rpc/codec/message.pb"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/gogo/protobuf/proto"
 )
 
 type Arith int
@@ -391,4 +394,74 @@ func BenchmarkEchoProtoRPC1K(b *testing.B) {
 
 func BenchmarkEchoProtoRPC64K(b *testing.B) {
 	benchmarkEchoProtoRPC(b, 64<<10)
+}
+
+func benchmarkEchoProtoHTTP(b *testing.B, size int) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer l.Close()
+
+	go http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqBody, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		req := &msg.EchoRequest{}
+		if err := proto.Unmarshal(reqBody, req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp := &msg.EchoResponse{Msg: req.Msg}
+		body, err := proto.Marshal(resp)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		w.Write(body)
+	}))
+
+	echoMsg := randString(size)
+	url := fmt.Sprintf("http://%s", l.Addr())
+
+	b.SetBytes(2 * int64(len(echoMsg)))
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			args := &msg.EchoRequest{Msg: echoMsg}
+			body, err := proto.Marshal(args)
+			if err != nil {
+				b.Fatal(err)
+			}
+			resp, err := http.Post(url, "application/x-protobuf", bytes.NewReader(body))
+			if err != nil {
+				b.Fatalf("%s: %v", url, err)
+			}
+			defer resp.Body.Close()
+
+			body, err = ioutil.ReadAll(resp.Body)
+			if err != nil {
+				b.Fatal(err)
+			}
+			reply := &msg.EchoResponse{}
+			if err := proto.Unmarshal(body, reply); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.StopTimer()
+}
+
+func BenchmarkEchoProtoHTTP1K(b *testing.B) {
+	benchmarkEchoProtoHTTP(b, 1<<10)
+}
+
+func BenchmarkEchoProtoHTTP64K(b *testing.B) {
+	benchmarkEchoProtoHTTP(b, 64<<10)
 }
