@@ -143,14 +143,6 @@ func (g *Gossip) SetBootstrap(bootstraps []net.Addr) {
 	}
 }
 
-// SetInterval sets the interval at which fresh info is gossiped to
-// incoming gossip clients.
-func (g *Gossip) SetInterval(interval time.Duration) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.interval = interval
-}
-
 // AddInfo adds or updates an info object. Returns an error if info
 // couldn't be added.
 func (g *Gossip) AddInfo(key string, val interface{}, ttl time.Duration) error {
