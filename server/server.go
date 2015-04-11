@@ -107,7 +107,7 @@ func NewServer(ctx *Context) (*Server, error) {
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", rpcAddr), rpcContext)
-	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrap)
+	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
 
 	// Create a client.KVSender instance for use with this node's
 	// client to the key value database as well as

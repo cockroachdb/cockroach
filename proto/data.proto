@@ -145,6 +145,11 @@ message InternalCommitTrigger {
   optional SplitTrigger split_trigger = 1;
   optional MergeTrigger merge_trigger = 2;
   optional ChangeReplicasTrigger change_replicas_trigger = 3;
+
+  // List of intents to resolve on commit or abort. Note that keys
+  // listed here will only be resolved if they fall on the same range
+  // that the transaction was started on.
+  repeated bytes intents = 4 [(gogoproto.customtype) = "Key"];
 }
 
 // IsolationType TODO(jiajia) Needs documentation.
@@ -221,7 +226,7 @@ message Transaction {
   optional Timestamp orig_timestamp = 10 [(gogoproto.nullable) = false];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between Timestamp and MaxTimestamp trigger a txn
-  // retry error, unless the node being read is listed in nodes_read
+  // retry error, unless the node being read is listed in certain_nodes
   // (in which case no more read uncertainty can occur).
   // The case MaxTimestamp < Timestamp is possible for transactions which have
   // been pushed; in this case, MaxTimestamp should be ignored.
@@ -245,6 +250,25 @@ message Transaction {
   // txn_coord_sender, with brief comments referring here.
   // See https://github.com/cockroachdb/cockroach/pull/221.
   optional NodeList certain_nodes = 12 [(gogoproto.nullable) = false];
+}
+
+// Lease contains information about leader leases including the
+// expiration and lease holder.
+message Lease {
+  // The expiration is a unix nanos timestamp and is set when requesting the
+  // lease according to the wall clock plus the Duration below at the lease
+  // requestor / grantee, which is also the only node that uses it directly.
+  // Granters must use always substitute their local walltime plus the
+  // Duration below instead.
+  optional int64 expiration = 1 [(gogoproto.nullable) = false];
+  // The duration, specified in nanoseconds, is the duration for which lease
+  // granters guarantee not to participate in elections, beginning right after
+  // the command has been accepted.
+  optional int64 duration = 2 [(gogoproto.nullable) = false];
+  // The leadership term for this lease.
+  optional uint64 term = 3 [(gogoproto.nullable) = false];
+  // The Raft NodeID on which the would-be lease holder lives.
+  optional uint64 raft_node_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftNodeID" ];
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

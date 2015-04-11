@@ -491,9 +491,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(EndTransactionRequest));
   EndTransactionResponse_descriptor_ = file->message_type(20);
-  static const int EndTransactionResponse_offsets_[2] = {
+  static const int EndTransactionResponse_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionResponse, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionResponse, commit_wait_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EndTransactionResponse, resolved_),
   };
   EndTransactionResponse_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -721,9 +722,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(AdminSplitResponse));
   AdminMergeRequest_descriptor_ = file->message_type(33);
-  static const int AdminMergeRequest_offsets_[2] = {
+  static const int AdminMergeRequest_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminMergeRequest, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminMergeRequest, subsumed_range_),
   };
   AdminMergeRequest_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -988,80 +988,80 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "uest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.R"
     "equestHeaderB\010\310\336\037\000\320\336\037\001\022\024\n\006commit\030\002 \001(\010B\004"
     "\310\336\037\000\022G\n\027internal_commit_trigger\030\003 \001(\0132&."
-    "cockroach.proto.InternalCommitTrigger\"n\n"
-    "\026EndTransactionResponse\0229\n\006header\030\001 \001(\0132"
+    "cockroach.proto.InternalCommitTrigger\"\211\001"
+    "\n\026EndTransactionResponse\0229\n\006header\030\001 \001(\013"
+    "2\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320"
+    "\336\037\001\022\031\n\013commit_wait\030\002 \001(\003B\004\310\336\037\000\022\031\n\010resolv"
+    "ed\030\003 \003(\014B\007\332\336\037\003Key\"g\n\020ReapQueueRequest\0228\n"
+    "\006header\030\001 \001(\0132\036.cockroach.proto.RequestH"
+    "eaderB\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336"
+    "\037\000\"~\n\021ReapQueueResponse\0229\n\006header\030\001 \001(\0132"
     "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\022\031\n\013commit_wait\030\002 \001(\003B\004\310\336\037\000\"g\n\020ReapQue"
-    "ueRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pr"
-    "oto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022\031\n\013max_resul"
-    "ts\030\002 \001(\003B\004\310\336\037\000\"~\n\021ReapQueueResponse\0229\n\006h"
-    "eader\030\001 \001(\0132\037.cockroach.proto.ResponseHe"
-    "aderB\010\310\336\037\000\320\336\037\001\022.\n\010messages\030\002 \003(\0132\026.cockr"
-    "oach.proto.ValueB\004\310\336\037\000\"P\n\024EnqueueUpdateR"
-    "equest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto"
-    ".RequestHeaderB\010\310\336\037\000\320\336\037\001\"R\n\025EnqueueUpdat"
-    "eResponse\0229\n\006header\030\001 \001(\0132\037.cockroach.pr"
-    "oto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"|\n\025EnqueueM"
-    "essageRequest\0228\n\006header\030\001 \001(\0132\036.cockroac"
-    "h.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\022)\n\003msg\030\002"
-    " \001(\0132\026.cockroach.proto.ValueB\004\310\336\037\000\"S\n\026En"
-    "queueMessageResponse\0229\n\006header\030\001 \001(\0132\037.c"
-    "ockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\""
-    "\303\005\n\014RequestUnion\0224\n\010contains\030\001 \001(\0132 .coc"
-    "kroach.proto.ContainsRequestH\000\022*\n\003get\030\002 "
-    "\001(\0132\033.cockroach.proto.GetRequestH\000\022*\n\003pu"
-    "t\030\003 \001(\0132\033.cockroach.proto.PutRequestH\000\022A"
-    "\n\017conditional_put\030\004 \001(\0132&.cockroach.prot"
-    "o.ConditionalPutRequestH\000\0226\n\tincrement\030\005"
-    " \001(\0132!.cockroach.proto.IncrementRequestH"
-    "\000\0220\n\006delete\030\006 \001(\0132\036.cockroach.proto.Dele"
-    "teRequestH\000\022;\n\014delete_range\030\007 \001(\0132#.cock"
-    "roach.proto.DeleteRangeRequestH\000\022,\n\004scan"
-    "\030\010 \001(\0132\034.cockroach.proto.ScanRequestH\000\022A"
-    "\n\017end_transaction\030\t \001(\0132&.cockroach.prot"
-    "o.EndTransactionRequestH\000\0227\n\nreap_queue\030"
-    "\n \001(\0132!.cockroach.proto.ReapQueueRequest"
-    "H\000\022\?\n\016enqueue_update\030\013 \001(\0132%.cockroach.p"
-    "roto.EnqueueUpdateRequestH\000\022A\n\017enqueue_m"
-    "essage\030\014 \001(\0132&.cockroach.proto.EnqueueMe"
-    "ssageRequestH\000:\004\310\240\037\001B\007\n\005value\"\320\005\n\rRespon"
-    "seUnion\0225\n\010contains\030\001 \001(\0132!.cockroach.pr"
-    "oto.ContainsResponseH\000\022+\n\003get\030\002 \001(\0132\034.co"
-    "ckroach.proto.GetResponseH\000\022+\n\003put\030\003 \001(\013"
-    "2\034.cockroach.proto.PutResponseH\000\022B\n\017cond"
-    "itional_put\030\004 \001(\0132\'.cockroach.proto.Cond"
-    "itionalPutResponseH\000\0227\n\tincrement\030\005 \001(\0132"
-    "\".cockroach.proto.IncrementResponseH\000\0221\n"
-    "\006delete\030\006 \001(\0132\037.cockroach.proto.DeleteRe"
-    "sponseH\000\022<\n\014delete_range\030\007 \001(\0132$.cockroa"
-    "ch.proto.DeleteRangeResponseH\000\022-\n\004scan\030\010"
-    " \001(\0132\035.cockroach.proto.ScanResponseH\000\022B\n"
-    "\017end_transaction\030\t \001(\0132\'.cockroach.proto"
-    ".EndTransactionResponseH\000\0228\n\nreap_queue\030"
-    "\n \001(\0132\".cockroach.proto.ReapQueueRespons"
-    "eH\000\022@\n\016enqueue_update\030\013 \001(\0132&.cockroach."
-    "proto.EnqueueUpdateResponseH\000\022B\n\017enqueue"
-    "_message\030\014 \001(\0132\'.cockroach.proto.Enqueue"
-    "MessageResponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014Batc"
-    "hRequest\0228\n\006header\030\001 \001(\0132\036.cockroach.pro"
-    "to.RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002"
-    " \003(\0132\035.cockroach.proto.RequestUnionB\004\310\336\037"
-    "\000\"\203\001\n\rBatchResponse\0229\n\006header\030\001 \001(\0132\037.co"
-    "ckroach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227"
-    "\n\tresponses\030\002 \003(\0132\036.cockroach.proto.Resp"
-    "onseUnionB\004\310\336\037\000\"m\n\021AdminSplitRequest\0228\n\006"
+    "\037\001\022.\n\010messages\030\002 \003(\0132\026.cockroach.proto.V"
+    "alueB\004\310\336\037\000\"P\n\024EnqueueUpdateRequest\0228\n\006he"
+    "ader\030\001 \001(\0132\036.cockroach.proto.RequestHead"
+    "erB\010\310\336\037\000\320\336\037\001\"R\n\025EnqueueUpdateResponse\0229\n"
+    "\006header\030\001 \001(\0132\037.cockroach.proto.Response"
+    "HeaderB\010\310\336\037\000\320\336\037\001\"|\n\025EnqueueMessageReques"
+    "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
+    "estHeaderB\010\310\336\037\000\320\336\037\001\022)\n\003msg\030\002 \001(\0132\026.cockr"
+    "oach.proto.ValueB\004\310\336\037\000\"S\n\026EnqueueMessage"
+    "Response\0229\n\006header\030\001 \001(\0132\037.cockroach.pro"
+    "to.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\303\005\n\014RequestU"
+    "nion\0224\n\010contains\030\001 \001(\0132 .cockroach.proto"
+    ".ContainsRequestH\000\022*\n\003get\030\002 \001(\0132\033.cockro"
+    "ach.proto.GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.co"
+    "ckroach.proto.PutRequestH\000\022A\n\017conditiona"
+    "l_put\030\004 \001(\0132&.cockroach.proto.Conditiona"
+    "lPutRequestH\000\0226\n\tincrement\030\005 \001(\0132!.cockr"
+    "oach.proto.IncrementRequestH\000\0220\n\006delete\030"
+    "\006 \001(\0132\036.cockroach.proto.DeleteRequestH\000\022"
+    ";\n\014delete_range\030\007 \001(\0132#.cockroach.proto."
+    "DeleteRangeRequestH\000\022,\n\004scan\030\010 \001(\0132\034.coc"
+    "kroach.proto.ScanRequestH\000\022A\n\017end_transa"
+    "ction\030\t \001(\0132&.cockroach.proto.EndTransac"
+    "tionRequestH\000\0227\n\nreap_queue\030\n \001(\0132!.cock"
+    "roach.proto.ReapQueueRequestH\000\022\?\n\016enqueu"
+    "e_update\030\013 \001(\0132%.cockroach.proto.Enqueue"
+    "UpdateRequestH\000\022A\n\017enqueue_message\030\014 \001(\013"
+    "2&.cockroach.proto.EnqueueMessageRequest"
+    "H\000:\004\310\240\037\001B\007\n\005value\"\320\005\n\rResponseUnion\0225\n\010c"
+    "ontains\030\001 \001(\0132!.cockroach.proto.Contains"
+    "ResponseH\000\022+\n\003get\030\002 \001(\0132\034.cockroach.prot"
+    "o.GetResponseH\000\022+\n\003put\030\003 \001(\0132\034.cockroach"
+    ".proto.PutResponseH\000\022B\n\017conditional_put\030"
+    "\004 \001(\0132\'.cockroach.proto.ConditionalPutRe"
+    "sponseH\000\0227\n\tincrement\030\005 \001(\0132\".cockroach."
+    "proto.IncrementResponseH\000\0221\n\006delete\030\006 \001("
+    "\0132\037.cockroach.proto.DeleteResponseH\000\022<\n\014"
+    "delete_range\030\007 \001(\0132$.cockroach.proto.Del"
+    "eteRangeResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cockr"
+    "oach.proto.ScanResponseH\000\022B\n\017end_transac"
+    "tion\030\t \001(\0132\'.cockroach.proto.EndTransact"
+    "ionResponseH\000\0228\n\nreap_queue\030\n \001(\0132\".cock"
+    "roach.proto.ReapQueueResponseH\000\022@\n\016enque"
+    "ue_update\030\013 \001(\0132&.cockroach.proto.Enqueu"
+    "eUpdateResponseH\000\022B\n\017enqueue_message\030\014 \001"
+    "(\0132\'.cockroach.proto.EnqueueMessageRespo"
+    "nseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchRequest\0228\n\006"
     "header\030\001 \001(\0132\036.cockroach.proto.RequestHe"
-    "aderB\010\310\336\037\000\320\336\037\001\022\036\n\tsplit_key\030\002 \001(\014B\013\310\336\037\000\332"
-    "\336\037\003Key\"O\n\022AdminSplitResponse\0229\n\006header\030\001"
-    " \001(\0132\037.cockroach.proto.ResponseHeaderB\010\310"
-    "\336\037\000\320\336\037\001\"\215\001\n\021AdminMergeRequest\0228\n\006header\030"
-    "\001 \001(\0132\036.cockroach.proto.RequestHeaderB\010\310"
-    "\336\037\000\320\336\037\001\022>\n\016subsumed_range\030\002 \001(\0132 .cockro"
-    "ach.proto.RangeDescriptorB\004\310\336\037\000\"O\n\022Admin"
-    "MergeResponse\0229\n\006header\030\001 \001(\0132\037.cockroac"
-    "h.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001*L\n\023Read"
-    "ConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCONSE"
-    "NSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\007Z\005proto", 5519);
+    "aderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003(\0132\035.cockr"
+    "oach.proto.RequestUnionB\004\310\336\037\000\"\203\001\n\rBatchR"
+    "esponse\0229\n\006header\030\001 \001(\0132\037.cockroach.prot"
+    "o.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\tresponses\030"
+    "\002 \003(\0132\036.cockroach.proto.ResponseUnionB\004\310"
+    "\336\037\000\"m\n\021AdminSplitRequest\0228\n\006header\030\001 \001(\013"
+    "2\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336"
+    "\037\001\022\036\n\tsplit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\"O\n\022Ad"
+    "minSplitResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
+    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"M\n\021A"
+    "dminMergeRequest\0228\n\006header\030\001 \001(\0132\036.cockr"
+    "oach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"O\n\022Ad"
+    "minMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
+    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001*L\n\023R"
+    "eadConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCO"
+    "NSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\007Z\005pro"
+    "to", 5482);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -6808,6 +6808,7 @@ void EndTransactionRequest::Swap(EndTransactionRequest* other) {
 #ifndef _MSC_VER
 const int EndTransactionResponse::kHeaderFieldNumber;
 const int EndTransactionResponse::kCommitWaitFieldNumber;
+const int EndTransactionResponse::kResolvedFieldNumber;
 #endif  // !_MSC_VER
 
 EndTransactionResponse::EndTransactionResponse()
@@ -6828,6 +6829,7 @@ EndTransactionResponse::EndTransactionResponse(const EndTransactionResponse& fro
 }
 
 void EndTransactionResponse::SharedCtor() {
+  ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   header_ = NULL;
   commit_wait_ = GOOGLE_LONGLONG(0);
@@ -6873,6 +6875,7 @@ void EndTransactionResponse::Clear() {
     }
     commit_wait_ = GOOGLE_LONGLONG(0);
   }
+  resolved_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -6910,6 +6913,20 @@ bool EndTransactionResponse::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(26)) goto parse_resolved;
+        break;
+      }
+
+      // repeated bytes resolved = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_resolved:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->add_resolved()));
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_resolved;
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -6950,6 +6967,12 @@ void EndTransactionResponse::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->commit_wait(), output);
   }
 
+  // repeated bytes resolved = 3;
+  for (int i = 0; i < this->resolved_size(); i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytes(
+      3, this->resolved(i), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -6970,6 +6993,12 @@ void EndTransactionResponse::SerializeWithCachedSizes(
   // optional int64 commit_wait = 2;
   if (has_commit_wait()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->commit_wait(), target);
+  }
+
+  // repeated bytes resolved = 3;
+  for (int i = 0; i < this->resolved_size(); i++) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteBytesToArray(3, this->resolved(i), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6999,6 +7028,13 @@ int EndTransactionResponse::ByteSize() const {
     }
 
   }
+  // repeated bytes resolved = 3;
+  total_size += 1 * this->resolved_size();
+  for (int i = 0; i < this->resolved_size(); i++) {
+    total_size += ::google::protobuf::internal::WireFormatLite::BytesSize(
+      this->resolved(i));
+  }
+
   if (!unknown_fields().empty()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -7024,6 +7060,7 @@ void EndTransactionResponse::MergeFrom(const ::google::protobuf::Message& from) 
 
 void EndTransactionResponse::MergeFrom(const EndTransactionResponse& from) {
   GOOGLE_CHECK_NE(&from, this);
+  resolved_.MergeFrom(from.resolved_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_header()) {
       mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
@@ -7056,6 +7093,7 @@ void EndTransactionResponse::Swap(EndTransactionResponse* other) {
   if (other != this) {
     std::swap(header_, other->header_);
     std::swap(commit_wait_, other->commit_wait_);
+    resolved_.Swap(&other->resolved_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -11043,7 +11081,6 @@ void AdminSplitResponse::Swap(AdminSplitResponse* other) {
 
 #ifndef _MSC_VER
 const int AdminMergeRequest::kHeaderFieldNumber;
-const int AdminMergeRequest::kSubsumedRangeFieldNumber;
 #endif  // !_MSC_VER
 
 AdminMergeRequest::AdminMergeRequest()
@@ -11054,7 +11091,6 @@ AdminMergeRequest::AdminMergeRequest()
 
 void AdminMergeRequest::InitAsDefaultInstance() {
   header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
-  subsumed_range_ = const_cast< ::cockroach::proto::RangeDescriptor*>(&::cockroach::proto::RangeDescriptor::default_instance());
 }
 
 AdminMergeRequest::AdminMergeRequest(const AdminMergeRequest& from)
@@ -11067,7 +11103,6 @@ AdminMergeRequest::AdminMergeRequest(const AdminMergeRequest& from)
 void AdminMergeRequest::SharedCtor() {
   _cached_size_ = 0;
   header_ = NULL;
-  subsumed_range_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -11079,7 +11114,6 @@ AdminMergeRequest::~AdminMergeRequest() {
 void AdminMergeRequest::SharedDtor() {
   if (this != default_instance_) {
     delete header_;
-    delete subsumed_range_;
   }
 }
 
@@ -11105,13 +11139,8 @@ AdminMergeRequest* AdminMergeRequest::New() const {
 }
 
 void AdminMergeRequest::Clear() {
-  if (_has_bits_[0 / 32] & 3) {
-    if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
-    }
-    if (has_subsumed_range()) {
-      if (subsumed_range_ != NULL) subsumed_range_->::cockroach::proto::RangeDescriptor::Clear();
-    }
+  if (has_header()) {
+    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
@@ -11132,19 +11161,6 @@ bool AdminMergeRequest::MergePartialFromCodedStream(
         if (tag == 10) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_subsumed_range;
-        break;
-      }
-
-      // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_subsumed_range:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_subsumed_range()));
         } else {
           goto handle_unusual;
         }
@@ -11183,12 +11199,6 @@ void AdminMergeRequest::SerializeWithCachedSizes(
       1, this->header(), output);
   }
 
-  // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-  if (has_subsumed_range()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->subsumed_range(), output);
-  }
-
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -11204,13 +11214,6 @@ void AdminMergeRequest::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         1, this->header(), target);
-  }
-
-  // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-  if (has_subsumed_range()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        2, this->subsumed_range(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -11230,13 +11233,6 @@ int AdminMergeRequest::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->header());
-    }
-
-    // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-    if (has_subsumed_range()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->subsumed_range());
     }
 
   }
@@ -11269,9 +11265,6 @@ void AdminMergeRequest::MergeFrom(const AdminMergeRequest& from) {
     if (from.has_header()) {
       mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
     }
-    if (from.has_subsumed_range()) {
-      mutable_subsumed_range()->::cockroach::proto::RangeDescriptor::MergeFrom(from.subsumed_range());
-    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -11296,7 +11289,6 @@ bool AdminMergeRequest::IsInitialized() const {
 void AdminMergeRequest::Swap(AdminMergeRequest* other) {
   if (other != this) {
     std::swap(header_, other->header_);
-    std::swap(subsumed_range_, other->subsumed_range_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

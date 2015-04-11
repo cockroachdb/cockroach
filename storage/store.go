@@ -125,8 +125,6 @@ func verifyKeys(start, end proto.Key) error {
 }
 
 // MakeRaftNodeID packs a NodeID and StoreID into a single uint64 for use in raft.
-// Both values are int32s, but we only allocate 8 bits for StoreID so we have
-// the option of expanding proto.NodeID and being more "wasteful" of node IDs.
 func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 	if n < 0 || s <= 0 {
 		// Zeroes are likely the result of incomplete initialization.
@@ -134,15 +132,12 @@ func MakeRaftNodeID(n proto.NodeID, s proto.StoreID) multiraft.NodeID {
 		// production but many tests use it.
 		panic("NodeID must be >= 0 and StoreID must be > 0")
 	}
-	if s > 0xff {
-		panic("StoreID must be <= 0xff")
-	}
-	return multiraft.NodeID(n)<<8 | multiraft.NodeID(s)
+	return multiraft.NodeID(n)<<32 | multiraft.NodeID(s)
 }
 
 // DecodeRaftNodeID converts a multiraft NodeID into its component NodeID and StoreID.
 func DecodeRaftNodeID(n multiraft.NodeID) (proto.NodeID, proto.StoreID) {
-	return proto.NodeID(n >> 8), proto.StoreID(n & 0xff)
+	return proto.NodeID(n >> 32), proto.StoreID(n & 0xffffffff)
 }
 
 type rangeAlreadyExists struct {
@@ -422,6 +417,7 @@ func (s *Store) Start() error {
 	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.transport,
 		Storage:                s,
+		StateMachine:           s,
 		TickInterval:           s.RaftTickInterval,
 		ElectionTimeoutTicks:   s.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.RaftHeartbeatIntervalTicks,
@@ -571,7 +567,9 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 	defer s.mu.Unlock()
 	zone := zoneMap[0].Config.(*proto.ZoneConfig)
 	idx := 0
-	for _, rng := range s.ranges {
+	// Note that we must iterate through the ranges in lexicographic
+	// order to match the ordering of the zoneMap.
+	for _, rng := range s.rangesByKey {
 		if idx < len(zoneMap)-1 && !rng.Desc().StartKey.Less(zoneMap[idx+1].Prefix) {
 			idx++
 			zone = zoneMap[idx].Config.(*proto.ZoneConfig)
@@ -1064,8 +1062,11 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	return wiErr
 }
 
-// ProposeRaftCommand submits a command to raft.
-func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) {
+// ProposeRaftCommand submits a command to raft. The command is processed
+// asynchronously and an error or nil will be written to the returned
+// channel when it is committed or aborted (but note that committed does
+// mean that it has been applied to the range yet).
+func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand) <-chan error {
 	value := cmd.Cmd.GetValue()
 	if value == nil {
 		panic("proposed a nil command")
@@ -1073,7 +1074,9 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 	// Lazily create group. TODO(bdarnell): make this non-lazy
 	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
 	if err != nil {
-		log.Fatal(err)
+		ch := make(chan error, 1)
+		ch <- err
+		return ch
 	}
 
 	data, err := gogoproto.Marshal(&cmd)
@@ -1086,13 +1089,12 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		// EndTransactionRequest with a ChangeReplicasTrigger is special because raft
 		// needs to understand it; it cannot simply be an opaque command.
 		crt := etr.InternalCommitTrigger.ChangeReplicasTrigger
-		s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
+		return s.multiraft.ChangeGroupMembership(uint64(cmd.RaftID), string(idKey),
 			changeTypeInternalToRaft[crt.ChangeType],
 			MakeRaftNodeID(crt.NodeID, crt.StoreID),
 			data)
-	} else {
-		s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 	}
+	return s.multiraft.SubmitCommand(uint64(cmd.RaftID), string(idKey), data)
 }
 
 // processRaft processes read/write commands that have been committed
@@ -1196,6 +1198,17 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 		}
 	}
 	return r
+}
+
+// AppliedIndex implements the multiraft.StateMachine interface.
+func (s *Store) AppliedIndex(groupID uint64) (uint64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.ranges[int64(groupID)]
+	if !ok {
+		return 0, util.Errorf("range %d not found", groupID)
+	}
+	return r.appliedIndex, nil
 }
 
 func raftEntryFormatter(data []byte) string {

@@ -2072,6 +2072,22 @@ class EndTransactionResponse : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 commit_wait() const;
   inline void set_commit_wait(::google::protobuf::int64 value);
 
+  // repeated bytes resolved = 3;
+  inline int resolved_size() const;
+  inline void clear_resolved();
+  static const int kResolvedFieldNumber = 3;
+  inline const ::std::string& resolved(int index) const;
+  inline ::std::string* mutable_resolved(int index);
+  inline void set_resolved(int index, const ::std::string& value);
+  inline void set_resolved(int index, const char* value);
+  inline void set_resolved(int index, const void* value, size_t size);
+  inline ::std::string* add_resolved();
+  inline void add_resolved(const ::std::string& value);
+  inline void add_resolved(const char* value);
+  inline void add_resolved(const void* value, size_t size);
+  inline const ::google::protobuf::RepeatedPtrField< ::std::string>& resolved() const;
+  inline ::google::protobuf::RepeatedPtrField< ::std::string>* mutable_resolved();
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.EndTransactionResponse)
  private:
   inline void set_has_header();
@@ -2085,6 +2101,7 @@ class EndTransactionResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::cockroach::proto::ResponseHeader* header_;
   ::google::protobuf::int64 commit_wait_;
+  ::google::protobuf::RepeatedPtrField< ::std::string> resolved_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -3494,28 +3511,16 @@ class AdminMergeRequest : public ::google::protobuf::Message {
   inline ::cockroach::proto::RequestHeader* release_header();
   inline void set_allocated_header(::cockroach::proto::RequestHeader* header);
 
-  // optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-  inline bool has_subsumed_range() const;
-  inline void clear_subsumed_range();
-  static const int kSubsumedRangeFieldNumber = 2;
-  inline const ::cockroach::proto::RangeDescriptor& subsumed_range() const;
-  inline ::cockroach::proto::RangeDescriptor* mutable_subsumed_range();
-  inline ::cockroach::proto::RangeDescriptor* release_subsumed_range();
-  inline void set_allocated_subsumed_range(::cockroach::proto::RangeDescriptor* subsumed_range);
-
   // @@protoc_insertion_point(class_scope:cockroach.proto.AdminMergeRequest)
  private:
   inline void set_has_header();
   inline void clear_has_header();
-  inline void set_has_subsumed_range();
-  inline void clear_has_subsumed_range();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::cockroach::proto::RequestHeader* header_;
-  ::cockroach::proto::RangeDescriptor* subsumed_range_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto();
@@ -5492,6 +5497,60 @@ inline void EndTransactionResponse::set_commit_wait(::google::protobuf::int64 va
   // @@protoc_insertion_point(field_set:cockroach.proto.EndTransactionResponse.commit_wait)
 }
 
+// repeated bytes resolved = 3;
+inline int EndTransactionResponse::resolved_size() const {
+  return resolved_.size();
+}
+inline void EndTransactionResponse::clear_resolved() {
+  resolved_.Clear();
+}
+inline const ::std::string& EndTransactionResponse::resolved(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_.Get(index);
+}
+inline ::std::string* EndTransactionResponse::mutable_resolved(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_.Mutable(index);
+}
+inline void EndTransactionResponse::set_resolved(int index, const ::std::string& value) {
+  // @@protoc_insertion_point(field_set:cockroach.proto.EndTransactionResponse.resolved)
+  resolved_.Mutable(index)->assign(value);
+}
+inline void EndTransactionResponse::set_resolved(int index, const char* value) {
+  resolved_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::set_resolved(int index, const void* value, size_t size) {
+  resolved_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline ::std::string* EndTransactionResponse::add_resolved() {
+  return resolved_.Add();
+}
+inline void EndTransactionResponse::add_resolved(const ::std::string& value) {
+  resolved_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::add_resolved(const char* value) {
+  resolved_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline void EndTransactionResponse::add_resolved(const void* value, size_t size) {
+  resolved_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:cockroach.proto.EndTransactionResponse.resolved)
+}
+inline const ::google::protobuf::RepeatedPtrField< ::std::string>&
+EndTransactionResponse::resolved() const {
+  // @@protoc_insertion_point(field_list:cockroach.proto.EndTransactionResponse.resolved)
+  return resolved_;
+}
+inline ::google::protobuf::RepeatedPtrField< ::std::string>*
+EndTransactionResponse::mutable_resolved() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.proto.EndTransactionResponse.resolved)
+  return &resolved_;
+}
+
 // -------------------------------------------------------------------
 
 // ReapQueueRequest
@@ -7274,47 +7333,6 @@ inline void AdminMergeRequest::set_allocated_header(::cockroach::proto::RequestH
     clear_has_header();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.AdminMergeRequest.header)
-}
-
-// optional .cockroach.proto.RangeDescriptor subsumed_range = 2;
-inline bool AdminMergeRequest::has_subsumed_range() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void AdminMergeRequest::set_has_subsumed_range() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void AdminMergeRequest::clear_has_subsumed_range() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void AdminMergeRequest::clear_subsumed_range() {
-  if (subsumed_range_ != NULL) subsumed_range_->::cockroach::proto::RangeDescriptor::Clear();
-  clear_has_subsumed_range();
-}
-inline const ::cockroach::proto::RangeDescriptor& AdminMergeRequest::subsumed_range() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.AdminMergeRequest.subsumed_range)
-  return subsumed_range_ != NULL ? *subsumed_range_ : *default_instance_->subsumed_range_;
-}
-inline ::cockroach::proto::RangeDescriptor* AdminMergeRequest::mutable_subsumed_range() {
-  set_has_subsumed_range();
-  if (subsumed_range_ == NULL) subsumed_range_ = new ::cockroach::proto::RangeDescriptor;
-  // @@protoc_insertion_point(field_mutable:cockroach.proto.AdminMergeRequest.subsumed_range)
-  return subsumed_range_;
-}
-inline ::cockroach::proto::RangeDescriptor* AdminMergeRequest::release_subsumed_range() {
-  clear_has_subsumed_range();
-  ::cockroach::proto::RangeDescriptor* temp = subsumed_range_;
-  subsumed_range_ = NULL;
-  return temp;
-}
-inline void AdminMergeRequest::set_allocated_subsumed_range(::cockroach::proto::RangeDescriptor* subsumed_range) {
-  delete subsumed_range_;
-  subsumed_range_ = subsumed_range;
-  if (subsumed_range) {
-    set_has_subsumed_range();
-  } else {
-    clear_has_subsumed_range();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.AdminMergeRequest.subsumed_range)
 }
 
 // -------------------------------------------------------------------

@@ -410,7 +410,11 @@ type InternalCommitTrigger struct {
 	SplitTrigger          *SplitTrigger          `protobuf:"bytes,1,opt,name=split_trigger" json:"split_trigger,omitempty"`
 	MergeTrigger          *MergeTrigger          `protobuf:"bytes,2,opt,name=merge_trigger" json:"merge_trigger,omitempty"`
 	ChangeReplicasTrigger *ChangeReplicasTrigger `protobuf:"bytes,3,opt,name=change_replicas_trigger" json:"change_replicas_trigger,omitempty"`
-	XXX_unrecognized      []byte                 `json:"-"`
+	// List of intents to resolve on commit or abort. Note that keys
+	// listed here will only be resolved if they fall on the same range
+	// that the transaction was started on.
+	Intents          []Key  `protobuf:"bytes,4,rep,name=intents,customtype=Key" json:"intents,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
@@ -489,7 +493,7 @@ type Transaction struct {
 	OrigTimestamp Timestamp `protobuf:"bytes,10,opt,name=orig_timestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between Timestamp and MaxTimestamp trigger a txn
-	// retry error, unless the node being read is listed in nodes_read
+	// retry error, unless the node being read is listed in certain_nodes
 	// (in which case no more read uncertainty can occur).
 	// The case MaxTimestamp < Timestamp is possible for transactions which have
 	// been pushed; in this case, MaxTimestamp should be ignored.
@@ -594,6 +598,58 @@ func (m *Transaction) GetCertainNodes() NodeList {
 		return m.CertainNodes
 	}
 	return NodeList{}
+}
+
+// Lease contains information about leader leases including the
+// expiration and lease holder.
+type Lease struct {
+	// The expiration is a unix nanos timestamp and is set when requesting the
+	// lease according to the wall clock plus the Duration below at the lease
+	// requestor / grantee, which is also the only node that uses it directly.
+	// Granters must use always substitute their local walltime plus the
+	// Duration below instead.
+	Expiration int64 `protobuf:"varint,1,opt,name=expiration" json:"expiration"`
+	// The duration, specified in nanoseconds, is the duration for which lease
+	// granters guarantee not to participate in elections, beginning right after
+	// the command has been accepted.
+	Duration int64 `protobuf:"varint,2,opt,name=duration" json:"duration"`
+	// The leadership term for this lease.
+	Term uint64 `protobuf:"varint,3,opt,name=term" json:"term"`
+	// The Raft NodeID on which the would-be lease holder lives.
+	RaftNodeID       uint64 `protobuf:"varint,4,opt,name=raft_node_id" json:"raft_node_id"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *Lease) Reset()         { *m = Lease{} }
+func (m *Lease) String() string { return proto1.CompactTextString(m) }
+func (*Lease) ProtoMessage()    {}
+
+func (m *Lease) GetExpiration() int64 {
+	if m != nil {
+		return m.Expiration
+	}
+	return 0
+}
+
+func (m *Lease) GetDuration() int64 {
+	if m != nil {
+		return m.Duration
+	}
+	return 0
+}
+
+func (m *Lease) GetTerm() uint64 {
+	if m != nil {
+		return m.Term
+	}
+	return 0
+}
+
+func (m *Lease) GetRaftNodeID() uint64 {
+	if m != nil {
+		return m.RaftNodeID
+	}
+	return 0
 }
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

@@ -43,7 +43,7 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	manual *hlc.ManualClock, lSender *LocalSender,
 	transport multiraft.Transport, err error) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, 250*time.Millisecond, "")
+	g := gossip.New(rpcContext, 250*time.Millisecond, gossip.TestBootstrap)
 	manual = hlc.NewManualClock(0)
 	clock = hlc.NewClock(manual.UnixNano)
 	eng = engine.NewInMem(proto.Attributes{}, 50<<20)

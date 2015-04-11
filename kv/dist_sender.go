@@ -111,6 +111,7 @@ type DistSender struct {
 	// outside of tests.
 	rpcSend         rpcSendFn
 	rpcRetryOptions util.RetryOptions
+	closer          chan struct{}
 }
 
 // rpcSendFn is the function type used to dispatch RPC calls.
@@ -152,6 +153,7 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 	ds := &DistSender{
 		clock:  clock,
 		gossip: gossip,
+		closer: make(chan struct{}),
 	}
 	ds.nodeID = ctx.NodeID
 	rcSize := ctx.RangeDescriptorCacheSize
@@ -429,6 +431,14 @@ func (ds *DistSender) Send(call *client.Call) {
 	for {
 		reply := call.Reply
 		err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+			select {
+			case <-ds.closer:
+				call.Reply.Header().SetGoError(
+					proto.NewTransactionRetryError(call.Args.Header().Txn))
+				return util.RetryBreak, nil
+			default:
+			}
+
 			reply.Header().Reset()
 			descNext = nil
 			desc, err := ds.rangeCache.LookupRangeDescriptor(args.Header().Key)
@@ -544,6 +554,7 @@ func (ds *DistSender) Send(call *client.Call) {
 	}
 }
 
-// Close implements the client.KVSender interface. It's a noop for the
-// distributed sender.
-func (ds *DistSender) Close() {}
+// Close implements the client.KVSender interface.
+func (ds *DistSender) Close() {
+	close(ds.closer)
+}

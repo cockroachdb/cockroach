@@ -102,8 +102,9 @@ func (tm *txnMetadata) addKeyRange(start, end proto.Key) {
 
 // close sends resolve intent commands for all key ranges this
 // transaction has covered, clears the keys cache and closes the
-// metadata heartbeat.
-func (tm *txnMetadata) close(txn *proto.Transaction, sender client.KVSender) {
+// metadata heartbeat. Any keys listed in the resolved slice have
+// already been resolved and do not receive resolve intent commands.
+func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sender client.KVSender) {
 	if tm.keys.Len() > 0 {
 		log.V(1).Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 	}
@@ -125,6 +126,17 @@ func (tm *txnMetadata) close(txn *proto.Transaction, sender client.KVSender) {
 		endKey := o.Key.End().(proto.Key)
 		if !call.Args.Header().Key.Next().Equal(endKey) {
 			call.Args.Header().EndKey = endKey
+		} else {
+			// Check if the key has already been resolved; skip if yes.
+			found := false
+			for _, k := range resolved {
+				if call.Args.Header().Key.Equal(k) {
+					found = true
+				}
+			}
+			if found {
+				continue
+			}
 		}
 		// We don't care about the reply channel; these are best
 		// effort. We simply fire and forget, each in its own goroutine.
@@ -305,7 +317,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 	switch t := call.Reply.Header().GoError().(type) {
 	case *proto.TransactionAbortedError:
 		// If already aborted, cleanup the txn on this TxnCoordSender.
-		tc.cleanupTxn(&t.Txn)
+		tc.cleanupTxn(&t.Txn, nil)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
 		log.Infof("%s: auto-wrapping in txn and re-executing", call.Method)
@@ -323,6 +335,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 		})
 	case nil:
 		var txn *proto.Transaction
+		var resolved []proto.Key
 		if call.Method == proto.EndTransaction {
 			txn = call.Reply.Header().Txn
 			// If the -linearizable flag is set, we want to make sure that
@@ -344,9 +357,10 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 					time.Sleep(sleepNS)
 				}()
 			}
+			resolved = call.Reply.(*proto.EndTransactionResponse).Resolved
 		}
 		if txn != nil && txn.Status != proto.PENDING {
-			tc.cleanupTxn(txn)
+			tc.cleanupTxn(txn, resolved)
 		}
 	}
 }
@@ -455,14 +469,14 @@ func (tc *TxnCoordSender) updateResponseTxn(argsHeader *proto.RequestHeader, rep
 // cleanupTxn is called to resolve write intents which were set down over
 // the course of the transaction. The txnMetadata object is removed from
 // the txns map.
-func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction) {
+func (tc *TxnCoordSender) cleanupTxn(txn *proto.Transaction, resolved []proto.Key) {
 	tc.Lock()
 	defer tc.Unlock()
 	txnMeta, ok := tc.txns[string(txn.ID)]
 	if !ok {
 		return
 	}
-	txnMeta.close(txn, tc.wrapped)
+	txnMeta.close(txn, resolved, tc.wrapped)
 	delete(tc.txns, string(txn.ID))
 }
 
@@ -522,8 +536,8 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction, closer chan struct{}
 			// write intents accordingly.
 			if reply.GoError() != nil {
 				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
-			} else if reply.Txn.Status != proto.PENDING {
-				tc.cleanupTxn(reply.Txn)
+			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
+				tc.cleanupTxn(reply.Txn, nil)
 				return
 			}
 		case <-closer:

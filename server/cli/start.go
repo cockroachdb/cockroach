@@ -137,6 +137,13 @@ func runStart(cmd *commander.Command, args []string) {
 	log.Infof("Build Time: %s", info.Time)
 	log.Infof("Build Deps: %s", info.Deps)
 
+	// First initialize the Context as it is used in other places.
+	err := Context.Init()
+	if err != nil {
+		log.Errorf("Failed to initialize context: %v", err)
+		return
+	}
+
 	log.Info("Starting cockroach cluster")
 	s, err := server.NewServer(Context)
 	if err != nil {
@@ -144,13 +151,8 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	err = Context.Init()
-	if err != nil {
-		log.Errorf("Failed to initialize context: %v", err)
-		return
-	}
-
-	err = s.Start(false)
+	isBootstrap := cmd.Name() == "init"
+	err = s.Start(isBootstrap)
 	defer s.Stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)

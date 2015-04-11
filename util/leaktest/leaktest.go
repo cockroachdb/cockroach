@@ -57,11 +57,7 @@ func interestingGoroutines() (gs []string) {
 			strings.Contains(stack, "created by runtime.gc") ||
 			strings.Contains(stack, "github.com/cockroachdb/cockroach/util/leaktest.interestingGoroutines") ||
 			strings.Contains(stack, "runtime.MHeap_Scavenger") ||
-			strings.Contains(stack, "golang/glog.init") ||
-			// Fire-and-forget write intent cleanups. These end up deadlocked
-			// because the store is already stopped by the time they run.
-			// TODO(bdarnell): clean these up better.
-			strings.Contains(stack, "*txnMetadata).close") {
+			strings.Contains(stack, "golang/glog.init") {
 			continue
 		}
 		gs = append(gs, stack)
@@ -117,7 +113,7 @@ func AfterTest(t testing.TB) {
 		"(*Range).AddCmd":                              "a range command",
 	}
 	var stacks string
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 8; i++ {
 		bad = ""
 		stacks = strings.Join(interestingGoroutines(), "\n\n")
 		for substr, what := range badSubstring {

@@ -29,14 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func adminMergeArgs(key []byte, subsumedRangeDesc proto.RangeDescriptor, raftID int64, storeID proto.StoreID) (*proto.AdminMergeRequest, *proto.AdminMergeResponse) {
+func adminMergeArgs(key []byte, raftID int64, storeID proto.StoreID) (*proto.AdminMergeRequest, *proto.AdminMergeResponse) {
 	args := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:     key,
 			RaftID:  raftID,
 			Replica: proto.Replica{StoreID: storeID},
 		},
-		SubsumedRange: subsumedRangeDesc,
 	}
 	reply := &proto.AdminMergeResponse{}
 	return args, reply
@@ -65,13 +64,13 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	store := createTestStore(t)
 	defer store.Stop()
 
-	_, bDesc, err := createSplitRanges(store)
+	_, _, err := createSplitRanges(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(engine.KeyMin, *bDesc, 1, store.StoreID())
+	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
 	err = store.ExecuteCmd(proto.AdminMerge, args, reply)
 	if err != nil {
 		t.Fatal(err)
@@ -123,9 +122,16 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 
 	// Merge the b range back into the a range.
-	args, reply := adminMergeArgs(engine.KeyMin, *bDesc, 1, store.StoreID())
+	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
 	if err := store.ExecuteCmd(proto.AdminMerge, args, reply); err != nil {
 		t.Fatal(err)
+	}
+
+	// Verify no intents remains on range descriptor keys.
+	for _, key := range []proto.Key{engine.RangeDescriptorKey(aDesc.StartKey), engine.RangeDescriptorKey(bDesc.StartKey)} {
+		if _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Verify the merge by looking up keys from both ranges.
@@ -176,29 +182,22 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	}
 }
 
-// TestStoreRangeMergeFirstRange attempts to merge the first range
-// which is illegal.
-func TestStoreRangeMergeFirstRange(t *testing.T) {
+// TestStoreRangeMergeLastRange verifies that merging the last range is a noop.
+func TestStoreRangeMergeLastRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
 
-	aDesc, _, err := createSplitRanges(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Merge the b range back into the a range. This should fail.
-	args, reply := adminMergeArgs(engine.KeyMin, *aDesc, 1, store.StoreID())
-	err = store.ExecuteCmd(proto.AdminMerge, args, reply)
-	if err == nil {
-		t.Fatal("Should not be able to merge the first range")
+	// Merge last range.
+	args, reply := adminMergeArgs(engine.KeyMin, 1, store.StoreID())
+	if err := store.ExecuteCmd(proto.AdminMerge, args, reply); err != nil {
+		t.Fatalf("merge of last range should be a noop: %s", err)
 	}
 }
 
-// TestStoreRangeMergeDistantRanges attempts to merge two ranges
-// that are not not next to each other.
-func TestStoreRangeMergeDistantRanges(t *testing.T) {
+// TestStoreRangeMergeNonConsecutive attempts to merge two ranges
+// that are not on same store.
+func TestStoreRangeMergeNonConsecutive(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	store := createTestStore(t)
 	defer store.Stop()
@@ -227,9 +226,12 @@ func TestStoreRangeMergeDistantRanges(t *testing.T) {
 		log.Errorf("split ranges keys are equal %q!=%q", rangeA.Desc().StartKey, rangeC.Desc().StartKey)
 	}
 
-	argsMerge, replyMerge := adminMergeArgs(rangeC.Desc().StartKey, *rangeC.Desc(), 1, store.StoreID())
+	// Remove range B from store and attempt to merge.
+	store.RemoveRange(rangeB)
+
+	argsMerge, replyMerge := adminMergeArgs(rangeA.Desc().StartKey, 1, store.StoreID())
 	rangeA.AdminMerge(argsMerge, replyMerge)
 	if replyMerge.Error == nil {
-		t.Fatal("Should not be able to merge two ranges that are not adjacent.")
+		t.Fatal("Should not be able to merge two ranges that are not consecutive on store")
 	}
 }

@@ -189,6 +189,13 @@ func TestStoreRangeSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify no intents remains on range descriptor keys.
+	for _, key := range []proto.Key{engine.RangeDescriptorKey(engine.KeyMin), engine.RangeDescriptorKey(splitKey)} {
+		if _, err := engine.MVCCGet(store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	rng := store.LookupRange(engine.KeyMin, nil)
 	newRng := store.LookupRange([]byte("m"), nil)
 	if !bytes.Equal(newRng.Desc().StartKey, splitKey) || !bytes.Equal(splitKey, rng.Desc().EndKey) {

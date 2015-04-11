@@ -22,11 +22,10 @@ import (
 	"fmt"
 	"os"
 
+	commander "code.google.com/p/go-commander"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	gogoproto "github.com/gogo/protobuf/proto"
-
-	"code.google.com/p/go-commander"
 )
 
 // A lsRangesCmd command lists the ranges in a cluster.
@@ -136,41 +135,14 @@ func runMergeRange(cmd *commander.Command, args []string) {
 		return
 	}
 
-	key := proto.Key(args[0])
-
 	kv := makeKVClient()
 	defer kv.Close()
 
-	scanReq := proto.ScanArgs(engine.RangeMetaKey(key), engine.KeyMeta2Prefix.PrefixEnd(), 2)
-	scanResp := &proto.ScanResponse{}
-	if err := kv.Call(proto.Scan, scanReq, scanResp); err != nil {
-		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
-		os.Exit(1)
-	}
-	switch len(scanResp.Rows) {
-	case 0:
-		fmt.Fprintf(os.Stderr, "unable to find range descriptor containing: %s\n", key)
-		os.Exit(1)
-	case 1:
-		fmt.Fprintf(os.Stderr, "range containing %s is the last range\n", key)
-		os.Exit(1)
-	case 2:
-		break
-	default:
-		fmt.Fprintf(os.Stderr, "unexpected number of scanned rows: %d\n", len(scanResp.Rows))
-		os.Exit(1)
-	}
-
 	req := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
-			Key: key,
+			Key: proto.Key(args[0]),
 		},
 	}
-	if err := gogoproto.Unmarshal(scanResp.Rows[1].Value.Bytes, &req.SubsumedRange); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: unable to unmarshal range descriptor\n", scanResp.Rows[1].Key)
-		os.Exit(1)
-	}
-
 	resp := &proto.AdminMergeResponse{}
 	if err := kv.Call(proto.AdminMerge, req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)

@@ -622,7 +622,9 @@ func (m *EndTransactionRequest) GetInternalCommitTrigger() *InternalCommitTrigge
 type EndTransactionResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Remaining time (ns).
-	CommitWait       int64  `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
+	CommitWait int64 `protobuf:"varint,2,opt,name=commit_wait" json:"commit_wait"`
+	// List of intents resolved by EndTransaction call.
+	Resolved         []Key  `protobuf:"bytes,3,rep,name=resolved,customtype=Key" json:"resolved,omitempty"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -1026,29 +1028,22 @@ func (m *AdminSplitResponse) String() string { return proto1.CompactTextString(m
 func (*AdminSplitResponse) ProtoMessage()    {}
 
 // An AdminMergeRequest is arguments to the AdminMerge() method. A
-// merge is always performed by calling AdminMerge on the range
-// that is subsuming the passed in subsumed_range. The ranges must
-// be consecutive in the key space, such that the end_key of the
-// subsuming range must match the start_key of the range being subsumed.
-// After the merge operation, the subsumed_range will no longer exist and
-// the subsuming range will now encompass all keys from its original
-// start_key to the end_key of the subsumed_range.
+// merge is performed by calling AdminMerge on the left-hand range of
+// two consecutive ranges (i.e. the range which contains keys which
+// sort first). This range will be the subsuming range and the right
+// hand range will be subsumed. After the merge operation, the
+// subsumed_range will no longer exist and the subsuming range will
+// now encompass all keys from its original start key to the end key
+// of the subsumed range. If AdminMerge is called on the final range
+// in the key space, it is a noop.
 type AdminMergeRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	SubsumedRange    RangeDescriptor `protobuf:"bytes,2,opt,name=subsumed_range" json:"subsumed_range"`
-	XXX_unrecognized []byte          `json:"-"`
+	XXX_unrecognized []byte `json:"-"`
 }
 
 func (m *AdminMergeRequest) Reset()         { *m = AdminMergeRequest{} }
 func (m *AdminMergeRequest) String() string { return proto1.CompactTextString(m) }
 func (*AdminMergeRequest) ProtoMessage()    {}
-
-func (m *AdminMergeRequest) GetSubsumedRange() RangeDescriptor {
-	if m != nil {
-		return m.SubsumedRange
-	}
-	return RangeDescriptor{}
-}
 
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
