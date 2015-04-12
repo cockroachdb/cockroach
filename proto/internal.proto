@@ -167,6 +167,22 @@ message InternalTruncateLogResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An InternalLeaderLeaseRequest is arguments to the InternalLeaderLease()
+// method. It is sent by the store on behalf of one of its ranges upon receipt
+// of a leader election event for that range.
+message InternalLeaderLeaseRequest {
+  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional Lease lease = 2[(gogoproto.nullable) = false];
+}
+
+// An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
+// operation.
+message InternalLeaderLeaseResponse{
+  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in storage/engine/db.cc in GetResponseHeader().
@@ -219,7 +235,8 @@ message InternalRaftCommandUnion {
     InternalResolveIntentRequest internal_resolve_intent = 34;
     InternalMergeRequest internal_merge_response = 35;
     InternalTruncateLogRequest internal_truncate_log = 36;
-    InternalGCRequest internal_gc = 37;
+    InternalGCRequest internal_gc = 37 [(gogoproto.customname) = "InternalGC"];
+    InternalLeaderLeaseRequest internal_lease = 38;
   }
 }
 

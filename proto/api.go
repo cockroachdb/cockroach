@@ -368,6 +368,8 @@ func MethodForRequest(req Request) (string, error) {
 		return InternalMerge, nil
 	case *InternalTruncateLogRequest:
 		return InternalTruncateLog, nil
+	case *InternalLeaderLeaseRequest:
+		return InternalLeaderLease, nil
 	}
 	return "", util.Errorf("unhandled request %T", req)
 }
@@ -427,6 +429,8 @@ func CreateArgs(method string) (Request, error) {
 		return &InternalMergeRequest{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogRequest{}, nil
+	case InternalLeaderLease:
+		return &InternalLeaderLeaseRequest{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }
@@ -476,6 +480,8 @@ func CreateReply(method string) (Response, error) {
 		return &InternalMergeResponse{}, nil
 	case InternalTruncateLog:
 		return &InternalTruncateLogResponse{}, nil
+	case InternalLeaderLease:
+		return &InternalLeaderLeaseResponse{}, nil
 	}
 	return nil, util.Errorf("unhandled method %s", method)
 }

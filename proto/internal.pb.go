@@ -337,6 +337,37 @@ func (m *InternalTruncateLogResponse) Reset()         { *m = InternalTruncateLog
 func (m *InternalTruncateLogResponse) String() string { return proto1.CompactTextString(m) }
 func (*InternalTruncateLogResponse) ProtoMessage()    {}
 
+// An InternalLeaderLeaseRequest is arguments to the InternalLeaderLease()
+// method. It is sent by the store on behalf of one of its ranges upon receipt
+// of a leader election event for that range.
+type InternalLeaderLeaseRequest struct {
+	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	Lease            Lease  `protobuf:"bytes,2,opt,name=lease" json:"lease"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *InternalLeaderLeaseRequest) Reset()         { *m = InternalLeaderLeaseRequest{} }
+func (m *InternalLeaderLeaseRequest) String() string { return proto1.CompactTextString(m) }
+func (*InternalLeaderLeaseRequest) ProtoMessage()    {}
+
+func (m *InternalLeaderLeaseRequest) GetLease() Lease {
+	if m != nil {
+		return m.Lease
+	}
+	return Lease{}
+}
+
+// An InternalLeaderLeaseResponse is the response to an InternalLeaderLease()
+// operation.
+type InternalLeaderLeaseResponse struct {
+	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *InternalLeaderLeaseResponse) Reset()         { *m = InternalLeaderLeaseResponse{} }
+func (m *InternalLeaderLeaseResponse) String() string { return proto1.CompactTextString(m) }
+func (*InternalLeaderLeaseResponse) ProtoMessage()    {}
+
 // A ReadWriteCmdResponse is a union type containing instances of all
 // mutating commands. Note that any entry added here must be handled
 // in storage/engine/db.cc in GetResponseHeader().
@@ -493,7 +524,8 @@ type InternalRaftCommandUnion struct {
 	InternalResolveIntent *InternalResolveIntentRequest `protobuf:"bytes,34,opt,name=internal_resolve_intent" json:"internal_resolve_intent,omitempty"`
 	InternalMergeResponse *InternalMergeRequest         `protobuf:"bytes,35,opt,name=internal_merge_response" json:"internal_merge_response,omitempty"`
 	InternalTruncateLog   *InternalTruncateLogRequest   `protobuf:"bytes,36,opt,name=internal_truncate_log" json:"internal_truncate_log,omitempty"`
-	InternalGc            *InternalGCRequest            `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
+	InternalGC            *InternalGCRequest            `protobuf:"bytes,37,opt,name=internal_gc" json:"internal_gc,omitempty"`
+	InternalLease         *InternalLeaderLeaseRequest   `protobuf:"bytes,38,opt,name=internal_lease" json:"internal_lease,omitempty"`
 	XXX_unrecognized      []byte                        `json:"-"`
 }
 
@@ -634,9 +666,16 @@ func (m *InternalRaftCommandUnion) GetInternalTruncateLog() *InternalTruncateLog
 	return nil
 }
 
-func (m *InternalRaftCommandUnion) GetInternalGc() *InternalGCRequest {
+func (m *InternalRaftCommandUnion) GetInternalGC() *InternalGCRequest {
 	if m != nil {
-		return m.InternalGc
+		return m.InternalGC
+	}
+	return nil
+}
+
+func (m *InternalRaftCommandUnion) GetInternalLease() *InternalLeaderLeaseRequest {
+	if m != nil {
+		return m.InternalLease
 	}
 	return nil
 }
@@ -2162,6 +2201,162 @@ func (m *InternalTruncateLogResponse) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+func (m *InternalLeaderLeaseRequest) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Lease", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Lease.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
+func (m *InternalLeaderLeaseResponse) Unmarshal(data []byte) error {
+	l := len(data)
+	index := 0
+	for index < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if index >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[index]
+			index++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		default:
+			var sizeOfWire int
+			for {
+				sizeOfWire++
+				wire >>= 7
+				if wire == 0 {
+					break
+				}
+			}
+			index -= sizeOfWire
+			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
+			if err != nil {
+				return err
+			}
+			if (index + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
+			index += skippy
+		}
+	}
+	return nil
+}
 func (m *ReadWriteCmdResponse) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -3143,7 +3338,7 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 			index = postIndex
 		case 37:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field InternalGc", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field InternalGC", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3161,10 +3356,37 @@ func (m *InternalRaftCommandUnion) Unmarshal(data []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.InternalGc == nil {
-				m.InternalGc = &InternalGCRequest{}
+			if m.InternalGC == nil {
+				m.InternalGC = &InternalGCRequest{}
 			}
-			if err := m.InternalGc.Unmarshal(data[index:postIndex]); err != nil {
+			if err := m.InternalGC.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 38:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InternalLease", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.InternalLease == nil {
+				m.InternalLease = &InternalLeaderLeaseRequest{}
+			}
+			if err := m.InternalLease.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -4040,8 +4262,11 @@ func (this *InternalRaftCommandUnion) GetValue() interface{} {
 	if this.InternalTruncateLog != nil {
 		return this.InternalTruncateLog
 	}
-	if this.InternalGc != nil {
-		return this.InternalGc
+	if this.InternalGC != nil {
+		return this.InternalGC
+	}
+	if this.InternalLease != nil {
+		return this.InternalLease
 	}
 	return nil
 }
@@ -4087,7 +4312,9 @@ func (this *InternalRaftCommandUnion) SetValue(value interface{}) bool {
 	case *InternalTruncateLogRequest:
 		this.InternalTruncateLog = vt
 	case *InternalGCRequest:
-		this.InternalGc = vt
+		this.InternalGC = vt
+	case *InternalLeaderLeaseRequest:
+		this.InternalLease = vt
 	default:
 		return false
 	}
@@ -4285,6 +4512,30 @@ func (m *InternalTruncateLogResponse) Size() (n int) {
 	return n
 }
 
+func (m *InternalLeaderLeaseRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.RequestHeader.Size()
+	n += 1 + l + sovInternal(uint64(l))
+	l = m.Lease.Size()
+	n += 1 + l + sovInternal(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *InternalLeaderLeaseResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ResponseHeader.Size()
+	n += 1 + l + sovInternal(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *ReadWriteCmdResponse) Size() (n int) {
 	var l int
 	_ = l
@@ -4433,8 +4684,12 @@ func (m *InternalRaftCommandUnion) Size() (n int) {
 		l = m.InternalTruncateLog.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
-	if m.InternalGc != nil {
-		l = m.InternalGc.Size()
+	if m.InternalGC != nil {
+		l = m.InternalGC.Size()
+		n += 2 + l + sovInternal(uint64(l))
+	}
+	if m.InternalLease != nil {
+		l = m.InternalLease.Size()
 		n += 2 + l + sovInternal(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -5096,6 +5351,72 @@ func (m *InternalTruncateLogResponse) MarshalTo(data []byte) (n int, err error) 
 	return i, nil
 }
 
+func (m *InternalLeaderLeaseRequest) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *InternalLeaderLeaseRequest) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.RequestHeader.Size()))
+	n21, err := m.RequestHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
+	data[i] = 0x12
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.Lease.Size()))
+	n22, err := m.Lease.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n22
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *InternalLeaderLeaseResponse) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *InternalLeaderLeaseResponse) MarshalTo(data []byte) (n int, err error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	data[i] = 0xa
+	i++
+	i = encodeVarintInternal(data, i, uint64(m.ResponseHeader.Size()))
+	n23, err := m.ResponseHeader.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
+	if m.XXX_unrecognized != nil {
+		i += copy(data[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *ReadWriteCmdResponse) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -5115,151 +5436,151 @@ func (m *ReadWriteCmdResponse) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.Put.Size()))
-		n21, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n21
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.ConditionalPut.Size()))
-		n22, err := m.ConditionalPut.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n22
-	}
-	if m.Increment != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.Increment.Size()))
-		n23, err := m.Increment.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n23
-	}
-	if m.Delete != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.Delete.Size()))
-		n24, err := m.Delete.MarshalTo(data[i:])
+		n24, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n24
 	}
-	if m.DeleteRange != nil {
-		data[i] = 0x2a
+	if m.ConditionalPut != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.DeleteRange.Size()))
-		n25, err := m.DeleteRange.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.ConditionalPut.Size()))
+		n25, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n25
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x32
+	if m.Increment != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EndTransaction.Size()))
-		n26, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Increment.Size()))
+		n26, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n26
 	}
-	if m.ReapQueue != nil {
-		data[i] = 0x3a
+	if m.Delete != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.ReapQueue.Size()))
-		n27, err := m.ReapQueue.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Delete.Size()))
+		n27, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n27
 	}
-	if m.EnqueueUpdate != nil {
-		data[i] = 0x42
+	if m.DeleteRange != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EnqueueUpdate.Size()))
-		n28, err := m.EnqueueUpdate.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.DeleteRange.Size()))
+		n28, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n28
 	}
-	if m.EnqueueMessage != nil {
-		data[i] = 0x4a
+	if m.EndTransaction != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EnqueueMessage.Size()))
-		n29, err := m.EnqueueMessage.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.EndTransaction.Size()))
+		n29, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n29
 	}
-	if m.InternalHeartbeatTxn != nil {
-		data[i] = 0x52
+	if m.ReapQueue != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalHeartbeatTxn.Size()))
-		n30, err := m.InternalHeartbeatTxn.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.ReapQueue.Size()))
+		n30, err := m.ReapQueue.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n30
 	}
-	if m.InternalPushTxn != nil {
-		data[i] = 0x5a
+	if m.EnqueueUpdate != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalPushTxn.Size()))
-		n31, err := m.InternalPushTxn.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.EnqueueUpdate.Size()))
+		n31, err := m.EnqueueUpdate.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n31
 	}
-	if m.InternalResolveIntent != nil {
-		data[i] = 0x62
+	if m.EnqueueMessage != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalResolveIntent.Size()))
-		n32, err := m.InternalResolveIntent.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.EnqueueMessage.Size()))
+		n32, err := m.EnqueueMessage.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n32
 	}
-	if m.InternalMerge != nil {
-		data[i] = 0x6a
+	if m.InternalHeartbeatTxn != nil {
+		data[i] = 0x52
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalMerge.Size()))
-		n33, err := m.InternalMerge.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.InternalHeartbeatTxn.Size()))
+		n33, err := m.InternalHeartbeatTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n33
 	}
-	if m.InternalTruncateLog != nil {
-		data[i] = 0x72
+	if m.InternalPushTxn != nil {
+		data[i] = 0x5a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalTruncateLog.Size()))
-		n34, err := m.InternalTruncateLog.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.InternalPushTxn.Size()))
+		n34, err := m.InternalPushTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n34
 	}
-	if m.InternalGc != nil {
-		data[i] = 0x7a
+	if m.InternalResolveIntent != nil {
+		data[i] = 0x62
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalGc.Size()))
-		n35, err := m.InternalGc.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.InternalResolveIntent.Size()))
+		n35, err := m.InternalResolveIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n35
+	}
+	if m.InternalMerge != nil {
+		data[i] = 0x6a
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.InternalMerge.Size()))
+		n36, err := m.InternalMerge.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n36
+	}
+	if m.InternalTruncateLog != nil {
+		data[i] = 0x72
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.InternalTruncateLog.Size()))
+		n37, err := m.InternalTruncateLog.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n37
+	}
+	if m.InternalGc != nil {
+		data[i] = 0x7a
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.InternalGc.Size()))
+		n38, err := m.InternalGc.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n38
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5286,121 +5607,121 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.Contains.Size()))
-		n36, err := m.Contains.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n36
-	}
-	if m.Get != nil {
-		data[i] = 0x12
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.Get.Size()))
-		n37, err := m.Get.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n37
-	}
-	if m.Put != nil {
-		data[i] = 0x1a
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.Put.Size()))
-		n38, err := m.Put.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n38
-	}
-	if m.ConditionalPut != nil {
-		data[i] = 0x22
-		i++
-		i = encodeVarintInternal(data, i, uint64(m.ConditionalPut.Size()))
-		n39, err := m.ConditionalPut.MarshalTo(data[i:])
+		n39, err := m.Contains.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n39
 	}
-	if m.Increment != nil {
-		data[i] = 0x2a
+	if m.Get != nil {
+		data[i] = 0x12
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.Increment.Size()))
-		n40, err := m.Increment.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Get.Size()))
+		n40, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n40
 	}
-	if m.Delete != nil {
-		data[i] = 0x32
+	if m.Put != nil {
+		data[i] = 0x1a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.Delete.Size()))
-		n41, err := m.Delete.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Put.Size()))
+		n41, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n41
 	}
-	if m.DeleteRange != nil {
-		data[i] = 0x3a
+	if m.ConditionalPut != nil {
+		data[i] = 0x22
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.DeleteRange.Size()))
-		n42, err := m.DeleteRange.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.ConditionalPut.Size()))
+		n42, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n42
 	}
-	if m.Scan != nil {
-		data[i] = 0x42
+	if m.Increment != nil {
+		data[i] = 0x2a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.Scan.Size()))
-		n43, err := m.Scan.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Increment.Size()))
+		n43, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n43
 	}
-	if m.EndTransaction != nil {
-		data[i] = 0x4a
+	if m.Delete != nil {
+		data[i] = 0x32
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EndTransaction.Size()))
-		n44, err := m.EndTransaction.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Delete.Size()))
+		n44, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n44
 	}
-	if m.ReapQueue != nil {
-		data[i] = 0x52
+	if m.DeleteRange != nil {
+		data[i] = 0x3a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.ReapQueue.Size()))
-		n45, err := m.ReapQueue.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.DeleteRange.Size()))
+		n45, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n45
 	}
-	if m.EnqueueUpdate != nil {
-		data[i] = 0x5a
+	if m.Scan != nil {
+		data[i] = 0x42
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EnqueueUpdate.Size()))
-		n46, err := m.EnqueueUpdate.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.Scan.Size()))
+		n46, err := m.Scan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n46
 	}
-	if m.EnqueueMessage != nil {
-		data[i] = 0x62
+	if m.EndTransaction != nil {
+		data[i] = 0x4a
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.EnqueueMessage.Size()))
-		n47, err := m.EnqueueMessage.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.EndTransaction.Size()))
+		n47, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n47
+	}
+	if m.ReapQueue != nil {
+		data[i] = 0x52
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.ReapQueue.Size()))
+		n48, err := m.ReapQueue.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n48
+	}
+	if m.EnqueueUpdate != nil {
+		data[i] = 0x5a
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.EnqueueUpdate.Size()))
+		n49, err := m.EnqueueUpdate.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n49
+	}
+	if m.EnqueueMessage != nil {
+		data[i] = 0x62
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.EnqueueMessage.Size()))
+		n50, err := m.EnqueueMessage.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n50
 	}
 	if m.Batch != nil {
 		data[i] = 0xf2
@@ -5408,11 +5729,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.Batch.Size()))
-		n48, err := m.Batch.MarshalTo(data[i:])
+		n51, err := m.Batch.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n48
+		i += n51
 	}
 	if m.InternalRangeLookup != nil {
 		data[i] = 0xfa
@@ -5420,11 +5741,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x1
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalRangeLookup.Size()))
-		n49, err := m.InternalRangeLookup.MarshalTo(data[i:])
+		n52, err := m.InternalRangeLookup.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n49
+		i += n52
 	}
 	if m.InternalHeartbeatTxn != nil {
 		data[i] = 0x82
@@ -5432,11 +5753,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x2
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalHeartbeatTxn.Size()))
-		n50, err := m.InternalHeartbeatTxn.MarshalTo(data[i:])
+		n53, err := m.InternalHeartbeatTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n50
+		i += n53
 	}
 	if m.InternalPushTxn != nil {
 		data[i] = 0x8a
@@ -5444,11 +5765,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x2
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalPushTxn.Size()))
-		n51, err := m.InternalPushTxn.MarshalTo(data[i:])
+		n54, err := m.InternalPushTxn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n51
+		i += n54
 	}
 	if m.InternalResolveIntent != nil {
 		data[i] = 0x92
@@ -5456,11 +5777,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x2
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalResolveIntent.Size()))
-		n52, err := m.InternalResolveIntent.MarshalTo(data[i:])
+		n55, err := m.InternalResolveIntent.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n52
+		i += n55
 	}
 	if m.InternalMergeResponse != nil {
 		data[i] = 0x9a
@@ -5468,11 +5789,11 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x2
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalMergeResponse.Size()))
-		n53, err := m.InternalMergeResponse.MarshalTo(data[i:])
+		n56, err := m.InternalMergeResponse.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n53
+		i += n56
 	}
 	if m.InternalTruncateLog != nil {
 		data[i] = 0xa2
@@ -5480,23 +5801,35 @@ func (m *InternalRaftCommandUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x2
 		i++
 		i = encodeVarintInternal(data, i, uint64(m.InternalTruncateLog.Size()))
-		n54, err := m.InternalTruncateLog.MarshalTo(data[i:])
+		n57, err := m.InternalTruncateLog.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n54
+		i += n57
 	}
-	if m.InternalGc != nil {
+	if m.InternalGC != nil {
 		data[i] = 0xaa
 		i++
 		data[i] = 0x2
 		i++
-		i = encodeVarintInternal(data, i, uint64(m.InternalGc.Size()))
-		n55, err := m.InternalGc.MarshalTo(data[i:])
+		i = encodeVarintInternal(data, i, uint64(m.InternalGC.Size()))
+		n58, err := m.InternalGC.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n55
+		i += n58
+	}
+	if m.InternalLease != nil {
+		data[i] = 0xb2
+		i++
+		data[i] = 0x2
+		i++
+		i = encodeVarintInternal(data, i, uint64(m.InternalLease.Size()))
+		n59, err := m.InternalLease.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n59
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -5525,11 +5858,11 @@ func (m *InternalRaftCommand) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0x1a
 	i++
 	i = encodeVarintInternal(data, i, uint64(m.Cmd.Size()))
-	n56, err := m.Cmd.MarshalTo(data[i:])
+	n60, err := m.Cmd.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n56
+	i += n60
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
