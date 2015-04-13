@@ -59,17 +59,32 @@ func TestClientHeartbeat(t *testing.T) {
 // as "ready" until a heartbeat request succeeds.
 func TestClientHeartbeatBadServer(t *testing.T) {
 	// Create a server without registering a heartbeat service.
-	s := createTestServer(hlc.NewClock(hlc.UnixNano), t)
+	serverClock := hlc.NewClock(hlc.UnixNano)
+	s := createTestServer(serverClock, t)
 	defer s.Close()
 
 	// Now, create a client. It should attempt a heartbeat and fail,
 	// causing retry loop to activate.
 	c := NewClient(s.Addr(), nil, s.context)
+	// does the test work
 	select {
 	case <-c.Ready:
 		t.Error("unexpected client heartbeat success")
-	case <-c.Closed:
+	case <-time.After(clientRetryOptions.Backoff * 2):
 	}
+
+	// Register a heartbeat service.
+	heartbeat := &HeartbeatService{
+		clock:              serverClock,
+		remoteClockMonitor: newRemoteClockMonitor(serverClock),
+	}
+	if err := s.RegisterName("Heartbeat", heartbeat); err != nil {
+		t.Fatalf("Unable to register heartbeat service: %s", err)
+	}
+
+	// A heartbeat should success and the client should become ready.
+	<-c.Ready
+	s.Close()
 }
 
 func TestOffsetMeasurement(t *testing.T) {

@@ -66,13 +66,13 @@ func init() {
 type Client struct {
 	Ready  chan struct{} // Closed when client is connected
 	Closed chan struct{} // Closed when connection has closed
+	closed bool          // True when connection has closed. Protected by clientMu.
 
 	mu           sync.Mutex // Mutex protects the fields below
 	*rpc.Client             // Embedded RPC client
 	addr         net.Addr   // Remote address of client
 	lAddr        net.Addr   // Local address of client
 	healthy      bool
-	closed       bool
 	offset       proto.RemoteOffset // Latest measured clock offset from the server
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
@@ -134,7 +134,6 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		// Ensure at least one heartbeat succeeds before exiting the
 		// retry loop.
 		if err = c.heartbeat(); err != nil {
-			c.Close()
 			return util.RetryContinue, err
 		}
 
@@ -195,8 +194,10 @@ func (c *Client) Close() {
 	clientMu.Lock()
 	if !c.closed {
 		delete(clients, c.Addr().String())
+		c.mu.Lock()
 		c.healthy = false
 		c.closed = true
+		c.mu.Unlock()
 		close(c.Closed)
 		c.Client.Close()
 	}
