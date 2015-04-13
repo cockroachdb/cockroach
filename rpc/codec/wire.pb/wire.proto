@@ -37,14 +37,15 @@ enum CompressionType {
 }
 
 message RequestHeader {
-	optional uint64 id = 1 [(gogoproto.nullable) = false];
-	optional string method = 2 [(gogoproto.nullable) = false];
-	optional CompressionType compression = 3 [(gogoproto.nullable) = false];
+  optional uint64 id = 1 [(gogoproto.nullable) = false];
+  optional string method = 2;
+  optional int32 method_id = 3 [(gogoproto.nullable) = false];
+  optional CompressionType compression = 4 [(gogoproto.nullable) = false];
 }
 
 message ResponseHeader {
-	optional uint64 id = 1 [(gogoproto.nullable) = false];
-	optional string method = 2 [(gogoproto.nullable) = false];
-	optional string error = 3 [(gogoproto.nullable) = false];
-	optional CompressionType compression = 4 [(gogoproto.nullable) = false];
+  optional uint64 id = 1 [(gogoproto.nullable) = false];
+  optional string method = 2;
+  optional string error = 3 [(gogoproto.nullable) = false];
+  optional CompressionType compression = 4 [(gogoproto.nullable) = false];
 }
