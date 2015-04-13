@@ -245,7 +245,7 @@ func (r *Range) start() {
 		r.maybeGossipClusterID()
 	}
 	// TODO(spencer): need to properly seed all unittests.
-	r.grantLeaderLease(&proto.Lease{
+	r.setLeaderLease(&proto.Lease{
 		Expiration: math.MaxInt64,
 		RaftNodeID: uint64(r.rm.RaftNodeID()),
 		Term:       1,
@@ -312,8 +312,8 @@ func (r *Range) HasLeaderLease() (bool, uint64) {
 }
 
 // AnotherHasLeaderLease returns whether a replica other than this one
-// is reasonably expected to be the holder of the lease. We use a grace
-// period to drown out clock offsets and provide hysteresis.
+// is known to be the holder of the lease. We use a grace period to
+// drown out clock offsets and provide hysteresis.
 func (r *Range) AnotherHasLeaderLease() bool {
 	if l := r.getLease(); l != nil {
 		if l.RaftNodeID != uint64(r.rm.RaftNodeID()) &&
@@ -324,19 +324,17 @@ func (r *Range) AnotherHasLeaderLease() bool {
 	return false
 }
 
-// grantLeaderLease sets the lease expiration for this range replica,
+// setLeaderLease sets the lease expiration for this range replica,
 // until which, subsequent calls to HasLeaderLease() will return
 // true. If this range replica is already the lease holder, the
 // expiration will be extended as indicated. Otherwise, all duties
 // required of the range leader are commenced, including gossiping
 // cluster and config info where appropriate and clearing the command
-// and timestamp caches.
+// queue and timestamp cache.
 //
 // TODO(tobias): call this method when processing the lease command
 // in Range.executeCmd().
-func (r *Range) grantLeaderLease(lease *proto.Lease) {
-	r.Lock()
-	defer r.Unlock()
+func (r *Range) setLeaderLease(lease *proto.Lease) {
 	// Set the new leader lease.
 	var oldTerm uint64
 	if l := r.getLease(); l != nil {
@@ -348,11 +346,12 @@ func (r *Range) grantLeaderLease(lease *proto.Lease) {
 
 	// If this replica holds the lease and it's being granted as part of
 	// a new term, as opposed to renewed before having expired, clear
-	// the timestamp and command caches and maybe start gossiping (if
-	// we're the first range).
+	// the timestamp cache and start gossiping if we're the first range.
 	if held, _ := r.HasLeaderLease(); held && lease.Term > oldTerm {
-		r.tsCache.Clear(r.rm.Clock())
+		r.Lock()
+		defer r.Unlock()
 		r.cmdQ.Clear()
+		r.tsCache.Clear(r.rm.Clock())
 
 		// Gossip configs in the event this range contains config info.
 		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
@@ -360,7 +359,7 @@ func (r *Range) grantLeaderLease(lease *proto.Lease) {
 		})
 		// Only start gossiping if this range is the first range.
 		if r.IsFirstRange() {
-			go r.startGossip(r.rm.Stopper())
+			go r.startGossip(lease.Term, r.rm.Stopper())
 		}
 	}
 }
@@ -511,8 +510,10 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 
 	held, prevTerm := r.HasLeaderLease()
 	if !held {
+		// If we don't hold the lease, but nobody else does either, submit
+		// this read-only command as read-write to trigger an election.
 		if !r.AnotherHasLeaderLease() {
-			// TODO(bdarnell): start an election asynchronously for this node.
+			return r.addReadWriteCmd(method, args, reply, true)
 		}
 		reply.Header().SetGoError(r.newNotLeaderError())
 		return reply.Header().GoError()
@@ -605,11 +606,12 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	}
 
 	// Add the write to the command queue to gate subsequent overlapping
-	// commands until this command completes. Note that this must be
+	// Commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	cmdKey := r.beginCmd(header.Key, header.EndKey, false)
+	readOnly := proto.IsReadOnly(method)
+	cmdKey := r.beginCmd(header.Key, header.EndKey, readOnly)
 
 	// Two important invariants of Cockroach: 1) encountering a more
 	// recently written value means transaction restart. 2) values must
@@ -619,7 +621,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// writes, send WriteTooOldError; for reads, update the write's
 	// timestamp. When the write returns, the updated timestamp will
 	// inform the final commit timestamp.
-	if UsesTimestampCache(method) {
+	if UsesTimestampCache(method) && !readOnly {
 		r.Lock()
 		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
 		r.Unlock()
@@ -683,7 +685,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// timestamp for successive writes to the same key or key range.
 		r.Lock()
 		if err == nil && UsesTimestampCache(method) {
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, readOnly)
 		}
 		r.cmdQ.Remove(cmdKey)
 		r.Unlock()
@@ -743,7 +745,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 // startGossip periodically gossips the cluster ID if it's the first
 // range. This function should only be called if this range replica is
 // the raft leader.
-func (r *Range) startGossip(stopper *util.Stopper) {
+func (r *Range) startGossip(term uint64, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		r.maybeGossipClusterID()
 		r.maybeGossipFirstRange()
@@ -752,7 +754,7 @@ func (r *Range) startGossip(stopper *util.Stopper) {
 		for {
 			select {
 			case <-ticker.C:
-				if held, _ := r.HasLeaderLease(); !held {
+				if held, curTerm := r.HasLeaderLease(); !held || curTerm != term {
 					return
 				}
 				r.maybeGossipClusterID()
@@ -943,7 +945,8 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
 				// Maybe update gossip configs on a put.
-				if (method == proto.Put || method == proto.ConditionalPut) && header.Key.Less(engine.KeySystemMax) {
+				if header.Key.Less(engine.KeySystemMax) &&
+					(method == proto.Put || method == proto.Delete || method == proto.DeleteRange) {
 					r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
 						return bytes.HasPrefix(header.Key, configPrefix)
 					})
