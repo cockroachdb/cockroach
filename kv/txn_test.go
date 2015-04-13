@@ -352,6 +352,9 @@ func TestUncertaintyRestarts(t *testing.T) {
 // See proto.Transaction.CertainNodes for details.
 func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	db, eng, clock, mClock, _, stopper, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer stopper.Stop()
 	// Large offset so that any value in the future is an uncertain read.
 	// Also makes sure that the values we write in the future below don't
