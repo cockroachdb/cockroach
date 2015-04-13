@@ -319,6 +319,8 @@ type Store struct {
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
+
+	Started bool // Flag to indicate if the store is started completely
 }
 
 var _ multiraft.Storage = &Store{}
@@ -367,6 +369,7 @@ func (s *Store) Stop() {
 	}
 	s.stopper.Stop()
 	s.engine.Stop()
+	s.Started = false
 }
 
 // String formats a store for debug output.
@@ -486,6 +489,7 @@ func (s *Store) Start() error {
 		s.gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 	}
 
+	s.Started = true
 	return nil
 }
 

@@ -306,7 +306,12 @@ func (n *Node) bootstrapStores(bootstraps *list.List) {
 	}
 	for e := bootstraps.Front(); e != nil; e = e.Next() {
 		s := e.Value.(*storage.Store)
-		s.Bootstrap(sIdent)
+		if err := s.Bootstrap(sIdent); err != nil {
+			log.Fatal(err)
+		}
+		if err := s.Start(); err != nil {
+			log.Fatal(err)
+		}
 		n.lSender.AddStore(s)
 		sIdent.StoreID++
 		log.Infof("bootstrapped store %s", s)

@@ -133,7 +133,7 @@ func TestBootstrapCluster(t *testing.T) {
 }
 
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
-// stores and verifies both stores are added.
+// stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	localDB, err := BootstrapCluster("cluster-1", e)
@@ -156,6 +156,16 @@ func TestBootstrapNewStore(t *testing.T) {
 	// in a goroutine, so we'll have to wait a bit (maximum 1s) until
 	// we can find the new node.
 	if err := util.IsTrueWithin(func() bool { return node.lSender.GetStoreCount() == 3 }, 1*time.Second); err != nil {
+		t.Error(err)
+	}
+
+	// Check whether all stores are started properly.
+	if err := node.lSender.VisitStores(func(s *storage.Store) error {
+		if s.Started == false {
+			return util.Errorf("fail to start store: %s", s)
+		}
+		return nil
+	}); err != nil {
 		t.Error(err)
 	}
 }
