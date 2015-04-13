@@ -18,6 +18,8 @@ import (
 type serverCodec struct {
 	baseConn
 
+	methods []string
+
 	// temporary work space
 	respBuf    bytes.Buffer
 	respHeader wire.ResponseHeader
@@ -42,8 +44,20 @@ func (c *serverCodec) ReadRequestHeader(r *rpc.Request) error {
 		return err
 	}
 
-	r.Seq = c.reqHeader.GetId()
-	r.ServiceMethod = c.reqHeader.GetMethod()
+	r.Seq = c.reqHeader.Id
+	if c.reqHeader.Method == nil {
+		if int(c.reqHeader.MethodId) >= len(c.methods) {
+			return fmt.Errorf("unexpected method-id: %d >= %d",
+				c.reqHeader.MethodId, len(c.methods))
+		}
+		r.ServiceMethod = c.methods[c.reqHeader.MethodId]
+	} else if int(c.reqHeader.MethodId) > len(c.methods) {
+		return fmt.Errorf("unexpected method-id: %d > %d",
+			c.reqHeader.MethodId, len(c.methods))
+	} else if int(c.reqHeader.MethodId) == len(c.methods) {
+		c.methods = append(c.methods, *c.reqHeader.Method)
+		r.ServiceMethod = *c.reqHeader.Method
+	}
 	return nil
 }
 

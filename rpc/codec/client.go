@@ -20,6 +20,8 @@ import (
 type clientCodec struct {
 	baseConn
 
+	methods map[string]int32
+
 	// temporary work space
 	reqBuf     bytes.Buffer
 	reqHeader  wire.RequestHeader
@@ -34,6 +36,7 @@ func NewClientCodec(conn io.ReadWriteCloser) rpc.ClientCodec {
 			w: bufio.NewWriter(conn),
 			c: conn,
 		},
+		methods: make(map[string]int32),
 	}
 }
 
@@ -49,7 +52,7 @@ func (c *clientCodec) WriteRequest(r *rpc.Request, param interface{}) error {
 		}
 	}
 
-	if err := c.writeRequest(r.Seq, r.ServiceMethod, request); err != nil {
+	if err := c.writeRequest(r, request); err != nil {
 		return err
 	}
 	return c.w.Flush()
@@ -60,9 +63,9 @@ func (c *clientCodec) ReadResponseHeader(r *rpc.Response) error {
 		return err
 	}
 
-	r.Seq = c.respHeader.GetId()
+	r.Seq = c.respHeader.Id
 	r.ServiceMethod = c.respHeader.GetMethod()
-	r.Error = c.respHeader.GetError()
+	r.Error = c.respHeader.Error
 	return nil
 }
 
@@ -88,13 +91,19 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 	return nil
 }
 
-func (c *clientCodec) writeRequest(id uint64, method string, request proto.Message) error {
+func (c *clientCodec) writeRequest(r *rpc.Request, request proto.Message) error {
 	// generate header
 	header := &c.reqHeader
 	*header = wire.RequestHeader{
-		Id:          id,
-		Method:      method,
+		Id:          r.Seq,
 		Compression: wire.CompressionType_NONE,
+	}
+	if mid, ok := c.methods[r.ServiceMethod]; ok {
+		header.MethodId = mid
+	} else {
+		header.Method = &r.ServiceMethod
+		header.MethodId = int32(len(c.methods))
+		c.methods[r.ServiceMethod] = header.MethodId
 	}
 	if enableSnappy {
 		header.Compression = wire.CompressionType_SNAPPY
