@@ -120,7 +120,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
 
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		conn, err := tlsDial(c.addr.Network(), c.addr.String(), context.tlsConfig)
+		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
 		if err != nil {
 			log.Info(err)
 			return util.RetryContinue, nil

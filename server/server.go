@@ -61,7 +61,6 @@ type Server struct {
 	status         *statusServer
 	structuredDB   structured.DB
 	structuredREST *structured.RESTServer
-	httpListener   *net.Listener // holds http endpoint information
 	raftTransport  multiraft.Transport
 	stopper        *util.Stopper
 }
@@ -71,20 +70,20 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	if ctx == nil {
 		return nil, util.Error("ctx must not be null")
 	}
-	// Determine hostname in case it hasn't been specified in -rpc or -http.
+	// Determine hostname in case it hasn't been specified in -http.
 	host, err := os.Hostname()
 	if err != nil {
 		host = "127.0.0.1"
 	}
 
-	rpcAddr := ctx.RPC
-	// If the specified rpc address includes no host component, use the hostname.
-	if strings.HasPrefix(rpcAddr, ":") {
-		rpcAddr = host + rpcAddr
+	httpAddr := ctx.HTTP
+	// If the specified address includes no host component, use the hostname.
+	if strings.HasPrefix(httpAddr, ":") {
+		httpAddr = host + httpAddr
 	}
-	_, err = net.ResolveTCPAddr("tcp", rpcAddr)
+	_, err = net.ResolveTCPAddr("tcp", httpAddr)
 	if err != nil {
-		return nil, util.Errorf("unable to resolve RPC address %q: %v", rpcAddr, err)
+		return nil, util.Errorf("unable to resolve RPC address %q: %v", httpAddr, err)
 	}
 
 	var tlsConfig *rpc.TLSConfig
@@ -108,7 +107,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	rpcContext := rpc.NewContext(s.clock, tlsConfig)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", rpcAddr), rpcContext)
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", httpAddr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
 
@@ -141,11 +140,9 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 // selfBootstrap is true, uses the rpc server's address as the gossip
 // bootstrap), and starts the node using the supplied engines slice.
 func (s *Server) Start(selfBootstrap bool) error {
-	// Bind RPC socket and launch goroutine.
-	if err := s.rpc.Start(); err != nil {
-		return err
+	if err := s.rpc.Listen(); err != nil {
+		return util.Errorf("could not listen on %s: %s", s.ctx.HTTP, err)
 	}
-	log.Infof("Started RPC server at %s", s.rpc.Addr())
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
@@ -158,19 +155,11 @@ func (s *Server) Start(selfBootstrap bool) error {
 		return err
 	}
 
-	// TODO(spencer): add tls to the HTTP server.
 	s.initHTTP()
-	httpAddr := s.ctx.HTTP
-	ln, err := net.Listen("tcp", httpAddr)
-	if err != nil {
-		return util.Errorf("could not listen on %s: %s", httpAddr, err)
-	}
-	// Obtaining the http end point listener is difficult using
-	// http.ListenAndServe(), so we are storing it with the server.
-	s.httpListener = &ln
-	log.Infof("Starting HTTP server at %s", ln.Addr())
+
+	log.Infof("Starting HTTP server at %s", s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
-	go http.Serve(ln, s)
+	s.rpc.Serve(s)
 	return nil
 }
 

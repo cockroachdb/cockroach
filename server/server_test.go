@@ -44,7 +44,7 @@ func startTestServer(t *testing.T) *TestServer {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
+	log.Infof("Test server listening on http: %s", s.HTTPAddr)
 	return s
 }
 

@@ -28,7 +28,6 @@ import (
 // settable here.
 func initFlags(ctx *server.Context) {
 	// Server flags.
-	flag.StringVar(&ctx.RPC, "rpc", ctx.RPC, "host:port to bind for RPC traffic; 0 to pick unused port")
 	flag.StringVar(&ctx.HTTP, "http", ctx.HTTP, "host:port to bind for HTTP traffic; 0 to pick unused port")
 
 	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs")

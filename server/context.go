@@ -33,7 +33,6 @@ import (
 
 // Context defaults.
 const (
-	defaultRPC            = ":0"
 	defaultHTTP           = ":8080"
 	defaultAddr           = "127.0.0.1:8080"
 	defaultMaxOffset      = 250 * time.Millisecond
@@ -45,9 +44,6 @@ const (
 // Calling "server/cli".InitFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "server/cli/flags.go".
 type Context struct {
-	// RPC is the "host:port" to bind for RPC traffic.
-	RPC string
-
 	// HTTP is the "host:port to bind for HTTP traffic.
 	HTTP string
 
@@ -114,7 +110,6 @@ type Context struct {
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	return &Context{
-		RPC:  defaultRPC,
 		HTTP: defaultHTTP,
 		Addr: defaultAddr,
 

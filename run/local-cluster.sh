@@ -91,8 +91,7 @@ DNS_CID=$(docker run -d -v "$DNS_DIR:/dnsmasq.hosts" --name=$DNSMASQ_NAME $DNSMA
 DNS_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $DNS_CID)
 echo "* ${DNSMASQ_NAME}"
 
-# Local rpc and http ports.
-RPC_PORT=9000
+# Local http ports.
 HTTP_PORT=8080
 
 # Start all nodes.
@@ -105,7 +104,7 @@ for i in $(seq 1 $NODES); do
     CMD="init"
   fi
   # Command args specify two data directories per instance to simulate two physical devices.
-  CMD_ARGS="-gossip=${HOSTS[1]}:$RPC_PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -rpc=${HOSTS[$i]}:$RPC_PORT -http=${HOSTS[$i]}:$HTTP_PORT"
+  CMD_ARGS="-gossip=${HOSTS[1]}:$HTTP_PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -http=${HOSTS[$i]}:$HTTP_PORT"
   # Log (almost) everything.
   CMD_ARGS="${CMD_ARGS} -v 7"
 

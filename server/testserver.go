@@ -30,7 +30,6 @@ import (
 
 const (
 	defaultHTTPAddr = "127.0.0.1:0"
-	defaultRPCAddr  = "127.0.0.1:0"
 )
 
 // A TestServer encapsulates an in-memory instantiation of a cockroach
@@ -51,10 +50,10 @@ type TestServer struct {
 	// This is mostly irrelevant except when testing reads within
 	// uncertainty intervals.
 	MaxOffset time.Duration
-	// HTTPAddr and RPCAddr default to localhost with port set
-	// at time of call to Start() to an available port.
-	HTTPAddr, RPCAddr string
-	SkipBootstrap     bool
+	// HTTPAddr defaults to localhost with port set at time of call to
+	// Start() to an available port.
+	HTTPAddr      string
+	SkipBootstrap bool
 	// server is the embedded Cockroach server struct.
 	*Server
 	// Engine underlying the test server.
@@ -85,15 +84,11 @@ func (ts *TestServer) Clock() *hlc.Clock {
 func (ts *TestServer) Start() error {
 	// We update these with the actual port once the servers
 	// have been launched for the purpose of this test.
-	if ts.RPCAddr == "" {
-		ts.RPCAddr = defaultRPCAddr
-	}
 	if ts.HTTPAddr == "" {
 		ts.HTTPAddr = defaultHTTPAddr
 	}
 
 	ctx := NewContext()
-	ctx.RPC = ts.RPCAddr
 	ctx.HTTP = ts.HTTPAddr
 	ctx.Addr = ts.HTTPAddr
 	ctx.Certs = ts.CertDir
@@ -123,8 +118,7 @@ func (ts *TestServer) Start() error {
 	}
 	// Update the configuration variables to reflect the actual
 	// ports bound.
-	ts.HTTPAddr = (*ts.httpListener).Addr().String()
-	ts.RPCAddr = ts.rpc.Addr().String()
+	ts.HTTPAddr = ts.rpc.Addr().String()
 
 	return nil
 }
