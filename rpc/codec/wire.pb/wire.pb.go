@@ -49,10 +49,44 @@ import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 var _ = proto.Marshal
 var _ = math.Inf
 
+type CompressionType int32
+
+const (
+	CompressionType_NONE   CompressionType = 0
+	CompressionType_SNAPPY CompressionType = 1
+)
+
+var CompressionType_name = map[int32]string{
+	0: "NONE",
+	1: "SNAPPY",
+}
+var CompressionType_value = map[string]int32{
+	"NONE":   0,
+	"SNAPPY": 1,
+}
+
+func (x CompressionType) Enum() *CompressionType {
+	p := new(CompressionType)
+	*p = x
+	return p
+}
+func (x CompressionType) String() string {
+	return proto.EnumName(CompressionType_name, int32(x))
+}
+func (x *CompressionType) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(CompressionType_value, data, "CompressionType")
+	if err != nil {
+		return err
+	}
+	*x = CompressionType(value)
+	return nil
+}
+
 type RequestHeader struct {
-	Id               uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
-	Method           string `protobuf:"bytes,2,opt,name=method" json:"method"`
-	XXX_unrecognized []byte `json:"-"`
+	Id               uint64          `protobuf:"varint,1,opt,name=id" json:"id"`
+	Method           string          `protobuf:"bytes,2,opt,name=method" json:"method"`
+	Compression      CompressionType `protobuf:"varint,3,opt,name=compression,enum=wire.CompressionType" json:"compression"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *RequestHeader) Reset()         { *m = RequestHeader{} }
@@ -73,10 +107,19 @@ func (m *RequestHeader) GetMethod() string {
 	return ""
 }
 
+func (m *RequestHeader) GetCompression() CompressionType {
+	if m != nil {
+		return m.Compression
+	}
+	return CompressionType_NONE
+}
+
 type ResponseHeader struct {
-	Id               uint64 `protobuf:"varint,1,opt,name=id" json:"id"`
-	Error            string `protobuf:"bytes,2,opt,name=error" json:"error"`
-	XXX_unrecognized []byte `json:"-"`
+	Id               uint64          `protobuf:"varint,1,opt,name=id" json:"id"`
+	Method           string          `protobuf:"bytes,2,opt,name=method" json:"method"`
+	Error            string          `protobuf:"bytes,3,opt,name=error" json:"error"`
+	Compression      CompressionType `protobuf:"varint,4,opt,name=compression,enum=wire.CompressionType" json:"compression"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *ResponseHeader) Reset()         { *m = ResponseHeader{} }
@@ -90,6 +133,13 @@ func (m *ResponseHeader) GetId() uint64 {
 	return 0
 }
 
+func (m *ResponseHeader) GetMethod() string {
+	if m != nil {
+		return m.Method
+	}
+	return ""
+}
+
 func (m *ResponseHeader) GetError() string {
 	if m != nil {
 		return m.Error
@@ -97,7 +147,15 @@ func (m *ResponseHeader) GetError() string {
 	return ""
 }
 
+func (m *ResponseHeader) GetCompression() CompressionType {
+	if m != nil {
+		return m.Compression
+	}
+	return CompressionType_NONE
+}
+
 func init() {
+	proto.RegisterEnum("wire.CompressionType", CompressionType_name, CompressionType_value)
 }
 func (m *RequestHeader) Unmarshal(data []byte) error {
 	l := len(data)
@@ -155,6 +213,21 @@ func (m *RequestHeader) Unmarshal(data []byte) error {
 			}
 			m.Method = string(data[index:postIndex])
 			index = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Compression", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Compression |= (CompressionType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -214,6 +287,28 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			}
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Method", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Method = string(data[index:postIndex])
+			index = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Error", wireType)
 			}
 			var stringLen uint64
@@ -234,6 +329,21 @@ func (m *ResponseHeader) Unmarshal(data []byte) error {
 			}
 			m.Error = string(data[index:postIndex])
 			index = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Compression", wireType)
+			}
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				m.Compression |= (CompressionType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			var sizeOfWire int
 			for {
@@ -263,6 +373,7 @@ func (m *RequestHeader) Size() (n int) {
 	n += 1 + sovWire(uint64(m.Id))
 	l = len(m.Method)
 	n += 1 + l + sovWire(uint64(l))
+	n += 1 + sovWire(uint64(m.Compression))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -273,8 +384,11 @@ func (m *ResponseHeader) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovWire(uint64(m.Id))
+	l = len(m.Method)
+	n += 1 + l + sovWire(uint64(l))
 	l = len(m.Error)
 	n += 1 + l + sovWire(uint64(l))
+	n += 1 + sovWire(uint64(m.Compression))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -316,6 +430,9 @@ func (m *RequestHeader) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintWire(data, i, uint64(len(m.Method)))
 	i += copy(data[i:], m.Method)
+	data[i] = 0x18
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Compression))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -342,8 +459,15 @@ func (m *ResponseHeader) MarshalTo(data []byte) (n int, err error) {
 	i = encodeVarintWire(data, i, uint64(m.Id))
 	data[i] = 0x12
 	i++
+	i = encodeVarintWire(data, i, uint64(len(m.Method)))
+	i += copy(data[i:], m.Method)
+	data[i] = 0x1a
+	i++
 	i = encodeVarintWire(data, i, uint64(len(m.Error)))
 	i += copy(data[i:], m.Error)
+	data[i] = 0x20
+	i++
+	i = encodeVarintWire(data, i, uint64(m.Compression))
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
