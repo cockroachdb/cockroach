@@ -224,8 +224,18 @@ func (k Key) Size() int {
 	return len(k)
 }
 
+// Size is required for gogoproto's marshaller.
+func (k EncodedKey) Size() int {
+	return len(k)
+}
+
 // MarshalTo is required for gogoproto's mashaller.
 func (k *Key) MarshalTo(data []byte) (int, error) {
+	return copy(data, []byte(*k)), nil
+}
+
+// MarshalTo is required for gogoproto's mashaller.
+func (k *EncodedKey) MarshalTo(data []byte) (int, error) {
 	return copy(data, []byte(*k)), nil
 }
 
