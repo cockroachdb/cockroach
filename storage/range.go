@@ -186,6 +186,8 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine.
 	appliedIndex uint64
+	lease        unsafe.Pointer // Information for leader lease
+	stopper      *util.Stopper
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -233,6 +235,7 @@ func (r *Range) String() string {
 // range in the map and gossips config information if the range
 // contains any of the configuration maps.
 func (r *Range) start(stopper *util.Stopper) {
+	r.stopper = stopper
 	// TODO(spencer): gossiping should only commence when the range gains
 	// the leader lease and it should stop when the range no longer holds
 	// the leader lease.
@@ -241,7 +244,7 @@ func (r *Range) start(stopper *util.Stopper) {
 	r.maybeGossipConfigs(configDescriptors...)
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
-		r.startGossip(stopper)
+		r.startGossip()
 	}
 }
 
@@ -276,6 +279,14 @@ func (r *Range) IsFirstRange() bool {
 // TODO(spencer): this is always true for now.
 func (r *Range) IsLeader() bool {
 	return true
+}
+
+func (r *Range) setLease(l *proto.Lease) {
+	atomic.StorePointer(&r.lease, unsafe.Pointer(l))
+}
+
+func (r *Range) getLease() *proto.Lease {
+	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
 // canServiceCmd returns an error in the event that the range replica
@@ -648,15 +659,15 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 
 // startGossip periodically gossips the cluster ID if it's the
 // first range and the raft leader.
-func (r *Range) startGossip(stopper *util.Stopper) {
-	stopper.RunWorker(func() {
+func (r *Range) startGossip() {
+	r.stopper.RunWorker(func() {
 		ticker := time.NewTicker(ttlClusterIDGossip / 2)
 		for {
 			select {
 			case <-ticker.C:
 				r.maybeGossipClusterID()
 				r.maybeGossipFirstRange()
-			case <-stopper.ShouldStop():
+			case <-r.stopper.ShouldStop():
 				return
 			}
 		}
@@ -1426,7 +1437,7 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 // InternalLeaderLease evaluates and responds to a request to grant a leader lease.
 func (r *Range) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
 	// TODO(tschottdorf)
-	return
+	// r.grantLeaderLease(args.Lease)
 }
 
 // requestLeaderLease sends a request to obtain or extend a leader lease for this
@@ -1458,6 +1469,7 @@ func (r *Range) requestLeaderLease(term uint64) {
 
 	// Propose the Raft command.
 	errCh := r.rm.ProposeRaftCommand(idKey, cmd)
+
 	// Make sure we log a potential error from Raft.
 	r.stopper.RunWorker(func() {
 		select {

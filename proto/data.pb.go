@@ -606,8 +606,8 @@ type Lease struct {
 	// The expiration is a unix nanos timestamp and is set when requesting the
 	// lease according to the wall clock plus the Duration below at the lease
 	// requestor / grantee, which is also the only node that uses it directly.
-	// Granters must use always substitute their local walltime plus the
-	// Duration below instead.
+	// Granters must always substitute their local walltime plus the Duration
+	// below instead.
 	Expiration int64 `protobuf:"varint,1,opt,name=expiration" json:"expiration"`
 	// The duration, specified in nanoseconds, is the duration for which lease
 	// granters guarantee not to participate in elections, beginning right after
