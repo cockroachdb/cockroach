@@ -43,12 +43,12 @@ func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
 	}
+	stopper.AddWorker()
 	go lt.start()
 	return lt
 }
 
 func (lt *localInterceptableTransport) start() {
-	lt.stopper.AddWorker()
 	defer lt.stopper.SetStopped()
 
 	for {

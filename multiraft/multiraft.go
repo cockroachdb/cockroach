@@ -147,6 +147,7 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 // Start runs the raft algorithm in a background goroutine.
 func (m *MultiRaft) Start(stopper *util.Stopper) error {
 	s := newState(m)
+	stopper.AddWorker()
 	go s.start(stopper)
 
 	return nil
@@ -399,10 +400,10 @@ func newState(m *MultiRaft) *state {
 
 func (s *state) start(stopper *util.Stopper) {
 	s.stopper = stopper
-	s.stopper.AddWorker()
 	defer s.stopper.SetStopped()
 
 	log.V(1).Infof("node %v starting", s.nodeID)
+	stopper.AddWorker()
 	go s.writeTask.start(s.stopper)
 	// These maps form a kind of state machine: We don't want to read from the
 	// ready channel until the groups we got from the last read have made their

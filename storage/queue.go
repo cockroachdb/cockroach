@@ -128,6 +128,7 @@ func (bq *baseQueue) Length() int {
 // Start launches a goroutine to process entries in the queue. The
 // provided stopper is used to finish processing.
 func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
+	stopper.AddWorker()
 	go bq.processLoop(clock, stopper)
 }
 
@@ -180,7 +181,6 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 //
 // TODO(spencer): current load should factor into range processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	// nextTime is set arbitrarily far into the future so that we don't

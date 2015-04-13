@@ -138,7 +138,6 @@ func newWriteTask(storage Storage) *writeTask {
 
 // start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
 func (w *writeTask) start(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	for {

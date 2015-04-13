@@ -248,8 +248,11 @@ func (g *Gossip) Outgoing() []net.Addr {
 func (g *Gossip) Start(rpcServer *rpc.Server, stopper *util.Stopper) {
 	// Start up asynchronous processors.
 	g.server.start(rpcServer, stopper) // serve gossip protocol
-	go g.bootstrap(stopper)            // bootstrap gossip client
-	go g.manage(stopper)               // manage gossip clients
+	stopper.AddWorker()
+	go g.bootstrap(stopper) // bootstrap gossip client
+	stopper.AddWorker()
+	go g.manage(stopper) // manage gossip clients
+	stopper.AddWorker()
 	go g.maybeWarnAboutInit(stopper)
 }
 
@@ -322,7 +325,6 @@ func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 //
 // This method will block and should be run via goroutine.
 func (g *Gossip) bootstrap(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	for {
@@ -368,7 +370,6 @@ func (g *Gossip) bootstrap(stopper *util.Stopper) {
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	checkTimeout := time.Tick(g.jitteredGossipInterval())
@@ -445,7 +446,6 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 // connected, and whether the node itself is a bootstrap host, but
 // there is still no sentinel gossip.
 func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	retryOptions := util.RetryOptions{
@@ -498,6 +498,7 @@ func (g *Gossip) checkHasConnected() {
 // a goroutine.
 func (g *Gossip) startClient(addr net.Addr, stopper *util.Stopper) {
 	log.Infof("starting client to %s", addr)
+	stopper.AddWorker()
 	c := newClient(addr)
 	g.outgoing.addAddr(c.addr)
 	g.clientsMu.Lock()

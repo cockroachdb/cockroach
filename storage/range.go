@@ -240,6 +240,7 @@ func (r *Range) start(stopper *util.Stopper) {
 	r.maybeGossipConfigs(configDescriptors...)
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
+		stopper.AddWorker()
 		go r.startGossip(stopper)
 	}
 }
@@ -643,7 +644,6 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 // startGossip periodically gossips the cluster ID if it's the
 // first range and the raft leader.
 func (r *Range) startGossip(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	ticker := time.NewTicker(ttlClusterIDGossip / 2)

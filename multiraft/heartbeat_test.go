@@ -34,7 +34,6 @@ import (
 // read on the channel times out.
 func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f func(*RaftMessageRequest) bool) {
 	if stopper != nil {
-		stopper.AddWorker()
 		defer stopper.SetStopped()
 	}
 	for {
@@ -226,6 +225,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 			return cnt.Sum() >= expCnt.Sum()
 		})
 	// Once done counting, simply process messages.
+	stopper.AddWorker()
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-blocker
 	if !reflect.DeepEqual(actCnt, expCnt) {
@@ -331,6 +331,7 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 			expCntSecondPhase, actCnt)
 	}
 	// Keep processing without inspection and shutdown cluster.
+	stopper.AddWorker()
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
 	stopper.Stop()

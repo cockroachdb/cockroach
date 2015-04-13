@@ -95,7 +95,6 @@ func (c *client) close() {
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
 func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	localMaxSeq := int64(0)

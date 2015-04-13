@@ -100,7 +100,7 @@ func (ts *TestServer) Start() error {
 	ctx.MaxOffset = ts.MaxOffset
 
 	var err error
-	ts.Server, err = NewServer(ctx)
+	ts.Server, err = NewServer(ctx, util.NewStopper())
 	if err != nil {
 		return util.Errorf("could not init server: %s", err)
 	}

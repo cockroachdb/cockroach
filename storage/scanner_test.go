@@ -124,8 +124,8 @@ func (tq *testQueue) setDisabled(d bool) {
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 	stopper.AddWorker()
-	defer stopper.SetStopped()
 	go func() {
+		defer stopper.SetStopped()
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):

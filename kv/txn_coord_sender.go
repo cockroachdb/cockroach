@@ -288,6 +288,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 			// for each active transaction. Spencer suggests a heap
 			// containing next heartbeat timeouts which is processed by a
 			// single goroutine.
+			tc.stopper.AddWorker()
 			go tc.heartbeat(header.Txn)
 		}
 		txnMeta.lastUpdateTS = tc.clock.Now()
@@ -486,7 +487,6 @@ func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
 func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
-	tc.stopper.AddWorker()
 	defer tc.stopper.SetStopped()
 
 	ticker := time.NewTicker(tc.heartbeatInterval)

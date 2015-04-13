@@ -187,6 +187,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	if err := n.initStores(clock, engines, stopper); err != nil {
 		return err
 	}
+	stopper.AddWorker()
 	go n.startGossip(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
@@ -346,7 +347,6 @@ func (n *Node) connectGossip() {
 // information. Loops until the node is closed and should be
 // invoked via goroutine.
 func (n *Node) startGossip(stopper *util.Stopper) {
-	stopper.AddWorker()
 	defer stopper.SetStopped()
 
 	ticker := time.NewTicker(gossipInterval)
