@@ -364,6 +364,65 @@ func TestRangeAnotherHasLeaderLease(t *testing.T) {
 	}
 }
 
+func TestRangeNotLeaderError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	tc.rng.setLeaderLease(&proto.Lease{
+		Expiration: 10,
+		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+		Term:       2,
+	})
+
+	header := proto.RequestHeader{
+		Key:     proto.Key("a"),
+		RaftID:  tc.rng.Desc().RaftID,
+		Replica: proto.Replica{StoreID: tc.store.StoreID()},
+	}
+	testCases := []struct {
+		method string
+		args   proto.Request
+		reply  proto.Response
+	}{
+		// Admin split covers admin commands.
+		{proto.AdminSplit,
+			&proto.AdminSplitRequest{
+				RequestHeader: header,
+				SplitKey:      proto.Key("a"),
+			},
+			&proto.AdminSplitResponse{},
+		},
+		// Get covers read-only commands.
+		{
+			proto.Get,
+			&proto.GetRequest{
+				RequestHeader: header,
+			},
+			&proto.GetResponse{},
+		},
+		// Put covers read-write commands.
+		{
+			proto.Put,
+			&proto.PutRequest{
+				RequestHeader: header,
+				Value: proto.Value{
+					Bytes: []byte("value"),
+				},
+			},
+			&proto.PutResponse{},
+		},
+	}
+
+	for i, test := range testCases {
+		err := tc.rng.AddCmd(test.method, test.args, test.reply, true)
+		if _, ok := err.(*proto.NotLeaderError); !ok {
+			t.Errorf("%d: expected not leader error: %s", i, err)
+		}
+	}
+}
+
 // TestRangeGossipConfigsOnLease verifies that config info is gossiped
 // upon acquisition of the leader lease.
 func TestRangeGossipConfigsOnLease(t *testing.T) {
