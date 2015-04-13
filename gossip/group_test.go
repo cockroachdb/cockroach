@@ -334,10 +334,14 @@ func TestGroupGetInfoTTL(t *testing.T) {
 	g.addInfo(info1)
 	g.addInfo(info2)
 
+	// Wait until info2 is expired.
 	time.Sleep(time.Nanosecond)
 	infos := g.infosAsSlice()
 	if len(infos) != 1 || infos[0].Val != info1.Val {
 		t.Error("only one info should be returned", infos)
+	}
+	if g.gatekeeper == nil || g.gatekeeper.Val != info1.Val {
+		t.Error("gatekeeper should have been updated", g.gatekeeper)
 	}
 }
 

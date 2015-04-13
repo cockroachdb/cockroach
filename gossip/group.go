@@ -123,9 +123,9 @@ func (g *group) compact() bool {
 	// Delete expired entries && update group stats.
 	g.minTTLStamp = math.MaxInt64
 	g.gatekeeper = nil
-	for key, i := range g.Infos {
-		if i.TTLStamp <= now {
-			delete(g.Infos, key)
+	for _, i := range g.Infos {
+		if i.expired(now) {
+			g.removeInternal(i)
 		} else {
 			g.updateIncremental(i)
 		}
@@ -153,7 +153,7 @@ func (g *group) getInfo(key string) *info {
 	if i, ok := g.Infos[key]; ok {
 		// Check TTL and discard if too old.
 		now := time.Now().UnixNano()
-		if i.TTLStamp <= now {
+		if i.expired(now) {
 			g.removeInternal(i)
 			return nil
 		}
@@ -171,7 +171,7 @@ func (g *group) infosAsSlice() infoSlice {
 	for _, i := range g.Infos {
 		// Check TTL and discard if too old.
 		if i.expired(now) {
-			delete(g.Infos, i.Key)
+			g.removeInternal(i)
 		} else {
 			infos = append(infos, i)
 		}
