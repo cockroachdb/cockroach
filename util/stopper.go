@@ -42,21 +42,34 @@ type Closer interface {
 // its stopper channel, which signals all live workers that it's safe
 // to shut down. Once shutdown, each worker invokes SetStopped(). When
 // all workers have shutdown, the stopper is complete.
+//
+// An arbitrary list of objects implementing the Closer interface may
+// be added to the stopper via AddCloser(), to be closed after the
+// stopper has stopped.
 type Stopper struct {
 	stopper  chan struct{}
-	draining int32
+	draining int32 // Uses atomic operations instead of mu.
 	drain    sync.WaitGroup
 	stop     sync.WaitGroup
 	mu       sync.Mutex // Protects the slice of Closers
 	closers  []Closer
 }
 
-// NewStopper returns an instance of Stopper. Count specifies how
-// many workers this stopper will stop.
+// NewStopper returns an instance of Stopper.
 func NewStopper() *Stopper {
 	return &Stopper{
 		stopper: make(chan struct{}),
 	}
+}
+
+// RunWorker runs the supplied function as a "worker" to be stopped
+// by the stopper. The function <f> is run in a goroutine.
+func (s *Stopper) RunWorker(f func()) {
+	s.AddWorker()
+	go func() {
+		defer s.SetStopped()
+		f()
+	}()
 }
 
 // AddWorker worker to the stopper.

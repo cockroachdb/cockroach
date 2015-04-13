@@ -123,9 +123,7 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
+	stopper.RunWorker(func() {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -142,7 +140,7 @@ func (tq *testQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (tq *testQueue) MaybeAdd(rng *Range, now proto.Timestamp) {

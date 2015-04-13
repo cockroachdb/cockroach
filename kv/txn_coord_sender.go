@@ -481,10 +481,7 @@ func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
 func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
-	tc.stopper.AddWorker()
-	go func() {
-		defer tc.stopper.SetStopped()
-
+	tc.stopper.RunWorker(func() {
 		ticker := time.NewTicker(tc.heartbeatInterval)
 		request := &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
@@ -532,5 +529,5 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				return
 			}
 		}
-	}()
+	})
 }

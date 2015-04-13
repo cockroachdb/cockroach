@@ -68,10 +68,7 @@ func newClient(addr net.Addr) *client {
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
 func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
 		select {
 		case <-c.rpcClient.Ready:
@@ -89,7 +86,7 @@ func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
 			c.err = util.Errorf("gossip client: %s", err)
 		}
 		done <- c
-	}()
+	})
 }
 
 // close stops the client gossip loop and returns immediately.

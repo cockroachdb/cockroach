@@ -398,11 +398,7 @@ func newState(m *MultiRaft) *state {
 
 func (s *state) start(stopper *util.Stopper) {
 	s.stopper = stopper
-	s.stopper.AddWorker()
-
-	go func() {
-		defer s.stopper.SetStopped()
-
+	s.stopper.RunWorker(func() {
 		log.V(1).Infof("node %v starting", s.nodeID)
 		s.writeTask.start(s.stopper)
 		// These maps form a kind of state machine: We don't want to read from the
@@ -501,7 +497,7 @@ func (s *state) start(stopper *util.Stopper) {
 				cb()
 			}
 		}
-	}()
+	})
 }
 
 func (s *state) coalescedHeartbeat() {

@@ -320,10 +320,7 @@ func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		for {
 			g.mu.Lock()
 			g.initializeBootstrapAddresses()
@@ -354,7 +351,7 @@ func (g *Gossip) bootstrap(stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // manage manages outgoing clients. Periodically, the infostore is
@@ -368,10 +365,7 @@ func (g *Gossip) bootstrap(stopper *util.Stopper) {
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		checkTimeout := time.Tick(g.jitteredGossipInterval())
 		// Loop until closed and there are no remaining outgoing connections.
 		for {
@@ -433,7 +427,7 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 
 			g.mu.Unlock()
 		}
-	}()
+	})
 }
 
 // maybeWarnAboutInit looks for signs indicating a cluster which
@@ -447,10 +441,7 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 // connected, and whether the node itself is a bootstrap host, but
 // there is still no sentinel gossip.
 func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		retryOptions := util.RetryOptions{
 			Tag:         "check cluster initialization",
 			Backoff:     5 * time.Second,  // first backoff at 5s
@@ -481,7 +472,7 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 			}
 			return util.RetryContinue, nil
 		})
-	}()
+	})
 }
 
 // checkHasConnected checks whether this gossip instance is connected

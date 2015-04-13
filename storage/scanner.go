@@ -129,10 +129,7 @@ func (rs *rangeScanner) RemoveRange(rng *Range) {
 // the range iterator, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		start := time.Now()
 		stats := &storeStats{}
 
@@ -186,5 +183,5 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }

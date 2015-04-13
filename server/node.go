@@ -345,10 +345,7 @@ func (n *Node) connectGossip() {
 // startGossip loops on a periodic ticker to gossip node-related
 // information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		ticker := time.NewTicker(gossipInterval)
 		for {
 			select {
@@ -361,7 +358,7 @@ func (n *Node) startGossip(stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // gossipCapacities calls capacity on each store and adds it to the

@@ -138,10 +138,7 @@ func newWriteTask(storage Storage) *writeTask {
 
 // start runs the storage loop in a goroutine.
 func (w *writeTask) start(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		for {
 			var request *writeRequest
 			select {
@@ -184,5 +181,5 @@ func (w *writeTask) start(stopper *util.Stopper) {
 			}
 			w.out <- response
 		}
-	}()
+	})
 }

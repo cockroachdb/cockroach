@@ -161,30 +161,32 @@ func runStart(cmd *commander.Command, args []string) {
 	}
 	defer s.Stop()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill)
+	// TODO(spencer): move this behind a build tag.
+	signal.Notify(signalCh, syscall.SIGTERM)
 
 	// Block until one of the signals above is received.
-	ch := make(chan struct{})
+	gracefulShutdownCh := make(chan struct{})
 	select {
 	case <-stopper.ShouldStop():
 		stopper.SetStopped()
-	case <-c:
+	case <-signalCh:
 		log.Infof("initiating graceful shutdown of server")
 		stopper.SetStopped()
 		go func() {
 			s.Stop()
-			close(ch)
+			close(gracefulShutdownCh)
 		}()
 	}
 
 	select {
-	case <-c:
-		log.Warningf("SIGTERM or SIGKILL received, initiating hard shutdown")
+	case <-signalCh:
+		log.Warningf("second signal received, initiating hard shutdown")
 	case <-time.After(time.Minute):
 		log.Warningf("time limit reached, initiating hard shutdown")
 		return
-	case <-ch:
+	case <-gracefulShutdownCh:
 		log.Infof("server drained and shutdown completed")
 	}
 }

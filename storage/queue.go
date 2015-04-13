@@ -180,10 +180,7 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 //
 // TODO(spencer): current load should factor into range processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		// nextTime is set arbitrarily far into the future so that we don't
 		// unecessarily check for a range to dequeue if the timer function
 		// returns a short duration but the priority queue is empty.
@@ -231,7 +228,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // pop dequeues the highest priority range in the queue. Returns the

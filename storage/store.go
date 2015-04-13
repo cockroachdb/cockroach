@@ -355,6 +355,7 @@ func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
+// IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
 }
@@ -1106,10 +1107,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 //   and be able to access the new leader's state machine BEFORE
 //   the overlapping writes are applied.
 func (s *Store) processRaft() {
-	s.stopper.AddWorker()
-	go func() {
-		defer s.stopper.SetStopped()
-
+	s.stopper.RunWorker(func() {
 		for {
 			select {
 			case e := <-s.multiraft.Events:
@@ -1166,7 +1164,7 @@ func (s *Store) processRaft() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 // GroupStorage implements the multiraft.Storage interface.

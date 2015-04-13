@@ -98,6 +98,27 @@ func TestStopperStartFinishTasks(t *testing.T) {
 	s.SetStopped()
 }
 
+func TestStopperRunWorker(t *testing.T) {
+	s := NewStopper()
+	s.RunWorker(func() {
+		select {
+		case <-s.ShouldStop():
+			return
+		}
+	})
+	closer := make(chan struct{})
+	go func() {
+		s.Stop()
+		close(closer)
+	}()
+	select {
+	case <-closer:
+		// Success.
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stopper should be ready to stop")
+	}
+}
+
 type testCloser bool
 
 func (tc *testCloser) Close() {

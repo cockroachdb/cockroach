@@ -48,10 +48,7 @@ func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 }
 
 func (lt *localInterceptableTransport) start() {
-	lt.stopper.AddWorker()
-	go func() {
-		defer lt.stopper.SetStopped()
-
+	lt.stopper.RunWorker(func() {
 		for {
 			select {
 			case msg := <-lt.messages:
@@ -79,7 +76,7 @@ func (lt *localInterceptableTransport) start() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (lt *localInterceptableTransport) Listen(id NodeID, server ServerInterface) error {

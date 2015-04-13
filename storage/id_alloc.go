@@ -80,13 +80,11 @@ func (ia *IDAllocator) Allocate() int64 {
 	for {
 		id := <-ia.ids
 		if id == allocationTrigger {
-			ia.stopper.AddWorker()
-			go func() {
+			ia.stopper.RunWorker(func() {
 				// allocateBlock may call itself to retry, so call stopper.SetStopped
 				// here to ensure Add and SetStopped are matched.
 				ia.allocateBlock(ia.blockSize)
-				ia.stopper.SetStopped()
-			}()
+			})
 		} else {
 			return id
 		}

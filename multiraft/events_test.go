@@ -44,10 +44,7 @@ func newEventDemux(events <-chan interface{}) *eventDemux {
 }
 
 func (e *eventDemux) start(stopper *util.Stopper) {
-	stopper.AddWorker()
-	go func() {
-		defer stopper.SetStopped()
-
+	stopper.RunWorker(func() {
 		for {
 			select {
 			case event := <-e.events:
@@ -72,5 +69,5 @@ func (e *eventDemux) start(stopper *util.Stopper) {
 				return
 			}
 		}
-	}()
+	})
 }
