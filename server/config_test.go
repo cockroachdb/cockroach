@@ -28,8 +28,8 @@ import (
 // TestSetZoneInvalid sets invalid zone configs and verifies error
 // responses.
 func TestSetZoneInvalid(t *testing.T) {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	url, stopper := startAdminServer()
+	defer stopper.Stop()
 
 	testData := []struct {
 		zone   string
@@ -55,7 +55,7 @@ range_max_bytes: 67108864
 
 	for i, test := range testData {
 		re := regexp.MustCompile(test.expErr)
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s%s/%s", httpServer.URL, zonePathPrefix, "foo"), strings.NewReader(test.zone))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s%s/%s", url, zonePathPrefix, "foo"), strings.NewReader(test.zone))
 		if err != nil {
 			t.Fatal(err)
 		}

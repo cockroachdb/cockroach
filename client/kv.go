@@ -39,8 +39,6 @@ type KVSender interface {
 	// Send invokes the Call.Method with Call.Args and sets the result
 	// in Call.Reply.
 	Send(*Call)
-	// Close frees up resources in use by the sender.
-	Close()
 }
 
 // A Clock is an interface which provides the current time.
@@ -224,7 +222,6 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	txnSender := newTxnSender(kv.Sender(), opts)
 	curCtx := kv.Context()
 	txnKV := NewKV(curCtx, txnSender)
-	defer txnKV.Close()
 
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
@@ -361,9 +358,4 @@ func (kv *KV) PreparePutProto(key proto.Key, msg gogoproto.Message) error {
 		Value:         value,
 	}, &proto.PutResponse{})
 	return nil
-}
-
-// Close closes the KV client and its sender.
-func (kv *KV) Close() {
-	kv.sender.Close()
 }

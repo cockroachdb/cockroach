@@ -91,7 +91,6 @@ type MultiRaft struct {
 	proposalChan    chan *proposal
 	// callbackChan is a generic hook to run a callback in the raft thread.
 	callbackChan chan func()
-	stopper      *util.Stopper
 }
 
 // multiraftServer is a type alias to separate RPC methods
@@ -135,7 +134,6 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 		removeGroupChan: make(chan *removeGroupOp, 100),
 		proposalChan:    make(chan *proposal, 100),
 		callbackChan:    make(chan func(), 100),
-		stopper:         util.NewStopper(1),
 	}
 
 	err = m.Transport.Listen(nodeID, (*multiraftServer)(m))
@@ -147,18 +145,10 @@ func NewMultiRaft(nodeID NodeID, config *Config) (*MultiRaft, error) {
 }
 
 // Start runs the raft algorithm in a background goroutine.
-func (m *MultiRaft) Start() error {
+func (m *MultiRaft) Start(stopper *util.Stopper) error {
 	s := newState(m)
-	go s.start()
-
+	s.start(stopper)
 	return nil
-}
-
-// Stop terminates the running raft instance and shuts down all network interfaces.
-func (m *MultiRaft) Stop() {
-	m.Transport.Stop(m.nodeID)
-	m.stopper.Stop()
-	m.multiNode.Stop()
 }
 
 // RaftMessage implements ServerInterface; this method is called by net/rpc
@@ -394,6 +384,7 @@ type state struct {
 	nodes         map[NodeID]*node
 	electionTimer *time.Timer
 	writeTask     *writeTask
+	stopper       *util.Stopper
 }
 
 func newState(m *MultiRaft) *state {
@@ -405,105 +396,108 @@ func newState(m *MultiRaft) *state {
 	}
 }
 
-func (s *state) start() {
-	log.V(1).Infof("node %v starting", s.nodeID)
-	go s.writeTask.start()
-	// These maps form a kind of state machine: We don't want to read from the
-	// ready channel until the groups we got from the last read have made their
-	// way through the rest of the pipeline.
-	var readyGroups map[uint64]raft.Ready
-	var writingGroups map[uint64]raft.Ready
-	// Counts up to heartbeat interval and is then reset.
-	ticks := 0
-	for {
-		// raftReady signals that the Raft state machine has pending
-		// work. That work is supplied over the raftReady channel as a map
-		// from group ID to raft.Ready struct.
-		var raftReady <-chan map[uint64]raft.Ready
-		// writeReady is set to the write task's ready channel, which
-		// receives when the write task is prepared to persist ready data
-		// from the Raft state machine.
-		var writeReady chan struct{}
+func (s *state) start(stopper *util.Stopper) {
+	s.stopper = stopper
+	s.stopper.RunWorker(func() {
+		log.V(1).Infof("node %v starting", s.nodeID)
+		s.writeTask.start(s.stopper)
+		// These maps form a kind of state machine: We don't want to read from the
+		// ready channel until the groups we got from the last read have made their
+		// way through the rest of the pipeline.
+		var readyGroups map[uint64]raft.Ready
+		var writingGroups map[uint64]raft.Ready
+		// Counts up to heartbeat interval and is then reset.
+		ticks := 0
+		for {
+			// raftReady signals that the Raft state machine has pending
+			// work. That work is supplied over the raftReady channel as a map
+			// from group ID to raft.Ready struct.
+			var raftReady <-chan map[uint64]raft.Ready
+			// writeReady is set to the write task's ready channel, which
+			// receives when the write task is prepared to persist ready data
+			// from the Raft state machine.
+			var writeReady chan struct{}
 
-		// The order of operations in this loop structure is as follows:
-		// start by setting raftReady to the multiNode's Ready()
-		// channel. Once a new raftReady has been consumed from the
-		// channel, set writeReady to the write task's ready channel and
-		// set raftReady back to nil. This advances our read-from-raft /
-		// write-to-storage state machine to the next step: wait for the
-		// write task to be ready to persist the new data.
-		if readyGroups != nil {
-			writeReady = s.writeTask.ready
-		} else if writingGroups == nil {
-			raftReady = s.multiNode.Ready()
-		}
+			// The order of operations in this loop structure is as follows:
+			// start by setting raftReady to the multiNode's Ready()
+			// channel. Once a new raftReady has been consumed from the
+			// channel, set writeReady to the write task's ready channel and
+			// set raftReady back to nil. This advances our read-from-raft /
+			// write-to-storage state machine to the next step: wait for the
+			// write task to be ready to persist the new data.
+			if readyGroups != nil {
+				writeReady = s.writeTask.ready
+			} else if writingGroups == nil {
+				raftReady = s.multiNode.Ready()
+			}
 
-		log.V(8).Infof("node %v: selecting", s.nodeID)
-		select {
-		case <-s.stopper.ShouldStop():
-			log.V(6).Infof("node %v: stopping", s.nodeID)
-			s.stop()
-			return
+			log.V(8).Infof("node %v: selecting", s.nodeID)
+			select {
+			case <-s.stopper.ShouldStop():
+				log.V(6).Infof("node %v: stopping", s.nodeID)
+				s.stop()
+				return
 
-		case req := <-s.reqChan:
-			log.V(5).Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
-				raft.DescribeMessage(req.Message, s.EntryFormatter))
-			switch req.Message.Type {
-			case raftpb.MsgHeartbeat:
-				s.fanoutHeartbeat(req)
-			case raftpb.MsgHeartbeatResp:
-				s.fanoutHeartbeatResponse(req)
-			default:
-				if _, ok := s.groups[req.GroupID]; !ok {
-					log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
-					if err := s.createGroup(req.GroupID); err != nil {
-						log.Warningf("Error creating group %d: %s", req.GroupID, err)
-						break
+			case req := <-s.reqChan:
+				log.V(5).Infof("node %v: group %v got message %.200s", s.nodeID, req.GroupID,
+					raft.DescribeMessage(req.Message, s.EntryFormatter))
+				switch req.Message.Type {
+				case raftpb.MsgHeartbeat:
+					s.fanoutHeartbeat(req)
+				case raftpb.MsgHeartbeatResp:
+					s.fanoutHeartbeatResponse(req)
+				default:
+					if _, ok := s.groups[req.GroupID]; !ok {
+						log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
+						if err := s.createGroup(req.GroupID); err != nil {
+							log.Warningf("Error creating group %d: %s", req.GroupID, err)
+							break
+						}
+					}
+
+					if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
+						log.V(4).Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
+							raft.DescribeMessage(req.Message, s.EntryFormatter))
 					}
 				}
+			case op := <-s.createGroupChan:
+				log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+				op.ch <- s.createGroup(op.groupID)
 
-				if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
-					log.V(4).Infof("node %v: multinode step failed for message %s", s.nodeID, req.GroupID,
-						raft.DescribeMessage(req.Message, s.EntryFormatter))
+			case op := <-s.removeGroupChan:
+				log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
+				s.removeGroup(op)
+
+			case prop := <-s.proposalChan:
+				s.propose(prop)
+
+			case readyGroups = <-raftReady:
+				s.handleRaftReady(readyGroups)
+
+			case writeReady <- struct{}{}:
+				s.handleWriteReady(readyGroups)
+				writingGroups = readyGroups
+				readyGroups = nil
+
+			case resp := <-s.writeTask.out:
+				s.handleWriteResponse(resp, writingGroups)
+				s.multiNode.Advance(writingGroups)
+				writingGroups = nil
+
+			case <-s.Ticker.Chan():
+				log.V(8).Infof("node %v: got tick", s.nodeID)
+				s.multiNode.Tick()
+				ticks++
+				if ticks >= s.HeartbeatIntervalTicks {
+					ticks = 0
+					s.coalescedHeartbeat()
 				}
+
+			case cb := <-s.callbackChan:
+				cb()
 			}
-		case op := <-s.createGroupChan:
-			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
-			op.ch <- s.createGroup(op.groupID)
-
-		case op := <-s.removeGroupChan:
-			log.V(6).Infof("node %v: got op %#v", s.nodeID, op)
-			s.removeGroup(op)
-
-		case prop := <-s.proposalChan:
-			s.propose(prop)
-
-		case readyGroups = <-raftReady:
-			s.handleRaftReady(readyGroups)
-
-		case writeReady <- struct{}{}:
-			s.handleWriteReady(readyGroups)
-			writingGroups = readyGroups
-			readyGroups = nil
-
-		case resp := <-s.writeTask.out:
-			s.handleWriteResponse(resp, writingGroups)
-			s.multiNode.Advance(writingGroups)
-			writingGroups = nil
-
-		case <-s.Ticker.Chan():
-			log.V(8).Infof("node %v: got tick", s.nodeID)
-			s.multiNode.Tick()
-			ticks++
-			if ticks >= s.HeartbeatIntervalTicks {
-				ticks = 0
-				s.coalescedHeartbeat()
-			}
-
-		case cb := <-s.callbackChan:
-			cb()
 		}
-	}
+	})
 }
 
 func (s *state) coalescedHeartbeat() {
@@ -536,7 +530,7 @@ func (s *state) coalescedHeartbeat() {
 
 func (s *state) stop() {
 	log.V(6).Infof("node %v stopping", s.nodeID)
-	s.writeTask.stop()
+	s.MultiRaft.Transport.Stop(s.nodeID)
 
 	// Drain the create/remove group channels because other threads may be blocking
 	// on these operations.
@@ -551,8 +545,7 @@ func (s *state) stop() {
 			done = true
 		}
 	}
-
-	s.stopper.SetStopped()
+	s.MultiRaft.multiNode.Stop()
 }
 
 // addNode creates a node and registers the given groupIDs for that
@@ -769,6 +762,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if len(cc.Context) > 0 {
 					commandID, payload = decodeCommand(cc.Context)
 				}
+				s.stopper.StartTask()
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
@@ -807,6 +801,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 							for _, prop := range g.pending {
 								s.proposalChan <- prop
 							}
+							s.stopper.FinishTask()
 						}
 					},
 				})

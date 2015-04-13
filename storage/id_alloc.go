@@ -18,7 +18,6 @@
 package storage
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -56,7 +55,8 @@ type IDAllocator struct {
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64) (*IDAllocator, error) {
+func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64,
+	stopper *util.Stopper) (*IDAllocator, error) {
 	if minID <= allocationTrigger {
 		return nil, util.Errorf("minID must be > %d", allocationTrigger)
 	}
@@ -68,17 +68,11 @@ func NewIDAllocator(idKey proto.Key, db *client.KV, minID int64, blockSize int64
 		minID:     minID,
 		blockSize: blockSize,
 		ids:       make(chan int64, blockSize+blockSize/2+1),
-		stopper:   util.NewStopper(0),
+		stopper:   stopper,
 	}
 	ia.idKey.Store(idKey)
 	ia.ids <- allocationTrigger
 	return ia, nil
-}
-
-// Stop an IDAllocator. This ensures that the allocator is in a quiescent state
-// and will not leave hanging commands on the Store.
-func (ia *IDAllocator) Stop() {
-	ia.stopper.Stop()
 }
 
 // Allocate allocates a new ID from the global KV DB.
@@ -86,13 +80,11 @@ func (ia *IDAllocator) Allocate() int64 {
 	for {
 		id := <-ia.ids
 		if id == allocationTrigger {
-			ia.stopper.Add(1)
-			go func() {
+			ia.stopper.RunWorker(func() {
 				// allocateBlock may call itself to retry, so call stopper.SetStopped
 				// here to ensure Add and SetStopped are matched.
 				ia.allocateBlock(ia.blockSize)
-				ia.stopper.SetStopped()
-			}()
+			})
 		} else {
 			return id
 		}
@@ -106,17 +98,18 @@ func (ia *IDAllocator) Allocate() int64 {
 func (ia *IDAllocator) allocateBlock(incr int64) {
 	ir := &proto.IncrementResponse{}
 	retryOpts := IDAllocationRetryOpts
+	retryOpts.Stopper = ia.stopper
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		select {
-		case <-ia.stopper.ShouldStop():
-			return util.RetryBreak, errors.New("ShouldStop")
-		default:
+		if !ia.stopper.StartTask() {
+			return util.RetryBreak, util.Errorf("id allocator exiting as stopper is draining")
 		}
 		idKey := ia.idKey.Load().(proto.Key)
 		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(idKey, incr), ir); err != nil {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
+			ia.stopper.FinishTask()
 			return util.RetryContinue, err
 		}
+		ia.stopper.FinishTask()
 		return util.RetryBreak, nil
 	})
 	if err != nil {

@@ -47,8 +47,7 @@ func (c cliTest) Run(line string) {
 
 	var args []string
 	args = append(args, a[0])
-	args = append(args, fmt.Sprintf("-http=%s", c.HTTPAddr))
-	args = append(args, fmt.Sprintf("-rpc=%s", c.RPCAddr))
+	args = append(args, fmt.Sprintf("-addr=%s", c.HTTPAddr))
 	args = append(args, a[1:]...)
 
 	fmt.Printf("%s\n", line)
@@ -59,7 +58,6 @@ func (c cliTest) Run(line string) {
 
 func ExampleBasic() {
 	c := newCLITest()
-	defer c.Stop()
 
 	c.Run("put a 1 b 2")
 	c.Run("scan")
@@ -71,6 +69,7 @@ func ExampleBasic() {
 	c.Run("inc c 100")
 	c.Run("scan")
 	c.Run("inc c b")
+	c.Run("quit")
 
 	// Output:
 	// put a 1 b 2
@@ -93,11 +92,12 @@ func ExampleBasic() {
 	// "c"	111
 	// inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
+	// quit
+	// node drain and shutdown: ok
 }
 
 func ExampleSplitMergeRanges() {
 	c := newCLITest()
-	defer c.Stop()
 
 	c.Run("put a 1 b 2 c 3 d 4")
 	c.Run("scan")
@@ -107,6 +107,7 @@ func ExampleSplitMergeRanges() {
 	c.Run("merge-range b")
 	c.Run("ls-ranges")
 	c.Run("scan")
+	c.Run("quit")
 
 	// Output:
 	// put a 1 b 2 c 3 d 4
@@ -135,4 +136,6 @@ func ExampleSplitMergeRanges() {
 	// "b"	2
 	// "c"	3
 	// "d"	4
+	// quit
+	// node drain and shutdown: ok
 }

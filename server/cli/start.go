@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"syscall"
+	"time"
 
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
@@ -34,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-// Context is the CLI contexted used for the server.
+// Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
 var cmdStartLongDescription = `
@@ -59,7 +61,7 @@ A node exports an HTTP API with the following endpoints:
   Key-value REST:         ` + kv.RESTPrefix + `
   Structured Schema REST: ` + structured.StructuredKeyPrefix
 
-// A initCmd command initializes a new Cockroach cluster.
+// An initCmd command initializes a new Cockroach cluster.
 var initCmd = &commander.Command{
 	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
@@ -98,14 +100,12 @@ func runInit(cmd *commander.Command, args []string) {
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
-	localDB, err := server.BootstrapCluster(clusterID, e)
-	if err != nil {
+	stopper := util.NewStopper()
+	if _, err = server.BootstrapCluster(clusterID, e, stopper); err != nil {
 		log.Errorf("Failed to bootstrap cluster: %v", err)
 		return
 	}
-	// Close localDB and bootstrap engine.
-	localDB.Close()
-	e.Stop()
+	stopper.Stop()
 
 	fmt.Printf("Cockroach cluster %s has been initialized\n", clusterID)
 	if Context.BootstrapOnly {
@@ -120,7 +120,7 @@ var startCmd = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network\n",
+	Short: "start node by joining the gossip network",
 	Long:  cmdStartLongDescription,
 	Run:   runStart,
 	Flag:  *flag.CommandLine,
@@ -145,7 +145,9 @@ func runStart(cmd *commander.Command, args []string) {
 	}
 
 	log.Info("Starting cockroach cluster")
-	s, err := server.NewServer(Context)
+	stopper := util.NewStopper()
+	stopper.AddWorker()
+	s, err := server.NewServer(Context, stopper)
 	if err != nil {
 		log.Errorf("Failed to start Cockroach server: %v", err)
 		return
@@ -153,15 +155,57 @@ func runStart(cmd *commander.Command, args []string) {
 
 	isBootstrap := cmd.Name() == "init"
 	err = s.Start(isBootstrap)
-	defer s.Stop()
 	if err != nil {
 		log.Errorf("Cockroach server exited with error: %v", err)
 		return
 	}
+	defer s.Stop()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, os.Kill)
+	// TODO(spencer): move this behind a build tag.
+	signal.Notify(signalCh, syscall.SIGTERM)
 
 	// Block until one of the signals above is received.
-	<-c
+	gracefulShutdownCh := make(chan struct{})
+	select {
+	case <-stopper.ShouldStop():
+		stopper.SetStopped()
+	case <-signalCh:
+		log.Infof("initiating graceful shutdown of server")
+		stopper.SetStopped()
+		go func() {
+			s.Stop()
+			close(gracefulShutdownCh)
+		}()
+	}
+
+	select {
+	case <-signalCh:
+		log.Warningf("second signal received, initiating hard shutdown")
+	case <-time.After(time.Minute):
+		log.Warningf("time limit reached, initiating hard shutdown")
+		return
+	case <-gracefulShutdownCh:
+		log.Infof("server drained and shutdown completed")
+	}
+}
+
+// A quitCmd command shuts down the node server.
+var quitCmd = &commander.Command{
+	UsageLine: "quit",
+	Short: "shutdown node by entering it into draining mode first, followed " +
+		"by exit\n",
+	Long: `
+Shutdown the server. The first stage is drain, where any new requests
+will be ignored by the server. When all extant requests have been
+completed, the server exits.
+`,
+	Run:  runQuit,
+	Flag: *flag.CommandLine,
+}
+
+// runQuit accesses the quitquitquit shutdown path.
+func runQuit(cmd *commander.Command, args []string) {
+	server.RunQuit(Context)
 }

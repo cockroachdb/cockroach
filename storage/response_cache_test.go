@@ -267,7 +267,7 @@ func TestResponseCacheShouldCache(t *testing.T) {
 func TestResponseCacheGC(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	eng := engine.NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, 1<<30)
-	defer eng.Stop()
+	defer eng.Close()
 
 	rc := NewResponseCache(1, eng)
 	cmdID := makeCmdID(1, 1)

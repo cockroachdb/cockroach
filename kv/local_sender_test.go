@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
@@ -126,21 +127,22 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	clock := hlc.NewClock(manualClock.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()
-	db := client.NewKV(nil, NewTxnCoordSender(ls, clock, false))
+	stopper := util.NewStopper()
+	defer stopper.Stop()
+	db := client.NewKV(nil, NewTxnCoordSender(ls, clock, false, stopper))
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
 	store := storage.NewStore(clock, eng, db, nil, transport, storage.TestStoreConfig)
-	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	ls.AddStore(store)
 	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Start(); err != nil {
+	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
-	defer store.Stop()
 	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)
@@ -162,13 +164,12 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		defer transport.Close()
 		s[i] = storage.NewStore(clock, e[i], db, nil, transport, storage.TestStoreConfig)
 		s[i].Ident.StoreID = rng.storeID
-		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}); err != nil {
+		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}, stopper); err != nil {
 			t.Fatal(err)
 		}
-		if err := s[i].Start(); err != nil {
+		if err := s[i].Start(stopper); err != nil {
 			t.Fatal(err)
 		}
-		defer s[i].Stop()
 
 		desc, err := store.NewRangeDescriptor(rng.start, rng.end, []proto.Replica{{StoreID: rng.storeID}})
 		if err != nil {

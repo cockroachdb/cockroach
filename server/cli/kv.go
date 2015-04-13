@@ -43,7 +43,7 @@ func makeKVClient() *client.KV {
 	transport := &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	}
-	kv := client.NewKV(nil, client.NewHTTPSender(Context.HTTP, transport))
+	kv := client.NewKV(nil, client.NewHTTPSender(Context.Addr, transport))
 	// TODO(pmattis): Initialize this to something more reasonable
 	kv.User = "root"
 	return kv
@@ -66,8 +66,6 @@ func runGet(cmd *commander.Command, args []string) {
 		return
 	}
 	kv := makeKVClient()
-	defer kv.Close()
-
 	key := proto.Key(args[0])
 	resp := &proto.GetResponse{}
 	if err := kv.Call(proto.Get, proto.GetArgs(key), resp); err != nil {
@@ -119,8 +117,6 @@ func runPut(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
 	err := kv.RunTransaction(opts, func(txn *client.KV) error {
 		for i := 0; i < len(args); i += 2 {
@@ -162,8 +158,6 @@ func runInc(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	amount := 1
 	if len(args) >= 2 {
 		var err error
@@ -211,8 +205,6 @@ func runDel(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
 	err := kv.RunTransaction(opts, func(txn *client.KV) error {
 		for i := 0; i < len(args); i++ {
@@ -269,8 +261,6 @@ func runScan(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	defer kv.Close()
-
 	// TODO(pmattis): Add a flag for the number of results to scan.
 	req := proto.ScanArgs(startKey, endKey, 1000)
 	resp := &proto.ScanResponse{}

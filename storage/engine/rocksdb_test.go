@@ -75,13 +75,13 @@ func TestRocksDBCompaction(t *testing.T) {
 	gob.Register(proto.Timestamp{})
 	loc := util.CreateTempDirectory()
 	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	err := rocksdb.Start()
+	err := rocksdb.Open()
 	if err != nil {
 		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
 	rocksdb.SetGCTimeouts(1, 2)
 	defer func(t *testing.T) {
-		rocksdb.Stop()
+		rocksdb.Close()
 		if err := rocksdb.Destroy(); err != nil {
 			t.Errorf("could not delete rocksdb db at %s: %v", loc, err)
 		}
@@ -160,7 +160,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 	log.Infof("creating mvcc data: %s", loc)
 	const cacheSize = 8 << 30 // 8 GB
 	rocksdb := NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
-	if err := rocksdb.Start(); err != nil {
+	if err := rocksdb.Open(); err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
 	}
 
@@ -222,7 +222,7 @@ func runMVCCScan(numRows, numVersions int, b *testing.B) {
 	const numKeys = 100000
 
 	rocksdb := setupMVCCScanData(numVersions, numKeys, b)
-	defer rocksdb.Stop()
+	defer rocksdb.Close()
 
 	prewarmCache(rocksdb)
 
@@ -311,7 +311,7 @@ func runMVCCGet(numVersions int, b *testing.B) {
 	const numKeys = 100000
 
 	rocksdb := setupMVCCScanData(numVersions, numKeys, b)
-	defer rocksdb.Stop()
+	defer rocksdb.Close()
 
 	prewarmCache(rocksdb)
 
@@ -355,7 +355,7 @@ func runMVCCPut(valueSize int, b *testing.B) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	defer rocksdb.Stop()
+	defer rocksdb.Close()
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
@@ -393,7 +393,7 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	defer rocksdb.Stop()
+	defer rocksdb.Close()
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
@@ -441,7 +441,7 @@ func BenchmarkMVCCBatch100000Put10(b *testing.B) {
 // runMVCCMerge merges value into numKeys separate keys.
 func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 	rocksdb := NewInMem(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	defer rocksdb.Stop()
+	defer rocksdb.Close()
 
 	// Precompute keys so we don't waste time formatting them at each iteration.
 	keys := make([]proto.Key, numKeys)

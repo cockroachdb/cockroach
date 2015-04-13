@@ -44,6 +44,7 @@ type Network struct {
 	Addrs          []net.Addr
 	NetworkType    string        // "tcp" or "unix"
 	GossipInterval time.Duration // The length of a round of gossip
+	Stopper        *util.Stopper
 }
 
 // NewNetwork creates nodeCount gossip nodes. The networkType should
@@ -77,11 +78,13 @@ func NewNetwork(nodeCount int, networkType string,
 		bootstrap = addrs[:3]
 	}
 
+	stopper := util.NewStopper()
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
 		node.Name = fmt.Sprintf("Node%d", i)
-		node.Start(servers[i])
+		node.Start(servers[i], stopper)
+		stopper.AddCloser(servers[i])
 		// Node 0 gossips node count.
 		if i == 0 {
 			node.AddInfo(gossip.KeyNodeCount, int64(nodeCount), time.Hour)
@@ -93,7 +96,9 @@ func NewNetwork(nodeCount int, networkType string,
 		Nodes:          nodes,
 		Addrs:          addrs,
 		NetworkType:    networkType,
-		GossipInterval: gossipInterval}
+		GossipInterval: gossipInterval,
+		Stopper:        stopper,
+	}
 }
 
 // GetNodeFromAddr returns the simulation node associated with
@@ -140,10 +145,7 @@ func (n *Network) SimulateNetwork(
 
 // Stop all servers and gossip nodes.
 func (n *Network) Stop() {
-	for i := 0; i < len(n.Nodes); i++ {
-		n.Nodes[i].Server.Close()
-		n.Nodes[i].Gossip.Stop()
-	}
+	n.Stopper.Stop()
 }
 
 // RunUntilFullyConnected blocks until the gossip network has received

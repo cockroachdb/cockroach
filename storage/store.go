@@ -24,6 +24,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -310,17 +311,12 @@ type Store struct {
 	replicateQueue *replicateQueue     // Replication queue
 	scanner        *rangeScanner       // Range scanner
 	multiraft      *multiraft.MultiRaft
-	// scanStopper is used to stop background tasks that might be adding work to the
-	// store. stopper is used to stop the store itself. Deadlocks could result if
-	// the two used the same stopper.
-	scanStopper *util.Stopper
-	stopper     *util.Stopper
+	started        int32
+	stopper        *util.Stopper
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
 	rangesByKey RangeSlice       // Sorted slice of ranges by StartKey
-
-	Started bool // Flag to indicate if the store is started completely
 }
 
 var _ multiraft.Storage = &Store{}
@@ -340,8 +336,6 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		allocator:   newAllocator(sf.findStores),
 		gossip:      gossip,
 		transport:   transport,
-		scanStopper: util.NewStopper(0),
-		stopper:     util.NewStopper(0),
 		ranges:      map[int64]*Range{},
 	}
 
@@ -356,50 +350,40 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	return s
 }
 
-// Stop shuts down the store.
-func (s *Store) Stop() {
-	// First, stop the scanner which might be generating new work in the background.
-	s.scanStopper.Stop()
-	// Second, stop the id allocator which may need the ranges to be up to finish.
-	if s.raftIDAlloc != nil {
-		s.raftIDAlloc.Stop()
-	}
-	for _, rng := range s.ranges {
-		rng.stop()
-	}
-	s.stopper.Stop()
-	s.engine.Stop()
-	s.Started = false
-}
-
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("store=%d:%d (%s)", s.Ident.NodeID, s.Ident.StoreID, s.engine)
 }
 
+// IsStarted returns true if the Store has been started.
+func (s *Store) IsStarted() bool {
+	return atomic.LoadInt32(&s.started) == 1
+}
+
 // Start the engine, set the GC and read the StoreIdent.
-func (s *Store) Start() error {
+func (s *Store) Start(stopper *util.Stopper) error {
+	s.stopper = stopper
+
 	if s.Ident.NodeID == 0 {
-		// Start engine (i.e. open and initialize RocksDB
-		// database). "NodeID != 0" implies the engine has already been
-		// started.
-		if err := s.engine.Start(); err != nil {
+		// Open engine (i.e. initialize RocksDB database). "NodeID != 0"
+		// implies the engine has already been opened.
+		if err := s.engine.Open(); err != nil {
 			return err
 		}
+		s.stopper.AddCloser(s.engine)
+
 		// Read store ident and return a not-bootstrapped error if necessary.
 		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true,
 			nil, &s.Ident)
 		if err != nil {
-			s.engine.Stop()
 			return err
 		} else if !ok {
-			s.engine.Stop()
 			return &NotBootstrappedError{}
 		}
 	}
 
 	// Create ID allocators.
-	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount)
+	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.db, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
 		return err
 	}
@@ -417,7 +401,7 @@ func (s *Store) Start() error {
 	start := engine.RangeDescriptorKey(engine.KeyMin)
 	end := engine.RangeDescriptorKey(engine.KeyMax)
 
-	mr, err := multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
+	if s.multiraft, err = multiraft.NewMultiRaft(s.RaftNodeID(), &multiraft.Config{
 		Transport:              s.transport,
 		Storage:                s,
 		StateMachine:           s,
@@ -425,11 +409,9 @@ func (s *Store) Start() error {
 		ElectionTimeoutTicks:   s.RaftElectionTimeoutTicks,
 		HeartbeatIntervalTicks: s.RaftHeartbeatIntervalTicks,
 		EntryFormatter:         raftEntryFormatter,
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	s.multiraft = mr
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -471,12 +453,11 @@ func (s *Store) Start() error {
 	sort.Sort(s.rangesByKey)
 
 	// Start Raft processing goroutines.
-	mr.Start()
-	s.stopper.Add(1)
-	go s.processRaft()
+	s.multiraft.Start(s.stopper)
+	s.processRaft()
 
 	// Start the scanner.
-	s.scanner.Start(s.clock, s.scanStopper)
+	s.scanner.Start(s.clock, s.stopper)
 
 	// Register callbacks for any changes to accounting and zone
 	// configurations; we split ranges along prefix boundaries.
@@ -489,7 +470,9 @@ func (s *Store) Start() error {
 		s.gossip.RegisterCallback(capacityRegex, s.capacityGossipUpdate)
 	}
 
-	s.Started = true
+	// Set the started flag (for unittests).
+	atomic.StoreInt32(&s.started, 1)
+
 	return nil
 }
 
@@ -587,13 +570,14 @@ func (s *Store) setRangesMaxBytes(zoneMap PrefixConfigMap) {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ident proto.StoreIdent) error {
+func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 	if s.Ident.NodeID != 0 {
 		return util.Errorf("engine already bootstrapped")
 	}
-	if err := s.engine.Start(); err != nil {
+	if err := s.engine.Open(); err != nil {
 		return err
 	}
+	stopper.AddCloser(s.engine)
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine, proto.EncodedKey(engine.KeyMin), proto.EncodedKey(engine.KeyMax), 1)
 	if err != nil {
@@ -612,6 +596,7 @@ func (s *Store) GetRange(raftID int64) (*Range, error) {
 	if rng, ok := s.ranges[raftID]; ok {
 		return rng, nil
 	}
+	log.Infof("couldn't find range %d in %s", raftID, s.ranges)
 	return nil, proto.NewRangeNotFoundError(raftID)
 }
 
@@ -850,7 +835,7 @@ func (s *Store) AddRange(rng *Range) error {
 // is held. Returns a rangeAlreadyExists error if a range with the
 // same Raft ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Range, resort bool) error {
-	rng.start()
+	rng.start(s.stopper)
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
 	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {
@@ -874,7 +859,7 @@ func (s *Store) RemoveRange(rng *Range) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rng.stop()
+
 	delete(s.ranges, rng.Desc().RaftID)
 	// Find the range in rangesByKey slice and swap it to end of slice
 	// and truncate.
@@ -942,20 +927,21 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 		}
 	}
 
-	// Get range and add command to the range for execution.
-	rng, err := s.GetRange(header.RaftID)
-	if err != nil {
-		return err
-	}
-
 	// Backoff and retry loop for handling errors.
 	retryOpts := s.RetryOpts
-	retryOpts.Tag = method
-	err = util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	retryOpts.Tag = fmt.Sprintf("store: %s", method)
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
-		err := rng.AddCmd(method, args, reply, true)
-		if err == nil {
+
+		// Get range and add command to the range for execution.
+		rng, err := s.GetRange(header.RaftID)
+		if err != nil {
+			reply.Header().SetGoError(err)
+			return util.RetryBreak, err
+		}
+
+		if err = rng.AddCmd(method, args, reply, true); err == nil {
 			return util.RetryBreak, nil
 		}
 
@@ -1103,8 +1089,8 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 
 // processRaft processes read/write commands that have been committed
 // by the raft consensus algorithm, dispatching them to the
-// appropriate range. This method processes indefinitely or until
-// Store.Stop() is invoked.
+// appropriate range. This method starts a goroutine to process Raft
+// commands indefinitely or until the stopper signals.
 //
 // TODO(bdarnell): when Raft elects this node as the leader for any
 //   of its ranges, we need to be careful to do the following before
@@ -1121,64 +1107,64 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 //   and be able to access the new leader's state machine BEFORE
 //   the overlapping writes are applied.
 func (s *Store) processRaft() {
-	for {
-		select {
-		case e := <-s.multiraft.Events:
-			var cmd proto.InternalRaftCommand
-			var groupID int64
-			var commandID string
-			var index uint64
-			var callback func(error)
+	s.stopper.RunWorker(func() {
+		for {
+			select {
+			case e := <-s.multiraft.Events:
+				var cmd proto.InternalRaftCommand
+				var groupID int64
+				var commandID string
+				var index uint64
+				var callback func(error)
 
-			switch e := e.(type) {
-			case *multiraft.EventCommandCommitted:
-				groupID = int64(e.GroupID)
-				commandID = e.CommandID
-				index = e.Index
-				err := gogoproto.Unmarshal(e.Command, &cmd)
-				if err != nil {
-					log.Fatal(err)
+				switch e := e.(type) {
+				case *multiraft.EventCommandCommitted:
+					groupID = int64(e.GroupID)
+					commandID = e.CommandID
+					index = e.Index
+					err := gogoproto.Unmarshal(e.Command, &cmd)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+				case *multiraft.EventMembershipChangeCommitted:
+					groupID = int64(e.GroupID)
+					commandID = e.CommandID
+					index = e.Index
+					callback = e.Callback
+					err := gogoproto.Unmarshal(e.Payload, &cmd)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+				default:
+					continue
 				}
 
-			case *multiraft.EventMembershipChangeCommitted:
-				groupID = int64(e.GroupID)
-				commandID = e.CommandID
-				index = e.Index
-				callback = e.Callback
-				err := gogoproto.Unmarshal(e.Payload, &cmd)
-				if err != nil {
-					log.Fatal(err)
+				if groupID != cmd.RaftID {
+					log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RaftID)
 				}
 
-			default:
-				continue
-			}
+				s.mu.Lock()
+				r, ok := s.ranges[groupID]
+				s.mu.Unlock()
+				var err error
+				if !ok {
+					err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
+						groupID, cmd)
+					log.Error(err)
+				} else {
+					err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
+				}
+				if callback != nil {
+					callback(err)
+				}
 
-			if groupID != cmd.RaftID {
-				log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RaftID)
+			case <-s.stopper.ShouldStop():
+				return
 			}
-
-			s.mu.Lock()
-			r, ok := s.ranges[groupID]
-			s.mu.Unlock()
-			var err error
-			if !ok {
-				err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
-					groupID, cmd)
-				log.Error(err)
-			} else {
-				err = r.processRaftCommand(cmdIDKey(commandID), index, cmd)
-			}
-			if callback != nil {
-				callback(err)
-			}
-
-		case <-s.stopper.ShouldStop():
-			s.multiraft.Stop()
-			s.stopper.SetStopped()
-			return
 		}
-	}
+	})
 }
 
 // GroupStorage implements the multiraft.Storage interface.

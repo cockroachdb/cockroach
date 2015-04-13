@@ -453,7 +453,6 @@ func ExampleKV_Call() {
 	})
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
-	defer kvClient.Close()
 
 	key := proto.Key("a")
 	value := []byte{1, 2, 3, 4}
@@ -499,7 +498,6 @@ func ExampleKV_Prepare() {
 	})
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
-	defer kvClient.Close()
 
 	// Insert test data.
 	batchSize := 12
@@ -570,7 +568,6 @@ func ExampleKV_RunTransaction() {
 	})
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
-	defer kvClient.Close()
 
 	// Create test data.
 	numKVPairs := 10

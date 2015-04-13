@@ -31,7 +31,6 @@ import (
 type LocalSender struct {
 	mu       sync.RWMutex                     // Protects storeMap and addrs
 	storeMap map[proto.StoreID]*storage.Store // Map from StoreID to Store
-	closer   chan struct{}
 }
 
 // NewLocalSender returns a local-only sender which directly accesses
@@ -39,7 +38,6 @@ type LocalSender struct {
 func NewLocalSender() *LocalSender {
 	return &LocalSender{
 		storeMap: map[proto.StoreID]*storage.Store{},
-		closer:   make(chan struct{}),
 	}
 }
 
@@ -108,13 +106,6 @@ func (ls *LocalSender) Send(call *client.Call) {
 		MaxAttempts: 2,
 	}
 	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		select {
-		case <-ls.closer:
-			call.Reply.Header().SetGoError(
-				proto.NewTransactionRetryError(call.Args.Header().Txn))
-			return util.RetryBreak, nil
-		default:
-		}
 		call.Reply.Header().Error = nil
 		var err error
 		var store *storage.Store
@@ -172,17 +163,6 @@ func (ls *LocalSender) Send(call *client.Call) {
 		}
 		return util.RetryBreak, nil
 	})
-}
-
-// Close implements the client.KVSender interface. Close closes all
-// stores.
-func (ls *LocalSender) Close() {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-	close(ls.closer)
-	for _, store := range ls.storeMap {
-		store.Stop()
-	}
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done

@@ -70,10 +70,10 @@ type Iterator interface {
 // Engine is the interface that wraps the core operations of a
 // key/value store.
 type Engine interface {
-	// Start initializes and starts the engine.
-	Start() error
-	// Stop closes the engine, freeing up any outstanding resources.
-	Stop()
+	// Open initializes the engine.
+	Open() error
+	// Close closes the engine, freeing up any outstanding resources.
+	Close()
 	// Attrs returns the engine/store attributes.
 	Attrs() proto.Attributes
 	// Put sets the given key to the value provided.
@@ -135,7 +135,7 @@ type Engine interface {
 	// NewSnapshot returns a new instance of a read-only snapshot
 	// engine. Snapshots are instantaneous and, as long as they're
 	// released relatively quickly, inexpensive. Snapshots are released
-	// by invoking Stop(). Note that snapshots must not be used after the
+	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Engine
 	// NewBatch returns a new instance of a batched engine which wraps

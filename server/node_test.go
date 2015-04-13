@@ -43,12 +43,13 @@ import (
 // of engines. The server, clock and node are returned. If gossipBS is
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *hlc.Clock, *Node) {
+	*rpc.Server, *hlc.Clock, *Node, *util.Stopper) {
 	tlsConfig, err := rpc.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	stopper := util.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(clock, tlsConfig)
 	rpcServer := rpc.NewServer(addr, rpcContext)
@@ -62,22 +63,22 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 			gossipBS = rpcServer.Addr()
 		}
 		g.SetBootstrap([]net.Addr{gossipBS})
-		g.Start(rpcServer)
+		g.Start(rpcServer, stopper)
 	}
 	db := client.NewKV(nil, kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, g))
 	// TODO(bdarnell): arrange to have the transport closed.
 	node := NewNode(db, g, storage.TestStoreConfig, multiraft.NewLocalRPCTransport())
-	return rpcServer, clock, node
+	return rpcServer, clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
-	*rpc.Server, *Node) {
-	rpcServer, clock, node := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, clock, engines, proto.Attributes{}); err != nil {
+	*rpc.Server, *Node, *util.Stopper) {
+	rpcServer, clock, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	if err := node.start(rpcServer, clock, engines, proto.Attributes{}, stopper); err != nil {
 		t.Fatal(err)
 	}
-	return rpcServer, node
+	return rpcServer, node, stopper
 }
 
 func formatKeys(keys []proto.Key) string {
@@ -91,12 +92,13 @@ func formatKeys(keys []proto.Key) string {
 // TestBootstrapCluster verifies the results of bootstrapping a
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
+	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	localDB, err := BootstrapCluster("cluster-1", e, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer localDB.Close()
+	defer stopper.Stop()
 
 	// Scan the complete contents of the local database.
 	sr := &proto.ScanResponse{}
@@ -135,12 +137,13 @@ func TestBootstrapCluster(t *testing.T) {
 // TestBootstrapNewStore starts a cluster with two unbootstrapped
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
+	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e)
+	_, err := BootstrapCluster("cluster-1", e, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	localDB.Close()
+	stopper.Stop()
 
 	// Start a new node with two new stores which will require bootstrapping.
 	engines := []engine.Engine{
@@ -148,8 +151,8 @@ func TestBootstrapNewStore(t *testing.T) {
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 		engine.NewInMem(proto.Attributes{}, 1<<20),
 	}
-	server, node := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	defer server.Close()
+	_, node, stopper := createAndStartTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	defer stopper.Stop()
 
 	// Non-initialized stores (in this case the new in-memory-based
 	// store) will be bootstrapped by the node upon start. This happens
@@ -161,7 +164,7 @@ func TestBootstrapNewStore(t *testing.T) {
 
 	// Check whether all stores are started properly.
 	if err := node.lSender.VisitStores(func(s *storage.Store) error {
-		if s.Started == false {
+		if s.IsStarted() == false {
 			return util.Errorf("fail to start store: %s", s)
 		}
 		return nil
@@ -173,25 +176,26 @@ func TestBootstrapNewStore(t *testing.T) {
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
+	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	db, err := BootstrapCluster("cluster-1", e)
+	_, err := BootstrapCluster("cluster-1", e, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	stopper.Stop()
 
 	// Set an aggressive gossip interval to make sure information is exchanged tout de suite.
 	testContext.GossipInterval = gossip.TestInterval
 	// Start the bootstrap node.
 	engines1 := []engine.Engine{e}
 	addr1 := util.CreateTestAddr("tcp")
-	server1, node1 := createAndStartTestNode(addr1, engines1, addr1, t)
-	defer server1.Close()
+	server1, node1, stopper1 := createAndStartTestNode(addr1, engines1, addr1, t)
+	defer stopper1.Stop()
 
 	// Create a new node.
 	engines2 := []engine.Engine{engine.NewInMem(proto.Attributes{}, 1<<20)}
-	server2, node2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
-	defer server2.Close()
+	server2, node2, stopper2 := createAndStartTestNode(util.CreateTestAddr("tcp"), engines2, server1.Addr(), t)
+	defer stopper2.Stop()
 
 	// Verify new node is able to bootstrap its store.
 	if err := util.IsTrueWithin(func() bool { return node2.lSender.GetStoreCount() == 1 }, 50*time.Millisecond); err != nil {
@@ -221,12 +225,13 @@ func TestNodeJoin(t *testing.T) {
 // TestCorruptedClusterID verifies that a node fails to start when a
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
+	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	db, err := BootstrapCluster("cluster-1", e)
+	_, err := BootstrapCluster("cluster-1", e, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.Close()
+	stopper.Stop()
 
 	// Set the cluster ID to an empty string.
 	sIdent := proto.StoreIdent{
@@ -239,9 +244,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	server, clock, node := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, clock, engines, proto.Attributes{}); err == nil {
+	server, clock, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	if err := node.start(server, clock, engines, proto.Attributes{}, stopper); err == nil {
 		t.Errorf("unexpected success")
 	}
-	server.Close()
+	stopper.Stop()
 }

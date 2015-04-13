@@ -77,7 +77,7 @@ func (vq *verifyQueue) process(now proto.Timestamp, rng *Range) error {
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng, snap)
 	defer iter.Close()
-	defer snap.Stop()
+	defer snap.Close()
 
 	// Iterate through all keys & values.
 	for ; iter.Valid(); iter.Next() {

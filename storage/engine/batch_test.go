@@ -32,7 +32,7 @@ import (
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
@@ -97,7 +97,7 @@ func TestBatchBasics(t *testing.T) {
 func TestBatchGet(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	// Write initial values, then write to batch.
@@ -144,7 +144,7 @@ func compareMergedValues(result, expected []byte) bool {
 func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	b := NewInMem(proto.Attributes{}, 1<<20).NewBatch()
-	defer b.Stop()
+	defer b.Close()
 
 	// Write batch put, delete & merge.
 	if err := b.Put(proto.EncodedKey("a"), appender("a-value")); err != nil {
@@ -197,7 +197,7 @@ func TestBatchMerge(t *testing.T) {
 func TestBatchProto(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
@@ -239,7 +239,7 @@ func TestBatchProto(t *testing.T) {
 func TestBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	existingVals := []proto.RawKeyValue{
@@ -329,7 +329,7 @@ func TestBatchScan(t *testing.T) {
 func TestBatchScanWithDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	// Write initial value, then delete via batch.
@@ -354,7 +354,7 @@ func TestBatchScanWithDelete(t *testing.T) {
 func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	// Write two values.
@@ -385,7 +385,7 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 func TestBatchConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	e := NewInMem(proto.Attributes{}, 1<<20)
-	defer e.Stop()
+	defer e.Close()
 
 	b := e.NewBatch()
 	// Write a merge to the batch.

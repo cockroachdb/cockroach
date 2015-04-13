@@ -116,7 +116,6 @@ type writeResponse struct {
 // writeTask manages a goroutine that interacts with the storage system.
 type writeTask struct {
 	storage Storage
-	stopper *util.Stopper
 
 	// ready is an unbuffered channel used for synchronization. If writes to this channel do not
 	// block, the writeTask is ready to receive a request.
@@ -131,61 +130,56 @@ type writeTask struct {
 func newWriteTask(storage Storage) *writeTask {
 	return &writeTask{
 		storage: storage,
-		stopper: util.NewStopper(1),
 		ready:   make(chan struct{}),
 		in:      make(chan *writeRequest, 1),
 		out:     make(chan *writeResponse, 1),
 	}
 }
 
-// start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
-func (w *writeTask) start() {
-	for {
-		var request *writeRequest
-		select {
-		case <-w.ready:
-			continue
-		case <-w.stopper.ShouldStop():
-			w.stopper.SetStopped()
-			return
-		case request = <-w.in:
-		}
-		log.V(6).Infof("writeTask got request %#v", *request)
-		response := &writeResponse{make(map[uint64]*groupWriteResponse)}
-
-		for groupID, groupReq := range request.groups {
-			group := w.storage.GroupStorage(groupID)
-			if group == nil {
-				log.V(4).Infof("dropping write to group %v", groupID)
+// start runs the storage loop in a goroutine.
+func (w *writeTask) start(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		for {
+			var request *writeRequest
+			select {
+			case <-w.ready:
 				continue
+			case <-stopper.ShouldStop():
+				return
+			case request = <-w.in:
 			}
-			groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
-			response.groups[groupID] = groupResp
-			if !raft.IsEmptyHardState(groupReq.state) {
-				err := group.SetHardState(groupReq.state)
-				if err != nil {
-					panic(err) // TODO(bdarnell): mark this node dead on storage errors
-				}
-				groupResp.state = groupReq.state
-			}
-			if !raft.IsEmptySnap(groupReq.snapshot) {
-				err := group.ApplySnapshot(groupReq.snapshot)
-				if err != nil {
-					panic(err) // TODO(bdarnell)
-				}
-			}
-			if len(groupReq.entries) > 0 {
-				err := group.Append(groupReq.entries)
-				if err != nil {
-					panic(err) // TODO(bdarnell)
-				}
-			}
-		}
-		w.out <- response
-	}
-}
+			log.V(6).Infof("writeTask got request %#v", *request)
+			response := &writeResponse{make(map[uint64]*groupWriteResponse)}
 
-// stop the running task.
-func (w *writeTask) stop() {
-	w.stopper.Stop()
+			for groupID, groupReq := range request.groups {
+				group := w.storage.GroupStorage(groupID)
+				if group == nil {
+					log.V(4).Infof("dropping write to group %v", groupID)
+					continue
+				}
+				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
+				response.groups[groupID] = groupResp
+				if !raft.IsEmptyHardState(groupReq.state) {
+					err := group.SetHardState(groupReq.state)
+					if err != nil {
+						panic(err) // TODO(bdarnell): mark this node dead on storage errors
+					}
+					groupResp.state = groupReq.state
+				}
+				if !raft.IsEmptySnap(groupReq.snapshot) {
+					err := group.ApplySnapshot(groupReq.snapshot)
+					if err != nil {
+						panic(err) // TODO(bdarnell)
+					}
+				}
+				if len(groupReq.entries) > 0 {
+					err := group.Append(groupReq.entries)
+					if err != nil {
+						panic(err) // TODO(bdarnell)
+					}
+				}
+			}
+			w.out <- response
+		}
+	})
 }

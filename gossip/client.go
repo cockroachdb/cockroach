@@ -65,25 +65,28 @@ func newClient(addr net.Addr) *client {
 // start dials the remote addr and commences gossip once connected.
 // Upon exit, signals client is done by pushing it onto the done
 // channel. If the client experienced an error, its err field will
-// be set. This method blocks and should be invoked via goroutine.
-func (c *client) start(g *Gossip, done chan *client) {
-	c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
-	select {
-	case <-c.rpcClient.Ready:
-		// Success!
-	case <-c.rpcClient.Closed:
-		c.err = util.Errorf("gossip client failed to connect")
-		done <- c
-		return
-	}
+// be set. This method starts client processing in a goroutine and
+// returns immediately.
+func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
+		select {
+		case <-c.rpcClient.Ready:
+			// Success!
+		case <-c.rpcClient.Closed:
+			c.err = util.Errorf("gossip client failed to connect")
+			done <- c
+			return
+		}
 
-	// Start gossipping and wait for disconnect or error.
-	c.lastFresh = time.Now().UnixNano()
-	err := c.gossip(g)
-	if err != nil {
-		c.err = util.Errorf("gossip client: %s", err)
-	}
-	done <- c
+		// Start gossipping and wait for disconnect or error.
+		c.lastFresh = time.Now().UnixNano()
+		err := c.gossip(g, stopper)
+		if err != nil {
+			c.err = util.Errorf("gossip client: %s", err)
+		}
+		done <- c
+	})
 }
 
 // close stops the client gossip loop and returns immediately.
@@ -94,7 +97,7 @@ func (c *client) close() {
 // gossip loops, sending deltas of the infostore and receiving deltas
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
-func (c *client) gossip(g *Gossip) error {
+func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 	localMaxSeq := int64(0)
 	remoteMaxSeq := int64(-1)
 	for {
@@ -138,6 +141,8 @@ func (c *client) gossip(g *Gossip) error {
 		case <-c.rpcClient.Closed:
 			return util.Error("client closed")
 		case <-c.closer:
+			return nil
+		case <-stopper.ShouldStop():
 			return nil
 		case <-time.After(g.interval * 10):
 			return util.Errorf("timeout after: %s", g.interval*10)

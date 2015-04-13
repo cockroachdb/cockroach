@@ -39,8 +39,9 @@ write: [readwrite, writeonly]
 // ExampleSetAndGetPerm sets perm configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func ExampleSetAndGetPerms() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
@@ -101,8 +102,9 @@ func ExampleSetAndGetPerms() {
 // perm-ls works. First, no regexp lists all perm configs. Second,
 // regexp properly matches results.
 func ExampleLsPerms() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
@@ -159,8 +161,9 @@ func ExampleLsPerms() {
 // have been removed via perm-ls. Also verify the default perm config
 // cannot be removed.
 func ExampleRmPerms() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testPermConfig)
 	defer os.Remove(testConfigFn)
 
@@ -192,8 +195,8 @@ func ExampleRmPerms() {
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
 func ExamplePermContentTypes() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
 
 	config := &proto.PermConfig{}
 	err := yaml.Unmarshal([]byte(testPermConfig), config)
@@ -273,8 +276,8 @@ func ExamplePermContentTypes() {
 // TestPermEmptyKey verifies that the Accept header can be used
 // to control the format of the response when a key is empty.
 func TestPermEmptyKey(t *testing.T) {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
 
 	config := &proto.PermConfig{}
 	err := yaml.Unmarshal([]byte(testPermConfig), config)

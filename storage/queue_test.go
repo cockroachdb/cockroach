@@ -189,7 +189,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		duration: 5 * time.Millisecond,
 	}
 	bq := newBaseQueue("test", testQueue, 2)
-	stopper := util.NewStopper(0)
+	stopper := util.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)
@@ -229,7 +229,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		},
 	}
 	bq := newBaseQueue("test", testQueue, 2)
-	stopper := util.NewStopper(0)
+	stopper := util.NewStopper()
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
 	bq.Start(clock, stopper)

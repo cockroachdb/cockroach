@@ -32,8 +32,7 @@ import (
 // processEventsUntil reads and acknowledges messages from the given channel
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
-func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper,
-	f func(*RaftMessageRequest) bool) {
+func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f func(*RaftMessageRequest) bool) {
 	if stopper != nil {
 		defer stopper.SetStopped()
 	}
@@ -134,15 +133,14 @@ func countHeartbeats(ch <-chan *interceptMessage,
 	return cnt
 }
 
-// a blockingCluster is a cluster in which we intercept and acknowledge all
-// inter-node traffic.
-func blockingCluster(nodeCount int, t *testing.T) (*testCluster, *util.Stopper) {
-	stopper := util.NewStopper(0)
+// newBlockingCluster creates and returns a variant of testCluster
+// which intercepts and acknowledges all inter-node traffic.
+func newBlockingCluster(nodeCount int, stopper *util.Stopper, t *testing.T) *testCluster {
 	transport := NewLocalInterceptableTransport(stopper)
-	cluster := newTestCluster(transport, nodeCount, t)
+	cluster := newTestCluster(transport, nodeCount, stopper, t)
 	// Outgoing messages block the client until we acknowledge them, and
 	// messages are sent synchronously.
-	return cluster, stopper
+	return cluster
 }
 
 // TestHeartbeatSingleGroup makes sure that in a single raft consensus group
@@ -181,7 +179,8 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 		expCnt[uint64(i+1)] = heartbeatCount{reqOut: 0, reqIn: ltc + ftc, respOut: ltc, respIn: 0}
 	}
 
-	cluster, stopper := blockingCluster(nc, t)
+	stopper := util.NewStopper()
+	cluster := newBlockingCluster(nc, stopper, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	blocker := make(chan struct{})
 	// Some more synchronization to prevent many heartbeat responses to be
@@ -226,7 +225,7 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 			return cnt.Sum() >= expCnt.Sum()
 		})
 	// Once done counting, simply process messages.
-	stopper.Add(1)
+	stopper.AddWorker()
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-blocker
 	if !reflect.DeepEqual(actCnt, expCnt) {
@@ -235,12 +234,12 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 			nc, ltc, actCnt, expCnt)
 	}
 	stopper.Stop()
-	cluster.stop()
 }
 
 func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	cluster, stopper := blockingCluster(6, t)
+	stopper := util.NewStopper()
+	cluster := newBlockingCluster(6, stopper, t)
 	transport := cluster.transport.(*localInterceptableTransport)
 	done := make(chan struct{})
 	firstPhase := make(chan struct{})
@@ -332,9 +331,8 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 			expCntSecondPhase, actCnt)
 	}
 	// Keep processing without inspection and shutdown cluster.
-	stopper.Add(1)
+	stopper.AddWorker()
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
 	stopper.Stop()
-	cluster.stop()
 }

@@ -108,8 +108,7 @@ type Gossip struct {
 	clientsMu    sync.Mutex         // Mutex protects the clients map
 	clients      map[string]*client // Map from address to client
 	disconnected chan *client       // Channel of disconnected clients
-	exited       chan error         // Channel to signal exit
-	stalled      *sync.Cond         // Indicates bootstrap is required
+	stalled      chan struct{}      // Channel to wakeup stalled bootstrap
 
 	// gossipBootstrap is a list of node addresses that act as
 	// bootstrap hosts for connecting to the gossip network.
@@ -119,17 +118,16 @@ type Gossip struct {
 // New creates an instance of a gossip node.
 func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap []net.Addr) *Gossip {
 	g := &Gossip{
-		Connected:    make(chan struct{}),
-		RPCContext:   rpcContext,
-		server:       newServer(gossipInterval),
-		bootstraps:   newAddrSet(MaxPeers),
-		outgoing:     newAddrSet(MaxPeers),
-		clients:      map[string]*client{},
-		disconnected: make(chan *client, MaxPeers),
-
+		Connected:       make(chan struct{}),
+		RPCContext:      rpcContext,
+		server:          newServer(gossipInterval),
+		bootstraps:      newAddrSet(MaxPeers),
+		outgoing:        newAddrSet(MaxPeers),
+		clients:         map[string]*client{},
+		disconnected:    make(chan *client, MaxPeers),
+		stalled:         make(chan struct{}, 10),
 		gossipBootstrap: gossipBootstrap,
 	}
-	g.stalled = sync.NewCond(&g.mu)
 	return g
 }
 
@@ -247,29 +245,12 @@ func (g *Gossip) Outgoing() []net.Addr {
 //
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
-func (g *Gossip) Start(rpcServer *rpc.Server) {
+func (g *Gossip) Start(rpcServer *rpc.Server, stopper *util.Stopper) {
 	// Start up asynchronous processors.
-	g.server.start(rpcServer) // serve gossip protocol
-	go g.bootstrap()          // bootstrap gossip client
-	go g.manage()             // manage gossip clients
-	go g.maybeWarnAboutInit()
-}
-
-// Stop shuts down the gossip server. Returns a channel which signals
-// exit once all outgoing clients are closed and the management loop
-// for the gossip instance is finished.
-func (g *Gossip) Stop() <-chan error {
-	// Set server's closed boolean and exit server.
-	g.stop()
-	// Wake up bootstrap goroutine so it can exit.
-	g.stalled.Signal()
-	// Close all outgoing clients.
-	g.mu.Lock()
-	for _, addr := range g.outgoing.asSlice() {
-		g.closeClient(addr)
-	}
-	g.mu.Unlock()
-	return g.exited
+	g.server.start(rpcServer, stopper) // serve gossip protocol
+	g.bootstrap(stopper)               // bootstrap gossip client
+	g.manage(stopper)                  // manage gossip clients
+	g.maybeWarnAboutInit(stopper)
 }
 
 // maxToleratedHops computes the maximum number of hops which the
@@ -338,34 +319,39 @@ func (g *Gossip) filterExtant(addrs *addrSet) *addrSet {
 // connection, this method will block on the stalled condvar, which
 // receives notifications that gossip network connectivity has been
 // lost and requires re-bootstrapping.
-//
-// This method will block and should be run via goroutine.
-func (g *Gossip) bootstrap() {
-	for {
-		g.mu.Lock()
-		g.initializeBootstrapAddresses()
-		if g.closed {
+func (g *Gossip) bootstrap(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		for {
+			g.mu.Lock()
+			g.initializeBootstrapAddresses()
+			if g.closed {
+				g.mu.Unlock()
+				break
+			}
+			// Find list of available bootstrap hosts.
+			avail := g.filterExtant(g.bootstraps)
+			if avail.len() > 0 {
+				// Check whether or not we need bootstrap.
+				haveClients := g.outgoing.len() > 0
+				haveSentinel := g.is.getInfo(KeySentinel) != nil
+				if !haveClients || !haveSentinel {
+					// Select a bootstrap address at random and start client.
+					addr := avail.selectRandom()
+					log.Infof("bootstrapping gossip protocol using host %+v", addr)
+					g.startClient(addr, stopper)
+				}
+			}
 			g.mu.Unlock()
-			break
-		}
-		// Find list of available bootstrap hosts.
-		avail := g.filterExtant(g.bootstraps)
-		if avail.len() > 0 {
-			// Check whether or not we need bootstrap.
-			haveClients := g.outgoing.len() > 0
-			haveSentinel := g.is.getInfo(KeySentinel) != nil
-			if !haveClients || !haveSentinel {
-				// Select a bootstrap address at random and start client.
-				addr := avail.selectRandom()
-				log.Infof("bootstrapping gossip protocol using host %+v", addr)
-				g.startClient(addr)
+
+			// Block until we need bootstrapping again.
+			select {
+			case <-g.stalled:
+				// continue
+			case <-stopper.ShouldStop():
+				return
 			}
 		}
-
-		// Block until we need bootstrapping again.
-		g.stalled.Wait()
-		g.mu.Unlock()
-	}
+	})
 }
 
 // manage manages outgoing clients. Periodically, the infostore is
@@ -378,73 +364,70 @@ func (g *Gossip) bootstrap() {
 // the outgoing address set. If there are no longer any outgoing
 // connections or the sentinel gossip is unavailable, the bootstrapper
 // is notified via the stalled conditional variable.
-func (g *Gossip) manage() {
-	checkTimeout := time.Tick(g.jitteredGossipInterval())
-	// Loop until closed and there are no remaining outgoing connections.
-	for {
-		select {
-		case c := <-g.disconnected:
-			g.mu.Lock()
-			if c.err != nil {
-				log.Infof("client disconnected: %s", c.err)
-			}
-			g.outgoing.removeAddr(c.addr)
+func (g *Gossip) manage(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		checkTimeout := time.Tick(g.jitteredGossipInterval())
+		// Loop until closed and there are no remaining outgoing connections.
+		for {
+			select {
+			case c := <-g.disconnected:
+				g.mu.Lock()
+				if c.err != nil {
+					log.Infof("client disconnected: %s", c.err)
+				}
+				g.outgoing.removeAddr(c.addr)
 
-			g.clientsMu.Lock()
-			delete(g.clients, c.addr.String())
-			g.clientsMu.Unlock()
+				g.clientsMu.Lock()
+				delete(g.clients, c.addr.String())
+				g.clientsMu.Unlock()
 
-			// If the client was disconnected with a forwarding address, connect now.
-			if c.forwardAddr != nil {
-				g.startClient(c.forwardAddr)
-			}
+				// If the client was disconnected with a forwarding address, connect now.
+				if c.forwardAddr != nil {
+					g.startClient(c.forwardAddr, stopper)
+				}
 
-		case <-checkTimeout:
-			g.mu.Lock()
-			// Check whether the graph needs to be tightened to
-			// accommodate distant infos.
-			distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
-			if distant.len() > 0 {
-				// If we have space, start a client immediately.
-				if g.outgoing.hasSpace() {
-					g.startClient(distant.selectRandom())
-				} else {
-					// Otherwise, find least useful peer and close it. Make sure
-					// here that we only consider outgoing clients which are
-					// connected.
-					addr := g.is.leastUseful(g.outgoing)
-					if addr != nil {
-						log.Infof("closing least useful client %+v to tighten network graph", addr)
-						g.closeClient(addr)
+			case <-checkTimeout:
+				g.mu.Lock()
+				// Check whether the graph needs to be tightened to
+				// accommodate distant infos.
+				distant := g.filterExtant(g.is.distant(g.maxToleratedHops()))
+				if distant.len() > 0 {
+					// If we have space, start a client immediately.
+					if g.outgoing.hasSpace() {
+						g.startClient(distant.selectRandom(), stopper)
+					} else {
+						// Otherwise, find least useful peer and close it. Make sure
+						// here that we only consider outgoing clients which are
+						// connected.
+						addr := g.is.leastUseful(g.outgoing)
+						if addr != nil {
+							log.Infof("closing least useful client %+v to tighten network graph", addr)
+							g.closeClient(addr)
+						}
 					}
 				}
-			}
-		}
 
-		// If there are no outgoing hosts or sentinel gossip is missing,
-		// and there are still unused bootstrap hosts, signal bootstrapper
-		// to try another.
-		hasSentinel := g.is.getInfo(KeySentinel) != nil
-		if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(g.gossipBootstrap) > 0) {
-			if g.outgoing.len()+g.incoming.len() == 0 {
-				log.Infof("no connections; signaling bootstrap")
-				g.stalled.Signal()
-			} else if !hasSentinel {
-				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
-				g.stalled.Signal()
+			case <-stopper.ShouldStop():
+				return
 			}
-		}
 
-		// The exit condition.
-		if g.closed && g.outgoing.len() == 0 {
+			// If there are no outgoing hosts or sentinel gossip is missing,
+			// and there are still unused bootstrap hosts, signal bootstrapper
+			// to try another.
+			hasSentinel := g.is.getInfo(KeySentinel) != nil
+			if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(g.gossipBootstrap) > 0) {
+				if g.outgoing.len()+g.incoming.len() == 0 {
+					log.Infof("no connections; signaling bootstrap")
+					g.stalled <- struct{}{}
+				} else if !hasSentinel {
+					log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
+					g.stalled <- struct{}{}
+				}
+			}
+
 			g.mu.Unlock()
-			break
 		}
-		g.mu.Unlock()
-	}
-
-	// Signal exit.
-	g.exited <- nil
+	})
 }
 
 // maybeWarnAboutInit looks for signs indicating a cluster which
@@ -457,31 +440,38 @@ func (g *Gossip) manage() {
 // This method checks whether all gossip bootstrap hosts are
 // connected, and whether the node itself is a bootstrap host, but
 // there is still no sentinel gossip.
-func (g *Gossip) maybeWarnAboutInit() {
-	time.Sleep(5 * time.Second)
-	retryOptions := util.RetryOptions{
-		Tag:         "check cluster initialization",
-		Backoff:     5 * time.Second,  // first backoff at 5s
-		MaxBackoff:  60 * time.Second, // max backoff is 60s
-		Constant:    2,                // doubles
-		MaxAttempts: 0,                // indefinite retries
-	}
-	util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
-		g.mu.Lock()
-		hasSentinel := g.is.getInfo(KeySentinel) != nil
-		allConnected := g.filterExtant(g.bootstraps).len() == 0
-		g.mu.Unlock()
-		// If we have the sentinel, exit the retry loop.
-		if hasSentinel {
-			return util.RetryBreak, nil
+func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		retryOptions := util.RetryOptions{
+			Tag:         "check cluster initialization",
+			Backoff:     5 * time.Second,  // first backoff at 5s
+			MaxBackoff:  60 * time.Second, // max backoff is 60s
+			Constant:    2,                // doubles
+			MaxAttempts: 0,                // indefinite retries
+			Stopper:     stopper,          // stop no matter what on stopper
 		}
-		// Otherwise, if all bootstrap hosts are connected and this
-		// node is a bootstrap host, warn.
-		if allConnected && g.isBootstrap {
-			log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
-				"Use \"cockroach init\" to initialize.")
-		}
-		return util.RetryContinue, nil
+		count := 0
+		util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
+			// Skip the first immediate check; we want to warn only after 5s.
+			if count == 0 {
+				return util.RetryContinue, nil
+			}
+			g.mu.Lock()
+			hasSentinel := g.is.getInfo(KeySentinel) != nil
+			allConnected := g.filterExtant(g.bootstraps).len() == 0
+			g.mu.Unlock()
+			// If we have the sentinel, exit the retry loop.
+			if hasSentinel {
+				return util.RetryBreak, nil
+			}
+			// Otherwise, if all bootstrap hosts are connected and this
+			// node is a bootstrap host, warn.
+			if allConnected && g.isBootstrap {
+				log.Warningf("connected to gossip but missing sentinel. Has the cluster been initialized? " +
+					"Use \"cockroach init\" to initialize.")
+			}
+			return util.RetryContinue, nil
+		})
 	})
 }
 
@@ -501,13 +491,14 @@ func (g *Gossip) checkHasConnected() {
 // startClient launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClient(addr net.Addr) {
+func (g *Gossip) startClient(addr net.Addr, stopper *util.Stopper) {
+	log.Infof("starting client to %s", addr)
 	c := newClient(addr)
 	g.outgoing.addAddr(c.addr)
 	g.clientsMu.Lock()
 	g.clients[c.addr.String()] = c
 	g.clientsMu.Unlock()
-	go c.start(g, g.disconnected)
+	c.start(g, g.disconnected, stopper)
 }
 
 // closeClient closes an existing client specified by client's

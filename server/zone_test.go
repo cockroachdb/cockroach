@@ -42,8 +42,9 @@ range_max_bytes: 67108864
 // ExampleSetAndGetZone sets zone configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func ExampleSetAndGetZone() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
@@ -104,8 +105,9 @@ func ExampleSetAndGetZone() {
 // zone-ls works. First, no regexp lists all zone configs. Second,
 // regexp properly matches results.
 func ExampleLsZones() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
@@ -162,8 +164,9 @@ func ExampleLsZones() {
 // have been removed via zone-ls. Also verify the default zone cannot
 // be removed.
 func ExampleRmZones() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testZoneConfig)
 	defer os.Remove(testConfigFn)
 
@@ -195,8 +198,8 @@ func ExampleRmZones() {
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
 func ExampleZoneContentTypes() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
 
 	config := &proto.ZoneConfig{}
 	err := yaml.Unmarshal([]byte(testZoneConfig), config)

@@ -69,6 +69,7 @@ var allCmds = &commander.Commander{
 		// Initialization commands.
 		initCmd,
 		startCmd,
+		quitCmd,
 
 		// Key/value commands.
 		getCmd,

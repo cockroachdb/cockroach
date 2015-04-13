@@ -35,8 +35,9 @@ const testAcctConfig = `cluster_id: test`
 // ExampleSetAndGetAccts sets acct configs for a variety of key
 // prefixes and verifies they can be fetched directly.
 func ExampleSetAndGetAccts() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
@@ -77,8 +78,9 @@ func ExampleSetAndGetAccts() {
 // acct-ls works. First, no regexp lists all acct configs. Second,
 // regexp properly matches results.
 func ExampleLsAccts() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
@@ -135,8 +137,9 @@ func ExampleLsAccts() {
 // have been removed via acct-ls. Also verify the default acct config
 // cannot be removed.
 func ExampleRmAccts() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
+
 	testConfigFn := createTestConfigFile(testAcctConfig)
 	defer os.Remove(testConfigFn)
 
@@ -168,8 +171,8 @@ func ExampleRmAccts() {
 // to control the format of the response and the Content-Type header
 // can be used to specify the format of the request.
 func ExampleAcctContentTypes() {
-	httpServer := startAdminServer()
-	defer httpServer.Close()
+	_, stopper := startAdminServer()
+	defer stopper.Stop()
 
 	config := &proto.AcctConfig{}
 	err := yaml.Unmarshal([]byte(testAcctConfig), config)
