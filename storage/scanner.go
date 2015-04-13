@@ -101,8 +101,7 @@ func (rs *rangeScanner) Start(clock *hlc.Clock, stopper *util.Stopper) {
 	for _, queue := range rs.queues {
 		queue.Start(clock, stopper)
 	}
-	stopper.AddWorker()
-	go rs.scanLoop(clock, stopper)
+	rs.scanLoop(clock, stopper)
 }
 
 // Stats returns store stats from the most recently completed scan of
@@ -130,59 +129,62 @@ func (rs *rangeScanner) RemoveRange(rng *Range) {
 // the range iterator, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
-	defer stopper.SetStopped()
+	stopper.AddWorker()
+	go func() {
+		defer stopper.SetStopped()
 
-	start := time.Now()
-	stats := &storeStats{}
+		start := time.Now()
+		stats := &storeStats{}
 
-	for {
-		elapsed := time.Now().Sub(start)
-		remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
-		if remainingNanos < 0 {
-			remainingNanos = 0
-		}
-		nextIteration := time.Duration(remainingNanos)
-		if count := rs.iter.EstimatedCount(); count > 0 {
-			nextIteration = time.Duration(remainingNanos / int64(count))
-		}
-		log.V(6).Infof("next range scan iteration in %s", nextIteration)
-
-		select {
-		case <-time.After(nextIteration):
-			if !stopper.StartTask() {
-				continue
+		for {
+			elapsed := time.Now().Sub(start)
+			remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
+			if remainingNanos < 0 {
+				remainingNanos = 0
 			}
-			rng := rs.iter.Next()
-			if rng != nil {
-				// Try adding range to all queues.
-				for _, q := range rs.queues {
-					q.MaybeAdd(rng, clock.Now())
+			nextIteration := time.Duration(remainingNanos)
+			if count := rs.iter.EstimatedCount(); count > 0 {
+				nextIteration = time.Duration(remainingNanos / int64(count))
+			}
+			log.V(6).Infof("next range scan iteration in %s", nextIteration)
+
+			select {
+			case <-time.After(nextIteration):
+				if !stopper.StartTask() {
+					continue
 				}
-				stats.RangeCount++
-				stats.MVCC.Accumulate(rng.stats.GetMVCC())
-			} else {
-				// Otherwise, we're done with the iteration. Reset iteration and start time.
-				rs.iter.Reset()
-				start = time.Now()
-				// Increment iteration counter.
-				atomic.AddInt64(&rs.count, 1)
-				// Store the most recent scan results in the scanner's stats.
-				atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
-				stats = &storeStats{}
-				log.V(6).Infof("reset range scan iteration")
-			}
-			stopper.FinishTask()
+				rng := rs.iter.Next()
+				if rng != nil {
+					// Try adding range to all queues.
+					for _, q := range rs.queues {
+						q.MaybeAdd(rng, clock.Now())
+					}
+					stats.RangeCount++
+					stats.MVCC.Accumulate(rng.stats.GetMVCC())
+				} else {
+					// Otherwise, we're done with the iteration. Reset iteration and start time.
+					rs.iter.Reset()
+					start = time.Now()
+					// Increment iteration counter.
+					atomic.AddInt64(&rs.count, 1)
+					// Store the most recent scan results in the scanner's stats.
+					atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
+					stats = &storeStats{}
+					log.V(6).Infof("reset range scan iteration")
+				}
+				stopper.FinishTask()
 
-		case rng := <-rs.removed:
-			// Remove range from all queues as applicable.
-			for _, q := range rs.queues {
-				q.MaybeRemove(rng)
-			}
-			log.V(6).Infof("removed range %s", rng)
+			case rng := <-rs.removed:
+				// Remove range from all queues as applicable.
+				for _, q := range rs.queues {
+					q.MaybeRemove(rng)
+				}
+				log.V(6).Infof("removed range %s", rng)
 
-		case <-stopper.ShouldStop():
-			// Exit the loop.
-			return
+			case <-stopper.ShouldStop():
+				// Exit the loop.
+				return
+			}
 		}
-	}
+	}()
 }

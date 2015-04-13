@@ -187,8 +187,7 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 	if err := n.initStores(clock, engines, stopper); err != nil {
 		return err
 	}
-	stopper.AddWorker()
-	go n.startGossip(stopper)
+	n.startGossip(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
 }
@@ -344,23 +343,25 @@ func (n *Node) connectGossip() {
 }
 
 // startGossip loops on a periodic ticker to gossip node-related
-// information. Loops until the node is closed and should be
-// invoked via goroutine.
+// information. Starts a goroutine to loop until the node is closed.
 func (n *Node) startGossip(stopper *util.Stopper) {
-	defer stopper.SetStopped()
+	stopper.AddWorker()
+	go func() {
+		defer stopper.SetStopped()
 
-	ticker := time.NewTicker(gossipInterval)
-	for {
-		select {
-		case <-ticker.C:
-			if stopper.StartTask() {
-				n.gossipCapacities()
-				stopper.FinishTask()
+		ticker := time.NewTicker(gossipInterval)
+		for {
+			select {
+			case <-ticker.C:
+				if stopper.StartTask() {
+					n.gossipCapacities()
+					stopper.FinishTask()
+				}
+			case <-stopper.ShouldStop():
+				return
 			}
-		case <-stopper.ShouldStop():
-			return
 		}
-	}
+	}()
 }
 
 // gossipCapacities calls capacity on each store and adds it to the

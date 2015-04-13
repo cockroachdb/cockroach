@@ -71,7 +71,7 @@ func TestClientGossip(t *testing.T) {
 	disconnected := make(chan *client, 1)
 
 	client := newClient(remote.is.NodeAddr)
-	go client.start(local, disconnected, stopper)
+	client.start(local, disconnected, stopper)
 
 	if err := util.IsTrueWithin(func() bool {
 		_, lerr := remote.GetInfo("local-key")
@@ -104,8 +104,8 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.startClient(lAddr, stopper)
 	local.mu.Unlock()
 	remote.mu.Unlock()
-	go local.manage(stopper)
-	go remote.manage(stopper)
+	local.manage(stopper)
+	remote.manage(stopper)
 	wasConnected1, wasConnected2 := false, false
 	if err := util.IsTrueWithin(func() bool {
 		// Check which of the clients is connected to the other.

@@ -86,7 +86,7 @@ func newTestCluster(transport Transport, size int, stopper *util.Stopper, t *tes
 func (c *testCluster) start(stopper *util.Stopper) {
 	// Let all the states listen before starting any.
 	for _, node := range c.nodes {
-		go node.start(stopper)
+		node.start(stopper)
 	}
 }
 

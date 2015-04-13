@@ -136,50 +136,53 @@ func newWriteTask(storage Storage) *writeTask {
 	}
 }
 
-// start runs the storage loop. Blocks until stopped, so should be run in a goroutine.
+// start runs the storage loop in a goroutine.
 func (w *writeTask) start(stopper *util.Stopper) {
-	defer stopper.SetStopped()
+	stopper.AddWorker()
+	go func() {
+		defer stopper.SetStopped()
 
-	for {
-		var request *writeRequest
-		select {
-		case <-w.ready:
-			continue
-		case <-stopper.ShouldStop():
-			return
-		case request = <-w.in:
-		}
-		log.V(6).Infof("writeTask got request %#v", *request)
-		response := &writeResponse{make(map[uint64]*groupWriteResponse)}
-
-		for groupID, groupReq := range request.groups {
-			group := w.storage.GroupStorage(groupID)
-			if group == nil {
-				log.V(4).Infof("dropping write to group %v", groupID)
+		for {
+			var request *writeRequest
+			select {
+			case <-w.ready:
 				continue
+			case <-stopper.ShouldStop():
+				return
+			case request = <-w.in:
 			}
-			groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
-			response.groups[groupID] = groupResp
-			if !raft.IsEmptyHardState(groupReq.state) {
-				err := group.SetHardState(groupReq.state)
-				if err != nil {
-					panic(err) // TODO(bdarnell): mark this node dead on storage errors
+			log.V(6).Infof("writeTask got request %#v", *request)
+			response := &writeResponse{make(map[uint64]*groupWriteResponse)}
+
+			for groupID, groupReq := range request.groups {
+				group := w.storage.GroupStorage(groupID)
+				if group == nil {
+					log.V(4).Infof("dropping write to group %v", groupID)
+					continue
 				}
-				groupResp.state = groupReq.state
-			}
-			if !raft.IsEmptySnap(groupReq.snapshot) {
-				err := group.ApplySnapshot(groupReq.snapshot)
-				if err != nil {
-					panic(err) // TODO(bdarnell)
+				groupResp := &groupWriteResponse{raftpb.HardState{}, -1, -1, groupReq.entries}
+				response.groups[groupID] = groupResp
+				if !raft.IsEmptyHardState(groupReq.state) {
+					err := group.SetHardState(groupReq.state)
+					if err != nil {
+						panic(err) // TODO(bdarnell): mark this node dead on storage errors
+					}
+					groupResp.state = groupReq.state
+				}
+				if !raft.IsEmptySnap(groupReq.snapshot) {
+					err := group.ApplySnapshot(groupReq.snapshot)
+					if err != nil {
+						panic(err) // TODO(bdarnell)
+					}
+				}
+				if len(groupReq.entries) > 0 {
+					err := group.Append(groupReq.entries)
+					if err != nil {
+						panic(err) // TODO(bdarnell)
+					}
 				}
 			}
-			if len(groupReq.entries) > 0 {
-				err := group.Append(groupReq.entries)
-				if err != nil {
-					panic(err) // TODO(bdarnell)
-				}
-			}
+			w.out <- response
 		}
-		w.out <- response
-	}
+	}()
 }

@@ -65,25 +65,31 @@ func newClient(addr net.Addr) *client {
 // start dials the remote addr and commences gossip once connected.
 // Upon exit, signals client is done by pushing it onto the done
 // channel. If the client experienced an error, its err field will
-// be set. This method blocks and should be invoked via goroutine.
+// be set. This method starts client processing in a goroutine and
+// returns immediately.
 func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
-	c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
-	select {
-	case <-c.rpcClient.Ready:
-		// Success!
-	case <-c.rpcClient.Closed:
-		c.err = util.Errorf("gossip client failed to connect")
-		done <- c
-		return
-	}
+	stopper.AddWorker()
+	go func() {
+		defer stopper.SetStopped()
 
-	// Start gossipping and wait for disconnect or error.
-	c.lastFresh = time.Now().UnixNano()
-	err := c.gossip(g, stopper)
-	if err != nil {
-		c.err = util.Errorf("gossip client: %s", err)
-	}
-	done <- c
+		c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
+		select {
+		case <-c.rpcClient.Ready:
+			// Success!
+		case <-c.rpcClient.Closed:
+			c.err = util.Errorf("gossip client failed to connect")
+			done <- c
+			return
+		}
+
+		// Start gossipping and wait for disconnect or error.
+		c.lastFresh = time.Now().UnixNano()
+		err := c.gossip(g, stopper)
+		if err != nil {
+			c.err = util.Errorf("gossip client: %s", err)
+		}
+		done <- c
+	}()
 }
 
 // close stops the client gossip loop and returns immediately.
@@ -95,8 +101,6 @@ func (c *client) close() {
 // in turn. If an alternate is proposed on response, the client addr
 // is modified and method returns for forwarding by caller.
 func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
-	defer stopper.SetStopped()
-
 	localMaxSeq := int64(0)
 	remoteMaxSeq := int64(-1)
 	for {

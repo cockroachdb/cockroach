@@ -43,41 +43,43 @@ func NewLocalInterceptableTransport(stopper *util.Stopper) Transport {
 		Events:    make(chan *interceptMessage),
 		stopper:   stopper,
 	}
-	stopper.AddWorker()
-	go lt.start()
+	lt.start()
 	return lt
 }
 
 func (lt *localInterceptableTransport) start() {
-	defer lt.stopper.SetStopped()
+	lt.stopper.AddWorker()
+	go func() {
+		defer lt.stopper.SetStopped()
 
-	for {
-		select {
-		case msg := <-lt.messages:
-			ack := make(chan struct{})
-			iMsg := &interceptMessage{
-				args: msg,
-				ack:  ack,
-			}
-			// The following channel ops are not protected by a select with ShouldStop
-			// since leaving things partially complete here could prevent other components
-			// from shutting down cleanly.
-			lt.Events <- iMsg
-			<-ack
-			lt.mu.Lock()
-			srv, ok := lt.listeners[NodeID(msg.Message.To)]
-			lt.mu.Unlock()
-			if !ok {
-				continue
-			}
-			if err := srv.RaftMessage(msg, nil); err != nil {
-				log.Fatal(err)
-			}
+		for {
+			select {
+			case msg := <-lt.messages:
+				ack := make(chan struct{})
+				iMsg := &interceptMessage{
+					args: msg,
+					ack:  ack,
+				}
+				// The following channel ops are not protected by a select with ShouldStop
+				// since leaving things partially complete here could prevent other components
+				// from shutting down cleanly.
+				lt.Events <- iMsg
+				<-ack
+				lt.mu.Lock()
+				srv, ok := lt.listeners[NodeID(msg.Message.To)]
+				lt.mu.Unlock()
+				if !ok {
+					continue
+				}
+				if err := srv.RaftMessage(msg, nil); err != nil {
+					log.Fatal(err)
+				}
 
-		case <-lt.stopper.ShouldStop():
-			return
+			case <-lt.stopper.ShouldStop():
+				return
+			}
 		}
-	}
+	}()
 }
 
 func (lt *localInterceptableTransport) Listen(id NodeID, server ServerInterface) error {

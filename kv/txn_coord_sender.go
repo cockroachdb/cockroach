@@ -283,13 +283,7 @@ func (tc *TxnCoordSender) sendOne(call *client.Call) {
 				timeoutDuration: tc.clientTimeout,
 			}
 			tc.txns[string(header.Txn.ID)] = txnMeta
-
-			// TODO(jiajia): Reevaluate this logic of creating a goroutine
-			// for each active transaction. Spencer suggests a heap
-			// containing next heartbeat timeouts which is processed by a
-			// single goroutine.
-			tc.stopper.AddWorker()
-			go tc.heartbeat(header.Txn)
+			tc.heartbeat(header.Txn)
 		}
 		txnMeta.lastUpdateTS = tc.clock.Now()
 		txnMeta.addKeyRange(header.Key, header.EndKey)
@@ -487,53 +481,56 @@ func (tc *TxnCoordSender) hasClientAbandonedCoord(txnID []byte) bool {
 // extant transaction, stopping in the event the transaction is
 // aborted or committed or if the TxnCoordSender is closed.
 func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
-	defer tc.stopper.SetStopped()
+	tc.stopper.AddWorker()
+	go func() {
+		defer tc.stopper.SetStopped()
 
-	ticker := time.NewTicker(tc.heartbeatInterval)
-	request := &proto.InternalHeartbeatTxnRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  txn.Key,
-			User: storage.UserRoot,
-			Txn:  txn,
-		},
-	}
-
-	// Loop with ticker for periodic heartbeats.
-	for {
-		select {
-		case <-ticker.C:
-			if !tc.stopper.StartTask() {
-				continue
-			}
-			// Before we send a heartbeat, determine whether this transaction
-			// should be considered abandoned. If so, exit heartbeat.
-			if tc.hasClientAbandonedCoord(txn.ID) {
-				log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
-				tc.stopper.FinishTask()
-				return
-			}
-			request.Header().Timestamp = tc.clock.Now()
-			reply := &proto.InternalHeartbeatTxnResponse{}
-			call := &client.Call{
-				Method: proto.InternalHeartbeatTxn,
-				Args:   request,
-				Reply:  reply,
-			}
-			tc.wrapped.Send(call)
-			// If the transaction is not in pending state, then we can stop
-			// the heartbeat. It's either aborted or committed, and we resolve
-			// write intents accordingly.
-			if reply.GoError() != nil {
-				log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
-			} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
-				tc.cleanupTxn(reply.Txn, nil)
-				tc.stopper.FinishTask()
-				return
-			}
-			tc.stopper.FinishTask()
-
-		case <-tc.stopper.ShouldStop():
-			return
+		ticker := time.NewTicker(tc.heartbeatInterval)
+		request := &proto.InternalHeartbeatTxnRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  txn.Key,
+				User: storage.UserRoot,
+				Txn:  txn,
+			},
 		}
-	}
+
+		// Loop with ticker for periodic heartbeats.
+		for {
+			select {
+			case <-ticker.C:
+				if !tc.stopper.StartTask() {
+					continue
+				}
+				// Before we send a heartbeat, determine whether this transaction
+				// should be considered abandoned. If so, exit heartbeat.
+				if tc.hasClientAbandonedCoord(txn.ID) {
+					log.V(1).Infof("transaction %q:%q abandoned; stopping heartbeat", txn.Key, txn.ID)
+					tc.stopper.FinishTask()
+					return
+				}
+				request.Header().Timestamp = tc.clock.Now()
+				reply := &proto.InternalHeartbeatTxnResponse{}
+				call := &client.Call{
+					Method: proto.InternalHeartbeatTxn,
+					Args:   request,
+					Reply:  reply,
+				}
+				tc.wrapped.Send(call)
+				// If the transaction is not in pending state, then we can stop
+				// the heartbeat. It's either aborted or committed, and we resolve
+				// write intents accordingly.
+				if reply.GoError() != nil {
+					log.Warningf("heartbeat to %q:%q failed: %s", txn.Key, txn.ID, reply.GoError())
+				} else if reply.Txn != nil && reply.Txn.Status != proto.PENDING {
+					tc.cleanupTxn(reply.Txn, nil)
+					tc.stopper.FinishTask()
+					return
+				}
+				tc.stopper.FinishTask()
+
+			case <-tc.stopper.ShouldStop():
+				return
+			}
+		}
+	}()
 }
