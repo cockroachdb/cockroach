@@ -207,7 +207,6 @@ var _ multiraft.WriteableGroupStorage = &Range{}
 func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 	r := &Range{
 		rm:          rm,
-		closer:      make(chan struct{}),
 		cmdQ:        NewCommandQueue(),
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
@@ -243,6 +242,7 @@ func (r *Range) String() string {
 func (r *Range) start() {
 	if r.IsFirstRange() {
 		r.maybeGossipClusterID()
+		r.maybeGossipFirstRange()
 	}
 	// TODO(spencer): need to properly seed all unittests.
 	r.setLeaderLease(&proto.Lease{
@@ -759,7 +759,7 @@ func (r *Range) startGossip(term uint64, stopper *util.Stopper) {
 				}
 				r.maybeGossipClusterID()
 				r.maybeGossipFirstRange()
-			case <-stopper().ShouldStop():
+			case <-stopper.ShouldStop():
 				return
 			}
 		}

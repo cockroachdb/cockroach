@@ -837,7 +837,7 @@ func (s *Store) AddRange(rng *Range) error {
 // is held. Returns a rangeAlreadyExists error if a range with the
 // same Raft ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Range, resort bool) error {
-	rng.start(s.stopper)
+	rng.start()
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
 	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {

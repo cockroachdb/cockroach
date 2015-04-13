@@ -189,7 +189,6 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 //
 // TODO(spencer): current load should factor into range processing timer.
 func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
-<<<<<<< HEAD
 	stopper.RunWorker(func() {
 		// nextTime is set arbitrarily far into the future so that we don't
 		// unecessarily check for a range to dequeue if the timer function
@@ -217,11 +216,17 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				rng := bq.pop()
 				bq.Unlock()
 				if rng != nil {
-					log.Infof("processing range %s from %s queue...", rng, bq.name)
+					log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
+					if bq.impl.needsLeaderLease() {
+						if held, _ := rng.HasLeaderLease(); !held {
+							log.V(1).Infof("lost required leader lease; skipping...")
+							continue
+						}
+					}
 					if err := bq.impl.process(clock.Now(), rng); err != nil {
 						log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
 					}
-					log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+					log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
 				}
 				if bq.Length() == 0 {
 					emptyQueue = true
@@ -236,46 +241,6 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				bq.priorityQ = nil
 				bq.Unlock()
 				return
-=======
-	// nextTime is set arbitrarily far into the future so that we don't
-	// unecessarily check for a range to dequeue if the timer function
-	// returns a short duration but the priority queue is empty.
-	emptyQueue := true
-	nextTime := time.Now().Add(24 * time.Hour)
-
-	for {
-		select {
-		// Incoming ranges set the next time to process in the event that
-		// there were previously no ranges in the queue.
-		case <-bq.incoming:
-			if emptyQueue {
-				emptyQueue = false
-				nextTime = time.Now().Add(bq.impl.timer())
-			}
-		// Process ranges as the timer expires.
-		case <-time.After(nextTime.Sub(time.Now())):
-			start := time.Now()
-			nextTime = start.Add(bq.impl.timer())
-			bq.Lock()
-			rng := bq.pop()
-			bq.Unlock()
-			if rng != nil {
-				log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
-				if bq.impl.needsLeaderLease() {
-					if held, _ := rng.HasLeaderLease(); !held {
-						log.V(1).Infof("lost required leader lease; skipping...")
-						continue
-					}
-				}
-				if err := bq.impl.process(clock.Now(), rng); err != nil {
-					log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
-				}
-				log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
-			}
-			if bq.Length() == 0 {
-				emptyQueue = true
-				nextTime = time.Now().Add(24 * time.Hour)
->>>>>>> Move checks for leader leases out of queue implementations.
 			}
 		}
 	})
