@@ -70,8 +70,8 @@ type Context struct {
 	// Maximum clock offset for the cluster.
 	MaxOffset time.Duration
 
-	// BootstrapOnly signals to only bootstrap and not start the server.
-	BootstrapOnly bool
+	// InitAndStart starts the server after bootstrap & initialization.
+	InitAndStart bool
 
 	// GossipBootstrap is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
@@ -139,7 +139,7 @@ func (ctx *Context) Init() error {
 		}
 		ctx.Engines = append(ctx.Engines, engine)
 	}
-	log.Infof("Initialized %d storage engine(s)", len(ctx.Engines))
+	log.Infof("initialized %d storage engine(s)", len(ctx.Engines))
 
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 

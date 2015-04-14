@@ -70,7 +70,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	if ctx == nil {
 		return nil, util.Error("ctx must not be null")
 	}
-	// Determine hostname in case it hasn't been specified in -http.
+	// Determine hostname in case it hasn't been specified in -addr.
 	host, err := os.Hostname()
 	if err != nil {
 		host = "127.0.0.1"
@@ -149,16 +149,14 @@ func (s *Server) Start(selfBootstrap bool) error {
 		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
-	log.Infoln("Started gossip instance")
 
 	if err := s.node.start(s.rpc, s.clock, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err
 	}
 
-	s.initHTTP()
-
-	log.Infof("Starting HTTP server at %s", s.rpc.Addr())
+	log.Infof("starting http server at %s", s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
+	s.initHTTP()
 	s.rpc.Serve(s)
 	return nil
 }

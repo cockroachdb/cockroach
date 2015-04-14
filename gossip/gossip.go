@@ -101,6 +101,7 @@ type Gossip struct {
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
+	haveUnused   bool               // True if there are unused hosts from gossipBootstrap
 	RPCContext   *rpc.Context       // The context required for RPC
 	*server                         // Embedded gossip RPC server
 	bootstraps   *addrSet           // Bootstrap host addresses
@@ -136,9 +137,7 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap 
 func (g *Gossip) SetBootstrap(bootstraps []net.Addr) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for _, addr := range bootstraps {
-		g.bootstraps.addAddr(addr)
-	}
+	g.gossipBootstrap = bootstraps
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -246,7 +245,6 @@ func (g *Gossip) Outgoing() []net.Addr {
 // This method starts bootstrap loop, gossip server, and client
 // management in separate goroutines and returns.
 func (g *Gossip) Start(rpcServer *rpc.Server, stopper *util.Stopper) {
-	// Start up asynchronous processors.
 	g.server.start(rpcServer, stopper) // serve gossip protocol
 	g.bootstrap(stopper)               // bootstrap gossip client
 	g.manage(stopper)                  // manage gossip clients
@@ -279,27 +277,35 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 // addresses are added to the bootstraps addrSet, except for the local
 // node, which is removed, if listed as a bootstrap host.
 func (g *Gossip) initializeBootstrapAddresses() {
+	if len(g.gossipBootstrap) == 0 {
+		log.Fatalf("no hosts specified for gossip network (use -gossip)")
+	}
+	g.haveUnused = false
 	for _, addr := range g.gossipBootstrap {
 		if addr.Network() == "tcp" {
 			_, err := net.ResolveTCPAddr("tcp", addr.String())
 			if err != nil {
 				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
+				g.haveUnused = true
 				continue
 			}
 		}
-
 		g.bootstraps.addAddr(addr)
 	}
 
-	// If we have no bootstrap hosts, fatal exit.
-	if len(g.gossipBootstrap) == 0 && g.bootstraps.len() == 0 && !g.isBootstrap {
-		log.Fatalf("no hosts specified for gossip network (use -gossip)")
-	}
 	// Remove our own node address.
 	if g.bootstraps.hasAddr(g.is.NodeAddr) {
 		g.isBootstrap = true
 		g.bootstraps.removeAddr(g.is.NodeAddr)
 	}
+}
+
+// additionalBootstrappingPossible return true if there are any
+// remaining bootstrap hosts to connect to...either valid addresses
+// which have yet to be connected, or addresses in the original set
+// which did not resolve but may yet on repeated attempts.
+func (g *Gossip) additionalBootstrappingPossible() bool {
+	return g.filterExtant(g.bootstraps).len() > 0 || g.haveUnused
 }
 
 // filterExtant removes any addresses from the supplied addrSet which
@@ -414,15 +420,12 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 			// If there are no outgoing hosts or sentinel gossip is missing,
 			// and there are still unused bootstrap hosts, signal bootstrapper
 			// to try another.
-			hasSentinel := g.is.getInfo(KeySentinel) != nil
-			if g.filterExtant(g.bootstraps).len() > 0 || (g.bootstraps.len() == 0 && len(g.gossipBootstrap) > 0) {
-				if g.outgoing.len()+g.incoming.len() == 0 {
-					log.Infof("no connections; signaling bootstrap")
-					g.stalled <- struct{}{}
-				} else if !hasSentinel {
-					log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
-					g.stalled <- struct{}{}
-				}
+			if g.outgoing.len()+g.incoming.len() == 0 && g.additionalBootstrappingPossible() {
+				log.Infof("no connections; signaling bootstrap")
+				g.stalled <- struct{}{}
+			} else if g.is.getInfo(KeySentinel) == nil && g.additionalBootstrappingPossible() {
+				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", KeySentinel)
+				g.stalled <- struct{}{}
 			}
 
 			g.mu.Unlock()
@@ -442,6 +445,12 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 // there is still no sentinel gossip.
 func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 	stopper.RunWorker(func() {
+		// Wait 5s before first check.
+		select {
+		case <-stopper.ShouldStop():
+			return
+		case <-time.After(5 * time.Second):
+		}
 		retryOptions := util.RetryOptions{
 			Tag:         "check cluster initialization",
 			Backoff:     5 * time.Second,  // first backoff at 5s
@@ -450,12 +459,7 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 			MaxAttempts: 0,                // indefinite retries
 			Stopper:     stopper,          // stop no matter what on stopper
 		}
-		count := 0
 		util.RetryWithBackoff(retryOptions, func() (util.RetryStatus, error) {
-			// Skip the first immediate check; we want to warn only after 5s.
-			if count == 0 {
-				return util.RetryContinue, nil
-			}
 			g.mu.Lock()
 			hasSentinel := g.is.getInfo(KeySentinel) != nil
 			allConnected := g.filterExtant(g.bootstraps).len() == 0
