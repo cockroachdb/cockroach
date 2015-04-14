@@ -439,11 +439,11 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 // commit. A bug in the EndTransaction implementation used to compare
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
-	db, _, _, _, _, transport, err := createTestDB()
+	db, _, _, _, _, stopper, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer transport.Close()
+	defer stopper.Stop()
 
 	keyA := proto.Key("a")
 	keyB := proto.Key("b")

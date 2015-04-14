@@ -986,8 +986,8 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *engine.MVCCStats, args *
 		} else if existTxn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
-			// than the transaction timestamp.
-			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.Timestamp)))
+			// than the original transaction timestamp.
+			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("timestamp regression: %s", args.Txn.OrigTimestamp)))
 			return
 		}
 		// Take max of requested epoch and existing epoch. The requester
