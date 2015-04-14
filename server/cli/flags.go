@@ -54,8 +54,8 @@ func initFlags(ctx *server.Context) {
 		"of -max_offset, it will commit suicide. Setting this value too high may "+
 		"decrease transaction performance in the presence of contention.")
 
-	flag.BoolVar(&ctx.BootstrapOnly, "bootstrap_only", ctx.BootstrapOnly, "specify --bootstrap_only "+
-		"to avoid starting the server after bootstrapping with the init command.")
+	flag.BoolVar(&ctx.InitAndStart, "init_and_start", ctx.InitAndStart, "specify "+
+		"to start the server after bootstrapping with the init command.")
 
 	// Gossip flags.
 
