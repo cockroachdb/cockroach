@@ -433,3 +433,48 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		t.Fatal(tErr)
 	}
 }
+
+// TestTxnTimestampRegression verifies that if a transaction's
+// timestamp is pushed forward by a concurrent read, it may still
+// commit. A bug in the EndTransaction implementation used to compare
+// the transaction's current timestamp instead of original timestamp.
+func TestTxnTimestampRegression(t *testing.T) {
+	db, _, _, _, _, transport, err := createTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer transport.Close()
+
+	keyA := proto.Key("a")
+	keyB := proto.Key("b")
+	// Use snapshot isolation so non-transactional read can always push.
+	txnOpts := &client.TransactionOptions{
+		Name:      "test",
+		Isolation: proto.SNAPSHOT,
+	}
+	err = db.RunTransaction(txnOpts, func(txn *client.KV) error {
+		// Put transactional value.
+		if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
+			return err
+		}
+
+		// Attempt to read outside of txn (this will push timestamp of transaction).
+		if err := db.Call(proto.Get, proto.GetArgs(keyA), &proto.GetResponse{}); err != nil {
+			return err
+		}
+
+		// Now, read again outside of txn to warmup timestamp cache with higher timestamp.
+		if err := db.Call(proto.Get, proto.GetArgs(keyB), &proto.GetResponse{}); err != nil {
+			return err
+		}
+
+		// Write now to keyB, which will get a higher timestamp than keyB was written at.
+		if err := txn.Call(proto.Put, proto.PutArgs(keyB, []byte("value2")), &proto.PutResponse{}); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

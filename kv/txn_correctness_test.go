@@ -777,32 +777,3 @@ func TestTxnDBWriteSkewAnomaly(t *testing.T) {
 	checkConcurrency("write skew", onlySerializable, []string{txn1, txn2}, verify, true, t)
 	checkConcurrency("write skew", onlySnapshot, []string{txn1, txn2}, verify, false, t)
 }
-
-// TestTxnTimestampRegression verifies that SI failed with TimestampRegression.
-// When both Txn's timestamp in system transaction table being pushed and Txn's
-// timestamp in Request being pushed, Txn's commitment will fail because of
-// TimestampRegression error.
-// Just check the following txn sequence:
-// ------ts1----ts2------ts3---ts4----ts5-----
-// txn1: I(A)                  I(B)    C
-// txn2:        R(A)
-// txn3:                R(B)
-// In this sequence, txn2 "R(A)" will push txn1's timestamp in system
-// transaction table to ts2. After txn3 "R(B)", timestamp_cache for key(B) ts3
-// will be stored, so txn1 "I(B)" will generate a response with pushed timestamp
-// as ts3.
-// When txn1 commit, the EndTransaction request will get a TimestampRegression
-// error.
-func TestTxntimestampRegression(t *testing.T) {
-	txn1 := "I(A) I(B) C"
-	txn2 := "R(A) C"
-	txn3 := "R(B) C"
-
-	verify := &verifier{
-		history: "R(A) R(B)",
-		checkFn: func(env map[string]int64) error {
-			return nil
-		},
-	}
-	checkConcurrency("TimestampRegression", onlySnapshot, []string{txn1, txn2, txn3}, verify, true, t)
-}
