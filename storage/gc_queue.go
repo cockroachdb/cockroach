@@ -68,15 +68,15 @@ func newGCQueue() *gcQueue {
 	return gcq
 }
 
+func (gcq *gcQueue) needsLeaderLease() bool {
+	return true
+}
+
 // shouldQueue determines whether a range should be queued for garbage
 // collection, and if so, at what priority. Returns true for shouldQ
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, priority float64) {
-	// Only queue for GC if this replica is leader.
-	if !rng.IsLeader() {
-		return
-	}
 	// Lookup GC policy for this range.
 	policy, err := gcq.lookupGCPolicy(rng)
 	if err != nil {
@@ -107,11 +107,6 @@ func (gcq *gcQueue) shouldQueue(now proto.Timestamp, rng *Range) (shouldQ bool, 
 // batched into InternalGC calls. Extant intents are resolved if
 // intents are older than intentAgeThreshold.
 func (gcq *gcQueue) process(now proto.Timestamp, rng *Range) error {
-	if !rng.IsLeader() {
-		log.Infof("not leader of range %s; skipping GC", rng)
-		return nil
-	}
-
 	snap := rng.rm.Engine().NewSnapshot()
 	iter := newRangeDataIterator(rng, snap)
 	defer iter.Close()

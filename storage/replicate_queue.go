@@ -56,13 +56,12 @@ func newReplicateQueue(gossip *gossip.Gossip, allocator *allocator,
 	return rq
 }
 
+func (rq *replicateQueue) needsLeaderLease() bool {
+	return true
+}
+
 func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Range) (
 	shouldQ bool, priority float64) {
-	// Only queue for replication if this replica is the leader.
-	if !rng.IsLeader() {
-		return
-	}
-
 	// If the range spans multiple zones, ignore it until the split queue has processed it.
 	if len(computeSplitKeys(rq.gossip, rng)) > 0 {
 		return

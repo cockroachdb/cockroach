@@ -36,6 +36,8 @@ type testQueueImpl struct {
 	duration      time.Duration
 }
 
+func (tq *testQueueImpl) needsLeaderLease() bool { return false }
+
 func (tq *testQueueImpl) shouldQueue(now proto.Timestamp, r *Range) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }

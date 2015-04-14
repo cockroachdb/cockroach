@@ -74,6 +74,10 @@ func (pq *priorityQueue) update(item *rangeItem, priority float64) {
 }
 
 type queueImpl interface {
+	// needsLeaderLease returns whether this queue requires the leader
+	// lease to operate on a range.
+	needsLeaderLease() bool
+
 	// shouldQueue accepts current time and a Range and returns whether
 	// it should be queued and if so, at what priority.
 	shouldQueue(proto.Timestamp, *Range) (shouldQueue bool, priority float64)
@@ -138,6 +142,11 @@ func (bq *baseQueue) Start(clock *hlc.Clock, stopper *util.Stopper) {
 func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 	bq.Lock()
 	defer bq.Unlock()
+	if bq.impl.needsLeaderLease() {
+		if held, _ := rng.HasLeaderLease(); !held {
+			return
+		}
+	}
 	should, priority := bq.impl.shouldQueue(now, rng)
 	item, ok := bq.ranges[rng.Desc().RaftID]
 	if !should {
@@ -151,7 +160,7 @@ func (bq *baseQueue) MaybeAdd(rng *Range, now proto.Timestamp) {
 		return
 	}
 
-	log.Infof("adding range %s to %s queue", rng, bq.name)
+	log.V(1).Infof("adding range %s to %s queue", rng, bq.name)
 	item = &rangeItem{value: rng, priority: priority}
 	heap.Push(&bq.priorityQ, item)
 	bq.ranges[rng.Desc().RaftID] = item
@@ -170,7 +179,7 @@ func (bq *baseQueue) MaybeRemove(rng *Range) {
 	bq.Lock()
 	defer bq.Unlock()
 	if item, ok := bq.ranges[rng.Desc().RaftID]; ok {
-		log.Infof("removing range %s from %s queue", item.value, bq.name)
+		log.V(1).Infof("removing range %s from %s queue", item.value, bq.name)
 		bq.remove(item.index)
 	}
 }
@@ -207,11 +216,17 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				rng := bq.pop()
 				bq.Unlock()
 				if rng != nil {
-					log.Infof("processing range %s from %s queue...", rng, bq.name)
+					log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
+					if bq.impl.needsLeaderLease() {
+						if held, _ := rng.HasLeaderLease(); !held {
+							log.V(1).Infof("lost required leader lease; skipping...")
+							continue
+						}
+					}
 					if err := bq.impl.process(clock.Now(), rng); err != nil {
 						log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
 					}
-					log.Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+					log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
 				}
 				if bq.Length() == 0 {
 					emptyQueue = true

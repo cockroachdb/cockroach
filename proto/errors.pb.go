@@ -64,19 +64,19 @@ func (x *TransactionRestart) UnmarshalJSON(data []byte) error {
 // A NotLeaderError indicates that the current range is not the
 // leader. If the leader is known, its Replica is set in the error.
 type NotLeaderError struct {
-	Leader           Replica `protobuf:"bytes,1,opt,name=leader" json:"leader"`
-	XXX_unrecognized []byte  `json:"-"`
+	Leader           *Replica `protobuf:"bytes,1,opt,name=leader" json:"leader,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
 func (m *NotLeaderError) Reset()         { *m = NotLeaderError{} }
 func (m *NotLeaderError) String() string { return proto1.CompactTextString(m) }
 func (*NotLeaderError) ProtoMessage()    {}
 
-func (m *NotLeaderError) GetLeader() Replica {
+func (m *NotLeaderError) GetLeader() *Replica {
 	if m != nil {
 		return m.Leader
 	}
-	return Replica{}
+	return nil
 }
 
 // A RangeNotFoundError indicates that a command was sent to a range
@@ -527,6 +527,9 @@ func (m *NotLeaderError) Unmarshal(data []byte) error {
 			postIndex := index + msglen
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
+			}
+			if m.Leader == nil {
+				m.Leader = &Replica{}
 			}
 			if err := m.Leader.Unmarshal(data[index:postIndex]); err != nil {
 				return err
@@ -2002,8 +2005,10 @@ func (this *ErrorDetail) SetValue(value interface{}) bool {
 func (m *NotLeaderError) Size() (n int) {
 	var l int
 	_ = l
-	l = m.Leader.Size()
-	n += 1 + l + sovErrors(uint64(l))
+	if m.Leader != nil {
+		l = m.Leader.Size()
+		n += 1 + l + sovErrors(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2251,14 +2256,16 @@ func (m *NotLeaderError) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintErrors(data, i, uint64(m.Leader.Size()))
-	n1, err := m.Leader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
+	if m.Leader != nil {
+		data[i] = 0xa
+		i++
+		i = encodeVarintErrors(data, i, uint64(m.Leader.Size()))
+		n1, err := m.Leader.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
 	}
-	i += n1
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
