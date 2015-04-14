@@ -555,7 +555,7 @@ func (ds *DistSender) Send(call *client.Call) {
 					return util.RetryReset, nil
 				case *proto.NotLeaderError:
 					ds.updateLeaderCache(proto.RaftID(desc.RaftID),
-						err.(*proto.NotLeaderError).Leader)
+						err.(*proto.NotLeaderError).GetLeader())
 					return util.RetryReset, nil
 				default:
 					if retryErr, ok := err.(util.Retryable); ok && retryErr.CanRetry() {
