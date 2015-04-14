@@ -366,8 +366,9 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(TimeSeriesDatapoint));
   TimeSeriesData_descriptor_ = file->message_type(16);
-  static const int TimeSeriesData_offsets_[2] = {
+  static const int TimeSeriesData_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, name_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, source_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(TimeSeriesData, datapoints_),
   };
   TimeSeriesData_reflection_ =
@@ -541,15 +542,15 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos"
     "\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017timesta"
     "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022"
-    "\023\n\013float_value\030\003 \001(\002\"^\n\016TimeSeriesData\022\022"
-    "\n\004name\030\001 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\002 \003(\0132$"
-    ".cockroach.proto.TimeSeriesDatapoint*>\n\021"
-    "ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016RE"
-    "MOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020\n"
-    "\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021T"
-    "ransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMITT"
-    "ED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001"
-    "\320\342\036\001", 2764);
+    "\023\n\013float_value\030\003 \001(\002\"t\n\016TimeSeriesData\022\022"
+    "\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\006source\030\002 \001(\tB\004\310\336\037\000"
+    "\0228\n\ndatapoints\030\003 \003(\0132$.cockroach.proto.T"
+    "imeSeriesDatapoint*>\n\021ReplicaChangeType\022"
+    "\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243"
+    "\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n"
+    "\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013"
+    "\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032"
+    "\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 2786);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -6109,6 +6110,7 @@ void TimeSeriesDatapoint::Swap(TimeSeriesDatapoint* other) {
 
 #ifndef _MSC_VER
 const int TimeSeriesData::kNameFieldNumber;
+const int TimeSeriesData::kSourceFieldNumber;
 const int TimeSeriesData::kDatapointsFieldNumber;
 #endif  // !_MSC_VER
 
@@ -6132,6 +6134,7 @@ void TimeSeriesData::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
   name_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  source_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -6143,6 +6146,9 @@ TimeSeriesData::~TimeSeriesData() {
 void TimeSeriesData::SharedDtor() {
   if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
     delete name_;
+  }
+  if (source_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete source_;
   }
   if (this != default_instance_) {
   }
@@ -6170,9 +6176,16 @@ TimeSeriesData* TimeSeriesData::New() const {
 }
 
 void TimeSeriesData::Clear() {
-  if (has_name()) {
-    if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
-      name_->clear();
+  if (_has_bits_[0 / 32] & 3) {
+    if (has_name()) {
+      if (name_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        name_->clear();
+      }
+    }
+    if (has_source()) {
+      if (source_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+        source_->clear();
+      }
     }
   }
   datapoints_.Clear();
@@ -6202,20 +6215,37 @@ bool TimeSeriesData::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_datapoints;
+        if (input->ExpectTag(18)) goto parse_source;
         break;
       }
 
-      // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+      // optional string source = 2;
       case 2: {
         if (tag == 18) {
+         parse_source:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_source()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+            this->source().data(), this->source().length(),
+            ::google::protobuf::internal::WireFormat::PARSE,
+            "source");
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_datapoints;
+        break;
+      }
+
+      // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
+      case 3: {
+        if (tag == 26) {
          parse_datapoints:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_datapoints()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_datapoints;
+        if (input->ExpectTag(26)) goto parse_datapoints;
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -6255,10 +6285,20 @@ void TimeSeriesData::SerializeWithCachedSizes(
       1, this->name(), output);
   }
 
-  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+  // optional string source = 2;
+  if (has_source()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->source().data(), this->source().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "source");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      2, this->source(), output);
+  }
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
   for (int i = 0; i < this->datapoints_size(); i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->datapoints(i), output);
+      3, this->datapoints(i), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -6282,11 +6322,22 @@ void TimeSeriesData::SerializeWithCachedSizes(
         1, this->name(), target);
   }
 
-  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+  // optional string source = 2;
+  if (has_source()) {
+    ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+      this->source().data(), this->source().length(),
+      ::google::protobuf::internal::WireFormat::SERIALIZE,
+      "source");
+    target =
+      ::google::protobuf::internal::WireFormatLite::WriteStringToArray(
+        2, this->source(), target);
+  }
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
   for (int i = 0; i < this->datapoints_size(); i++) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        2, this->datapoints(i), target);
+        3, this->datapoints(i), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -6308,8 +6359,15 @@ int TimeSeriesData::ByteSize() const {
           this->name());
     }
 
+    // optional string source = 2;
+    if (has_source()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->source());
+    }
+
   }
-  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
   total_size += 1 * this->datapoints_size();
   for (int i = 0; i < this->datapoints_size(); i++) {
     total_size +=
@@ -6347,6 +6405,9 @@ void TimeSeriesData::MergeFrom(const TimeSeriesData& from) {
     if (from.has_name()) {
       set_name(from.name());
     }
+    if (from.has_source()) {
+      set_source(from.source());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -6371,6 +6432,7 @@ bool TimeSeriesData::IsInitialized() const {
 void TimeSeriesData::Swap(TimeSeriesData* other) {
   if (other != this) {
     std::swap(name_, other->name_);
+    std::swap(source_, other->source_);
     datapoints_.Swap(&other->datapoints_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);

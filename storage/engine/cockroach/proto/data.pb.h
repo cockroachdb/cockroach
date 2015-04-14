@@ -1937,10 +1937,22 @@ class TimeSeriesData : public ::google::protobuf::Message {
   inline ::std::string* release_name();
   inline void set_allocated_name(::std::string* name);
 
-  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+  // optional string source = 2;
+  inline bool has_source() const;
+  inline void clear_source();
+  static const int kSourceFieldNumber = 2;
+  inline const ::std::string& source() const;
+  inline void set_source(const ::std::string& value);
+  inline void set_source(const char* value);
+  inline void set_source(const char* value, size_t size);
+  inline ::std::string* mutable_source();
+  inline ::std::string* release_source();
+  inline void set_allocated_source(::std::string* source);
+
+  // repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
   inline int datapoints_size() const;
   inline void clear_datapoints();
-  static const int kDatapointsFieldNumber = 2;
+  static const int kDatapointsFieldNumber = 3;
   inline const ::cockroach::proto::TimeSeriesDatapoint& datapoints(int index) const;
   inline ::cockroach::proto::TimeSeriesDatapoint* mutable_datapoints(int index);
   inline ::cockroach::proto::TimeSeriesDatapoint* add_datapoints();
@@ -1953,12 +1965,15 @@ class TimeSeriesData : public ::google::protobuf::Message {
  private:
   inline void set_has_name();
   inline void clear_has_name();
+  inline void set_has_source();
+  inline void clear_has_source();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::std::string* name_;
+  ::std::string* source_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::proto::TimeSeriesDatapoint > datapoints_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
@@ -4260,7 +4275,83 @@ inline void TimeSeriesData::set_allocated_name(::std::string* name) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TimeSeriesData.name)
 }
 
-// repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 2;
+// optional string source = 2;
+inline bool TimeSeriesData::has_source() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void TimeSeriesData::set_has_source() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void TimeSeriesData::clear_has_source() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void TimeSeriesData::clear_source() {
+  if (source_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    source_->clear();
+  }
+  clear_has_source();
+}
+inline const ::std::string& TimeSeriesData::source() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.TimeSeriesData.source)
+  return *source_;
+}
+inline void TimeSeriesData::set_source(const ::std::string& value) {
+  set_has_source();
+  if (source_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    source_ = new ::std::string;
+  }
+  source_->assign(value);
+  // @@protoc_insertion_point(field_set:cockroach.proto.TimeSeriesData.source)
+}
+inline void TimeSeriesData::set_source(const char* value) {
+  set_has_source();
+  if (source_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    source_ = new ::std::string;
+  }
+  source_->assign(value);
+  // @@protoc_insertion_point(field_set_char:cockroach.proto.TimeSeriesData.source)
+}
+inline void TimeSeriesData::set_source(const char* value, size_t size) {
+  set_has_source();
+  if (source_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    source_ = new ::std::string;
+  }
+  source_->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:cockroach.proto.TimeSeriesData.source)
+}
+inline ::std::string* TimeSeriesData::mutable_source() {
+  set_has_source();
+  if (source_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    source_ = new ::std::string;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.TimeSeriesData.source)
+  return source_;
+}
+inline ::std::string* TimeSeriesData::release_source() {
+  clear_has_source();
+  if (source_ == &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    return NULL;
+  } else {
+    ::std::string* temp = source_;
+    source_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+    return temp;
+  }
+}
+inline void TimeSeriesData::set_allocated_source(::std::string* source) {
+  if (source_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
+    delete source_;
+  }
+  if (source) {
+    set_has_source();
+    source_ = source;
+  } else {
+    clear_has_source();
+    source_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.TimeSeriesData.source)
+}
+
+// repeated .cockroach.proto.TimeSeriesDatapoint datapoints = 3;
 inline int TimeSeriesData::datapoints_size() const {
   return datapoints_.size();
 }
