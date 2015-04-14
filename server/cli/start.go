@@ -20,7 +20,6 @@ package cli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -90,29 +89,29 @@ func runInit(cmd *commander.Command, args []string) {
 
 	err := Context.Init()
 	if err != nil {
-		log.Errorf("Failed to initialize context: %v", err)
+		log.Errorf("failed to initialize context: %v", err)
 		return
 	}
 	e := Context.Engines[0]
 	if _, ok := e.(*engine.InMem); ok {
-		log.Errorf("Cannot initialize a cluster using an in-memory store")
+		log.Errorf("cannot initialize a cluster using an in-memory store")
 		return
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
 	stopper := util.NewStopper()
 	if _, err = server.BootstrapCluster(clusterID, e, stopper); err != nil {
-		log.Errorf("Failed to bootstrap cluster: %v", err)
+		log.Errorf("failed to bootstrap cluster: %v", err)
 		return
 	}
 	stopper.Stop()
 
-	fmt.Printf("Cockroach cluster %s has been initialized\n", clusterID)
-	if Context.BootstrapOnly {
-		fmt.Printf("To start the cluster, run \"cockroach start\"\n")
+	log.Infof("cockroach cluster %s has been initialized\n", clusterID)
+	if Context.InitAndStart {
+		runStart(cmd, args)
 		return
 	}
-	runStart(cmd, args)
+	log.Infof("to start the cluster, run \"cockroach start\"\n")
 }
 
 // A startCmd command starts nodes by joining the gossip network.
@@ -132,34 +131,33 @@ var startCmd = &commander.Command{
 // cluster via the gossip network.
 func runStart(cmd *commander.Command, args []string) {
 	info := util.GetBuildInfo()
-	log.Infof("Build Vers: %s", info.Vers)
-	log.Infof("Build Tag:  %s", info.Tag)
-	log.Infof("Build Time: %s", info.Time)
-	log.Infof("Build Deps: %s", info.Deps)
+	log.Infof("build Vers: %s", info.Vers)
+	log.Infof("build Tag:  %s", info.Tag)
+	log.Infof("build Time: %s", info.Time)
+	log.Infof("build Deps: %s", info.Deps)
 
 	// First initialize the Context as it is used in other places.
 	err := Context.Init()
 	if err != nil {
-		log.Errorf("Failed to initialize context: %v", err)
+		log.Errorf("failed to initialize context: %v", err)
 		return
 	}
 
-	log.Info("Starting cockroach cluster")
+	log.Info("starting cockroach cluster")
 	stopper := util.NewStopper()
 	stopper.AddWorker()
 	s, err := server.NewServer(Context, stopper)
 	if err != nil {
-		log.Errorf("Failed to start Cockroach server: %v", err)
+		log.Errorf("failed to start Cockroach server: %v", err)
 		return
 	}
 
 	isBootstrap := cmd.Name() == "init"
 	err = s.Start(isBootstrap)
 	if err != nil {
-		log.Errorf("Cockroach server exited with error: %v", err)
+		log.Errorf("cockroach server exited with error: %v", err)
 		return
 	}
-	defer s.Stop()
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, os.Kill)

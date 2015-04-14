@@ -139,7 +139,7 @@ func tlsListen(network, address string, config *TLSConfig) (net.Listener, error)
 	cfg := config.Config()
 	if cfg == nil {
 		if network != "unix" {
-			log.Warningf("Listening via %s to %s without TLS", network, address)
+			log.Warningf("listening via %s to %s without TLS", network, address)
 		}
 		return net.Listen(network, address)
 	}
@@ -152,7 +152,7 @@ func tlsDial(network, address string, config *TLSConfig) (net.Conn, error) {
 	cfg := config.Config()
 	if cfg == nil {
 		if network != "unix" {
-			log.Warningf("Connecting via %s to %s without TLS", network, address)
+			log.Warningf("connecting via %s to %s without TLS", network, address)
 		}
 		return net.Dial(network, address)
 	}

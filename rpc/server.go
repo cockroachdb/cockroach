@@ -154,29 +154,29 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 		// reflected in our addr.
 		oldHost, oldPort, err := net.SplitHostPort(oldAddr.String())
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse original addr '%s': %v",
+			return nil, fmt.Errorf("unable to parse original addr '%s': %v",
 				oldAddr.String(), err)
 		}
 		_, newPort, err := net.SplitHostPort(newAddr.String())
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse new addr '%s': %v",
+			return nil, fmt.Errorf("unable to parse new addr '%s': %v",
 				newAddr.String(), err)
 		}
 
 		if newPort != oldPort && oldPort != "0" {
-			log.Warningf("Asked for port %s, got %s", oldPort, newPort)
+			log.Warningf("asked for port %s, got %s", oldPort, newPort)
 		}
 
 		return util.MakeRawAddr("tcp", net.JoinHostPort(oldHost, newPort)), nil
 
 	case "unix":
 		if oldAddr.String() != newAddr.String() {
-			return nil, fmt.Errorf("Asked for unix addr %s, got %s", oldAddr, newAddr)
+			return nil, fmt.Errorf("asked for unix addr %s, got %s", oldAddr, newAddr)
 		}
 		return newAddr, nil
 
 	default:
-		return nil, fmt.Errorf("Unexpected network type: %s", oldAddr.Network())
+		return nil, fmt.Errorf("unexpected network type: %s", oldAddr.Network())
 	}
 }
 
