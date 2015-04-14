@@ -47,7 +47,7 @@ func (c cliTest) Run(line string) {
 
 	var args []string
 	args = append(args, a[0])
-	args = append(args, fmt.Sprintf("-addr=%s", c.HTTPAddr))
+	args = append(args, fmt.Sprintf("-addr=%s", c.Addr))
 	args = append(args, a[1:]...)
 
 	fmt.Printf("%s\n", line)

@@ -76,14 +76,14 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		host = "127.0.0.1"
 	}
 
-	httpAddr := ctx.HTTP
+	addr := ctx.Addr
 	// If the specified address includes no host component, use the hostname.
-	if strings.HasPrefix(httpAddr, ":") {
-		httpAddr = host + httpAddr
+	if strings.HasPrefix(addr, ":") {
+		addr = host + addr
 	}
-	_, err = net.ResolveTCPAddr("tcp", httpAddr)
+	_, err = net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
-		return nil, util.Errorf("unable to resolve RPC address %q: %v", httpAddr, err)
+		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
 	}
 
 	var tlsConfig *rpc.TLSConfig
@@ -107,7 +107,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	rpcContext := rpc.NewContext(s.clock, tlsConfig)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
-	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", httpAddr), rpcContext)
+	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
 	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
 
@@ -141,7 +141,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 // bootstrap), and starts the node using the supplied engines slice.
 func (s *Server) Start(selfBootstrap bool) error {
 	if err := s.rpc.Listen(); err != nil {
-		return util.Errorf("could not listen on %s: %s", s.ctx.HTTP, err)
+		return util.Errorf("could not listen on %s: %s", s.ctx.Addr, err)
 	}
 
 	// Handle self-bootstrapping case for a single node.

@@ -33,8 +33,7 @@ import (
 
 // Context defaults.
 const (
-	defaultHTTP           = ":8080"
-	defaultAddr           = "127.0.0.1:8080"
+	defaultAddr           = ":8080"
 	defaultMaxOffset      = 250 * time.Millisecond
 	defaultGossipInterval = 2 * time.Second
 	defaultCacheSize      = 1 << 30 // GB
@@ -44,10 +43,7 @@ const (
 // Calling "server/cli".InitFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "server/cli/flags.go".
 type Context struct {
-	// HTTP is the "host:port to bind for HTTP traffic.
-	HTTP string
-
-	// Addr is the address for connection to cockroach cluster.
+	// Addr is the host:port to bind for HTTP/RPC traffic.
 	Addr string
 
 	// Certs specifies a directory containing RSA key and x509 certs.
@@ -110,7 +106,6 @@ type Context struct {
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	return &Context{
-		HTTP: defaultHTTP,
 		Addr: defaultAddr,
 
 		MaxOffset: defaultMaxOffset,

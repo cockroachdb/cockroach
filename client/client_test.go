@@ -49,7 +49,7 @@ func StartTestServer(t *testing.T) *server.TestServer {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on http: %s", s.HTTPAddr)
+	log.Infof("Test server listening on http: %s", s.Addr)
 	return s
 }
 
@@ -108,7 +108,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 		Constant:    2,
 		MaxAttempts: 2,
 	})
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	testCases := []struct {
@@ -218,7 +218,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 func TestKVClientRunTransaction(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.TxnRetryOptions.Backoff = 1 * time.Millisecond
 	kvClient.User = storage.UserRoot
 
@@ -279,7 +279,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 func TestKVClientGetAndPutProto(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	zoneConfig := &proto.ZoneConfig{
@@ -314,7 +314,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 func TestKVClientGetAndPutGob(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	obj := map[string]map[int]int{
@@ -354,7 +354,7 @@ func TestKVClientGetAndPutGob(t *testing.T) {
 func TestKVClientEmptyValues(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	kvClient.Call(proto.Put, proto.PutArgs(proto.Key("a"), []byte{}), &proto.PutResponse{})
@@ -383,7 +383,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 func TestKVClientPrepareAndFlush(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	replies := []*proto.IncrementResponse{}
@@ -445,7 +445,7 @@ func ExampleKV_Call() {
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
-	serverAddress := serv.HTTPAddr
+	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
@@ -490,7 +490,7 @@ func ExampleKV_Prepare() {
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
-	serverAddress := serv.HTTPAddr
+	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
@@ -560,7 +560,7 @@ func ExampleKV_RunTransaction() {
 	defer serv.Stop()
 
 	// Replace with actual host:port address string (ex "localhost:8080") for server cluster.
-	serverAddress := serv.HTTPAddr
+	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
 	sender := client.NewHTTPSender(serverAddress, &http.Transport{
@@ -705,7 +705,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 func TestConcurrentIncrements(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.HTTPAddr)
+	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	// Convenience loop: Crank up this number for testing this
@@ -736,7 +736,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 		b.Fatalf("Could not start server: %v", err)
 	}
 
-	kv := createTestClient(s.HTTPAddr)
+	kv := createTestClient(s.Addr)
 	kv.User = storage.UserRoot
 
 	if exists {
