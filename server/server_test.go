@@ -44,7 +44,7 @@ func startTestServer(t *testing.T) *TestServer {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on http: %s, rpc: %s", s.HTTPAddr, s.RPCAddr)
+	log.Infof("Test server listening on http: %s", s.Addr)
 	return s
 }
 
@@ -181,7 +181,7 @@ func TestSelfBootstrap(t *testing.T) {
 func TestHealth(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	url := "http://" + s.HTTPAddr + healthPath
+	url := "http://" + s.Addr + healthPath
 	resp, err := http.Get(url)
 	if err != nil {
 		t.Fatalf("error requesting health at %s: %s", url, err)
@@ -209,7 +209,7 @@ func TestGzip(t *testing.T) {
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+s.HTTPAddr+healthPath, nil)
+	req, err := http.NewRequest("GET", "http://"+s.Addr+healthPath, nil)
 	if err != nil {
 		t.Fatalf("could not create request: %s", err)
 	}

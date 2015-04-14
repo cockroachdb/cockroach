@@ -21,10 +21,14 @@ package rpc
 // properties haven't been analyzed or audited.
 
 import (
+	"bufio"
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
+	"net/rpc"
 	"path"
 	"sync"
 
@@ -131,7 +135,7 @@ func LoadTestTLSConfig() (*TLSConfig, error) {
 
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of
 // the passed TLSConfig.
-func tlsListen(network string, address string, config *TLSConfig) (net.Listener, error) {
+func tlsListen(network, address string, config *TLSConfig) (net.Listener, error) {
 	cfg := config.Config()
 	if cfg == nil {
 		if network != "unix" {
@@ -144,7 +148,7 @@ func tlsListen(network string, address string, config *TLSConfig) (net.Listener,
 
 // tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of
 // the passed TLSConfig.
-func tlsDial(network string, address string, config *TLSConfig) (net.Conn, error) {
+func tlsDial(network, address string, config *TLSConfig) (net.Conn, error) {
 	cfg := config.Config()
 	if cfg == nil {
 		if network != "unix" {
@@ -153,4 +157,26 @@ func tlsDial(network string, address string, config *TLSConfig) (net.Conn, error
 		return net.Dial(network, address)
 	}
 	return tls.Dial(network, address, cfg)
+}
+
+// tlsDialHTTP connects to an HTTP RPC server at the specified address.
+func tlsDialHTTP(network, address string, config *TLSConfig) (net.Conn, error) {
+	conn, err := tlsDial(network, address, config)
+	if err != nil {
+		return conn, err
+	}
+
+	// Note: this code was adapted from net/rpc.DialHTTPPath.
+	io.WriteString(conn, "CONNECT "+rpc.DefaultRPCPath+" HTTP/1.0\n\n")
+
+	// Require successful HTTP response before switching to RPC protocol.
+	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: "CONNECT"})
+	if err == nil && resp.Status == connected {
+		return conn, nil
+	}
+	if err == nil {
+		err = util.Errorf("unexpected HTTP response: %s", resp.Status)
+	}
+	conn.Close()
+	return nil, err
 }

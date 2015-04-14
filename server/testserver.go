@@ -28,11 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-const (
-	defaultHTTPAddr = "127.0.0.1:0"
-	defaultRPCAddr  = "127.0.0.1:0"
-)
-
 // A TestServer encapsulates an in-memory instantiation of a cockroach
 // node with a single store. Example usage of a TestServer follows:
 //
@@ -51,10 +46,10 @@ type TestServer struct {
 	// This is mostly irrelevant except when testing reads within
 	// uncertainty intervals.
 	MaxOffset time.Duration
-	// HTTPAddr and RPCAddr default to localhost with port set
-	// at time of call to Start() to an available port.
-	HTTPAddr, RPCAddr string
-	SkipBootstrap     bool
+	// Addr defaults to localhost with port set at time of call to
+	// Start() to an available port.
+	Addr          string
+	SkipBootstrap bool
 	// server is the embedded Cockroach server struct.
 	*Server
 	// Engine underlying the test server.
@@ -80,22 +75,17 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.HTTPAddr after Start() for client connections. Use Stop()
+// TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
 	// We update these with the actual port once the servers
 	// have been launched for the purpose of this test.
-	if ts.RPCAddr == "" {
-		ts.RPCAddr = defaultRPCAddr
-	}
-	if ts.HTTPAddr == "" {
-		ts.HTTPAddr = defaultHTTPAddr
+	if ts.Addr == "" {
+		ts.Addr = "127.0.0.1:0"
 	}
 
 	ctx := NewContext()
-	ctx.RPC = ts.RPCAddr
-	ctx.HTTP = ts.HTTPAddr
-	ctx.Addr = ts.HTTPAddr
+	ctx.Addr = ts.Addr
 	ctx.Certs = ts.CertDir
 	ctx.MaxOffset = ts.MaxOffset
 
@@ -123,8 +113,7 @@ func (ts *TestServer) Start() error {
 	}
 	// Update the configuration variables to reflect the actual
 	// ports bound.
-	ts.HTTPAddr = (*ts.httpListener).Addr().String()
-	ts.RPCAddr = ts.rpc.Addr().String()
+	ts.Addr = ts.rpc.Addr().String()
 
 	return nil
 }

@@ -91,9 +91,8 @@ DNS_CID=$(docker run -d -v "$DNS_DIR:/dnsmasq.hosts" --name=$DNSMASQ_NAME $DNSMA
 DNS_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $DNS_CID)
 echo "* ${DNSMASQ_NAME}"
 
-# Local rpc and http ports.
-RPC_PORT=9000
-HTTP_PORT=8080
+# Local ports.
+PORT=8080
 
 # Start all nodes.
 for i in $(seq 1 $NODES); do
@@ -105,7 +104,7 @@ for i in $(seq 1 $NODES); do
     CMD="init"
   fi
   # Command args specify two data directories per instance to simulate two physical devices.
-  CMD_ARGS="-gossip=${HOSTS[1]}:$RPC_PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -rpc=${HOSTS[$i]}:$RPC_PORT -http=${HOSTS[$i]}:$HTTP_PORT"
+  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -addr=${HOSTS[$i]}:$PORT"
   # Log (almost) everything.
   CMD_ARGS="${CMD_ARGS} -v 7"
 
@@ -115,7 +114,7 @@ for i in $(seq 1 $NODES); do
   # Start Cockroach docker container and corral HTTP port and docker
   # IP address for container-local DNS.
   CIDS[$i]=$(docker run $STD_ARGS $NODE_ARGS $COCKROACH_IMAGE $CMD $CMD_ARGS)
-  HTTP_PORTS[$i]=$(echo $(docker port ${CIDS[$i]} 8080) | sed 's/.*://')
+  PORTS[$i]=$(echo $(docker port ${CIDS[$i]} 8080) | sed 's/.*://')
   IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' ${CIDS[$i]})
   IP_HOST[$i]="$IP ${HOSTS[$i]}"
   echo "* ${HOSTS[$i]}"
@@ -137,7 +136,7 @@ if [[ $DOCKERHOST != "127.0.0.1" ]]; then
 fi
 
 # Fetch the local status contents from node 1 and verify build information is present.
-LOCAL_URL="$DOCKERHOST:${HTTP_PORTS[1]}/_status/local/"
+LOCAL_URL="$DOCKERHOST:${PORTS[1]}/_status/local/"
 LOCAL=$(curl --noproxy '*' -s $LOCAL_URL)
 if [[ -z $LOCAL ]]; then
   echo "Failed to fetch status from node 1"
@@ -162,7 +161,7 @@ for ATTEMPT in $(seq 1 $MAX_WAIT); do
   FOUND=0
   for i in $(seq 1 $NODES); do
     FOUND_NAMES=""
-    GOSSIP_URL="$DOCKERHOST:${HTTP_PORTS[$i]}/_status/gossip"
+    GOSSIP_URL="$DOCKERHOST:${PORTS[$i]}/_status/gossip"
     GOSSIP=$(curl --noproxy '*' -s $GOSSIP_URL)
     for j in $(seq 1 $((2*NODES))); do
       if [[ ! -z $(echo $GOSSIP | grep "node:$j") ]]; then

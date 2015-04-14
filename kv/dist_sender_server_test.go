@@ -47,7 +47,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stop()
-	sender := client.NewHTTPSender(s.HTTPAddr, &http.Transport{
+	sender := client.NewHTTPSender(s.Addr, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	})
 	db := client.NewKV(nil, sender)
@@ -94,7 +94,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	sender := client.NewHTTPSender(s.HTTPAddr, &http.Transport{
+	sender := client.NewHTTPSender(s.Addr, &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	})
 	db := client.NewKV(nil, sender)

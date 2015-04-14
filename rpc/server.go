@@ -19,7 +19,9 @@ package rpc
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/rpc"
 	"sync"
 
@@ -36,6 +38,7 @@ import (
 type Server struct {
 	*rpc.Server              // Embedded RPC server instance
 	listener    net.Listener // Server listener
+	handler     http.Handler
 
 	context *Context
 
@@ -70,9 +73,38 @@ func (s *Server) AddCloseCallback(cb func(conn net.Conn)) {
 	s.closeCallbacks = append(s.closeCallbacks, cb)
 }
 
-// Start runs the RPC server. After this method returns, the socket
-// will have been bound. Use Server.Addr() to ascertain server address.
-func (s *Server) Start() error {
+// Can connect to RPC service using HTTP CONNECT to rpcPath.
+var connected = "200 Connected to Go RPC"
+
+// ServeHTTP implements an http.Handler that answers RPC requests.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != rpc.DefaultRPCPath {
+		if s.handler != nil {
+			s.handler.ServeHTTP(w, r)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+	// Note: this code was adapted from net/rpc.Server.ServeHTTP.
+	if r.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		io.WriteString(w, "405 must CONNECT\n")
+		return
+	}
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Infof("rpc hijacking %s: %s", r.RemoteAddr, err)
+		return
+	}
+	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	s.serveConn(conn)
+}
+
+// Listen listens on the configured address but does not start
+// accepting connections until Serve is called.
+func (s *Server) Listen() error {
 	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.context.tlsConfig)
 	if err != nil {
 		return err
@@ -88,24 +120,23 @@ func (s *Server) Start() error {
 	s.addr = addr
 	s.mu.Unlock()
 
-	go func() {
-		// Start serving in a loop until listener is closed.
-		log.Infof("serving on %+v...", s.Addr())
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				s.mu.Lock()
-				if !s.closed {
-					log.Fatalf("server terminated: %v", err)
-				}
-				s.mu.Unlock()
-				break
-			}
-			// Serve connection to completion in a goroutine.
-			go s.serveConn(conn)
-		}
-		log.Infof("done serving on %+v", s.Addr())
-	}()
+	return nil
+}
+
+// Serve accepts and services connections on the already started
+// listener.
+func (s *Server) Serve(handler http.Handler) {
+	s.handler = handler
+	go http.Serve(s.listener, s)
+}
+
+// Start runs the RPC server. After this method returns, the socket
+// will have been bound. Use Server.Addr() to ascertain server address.
+func (s *Server) Start() error {
+	if err := s.Listen(); err != nil {
+		return err
+	}
+	s.Serve(s)
 	return nil
 }
 
