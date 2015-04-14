@@ -20,6 +20,7 @@ package multiraft
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util"
@@ -32,6 +33,13 @@ import (
 // NodeID is a type alias for a raft node ID. Note that a raft node corresponds
 // to a cockroach node+store combination.
 type NodeID uint64
+
+// Format implements the fmt.Formatter interface.
+func (n NodeID) Format(f fmt.State, verb rune) {
+	// Note: this implementation doesn't handle the width and precision
+	// specifiers such as "%20.10s".
+	fmt.Fprint(f, strconv.FormatInt(int64(n), 16))
+}
 
 // Config contains the parameters necessary to construct a MultiRaft object.
 type Config struct {
