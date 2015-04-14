@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
+// Author: Peter Mattis (peter.mattis@gmail.com)
 
 package client
 
@@ -37,43 +37,32 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 	}
 }
 
-type testSender struct {
-	handler func(call Call) // called after standard servicing
-}
+func newTestSender(handler func(Call)) KVSenderFunc {
+	return func(call Call) {
+		header := call.Args.Header()
+		header.UserPriority = gogoproto.Int32(-1)
+		if header.Txn != nil && len(header.Txn.ID) == 0 {
+			header.Txn.Key = txnKey
+			header.Txn.ID = txnID
+		}
+		call.Reply.Reset()
+		switch call.Method() {
+		case proto.Put:
+			gogoproto.Merge(call.Reply, testPutResp)
+		default:
+			// Do nothing.
+		}
+		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 
-func newTestSender(handler func(Call)) *testSender {
-	return &testSender{
-		handler: handler,
+		if handler != nil {
+			handler(call)
+		}
 	}
 }
 
-func (ts *testSender) Send(call Call) {
-	header := call.Args.Header()
-	header.UserPriority = gogoproto.Int32(-1)
-	if header.Txn != nil && len(header.Txn.ID) == 0 {
-		header.Txn.Key = txnKey
-		header.Txn.ID = txnID
-	}
-	call.Reply.Reset()
-	switch call.Method() {
-	case proto.Put:
-		gogoproto.Merge(call.Reply, testPutResp)
-	default:
-		// Do nothing.
-	}
-	call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
-
-	if ts.handler != nil {
-		ts.handler(call)
-	}
-}
-
-func (ts *testSender) Close() {
-}
-
-// TestTxnSenderRequestTxnTimestamp verifies response txn timestamp is
+// TestTxnRequestTxnTimestamp verifies response txn timestamp is
 // always upgraded on successive requests.
-func TestTxnSenderRequestTxnTimestamp(t *testing.T) {
+func TestTxnRequestTxnTimestamp(t *testing.T) {
 	testCases := []struct {
 		expRequestTS, responseTS proto.Timestamp
 	}{
@@ -87,30 +76,31 @@ func TestTxnSenderRequestTxnTimestamp(t *testing.T) {
 	}
 
 	testIdx := 0
-	ts := newTxnSender(newTestSender(func(call Call) {
+	kv := NewKV(nil, newTestSender(func(call Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {
 			t.Errorf("%d: expected ts %s got %s", testIdx, test.expRequestTS, call.Args.Header().Txn.Timestamp)
 		}
 		call.Reply.Header().Txn.Timestamp = test.responseTS
-	}), &TransactionOptions{})
+	}))
+	txn := newTxn(kv, nil)
 
 	for testIdx = range testCases {
-		ts.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		txn.kv.Sender.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
-// TestTxnSenderResetTxnOnAbort verifies transaction is reset on abort.
-func TestTxnSenderResetTxnOnAbort(t *testing.T) {
-	ts := newTxnSender(newTestSender(func(call Call) {
+// TestTxnResetTxnOnAbort verifies transaction is reset on abort.
+func TestTxnResetTxnOnAbort(t *testing.T) {
+	kv := NewKV(nil, newTestSender(func(call Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
-	}), &TransactionOptions{})
+	}))
+	txn := newTxn(kv, nil)
 
-	reply := &proto.PutResponse{}
-	ts.Send(Call{Args: testPutReq, Reply: reply})
+	txn.kv.Sender.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 
-	if len(ts.txn.ID) != 0 {
+	if len(txn.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
 	}
 }

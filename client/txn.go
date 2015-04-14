@@ -17,12 +17,113 @@
 
 package client
 
+import (
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/util/log"
+)
+
+type txnSender struct {
+	*Txn
+}
+
+func (ts *txnSender) Send(call Call) {
+	// Send call through wrapped sender.
+	call.Args.Header().Txn = &ts.txn
+	ts.wrapped.Send(call)
+	ts.txn.Update(call.Reply.Header().Txn)
+
+	if err, ok := call.Reply.Header().GoError().(*proto.TransactionAbortedError); ok {
+		// On Abort, reset the transaction so we start anew on restart.
+		ts.txn = proto.Transaction{
+			Name:      ts.txn.Name,
+			Isolation: ts.txn.Isolation,
+			Priority:  err.Txn.Priority, // acts as a minimum priority on restart
+		}
+	}
+}
+
 // Txn provides serial access to a KV store via Run and parallel
-// access via Prepare and Flush. A Txn instance is not thread
-// safe.
+// access via Prepare and Flush. On receipt of
+// TransactionRestartError, the transaction epoch is incremented and
+// error passed to caller. On receipt of TransactionAbortedError, the
+// transaction is re-created and the error passed to caller.
+//
+// A Txn instance is not thread safe.
 type Txn struct {
-	kv       KV
-	prepared []Call
+	kv          KV
+	wrapped     KVSender
+	txn         proto.Transaction
+	txnSender   txnSender
+	prepared    []Call
+	needsEndTxn bool // True if EndTransaction needs to be sent
+}
+
+var defaultTxnOpts = TransactionOptions{}
+
+func newTxn(kv *KV, opts *TransactionOptions) *Txn {
+	if opts == nil {
+		opts = &defaultTxnOpts
+	}
+
+	t := &Txn{
+		kv:      *kv,
+		wrapped: kv.Sender,
+		txn: proto.Transaction{
+			Name:      opts.Name,
+			Isolation: opts.Isolation,
+		},
+	}
+	t.txnSender.Txn = t
+	t.kv.Sender = &t.txnSender
+	if opts != &defaultTxnOpts {
+		t.kv.UserPriority = opts.UserPriority
+	}
+	return t
+}
+
+func (t *Txn) exec(retryable func(txn *Txn) error) error {
+	// Run retryable in a retry loop until we encounter a success or
+	// error condition this loop isn't capable of handling.
+	retryOpts := t.kv.TxnRetryOptions
+	retryOpts.Tag = t.txn.Name
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		t.needsEndTxn = false // always reset before [re]starting txn
+		err := retryable(t)
+		if err == nil {
+			if t.needsEndTxn {
+				// If there were no errors running retryable, commit the txn. This
+				// may block waiting for outstanding writes to complete in case
+				// retryable didn't -- we need the most recent of all response
+				// timestamps in order to commit.
+				etArgs := &proto.EndTransactionRequest{Commit: true}
+				etReply := &proto.EndTransactionResponse{}
+				// Prepare and flush for end txn in order to execute entire txn in
+				// a single round trip if possible.
+				t.Prepare(Call{Args: etArgs, Reply: etReply})
+			}
+			err = t.Flush()
+		}
+		if restartErr, ok := err.(proto.TransactionRestartError); ok {
+			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
+				return util.RetryReset, nil
+			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
+				return util.RetryContinue, nil
+			}
+			// By default, fall through and return RetryBreak.
+		}
+		return util.RetryBreak, err
+	})
+	if err != nil && t.needsEndTxn {
+		etArgs := &proto.EndTransactionRequest{Commit: false}
+		etReply := &proto.EndTransactionResponse{}
+		t.Run(Call{Args: etArgs, Reply: etReply})
+		if etReply.Header().GoError() != nil {
+			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
+		}
+		return err
+	}
+	return err
 }
 
 // Run runs the specified calls synchronously in a single batch and
@@ -35,6 +136,7 @@ func (t *Txn) Run(calls ...Call) error {
 		t.Prepare(calls...)
 		return t.Flush()
 	}
+	t.updateNeedsEndTxn(calls)
 	return t.kv.Run(calls...)
 }
 
@@ -56,6 +158,7 @@ func (t *Txn) Run(calls ...Call) error {
 // send the EndTransaction in the same batch as the final set of
 // prepared calls.
 func (t *Txn) Prepare(calls ...Call) {
+	t.updateNeedsEndTxn(calls)
 	for _, c := range calls {
 		c.resetClientCmdID(t.kv.clock)
 	}
@@ -71,5 +174,28 @@ func (t *Txn) Prepare(calls ...Call) {
 func (t *Txn) Flush() error {
 	calls := t.prepared
 	t.prepared = nil
+	if len(calls) == 0 {
+		return nil
+	}
 	return t.kv.Run(calls...)
+}
+
+func (t *Txn) updateNeedsEndTxn(calls []Call) {
+	for _, c := range calls {
+		if b, ok := c.Args.(*proto.BatchRequest); ok {
+			for _, br := range b.Requests {
+				t.updateNeedsEndTxnRequest(br.GetValue().(proto.Request))
+			}
+			continue
+		}
+		t.updateNeedsEndTxnRequest(c.Args)
+	}
+}
+
+func (t *Txn) updateNeedsEndTxnRequest(r proto.Request) {
+	if !t.needsEndTxn {
+		t.needsEndTxn = proto.IsTransactional(r)
+	} else if _, ok := r.(*proto.EndTransactionRequest); ok {
+		t.needsEndTxn = false
+	}
 }

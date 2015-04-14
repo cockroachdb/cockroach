@@ -108,19 +108,15 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 	}
 }
 
-// TestKVTransactionSender verifies the proper unwrapping and
+// TestKVTransactionConfig verifies the proper unwrapping and
 // re-wrapping of the client's sender when starting a transaction.
 // Also verifies that User and UserPriority are propagated to the
 // transactional client.
-func TestKVTransactionSender(t *testing.T) {
+func TestKVTransactionConfig(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
-		if txn.kv.Sender() != client.Sender() {
-			t.Errorf("expected wrapped sender for txn to equal original sender; %+v != %+v",
-				txn.kv.Sender(), client.Sender())
-		}
 		if txn.kv.User != client.User {
 			t.Errorf("expected txn user %s; got %s", client.User, txn.kv.User)
 		}
@@ -133,26 +129,45 @@ func TestKVTransactionSender(t *testing.T) {
 	}
 }
 
-// TestKVCommitTransaction verifies that transaction is committed
-// upon successful invocation of the retryable func.
-func TestKVCommitTransaction(t *testing.T) {
-	count := 0
+// TestKVCommitReadOnlyTransaction verifies that transaction is
+// committed but EndTransaction is not sent if only read-only
+// operations were performed.
+func TestKVCommitReadOnlyTransaction(t *testing.T) {
+	var calls []string
 	client := NewKV(nil, newTestSender(func(call Call) {
-		count++
-		if call.Method() != proto.EndTransaction {
-			t.Errorf("expected call to EndTransaction; got %s", call.Method())
-		}
-		if commit := call.Args.(*proto.EndTransactionRequest).Commit; !commit {
-			t.Errorf("expected commit to be true; got %t", commit)
-		}
+		calls = append(calls, call.Method())
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
+		txn.Run(GetCall(proto.Key("a")))
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-	if count != 1 {
-		t.Errorf("expected single invocation of EndTransaction; got %d", count)
+	expectedCalls := []string{"Get"}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
+	}
+}
+
+// TestKVCommitMutatingTransaction verifies that transaction is committed
+// upon successful invocation of the retryable func.
+func TestKVCommitMutatingTransaction(t *testing.T) {
+	var calls []string
+	client := NewKV(nil, newTestSender(func(call Call) {
+		calls = append(calls, call.Method())
+		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
+			t.Errorf("expected commit to be true; got %t", et.Commit)
+		}
+	}))
+	if err := client.RunTransaction(nil, func(txn *Txn) error {
+		txn.Run(PutCall(proto.Key("a"), nil))
+		return nil
+	}); err != nil {
+		t.Errorf("unexpected error on commit: %s", err)
+	}
+	expectedCalls := []string{"Put", "EndTransaction"}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
 }
 
@@ -179,27 +194,43 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	}
 }
 
-// TestKVAbortTransaction verifies that transaction is aborted
+// TestKVAbortReadOnlyTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
-func TestKVAbortTransaction(t *testing.T) {
-	count := 0
+func TestKVAbortReadOnlyTransaction(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call Call) {
-		count++
-		if call.Method() != proto.EndTransaction {
-			t.Errorf("expected call to EndTransaction; got %s", call.Method())
-		}
-		if commit := call.Args.(*proto.EndTransactionRequest).Commit; commit {
-			t.Errorf("expected commit to be false; got %t", commit)
+		if call.Method() == proto.EndTransaction {
+			t.Errorf("did not expect EndTransaction")
 		}
 	}))
 	err := client.RunTransaction(nil, func(txn *Txn) error {
+		txn.Run(GetCall(proto.Key("a")))
 		return errors.New("foo")
 	})
 	if err == nil {
 		t.Error("expected error on abort")
 	}
-	if count != 1 {
-		t.Errorf("expected single invocation of EndTransaction; got %d", count)
+}
+
+// TestKVAbortMutatingTransaction verifies that transaction is aborted
+// upon failed invocation of the retryable func.
+func TestKVAbortMutatingTransaction(t *testing.T) {
+	var calls []string
+	client := NewKV(nil, newTestSender(func(call Call) {
+		calls = append(calls, call.Method())
+		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
+			t.Errorf("expected commit to be false; got %t", et.Commit)
+		}
+	}))
+	err := client.RunTransaction(nil, func(txn *Txn) error {
+		txn.Run(PutCall(proto.Key("a"), nil))
+		return errors.New("foo")
+	})
+	if err == nil {
+		t.Error("expected error on abort")
+	}
+	expectedCalls := []string{"Put", "EndTransaction"}
+	if !reflect.DeepEqual(expectedCalls, calls) {
+		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
 }
 
