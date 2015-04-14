@@ -300,6 +300,14 @@ func (g *Gossip) initializeBootstrapAddresses() {
 	}
 }
 
+// additionalBootstrappingPossible return true if there are any
+// remaining bootstrap hosts to connect to...either valid addresses
+// which have yet to be connected, or addresses in the original set
+// which did not resolve but may yet on repeated attempts.
+func (g *Gossip) additionalBootstrappingPossible() bool {
+	return g.filterExtant(g.bootstraps).len() > 0 || g.haveUnused
+}
+
 // filterExtant removes any addresses from the supplied addrSet which
 // are already connected to this node, either via outgoing or incoming
 // client connections.
@@ -425,10 +433,6 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 	})
 }
 
-func (g *Gossip) additionalBootstrappingPossible() bool {
-	return g.filterExtant(g.bootstraps).len() > 0 || g.haveUnused
-}
-
 // maybeWarnAboutInit looks for signs indicating a cluster which
 // hasn't been initialized and warns. There's no absolutely sure way
 // to determine whether the current node is simply waiting to be
@@ -444,6 +448,7 @@ func (g *Gossip) maybeWarnAboutInit(stopper *util.Stopper) {
 		// Wait 5s before first check.
 		select {
 		case <-stopper.ShouldStop():
+			return
 		case <-time.After(5 * time.Second):
 		}
 		retryOptions := util.RetryOptions{
