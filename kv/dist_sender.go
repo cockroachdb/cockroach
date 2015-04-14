@@ -255,8 +255,8 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 // data is not a correctness problem but instead may infrequently result in
 // additional latency as additional range lookups may be required. Note also
 // that internalRangeLookup bypasses the DistSender's Send() method, so there
-// is no error inspection and retry logic here; this is not an issue here since
-// the lookup performs a single inconsistent read only.
+// is no error inspection and retry logic here; this is not an issue since the
+// lookup performs a single inconsistent read only.
 func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescriptor) ([]proto.RangeDescriptor, error) {
 	args := &proto.InternalRangeLookupRequest{
 		RequestHeader: proto.RequestHeader{
@@ -363,9 +363,6 @@ func (ds *DistSender) getNodeDescriptor() *storage.NodeDescriptor {
 	ownNodeID := ds.gossip.GetNodeID()
 	if nodeDesc, err := ds.gossip.GetInfo(
 		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
-		// Rearrange the replicas so that those replicas with long common
-		// prefix of attributes end up first. If there's no prefix, this is a
-		// no-op.
 		ds.nodeDescriptor = nodeDesc.(*storage.NodeDescriptor)
 	} else {
 		log.Infof("unable to determine this node's attributes for replica " +
@@ -390,6 +387,9 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 	// Copy and rearrange the replicas suitably, then return the desired order.
 	replicas := proto.ReplicaSlice(append(make([]proto.Replica,
 		len(desc.Replicas)), desc.Replicas...))
+	// Rearrange the replicas so that those replicas with long common
+	// prefix of attributes end up first. If there's no prefix, this is a
+	// no-op.
 	order := ds.optimizeReplicaOrder(replicas)
 
 	// If this request needs to go to a leader and we know who that is, move
