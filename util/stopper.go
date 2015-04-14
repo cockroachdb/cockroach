@@ -72,7 +72,7 @@ func (s *Stopper) RunWorker(f func()) {
 	}()
 }
 
-// AddWorker worker to the stopper.
+// AddWorker adds a worker to the stopper.
 func (s *Stopper) AddWorker() {
 	s.stop.Add(1)
 }
