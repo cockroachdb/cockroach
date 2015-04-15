@@ -148,7 +148,6 @@ func (s *statusServer) handleLocalStacks(w http.ResponseWriter, r *http.Request)
 // handleNodeStatus handles GET requests for node status.
 func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) {
 	// TODO(shawn) parse node-id in path
-
 	nodes := &status.NodeList{}
 	b, contentType, err := util.MarshalResponse(r, nodes, []util.EncodingType{util.JSONEncoding})
 	if err != nil {
@@ -163,13 +162,11 @@ func (s *statusServer) handleNodeStatus(w http.ResponseWriter, r *http.Request) 
 // handleStoresStatus handles GET requests for store status.
 func (s *statusServer) handleStoresStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	w.Write([]byte(`{"stores": []}`))
 }
 
 // handleTransactionStatus handles GET requests for transaction status.
 func (s *statusServer) handleTransactionStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
 	w.Write([]byte(`{"transactions": []}`))
 }

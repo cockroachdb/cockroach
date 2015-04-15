@@ -18,6 +18,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -69,8 +71,8 @@ func TestStatusLocalStacks(t *testing.T) {
 // Json results. The content type of the responses is always
 // "application/json".
 func TestStatusJson(t *testing.T) {
-	s, stopper := startStatusServer()
-	defer stopper.Stop()
+	s := startTestServer(t)
+	defer s.Stop()
 
 	type TestCase struct {
 		keyPrefix string
@@ -96,23 +98,22 @@ func TestStatusJson(t *testing.T) {
 	for _, spec := range testCases {
 		contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
 		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", s.URL+spec.keyPrefix, nil)
+			req, err := http.NewRequest("GET", "http://"+s.Addr+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			req.Header.Set("Accept", contentType)
-
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				t.Errorf("Unpexected status code: %v", resp.StatusCode)
+				t.Errorf("unexpected status code: %v", resp.StatusCode)
 			}
-			contentType = resp.Header.Get(util.ContentTypeHeader)
-			if contentType != "application/json" {
-				t.Errorf("Unpexected content type: %v", contentType)
+			returnedContentType := resp.Header.Get(util.ContentTypeHeader)
+			if returnedContentType != "application/json" {
+				t.Errorf("unexpected content type: %v", returnedContentType)
 			}
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
@@ -121,6 +122,92 @@ func TestStatusJson(t *testing.T) {
 			if matches, err := regexp.Match(spec.expected, body); !matches || err != nil {
 				t.Errorf("expected match: %t; err nil: %s", matches, err)
 			}
+		}
+	}
+}
+
+// TestStatusGossipJson ensures that the output response for the full gossip
+// info contains the required fields.
+func TestStatusGossipJson(t *testing.T) {
+	s := startTestServer(t)
+	defer s.Stop()
+
+	type prefixedInfo struct {
+		Key string                 `json:"Key"`
+		Val []storage.PrefixConfig `json:"Val"`
+	}
+
+	type rangeDescriptorInfo struct {
+		Key string                `json:"Key"`
+		Val proto.RangeDescriptor `json:"Val"`
+	}
+
+	type keyValueStringPair struct {
+		Key string `json:"Key"`
+		Val string `json:"Val"`
+	}
+
+	type keyValuePair struct {
+		Key string                 `json:"Key"`
+		Val map[string]interface{} `json:"Val"`
+	}
+
+	type infos struct {
+		Infos struct {
+			Accounting  *prefixedInfo        `json:"accounting"`
+			FirstRange  *rangeDescriptorInfo `json:"first-range"`
+			Permissions *prefixedInfo        `json:"permissions"`
+			Zones       *prefixedInfo        `json:"zones"`
+			ClusterID   *keyValueStringPair  `json:"cluster-id"`
+			Node1       *keyValuePair        `json:"node:1"`
+		} `json:"infos"`
+	}
+
+	contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
+	for _, contentType := range contentTypes {
+		req, err := http.NewRequest("GET", "http://"+s.Addr+statusGossipKeyPrefix, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Accept", contentType)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %v", resp.StatusCode)
+		}
+		returnedContentType := resp.Header.Get(util.ContentTypeHeader)
+		if returnedContentType != "application/json" {
+			t.Errorf("unexpected content type: %v", returnedContentType)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := &infos{}
+		if err = json.Unmarshal(body, &data); err != nil {
+			t.Fatal(err)
+		}
+		if data.Infos.Accounting == nil {
+			t.Errorf("no accounting info returned: %v,", body)
+		}
+		if data.Infos.FirstRange == nil {
+			t.Errorf("no first-range info returned: %v", body)
+		}
+		if data.Infos.Permissions == nil {
+			t.Errorf("no permission info returned: %v", body)
+		}
+		if data.Infos.Zones == nil {
+			t.Errorf("no zone info returned: %v", body)
+		}
+		if data.Infos.ClusterID == nil {
+			t.Errorf("no clusterID info returned: %v", body)
+		}
+		if data.Infos.Node1 == nil {
+			t.Errorf("no node 1 info returned: %v", body)
 		}
 	}
 }
