@@ -20,11 +20,14 @@ package server
 import (
 	"compress/gzip"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+
+	"code.google.com/p/snappy-go/snappy"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
@@ -197,10 +200,10 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-// TestGzip hits the health endpoint while explicitly disabling
-// decompression on a custom client's Transport and setting it
-// conditionally via the request's Accept-Encoding headers.
-func TestGzip(t *testing.T) {
+// TestAcceptEncoding hits the health endpoint while explicitly
+// disabling decompression on a custom client's Transport and setting
+// it conditionally via the request's Accept-Encoding headers.
+func TestAcceptEncoding(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
 	client := http.Client{
@@ -209,40 +212,56 @@ func TestGzip(t *testing.T) {
 			DisableCompression: true,
 		},
 	}
-	req, err := http.NewRequest("GET", "http://"+s.Addr+healthPath, nil)
-	if err != nil {
-		t.Fatalf("could not create request: %s", err)
+
+	testData := []struct {
+		acceptEncoding string
+		newReader      func(io.Reader) io.Reader
+	}{
+		{"",
+			func(b io.Reader) io.Reader {
+				return b
+			},
+		},
+		{"gzip",
+			func(b io.Reader) io.Reader {
+				r, err := gzip.NewReader(b)
+				if err != nil {
+					t.Fatalf("could not create new gzip reader: %s", err)
+				}
+				return r
+			},
+		},
+		{"snappy",
+			func(b io.Reader) io.Reader {
+				return snappy.NewReader(b)
+			},
+		},
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("could not make request to %s: %s", req.URL, err)
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("could not read response body: %s", err)
-	}
-	expected := "ok"
-	if !strings.Contains(string(b), expected) {
-		t.Errorf("expected body to contain %q, got %q", expected, string(b))
-	}
-	// Test for gzip explicitly.
-	req.Header.Set("Accept-Encoding", "gzip")
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Fatalf("could not make request to %s: %s", req.URL, err)
-	}
-	defer resp.Body.Close()
-	gz, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		t.Fatalf("could not create new gzip reader: %s", err)
-	}
-	b, err = ioutil.ReadAll(gz)
-	if err != nil {
-		t.Fatalf("could not read gzipped response body: %s", err)
-	}
-	if !strings.Contains(string(b), expected) {
-		t.Errorf("expected body to contain %q, got %q", expected, string(b))
+	for _, d := range testData {
+		req, err := http.NewRequest("GET", "http://"+s.Addr+healthPath, nil)
+		if err != nil {
+			t.Fatalf("could not create request: %s", err)
+		}
+		if d.acceptEncoding != "" {
+			req.Header.Set("Accept-Encoding", d.acceptEncoding)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("could not make request to %s: %s", req.URL, err)
+		}
+		defer resp.Body.Close()
+		if ce := resp.Header.Get("Content-Encoding"); ce != d.acceptEncoding {
+			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
+		}
+		r := d.newReader(resp.Body)
+		b, err := ioutil.ReadAll(r)
+		if err != nil {
+			t.Fatalf("could not read '%s' response body: %s", d.acceptEncoding, err)
+		}
+		expected := "ok"
+		if !strings.Contains(string(b), expected) {
+			t.Errorf("expected body to contain %q, got %q", expected, b)
+		}
 	}
 }
 
