@@ -18,9 +18,6 @@
 package client
 
 import (
-	"bytes"
-	"encoding/gob"
-
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -263,24 +260,21 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	return nil
 }
 
-// GetI fetches the value at the specified key and gob-deserializes it
-// into "value". Returns true on success or false if the key was not
-// found. The timestamp of the write is returned as the second return
-// value. The first result parameter is "ok": true if a value was
-// found for the requested key; false otherwise. An error is returned
-// on error fetching from underlying storage or deserializing value.
-func (kv *KV) GetI(key proto.Key, iface interface{}) (bool, proto.Timestamp, error) {
+// Get fetches the value at the specified key. Returns true on success
+// or false if the key was not found. The timestamp of the write is
+// returned as the second return value. The first result parameter is
+// "ok": true if a value was found for the requested key; false
+// otherwise. An error is returned on error fetching from underlying
+// storage or deserializing value.
+func (kv *KV) Get(key proto.Key) (bool, []byte, proto.Timestamp, error) {
 	value, err := kv.getInternal(key)
 	if err != nil || value == nil {
-		return false, proto.Timestamp{}, err
+		return false, nil, proto.Timestamp{}, err
 	}
 	if value.Integer != nil {
-		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
+		return false, nil, proto.Timestamp{}, util.Errorf("unexpected integer value at key %s: %+v", key, value)
 	}
-	if err := gob.NewDecoder(bytes.NewBuffer(value.Bytes)).Decode(iface); err != nil {
-		return true, *value.Timestamp, err
-	}
-	return true, *value.Timestamp, nil
+	return true, value.Bytes, *value.Timestamp, nil
 }
 
 // GetProto fetches the value at the specified key and unmarshals it
@@ -314,13 +308,9 @@ func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
 	return nil, nil
 }
 
-// PutI sets the given key to the gob-serialized byte string of value.
-func (kv *KV) PutI(key proto.Key, iface interface{}) error {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(iface); err != nil {
-		return err
-	}
-	return kv.putInternal(key, proto.Value{Bytes: buf.Bytes()})
+// Put writes the specified byte slice value to key.
+func (kv *KV) Put(key proto.Key, value []byte) error {
+	return kv.putInternal(key, proto.Value{Bytes: value})
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
