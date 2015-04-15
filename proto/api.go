@@ -322,58 +322,6 @@ func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {
 	}
 }
 
-// CreateArgsAndReply returns allocated request and response pairs
-// according to the specified method.
-func CreateArgsAndReply(method string) (args Request, reply Response, err error) {
-	switch method {
-	case Contains:
-		return &ContainsRequest{}, &ContainsResponse{}, nil
-	case Get:
-		return &GetRequest{}, &GetResponse{}, nil
-	case Put:
-		return &PutRequest{}, &PutResponse{}, nil
-	case ConditionalPut:
-		return &ConditionalPutRequest{}, &ConditionalPutResponse{}, nil
-	case Increment:
-		return &IncrementRequest{}, &IncrementResponse{}, nil
-	case Delete:
-		return &DeleteRequest{}, &DeleteResponse{}, nil
-	case DeleteRange:
-		return &DeleteRangeRequest{}, &DeleteRangeResponse{}, nil
-	case Scan:
-		return &ScanRequest{}, &ScanResponse{}, nil
-	case EndTransaction:
-		return &EndTransactionRequest{}, &EndTransactionResponse{}, nil
-	case ReapQueue:
-		return &ReapQueueRequest{}, &ReapQueueResponse{}, nil
-	case EnqueueUpdate:
-		return &EnqueueUpdateRequest{}, &EnqueueUpdateResponse{}, nil
-	case EnqueueMessage:
-		return &EnqueueMessageRequest{}, &EnqueueMessageResponse{}, nil
-	case Batch:
-		return &BatchRequest{}, &BatchResponse{}, nil
-	case AdminSplit:
-		return &AdminSplitRequest{}, &AdminSplitResponse{}, nil
-	case AdminMerge:
-		return &AdminMergeRequest{}, &AdminMergeResponse{}, nil
-	case InternalHeartbeatTxn:
-		return &InternalHeartbeatTxnRequest{}, &InternalHeartbeatTxnResponse{}, nil
-	case InternalGC:
-		return &InternalGCRequest{}, &InternalGCResponse{}, nil
-	case InternalPushTxn:
-		return &InternalPushTxnRequest{}, &InternalPushTxnResponse{}, nil
-	case InternalResolveIntent:
-		return &InternalResolveIntentRequest{}, &InternalResolveIntentResponse{}, nil
-	case InternalMerge:
-		return &InternalMergeRequest{}, &InternalMergeResponse{}, nil
-	case InternalTruncateLog:
-		return &InternalTruncateLogRequest{}, &InternalTruncateLogResponse{}, nil
-	case InternalLeaderLease:
-		return &InternalLeaderLeaseRequest{}, &InternalLeaderLeaseResponse{}, nil
-	}
-	return nil, nil, util.Errorf("unhandled method %s", method)
-}
-
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
