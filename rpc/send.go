@@ -97,6 +97,13 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
 	getReply func() interface{}, context *Context) ([]interface{}, error) {
 
+	if opts.N <= 0 {
+		return nil, SendError{
+			errMsg:   fmt.Sprintf("opts.N must be positive: %d", opts.N),
+			canRetry: false,
+		}
+	}
+
 	if len(addrs) < opts.N {
 		return nil, SendError{
 			errMsg:   fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d", len(addrs), opts.N),
@@ -166,11 +173,11 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				if log.V(1) {
 					log.Warningf("%s: error reply: %+v", method, t)
 				}
-				remainingRPCs := len(clients) - errors
-				if remainingRPCs < opts.N {
+				remainingNonErrorRPCs := len(clients) - errors
+				if remainingNonErrorRPCs < opts.N {
 					return nil, SendError{
 						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), t),
-						canRetry: retryableErrors+remainingRPCs > len(clients),
+						canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
 					}
 				}
 				// Send to additional replicas if available.
