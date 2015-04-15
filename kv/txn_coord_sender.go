@@ -353,12 +353,8 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 	for i := range batchArgs.Requests {
 		// Initialize args header values where appropriate.
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		method, err := proto.MethodForRequest(args)
+		method := args.Method()
 		call := &client.Call{Method: method, Args: args}
-		if err != nil {
-			batchReply.SetGoError(err)
-			return
-		}
 		if args.Header().User == "" {
 			args.Header().User = batchArgs.User
 		}
@@ -369,10 +365,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 
 		// Create a reply from the method type and add to batch response.
 		if i >= len(batchReply.Responses) {
-			if call.Reply, err = proto.CreateReply(method); err != nil {
-				batchReply.SetGoError(util.Errorf("unsupported method in batch: %s", method))
-				return
-			}
+			call.Reply = args.CreateReply()
 			batchReply.Add(call.Reply)
 		} else {
 			call.Reply = batchReply.Responses[i].GetValue().(proto.Response)

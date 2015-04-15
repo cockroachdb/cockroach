@@ -73,7 +73,7 @@ func (ts *txnSender) Send(call *Call) {
 		case proto.Batch:
 			for _, batchReq := range call.Args.(*proto.BatchRequest).Requests {
 				req := batchReq.GetValue().(proto.Request)
-				if method, err := proto.MethodForRequest(req); err == nil && method == proto.EndTransaction {
+				if req.Method() == proto.EndTransaction {
 					ts.txnEnd = true
 				}
 			}

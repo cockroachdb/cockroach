@@ -641,10 +641,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 	r.Unlock()
 
 	args := raftCmd.Cmd.GetValue().(proto.Request)
-	method, err := proto.MethodForRequest(args)
-	if err != nil {
-		log.Fatal(err)
-	}
+	method := args.Method()
 
 	var reply proto.Response
 	if cmd != nil {
@@ -652,12 +649,9 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 		reply = cmd.Reply
 	} else {
 		// This command originated elsewhere so we must create a new reply buffer.
-		_, reply, err = proto.CreateArgsAndReply(method)
-		if err != nil {
-			log.Fatal(err)
-		}
+		reply = args.CreateReply()
 	}
-	err = r.executeCmd(index, method, args, reply)
+	err := r.executeCmd(index, method, args, reply)
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
