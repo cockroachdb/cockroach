@@ -199,7 +199,8 @@ func TestRangeDataIterator(t *testing.T) {
 			k1, ts1, _ := engine.MVCCDecodeKey(iter.Key())
 			if bytes.HasPrefix(k1, engine.KeyConfigAccountingPrefix) ||
 				bytes.HasPrefix(k1, engine.KeyConfigPermissionPrefix) ||
-				bytes.HasPrefix(k1, engine.KeyConfigZonePrefix) {
+				bytes.HasPrefix(k1, engine.KeyConfigZonePrefix) ||
+				bytes.HasPrefix(k1, engine.KeyStatusPrefix) {
 				// Some data is written into the system prefix by Store.BootstrapRange,
 				// but it is not in our expected key list so skip it.
 				// TODO(bdarnell): validate this data instead of skipping it.

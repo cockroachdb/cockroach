@@ -313,6 +313,7 @@ type Store struct {
 	multiraft      *multiraft.MultiRaft
 	started        int32
 	stopper        *util.Stopper
+	status         *proto.StoreStatus
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
@@ -337,6 +338,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 		gossip:      gossip,
 		transport:   transport,
 		ranges:      map[int64]*Range{},
+		status:      &proto.StoreStatus{},
 	}
 
 	// Add range scanner and configure with queues.
@@ -472,6 +474,14 @@ func (s *Store) Start(stopper *util.Stopper) error {
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
+
+	// Update the store status.
+	s.status.StoreID = s.Ident.StoreID
+	s.status.NodeID = s.Ident.NodeID
+	s.status.StartedAt = now.WallTime
+	if err := s.updateStoreStatus(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1251,4 +1261,19 @@ func raftEntryFormatter(data []byte) string {
 		s = s[:maxLen]
 	}
 	return s
+}
+
+// updateStoreStatus updates the store's status proto.
+func (s *Store) updateStoreStatus() error {
+	now := s.clock.Now().WallTime
+	s.status.UpdatedAt = now
+	s.status.RaftIDs = []int64{}
+	for raftID := range s.ranges {
+		s.status.RaftIDs = append(s.status.RaftIDs, raftID)
+	}
+	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
+	if err := engine.MVCCPutProto(s.engine, nil, key, proto.ZeroTimestamp, nil, s.status); err != nil {
+		return err
+	}
+	return nil
 }
