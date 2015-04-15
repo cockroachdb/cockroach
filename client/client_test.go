@@ -365,44 +365,44 @@ func TestKVClientEmptyValues(t *testing.T) {
 	}
 }
 
-// TestKVClientPrepareAndFlush prepares a sequence of increment
-// calls and then flushes them and verifies the results.
-func TestKVClientPrepareAndFlush(t *testing.T) {
+// TestKVClientBatch runs a batch of increment calls and then verifies
+// the results.
+func TestKVClientBatch(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
-	replies := []*proto.IncrementResponse{}
 	keys := []proto.Key{}
+	calls := []*client.Call{}
 	for i := 0; i < 10; i++ {
 		key := proto.Key(fmt.Sprintf("key %02d", i))
 		keys = append(keys, key)
-		reply := &proto.IncrementResponse{}
-		replies = append(replies, reply)
-		kvClient.Prepare(proto.IncrementArgs(key, int64(i)), reply)
+		calls = append(calls, client.IncrementCall(key, int64(i)))
 	}
 
-	if err := kvClient.Flush(); err != nil {
+	if err := kvClient.Run(calls...); err != nil {
 		t.Fatal(err)
 	}
 
-	for i, reply := range replies {
+	for i, call := range calls {
+		reply := call.Reply.(*proto.IncrementResponse)
 		if reply.NewValue != int64(i) {
 			t.Errorf("%d: expected %d; got %d", i, i, reply.NewValue)
 		}
 	}
 
 	// Now try 2 scans.
-	scan1 := &proto.ScanResponse{}
-	scan2 := &proto.ScanResponse{}
-	kvClient.Prepare(proto.ScanArgs(proto.Key("key 00"), proto.Key("key 05"), 0), scan1)
-	kvClient.Prepare(proto.ScanArgs(proto.Key("key 05"), proto.Key("key 10"), 0), scan2)
-
-	if err := kvClient.Flush(); err != nil {
+	calls = []*client.Call{
+		client.ScanCall(proto.Key("key 00"), proto.Key("key 05"), 0),
+		client.ScanCall(proto.Key("key 05"), proto.Key("key 10"), 0),
+	}
+	if err := kvClient.Run(calls...); err != nil {
 		t.Fatal(err)
 	}
 
+	scan1 := calls[0].Reply.(*proto.ScanResponse)
+	scan2 := calls[1].Reply.(*proto.ScanResponse)
 	if len(scan1.Rows) != 5 || len(scan2.Rows) != 5 {
 		t.Errorf("expected scan results to include 5 and 5 rows; got %d and %d",
 			len(scan1.Rows), len(scan2.Rows))

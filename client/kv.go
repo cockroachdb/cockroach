@@ -18,6 +18,8 @@
 package client
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -106,25 +108,37 @@ func (kv *KV) Sender() KVSender {
 // Prepare() without a call to Flush(), this call is prepared and
 // then all prepared calls are flushed.
 func (kv *KV) Call(args proto.Request, reply proto.Response) error {
+	return kv.Run(&Call{Args: args, Reply: reply})
+}
+
+// Run runs the specified calls in a single batch.
+//
+// TODO(pmattis): Flesh out this description.
+func (kv *KV) Run(calls ...*Call) error {
 	if len(kv.prepared) > 0 {
-		kv.Prepare(args, reply)
+		panic(fmt.Errorf("prepared is not empty: %d", len(kv.prepared)))
+	}
+	if len(calls) == 0 {
+		return nil
+	}
+	if len(kv.prepared) > 0 || len(calls) > 1 {
+		for _, c := range calls {
+			kv.Prepare(c.Args, c.Reply)
+		}
 		return kv.Flush()
 	}
-	if args.Header().User == "" {
-		args.Header().User = kv.User
+	c := calls[0]
+	if c.Args.Header().User == "" {
+		c.Args.Header().User = kv.User
 	}
-	if args.Header().UserPriority == nil && kv.UserPriority != 0 {
-		args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
+	if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
+		c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
 	}
-	call := &Call{
-		Args:  args,
-		Reply: reply,
-	}
-	call.resetClientCmdID(kv.clock)
-	kv.sender.Send(call)
-	err := call.Reply.Header().GoError()
+	c.resetClientCmdID(kv.clock)
+	kv.sender.Send(c)
+	err := c.Reply.Header().GoError()
 	if err != nil {
-		log.Infof("failed %s: %s", call.Method, err)
+		log.Infof("failed %s: %s", c.Method, err)
 	}
 	return err
 }

@@ -2031,13 +2031,16 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
 			return err
 		}
+		if err := txn.Flush(); err != nil {
+			return err
+		}
 		// Update the RangeTree.
 		if err := InsertRange(txn, newDesc.StartKey); err != nil {
 			return err
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		return txn.Call(&proto.EndTransactionRequest{
+		txn.Prepare(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
@@ -2048,6 +2051,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 				Intents: []proto.Key{desc1Key, desc2Key},
 			},
 		}, &proto.EndTransactionResponse{})
+		return txn.Flush()
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
 	}
@@ -2149,7 +2153,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		return txn.Call(&proto.EndTransactionRequest{
+		txn.Prepare(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
@@ -2160,6 +2164,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 				Intents: []proto.Key{desc1Key, desc2Key},
 			},
 		}, &proto.EndTransactionResponse{})
+		return txn.Flush()
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
 			subsumedDesc.RaftID, desc.RaftID, err))
@@ -2215,7 +2220,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		return txn.Call(&proto.EndTransactionRequest{
+		txn.Prepare(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
@@ -2228,6 +2233,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 				Intents: []proto.Key{descKey},
 			},
 		}, &proto.EndTransactionResponse{})
+		return txn.Flush()
 	})
 	if err != nil {
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)

@@ -88,38 +88,6 @@ func TestKVPrepareAndFlush(t *testing.T) {
 	}
 }
 
-// TestKVPrepareAndCall verifies that Call will act as a Prepare
-// followed by a Flush in the event there are already-prepared
-// and unflushed calls buffered.
-func TestKVPrepareAndCall(t *testing.T) {
-	for i := 0; i < 3; i++ {
-		count := 0
-		client := NewKV(nil, newTestSender(func(call *Call) {
-			count++
-			if i == 0 && call.Method() == proto.Batch {
-				t.Error("expected non-batch for a single call")
-			} else if i > 0 {
-				if call.Method() != proto.Batch {
-					t.Errorf("expected batch for %d prepared call(s)", i)
-				}
-				if l := len(call.Args.(*proto.BatchRequest).Requests); l != i+1 {
-					t.Errorf("expected batch to contain %d requests; got %d", i+1, l)
-				}
-			}
-		}))
-
-		for j := 0; j < i; j++ {
-			client.Prepare(testPutReq, &proto.PutResponse{})
-		}
-		if err := client.Call(testPutReq, &proto.PutResponse{}); err != nil {
-			t.Fatal(err)
-		}
-		if count != 1 {
-			t.Errorf("expected test sender to be invoked once; got %d", count)
-		}
-	}
-}
-
 // TestKVTransactionSender verifies the proper unwrapping and
 // re-wrapping of the client's sender when starting a transaction.
 // Also verifies that User and UserPriority are propagated to the
