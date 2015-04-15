@@ -70,8 +70,14 @@ type Context struct {
 	// Maximum clock offset for the cluster.
 	MaxOffset time.Duration
 
-	// InitAndStart starts the server after bootstrap & initialization.
-	InitAndStart bool
+	// Bootstrap first bootstraps the cluster using the first store
+	// specified.  This option cannot be specified twice when starting a
+	// node.
+	Bootstrap bool
+
+	// BootstrapOnly bootstraps the cluster using the first store
+	// specified and exits.
+	BootstrapOnly bool
 
 	// GossipBootstrap is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
@@ -106,15 +112,11 @@ type Context struct {
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	return &Context{
-		Addr: defaultAddr,
-
-		MaxOffset: defaultMaxOffset,
-
-		GossipInterval: defaultGossipInterval,
-
+		Addr:            defaultAddr,
+		MaxOffset:       defaultMaxOffset,
+		GossipInterval:  defaultGossipInterval,
 		GossipBootstrap: defaultGossipBootstrap,
-
-		CacheSize: defaultCacheSize,
+		CacheSize:       defaultCacheSize,
 	}
 }
 

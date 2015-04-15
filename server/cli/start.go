@@ -38,80 +38,23 @@ import (
 // Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
-var cmdStartLongDescription = `
-
-Start Cockroach node by joining the gossip network and exporting key
-ranges stored on physical device(s). The gossip network is joined by
-contacting one or more well-known hosts specified by the -gossip
-command line flag. Every node should be run with the same list of
-bootstrap hosts to guarantee a connected network. An alternate
-approach is to use a single host for -gossip and round-robin DNS.
-
-Each node exports data from one or more physical devices. These
-devices are specified via the -stores command line flag. This is a
-comma-separated list of paths to storage directories or for in-memory
-stores, the number of bytes. Although the paths should be specified to
-correspond uniquely to physical devices, this requirement isn't
-strictly enforced.
-
-A node exports an HTTP API with the following endpoints:
-
-  Health check:           /healthz
-  Key-value REST:         ` + kv.RESTPrefix + `
-  Structured Schema REST: ` + structured.StructuredKeyPrefix
-
-// An initCmd command initializes a new Cockroach cluster.
-var initCmd = &commander.Command{
-	UsageLine: "init -gossip=host1:port1[,host2:port2...] " +
-		"-certs=<cert-dir> " +
-		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>,mem=<capacity-in-bytes>)[,...]",
-	Short: "init new Cockroach cluster and start server",
-	Long: `
-Initialize a new Cockroach cluster on this node using the first
-directory specified in the -stores command line flag as the only
-replica of the first range.
-
-For example:
-
-  cockroach init -gossip=host1:port1,host2:port2 -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
-
-If any specified store is already part of a pre-existing cluster, the
-bootstrap will fail.
-
-After bootstrap initialization: ` + cmdStartLongDescription,
-	Run:  runInit,
-	Flag: *flag.CommandLine,
-}
-
-func runInit(cmd *commander.Command, args []string) {
-	// Initialize the engine based on the first argument and
-	// then verify it's not in-memory.
-
-	err := Context.Init()
-	if err != nil {
-		log.Errorf("failed to initialize context: %v", err)
-		return
-	}
+// bootstrapCluster initializes the engine based on the first
+// store. The bootstrap engine may not be an in-memory type.
+func bootstrapCluster() error {
 	e := Context.Engines[0]
 	if _, ok := e.(*engine.InMem); ok {
-		log.Errorf("cannot initialize a cluster using an in-memory store")
-		return
+		return util.Errorf("cannot initialize a cluster using an in-memory store")
 	}
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
 	stopper := util.NewStopper()
-	if _, err = server.BootstrapCluster(clusterID, e, stopper); err != nil {
-		log.Errorf("failed to bootstrap cluster: %v", err)
-		return
+	if _, err := server.BootstrapCluster(clusterID, e, stopper); err != nil {
+		return err
 	}
 	stopper.Stop()
 
 	log.Infof("cockroach cluster %s has been initialized\n", clusterID)
-	if Context.InitAndStart {
-		runStart(cmd, args)
-		return
-	}
-	log.Infof("to start the cluster, run \"cockroach start\"\n")
+	return nil
 }
 
 // A startCmd command starts nodes by joining the gossip network.
@@ -119,10 +62,38 @@ var startCmd = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network",
-	Long:  cmdStartLongDescription,
-	Run:   runStart,
-	Flag:  *flag.CommandLine,
+	Short: "start node by joining the gossip network\n",
+	Long: `
+Start Cockroach node by joining the gossip network and exporting key
+ranges stored on physical device(s). The gossip network is joined by
+contacting one or more well-known hosts specified by the -gossip
+flag. Every node should be run with the same list of bootstrap hosts
+to guarantee a connected network. An alternate approach is to use a
+single host for -gossip and round-robin DNS.
+
+Each node exports data from one or more physical devices. These
+devices are specified via the -stores flag. This is a comma-separated
+list of paths to storage directories or for in-memory stores, the
+number of bytes. Although the paths should be specified to correspond
+uniquely to physical devices, this requirement isn't strictly
+enforced.
+
+A node exports an HTTP API with the following endpoints:
+
+  Health check:           /healthz
+  Key-value REST:         ` + kv.RESTPrefix + `
+  Structured Schema REST: ` + structured.StructuredKeyPrefix + `
+
+If this is the first node to join the cluster, specify -bootstrap or
+-bootstrap-only to bootstrap the cluster. -bootstrap-only exits after
+bootstrap.
+
+Bootstrapping initializes a new Cockroach cluster using the first
+directory specified in the -stores flag as the only replica of the
+first range. If any specified store is already part of a pre-existing
+cluster, the bootstrap will fail.`,
+	Run:  runStart,
+	Flag: *flag.CommandLine,
 }
 
 // runStart starts the cockroach node using -stores as the list of
@@ -143,6 +114,17 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
+	isBootstrap := Context.Bootstrap || Context.BootstrapOnly
+	if isBootstrap {
+		if err := bootstrapCluster(); err != nil {
+			log.Errorf("failed to bootstrap cluster: %s", err)
+			return
+		}
+		if Context.BootstrapOnly {
+			return
+		}
+	}
+
 	log.Info("starting cockroach cluster")
 	stopper := util.NewStopper()
 	stopper.AddWorker()
@@ -152,7 +134,6 @@ func runStart(cmd *commander.Command, args []string) {
 		return
 	}
 
-	isBootstrap := cmd.Name() == "init"
 	err = s.Start(isBootstrap)
 	if err != nil {
 		log.Errorf("cockroach server exited with error: %v", err)

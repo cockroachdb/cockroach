@@ -100,13 +100,13 @@ for i in $(seq 1 $NODES); do
 
   # If this is the first node, command is init; otherwise start.
   CMD="start"
-  if [[ $i == 1 ]]; then
-      CMD="init"
-  fi
   # Command args specify two data directories per instance to simulate two physical devices.
-  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -addr=${HOSTS[$i]}:$PORT -init_and_start"
+  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -addr=${HOSTS[$i]}:$PORT"
   # Log (almost) everything.
   CMD_ARGS="${CMD_ARGS} -v 7"
+  if [[ $i == 1 ]]; then
+      CMD_ARGS="${CMD_ARGS} -bootstrap"
+  fi
 
   # Node-specific arguments for node container.
   NODE_ARGS="--hostname=${HOSTS[$i]} --name=${HOSTS[$i]} --dns=$DNS_IP"

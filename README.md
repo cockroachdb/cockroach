@@ -60,10 +60,10 @@ root@82cb657cdc42:/cockroach#
 Now we're in an environment that has everything set up, and we start by firing up a node:
 
 ```bash
-$ ./cockroach init -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
+$ ./cockroach start -bootstrap -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
 [...]
 ```
-This bootstraps and starts a single-node cluster in the background, with logs sent to `node.log`.
+This bootstraps (-bootstrap flags) and starts a single-node cluster in the background, with logs sent to `node.log`.
 
 ##### Built-in client
 
@@ -144,7 +144,7 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
 
 ```bash
-$ docker run -p 8080:8080 -d cockroachdb/cockroach init \
+$ docker run -p 8080:8080 -d cockroachdb/cockroach start -bootstrap \
     -stores ssd="$(mktemp -d /tmp/dbXXX)"
 ```
 
