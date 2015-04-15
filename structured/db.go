@@ -19,6 +19,9 @@
 package structured
 
 import (
+	"bytes"
+	"encoding/gob"
+
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -52,7 +55,13 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 		return err
 	}
 	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key))
-	return db.kvDB.PutI(k, s)
+	// TODO(pmattis): This is an inappropriate use of gob. Replace with
+	// something else.
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(s); err != nil {
+		return err
+	}
+	return db.kvDB.Put(k, buf.Bytes())
 }
 
 // DeleteSchema removes s from the kv store.
@@ -70,9 +79,14 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	s := &Schema{}
 	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(key))
-	found, _, err := db.kvDB.GetI(k, s)
+	found, v, _, err := db.kvDB.Get(k)
 	if err != nil || !found {
-		s = nil
+		return nil, err
+	}
+	// TODO(pmattis): This is an inappropriate use of gob. Replace with
+	// something else.
+	if err := gob.NewDecoder(bytes.NewBuffer(v)).Decode(s); err != nil {
+		return nil, err
 	}
 	return s, err
 }

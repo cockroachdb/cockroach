@@ -27,7 +27,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -309,40 +308,29 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 	}
 }
 
-// TestKVClientGetAndPutGob verifies gets and puts of Go objects using the
-// KV client's convenience methods.
-func TestKVClientGetAndPutGob(t *testing.T) {
+// TestKVClientGetAndPut verifies gets and puts of using the KV
+// client's convenience methods.
+func TestKVClientGetAndPut(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
-	obj := map[string]map[int]int{
-		"foo": {
-			1: 100,
-			2: 101,
-		},
-		"bar": {
-			3: 200,
-			4: 201,
-		},
+	key := proto.Key("key")
+	value := []byte("value")
+	if err := kvClient.Put(key, value); err != nil {
+		t.Fatalf("unable to put value: %s", err)
 	}
 
-	key := proto.Key("gob-key")
-	if err := kvClient.PutI(key, obj); err != nil {
-		t.Fatalf("unable to put object: %s", err)
-	}
-
-	readObj := map[string]map[int]int{}
-	ok, ts, err := kvClient.GetI(key, &readObj)
+	ok, readValue, ts, err := kvClient.Get(key)
 	if !ok || err != nil {
-		t.Fatalf("unable to get object ok? %t: %s", ok, err)
+		t.Fatalf("unable to get value ok? %t: %s", ok, err)
 	}
 	if ts.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
-	if !reflect.DeepEqual(obj, readObj) {
-		t.Errorf("expected objects equal; %+v != %+v", obj, readObj)
+	if !bytes.Equal(value, readValue) {
+		t.Errorf("expected values equal; %+v != %+v", value, readValue)
 	}
 }
 
