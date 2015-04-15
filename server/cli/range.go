@@ -56,7 +56,7 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	kv := makeKVClient()
 	req := proto.ScanArgs(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
 	resp := &proto.ScanResponse{}
-	if err := kv.Call(proto.Scan, req, resp); err != nil {
+	if err := kv.Call(req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		os.Exit(1)
 	}
@@ -108,7 +108,7 @@ func runSplitRange(cmd *commander.Command, args []string) {
 		SplitKey: splitKey,
 	}
 	resp := &proto.AdminSplitResponse{}
-	if err := kv.Call(proto.AdminSplit, req, resp); err != nil {
+	if err := kv.Call(req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		os.Exit(1)
 	}
@@ -138,7 +138,7 @@ func runMergeRange(cmd *commander.Command, args []string) {
 		},
 	}
 	resp := &proto.AdminMergeResponse{}
-	if err := kv.Call(proto.AdminMerge, req, resp); err != nil {
+	if err := kv.Call(req, resp); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		os.Exit(1)
 	}

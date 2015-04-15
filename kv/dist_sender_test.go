@@ -277,7 +277,7 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	args := proto.PutArgs(proto.Key("a"), []byte("value"))
 	reply := &proto.PutResponse{}
-	ds.Send(&client.Call{Method: proto.Put, Args: args, Reply: reply})
+	ds.Send(&client.Call{Args: args, Reply: reply})
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -340,7 +340,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	ds := NewDistSender(ctx, g)
 	sa := proto.ScanArgs(proto.Key("a"), proto.Key("d"), 0)
 	sr := &proto.ScanResponse{}
-	ds.Send(&client.Call{Method: proto.Scan, Args: sa, Reply: sr})
+	ds.Send(&client.Call{Args: sa, Reply: sr})
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}

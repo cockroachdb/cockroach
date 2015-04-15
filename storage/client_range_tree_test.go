@@ -135,7 +135,7 @@ func splitRange(db *client.KV, key proto.Key) error {
 		SplitKey: key,
 	}
 	resp := &proto.AdminSplitResponse{}
-	if err := db.Call(proto.AdminSplit, req, resp); err != nil {
+	if err := db.Call(req, resp); err != nil {
 		return err
 	}
 

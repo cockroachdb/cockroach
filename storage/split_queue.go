@@ -100,7 +100,7 @@ func (sq *splitQueue) process(now proto.Timestamp, rng *Range) error {
 				RequestHeader: proto.RequestHeader{Key: splitKey},
 				SplitKey:      splitKey,
 			}
-			if err := sq.db.Call(proto.AdminSplit, req, &proto.AdminSplitResponse{}); err != nil {
+			if err := sq.db.Call(req, &proto.AdminSplitResponse{}); err != nil {
 				return util.Errorf("unable to split at key %q: %s", splitKey, err)
 			}
 		}

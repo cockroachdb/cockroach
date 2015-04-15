@@ -466,7 +466,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 		t.Fatalf("expected body to be %q; got %q", encBody, string(pr.Value.Bytes))
 	}
 	gr := &proto.GetResponse{}
-	if err := db.Call(proto.Get, &proto.GetRequest{
+	if err := db.Call(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  proto.Key("\x00some/key that encodes世界"),
 			User: storage.UserRoot,

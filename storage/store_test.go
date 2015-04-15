@@ -72,8 +72,8 @@ type testSender struct {
 // supported. Since kv/ depends on storage/, we can't get access to a
 // coordinator sender from here.
 func (db *testSender) Send(call *client.Call) {
-	if call.Method == proto.EndTransaction || call.Method == proto.Batch {
-		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method))
+	if call.Method() == proto.EndTransaction || call.Method() == proto.Batch {
+		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method()))
 		return
 	}
 	// Lookup range and direct request.
@@ -81,7 +81,7 @@ func (db *testSender) Send(call *client.Call) {
 	if rng := db.store.LookupRange(header.Key, header.EndKey); rng != nil {
 		header.RaftID = rng.Desc().RaftID
 		header.Replica = *rng.GetReplica()
-		db.store.ExecuteCmd(call.Method, call.Args, call.Reply)
+		db.store.ExecuteCmd(call.Method(), call.Args, call.Reply)
 	} else {
 		call.Reply.Header().SetGoError(proto.NewRangeKeyMismatchError(header.Key, header.EndKey, nil))
 	}

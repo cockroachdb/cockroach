@@ -446,7 +446,7 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	}
 	if err := util.IsTrueWithin(func() bool {
 		resp := &proto.ScanResponse{}
-		if err := store.DB().Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+		if err := store.DB().Call(proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		var keys []proto.Key

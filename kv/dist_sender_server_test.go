@@ -71,7 +71,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// lookup, etc, ad nauseam.
 	success := make(chan struct{})
 	go func() {
-		if err := db.Call(proto.Get, proto.GetArgs(proto.Key("a")), &proto.GetResponse{}); err != nil {
+		if err := db.Call(proto.GetArgs(proto.Key("a")), &proto.GetResponse{}); err != nil {
 			t.Fatal(err)
 		}
 		close(success)
@@ -101,7 +101,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".
-	if err := db.Call(proto.AdminSplit,
+	if err := db.Call(
 		&proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("b"),
@@ -122,13 +122,13 @@ func TestMultiRangeScan(t *testing.T) {
 	// Write keys "a" and "b".
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
 		pr := &proto.PutResponse{}
-		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+		if err := db.Call(proto.PutArgs(key, []byte("value")), pr); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	sr := &proto.ScanResponse{}
-	if err := db.Call(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0), sr); err != nil {
+	if err := db.Call(proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0), sr); err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
 	if l := len(sr.Rows); l != 2 {
@@ -148,7 +148,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	ts := []proto.Timestamp{}
 	for _, key := range keys {
 		pr := &proto.PutResponse{}
-		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+		if err := db.Call(proto.PutArgs(key, []byte("value")), pr); err != nil {
 			t.Fatal(err)
 		}
 		ts = append(ts, pr.Timestamp)
@@ -165,7 +165,7 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot
 	sr := &proto.ScanResponse{}
-	ds.Send(&client.Call{Method: proto.Scan, Args: sa, Reply: sr})
+	ds.Send(&client.Call{Args: sa, Reply: sr})
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}

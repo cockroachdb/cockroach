@@ -256,7 +256,7 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 	// Scan all configs if the key is empty.
 	if len(path) == 0 {
 		sr := &proto.ScanResponse{}
-		if err = db.Call(proto.Scan, &proto.ScanRequest{
+		if err = db.Call(&proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    configPrefix,
 				EndKey: configPrefix.PrefixEnd(),
@@ -303,7 +303,7 @@ func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Re
 		return util.Errorf("the default configuration cannot be deleted")
 	}
 	configKey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-	return db.Call(proto.Delete, &proto.DeleteRequest{
+	return db.Call(&proto.DeleteRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  configKey,
 			User: storage.UserRoot,

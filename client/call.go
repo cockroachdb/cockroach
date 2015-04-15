@@ -25,9 +25,8 @@ import (
 
 // A Call is a pending database API call.
 type Call struct {
-	Method string         // The name of the database command (see api.proto)
-	Args   proto.Request  // The argument to the command
-	Reply  proto.Response // The reply from the command
+	Args  proto.Request  // The argument to the command
+	Reply proto.Response // The reply from the command
 }
 
 // resetClientCmdID sets the client command ID if the call is for a
@@ -38,4 +37,9 @@ func (c *Call) resetClientCmdID(clock Clock) {
 		WallTime: clock.Now(),
 		Random:   rand.Int63(),
 	}
+}
+
+// Method returns the name of the database command for the call.
+func (c *Call) Method() string {
+	return c.Args.Method()
 }

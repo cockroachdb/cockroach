@@ -275,7 +275,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
-	if err := s.node.db.Call(proto.AdminSplit,
+	if err := s.node.db.Call(
 		&proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("m"),
@@ -286,9 +286,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
 	get := &client.Call{
-		Method: proto.Get,
-		Args:   proto.GetArgs(writes[0]),
-		Reply:  &proto.GetResponse{},
+		Args:  proto.GetArgs(writes[0]),
+		Reply: &proto.GetResponse{},
 	}
 	get.Args.Header().User = storage.UserRoot
 	get.Args.Header().EndKey = writes[len(writes)-1]
@@ -299,9 +298,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	var call *client.Call
 	for i, k := range writes {
 		call = &client.Call{
-			Method: proto.Put,
-			Args:   proto.PutArgs(k, k),
-			Reply:  &proto.PutResponse{},
+			Args:  proto.PutArgs(k, k),
+			Reply: &proto.PutResponse{},
 		}
 		call.Args.Header().User = storage.UserRoot
 		tds.Send(call)
@@ -309,9 +307,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			t.Fatal(err)
 		}
 		scan := &client.Call{
-			Method: proto.Scan,
-			Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
-			Reply:  &proto.ScanResponse{},
+			Args:  proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
+			Reply: &proto.ScanResponse{},
 		}
 		// The Put ts may have been pushed by tsCache,
 		// so make sure we see their values in our Scan.
@@ -330,7 +327,6 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	del := &client.Call{
-		Method: proto.DeleteRange,
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
 				User:      storage.UserRoot,
@@ -354,9 +350,8 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	scan := &client.Call{
-		Method: proto.Scan,
-		Args:   proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
-		Reply:  &proto.ScanResponse{},
+		Args:  proto.ScanArgs(writes[0], writes[len(writes)-1].Next(), 0),
+		Reply: &proto.ScanResponse{},
 	}
 	scan.Args.Header().Timestamp = del.Reply.Header().Timestamp
 	scan.Args.Header().User = storage.UserRoot
@@ -393,7 +388,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
 		for _, sk := range tc.splitKeys {
-			if err := s.node.db.Call(proto.AdminSplit,
+			if err := s.node.db.Call(
 				&proto.AdminSplitRequest{
 					RequestHeader: proto.RequestHeader{
 						Key: sk,
@@ -407,9 +402,8 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		var call *client.Call
 		for _, k := range tc.keys {
 			call = &client.Call{
-				Method: proto.Put,
-				Args:   proto.PutArgs(k, k),
-				Reply:  &proto.PutResponse{},
+				Args:  proto.PutArgs(k, k),
+				Reply: &proto.PutResponse{},
 			}
 			call.Args.Header().User = storage.UserRoot
 			tds.Send(call)
@@ -423,7 +417,6 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			// Try every possible maxResults, from 1 to beyond the size of key array.
 			for maxResults := 1; maxResults <= len(tc.keys)-start+1; maxResults++ {
 				scan := &client.Call{
-					Method: proto.Scan,
 					Args: proto.ScanArgs(tc.keys[start], tc.keys[len(tc.keys)-1].Next(),
 						int64(maxResults)),
 					Reply: &proto.ScanResponse{},

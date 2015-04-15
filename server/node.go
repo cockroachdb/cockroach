@@ -69,7 +69,7 @@ type Node struct {
 // a new, unique node id.
 func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 	iReply := &proto.IncrementResponse{}
-	if err := db.Call(proto.Increment, &proto.IncrementRequest{
+	if err := db.Call(&proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  engine.KeyNodeIDGenerator,
 			User: storage.UserRoot,
@@ -86,7 +86,7 @@ func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.StoreID, error) {
 	iReply := &proto.IncrementResponse{}
-	if err := db.Call(proto.Increment, &proto.IncrementRequest{
+	if err := db.Call(&proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
 			User: storage.UserRoot,
@@ -404,9 +404,8 @@ func (n *Node) gossipCapacities() {
 // executeCmd creates a client.Call struct and sends if via our local sender.
 func (n *Node) executeCmd(method string, args proto.Request, reply proto.Response) error {
 	call := &client.Call{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
+		Args:  args,
+		Reply: reply,
 	}
 	n.lSender.Send(call)
 	return nil

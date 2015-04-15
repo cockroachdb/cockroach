@@ -51,7 +51,7 @@ func TestKVClientCommandID(t *testing.T) {
 			t.Errorf("expected client command ID to be initialized")
 		}
 	}))
-	client.Call(proto.Put, testPutReq, &proto.PutResponse{})
+	client.Call(testPutReq, &proto.PutResponse{})
 	if count != 1 {
 		t.Errorf("expected test sender to be invoked once; got %d", count)
 	}
@@ -64,10 +64,10 @@ func TestKVPrepareAndFlush(t *testing.T) {
 		count := 0
 		client := NewKV(nil, newTestSender(func(call *Call) {
 			count++
-			if i == 1 && call.Method == proto.Batch {
+			if i == 1 && call.Method() == proto.Batch {
 				t.Error("expected non-batch for a single buffered call")
 			} else if i > 1 {
-				if call.Method != proto.Batch {
+				if call.Method() != proto.Batch {
 					t.Error("expected batch for > 1 buffered calls")
 				}
 				if call.Args.Header().CmdID.WallTime == 0 {
@@ -77,7 +77,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 		}))
 
 		for j := 0; j < i; j++ {
-			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
+			client.Prepare(testPutReq, &proto.PutResponse{})
 		}
 		if err := client.Flush(); err != nil {
 			t.Fatal(err)
@@ -96,10 +96,10 @@ func TestKVPrepareAndCall(t *testing.T) {
 		count := 0
 		client := NewKV(nil, newTestSender(func(call *Call) {
 			count++
-			if i == 0 && call.Method == proto.Batch {
+			if i == 0 && call.Method() == proto.Batch {
 				t.Error("expected non-batch for a single call")
 			} else if i > 0 {
-				if call.Method != proto.Batch {
+				if call.Method() != proto.Batch {
 					t.Errorf("expected batch for %d prepared call(s)", i)
 				}
 				if l := len(call.Args.(*proto.BatchRequest).Requests); l != i+1 {
@@ -109,9 +109,9 @@ func TestKVPrepareAndCall(t *testing.T) {
 		}))
 
 		for j := 0; j < i; j++ {
-			client.Prepare(proto.Put, testPutReq, &proto.PutResponse{})
+			client.Prepare(testPutReq, &proto.PutResponse{})
 		}
-		if err := client.Call(proto.Put, testPutReq, &proto.PutResponse{}); err != nil {
+		if err := client.Call(testPutReq, &proto.PutResponse{}); err != nil {
 			t.Fatal(err)
 		}
 		if count != 1 {
@@ -162,8 +162,8 @@ func TestKVCommitTransaction(t *testing.T) {
 	count := 0
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
-		if call.Method != proto.EndTransaction {
-			t.Errorf("expected call to EndTransaction; got %s", call.Method)
+		if call.Method() != proto.EndTransaction {
+			t.Errorf("expected call to EndTransaction; got %s", call.Method())
 		}
 		if commit := call.Args.(*proto.EndTransactionRequest).Commit; !commit {
 			t.Errorf("expected commit to be true; got %t", commit)
@@ -189,7 +189,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	}))
 	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 		reply := &proto.EndTransactionResponse{}
-		txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{Commit: true}, reply)
+		txn.Call(&proto.EndTransactionRequest{Commit: true}, reply)
 		if reply.GoError() != nil {
 			t.Fatal(reply.GoError())
 		}
@@ -208,8 +208,8 @@ func TestKVAbortTransaction(t *testing.T) {
 	count := 0
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
-		if call.Method != proto.EndTransaction {
-			t.Errorf("expected call to EndTransaction; got %s", call.Method)
+		if call.Method() != proto.EndTransaction {
+			t.Errorf("expected call to EndTransaction; got %s", call.Method())
 		}
 		if commit := call.Args.(*proto.EndTransactionRequest).Commit; commit {
 			t.Errorf("expected commit to be false; got %t", commit)
@@ -249,7 +249,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 	for i, test := range testCases {
 		count := 0
 		client := NewKV(ctx, newTestSender(func(call *Call) {
-			if call.Method == proto.Put {
+			if call.Method() == proto.Put {
 				count++
 				if count == 1 {
 					call.Reply.Header().SetGoError(test.err)
@@ -258,7 +258,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 		}))
 		err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
 			reply := &proto.PutResponse{}
-			return client.Call(proto.Put, testPutReq, reply)
+			return client.Call(testPutReq, reply)
 		})
 		if test.retry {
 			if count != 2 {

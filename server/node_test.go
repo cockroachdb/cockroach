@@ -102,7 +102,7 @@ func TestBootstrapCluster(t *testing.T) {
 
 	// Scan the complete contents of the local database.
 	sr := &proto.ScanResponse{}
-	if err := localDB.Call(proto.Scan, &proto.ScanRequest{
+	if err := localDB.Call(&proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{
 			Key:    engine.KeyLocalPrefix.PrefixEnd(), // skip local keys
 			EndKey: engine.KeyMax,

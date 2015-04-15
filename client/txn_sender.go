@@ -67,7 +67,7 @@ func (ts *txnSender) Send(call *Call) {
 	case nil:
 		// Check for whether the transaction was ended as a direct call
 		// or as part of a batch.
-		switch call.Method {
+		switch call.Method() {
 		case proto.EndTransaction:
 			ts.txnEnd = true
 		case proto.Batch:

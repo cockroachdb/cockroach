@@ -264,7 +264,7 @@ func (gcq *gcQueue) resolveIntent(rng *Range, key proto.Key, meta *proto.MVCCMet
 		Abort:     true,
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
-	if err := rng.rm.DB().Call(proto.InternalPushTxn, pushArgs, pushReply); err != nil {
+	if err := rng.rm.DB().Call(pushArgs, pushReply); err != nil {
 		log.Warningf("push of txn %s failed: %s", meta.Txn, err)
 		updateOldestIntent(meta.Timestamp.WallTime)
 		return

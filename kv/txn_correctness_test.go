@@ -138,7 +138,7 @@ func (c *cmd) String() string {
 // readCmd reads a value from the db and stores it in the env.
 func readCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.GetResponse{}
-	if err := db.Call(proto.Get, &proto.GetRequest{
+	if err := db.Call(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
 	}, r); err != nil {
 		return err
@@ -152,7 +152,7 @@ func readCmd(c *cmd, db *client.KV, t *testing.T) error {
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(c *cmd, db *client.KV, t *testing.T) error {
-	return db.Call(proto.DeleteRange, &proto.DeleteRangeRequest{
+	return db.Call(&proto.DeleteRangeRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
 	}, &proto.DeleteRangeResponse{})
 }
@@ -160,7 +160,7 @@ func deleteRngCmd(c *cmd, db *client.KV, t *testing.T) error {
 // scanCmd reads the values from the db from [key, endKey).
 func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.ScanResponse{}
-	if err := db.Call(proto.Scan, &proto.ScanRequest{
+	if err := db.Call(&proto.ScanRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
 	}, r); err != nil {
 		return err
@@ -180,7 +180,7 @@ func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
 // it to the db. If c.key isn't in the db, writes 1.
 func incCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.IncrementResponse{}
-	if err := db.Call(proto.Increment, &proto.IncrementRequest{
+	if err := db.Call(&proto.IncrementRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
 		Increment:     int64(1),
 	}, r); err != nil {
@@ -199,7 +199,7 @@ func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
 		sum += v
 	}
 	r := &proto.PutResponse{}
-	err := db.Call(proto.Put, &proto.PutRequest{
+	err := db.Call(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: c.getKey()},
 		Value:         proto.Value{Integer: gogoproto.Int64(sum)},
 	}, r)
@@ -210,7 +210,7 @@ func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.EndTransactionResponse{}
-	err := db.Call(proto.EndTransaction, &proto.EndTransactionRequest{Commit: true}, r)
+	err := db.Call(&proto.EndTransactionRequest{Commit: true}, r)
 	c.debug = fmt.Sprintf("[ts=%d]", r.Timestamp.Logical)
 	return err
 }

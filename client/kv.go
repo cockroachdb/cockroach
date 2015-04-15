@@ -105,9 +105,9 @@ func (kv *KV) Sender() KVSender {
 // and error, if applicable. If preceeding calls have been made to
 // Prepare() without a call to Flush(), this call is prepared and
 // then all prepared calls are flushed.
-func (kv *KV) Call(method string, args proto.Request, reply proto.Response) error {
+func (kv *KV) Call(args proto.Request, reply proto.Response) error {
 	if len(kv.prepared) > 0 {
-		kv.Prepare(method, args, reply)
+		kv.Prepare(args, reply)
 		return kv.Flush()
 	}
 	if args.Header().User == "" {
@@ -117,9 +117,8 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 		args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
 	}
 	call := &Call{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
+		Args:  args,
+		Reply: reply,
 	}
 	call.resetClientCmdID(kv.clock)
 	kv.sender.Send(call)
@@ -130,11 +129,11 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 	return err
 }
 
-// Prepare accepts a KV API call, specified by method name, arguments
-// and a reply struct. The call will be buffered locally until the
-// first call to Flush(), at which time it will be sent for execution
-// as part of a batch call. Using Prepare/Flush parallelizes queries
-// and updates and should be used where possible for efficiency.
+// Prepare accepts a KV API call, specified by arguments and a reply
+// struct. The call will be buffered locally until the first call to
+// Flush(), at which time it will be sent for execution as part of a
+// batch call. Using Prepare/Flush parallelizes queries and updates
+// and should be used where possible for efficiency.
 //
 // For clients using an HTTP sender, Prepare/Flush allows multiple
 // commands to be sent over the same connection. For transactional
@@ -146,11 +145,10 @@ func (kv *KV) Call(method string, args proto.Request, reply proto.Response) erro
 //
 // The supplied reply struct will not be valid until after a call
 // to Flush().
-func (kv *KV) Prepare(method string, args proto.Request, reply proto.Response) {
+func (kv *KV) Prepare(args proto.Request, reply proto.Response) {
 	call := &Call{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
+		Args:  args,
+		Reply: reply,
 	}
 	call.resetClientCmdID(kv.clock)
 	kv.prepared = append(kv.prepared, call)
@@ -168,7 +166,7 @@ func (kv *KV) Flush() (err error) {
 	} else if len(kv.prepared) == 1 {
 		call := kv.prepared[0]
 		kv.prepared = []*Call{}
-		err = kv.Call(call.Method, call.Args, call.Reply)
+		err = kv.Call(call.Args, call.Reply)
 		return
 	}
 	replies := make([]proto.Response, 0, len(kv.prepared))
@@ -178,7 +176,7 @@ func (kv *KV) Flush() (err error) {
 		replies = append(replies, call.Reply)
 	}
 	kv.prepared = []*Call{}
-	err = kv.Call(proto.Batch, bArgs, bReply)
+	err = kv.Call(bArgs, bReply)
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -236,7 +234,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			etReply := &proto.EndTransactionResponse{}
 			// Prepare and flush for end txn in order to execute entire txn in
 			// a single round trip if possible.
-			txnKV.Prepare(proto.EndTransaction, etArgs, etReply)
+			txnKV.Prepare(etArgs, etReply)
 			err = txnKV.Flush()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -251,7 +249,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	}); err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
-		txnKV.Call(proto.EndTransaction, etArgs, etReply)
+		txnKV.Call(etArgs, etReply)
 		if etReply.Header().GoError() != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
 		}
@@ -297,7 +295,7 @@ func (kv *KV) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timest
 // getInternal fetches the requested key and returns the value.
 func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
 	reply := &proto.GetResponse{}
-	if err := kv.Call(proto.Get, &proto.GetRequest{
+	if err := kv.Call(&proto.GetRequest{
 		RequestHeader: proto.RequestHeader{Key: key},
 	}, reply); err != nil {
 		return nil, err
@@ -326,7 +324,7 @@ func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
 // putInternal writes the specified value to key.
 func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 	value.InitChecksum(key)
-	return kv.Call(proto.Put, &proto.PutRequest{
+	return kv.Call(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
 	}, &proto.PutResponse{})
@@ -343,7 +341,7 @@ func (kv *KV) PreparePutProto(key proto.Key, msg gogoproto.Message) error {
 	}
 	value := proto.Value{Bytes: data}
 	value.InitChecksum(key)
-	kv.Prepare(proto.Put, &proto.PutRequest{
+	kv.Prepare(&proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
 	}, &proto.PutResponse{})

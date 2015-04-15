@@ -33,7 +33,7 @@ func putMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
 }
 
 func delMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
-	db.Prepare(proto.Delete, proto.DeleteArgs(key), &proto.DeleteResponse{})
+	db.Prepare(proto.DeleteArgs(key), &proto.DeleteResponse{})
 	return nil
 }
 

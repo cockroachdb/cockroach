@@ -2037,7 +2037,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+		return txn.Call(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
@@ -2141,8 +2141,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		// Remove the range descriptor for the deleted range.
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
 		deleteResponse := &proto.DeleteResponse{}
-		txn.Prepare(proto.Delete, proto.DeleteArgs(desc2Key),
-			deleteResponse)
+		txn.Prepare(proto.DeleteArgs(desc2Key), deleteResponse)
 
 		if err := MergeRangeAddressing(txn, desc, &updatedDesc); err != nil {
 			return err
@@ -2150,7 +2149,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+		return txn.Call(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: args.Key},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
@@ -2216,7 +2215,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		return txn.Call(proto.EndTransaction, &proto.EndTransactionRequest{
+		return txn.Call(&proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 			Commit:        true,
 			InternalCommitTrigger: &proto.InternalCommitTrigger{
