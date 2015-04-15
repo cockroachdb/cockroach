@@ -788,15 +788,18 @@ func (m *TimeSeriesDatapoint) GetFloatValue() float32 {
 }
 
 // TimeSeriesData is a set of observations of a single variable value at
-// multiple points in time. This message contains a string which uniquely
-// identifies the source variable, and a repeated set of TimeSeriesDatapoint
-// messages representing distinct measurements of that variable.
+// multiple points in time. This message contains a name and a source which, in
+// combination, uniquely identify the series being measured. The message also
+// contains a repeated set of TimeSeriesDatapoint messages representing distinct
+// measurements of the variable.
 type TimeSeriesData struct {
 	// A string which uniquely identifies the variable from which this data was
 	// measured.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
+	// A string which identifies the unique source from which the variable was measured.
+	Source string `protobuf:"bytes,2,opt,name=source" json:"source"`
 	// Datapoints representing one or more measurements taken from the variable.
-	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,2,rep,name=datapoints" json:"datapoints,omitempty"`
+	Datapoints       []*TimeSeriesDatapoint `protobuf:"bytes,3,rep,name=datapoints" json:"datapoints,omitempty"`
 	XXX_unrecognized []byte                 `json:"-"`
 }
 
@@ -807,6 +810,13 @@ func (*TimeSeriesData) ProtoMessage()    {}
 func (m *TimeSeriesData) GetName() string {
 	if m != nil {
 		return m.Name
+	}
+	return ""
+}
+
+func (m *TimeSeriesData) GetSource() string {
+	if m != nil {
+		return m.Source
 	}
 	return ""
 }
@@ -2687,6 +2697,28 @@ func (m *TimeSeriesData) Unmarshal(data []byte) error {
 			index = postIndex
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + int(stringLen)
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Source = string(data[index:postIndex])
+			index = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Datapoints", wireType)
 			}
 			var msglen int
@@ -3011,6 +3043,8 @@ func (m *TimeSeriesData) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
+	n += 1 + l + sovData(uint64(l))
+	l = len(m.Source)
 	n += 1 + l + sovData(uint64(l))
 	if len(m.Datapoints) > 0 {
 		for _, e := range m.Datapoints {
@@ -3743,9 +3777,13 @@ func (m *TimeSeriesData) MarshalTo(data []byte) (n int, err error) {
 	i++
 	i = encodeVarintData(data, i, uint64(len(m.Name)))
 	i += copy(data[i:], m.Name)
+	data[i] = 0x12
+	i++
+	i = encodeVarintData(data, i, uint64(len(m.Source)))
+	i += copy(data[i:], m.Source)
 	if len(m.Datapoints) > 0 {
 		for _, msg := range m.Datapoints {
-			data[i] = 0x12
+			data[i] = 0x1a
 			i++
 			i = encodeVarintData(data, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(data[i:])
