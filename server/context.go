@@ -20,7 +20,6 @@ package server
 import (
 	"net"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -175,7 +174,6 @@ func parseAttributes(attrsStr string) proto.Attributes {
 			filtered = append(filtered, attr)
 		}
 	}
-	sort.Strings(filtered)
 	return proto.Attributes{Attrs: filtered}
 }
 

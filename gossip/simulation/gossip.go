@@ -226,7 +226,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 				(maxDotFontSize-minDotFontSize))/float64(maxIncoming)))
 		}
 		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|MH=%d, AA=%s, SA=%d}\"]\n",
-			node.Name, nodeColor, fontSize, node.Name, node.MaxHops(), age, sentinelAge))
+			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), node.MaxHops(), age, sentinelAge))
 		outgoing := outgoingMap[simNode.Addr.String()]
 		for _, e := range outgoing {
 			destSimNode, ok := network.GetNodeFromAddr(e.dest)
@@ -240,7 +240,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			} else if e.deleted {
 				style = " [color=red,style=dotted]"
 			}
-			f.WriteString(fmt.Sprintf("\t%s -> %s%s\n", node.Name, dest.Name, style))
+			f.WriteString(fmt.Sprintf("\t%s -> %s%s\n", node.GetNodeID(), dest.GetNodeID(), style))
 			if !e.deleted {
 				edgeSet[fmt.Sprintf("%s:%s", simNode.Addr, e.dest)] = e
 			}
@@ -298,7 +298,7 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval)
+	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval, "")
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			if cycle == numCycles {

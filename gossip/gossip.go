@@ -62,6 +62,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -97,7 +98,7 @@ var (
 // During bootstrapping, the bootstrap list contains candidates for
 // entry to the gossip network.
 type Gossip struct {
-	Name         string             // Optional node name
+	nodeID       proto.NodeID       // Optional node ID
 	Connected    chan struct{}      // Closed upon initial connection
 	hasConnected bool               // Set first time network is connected
 	isBootstrap  bool               // True if this node is a bootstrap host
@@ -130,6 +131,23 @@ func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap 
 		gossipBootstrap: gossipBootstrap,
 	}
 	return g
+}
+
+// GetNodeID returns the instance's saved NodeID.
+func (g *Gossip) GetNodeID() proto.NodeID {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	id := g.nodeID
+	return id
+}
+
+// SetNodeID sets the Gossip instance's NodeID.
+// It is typically only set once, but is only obtained
+// after creating the instance.
+func (g *Gossip) SetNodeID(id proto.NodeID) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.nodeID = id
 }
 
 // SetBootstrap initializes the set of gossip node addresses used to

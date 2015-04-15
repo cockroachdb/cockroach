@@ -166,11 +166,50 @@ func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConf
 // initDescriptor initializes the node descriptor with the server
 // address and the node attributes.
 func (n *Node) initDescriptor(addr net.Addr, attrs proto.Attributes) {
-	n.Descriptor = storage.NodeDescriptor{
-		// NodeID is set after invocation of start()
-		Address: addr,
-		Attrs:   attrs,
+	n.Descriptor.Address = addr
+	n.Descriptor.Attrs = attrs
+}
+
+// initNodeID updates the internal NodeDescriptor with the given ID. If zero is
+// supplied, a new NodeID is allocated with the first invocation. For all other
+// values, the supplied ID is stored into the descriptor (unless one has been
+// set previously, in which case a fatal error occurs).
+//
+// Upon setting a new NodeID, the descriptor is gossiped and the NodeID is
+// stored into the gossip instance.
+func (n *Node) initNodeID(id proto.NodeID) {
+	if id < 0 {
+		log.Fatalf("NodeID must not be negative")
 	}
+
+	if o := n.Descriptor.NodeID; o > 0 {
+		if id == 0 {
+			return
+		}
+		log.Fatalf("cannot initialize NodeID to %d, already have %d", id, o)
+	}
+	var err error
+	if id == 0 {
+		id, err = allocateNodeID(n.db)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if id == 0 {
+			log.Fatal("new node allocated illegal ID 0")
+		}
+
+		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
+	}
+
+	n.Descriptor.NodeID = id
+
+	nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
+	if err = n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
+		log.Fatalf("couldn't gossip descriptor for node %d: %v", n.Descriptor.NodeID, err)
+	}
+	// Setting the NodeID as the name of the gossip instance allows the
+	// DistSender to look up the own node's descriptor from the gossip network.
+	n.gossip.SetNodeID(n.Descriptor.NodeID)
 }
 
 // start starts the node by registering the storage instance for the
@@ -238,6 +277,9 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *ut
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
+		// If no NodeID has been assigned yet, allocate a new node ID by
+		// supplying 0 to initNodeID.
+		n.initNodeID(0)
 		go n.bootstrapStores(bootstraps, stopper)
 	}
 
@@ -251,7 +293,7 @@ func (n *Node) validateStores() error {
 	return n.lSender.VisitStores(func(s *storage.Store) error {
 		if n.ClusterID == "" {
 			n.ClusterID = s.Ident.ClusterID
-			n.Descriptor.NodeID = s.Ident.NodeID
+			n.initNodeID(s.Ident.NodeID)
 		} else if n.ClusterID != s.Ident.ClusterID {
 			return util.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
@@ -267,20 +309,8 @@ func (n *Node) validateStores() error {
 // node.
 func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	log.Infof("bootstrapping %d store(s)", bootstraps.Len())
-
-	// Allocate a new node ID if necessary.
-	if n.Descriptor.NodeID == 0 {
-		var err error
-		n.Descriptor.NodeID, err = allocateNodeID(n.db)
-		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
-		if err != nil {
-			log.Fatal(err)
-		}
-		// Gossip node address keyed by node ID.
-		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
-			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
-		}
+	if n.ClusterID == "" {
+		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
 	// Bootstrap all waiting stores by allocating a new store id for

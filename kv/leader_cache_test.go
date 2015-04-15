@@ -29,18 +29,18 @@ func TestLeaderCache(t *testing.T) {
 	if r := lc.Lookup(12); r != nil {
 		t.Fatalf("lookup of missing key returned replica: %v", r)
 	}
-	replica := &proto.Replica{StoreID: 1}
+	replica := proto.Replica{StoreID: 1}
 	lc.Update(5, replica)
-	if r := lc.Lookup(5); !reflect.DeepEqual(replica, r) {
+	if r := lc.Lookup(5); !reflect.DeepEqual(&replica, r) {
 		t.Errorf("expected %v, got %v", replica, r)
 	}
-	newReplica := &proto.Replica{StoreID: 7}
+	newReplica := proto.Replica{StoreID: 7}
 	lc.Update(5, newReplica)
 	r := lc.Lookup(5)
-	if !reflect.DeepEqual(newReplica, r) {
+	if !reflect.DeepEqual(&newReplica, r) {
 		t.Errorf("expected %v, got %v", newReplica, r)
 	}
-	lc.Update(5, nil)
+	lc.Update(5, proto.Replica{})
 	r = lc.Lookup(5)
 	if r != nil {
 		t.Fatalf("evicted leader returned: %v", r)
