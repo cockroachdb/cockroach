@@ -755,8 +755,8 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
-	defer tc.Stop()
 	defer func() { TestingCommandFilter = nil }()
+	defer tc.Stop()
 
 	key := proto.Key("key1")
 	blockingDone := make(chan struct{})
