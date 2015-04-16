@@ -117,6 +117,64 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	validate(store)
 }
 
+// TestStoreRecoverWithErrors verifies that even commands that fail are marked as
+// applied so they are not retried after recovery.
+func TestStoreRecoverWithErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
+
+	numIncrements := 0
+
+	storage.TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+		if method == proto.Increment && args.Header().Key.Equal(proto.Key("a")) {
+			numIncrements++
+		}
+		return false
+	}
+	defer func() {
+		storage.TestingCommandFilter = nil
+	}()
+
+	func() {
+		store, stopper := createTestStoreWithEngine(t, eng, clock, true)
+		defer stopper.Stop()
+
+		// Write a bytes value so the increment will fail.
+		putArgs, putReply := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
+		if err := store.ExecuteCmd(proto.Put, putArgs, putReply); err != nil {
+			t.Fatal(err)
+		}
+
+		// Try and fail to increment the key. It is important for this test that the
+		// failure be the last thing in the raft log when the store is stopped.
+		incArgs, incReply := incrementArgs(proto.Key("a"), 42, 1, store.StoreID())
+		if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err == nil {
+			t.Fatal("did not get expected error")
+		}
+	}()
+
+	if numIncrements != 1 {
+		t.Fatalf("expected 1 increments; was %d", numIncrements)
+	}
+
+	// Recover from the engine.
+	store, stopper := createTestStoreWithEngine(t, eng, clock, false)
+	defer stopper.Stop()
+
+	// Issue a no-op write to lazily initialize raft on the range.
+	incArgs, incReply := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())
+	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+		t.Fatal(err)
+	}
+
+	// No additional increments were performed on key A during recovery.
+	if numIncrements != 1 {
+		t.Fatalf("expected 1 increments; was %d", numIncrements)
+	}
+}
+
 // TestReplicateRange verifies basic replication functionality by creating two stores
 // and a range, replicating the range to the second store, and reading its data there.
 func TestReplicateRange(t *testing.T) {
