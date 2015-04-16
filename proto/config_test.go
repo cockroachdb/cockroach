@@ -114,6 +114,7 @@ func TestRangeDescriptorContains(t *testing.T) {
 		{[]byte("b"), []byte("bb"), false},
 		{[]byte("0"), []byte("bb"), false},
 		{[]byte("aa"), []byte("bb"), false},
+		{[]byte("b"), []byte("a"), false},
 	}
 	for _, test := range testData {
 		if bytes.Compare(test.start, test.end) == 0 {
