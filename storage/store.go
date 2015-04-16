@@ -583,7 +583,7 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 	if err != nil {
 		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
-		// See if this is an already-bootrapped store.
+		// See if this is an already-bootstrapped store.
 		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
 		if err != nil {
 			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)

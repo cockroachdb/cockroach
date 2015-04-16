@@ -28,6 +28,7 @@ import (
 	commander "code.google.com/p/go-commander"
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cockroachdb/cockroach/kv"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/structured"
@@ -38,23 +39,48 @@ import (
 // Context is the CLI Context used for the server.
 var Context = server.NewContext()
 
-// bootstrapCluster initializes the engine based on the first
+// An initCmd command initializes a new Cockroach cluster.
+var initCmd = &commander.Command{
+	UsageLine: "init <storage-location>",
+	Short:     "init new Cockroach cluster and start server",
+	Long: `
+Initialize a new Cockroach cluster using the first argument as the
+storage location used to bootstrap the first replica of the first
+range. If the storage location is already part of a pre-existing
+cluster, the bootstrap will fail.
+
+This command must be run before starting any nodes in the cluster.
+The storage location specified here must be used as a device in the
+-stores flag when starting this node in order to start the cluster.
+
+For example:
+
+  cockroach init /mnt/ssd1
+`,
+	Run:  runInit,
+	Flag: *flag.CommandLine,
+}
+
+// runInit initializes the engine based on the first
 // store. The bootstrap engine may not be an in-memory type.
-func bootstrapCluster() error {
-	e := Context.Engines[0]
-	if _, ok := e.(*engine.InMem); ok {
-		return util.Errorf("cannot initialize a cluster using an in-memory store")
+func runInit(cmd *commander.Command, args []string) {
+	// Require a single argument for storage location.
+	if len(args) != 1 {
+		cmd.Usage()
+		return
 	}
+
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
+	e := engine.NewRocksDB(proto.Attributes{}, args[0], 1<<20)
 	stopper := util.NewStopper()
 	if _, err := server.BootstrapCluster(clusterID, e, stopper); err != nil {
-		return err
+		log.Errorf("unable to bootstrap cluster: %s", err)
+		return
 	}
 	stopper.Stop()
 
-	log.Infof("cockroach cluster %s has been initialized\n", clusterID)
-	return nil
+	log.Infof("cockroach cluster %s has been initialized", clusterID)
 }
 
 // A startCmd command starts nodes by joining the gossip network.
@@ -62,7 +88,7 @@ var startCmd = &commander.Command{
 	UsageLine: "start -gossip=host1:port1[,host2:port2...] " +
 		"-certs=<cert-dir> " +
 		"-stores=(ssd=<data-dir>,hdd:7200rpm=<data-dir>|mem=<capacity-in-bytes>)[,...]",
-	Short: "start node by joining the gossip network\n",
+	Short: "start node by joining the gossip network",
 	Long: `
 Start Cockroach node by joining the gossip network and exporting key
 ranges stored on physical device(s). The gossip network is joined by
@@ -78,20 +104,15 @@ number of bytes. Although the paths should be specified to correspond
 uniquely to physical devices, this requirement isn't strictly
 enforced.
 
+For example:
+
+  cockroach start -gossip=host1:port1,host2:port2 -stores=ssd=/mnt/ssd1,ssd=/mnt/ssd2
+
 A node exports an HTTP API with the following endpoints:
 
   Health check:           /healthz
   Key-value REST:         ` + kv.RESTPrefix + `
-  Structured Schema REST: ` + structured.StructuredKeyPrefix + `
-
-If this is the first node to join the cluster, specify -bootstrap or
--bootstrap-only to bootstrap the cluster. -bootstrap-only exits after
-bootstrap.
-
-Bootstrapping initializes a new Cockroach cluster using the first
-directory specified in the -stores flag as the only replica of the
-first range. If any specified store is already part of a pre-existing
-cluster, the bootstrap will fail.`,
+  Structured Schema REST: ` + structured.StructuredKeyPrefix,
 	Run:  runStart,
 	Flag: *flag.CommandLine,
 }
@@ -110,19 +131,8 @@ func runStart(cmd *commander.Command, args []string) {
 	// First initialize the Context as it is used in other places.
 	err := Context.Init()
 	if err != nil {
-		log.Errorf("failed to initialize context: %v", err)
+		log.Errorf("failed to initialize context: %s", err)
 		return
-	}
-
-	isBootstrap := Context.Bootstrap || Context.BootstrapOnly
-	if isBootstrap {
-		if err := bootstrapCluster(); err != nil {
-			log.Errorf("failed to bootstrap cluster: %s", err)
-			return
-		}
-		if Context.BootstrapOnly {
-			return
-		}
 	}
 
 	log.Info("starting cockroach cluster")
@@ -130,13 +140,13 @@ func runStart(cmd *commander.Command, args []string) {
 	stopper.AddWorker()
 	s, err := server.NewServer(Context, stopper)
 	if err != nil {
-		log.Errorf("failed to start Cockroach server: %v", err)
+		log.Errorf("failed to start Cockroach server: %s", err)
 		return
 	}
 
-	err = s.Start(isBootstrap)
+	err = s.Start(false)
 	if err != nil {
-		log.Errorf("cockroach server exited with error: %v", err)
+		log.Errorf("cockroach server exited with error: %s", err)
 		return
 	}
 
@@ -150,6 +160,7 @@ func runStart(cmd *commander.Command, args []string) {
 	select {
 	case <-stopper.ShouldStop():
 		stopper.SetStopped()
+		close(gracefulShutdownCh)
 	case <-signalCh:
 		log.Infof("initiating graceful shutdown of server")
 		stopper.SetStopped()
@@ -170,11 +181,51 @@ func runStart(cmd *commander.Command, args []string) {
 	}
 }
 
+// A exterminateCmd command shuts down the node server.
+var exterminateCmd = &commander.Command{
+	UsageLine: "exterminate",
+	Short:     "destroy all data held by the node",
+	Long: `
+
+First shuts down the system and then destroys all data held by the
+node, cycling through each store specified by the -stores flag.
+`,
+	Run:  runExterminate,
+	Flag: *flag.CommandLine,
+}
+
+// runExterminate destroys the data held in the specified stores.
+func runExterminate(cmd *commander.Command, args []string) {
+	err := Context.Init()
+	if err != nil {
+		log.Errorf("failed to initialize context: %s", err)
+		return
+	}
+
+	// First attempt to shutdown the server. Note that an error of EOF just
+	// means the HTTP server shutdown before the request to quit returned.
+	if err := server.SendQuit(Context); err != nil {
+		log.Infof("shutdown node %s: %s", Context.Addr, err)
+	} else {
+		log.Infof("shutdown node in anticipation of data extermination")
+	}
+
+	// Exterminate all data held in specified stores.
+	for _, e := range Context.Engines {
+		if rocksdb, ok := e.(*engine.RocksDB); ok {
+			log.Infof("exterminating data from store %s", e)
+			if err := rocksdb.Destroy(); err != nil {
+				log.Fatalf("unable to destroy store %s: %s", e, err)
+			}
+		}
+	}
+	log.Infof("exterminated all data from stores %s", Context.Engines)
+}
+
 // A quitCmd command shuts down the node server.
 var quitCmd = &commander.Command{
 	UsageLine: "quit",
-	Short: "shutdown node by entering it into draining mode first, followed " +
-		"by exit\n",
+	Short:     "drain and shutdown node\n",
 	Long: `
 Shutdown the server. The first stage is drain, where any new requests
 will be ignored by the server. When all extant requests have been
@@ -184,7 +235,7 @@ completed, the server exits.
 	Flag: *flag.CommandLine,
 }
 
-// runQuit accesses the quitquitquit shutdown path.
+// runQuit accesses the quit shutdown path.
 func runQuit(cmd *commander.Command, args []string) {
-	server.RunQuit(Context)
+	server.SendQuit(Context)
 }

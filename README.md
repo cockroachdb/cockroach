@@ -57,13 +57,15 @@ $ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
 root@82cb657cdc42:/cockroach#
 ```
 
-Now we're in an environment that has everything set up, and we start by firing up a node:
+Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up a node:
 
 ```bash
-$ ./cockroach start -bootstrap -stores ssd="$(mktemp -d /tmp/dbXXX)" &> node.log &
+$ DIR=$(mktemp -d /tmp/dbXXX)
+$ ./cockroach init $DIR"
+$ ./cockroach start -stores ssd="$DIR" &> node.log &
 [...]
 ```
-This bootstraps (-bootstrap flags) and starts a single-node cluster in the background, with logs sent to `node.log`.
+This initializes and starts a single-node cluster in the background, with logs sent to `node.log`.
 
 ##### Built-in client
 
@@ -144,8 +146,8 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
 
 ```bash
-$ docker run -p 8080:8080 -d cockroachdb/cockroach start -bootstrap \
-    -stores ssd="$(mktemp -d /tmp/dbXXX)"
+$ docker run -p 8080:8080 -d -v /cr-data cockroachdb/cockroach init /cr-data
+$ docker run -p 8080:8080 -d -v /cr-data cockroachdb/cockroach start -bootstrap -stores ssd=/cr-data
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.

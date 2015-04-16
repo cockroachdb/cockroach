@@ -58,14 +58,6 @@ func initFlags(ctx *server.Context) {
 		"of -max-offset, it will commit suicide. Setting this value too high may "+
 		"decrease transaction performance in the presence of contention.")
 
-	flag.BoolVar(&ctx.Bootstrap, "bootstrap", ctx.Bootstrap, "specify "+
-		"to first bootstrap the cluster using the first store specified. This is a "+
-		"one-time operation which chooses a unique cluster ID. After bootstrapping, "+
-		"a node may never be restarted with this flag. See -bootstrap-only also.")
-
-	flag.BoolVar(&ctx.BootstrapOnly, "bootstrap-only", ctx.BootstrapOnly, "specify "+
-		"to bootstrap the cluster and exit. See -bootstrap for additional details.")
-
 	// Gossip flags.
 
 	flag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap,

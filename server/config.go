@@ -36,24 +36,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// sendAdminRequest send an HTTP request and processes the response for
-// its body or error message if a non-200 response code.
-func sendAdminRequest(req *http.Request) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, util.Errorf("admin REST request failed: %s", err)
-	}
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, util.Errorf("unable to read admin REST response: %s", err)
-	}
-	if resp.StatusCode != 200 {
-		return nil, util.Errorf("%s: %s", resp.Status, string(b))
-	}
-	return b, nil
-}
-
 // Gets a friendly name for output based on the passed in config prefix.
 func getFriendlyNameFromPrefix(prefix string) string {
 	switch prefix {
@@ -327,20 +309,4 @@ func deleteConfig(db *client.KV, configPrefix proto.Key, path string, r *http.Re
 			User: storage.UserRoot,
 		},
 	}, &proto.DeleteResponse{})
-}
-
-// RunQuit fetches the admin quitquitquit path to drain and shutdown
-// the server.
-func RunQuit(ctx *Context) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, ctx.Addr, quitPath), nil)
-	if err != nil {
-		log.Errorf("unable to create request to admin REST endpoint: %s", err)
-		return
-	}
-	b, err := sendAdminRequest(req)
-	if err != nil {
-		log.Errorf("admin REST request failed: %s", err)
-		return
-	}
-	fmt.Fprintf(os.Stdout, "node drain and shutdown: %s", string(b))
 }

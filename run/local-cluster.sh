@@ -78,6 +78,7 @@ function fail {
   docker rm ${CIDS[*]} > /dev/null
   docker kill $DNS_CID > /dev/null
   docker rm $DNS_CID > /dev/null
+  docker rm $INIT_CID > /dev/null
   exit 1
 }
 
@@ -98,18 +99,23 @@ PORT=8080
 for i in $(seq 1 $NODES); do
   HOSTS[$i]="$COCKROACH_NAME$i.local"
 
-  # If this is the first node, command is init; otherwise start.
   CMD="start"
-  # Command args specify two data directories per instance to simulate two physical devices.
-  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=hdd=/tmp/disk1,hdd=/tmp/disk2 -addr=${HOSTS[$i]}:$PORT"
-  # Log (almost) everything.
-  CMD_ARGS="${CMD_ARGS} -v 7"
-  if [[ $i == 1 ]]; then
-      CMD_ARGS="${CMD_ARGS} -bootstrap"
-  fi
+  VOL="/data$i"
 
+  # Command args specify two data directories per instance to simulate two physical devices.
+  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT"
+  # Log (almost) everything.
+  #CMD_ARGS="${CMD_ARGS} -v 7"
   # Node-specific arguments for node container.
   NODE_ARGS="--hostname=${HOSTS[$i]} --name=${HOSTS[$i]} --dns=$DNS_IP"
+
+  # If this is the first node, initialize the cluster first.
+  if [[ $i == 1 ]]; then
+      docker run -v $VOL $COCKROACH_IMAGE init $VOL 2> /dev/null
+      INIT_CID=$(docker ps -q -n 1)
+      NODE_ARGS="${NODE_ARGS} --volumes-from=$INIT_CID"
+      # TODO(tobias): do we need to figure out how to clean up this volume?
+  fi
 
   # Start Cockroach docker container and corral HTTP port and docker
   # IP address for container-local DNS.

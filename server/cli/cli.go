@@ -67,7 +67,9 @@ var allCmds = &commander.Commander{
 	Name: "cockroach",
 	Commands: []*commander.Command{
 		// Node commands.
+		initCmd,
 		startCmd,
+		exterminateCmd,
 		quitCmd,
 
 		// Key/value commands.

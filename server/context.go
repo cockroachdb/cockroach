@@ -70,15 +70,6 @@ type Context struct {
 	// Maximum clock offset for the cluster.
 	MaxOffset time.Duration
 
-	// Bootstrap first bootstraps the cluster using the first store
-	// specified.  This option cannot be specified twice when starting a
-	// node.
-	Bootstrap bool
-
-	// BootstrapOnly bootstraps the cluster using the first store
-	// specified and exits.
-	BootstrapOnly bool
-
 	// GossipBootstrap is a comma-separated list of node addresses that
 	// act as bootstrap hosts for connecting to the gossip network.
 	GossipBootstrap string
@@ -139,7 +130,7 @@ func (ctx *Context) Init() error {
 		// list of attributes and the path.
 		engine, err := ctx.initEngine(store[1], store[2])
 		if err != nil {
-			return util.Errorf("unable to init engine for store %q: %v", store[0], err)
+			return util.Errorf("unable to init engine for store %q: %s", store[0], err)
 		}
 		ctx.Engines = append(ctx.Engines, engine)
 	}
