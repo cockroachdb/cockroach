@@ -132,8 +132,8 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano)
 
 	testCases := []struct {
-		useCopy bool
-		expLen  int
+		useClear bool
+		expLen   int
 	}{
 		{true, 3},
 		{false, 5},
@@ -157,7 +157,7 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 		cTS := clock.Now()
 		tc1.Add(proto.Key("c"), nil, cTS, proto.NoTxnMD5, true)
 
-		tc1.MergeInto(tc2, test.useCopy)
+		tc1.MergeInto(tc2, test.useClear)
 
 		if tc2.cache.Len() != test.expLen {
 			t.Errorf("expected merged length of %d; got %d", test.expLen, tc2.cache.Len())
@@ -172,7 +172,7 @@ func TestTimestampCacheMergeInto(t *testing.T) {
 		if rTS, _ := tc2.GetMax(proto.Key("b"), nil, proto.NoTxnMD5); !rTS.Equal(beTS) {
 			t.Error("expected \"b\" to have beTS timestamp")
 		}
-		if test.useCopy {
+		if test.useClear {
 			if rTS, _ := tc2.GetMax(proto.Key("aa"), nil, proto.NoTxnMD5); !rTS.Equal(adTS) {
 				t.Error("expected \"aa\" to have adTS timestamp")
 			}

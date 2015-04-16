@@ -1540,7 +1540,7 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 
 	// Copy the timestamp cache into the new range.
 	r.Lock()
-	r.tsCache.MergeInto(newRng.tsCache, true)
+	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
 	r.Unlock()
 
 	return r.rm.SplitRange(r, newRng)
@@ -1581,7 +1581,7 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	if err == nil {
 		// Merge the timestamp caches from both ranges.
 		r.Lock()
-		subsumedRng.tsCache.MergeInto(r.tsCache, false)
+		subsumedRng.tsCache.MergeInto(r.tsCache, false /* clear */)
 		r.Unlock()
 	}
 	return err
