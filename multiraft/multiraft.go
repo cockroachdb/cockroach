@@ -799,7 +799,6 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if len(cc.Context) > 0 {
 					commandID, payload = decodeCommand(cc.Context)
 				}
-				s.stopper.StartTask()
 				s.sendEvent(&EventMembershipChangeCommitted{
 					GroupID:    groupID,
 					CommandID:  commandID,
@@ -838,7 +837,6 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 							for _, prop := range g.pending {
 								s.proposalChan <- prop
 							}
-							s.stopper.FinishTask()
 						}
 					},
 				})
