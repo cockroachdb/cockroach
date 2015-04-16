@@ -18,12 +18,12 @@
 package server
 
 import (
-	"net"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -95,9 +95,9 @@ type Context struct {
 	// NodeAttributes is the parsed representation of Attrs.
 	NodeAttributes proto.Attributes
 
-	// GossipBootstrapAddrs is a list of node addresses that act
-	// as bootstrap hosts for connecting to the gossip network.
-	GossipBootstrapAddrs []net.Addr
+	// GossipBootstrapResolvers is a list of gossip resolvers used
+	// to find bootstrap nodes for connecting to the gossip network.
+	GossipBootstrapResolvers []*gossip.Resolver
 }
 
 // NewContext returns a Context with default values.
@@ -114,6 +114,7 @@ func NewContext() *Context {
 // Init interprets the stores parameter to initialize a slice of
 // engine.Engine objects and parses node attributes.
 func (ctx *Context) Init() error {
+	var err error
 	storesRE := regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 	// Error if regexp doesn't match.
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
@@ -138,7 +139,11 @@ func (ctx *Context) Init() error {
 
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
-	ctx.GossipBootstrapAddrs = parseGossipBootstrapAddrs(ctx.GossipBootstrap)
+	resolvers, err := parseGossipBootstrapAddrs(ctx.GossipBootstrap)
+	if err != nil {
+		return err
+	}
+	ctx.GossipBootstrapResolvers = resolvers
 
 	return nil
 }
@@ -174,17 +179,20 @@ func parseAttributes(attrsStr string) proto.Attributes {
 }
 
 // parseGossipBootstrapAddrs parses a comma-separated list of
-// gossip bootstrap addresses.
-func parseGossipBootstrapAddrs(gossipBootstrap string) []net.Addr {
-	var bootstrapAddrs []net.Addr
+// gossip bootstrap addresses or resolvers.
+func parseGossipBootstrapAddrs(gossipBootstrap string) ([]*gossip.Resolver, error) {
+	var bootstrapResolvers []*gossip.Resolver
 	addresses := strings.Split(gossipBootstrap, ",")
-	for _, addr := range addresses {
-		addr = strings.TrimSpace(addr)
-		if len(addr) == 0 {
+	for _, address := range addresses {
+		if len(address) == 0 {
 			continue
 		}
-		addr = util.EnsureHost(addr)
-		bootstrapAddrs = append(bootstrapAddrs, util.MakeRawAddr("tcp", addr))
+		resolver, err := gossip.NewResolver(address)
+		if err != nil {
+			return nil, err
+		}
+		bootstrapResolvers = append(bootstrapResolvers, resolver)
 	}
-	return bootstrapAddrs
+
+	return bootstrapResolvers, nil
 }

@@ -56,13 +56,13 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
 	}
-	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrapAddrs)
+	g := gossip.New(rpcContext, testContext.GossipInterval, testContext.GossipBootstrapResolvers)
 	if gossipBS != nil {
 		// Handle possibility of a :0 port specification.
 		if gossipBS == addr {
 			gossipBS = rpcServer.Addr()
 		}
-		g.SetBootstrap([]net.Addr{gossipBS})
+		g.SetResolvers([]*gossip.Resolver{gossip.NewResolverFromAddress(gossipBS)})
 		g.Start(rpcServer, stopper)
 	}
 	db := client.NewKV(nil, kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, g))

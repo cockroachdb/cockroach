@@ -59,9 +59,11 @@ func initFlags(ctx *server.Context) {
 		"decrease transaction performance in the presence of contention.")
 
 	// Gossip flags.
-
-	flag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap,
-		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap.")
+	flag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap, "specify a "+
+		"comma-separated list of gossip addresses or resolvers for gossip bootstrap. "+
+		"Each item in the list has an optional type: [type=]<address>. "+
+		"Unspecified type means ip address or dns. Type can also be a load balancer (\"lb\"), "+
+		"or a unix socket (\"unix\")")
 
 	flag.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
 		"approximate interval (time.Duration) for gossiping new information to peers.")

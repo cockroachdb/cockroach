@@ -104,7 +104,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", addr), rpcContext)
 	s.stopper.AddCloser(s.rpc)
-	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapAddrs)
+	s.gossip = gossip.New(rpcContext, s.ctx.GossipInterval, s.ctx.GossipBootstrapResolvers)
 
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.clock}, s.gossip)
 	sender := kv.NewTxnCoordSender(ds, s.clock, ctx.Linearizable, s.stopper)
@@ -139,7 +139,11 @@ func (s *Server) Start(selfBootstrap bool) error {
 
 	// Handle self-bootstrapping case for a single node.
 	if selfBootstrap {
-		s.gossip.SetBootstrap([]net.Addr{s.rpc.Addr()})
+		selfResolver, err := gossip.NewResolver(s.rpc.Addr().String())
+		if err != nil {
+			return err
+		}
+		s.gossip.SetResolvers([]*gossip.Resolver{selfResolver})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 

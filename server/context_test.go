@@ -18,11 +18,10 @@
 package server
 
 import (
-	"net"
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/util"
+	"github.com/cockroachdb/cockroach/gossip"
 )
 
 func TestParseNodeAttributes(t *testing.T) {
@@ -47,11 +46,11 @@ func TestParseGossipBootstrapAddrs(t *testing.T) {
 	if err := ctx.Init(); err != nil {
 		t.Fatalf("Failed to initialize the context: %v", err)
 	}
-	expected := []net.Addr{
-		util.MakeRawAddr("tcp", "localhost:12345"),
-		util.MakeRawAddr("tcp", "localhost:23456"),
+	expected := []*gossip.Resolver{
+		{"tcp", "localhost:12345", false},
+		{"tcp", "localhost:23456", false},
 	}
-	if !reflect.DeepEqual(ctx.GossipBootstrapAddrs, expected) {
-		t.Fatalf("Unexpected bootstrap addresses: %v", ctx.GossipBootstrapAddrs)
+	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
+		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
 	}
 }

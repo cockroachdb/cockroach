@@ -71,11 +71,12 @@ func NewNetwork(nodeCount int, networkType string,
 		}
 		addrs[i] = servers[i].Addr()
 	}
-	var bootstrap []net.Addr
-	if nodeCount < 3 {
-		bootstrap = addrs
-	} else {
-		bootstrap = addrs[:3]
+	var bootstrap []*gossip.Resolver
+	for i, addr := range addrs {
+		if i >= 3 {
+			break
+		}
+		bootstrap = append(bootstrap, gossip.NewResolverFromAddress(addr))
 	}
 
 	stopper := util.NewStopper()
