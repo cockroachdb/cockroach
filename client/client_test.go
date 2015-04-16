@@ -145,46 +145,51 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan struct{})
 		count := 0 // keeps track of retries
-		if err := kvClient.RunTransaction(&client.TransactionOptions{Isolation: test.isolation}, func(txn *client.KV) error {
-			txn.UserPriority = txnPri
-			count++
-			// Lay down the intent.
-			if err := txn.Run(client.PutCall(key, []byte("txn-value"), nil)); err != nil {
-				return err
-			}
-			// The wait group lets us pause txn until after the non-txn method has run once.
-			wg := sync.WaitGroup{}
-			// On the first true, send the non-txn put or get.
-			if count == 1 {
-				// We use a "notifying" sender here, which allows us to know exactly when the
-				// call has been processed; otherwise, we'd be dependent on timing.
-				kvClient.Sender().(*notifyingSender).reset(&wg)
-				// We must try the non-txn put or get in a goroutine because
-				// it might have to retry and will only succeed immediately in
-				// the event we can push.
-				go func() {
-					args := gogoproto.Clone(test.args).(proto.Request)
-					args.Header().Key = key
-					if args.Method() == proto.Put {
-						args.(*proto.PutRequest).Value.Bytes = []byte("value")
-					}
-					reply := args.CreateReply()
-					var err error
-					for i := 0; ; i++ {
-						err = kvClient.Run(&client.Call{Args: args, Reply: reply})
-						if _, ok := err.(*proto.WriteIntentError); !ok {
-							break
+		txnOpts := &client.TransactionOptions{
+			Isolation:    test.isolation,
+			UserPriority: txnPri,
+		}
+		err := kvClient.RunTransaction(txnOpts,
+			func(txn *client.Txn) error {
+				count++
+				// Lay down the intent.
+				if err := txn.Run(client.PutCall(key, []byte("txn-value"), nil)); err != nil {
+					return err
+				}
+				// The wait group lets us pause txn until after the non-txn method has run once.
+				wg := sync.WaitGroup{}
+				// On the first true, send the non-txn put or get.
+				if count == 1 {
+					// We use a "notifying" sender here, which allows us to know exactly when the
+					// call has been processed; otherwise, we'd be dependent on timing.
+					kvClient.Sender().(*notifyingSender).reset(&wg)
+					// We must try the non-txn put or get in a goroutine because
+					// it might have to retry and will only succeed immediately in
+					// the event we can push.
+					go func() {
+						args := gogoproto.Clone(test.args).(proto.Request)
+						args.Header().Key = key
+						if args.Method() == proto.Put {
+							args.(*proto.PutRequest).Value.Bytes = []byte("value")
 						}
-					}
-					close(doneCall)
-					if err != nil {
-						t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, args.Method())
-					}
-				}()
-				kvClient.Sender().(*notifyingSender).wait()
-			}
-			return nil
-		}); err != nil {
+						reply := args.CreateReply()
+						var err error
+						for i := 0; ; i++ {
+							err = kvClient.Run(&client.Call{Args: args, Reply: reply})
+							if _, ok := err.(*proto.WriteIntentError); !ok {
+								break
+							}
+						}
+						close(doneCall)
+						if err != nil {
+							t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, args.Method())
+						}
+					}()
+					kvClient.Sender().(*notifyingSender).wait()
+				}
+				return nil
+			})
+		if err != nil {
 			t.Fatalf("%d: expected success writing transactionally; got %s", i, err)
 		}
 
@@ -225,31 +230,32 @@ func TestKVClientRunTransaction(t *testing.T) {
 		key := []byte(fmt.Sprintf("key-%t", commit))
 
 		// Use snapshot isolation so non-transactional read can always push.
-		err := kvClient.RunTransaction(&client.TransactionOptions{Isolation: proto.SNAPSHOT}, func(txn *client.KV) error {
-			// Put transactional value.
-			if err := txn.Run(client.PutCall(key, value, nil)); err != nil {
-				return err
-			}
-			// Attempt to read outside of txn.
-			gr := &proto.GetResponse{}
-			if err := kvClient.Run(client.GetCall(key, gr)); err != nil {
-				return err
-			}
-			if gr.Value != nil {
-				return util.Errorf("expected nil value; got %+v", gr.Value)
-			}
-			// Read within the transaction.
-			if err := txn.Run(client.GetCall(key, gr)); err != nil {
-				return err
-			}
-			if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
-				return util.Errorf("expected value %q; got %q", value, gr.Value.Bytes)
-			}
-			if !commit {
-				return errors.New("purposefully failing transaction")
-			}
-			return nil
-		})
+		err := kvClient.RunTransaction(&client.TransactionOptions{Isolation: proto.SNAPSHOT},
+			func(txn *client.Txn) error {
+				// Put transactional value.
+				if err := txn.Run(client.PutCall(key, value, nil)); err != nil {
+					return err
+				}
+				// Attempt to read outside of txn.
+				gr := &proto.GetResponse{}
+				if err := kvClient.Run(client.GetCall(key, gr)); err != nil {
+					return err
+				}
+				if gr.Value != nil {
+					return util.Errorf("expected nil value; got %+v", gr.Value)
+				}
+				// Read within the transaction.
+				if err := txn.Run(client.GetCall(key, gr)); err != nil {
+					return err
+				}
+				if gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
+					return util.Errorf("expected value %q; got %q", value, gr.Value.Bytes)
+				}
+				if !commit {
+					return errors.New("purposefully failing transaction")
+				}
+				return nil
+			})
 
 		if commit != (err == nil) {
 			t.Errorf("expected success? %t; got %s", commit, err)
@@ -568,7 +574,7 @@ func ExampleKV_RunTransaction() {
 
 	// Insert all KV pairs inside a transaction.
 	putOpts := client.TransactionOptions{Name: "example put"}
-	err := kvClient.RunTransaction(&putOpts, func(txn *client.KV) error {
+	err := kvClient.RunTransaction(&putOpts, func(txn *client.Txn) error {
 		for i := 0; i < numKVPairs; i++ {
 			txn.Prepare(client.PutCall(proto.Key(keys[i]), values[i], nil))
 		}
@@ -585,7 +591,7 @@ func ExampleKV_RunTransaction() {
 	// Read back KV pairs inside a transaction.
 	getResponses := make([]proto.GetResponse, numKVPairs)
 	getOpts := client.TransactionOptions{Name: "example get"}
-	err = kvClient.RunTransaction(&getOpts, func(txn *client.KV) error {
+	err = kvClient.RunTransaction(&getOpts, func(txn *client.Txn) error {
 		for i := 0; i < numKVPairs; i++ {
 			call := client.GetCall(proto.Key(keys[i]), &getResponses[i])
 			txn.Prepare(call)
@@ -635,7 +641,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 			txnOpts := &client.TransactionOptions{
 				Name: fmt.Sprintf("test-%d", i),
 			}
-			if err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
+			if err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				// Retrieve the other key.
 				gr := &proto.GetResponse{}
 				if err := txn.Run(client.GetCall(readKey, gr)); err != nil {
@@ -733,6 +739,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
+		var calls []*client.Call
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
 				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))
@@ -743,15 +750,16 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 			if t <= nvs[i] {
 				call := client.PutCall(proto.Key(keys[i]), util.RandBytes(rng, 1024), nil)
 				call.Args.Header().Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
-				kv.Prepare(call)
+				calls = append(calls, call)
 			}
 			if (i+1)%1000 == 0 {
-				if err := kv.Flush(); err != nil {
+				if err := kv.Run(calls...); err != nil {
 					b.Fatal(err)
 				}
+				calls = nil
 			}
 		}
-		if err := kv.Flush(); err != nil {
+		if err := kv.Run(calls...); err != nil {
 			b.Fatal(err)
 		}
 	}

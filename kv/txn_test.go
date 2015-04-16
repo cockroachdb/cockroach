@@ -53,7 +53,7 @@ func TestTxnDBBasics(t *testing.T) {
 			Name:      "test",
 			Isolation: proto.SNAPSHOT,
 		}
-		err := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 			// Put transactional value.
 			if err := txn.Run(client.PutCall(key, value, nil)); err != nil {
 				return err
@@ -115,7 +115,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Manual.Increment(1)
-		if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
+		if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 			if err := txn.Run(client.PutCall(key, []byte(fmt.Sprintf("value-%d", i)), nil)); err != nil {
 				b.Fatal(err)
 			}
@@ -205,7 +205,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			txnDB := client.NewKV(nil, sender)
 			txnDB.User = storage.UserRoot
 
-			if err := txnDB.RunTransaction(txnOpts, func(txn *client.KV) error {
+			if err := txnDB.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				// Read within the transaction.
 				gr := proto.GetResponse{}
 				txn.Run(&client.Call{
@@ -304,7 +304,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 	}
 	gr := &proto.GetResponse{}
 	i := -1
-	tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
+	tErr := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		i++
 		s.Manual.Increment(1)
 		futureTS := s.Clock.Now()
@@ -374,7 +374,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
+	if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
@@ -435,7 +435,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 		Name:      "test",
 		Isolation: proto.SNAPSHOT,
 	}
-	err := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Put transactional value.
 		if err := txn.Run(client.PutCall(keyA, []byte("value1"), nil)); err != nil {
 			return err
@@ -483,11 +483,9 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 		Isolation: proto.SNAPSHOT,
 	}
 	go func() {
-		err := s.KV.RunTransaction(txnAOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
 			// Put transactional value.
-			if err := txn.Run(&client.Call{
-				Args:  proto.PutArgs(keyA, []byte("value1")),
-				Reply: &proto.PutResponse{}}); err != nil {
+			if err := txn.Run(client.PutCall(keyA, []byte("value1"), nil)); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(b).
@@ -495,9 +493,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			// Wait for txnB notify us to put(b).
 			<-ch
 			// Write now to keyB.
-			if err := txn.Run(&client.Call{
-				Args:  proto.PutArgs(keyB, []byte("value2")),
-				Reply: &proto.PutResponse{}}); err != nil {
+			if err := txn.Run(client.PutCall(keyB, []byte("value2"), nil)); err != nil {
 				return err
 			}
 			return nil
@@ -513,7 +509,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	err := s.KV.RunTransaction(txnBOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnBOpts, func(txn *client.Txn) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 
@@ -563,7 +559,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		Isolation: proto.SNAPSHOT,
 	}
 	go func() {
-		err := s.KV.RunTransaction(txnAOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
 			// Put transactional value.
 			if err := txn.Run(client.PutCall(keyA, []byte("value1"), nil)); err != nil {
 				return err
@@ -588,7 +584,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	err := s.KV.RunTransaction(txnBOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnBOpts, func(txn *client.Txn) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 

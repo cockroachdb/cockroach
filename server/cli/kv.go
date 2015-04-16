@@ -120,7 +120,7 @@ func runPut(cmd *commander.Command, args []string) {
 
 	kv := makeKVClient()
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err := kv.RunTransaction(opts, func(txn *client.KV) error {
+	err := kv.RunTransaction(opts, func(txn *client.Txn) error {
 		for i := 0; i < len(args); i += 2 {
 			key := proto.Key(args[i])
 			value := []byte(args[i+1])
@@ -208,7 +208,7 @@ func runDel(cmd *commander.Command, args []string) {
 
 	kv := makeKVClient()
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err := kv.RunTransaction(opts, func(txn *client.KV) error {
+	err := kv.RunTransaction(opts, func(txn *client.Txn) error {
 		for i := 0; i < len(args); i++ {
 			key := proto.Key(args[i])
 			txn.Prepare(client.DeleteCall(key, nil))

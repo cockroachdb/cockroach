@@ -58,7 +58,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
+			err := db.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {

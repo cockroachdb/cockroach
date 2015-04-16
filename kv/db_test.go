@@ -194,7 +194,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 
 	kvClient := createTestClient(addr)
 	txnOpts := &client.TransactionOptions{Name: "test"}
-	err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
+	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Make an EndTransaction request which would fail if not
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
@@ -302,7 +302,7 @@ func TestKVDBTransaction(t *testing.T) {
 		Name:      "test",
 		Isolation: proto.SNAPSHOT,
 	}
-	err := kvClient.RunTransaction(txnOpts, func(txn *client.KV) error {
+	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		if err := txn.Run(client.PutCall(key, value, nil)); err != nil {
 			t.Fatal(err)
 		}

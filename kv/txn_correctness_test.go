@@ -55,6 +55,10 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	})
 }
 
+type runner interface {
+	Run(calls ...*client.Call) error
+}
+
 // The following structs and methods provide a mechanism for verifying
 // the correctness of Cockroach's transaction model. They do this by
 // allowing transaction histories to be specified for concurrent txns
@@ -73,7 +77,7 @@ type cmd struct {
 	txnIdx      int    // transaction index in the history
 	historyIdx  int    // this suffixes key so tests get unique keys
 	fn          func(
-		c *cmd, kv *client.KV, t *testing.T) error // execution function
+		c *cmd, db runner, t *testing.T) error // execution function
 	ch   chan struct{}    // channel for other commands to wait
 	prev <-chan struct{}  // channel this command must wait on before executing
 	env  map[string]int64 // contains all previously read values
@@ -89,7 +93,7 @@ func (c *cmd) init(prevCmd *cmd) {
 	c.debug = ""
 }
 
-func (c *cmd) execute(db *client.KV, t *testing.T) (string, error) {
+func (c *cmd) execute(db runner, t *testing.T) (string, error) {
 	if c.prev != nil {
 		<-c.prev
 	}
@@ -136,13 +140,9 @@ func (c *cmd) String() string {
 }
 
 // readCmd reads a value from the db and stores it in the env.
-func readCmd(c *cmd, db *client.KV, t *testing.T) error {
+func readCmd(c *cmd, db runner, t *testing.T) error {
 	r := &proto.GetResponse{}
-	if err := db.Run(&client.Call{
-		Args: &proto.GetRequest{
-			RequestHeader: proto.RequestHeader{Key: c.getKey()},
-		},
-		Reply: r}); err != nil {
+	if err := db.Run(client.GetCall(c.getKey(), r)); err != nil {
 		return err
 	}
 	if r.Value != nil {
@@ -153,22 +153,14 @@ func readCmd(c *cmd, db *client.KV, t *testing.T) error {
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
-func deleteRngCmd(c *cmd, db *client.KV, t *testing.T) error {
-	return db.Run(&client.Call{
-		Args: &proto.DeleteRangeRequest{
-			RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
-		},
-		Reply: &proto.DeleteRangeResponse{}})
+func deleteRngCmd(c *cmd, db runner, t *testing.T) error {
+	return db.Run(client.DeleteRangeCall(c.getKey(), c.getEndKey(), nil))
 }
 
 // scanCmd reads the values from the db from [key, endKey).
-func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
+func scanCmd(c *cmd, db runner, t *testing.T) error {
 	r := &proto.ScanResponse{}
-	if err := db.Run(&client.Call{
-		Args: &proto.ScanRequest{
-			RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
-		},
-		Reply: r}); err != nil {
+	if err := db.Run(client.ScanCall(c.getKey(), c.getEndKey(), 0, r)); err != nil {
 		return err
 	}
 	var vals []string
@@ -184,14 +176,9 @@ func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
 
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
-func incCmd(c *cmd, db *client.KV, t *testing.T) error {
+func incCmd(c *cmd, db runner, t *testing.T) error {
 	r := &proto.IncrementResponse{}
-	if err := db.Run(&client.Call{
-		Args: &proto.IncrementRequest{
-			RequestHeader: proto.RequestHeader{Key: c.getKey()},
-			Increment:     int64(1),
-		},
-		Reply: r}); err != nil {
+	if err := db.Run(client.IncrementCall(c.getKey(), 1, r)); err != nil {
 		return err
 	}
 	c.env[c.key] = r.NewValue
@@ -201,7 +188,7 @@ func incCmd(c *cmd, db *client.KV, t *testing.T) error {
 
 // sumCmd sums the values of all keys read during the transaction
 // and writes the result to the db.
-func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
+func sumCmd(c *cmd, db runner, t *testing.T) error {
 	sum := int64(0)
 	for _, v := range c.env {
 		sum += v
@@ -218,7 +205,7 @@ func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
 }
 
 // commitCmd commits the transaction.
-func commitCmd(c *cmd, db *client.KV, t *testing.T) error {
+func commitCmd(c *cmd, db runner, t *testing.T) error {
 	r := &proto.EndTransactionResponse{}
 	err := db.Run(&client.Call{Args: &proto.EndTransactionRequest{Commit: true}, Reply: r})
 	c.debug = fmt.Sprintf("[ts=%d]", r.Timestamp.Logical)
@@ -227,7 +214,7 @@ func commitCmd(c *cmd, db *client.KV, t *testing.T) error {
 
 // cmdDict maps from command name to function implementing the command.
 // Use only upper case letters for commands. More than one letter is OK.
-var cmdDict = map[string]func(c *cmd, db *client.KV, t *testing.T) error{
+var cmdDict = map[string]func(c *cmd, db runner, t *testing.T) error{
 	"R":   readCmd,
 	"I":   incCmd,
 	"DR":  deleteRngCmd,
@@ -571,12 +558,11 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	var retry int
 	txnName := fmt.Sprintf("txn%d", txnIdx)
 	txnOpts := &client.TransactionOptions{
-		Name:      txnName,
-		Isolation: isolation,
+		Name:         txnName,
+		Isolation:    isolation,
+		UserPriority: -priority,
 	}
-	err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
-		txn.UserPriority = -priority
-
+	err := db.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		env := map[string]int64{}
 		// TODO(spencer): restarts must create additional histories. They
 		// look like: given the current partial history and a restart on
@@ -603,7 +589,7 @@ func (hv *historyVerifier) runTxn(txnIdx int, priority int32,
 	return err
 }
 
-func (hv *historyVerifier) runCmd(db *client.KV, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
+func (hv *historyVerifier) runCmd(db runner, txnIdx, retry, cmdIdx int, cmds []*cmd, t *testing.T) error {
 	fmtStr, err := cmds[cmdIdx].execute(db, t)
 	if err != nil {
 		return err

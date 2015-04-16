@@ -33,7 +33,7 @@ func TestKVTransactionEmptyFlush(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 	}))
-	client.RunTransaction(nil, func(txn *KV) error {
+	client.RunTransaction(nil, func(txn *Txn) error {
 		if err := txn.Flush(); err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +79,7 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 			}
 		}))
 
-		client.RunTransaction(nil, func(txn *KV) error {
+		client.RunTransaction(nil, func(txn *Txn) error {
 			for j := 0; j < i; j++ {
 				txn.Prepare(&Call{testPutReq, &proto.PutResponse{}})
 			}
@@ -102,32 +102,21 @@ func TestKVTransactionSender(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
-	if err := client.RunTransaction(nil, func(txn *KV) error {
-		if txn.Sender() != client.Sender() {
-			t.Errorf("expected wrapped sender for txn to equal original sender; %+v != %+v", txn.Sender(), client.Sender())
+	if err := client.RunTransaction(nil, func(txn *Txn) error {
+		if txn.kv.Sender() != client.Sender() {
+			t.Errorf("expected wrapped sender for txn to equal original sender; %+v != %+v",
+				txn.kv.Sender(), client.Sender())
 		}
-		if txn.User != client.User {
-			t.Errorf("expected txn user %s; got %s", client.User, txn.User)
+		if txn.kv.User != client.User {
+			t.Errorf("expected txn user %s; got %s", client.User, txn.kv.User)
 		}
-		if txn.UserPriority != client.UserPriority {
-			t.Errorf("expected txn user priority %d; got %d", client.UserPriority, txn.UserPriority)
+		if txn.kv.UserPriority != client.UserPriority {
+			t.Errorf("expected txn user priority %d; got %d", client.UserPriority, txn.kv.UserPriority)
 		}
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-}
-
-// TestKVNestedTransactions verifies that trying to create nested
-// transactions returns an error.
-func TestKVNestedTransactions(t *testing.T) {
-	client := NewKV(nil, newTestSender(func(call *Call) {}))
-	client.RunTransaction(nil, func(txn *KV) error {
-		if err := txn.RunTransaction(nil, func(txn *KV) error { return nil }); err == nil {
-			t.Errorf("expected error starting a nested transaction")
-		}
-		return nil
-	})
 }
 
 // TestKVCommitTransaction verifies that transaction is committed
@@ -143,7 +132,7 @@ func TestKVCommitTransaction(t *testing.T) {
 			t.Errorf("expected commit to be true; got %t", commit)
 		}
 	}))
-	if err := client.RunTransaction(nil, func(txn *KV) error {
+	if err := client.RunTransaction(nil, func(txn *Txn) error {
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -161,7 +150,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 	}))
-	if err := client.RunTransaction(nil, func(txn *KV) error {
+	if err := client.RunTransaction(nil, func(txn *Txn) error {
 		reply := &proto.EndTransactionResponse{}
 		txn.Run(&Call{&proto.EndTransactionRequest{Commit: true}, reply})
 		if reply.GoError() != nil {
@@ -189,7 +178,7 @@ func TestKVAbortTransaction(t *testing.T) {
 			t.Errorf("expected commit to be false; got %t", commit)
 		}
 	}))
-	err := client.RunTransaction(nil, func(txn *KV) error {
+	err := client.RunTransaction(nil, func(txn *Txn) error {
 		return errors.New("foo")
 	})
 	if err == nil {
@@ -230,7 +219,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 				}
 			}
 		}))
-		err := client.RunTransaction(nil, func(txn *KV) error {
+		err := client.RunTransaction(nil, func(txn *Txn) error {
 			reply := &proto.PutResponse{}
 			return client.Run(&Call{testPutReq, reply})
 		})

@@ -33,7 +33,7 @@ type cachedNode struct {
 // RangeTree is used to hold the relevant context information for any
 // operations on the range tree.
 type treeContext struct {
-	db    *client.KV
+	txn   *client.Txn
 	tree  *proto.RangeTree
 	dirty bool
 	nodes map[string]cachedNode
@@ -69,7 +69,7 @@ func (tc *treeContext) flush() error {
 		if err != nil {
 			return err
 		}
-		tc.db.Prepare(call)
+		tc.txn.Prepare(call)
 	}
 	for _, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
@@ -77,16 +77,16 @@ func (tc *treeContext) flush() error {
 			if err != nil {
 				return err
 			}
-			tc.db.Prepare(call)
+			tc.txn.Prepare(call)
 		}
 	}
 	return nil
 }
 
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
-func getRangeTree(db *client.KV) (*treeContext, error) {
+func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := &proto.RangeTree{}
-	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, tree)
+	ok, _, err := txn.GetProto(engine.KeyRangeTreeRoot, tree)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func getRangeTree(db *client.KV) (*treeContext, error) {
 	}
 
 	return &treeContext{
-		db:    db,
+		txn:   txn,
 		tree:  tree,
 		dirty: false,
 		nodes: map[string]cachedNode{},
@@ -134,7 +134,7 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := &proto.RangeTreeNode{}
-	ok, _, err := tc.db.GetProto(engine.RangeTreeNodeKey(*key), node)
+	ok, _, err := tc.txn.GetProto(engine.RangeTreeNodeKey(*key), node)
 	if err != nil {
 		return nil, err
 	}
@@ -152,8 +152,8 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 // from operations that create new ranges, such as range.splitTrigger.
 // TODO(bram): Can we optimize this by inserting as a child of the range being
 // split?
-func InsertRange(db *client.KV, key proto.Key) error {
-	tc, err := getRangeTree(db)
+func InsertRange(txn *client.Txn, key proto.Key) error {
+	tc, err := getRangeTree(txn)
 	if err != nil {
 		return err
 	}

@@ -2014,7 +2014,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 	txnOpts := &client.TransactionOptions{
 		Name: fmt.Sprintf("split range %d at %s", desc.RaftID, splitKey),
 	}
-	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+	if err = r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Create range descriptor for second half of split.
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
@@ -2144,7 +2144,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	txnOpts := &client.TransactionOptions{
 		Name: fmt.Sprintf("merge range %d into %d", subsumedDesc.RaftID, desc.RaftID),
 	}
-	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
 		call, err := client.PutProtoCall(desc1Key, &updatedDesc, nil)
@@ -2223,7 +2223,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	txnOpts := &client.TransactionOptions{
 		Name: fmt.Sprintf("change replicas of %d", desc.RaftID),
 	}
-	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
+	err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
