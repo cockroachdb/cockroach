@@ -783,10 +783,10 @@ func runClientScan(numRows, numVersions int, b *testing.B) {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
 			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
-			args := proto.ScanArgs(proto.Key(startKey), proto.Key(endKey), int64(numRows))
-			args.Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
 			resp := &proto.ScanResponse{}
-			if err := kv.Run(&client.Call{Args: args, Reply: resp}); err != nil {
+			call := client.ScanCall(proto.Key(startKey), proto.Key(endKey), int64(numRows), resp)
+			call.Args.Header().Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
+			if err := kv.Run(call); err != nil {
 				b.Fatalf("failed scan: %s", err)
 			}
 			if len(resp.Rows) != numRows {

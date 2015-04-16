@@ -162,11 +162,12 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	manual := hlc.NewManualClock(ts[1].WallTime - 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
-	sa := proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0)
+	sr := &proto.ScanResponse{}
+	call := client.ScanCall(proto.Key("a"), proto.Key("c"), 0, sr)
+	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot
-	sr := &proto.ScanResponse{}
-	ds.Send(&client.Call{Args: sa, Reply: sr})
+	ds.Send(call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}
