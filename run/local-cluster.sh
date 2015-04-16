@@ -98,14 +98,12 @@ PORT=8080
 # Start all nodes.
 for i in $(seq 1 $NODES); do
   HOSTS[$i]="$COCKROACH_NAME$i.local"
-
-  CMD="start"
   VOL="/data$i"
 
   # Command args specify two data directories per instance to simulate two physical devices.
-  CMD_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT"
+  START_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT"
   # Log (almost) everything.
-  #CMD_ARGS="${CMD_ARGS} -v 7"
+  #START_ARGS="${START_ARGS} -v 7"
   # Node-specific arguments for node container.
   NODE_ARGS="--hostname=${HOSTS[$i]} --name=${HOSTS[$i]} --dns=$DNS_IP"
 
@@ -119,7 +117,7 @@ for i in $(seq 1 $NODES); do
 
   # Start Cockroach docker container and corral HTTP port and docker
   # IP address for container-local DNS.
-  CIDS[$i]=$(docker run $STD_ARGS $NODE_ARGS $COCKROACH_IMAGE $CMD $CMD_ARGS)
+  CIDS[$i]=$(docker run $STD_ARGS $NODE_ARGS $COCKROACH_IMAGE start $START_ARGS)
   PORTS[$i]=$(echo $(docker port ${CIDS[$i]} 8080) | sed 's/.*://')
   IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' ${CIDS[$i]})
   IP_HOST[$i]="$IP ${HOSTS[$i]}"

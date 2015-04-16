@@ -54,7 +54,7 @@ func SendQuit(ctx *Context) error {
 		return util.Errorf("admin REST request failed: %s", err)
 	}
 
-	fmt.Printf("node drain and shutdown: %s\n", string(b))
+	fmt.Printf("node drained and shutdown: %s", string(b))
 
 	return nil
 }

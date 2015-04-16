@@ -47,11 +47,12 @@ type Closer interface {
 // be added to the stopper via AddCloser(), to be closed after the
 // stopper has stopped.
 type Stopper struct {
-	stopper  chan struct{}
-	draining int32 // Uses atomic operations instead of mu.
-	drain    sync.WaitGroup
-	stop     sync.WaitGroup
-	mu       sync.Mutex // Protects the slice of Closers
+	stopper  chan struct{}  // Closed when stopping
+	stopped  chan struct{}  // Closed when stopped completely
+	draining int32          // Uses atomic operations instead of mu.
+	drain    sync.WaitGroup // Incremented for outstanding tasks
+	stop     sync.WaitGroup // Incremented for outstanding workers
+	mu       sync.Mutex     // Protects the slice of Closers
 	closers  []Closer
 }
 
@@ -59,6 +60,7 @@ type Stopper struct {
 func NewStopper() *Stopper {
 	return &Stopper{
 		stopper: make(chan struct{}),
+		stopped: make(chan struct{}),
 	}
 }
 
@@ -120,6 +122,7 @@ func (s *Stopper) Stop() {
 	for _, c := range s.closers {
 		c.Close()
 	}
+	close(s.stopped)
 }
 
 // ShouldStop returns a channel which will be closed when Stop() has
@@ -130,6 +133,16 @@ func (s *Stopper) ShouldStop() <-chan struct{} {
 		return nil
 	}
 	return s.stopper
+}
+
+// IsStopped returns a channel which will be closed after Stop() has
+// been invoked to full completion, meaning all workers have completed
+// and all closers have been closed.
+func (s *Stopper) IsStopped() <-chan struct{} {
+	if s == nil {
+		return nil
+	}
+	return s.stopped
 }
 
 // SetStopped should be called after the ShouldStop() channel has

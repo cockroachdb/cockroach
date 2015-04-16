@@ -155,18 +155,16 @@ func runStart(cmd *commander.Command, args []string) {
 	// TODO(spencer): move this behind a build tag.
 	signal.Notify(signalCh, syscall.SIGTERM)
 
-	// Block until one of the signals above is received.
-	gracefulShutdownCh := make(chan struct{})
+	// Block until one of the signals above is received or the stopper
+	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case <-stopper.ShouldStop():
 		stopper.SetStopped()
-		close(gracefulShutdownCh)
 	case <-signalCh:
 		log.Infof("initiating graceful shutdown of server")
 		stopper.SetStopped()
 		go func() {
 			s.Stop()
-			close(gracefulShutdownCh)
 		}()
 	}
 
@@ -176,7 +174,7 @@ func runStart(cmd *commander.Command, args []string) {
 	case <-time.After(time.Minute):
 		log.Warningf("time limit reached, initiating hard shutdown")
 		return
-	case <-gracefulShutdownCh:
+	case <-stopper.IsStopped():
 		log.Infof("server drained and shutdown completed")
 	}
 }

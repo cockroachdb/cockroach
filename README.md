@@ -146,8 +146,8 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
 
 ```bash
-$ docker run -p 8080:8080 -d -v /cr-data cockroachdb/cockroach init /cr-data
-$ docker run -p 8080:8080 -d -v /cr-data cockroachdb/cockroach start -bootstrap -stores ssd=/cr-data
+$ docker run -p 8080:8080 -v /data cockroachdb/cockroach init /data
+$ docker run -p 8080:8080 -d --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach start -stores ssd=/data
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.

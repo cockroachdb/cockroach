@@ -93,7 +93,7 @@ func ExampleBasic() {
 	// inc c b
 	// invalid increment: b: strconv.ParseInt: parsing "b": invalid syntax
 	// quit
-	// node drain and shutdown: ok
+	// node drained and shutdown: ok
 }
 
 func ExampleSplitMergeRanges() {
@@ -137,5 +137,5 @@ func ExampleSplitMergeRanges() {
 	// "c"	3
 	// "d"	4
 	// quit
-	// node drain and shutdown: ok
+	// node drained and shutdown: ok
 }
