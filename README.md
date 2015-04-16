@@ -57,15 +57,15 @@ $ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
 root@82cb657cdc42:/cockroach#
 ```
 
-Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up a node:
+Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
 
 ```bash
 $ DIR=$(mktemp -d /tmp/dbXXX)
-$ ./cockroach init $DIR"
-$ ./cockroach start -stores ssd="$DIR" &> node.log &
+$ ./cockroach init $DIR
+$ ./cockroach start -stores ssd="$DIR" -gossip :8080 &
 [...]
 ```
-This initializes and starts a single-node cluster in the background, with logs sent to `node.log`.
+This initializes and starts a single-node cluster in the background.
 
 ##### Built-in client
 
@@ -103,8 +103,11 @@ Check out `./cockroach help` to see all available commands.
 
 Cockroach also exposes a REST API. You can use the [REST Explorer at
 localhost:8080](http://localhost:8080/#rest-explorer) or talk directly to it.
+
 Note that if you're using the Docker container, you want to do this in a new shell
-and not inside the container, which does not have cURL installed.
+and not inside the container, which does not have cURL installed. Note also that
+if you're using boot2docker, you don't want to curl `localhost` - find out
+the correct endpoint using `boot2docker ip`.
 
 ```bash
 $ curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
