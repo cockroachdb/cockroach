@@ -66,11 +66,13 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	return db.kvDB.Call(&proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
+	return db.kvDB.Run(&client.Call{
+		Args: &proto.DeleteRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
+			},
 		},
-	}, &proto.DeleteResponse{})
+		Reply: &proto.DeleteResponse{}})
 }
 
 // GetSchema returns the Schema with the given key, or nil if

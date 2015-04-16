@@ -23,6 +23,7 @@ import (
 	"os"
 
 	commander "code.google.com/p/go-commander"
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -54,9 +55,9 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	req := proto.ScanArgs(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
 	resp := &proto.ScanResponse{}
-	if err := kv.Call(req, resp); err != nil {
+	call := client.ScanCall(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000, resp)
+	if err := kv.Run(call); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		os.Exit(1)
 	}
@@ -108,7 +109,7 @@ func runSplitRange(cmd *commander.Command, args []string) {
 		SplitKey: splitKey,
 	}
 	resp := &proto.AdminSplitResponse{}
-	if err := kv.Call(req, resp); err != nil {
+	if err := kv.Run(&client.Call{Args: req, Reply: resp}); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		os.Exit(1)
 	}
@@ -138,7 +139,7 @@ func runMergeRange(cmd *commander.Command, args []string) {
 		},
 	}
 	resp := &proto.AdminMergeResponse{}
-	if err := kv.Call(req, resp); err != nil {
+	if err := kv.Run(&client.Call{Args: req, Reply: resp}); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		os.Exit(1)
 	}

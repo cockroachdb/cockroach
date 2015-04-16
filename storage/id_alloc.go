@@ -104,7 +104,7 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 			return util.RetryBreak, util.Errorf("id allocator exiting as stopper is draining")
 		}
 		idKey := ia.idKey.Load().(proto.Key)
-		if err := ia.db.Call(proto.IncrementArgs(idKey, incr), ir); err != nil {
+		if err := ia.db.Run(client.IncrementCall(idKey, incr, ir)); err != nil {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
 			ia.stopper.FinishTask()
 			return util.RetryContinue, err

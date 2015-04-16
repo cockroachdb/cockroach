@@ -26,19 +26,22 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
-// TestKVEmptyFlush verifies that flushing without preparing any
+// TestKVTransactionEmptyFlush verifies that flushing without preparing any
 // calls is a noop.
-func TestKVEmptyFlush(t *testing.T) {
+func TestKVTransactionEmptyFlush(t *testing.T) {
 	count := 0
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 	}))
-	if err := client.Flush(); err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 count; got %d", count)
-	}
+	client.RunTransaction(nil, func(txn *KV) error {
+		if err := txn.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Errorf("expected 0 count; got %d", count)
+		}
+		return nil
+	})
 }
 
 // TestKVClientCommandID verifies that client command ID is set
@@ -51,15 +54,15 @@ func TestKVClientCommandID(t *testing.T) {
 			t.Errorf("expected client command ID to be initialized")
 		}
 	}))
-	client.Call(testPutReq, &proto.PutResponse{})
+	client.Run(&Call{testPutReq, &proto.PutResponse{}})
 	if count != 1 {
 		t.Errorf("expected test sender to be invoked once; got %d", count)
 	}
 }
 
-// TestKVPrepareAndFlush verifies that Flush sends single prepared
+// TestKVTransactionPrepareAndFlush verifies that Flush sends single prepared
 // call without a batch and more than one prepared calls with a batch.
-func TestKVPrepareAndFlush(t *testing.T) {
+func TestKVTransactionPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
 		count := 0
 		client := NewKV(nil, newTestSender(func(call *Call) {
@@ -67,7 +70,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 			if i == 1 && call.Method() == proto.Batch {
 				t.Error("expected non-batch for a single buffered call")
 			} else if i > 1 {
-				if call.Method() != proto.Batch {
+				if call.Method() != proto.Batch && call.Method() != proto.EndTransaction {
 					t.Error("expected batch for > 1 buffered calls")
 				}
 				if call.Args.Header().CmdID.WallTime == 0 {
@@ -76,15 +79,18 @@ func TestKVPrepareAndFlush(t *testing.T) {
 			}
 		}))
 
-		for j := 0; j < i; j++ {
-			client.Prepare(&Call{testPutReq, &proto.PutResponse{}})
-		}
-		if err := client.Flush(); err != nil {
-			t.Fatal(err)
-		}
-		if count != 1 {
-			t.Errorf("expected test sender to be invoked once; got %d", count)
-		}
+		client.RunTransaction(nil, func(txn *KV) error {
+			for j := 0; j < i; j++ {
+				txn.Prepare(&Call{testPutReq, &proto.PutResponse{}})
+			}
+			if err := txn.Flush(); err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 {
+				t.Errorf("expected test sender to be invoked once; got %d", count)
+			}
+			return nil
+		})
 	}
 }
 
@@ -96,7 +102,7 @@ func TestKVTransactionSender(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {}))
 	client.User = "foo"
 	client.UserPriority = 101
-	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+	if err := client.RunTransaction(nil, func(txn *KV) error {
 		if txn.Sender() != client.Sender() {
 			t.Errorf("expected wrapped sender for txn to equal original sender; %+v != %+v", txn.Sender(), client.Sender())
 		}
@@ -116,8 +122,8 @@ func TestKVTransactionSender(t *testing.T) {
 // transactions returns an error.
 func TestKVNestedTransactions(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {}))
-	client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
-		if err := txn.RunTransaction(&TransactionOptions{}, func(txn *KV) error { return nil }); err == nil {
+	client.RunTransaction(nil, func(txn *KV) error {
+		if err := txn.RunTransaction(nil, func(txn *KV) error { return nil }); err == nil {
 			t.Errorf("expected error starting a nested transaction")
 		}
 		return nil
@@ -137,7 +143,7 @@ func TestKVCommitTransaction(t *testing.T) {
 			t.Errorf("expected commit to be true; got %t", commit)
 		}
 	}))
-	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+	if err := client.RunTransaction(nil, func(txn *KV) error {
 		return nil
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
@@ -155,9 +161,9 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call *Call) {
 		count++
 	}))
-	if err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+	if err := client.RunTransaction(nil, func(txn *KV) error {
 		reply := &proto.EndTransactionResponse{}
-		txn.Call(&proto.EndTransactionRequest{Commit: true}, reply)
+		txn.Run(&Call{&proto.EndTransactionRequest{Commit: true}, reply})
 		if reply.GoError() != nil {
 			t.Fatal(reply.GoError())
 		}
@@ -183,7 +189,7 @@ func TestKVAbortTransaction(t *testing.T) {
 			t.Errorf("expected commit to be false; got %t", commit)
 		}
 	}))
-	err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+	err := client.RunTransaction(nil, func(txn *KV) error {
 		return errors.New("foo")
 	})
 	if err == nil {
@@ -224,9 +230,9 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 				}
 			}
 		}))
-		err := client.RunTransaction(&TransactionOptions{}, func(txn *KV) error {
+		err := client.RunTransaction(nil, func(txn *KV) error {
 			reply := &proto.PutResponse{}
-			return client.Call(testPutReq, reply)
+			return client.Run(&Call{testPutReq, reply})
 		})
 		if test.retry {
 			if count != 2 {

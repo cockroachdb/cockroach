@@ -69,13 +69,15 @@ type Node struct {
 // a new, unique node id.
 func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 	iReply := &proto.IncrementResponse{}
-	if err := db.Call(&proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  engine.KeyNodeIDGenerator,
-			User: storage.UserRoot,
+	if err := db.Run(&client.Call{
+		Args: &proto.IncrementRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  engine.KeyNodeIDGenerator,
+				User: storage.UserRoot,
+			},
+			Increment: 1,
 		},
-		Increment: 1,
-	}, iReply); err != nil {
+		Reply: iReply}); err != nil {
 		return 0, util.Errorf("unable to allocate node ID: %v", err)
 	}
 	return proto.NodeID(iReply.NewValue), nil
@@ -86,13 +88,15 @@ func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 // first ID in a contiguous range is returned on success.
 func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.StoreID, error) {
 	iReply := &proto.IncrementResponse{}
-	if err := db.Call(&proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
-			User: storage.UserRoot,
+	if err := db.Run(&client.Call{
+		Args: &proto.IncrementRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
+				User: storage.UserRoot,
+			},
+			Increment: inc,
 		},
-		Increment: inc,
-	}, iReply); err != nil {
+		Reply: iReply}); err != nil {
 		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %v", inc, nodeID, err)
 	}
 	return proto.StoreID(iReply.NewValue - inc + 1), nil

@@ -138,9 +138,11 @@ func (c *cmd) String() string {
 // readCmd reads a value from the db and stores it in the env.
 func readCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.GetResponse{}
-	if err := db.Call(&proto.GetRequest{
-		RequestHeader: proto.RequestHeader{Key: c.getKey()},
-	}, r); err != nil {
+	if err := db.Run(&client.Call{
+		Args: &proto.GetRequest{
+			RequestHeader: proto.RequestHeader{Key: c.getKey()},
+		},
+		Reply: r}); err != nil {
 		return err
 	}
 	if r.Value != nil {
@@ -152,17 +154,21 @@ func readCmd(c *cmd, db *client.KV, t *testing.T) error {
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(c *cmd, db *client.KV, t *testing.T) error {
-	return db.Call(&proto.DeleteRangeRequest{
-		RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
-	}, &proto.DeleteRangeResponse{})
+	return db.Run(&client.Call{
+		Args: &proto.DeleteRangeRequest{
+			RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
+		},
+		Reply: &proto.DeleteRangeResponse{}})
 }
 
 // scanCmd reads the values from the db from [key, endKey).
 func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.ScanResponse{}
-	if err := db.Call(&proto.ScanRequest{
-		RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
-	}, r); err != nil {
+	if err := db.Run(&client.Call{
+		Args: &proto.ScanRequest{
+			RequestHeader: proto.RequestHeader{Key: c.getKey(), EndKey: c.getEndKey()},
+		},
+		Reply: r}); err != nil {
 		return err
 	}
 	var vals []string
@@ -180,10 +186,12 @@ func scanCmd(c *cmd, db *client.KV, t *testing.T) error {
 // it to the db. If c.key isn't in the db, writes 1.
 func incCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.IncrementResponse{}
-	if err := db.Call(&proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{Key: c.getKey()},
-		Increment:     int64(1),
-	}, r); err != nil {
+	if err := db.Run(&client.Call{
+		Args: &proto.IncrementRequest{
+			RequestHeader: proto.RequestHeader{Key: c.getKey()},
+			Increment:     int64(1),
+		},
+		Reply: r}); err != nil {
 		return err
 	}
 	c.env[c.key] = r.NewValue
@@ -199,10 +207,12 @@ func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
 		sum += v
 	}
 	r := &proto.PutResponse{}
-	err := db.Call(&proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: c.getKey()},
-		Value:         proto.Value{Integer: gogoproto.Int64(sum)},
-	}, r)
+	err := db.Run(&client.Call{
+		Args: &proto.PutRequest{
+			RequestHeader: proto.RequestHeader{Key: c.getKey()},
+			Value:         proto.Value{Integer: gogoproto.Int64(sum)},
+		},
+		Reply: r})
 	c.debug = fmt.Sprintf("[%d ts=%d]", sum, r.Timestamp.Logical)
 	return err
 }
@@ -210,7 +220,7 @@ func sumCmd(c *cmd, db *client.KV, t *testing.T) error {
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, db *client.KV, t *testing.T) error {
 	r := &proto.EndTransactionResponse{}
-	err := db.Call(&proto.EndTransactionRequest{Commit: true}, r)
+	err := db.Run(&client.Call{Args: &proto.EndTransactionRequest{Commit: true}, Reply: r})
 	c.debug = fmt.Sprintf("[ts=%d]", r.Timestamp.Logical)
 	return err
 }

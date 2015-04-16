@@ -68,9 +68,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := util.RandBytes(src, 10)
 					val := util.RandBytes(src, int(src.Int31n(valBytes)))
-					req := &proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}}
-					resp := &proto.PutResponse{}
-					if err := txn.Call(req, resp); err != nil {
+					if err := txn.Run(client.PutCall(key, val, nil)); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err
 					}
@@ -118,7 +116,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		log.Infof("starting split at key %q...", splitKey)
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := s.KV.Call(req, resp); err != nil {
+		if err := s.KV.Run(&client.Call{Args: req, Reply: resp}); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
@@ -164,7 +162,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
 		resp := &proto.ScanResponse{}
-		if err := s.KV.Call(proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+		if err := s.KV.Run(client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0, resp)); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		return len(resp.Rows) >= 5

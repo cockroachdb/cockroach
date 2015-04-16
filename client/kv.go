@@ -93,90 +93,40 @@ func (kv *KV) Sender() KVSender {
 	}
 }
 
-// Call invokes the KV command synchronously and returns the response
-// and error, if applicable. If preceeding calls have been made to
-// Prepare() without a call to Flush(), this call is prepared and
-// then all prepared calls are flushed.
-func (kv *KV) Call(args proto.Request, reply proto.Response) error {
-	return kv.Run(&Call{Args: args, Reply: reply})
-}
-
-// Run runs the specified calls in a single batch.
-//
-// TODO(pmattis): Flesh out this description.
-func (kv *KV) Run(calls ...*Call) error {
+// Run runs the specified calls synchronously in a single batch and
+// returns any errors.
+func (kv *KV) Run(calls ...*Call) (err error) {
 	if len(kv.prepared) > 0 {
 		panic(fmt.Errorf("prepared is not empty: %d", len(kv.prepared)))
 	}
 	if len(calls) == 0 {
 		return nil
 	}
-	if len(kv.prepared) > 0 || len(calls) > 1 {
-		for _, c := range calls {
-			kv.Prepare(c)
+
+	if len(calls) == 1 {
+		c := calls[0]
+		if c.Args.Header().User == "" {
+			c.Args.Header().User = kv.User
 		}
-		return kv.Flush()
-	}
-	c := calls[0]
-	if c.Args.Header().User == "" {
-		c.Args.Header().User = kv.User
-	}
-	if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
-		c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
-	}
-	c.resetClientCmdID(kv.clock)
-	kv.sender.Send(c)
-	err := c.Reply.Header().GoError()
-	if err != nil {
-		log.Infof("failed %s: %s", c.Method, err)
-	}
-	return err
-}
-
-// Prepare accepts a KV API call, specified by arguments and a reply
-// struct. The call will be buffered locally until the first call to
-// Flush(), at which time it will be sent for execution as part of a
-// batch call. Using Prepare/Flush parallelizes queries and updates
-// and should be used where possible for efficiency.
-//
-// For clients using an HTTP sender, Prepare/Flush allows multiple
-// commands to be sent over the same connection. For transactional
-// clients, Prepare/Flush can dramatically improve efficiency by
-// compressing multiple writes into a single atomic update in the
-// event that the writes are to keys within a single range. However,
-// using Prepare/Flush alone will not guarantee atomicity. Clients
-// must use a transaction for that purpose.
-//
-// The supplied reply struct will not be valid until after a call
-// to Flush().
-func (kv *KV) Prepare(call *Call) {
-	call.resetClientCmdID(kv.clock)
-	kv.prepared = append(kv.prepared, call)
-}
-
-// Flush sends all previously prepared calls, buffered by invocations
-// of Prepare(). The calls are organized into a single batch command
-// and sent together. Flush returns nil if all prepared calls are
-// executed successfully. Otherwise, Flush returns the first error,
-// where calls are executed in the order in which they were prepared.
-// After Flush returns, all prepared reply structs will be valid.
-func (kv *KV) Flush() (err error) {
-	if len(kv.prepared) == 0 {
-		return
-	} else if len(kv.prepared) == 1 {
-		call := kv.prepared[0]
-		kv.prepared = []*Call{}
-		err = kv.Call(call.Args, call.Reply)
+		if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
+			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
+		}
+		c.resetClientCmdID(kv.clock)
+		kv.sender.Send(c)
+		err = c.Reply.Header().GoError()
+		if err != nil {
+			log.Infof("failed %s: %s", c.Method, err)
+		}
 		return
 	}
-	replies := make([]proto.Response, 0, len(kv.prepared))
+
+	replies := make([]proto.Response, 0, len(calls))
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
-	for _, call := range kv.prepared {
+	for _, call := range calls {
 		bArgs.Add(call.Args)
 		replies = append(replies, call.Reply)
 	}
-	kv.prepared = []*Call{}
-	err = kv.Call(bArgs, bReply)
+	err = kv.Run(&Call{bArgs, bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -199,6 +149,50 @@ func (kv *KV) Flush() (err error) {
 	return
 }
 
+// Prepare accepts a KV API call, specified by arguments and a reply
+// struct. The call will be buffered locally until the first call to
+// Flush(), at which time it will be sent for execution as part of a
+// batch call. Using Prepare/Flush parallelizes queries and updates
+// and should be used where possible for efficiency.
+//
+// For clients using an HTTP sender, Prepare/Flush allows multiple
+// commands to be sent over the same connection. For transactional
+// clients, Prepare/Flush can dramatically improve efficiency by
+// compressing multiple writes into a single atomic update in the
+// event that the writes are to keys within a single range. However,
+// using Prepare/Flush alone will not guarantee atomicity. Clients
+// must use a transaction for that purpose.
+//
+// The supplied reply struct will not be valid until after a call
+// to Flush().
+func (kv *KV) Prepare(calls ...*Call) {
+	if _, ok := kv.sender.(*txnSender); !ok {
+		panic(fmt.Errorf("cannot prepare on non-transaction"))
+	}
+	for _, c := range calls {
+		c.resetClientCmdID(kv.clock)
+	}
+	kv.prepared = append(kv.prepared, calls...)
+}
+
+// Flush sends all previously prepared calls, buffered by invocations
+// of Prepare(). The calls are organized into a single batch command
+// and sent together. Flush returns nil if all prepared calls are
+// executed successfully. Otherwise, Flush returns the first error,
+// where calls are executed in the order in which they were prepared.
+// After Flush returns, all prepared reply structs will be valid.
+func (kv *KV) Flush() error {
+	if _, ok := kv.sender.(*txnSender); !ok {
+		panic(fmt.Errorf("cannot flush on non-transaction"))
+	}
+	if len(kv.prepared) == 0 {
+		return nil
+	}
+	calls := kv.prepared
+	kv.prepared = nil
+	return kv.Run(calls...)
+}
+
 // RunTransaction executes retryable in the context of a distributed
 // transaction. The transaction is automatically aborted if retryable
 // returns any error aside from recoverable internal errors, and is
@@ -214,6 +208,9 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	}
 
 	// Create a new KV for the transaction using a transactional KV sender.
+	if opts == nil {
+		opts = &defaultTxnOpts
+	}
 	txnSender := newTxnSender(kv.Sender(), opts)
 	txnKV := &KV{}
 	*txnKV = *kv
@@ -251,7 +248,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 	}); err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
-		txnKV.Call(etArgs, etReply)
+		txnKV.Run(&Call{etArgs, etReply})
 		if etReply.Header().GoError() != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
 		}
@@ -296,10 +293,11 @@ func (kv *KV) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timest
 
 // getInternal fetches the requested key and returns the value.
 func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
-	reply := &proto.GetResponse{}
-	if err := kv.Call(&proto.GetRequest{
+	req := &proto.GetRequest{
 		RequestHeader: proto.RequestHeader{Key: key},
-	}, reply); err != nil {
+	}
+	reply := &proto.GetResponse{}
+	if err := kv.Run(&Call{req, reply}); err != nil {
 		return nil, err
 	}
 	if reply.Value != nil {
@@ -326,8 +324,9 @@ func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
 // putInternal writes the specified value to key.
 func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 	value.InitChecksum(key)
-	return kv.Call(&proto.PutRequest{
+	req := &proto.PutRequest{
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
-	}, &proto.PutResponse{})
+	}
+	return kv.Run(&Call{req, &proto.PutResponse{}})
 }

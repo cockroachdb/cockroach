@@ -275,13 +275,14 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
-	if err := s.node.db.Call(
-		&proto.AdminSplitRequest{
+	if err := s.node.db.Run(&client.Call{
+		Args: &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("m"),
 			},
 			SplitKey: proto.Key("m"),
-		}, &proto.AdminSplitResponse{}); err != nil {
+		},
+		Reply: &proto.AdminSplitResponse{}}); err != nil {
 		t.Fatal(err)
 	}
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
@@ -388,13 +389,14 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
 		for _, sk := range tc.splitKeys {
-			if err := s.node.db.Call(
-				&proto.AdminSplitRequest{
+			if err := s.node.db.Run(&client.Call{
+				Args: &proto.AdminSplitRequest{
 					RequestHeader: proto.RequestHeader{
 						Key: sk,
 					},
 					SplitKey: sk,
-				}, &proto.AdminSplitResponse{}); err != nil {
+				},
+				Reply: &proto.AdminSplitResponse{}}); err != nil {
 				t.Fatal(err)
 			}
 		}

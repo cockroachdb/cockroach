@@ -33,6 +33,8 @@ type txnSender struct {
 	txn     *proto.Transaction
 }
 
+var defaultTxnOpts = TransactionOptions{}
+
 // newTxnSender returns a new instance of txnSender which wraps a
 // KVSender and uses the supplied transaction options.
 func newTxnSender(wrapped KVSender, opts *TransactionOptions) *txnSender {

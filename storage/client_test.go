@@ -409,16 +409,21 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	for i, test := range testCases {
 		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
 		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
+		var calls []*client.Call
 		if test.split {
-			if err := storage.SplitRangeAddressing(store.DB(), left, right); err != nil {
+			var err error
+			if calls, err = storage.SplitRangeAddressing(left, right); err != nil {
 				t.Fatal(err)
 			}
 		} else {
-			if err := storage.MergeRangeAddressing(store.DB(), left, right); err != nil {
+			var err error
+			if calls, err = storage.MergeRangeAddressing(left, right); err != nil {
 				t.Fatal(err)
 			}
 		}
-		store.DB().Flush()
+		if err := store.DB().Run(calls...); err != nil {
+			t.Fatal(err)
+		}
 		// Scan meta keys directly from engine.
 		kvs, err := engine.MVCCScan(store.Engine(), engine.KeyMetaPrefix, engine.KeyMetaMax, 0, proto.MaxTimestamp, true, nil)
 		if err != nil {
@@ -489,11 +494,9 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	store, stopper := createTestStore(t)
-	defer stopper.Stop()
 	left := &proto.RangeDescriptor{StartKey: engine.KeyMin, EndKey: meta1Key(proto.Key("a"))}
 	right := &proto.RangeDescriptor{StartKey: meta1Key(proto.Key("a")), EndKey: engine.KeyMax}
-	if err := storage.SplitRangeAddressing(store.DB(), left, right); err == nil {
+	if _, err := storage.SplitRangeAddressing(left, right); err == nil {
 		t.Error("expected failure trying to update addressing records for meta1 split")
 	}
 }
