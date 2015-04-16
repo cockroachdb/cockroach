@@ -206,6 +206,21 @@ func TestEqual(t *testing.T) {
 	}
 }
 
+func TestTimestampNext(t *testing.T) {
+	testCases := []struct {
+		ts, expNext Timestamp
+	}{
+		{makeTS(1, 2), makeTS(1, 3)},
+		{makeTS(1, math.MaxInt32-1), makeTS(1, math.MaxInt32)},
+		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
+	}
+	for i, c := range testCases {
+		if next := c.ts.Next(); !next.Equal(c.expNext) {
+			t.Errorf("%d: expected %s; got %s", i, c.expNext, next)
+		}
+	}
+}
+
 func TestTimestampPrev(t *testing.T) {
 	testCases := []struct {
 		ts, expPrev Timestamp

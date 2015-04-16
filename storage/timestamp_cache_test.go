@@ -126,6 +126,67 @@ func TestTimestampCacheEviction(t *testing.T) {
 	}
 }
 
+func TestTimestampCacheMergeInto(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+
+	testCases := []struct {
+		useCopy bool
+		expLen  int
+	}{
+		{true, 3},
+		{false, 5},
+	}
+	for _, test := range testCases {
+		tc1 := NewTimestampCache(clock)
+		tc2 := NewTimestampCache(clock)
+
+		bfTS := clock.Now()
+		tc2.Add(proto.Key("b"), proto.Key("f"), bfTS, proto.NoTxnMD5, true)
+
+		adTS := clock.Now()
+		tc1.Add(proto.Key("a"), proto.Key("d"), adTS, proto.NoTxnMD5, true)
+
+		beTS := clock.Now()
+		tc1.Add(proto.Key("b"), proto.Key("e"), beTS, proto.NoTxnMD5, true)
+
+		aaTS := clock.Now()
+		tc2.Add(proto.Key("aa"), nil, aaTS, proto.NoTxnMD5, true)
+
+		cTS := clock.Now()
+		tc1.Add(proto.Key("c"), nil, cTS, proto.NoTxnMD5, true)
+
+		tc1.MergeInto(tc2, test.useCopy)
+
+		if tc2.cache.Len() != test.expLen {
+			t.Errorf("expected merged length of %d; got %d", test.expLen, tc2.cache.Len())
+		}
+		if !tc2.latest.Equal(tc1.latest) {
+			t.Errorf("expected latest to be updated to %s; got %s", tc1.latest, tc2.latest)
+		}
+
+		if rTS, _ := tc2.GetMax(proto.Key("a"), nil, proto.NoTxnMD5); !rTS.Equal(adTS) {
+			t.Error("expected \"a\" to have adTS timestamp")
+		}
+		if rTS, _ := tc2.GetMax(proto.Key("b"), nil, proto.NoTxnMD5); !rTS.Equal(beTS) {
+			t.Error("expected \"b\" to have beTS timestamp")
+		}
+		if test.useCopy {
+			if rTS, _ := tc2.GetMax(proto.Key("aa"), nil, proto.NoTxnMD5); !rTS.Equal(adTS) {
+				t.Error("expected \"aa\" to have adTS timestamp")
+			}
+		} else {
+			if rTS, _ := tc2.GetMax(proto.Key("aa"), nil, proto.NoTxnMD5); !rTS.Equal(aaTS) {
+				t.Error("expected \"aa\" to have aaTS timestamp")
+			}
+			if rTS, _ := tc2.GetMax(proto.Key("a"), proto.Key("c"), proto.NoTxnMD5); !rTS.Equal(aaTS) {
+				t.Error("expected \"a\"-\"c\" to have aaTS timestamp")
+			}
+		}
+	}
+}
+
 // TestTimestampCacheLayeredIntervals verifies the maximum timestamp
 // is chosen if previous entries have ranges which are layered over
 // each other.

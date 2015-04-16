@@ -789,26 +789,26 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
-// on the same store.
-func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
+// on the same store. Returns the subsumed range.
+func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) (*Range, error) {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
-		return util.Errorf("the new end key is not greater than the current one: %+v < %+v",
+		return nil, util.Errorf("the new end key is not greater than the current one: %+v < %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
 	subsumedRng, err := s.GetRange(subsumedRaftID)
 	if err != nil {
-		return util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
+		return nil, util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
 	}
 
 	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
-		return util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
+		return nil, util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
 			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
 	}
 
 	// Remove and destroy the subsumed range.
 	if err = s.RemoveRange(subsumedRng); err != nil {
-		return util.Errorf("cannot remove range %s", err)
+		return nil, util.Errorf("cannot remove range %s", err)
 	}
 
 	// TODO(bram): The removed range needs to have all of its metadata removed.
@@ -818,7 +818,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	copy.EndKey = updatedEndKey
 	subsumingRng.SetDesc(&copy)
 
-	return nil
+	return subsumedRng, nil
 }
 
 // AddRange adds the range to the store's range map and to the sorted
