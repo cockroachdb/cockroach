@@ -26,15 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 
 func createTestClient(addr string) *client.KV {
-	transport := &http.Transport{TLSClientConfig: rpc.LoadInsecureTLSConfig().Config()}
-	return client.NewKV(nil, client.NewHTTPSender(addr, transport))
+	return client.NewKV(nil, client.CreateTestHTTPSender(addr))
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -261,7 +259,7 @@ func TestKVDBContentType(t *testing.T) {
 			t.Fatalf("%d: %s", i, err)
 		}
 		// Send a Put request but with non-canonical capitalization.
-		httpReq, err := http.NewRequest("POST", "http://"+addr+kv.DBPrefix+"Put", bytes.NewReader(body))
+		httpReq, err := http.NewRequest("POST", "https://"+addr+kv.DBPrefix+"Put", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
@@ -269,7 +267,7 @@ func TestKVDBContentType(t *testing.T) {
 		if test.accept != "" {
 			httpReq.Header.Add(util.AcceptHeader, test.accept)
 		}
-		resp, err := http.DefaultClient.Do(httpReq)
+		resp, err := httpDoReq(httpReq)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}

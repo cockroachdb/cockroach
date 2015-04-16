@@ -229,13 +229,13 @@ func ExampleZoneContentTypes() {
 		}
 		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, zonePathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
-		if _, err = sendAdminRequest(req); err != nil {
+		if _, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
 
 		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, zonePathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
-		if body, err = sendAdminRequest(req); err != nil {
+		if body, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
 		fmt.Println(string(body))

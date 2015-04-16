@@ -27,6 +27,8 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/client"
 )
 
 var (
@@ -68,7 +70,7 @@ func newTestDB() *testDB {
 }
 
 func startServer(t *testing.T) {
-	server := httptest.NewServer(NewRESTServer(newTestDB()))
+	server := httptest.NewTLSServer(NewRESTServer(newTestDB()))
 	serverAddr = server.Listener.Addr().String()
 }
 
@@ -100,12 +102,12 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
 	}
 	for _, tc := range testCases {
-		addr := "http://" + serverAddr + tc.path
+		addr := "https://" + serverAddr + tc.path
 		req, err := http.NewRequest(tc.method, addr, tc.body)
 		if err != nil {
 			t.Fatalf("[%s] %s: error creating request: %v", tc.method, tc.path, err)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.CreateTestHTTPClient().Do(req)
 		if err != nil {
 			t.Fatalf("[%s] %s: error requesting %s: %s", tc.method, tc.path, addr, err)
 		}

@@ -22,13 +22,18 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 // sendAdminRequest send an HTTP request and processes the response for
 // its body or error message if a non-200 response code.
-func sendAdminRequest(req *http.Request) ([]byte, error) {
-	resp, err := http.DefaultClient.Do(req)
+func sendAdminRequest(ctx *Context, req *http.Request) ([]byte, error) {
+	client, err := client.NewHTTPClient(ctx.Certs)
+	if err != nil {
+		return nil, util.Errorf("failed to initialized http client: %s", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, util.Errorf("admin REST request failed: %s", err)
 	}
@@ -49,7 +54,7 @@ func SendQuit(ctx *Context) error {
 	if err != nil {
 		return util.Errorf("unable to create request to admin REST endpoint: %s", err)
 	}
-	b, err := sendAdminRequest(req)
+	b, err := sendAdminRequest(ctx, req)
 	if err != nil {
 		return util.Errorf("admin REST request failed: %s", err)
 	}

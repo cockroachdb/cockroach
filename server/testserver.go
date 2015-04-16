@@ -18,6 +18,8 @@
 package server
 
 import (
+	"os"
+	"path"
 	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
@@ -82,6 +84,11 @@ func (ts *TestServer) Start() error {
 	// have been launched for the purpose of this test.
 	if ts.Addr == "" {
 		ts.Addr = "127.0.0.1:0"
+	}
+	if ts.CertDir == "" {
+		// Always load server certs. Not sure if this path is a good assumption though,
+		// something relative might be best.
+		ts.CertDir = path.Join(os.ExpandEnv("$GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
 	}
 
 	ctx := NewContext()

@@ -59,7 +59,7 @@ func startServer(t *testing.T) (string, *client.KV, *util.Stopper) {
 	mux := http.NewServeMux()
 	mux.Handle(RESTPrefix, NewRESTServer(db))
 	mux.Handle(DBPrefix, NewDBServer(db.Sender()))
-	server := httptest.NewServer(mux)
+	server := httptest.NewTLSServer(mux)
 	stopper.AddCloser(server)
 	addr := server.Listener.Addr().String()
 	return addr, db, stopper
@@ -158,7 +158,7 @@ func TestRange(t *testing.T) {
 	defer stopper.Stop()
 
 	// Create range of keys (with counters interspersed).
-	baseURL := "http://" + addr
+	baseURL := "https://" + addr
 	for i := 0; i < 100; i++ {
 		key := fmt.Sprintf("key_%.2d", i)
 		val := fmt.Sprintf("value_%.2d", i)
@@ -428,7 +428,7 @@ func TestSystemKeys(t *testing.T) {
 	// Manipulate the meta1 key.
 	metaKey := engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax)
 	encMeta1Key := url.QueryEscape(string(metaKey))
-	url := "http://" + addr + EntryPrefix + encMeta1Key
+	url := "https://" + addr + EntryPrefix + encMeta1Key
 	resp := getURL(url, t)
 	var pr protoResp
 	if err := json.Unmarshal([]byte(resp), &pr); err != nil {
@@ -455,7 +455,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 
 	encKey := "%00some%2Fkey%20that%20encodes%E4%B8%96%E7%95%8C"
 	encBody := "%00some%2FBODY%20that%20encodes"
-	url := "http://" + addr + EntryPrefix + encKey
+	url := "https://" + addr + EntryPrefix + encKey
 	postURL(url, strings.NewReader(encBody), t)
 	resp := getURL(url, t)
 	var pr protoResp
@@ -481,8 +481,11 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 }
 
 func postURL(url string, body io.Reader, t *testing.T) {
-	resp, err := http.Post(url, "text/plain", body)
-	defer resp.Body.Close()
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := httpDoReq(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,12 +495,11 @@ func postURL(url string, body io.Reader, t *testing.T) {
 }
 
 func getURL(url string, t *testing.T) string {
-	resp, err := http.Get(url)
-	defer resp.Body.Close()
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	resp, err := httpDoReq(req)
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -509,11 +511,15 @@ func getURL(url string, t *testing.T) string {
 }
 
 func httpDo(addr, method, path string, body io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, "http://"+addr+path, body)
+	req, err := http.NewRequest(method, "https://"+addr+path, body)
 	if err != nil {
 		return nil, err
 	}
-	return http.DefaultClient.Do(req)
+	return httpDoReq(req)
+}
+
+func httpDoReq(req *http.Request) (*http.Response, error) {
+	return client.CreateTestHTTPClient().Do(req)
 }
 
 // statusText appends a new line because go's default http error writer adds a new line.

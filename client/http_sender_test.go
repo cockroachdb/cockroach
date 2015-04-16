@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -38,15 +37,9 @@ var (
 )
 
 func startTestHTTPServer(handler http.Handler) (*httptest.Server, string) {
-	server := httptest.NewServer(handler)
+	server := httptest.NewTLSServer(handler)
 	addr := server.Listener.Addr().String()
 	return server, addr
-}
-
-func createTestHTTPSender(addr string) *HTTPSender {
-	return NewHTTPSender(addr, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
 }
 
 // TestHTTPSenderSend verifies sending posts.
@@ -79,7 +72,7 @@ func TestHTTPSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := createTestHTTPSender(addr)
+	sender := CreateTestHTTPSender(addr)
 	reply := &proto.PutResponse{}
 	sender.Send(Call{Args: testPutReq, Reply: reply})
 	if reply.GoError() != nil {
@@ -131,7 +124,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			w.Write(body)
 		}))
 
-		sender := createTestHTTPSender(addr)
+		sender := CreateTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
 		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if test.retry {
@@ -189,7 +182,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		}))
 
 		s = server
-		sender := createTestHTTPSender(addr)
+		sender := CreateTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
 		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if reply.GoError() != nil {

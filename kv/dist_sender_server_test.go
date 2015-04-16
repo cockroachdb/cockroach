@@ -18,14 +18,12 @@
 package kv_test
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -47,10 +45,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stop()
-	sender := client.NewHTTPSender(s.Addr, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
-	db := client.NewKV(nil, sender)
+	db := createTestClient(s.Addr)
 	db.User = storage.UserRoot
 
 	// Create an intent on the meta1 record by writing directly to the
@@ -94,10 +89,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	sender := client.NewHTTPSender(s.Addr, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
-	db := client.NewKV(nil, sender)
+	db := createTestClient(s.Addr)
 	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -47,7 +48,7 @@ func startTestServer(t *testing.T) *TestServer {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on http: %s", s.Addr)
+	log.Infof("Test server listening on https: %s", s.Addr)
 	return s
 }
 
@@ -186,8 +187,8 @@ func TestSelfBootstrap(t *testing.T) {
 func TestHealth(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	url := "http://" + s.Addr + healthPath
-	resp, err := http.Get(url)
+	url := "https://" + s.Addr + healthPath
+	resp, err := client.CreateTestHTTPClient().Get(url)
 	if err != nil {
 		t.Fatalf("error requesting health at %s: %s", url, err)
 	}
@@ -208,8 +209,11 @@ func TestHealth(t *testing.T) {
 func TestAcceptEncoding(t *testing.T) {
 	s := startTestServer(t)
 	defer s.Stop()
-	client := http.Client{
+	// We can't use the standard test client. Create our own.
+	tlsConfig := rpc.LoadInsecureClientTLSConfig().Config()
+	client := &http.Client{
 		Transport: &http.Transport{
+			TLSClientConfig:    tlsConfig,
 			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
 		},
@@ -240,7 +244,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", "http://"+s.Addr+healthPath, nil)
+		req, err := http.NewRequest("GET", "https://"+s.Addr+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}

@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -33,7 +32,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -48,7 +46,7 @@ func StartTestServer(t *testing.T) *server.TestServer {
 	if err := s.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on http: %s", s.Addr)
+	log.Infof("Test server listening on https: %s", s.Addr)
 	return s
 }
 
@@ -85,12 +83,11 @@ func newNotifyingSender(wrapped client.KVSender) *notifyingSender {
 	}
 }
 
-// createTestClient creates a new KV client which connects using
+// createTestNotifyClient creates a new KV client which connects using
 // an HTTP sender to the server at addr.
-func createTestClient(addr string) *client.KV {
-	sender := newNotifyingSender(client.NewHTTPSender(addr, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	}))
+// It contains a waitgroup to allow waiting.
+func createTestNotifyClient(addr string) *client.KV {
+	sender := newNotifyingSender(client.CreateTestHTTPSender(addr))
 	return client.NewKV(nil, sender)
 }
 
@@ -107,7 +104,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 		Constant:    2,
 		MaxAttempts: 2,
 	})
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	testCases := []struct {
@@ -222,7 +219,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 func TestKVClientRunTransaction(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.TxnRetryOptions.Backoff = 1 * time.Millisecond
 	kvClient.User = storage.UserRoot
 
@@ -288,7 +285,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 func TestKVClientGetAndPutProto(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	zoneConfig := &proto.ZoneConfig{
@@ -327,7 +324,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 func TestKVClientGetAndPut(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	key := proto.Key("key")
@@ -357,7 +354,7 @@ func TestKVClientGetAndPut(t *testing.T) {
 func TestKVClientEmptyValues(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	kvClient.Run(client.PutCall(proto.Key("a"), []byte{}))
@@ -392,7 +389,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 func TestKVClientBatch(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	keys := []proto.Key{}
@@ -457,9 +454,10 @@ func ExampleKV_Run1() {
 	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serverAddress, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
+	sender, err := client.NewHTTPSender(serverAddress, "")
+	if err != nil {
+		log.Fatal(err)
+	}
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -502,9 +500,10 @@ func ExampleKV_RunMultiple() {
 	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serverAddress, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
+	sender, err := client.NewHTTPSender(serverAddress, "")
+	if err != nil {
+		log.Fatal(err)
+	}
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -571,9 +570,10 @@ func ExampleKV_RunTransaction() {
 	serverAddress := serv.Addr
 
 	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serverAddress, &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
-	})
+	sender, err := client.NewHTTPSender(serverAddress, "")
+	if err != nil {
+		log.Fatal(err)
+	}
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -715,7 +715,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 func TestConcurrentIncrements(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	kvClient := createTestClient(s.Addr)
+	kvClient := createTestNotifyClient(s.Addr)
 	kvClient.User = storage.UserRoot
 
 	// Convenience loop: Crank up this number for testing this
@@ -745,7 +745,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 		b.Fatalf("Could not start server: %v", err)
 	}
 
-	kv := createTestClient(s.Addr)
+	kv := createTestNotifyClient(s.Addr)
 	kv.User = storage.UserRoot
 
 	if exists {
