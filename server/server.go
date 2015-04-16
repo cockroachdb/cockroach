@@ -53,7 +53,6 @@ var (
 type Server struct {
 	ctx *Context
 
-	host           string
 	mux            *http.ServeMux
 	clock          *hlc.Clock
 	rpc            *rpc.Server
@@ -94,7 +93,6 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 
 	s := &Server{
 		ctx:     ctx,
-		host:    strings.Split(addr, ":")[0],
 		mux:     http.NewServeMux(),
 		clock:   hlc.NewClock(hlc.UnixNano),
 		stopper: stopper,
