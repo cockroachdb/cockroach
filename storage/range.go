@@ -184,7 +184,7 @@ type Range struct {
 	// Last index persisted to the raft log (not necessarily committed).
 	// Updated atomically.
 	lastIndex uint64
-	// Last index applied to the state machine.
+	// Last index applied to the state machine. Updated atomically.
 	appliedIndex uint64
 	lease        unsafe.Pointer // Information for leader lease
 	stopper      *util.Stopper
@@ -214,10 +214,11 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		return nil, err
 	}
 
-	r.appliedIndex, err = loadAppliedIndex(r.rm.Engine(), desc.RaftID)
+	appliedIndex, err := loadAppliedIndex(r.rm.Engine(), desc.RaftID)
 	if err != nil {
 		return nil, err
 	}
+	atomic.StoreUint64(&r.appliedIndex, appliedIndex)
 
 	if r.stats, err = newRangeStats(desc.RaftID, rm.Engine()); err != nil {
 		return nil, err
@@ -847,10 +848,10 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	if err := reply.Header().GoError(); err == nil {
 		// If we are applying a raft command, update the applied index.
 		if index > 0 {
-			if r.appliedIndex >= index {
-				log.Fatalf("applied index moved backwards: %d >= %d", r.appliedIndex, index)
+			if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
+				log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
 			}
-			r.appliedIndex = index
+			atomic.StoreUint64(&r.appliedIndex, index)
 			err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
 				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
 			if err != nil {
@@ -875,7 +876,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 		}
 	} else {
 		if index > 0 {
-			r.appliedIndex = index
+			atomic.StoreUint64(&r.appliedIndex, index)
 			// On failure, abandon the batch we've built up, but still update the
 			// applied index so we won't retry this command on restart.
 			if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
@@ -1915,7 +1916,7 @@ func (r *Range) ApplySnapshot(snap raftpb.Snapshot) error {
 
 	// Save the descriptor and applied index to our member variables.
 	r.SetDesc(&desc)
-	r.appliedIndex = snap.Metadata.Index
+	atomic.StoreUint64(&r.appliedIndex, snap.Metadata.Index)
 
 	// TODO(bdarnell): extract the real last index.
 	// snap.Metadata.Index is the last applied index, but our snapshot may have given us
