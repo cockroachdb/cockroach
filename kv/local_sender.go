@@ -97,72 +97,49 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.
 func (ls *LocalSender) Send(call *client.Call) {
-	// Instant retry with max two attempts to handle the case of a
-	// range split, which is exposed here as a RangeKeyMismatchError.
-	// If we fail with two in a row, pass the error up to caller and
-	// let the remote client requery range metadata.
-	retryOpts := util.RetryOptions{
-		Tag:         fmt.Sprintf("routing %s locally", call.Method),
-		MaxAttempts: 2,
-	}
-	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		call.Reply.Header().Error = nil
-		var err error
-		var store *storage.Store
+	call.Reply.Header().Error = nil
+	var err error
+	var store *storage.Store
 
-		// If we aren't given a Replica, then a little bending over
-		// backwards here. This case applies exclusively to unittests.
-		header := call.Args.Header()
-		if header.RaftID == 0 || header.Replica.StoreID == 0 {
-			var repl *proto.Replica
-			var raftID int64
-			raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
-			if err == nil {
-				header.RaftID = raftID
-				header.Replica = *repl
-			}
-		}
+	// If we aren't given a Replica, then a little bending over
+	// backwards here. This case applies exclusively to unittests.
+	header := call.Args.Header()
+	if header.RaftID == 0 || header.Replica.StoreID == 0 {
+		var repl *proto.Replica
+		var raftID int64
+		raftID, repl, err = ls.lookupReplica(header.Key, header.EndKey)
 		if err == nil {
-			store, err = ls.GetStore(header.Replica.StoreID)
+			header.RaftID = raftID
+			header.Replica = *repl
 		}
-		if err != nil {
-			call.Reply.Header().SetGoError(err)
-		} else {
-			if header := call.Args.Header(); header.Txn != nil {
-				// For calls that read data, we can avoid uncertainty related
-				// retries in certain situations.
-				// If the node is in "CertainNodes", we need not worry about
-				// uncertain reads any more. Setting MaxTimestamp=Timestamp
-				// for the operation accomplishes that.
-				// See proto.Transaction.CertainNodes for details.
-				if header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
-					// Make sure that when this retryable function returns,
-					// MaxTimestamp is restored. On retries, there is no
-					// guarantee that the request gets routed to the same node
-					// as the replica may have moved.
-					defer func(ts proto.Timestamp) {
-						header.Txn.MaxTimestamp = ts
-					}(header.Txn.MaxTimestamp)
-					// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-					header.Txn.MaxTimestamp = header.Txn.Timestamp
-				}
-			}
-
-			if err = store.ExecuteCmd(call.Method, call.Args, call.Reply); err != nil {
-				// Check for range key mismatch error (this could happen if
-				// range was split between lookup and execution). In this case,
-				// reset header.Replica and engage retry loop.
-				call.Reply.Header().SetGoError(err)
-				switch err.(type) {
-				case *proto.RangeKeyMismatchError:
-					// Clear request replica & response error.
-					header.Replica = proto.Replica{}
-					return util.RetryContinue, nil
-				}
+	}
+	if err == nil {
+		store, err = ls.GetStore(header.Replica.StoreID)
+	}
+	if err != nil {
+		call.Reply.Header().SetGoError(err)
+	} else {
+		if header := call.Args.Header(); header.Txn != nil {
+			// For calls that read data, we can avoid uncertainty related
+			// retries in certain situations.
+			// If the node is in "CertainNodes", we need not worry about
+			// uncertain reads any more. Setting MaxTimestamp=Timestamp
+			// for the operation accomplishes that.
+			// See proto.Transaction.CertainNodes for details.
+			if header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
+				// Make sure that when this retryable function returns,
+				// MaxTimestamp is restored. On retries, there is no
+				// guarantee that the request gets routed to the same node
+				// as the replica may have moved.
+				defer func(ts proto.Timestamp) {
+					header.Txn.MaxTimestamp = ts
+				}(header.Txn.MaxTimestamp)
+				// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+				header.Txn.MaxTimestamp = header.Txn.Timestamp
 			}
 		}
-		return util.RetryBreak, nil
-	})
+		store.ExecuteCmd(call.Method, call.Args, call.Reply)
+	}
 }
 
 // lookupReplica looks up replica by key [range]. Lookups are done

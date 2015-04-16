@@ -19,6 +19,7 @@ package kv
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -35,18 +36,50 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
+// retryableLocalSender provides a retry option in the event of
+// range splits.
+type retryableLocalSender struct {
+	*LocalSender
+}
+
+// Send implements the client.Sender interface.
+func (rls *retryableLocalSender) Send(call *client.Call) {
+	// Instant retry with max two attempts to handle the case of a
+	// range split, which is exposed here as a RangeKeyMismatchError.
+	// If we fail with two in a row, pass the error up to caller and
+	// let the remote client requery range metadata.
+	retryOpts := util.RetryOptions{
+		Tag:         fmt.Sprintf("routing %s locally", call.Method),
+		MaxAttempts: 2,
+	}
+	util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+		rls.LocalSender.Send(call)
+		// Check for range key mismatch error (this could happen if
+		// range was split between lookup and execution). In this case,
+		// reset header.Replica and engage retry loop.
+		if err := call.Reply.Header().GoError(); err != nil {
+			if _, ok := err.(*proto.RangeKeyMismatchError); ok {
+				// Clear request replica & response error.
+				call.Args.Header().Replica = proto.Replica{}
+				return util.RetryContinue, nil
+			}
+		}
+		return util.RetryBreak, nil
+	})
+}
+
 // createTestDB creates a *client.KV using a LocalSender object built
 // with a store using an in-memory engine. Returns the created kv
 // client and associated clock's manual time.
 // TODO(spencer): return a struct.
 func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
-	manual *hlc.ManualClock, lSender *LocalSender, stopper *util.Stopper, err error) {
+	manual *hlc.ManualClock, lSender *retryableLocalSender, stopper *util.Stopper, err error) {
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	g := gossip.New(rpcContext, 250*time.Millisecond, gossip.TestBootstrap)
 	manual = hlc.NewManualClock(0)
 	clock = hlc.NewClock(manual.UnixNano)
 	eng = engine.NewInMem(proto.Attributes{}, 50<<20)
-	lSender = NewLocalSender()
+	lSender = &retryableLocalSender{NewLocalSender()}
 	stopper = util.NewStopper()
 	sender := NewTxnCoordSender(lSender, clock, false, stopper)
 	db = client.NewKV(nil, sender)
