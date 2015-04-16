@@ -146,6 +146,28 @@ func (tc *TimestampCache) GetMax(start, end proto.Key, txnMD5 [md5.Size]byte) (p
 	return maxR, maxW
 }
 
+// MergeInto merges all entries from this timestamp cache into the
+// dest timestamp cache. The clear parameter, if true, copies the
+// values of lowWater and latest and clears the destination cache
+// before merging in the source.
+func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
+	if clear {
+		dest.cache.Clear()
+		dest.lowWater = tc.lowWater
+		dest.latest = tc.latest
+	} else {
+		if dest.lowWater.Less(tc.lowWater) {
+			dest.lowWater = tc.lowWater
+		}
+		if dest.latest.Less(tc.latest) {
+			tc.latest = dest.latest
+		}
+	}
+	tc.cache.Do(func(k, v interface{}) {
+		dest.cache.Add(k, v)
+	})
+}
+
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the minCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {

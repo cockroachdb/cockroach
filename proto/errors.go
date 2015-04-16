@@ -155,7 +155,7 @@ func (e *WriteIntentError) Error() string {
 
 // Error formats error.
 func (e *WriteTooOldError) Error() string {
-	return fmt.Sprintf("write too old: timestamp %s < %s", e.Timestamp, e.ExistingTimestamp)
+	return fmt.Sprintf("write too old: timestamp %s <= %s", e.Timestamp, e.ExistingTimestamp)
 }
 
 // Error formats error.

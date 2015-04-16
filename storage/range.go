@@ -160,7 +160,7 @@ type RangeManager interface {
 	// Range manipulation methods.
 	AddRange(rng *Range) error
 	LookupRange(start, end proto.Key) *Range
-	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error
+	MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) (*Range, error)
 	NewRangeDescriptor(start, end proto.Key, replicas []proto.Replica) (*proto.RangeDescriptor, error)
 	NewSnapshot() engine.Engine
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
@@ -542,25 +542,24 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
 		r.Unlock()
 
-		// If there's a newer write timestamp and we're in a txn, set a
-		// write too old error in reply. We still go ahead and try the
-		// write; afterall, the cause of the higher timestamp may be an
-		// intent we can push.
-		if !wTS.Less(header.Timestamp) && header.Txn != nil {
-			err := &proto.WriteTooOldError{Timestamp: header.Timestamp, ExistingTimestamp: wTS}
-			reply.Header().SetGoError(err)
-		} else if !wTS.Less(header.Timestamp) || !rTS.Less(header.Timestamp) {
-			// Otherwise, make sure we advance the request's timestamp.
-			ts := wTS
-			if ts.Less(rTS) {
-				ts = rTS
+		// Always push the timestamp forward if there's been a read which
+		// occurred after our txn timestamp.
+		if !rTS.Less(header.Timestamp) {
+			header.Timestamp = rTS.Next()
+		}
+		// If there's a newer write timestamp...
+		if !wTS.Less(header.Timestamp) {
+			// If we're in a txn, set a write too old error in reply. We
+			// still go ahead and try the write because we want to avoid
+			// restarting the transaction in the event that there isn't an
+			// intent or the intent can be pushed by us.
+			if header.Txn != nil {
+				err := &proto.WriteTooOldError{Timestamp: header.Timestamp, ExistingTimestamp: wTS}
+				reply.Header().SetGoError(err)
+			} else {
+				// Otherwise, make sure we advance the request's timestamp.
+				header.Timestamp = wTS.Next()
 			}
-			if log.V(1) {
-				log.Infof("Overriding existing timestamp %s with %s", header.Timestamp, ts)
-			}
-			ts.Logical++ // increment logical component by one to differentiate.
-			// Update the request timestamp.
-			header.Timestamp = ts
 		}
 	}
 
@@ -1554,6 +1553,11 @@ func (r *Range) splitTrigger(batch engine.Engine, split *proto.SplitTrigger) err
 	}
 	newRng.stats.SetMVCCStats(batch, ms)
 
+	// Copy the timestamp cache into the new range.
+	r.Lock()
+	r.tsCache.MergeInto(newRng.tsCache, true /* clear */)
+	r.Unlock()
+
 	return r.rm.SplitRange(r, newRng)
 }
 
@@ -1588,7 +1592,14 @@ func (r *Range) mergeTrigger(batch engine.Engine, merge *proto.MergeTrigger) err
 	}
 	r.stats.SetMVCCStats(batch, ms)
 
-	return r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+	subsumedRng, err := r.rm.MergeRange(r, merge.UpdatedDesc.EndKey, merge.SubsumedRaftID)
+	if err == nil {
+		// Merge the timestamp caches from both ranges.
+		r.Lock()
+		subsumedRng.tsCache.MergeInto(r.tsCache, false /* clear */)
+		r.Unlock()
+	}
+	return err
 }
 
 func (r *Range) changeReplicasTrigger(change *proto.ChangeReplicasTrigger) error {

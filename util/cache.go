@@ -22,6 +22,7 @@ package util
 import (
 	"container/list"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/biogo/store/interval"
 	"github.com/biogo/store/llrb"
@@ -338,20 +339,32 @@ func (oc *OrderedCache) Do(f func(k, v interface{})) {
 // IntervalCache is not safe for concurrent access.
 type IntervalCache struct {
 	*baseCache
-	tree  *interval.Tree
-	alloc int64
+	tree *interval.Tree
 }
 
+// IntervalKey provides uniqueness as well as key interval.
 type IntervalKey struct {
 	id         uintptr
 	start, end interval.Comparable
 }
 
+var intervalAlloc int64
+
 // Implementation of the interval.Range & interval.Mutable interfaces.
-func (ik *IntervalKey) Start() interval.Comparable     { return ik.start }
-func (ik *IntervalKey) End() interval.Comparable       { return ik.end }
+
+// Start .
+func (ik *IntervalKey) Start() interval.Comparable { return ik.start }
+
+// End .
+func (ik *IntervalKey) End() interval.Comparable { return ik.end }
+
+// SetStart .
 func (ik *IntervalKey) SetStart(c interval.Comparable) { ik.start = c }
-func (ik *IntervalKey) SetEnd(c interval.Comparable)   { ik.end = c }
+
+// SetEnd .
+func (ik *IntervalKey) SetEnd(c interval.Comparable) { ik.end = c }
+
+// Overlap .
 func (ik *IntervalKey) Overlap(r interval.Range) bool {
 	return ik.end.Compare(r.Start()) > 0 && ik.start.Compare(r.End()) < 0
 }
@@ -382,8 +395,7 @@ func (ic *IntervalCache) NewKey(start, end interval.Comparable) *IntervalKey {
 	if start.Compare(end) > 0 {
 		panic(fmt.Sprintf("start key greater than end key %s > %s", start, end))
 	}
-	ic.alloc++
-	return &IntervalKey{id: uintptr(ic.alloc), start: start, end: end}
+	return &IntervalKey{id: uintptr(atomic.AddInt64(&intervalAlloc, 1)), start: start, end: end}
 }
 
 // Implementation of cacheStore interface.
@@ -411,7 +423,6 @@ func (ic *IntervalCache) clear() {
 		ic.Del(e.(*entry).key.(*IntervalKey))
 		return
 	})
-	ic.alloc = 0
 }
 func (ic *IntervalCache) length() int {
 	return ic.tree.Len()
@@ -435,4 +446,12 @@ func (ic *IntervalCache) GetOverlaps(start, end interval.Comparable) []Overlap {
 		values[i].Value = e.value
 	}
 	return values
+}
+
+// Do invokes f on all of the entries in the cache.
+func (ic *IntervalCache) Do(f func(k, v interface{})) {
+	ic.tree.Do(func(e interval.Interface) (done bool) {
+		f(e.(*entry).key, e.(*entry).value)
+		return
+	})
 }
