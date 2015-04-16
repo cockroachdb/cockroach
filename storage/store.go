@@ -1234,7 +1234,7 @@ func (s *Store) AppliedIndex(groupID uint64) (uint64, error) {
 	if !ok {
 		return 0, util.Errorf("range %d not found", groupID)
 	}
-	return r.appliedIndex, nil
+	return atomic.LoadUint64(&r.appliedIndex), nil
 }
 
 func raftEntryFormatter(data []byte) string {
