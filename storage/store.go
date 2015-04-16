@@ -581,9 +581,17 @@ func (s *Store) Bootstrap(ident proto.StoreIdent, stopper *util.Stopper) error {
 	s.Ident = ident
 	kvs, err := engine.Scan(s.engine, proto.EncodedKey(engine.KeyMin), proto.EncodedKey(engine.KeyMax), 1)
 	if err != nil {
-		return util.Errorf("unable to scan engine to verify empty: %s", err)
+		return util.Errorf("store %s: unable to access: %s", s.engine, err)
 	} else if len(kvs) > 0 {
-		return util.Errorf("non-empty engine %s (first key: %q)", s.engine, kvs[0].Key)
+		// See if this is an already-bootstrapped store.
+		ok, err := engine.MVCCGetProto(s.engine, engine.StoreIdentKey(), proto.ZeroTimestamp, true, nil, &s.Ident)
+		if err != nil {
+			return util.Errorf("store %s is non-empty but cluster ID could not be determined: %s", s.engine, err)
+		}
+		if ok {
+			return util.Errorf("store %s already belongs to cockroach cluster %s", s.engine, s.Ident.ClusterID)
+		}
+		return util.Errorf("store %s is not-empty and has invalid contents (first key: %q)", s.engine, kvs[0].Key)
 	}
 	err = engine.MVCCPutProto(s.engine, nil, engine.StoreIdentKey(), proto.ZeroTimestamp, nil, &s.Ident)
 	return err

@@ -66,9 +66,10 @@ Output build version information.
 var allCmds = &commander.Commander{
 	Name: "cockroach",
 	Commands: []*commander.Command{
-		// Initialization commands.
+		// Node commands.
 		initCmd,
 		startCmd,
+		exterminateCmd,
 		quitCmd,
 
 		// Key/value commands.

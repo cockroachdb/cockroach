@@ -29,9 +29,9 @@ import (
 func initFlags(ctx *server.Context) {
 	// Server flags.
 	flag.StringVar(&ctx.Addr, "addr", ctx.Addr, "when run as the server the host:port to bind for "+
-		"HTTP/RPC traffic; when run as the client the address for connection to the cockroach cluster")
+		"HTTP/RPC traffic; when run as the client the address for connection to the cockroach cluster.")
 
-	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs")
+	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs.")
 
 	flag.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+
 		"specified by a colon-separated list of device attributes followed by '=' and "+
@@ -39,7 +39,7 @@ func initFlags(ctx *server.Context) {
 		"in-memory store. Device attributes typically include whether the store is "+
 		"flash (ssd), spinny disk (hdd), fusion-io (fio), in-memory (mem); device "+
 		"attributes might also include speeds and other specs (7200rpm, 200kiops, etc.). "+
-		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824")
+		"For example, -store=hdd:7200rpm=/mnt/hda1,ssd=/mnt/ssd01,ssd=/mnt/ssd02,mem=1073741824.")
 
 	flag.StringVar(&ctx.Attrs, "attrs", ctx.Attrs, "specify an ordered, colon-separated list of node "+
 		"attributes. Attributes are arbitrary strings specifying topography or "+
@@ -52,22 +52,19 @@ func initFlags(ctx *server.Context) {
 		"specified first and in the same order for all nodes. "+
 		"For example: -attrs=us-west-1b,gpu.")
 
-	flag.DurationVar(&ctx.MaxOffset, "max_offset", ctx.MaxOffset, "specify "+
+	flag.DurationVar(&ctx.MaxOffset, "max-offset", ctx.MaxOffset, "specify "+
 		"the maximum clock offset for the cluster. Clock offset is measured on all "+
 		"node-to-node links and if any node notices it has clock offset in excess "+
-		"of -max_offset, it will commit suicide. Setting this value too high may "+
+		"of -max-offset, it will commit suicide. Setting this value too high may "+
 		"decrease transaction performance in the presence of contention.")
-
-	flag.BoolVar(&ctx.InitAndStart, "init_and_start", ctx.InitAndStart, "specify "+
-		"to start the server after bootstrapping with the init command.")
 
 	// Gossip flags.
 
 	flag.StringVar(&ctx.GossipBootstrap, "gossip", ctx.GossipBootstrap,
-		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap")
+		"addresses (comma-separated host:port pairs) of node addresses for gossip bootstrap.")
 
-	flag.DurationVar(&ctx.GossipInterval, "gossip_interval", ctx.GossipInterval,
-		"approximate interval (time.Duration) for gossiping new information to peers")
+	flag.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
+		"approximate interval (time.Duration) for gossiping new information to peers.")
 
 	// KV flags.
 
@@ -77,8 +74,8 @@ func initFlags(ctx *server.Context) {
 
 	// Engine flags.
 
-	flag.Int64Var(&ctx.CacheSize, "cache_size", ctx.CacheSize, "total size in bytes for "+
-		"caches, shared evenly if there are multiple storage devices")
+	flag.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, "total size in bytes for "+
+		"caches, shared evenly if there are multiple storage devices.")
 }
 
 func init() {

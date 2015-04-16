@@ -250,6 +250,7 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *ut
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
 			if _, ok := err.(*storage.NotBootstrappedError); ok {
+				log.Infof("store %s not bootstrapped", s)
 				bootstraps.PushBack(s)
 				continue
 			}

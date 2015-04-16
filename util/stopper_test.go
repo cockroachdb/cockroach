@@ -48,6 +48,50 @@ func TestStopper(t *testing.T) {
 	close(waiting)
 }
 
+type blockingCloser struct {
+	block chan struct{}
+}
+
+func newBlockingCloser() *blockingCloser {
+	return &blockingCloser{block: make(chan struct{})}
+}
+
+func (bc *blockingCloser) Unblock() {
+	close(bc.block)
+}
+
+func (bc *blockingCloser) Close() {
+	<-bc.block
+}
+
+func TestStopperIsStopped(t *testing.T) {
+	s := NewStopper()
+	s.AddWorker()
+	bc := newBlockingCloser()
+	s.AddCloser(bc)
+	go s.Stop()
+
+	select {
+	case <-s.ShouldStop():
+		s.SetStopped()
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stopper should have finished waiting")
+	}
+	select {
+	case <-s.IsStopped():
+		t.Fatal("expected blocked closer to prevent stop")
+	case <-time.After(1 * time.Millisecond):
+		// Expected.
+	}
+	bc.Unblock()
+	select {
+	case <-s.IsStopped():
+		// Expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("stopper should have finished stopping")
+	}
+}
+
 func TestStopperMultipleStopees(t *testing.T) {
 	const count = 3
 	s := NewStopper()
