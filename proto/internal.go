@@ -59,6 +59,8 @@ const (
 	InternalMerge = "InternalMerge"
 	// InternalTruncateLog discards a prefix of the raft log.
 	InternalTruncateLog = "InternalTruncateLog"
+	// InternalLeaderLease requests a leader lease for a replica.
+	InternalLeaderLease = "InternalLeaderLease"
 )
 
 // ToValue generates a Value message which contains an encoded copy of this

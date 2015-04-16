@@ -1137,6 +1137,34 @@ func (s *Store) processRaft() {
 						log.Fatal(err)
 					}
 
+				case *multiraft.EventLeaderElection:
+					if e.NodeID == 0 {
+						// Election in progress.
+						continue
+					}
+					// Only the store housing the election winner gets to
+					// proceed.
+					groupID = int64(e.GroupID)
+					r, err := s.GetRange(groupID)
+					if err != nil {
+						log.Warning(err)
+						continue
+					}
+					if e.NodeID != s.RaftNodeID() {
+						// TODO(tschottdorf): Fatalf if we think we have a leader
+						// lease for that group, during which we're not supposed to
+						// get a message like that.
+						// if r.HaveLeaderLease() {
+						//   log.Fatalf("have leader lease, but other node requests it")
+						// }
+						continue
+					}
+
+					r.requestLeaderLease(e.Term)
+
+					// Done with this event, go back to listening on the channel.
+					continue
+
 				default:
 					continue
 				}

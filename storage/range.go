@@ -89,8 +89,9 @@ var TestingCommandFilter func(string, proto.Request, proto.Response) bool
 // discarded prefix to the log, so we must begin the log at an arbitrary
 // index greater than 1.
 const (
-	raftInitialLogIndex = 10
-	raftInitialLogTerm  = 5
+	raftInitialLogIndex        = 10
+	raftInitialLogTerm         = 5
+	defaultLeaderLeaseDuration = time.Second
 )
 
 // configDescriptor describes administrative configuration maps
@@ -185,6 +186,8 @@ type Range struct {
 	lastIndex uint64
 	// Last index applied to the state machine.
 	appliedIndex uint64
+	lease        unsafe.Pointer // Information for leader lease
+	stopper      *util.Stopper
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -232,6 +235,7 @@ func (r *Range) String() string {
 // range in the map and gossips config information if the range
 // contains any of the configuration maps.
 func (r *Range) start(stopper *util.Stopper) {
+	r.stopper = stopper
 	// TODO(spencer): gossiping should only commence when the range gains
 	// the leader lease and it should stop when the range no longer holds
 	// the leader lease.
@@ -240,7 +244,7 @@ func (r *Range) start(stopper *util.Stopper) {
 	r.maybeGossipConfigs(configDescriptors...)
 	// Only start gossiping if this range is the first range.
 	if r.IsFirstRange() {
-		r.startGossip(stopper)
+		r.startGossip()
 	}
 }
 
@@ -275,6 +279,14 @@ func (r *Range) IsFirstRange() bool {
 // TODO(spencer): this is always true for now.
 func (r *Range) IsLeader() bool {
 	return true
+}
+
+func (r *Range) setLease(l *proto.Lease) {
+	atomic.StorePointer(&r.lease, unsafe.Pointer(l))
+}
+
+func (r *Range) getLease() *proto.Lease {
+	return (*proto.Lease)(atomic.LoadPointer(&r.lease))
 }
 
 // canServiceCmd returns an error in the event that the range replica
@@ -647,15 +659,15 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 
 // startGossip periodically gossips the cluster ID if it's the
 // first range and the raft leader.
-func (r *Range) startGossip(stopper *util.Stopper) {
-	stopper.RunWorker(func() {
+func (r *Range) startGossip() {
+	r.stopper.RunWorker(func() {
 		ticker := time.NewTicker(ttlClusterIDGossip / 2)
 		for {
 			select {
 			case <-ticker.C:
 				r.maybeGossipClusterID()
 				r.maybeGossipFirstRange()
-			case <-stopper.ShouldStop():
+			case <-r.stopper.ShouldStop():
 				return
 			}
 		}
@@ -825,6 +837,8 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
 	case proto.InternalTruncateLog:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
+	case proto.InternalLeaderLease:
+		r.InternalLeaderLease(args.(*proto.InternalLeaderLeaseRequest), reply.(*proto.InternalLeaderLeaseResponse))
 	default:
 		return util.Errorf("unrecognized command %s", method)
 	}
@@ -1418,6 +1432,55 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 	err = engine.MVCCPutProto(batch, ms, engine.RaftTruncatedStateKey(r.Desc().RaftID),
 		proto.ZeroTimestamp, nil, &ts)
 	reply.SetGoError(err)
+}
+
+// InternalLeaderLease evaluates and responds to a request to grant a leader lease.
+func (r *Range) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
+	// TODO(tschottdorf)
+	// r.grantLeaderLease(args.Lease)
+}
+
+// requestLeaderLease sends a request to obtain or extend a leader lease for this
+// replica.
+func (r *Range) requestLeaderLease(term uint64) {
+	// Prepare a Raft command to get a leader lease for the replica
+	// of that group that lives in our store.
+	wallTime := r.rm.Clock().PhysicalNow()
+	// TODO: get this from configuration, either as a config flag
+	// or, later, dynamically adjusted.
+	duration := int64(defaultLeaderLeaseDuration)
+	idKey := makeCmdIDKey(proto.ClientCmdID{
+		WallTime: wallTime,
+		Random:   rand.Int63(),
+	})
+	cmd := proto.InternalRaftCommand{
+		RaftID: r.Desc().RaftID,
+	}
+	args := &proto.InternalLeaderLeaseRequest{
+		Lease: proto.Lease{
+			Expiration: wallTime + duration,
+			Duration:   duration,
+			Term:       term,
+			RaftNodeID: uint64(r.rm.RaftNodeID()),
+		},
+	}
+
+	cmd.Cmd.SetValue(args)
+
+	// Propose the Raft command.
+	errCh := r.rm.ProposeRaftCommand(idKey, cmd)
+
+	// Make sure we log a potential error from Raft.
+	r.stopper.RunWorker(func() {
+		select {
+		case err := <-errCh:
+			if err != nil {
+				log.Warning(err)
+			}
+		case <-r.stopper.ShouldStop():
+			return
+		}
+	})
 }
 
 // splitTrigger is called on a successful commit of an AdminSplit
