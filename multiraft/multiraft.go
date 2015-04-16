@@ -401,9 +401,9 @@ type state struct {
 	writeTask     *writeTask
 	stopper       *util.Stopper
 
-	// cmdBuffer is a scratch buffer to use for inspecting
-	// Raft commands.
+	// cmdBuffer is a scratch to use for inspecting Raft commands.
 	cmdBuffer proto.InternalRaftCommand
+	clock     func() int64 // local node's unix nanosecond walltime
 }
 
 func newState(m *MultiRaft) *state {
@@ -412,6 +412,9 @@ func newState(m *MultiRaft) *state {
 		groups:    make(map[uint64]*group),
 		nodes:     make(map[NodeID]*node),
 		writeTask: newWriteTask(m.Storage),
+		clock: func() int64 {
+			return time.Now().UnixNano()
+		},
 	}
 }
 
@@ -472,6 +475,18 @@ func (s *state) start(stopper *util.Stopper) {
 							log.Warningf("Error creating group %d: %s", req.GroupID, err)
 							break
 						}
+					}
+
+					// If this node has granted a leader lease, it should not
+					// be able to receive votes. We already block outgoing
+					// vote requests, but since nodes vote for themselves
+					// at the Raft level, only here do we make sure that
+					// the leader lease cannot be violated.
+					if req.Message.Type == raftpb.MsgVoteResp &&
+						s.groups[req.GroupID].leaseGrantedUntil > s.clock() {
+						log.V(6).Infof("node %v has granted a leader lease; dropping incoming %s from %v",
+							s.nodeID, req.Message.Type, req.Message.From)
+						continue
 					}
 
 					if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
@@ -763,6 +778,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 				if entry.Data != nil {
 					var command []byte
 					commandID, command = decodeCommand(entry.Data)
+					// If there's a lease in this command, committing is
+					// tantamount to granting the lease.
 					s.processLease(groupID, command)
 					s.sendEvent(&EventCommandCommitted{
 						GroupID:   groupID,
@@ -857,12 +874,17 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 					continue
 				}
 				noMoreHeartbeats[msg.To] = struct{}{}
+			case raftpb.MsgVote:
+				fallthrough
 			case raftpb.MsgVoteResp:
 				// If we've granted a leader lease, make sure we don't vote for
-				// anybody.
-				if g.leaseGrantedUntil > time.Now().UnixNano() {
-					log.V(7).Infof("node %v has active leader lease; dropping vote to %v",
-						s.nodeID, msg.To)
+				// anybody. Note that a raft instance votes for itself
+				// automatically, so we drop incoming MsgVoteResp elsewhere as
+				// well to compensate for that.
+				if g.leaseGrantedUntil > s.clock() {
+					log.V(6).Infof("node %v has granted a leader lease; dropping outgoing %s to %v",
+						s.nodeID, msg.Type, msg.To)
+					continue
 				}
 			}
 
@@ -897,14 +919,37 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 // This causes local representant of the group to have its outgoing votes
 // dropped for the duration specified in the request.
 //
+// The mechanism for leader leases is unfortunately somewhat involved.
+// Leases are initiated on the range level by proposing a command to Raft
+// that contains the prospective lease holder's local expiration timestamp
+// and a duration (which is used by recipients of that message to construct
+// their local timestamps).
+// For this to work reliably, it is vital that the lease expires first at
+// the lease holder, and only begins when the lease command commits.
+// While a lease is active, the node may not elect a new leader, and this
+// is implemented in MultiRaft by dropping voting-related messages.
+// However, the amount of abstraction between Raft, MultiRaft and the Range
+// makes it cumbersome to find out where a command originated from.
+// For that reason, here we simply use the local clock plus the expiration
+// from the lease message before letting the client know the lease has been
+// committed to figure out the duration for which we won't participate in
+// elections. Since the grantee will only believe it has the lease once it
+// learns that the command committed, and since the range is taking its local
+// walltime strictly before we even see the command here, that only adds an
+// unecessary extra period of time in which nodes don't vote but does not
+// impact correctness.
+//
 // TODO(tschottdorf) having to unmarshal every single command just for leader
 // leases is horrible. Should do this in a way that's closer to MultiRaft.
+// @bdarnell suggested adding a third parameter to the command encoding
+// that gives away the content (something like the protobuf tag ID, though
+// that's not readily accessible from the generated proto Go code).
 func (s *state) processLease(groupID uint64, command []byte) {
 	err := gogoproto.Unmarshal(command, &s.cmdBuffer)
 	if err != nil {
 		return
 	}
 	if req := s.cmdBuffer.Cmd.GetInternalLease(); req != nil {
-		s.groups[groupID].leaseGrantedUntil = time.Now().UnixNano() + req.Lease.Duration
+		s.groups[groupID].leaseGrantedUntil = s.clock() + req.Lease.Duration
 	}
 }
