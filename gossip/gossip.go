@@ -91,7 +91,7 @@ const (
 
 var (
 	// TestBootstrap is the default gossip bootstrap used for running tests.
-	TestBootstrap = []net.Addr{}
+	TestBootstrap = []*Resolver{}
 )
 
 // Gossip is an instance of a gossip node. It embeds a gossip server.
@@ -112,23 +112,23 @@ type Gossip struct {
 	disconnected chan *client       // Channel of disconnected clients
 	stalled      chan struct{}      // Channel to wakeup stalled bootstrap
 
-	// gossipBootstrap is a list of node addresses that act as
+	// resolvers is a list of resolvers used to determine
 	// bootstrap hosts for connecting to the gossip network.
-	gossipBootstrap []net.Addr
+	resolvers []*Resolver
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, gossipInterval time.Duration, gossipBootstrap []net.Addr) *Gossip {
+func New(rpcContext *rpc.Context, gossipInterval time.Duration, resolvers []*Resolver) *Gossip {
 	g := &Gossip{
-		Connected:       make(chan struct{}),
-		RPCContext:      rpcContext,
-		server:          newServer(gossipInterval),
-		bootstraps:      newAddrSet(MaxPeers),
-		outgoing:        newAddrSet(MaxPeers),
-		clients:         map[string]*client{},
-		disconnected:    make(chan *client, MaxPeers),
-		stalled:         make(chan struct{}, 10),
-		gossipBootstrap: gossipBootstrap,
+		Connected:    make(chan struct{}),
+		RPCContext:   rpcContext,
+		server:       newServer(gossipInterval),
+		bootstraps:   newAddrSet(MaxPeers),
+		outgoing:     newAddrSet(MaxPeers),
+		clients:      map[string]*client{},
+		disconnected: make(chan *client, MaxPeers),
+		stalled:      make(chan struct{}, 10),
+		resolvers:    resolvers,
 	}
 	return g
 }
@@ -150,12 +150,12 @@ func (g *Gossip) SetNodeID(id proto.NodeID) {
 	g.nodeID = id
 }
 
-// SetBootstrap initializes the set of gossip node addresses used to
-// bootstrap the gossip network.
-func (g *Gossip) SetBootstrap(bootstraps []net.Addr) {
+// SetResolvers initializes the set of gossip resolvers used to
+// find nodes to bootstrap the gossip network.
+func (g *Gossip) SetResolvers(resolvers []*Resolver) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.gossipBootstrap = bootstraps
+	g.resolvers = resolvers
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -295,18 +295,19 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 // addresses are added to the bootstraps addrSet, except for the local
 // node, which is removed, if listed as a bootstrap host.
 func (g *Gossip) initializeBootstrapAddresses() {
-	if len(g.gossipBootstrap) == 0 {
-		log.Fatalf("no hosts specified for gossip network (use -gossip)")
+	if len(g.resolvers) == 0 {
+		log.Fatalf("no resolvers specified for gossip network (use -gossip)")
 	}
 	g.haveUnused = false
-	for _, addr := range g.gossipBootstrap {
-		if addr.Network() == "tcp" {
-			_, err := net.ResolveTCPAddr("tcp", addr.String())
-			if err != nil {
-				log.Errorf("invalid gossip bootstrap address %s: %s", addr, err)
-				g.haveUnused = true
-				continue
-			}
+	for _, resolver := range g.resolvers {
+		addr, err := resolver.GetAddress()
+		// Always set "haveUnused" from the resolver.
+		if !resolver.IsExhausted {
+			g.haveUnused = true
+		}
+		if err != nil {
+			log.Errorf("invalid bootstrap address: %+v, %v", resolver, err)
+			continue
 		}
 		g.bootstraps.addAddr(addr)
 	}

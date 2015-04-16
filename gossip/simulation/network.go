@@ -71,16 +71,18 @@ func NewNetwork(nodeCount int, networkType string,
 		}
 		addrs[i] = servers[i].Addr()
 	}
-	var bootstrap []net.Addr
-	if nodeCount < 3 {
-		bootstrap = addrs
-	} else {
-		bootstrap = addrs[:3]
-	}
-
 	stopper := util.NewStopper()
 	nodes := make([]*Node, nodeCount)
 	for i := 0; i < nodeCount; i++ {
+		// Build new resolvers for each instance or we'll get data races.
+		var bootstrap []*gossip.Resolver
+		for i, addr := range addrs {
+			if i >= 3 {
+				break
+			}
+			bootstrap = append(bootstrap, gossip.NewResolverFromAddress(addr))
+		}
+
 		node := gossip.New(rpcContext, gossipInterval, bootstrap)
 		node.SetNodeID(proto.NodeID(i))
 		node.Start(servers[i], stopper)
