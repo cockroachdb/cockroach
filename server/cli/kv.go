@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 
 	commander "code.google.com/p/go-commander"
 )
@@ -43,7 +44,8 @@ func makeKVClient() *client.KV {
 	transport := &http.Transport{
 		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
 	}
-	kv := client.NewKV(nil, client.NewHTTPSender(Context.Addr, transport))
+	kv := client.NewKV(nil, client.NewHTTPSender(
+		util.EnsureHost(Context.Addr), transport))
 	// TODO(pmattis): Initialize this to something more reasonable
 	kv.User = "root"
 	return kv

@@ -32,10 +32,11 @@ import (
 
 // Context defaults.
 const (
-	defaultAddr           = ":8080"
-	defaultMaxOffset      = 250 * time.Millisecond
-	defaultGossipInterval = 2 * time.Second
-	defaultCacheSize      = 1 << 30 // GB
+	defaultAddr            = ":8080"
+	defaultMaxOffset       = 250 * time.Millisecond
+	defaultGossipInterval  = 2 * time.Second
+	defaultGossipBootstrap = ":8080"
+	defaultCacheSize       = 1 << 30 // GB
 )
 
 // Context holds parameters needed to setup a server.
@@ -110,6 +111,8 @@ func NewContext() *Context {
 		MaxOffset: defaultMaxOffset,
 
 		GossipInterval: defaultGossipInterval,
+
+		GossipBootstrap: defaultGossipBootstrap,
 
 		CacheSize: defaultCacheSize,
 	}
@@ -187,6 +190,7 @@ func parseGossipBootstrapAddrs(gossipBootstrap string) []net.Addr {
 		if len(addr) == 0 {
 			continue
 		}
+		addr = util.EnsureHost(addr)
 		bootstrapAddrs = append(bootstrapAddrs, util.MakeRawAddr("tcp", addr))
 	}
 	return bootstrapAddrs
