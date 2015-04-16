@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ package engine
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -44,10 +45,15 @@ func StoreIdentKey() proto.Key {
 	return MakeStoreKey(KeyLocalStoreIdentSuffix, proto.Key{})
 }
 
-// StoreStatKey returns the key for accessing the named stat
-// for the specified store ID.
-func StoreStatKey(storeID int32, stat proto.Key) proto.Key {
+// StoreStatKey returns the key for accessing the named stat.
+func StoreStatKey(stat proto.Key) proto.Key {
 	return MakeStoreKey(KeyLocalStoreStatSuffix, stat)
+}
+
+// StoreStatusKey returns the key for accessing the store status for the
+// specified store ID.
+func StoreStatusKey(storeID int32) proto.Key {
+	return MakeKey(KeyStatusStorePrefix, proto.Key(strconv.FormatInt(int64(storeID), 10)))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
@@ -445,4 +451,9 @@ var (
 	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, proto.Key("store-idgen-"))
 	// KeyRangeTreeRoot specifies the root range in the range tree.
 	KeyRangeTreeRoot = MakeKey(KeySystemPrefix, proto.Key("range-tree-root"))
+
+	// KeyStatusPrefix specifies the key prefix to store all status details.
+	KeyStatusPrefix = MakeKey(KeySystemPrefix, proto.Key("status-"))
+	// KeyStatusStorePrefix stores all status info for stores.
+	KeyStatusStorePrefix = MakeKey(KeyStatusPrefix, proto.Key("store-"))
 )

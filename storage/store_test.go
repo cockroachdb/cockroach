@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -112,8 +113,7 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	return store, manual, stopper
 }
 
-// TestStoreInitAndBootstrap verifies store initialization and
-// bootstrap.
+// TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
@@ -127,7 +127,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 	// Can't start as haven't bootstrapped.
 	if err := store.Start(stopper); err == nil {
-		t.Error("expected failure start'ing un-bootstrapped store")
+		t.Error("expected failure starting un-bootstrapped store")
 	}
 
 	// Bootstrap with a fake ident.
@@ -153,6 +153,32 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	// 1st range should be available.
 	if _, err := store.GetRange(1); err != nil {
 		t.Errorf("failure fetching 1st range: %s", err)
+	}
+
+	// Make sure the store status exists and is correct.
+	expectedStoreStatus := &proto.StoreStatus{
+		StoreID:   1,
+		NodeID:    1,
+		RaftIDs:   []int64{1},
+		UpdatedAt: 0,
+		StartedAt: 0,
+		UsedBytes: 0,
+		MaxBytes:  0,
+	}
+	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
+	gArgs, gReply := getArgs(storeStatusKey, 1, store.StoreID())
+	if err := store.ExecuteCmd(proto.Get, gArgs, gReply); err != nil {
+		t.Fatalf("failure getting store status: %s", err)
+	}
+	if gReply.Value == nil {
+		t.Errorf("could not find store status at: %s", storeStatusKey)
+	}
+	storeStatus := &proto.StoreStatus{}
+	if err := gogoproto.Unmarshal(gReply.Value.GetBytes(), storeStatus); err != nil {
+		t.Errorf("could not unmarshal store status: %+v", gReply)
+	}
+	if !reflect.DeepEqual(storeStatus, expectedStoreStatus) {
+		t.Errorf("actual store status is not as expected\nexpected: %+v\nactual: %v\n", expectedStoreStatus, storeStatus)
 	}
 }
 
