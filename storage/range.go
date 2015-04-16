@@ -2019,14 +2019,18 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
 		desc1Key := engine.RangeDescriptorKey(newDesc.StartKey)
-		if err := txn.PreparePutProto(desc1Key, newDesc); err != nil {
+		call, err := client.PutProtoCall(desc1Key, newDesc)
+		if err != nil {
 			return err
 		}
+		txn.Prepare(call)
 		// Update existing range descriptor for first half of split.
 		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := txn.PreparePutProto(desc2Key, &updatedDesc); err != nil {
+		call, err = client.PutProtoCall(desc2Key, &updatedDesc)
+		if err != nil {
 			return err
 		}
+		txn.Prepare(call)
 		// Update range descriptor addressing record(s).
 		if err := SplitRangeAddressing(txn, newDesc, &updatedDesc); err != nil {
 			return err
@@ -2040,17 +2044,20 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		txn.Prepare(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: args.Key},
-			Commit:        true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				SplitTrigger: &proto.SplitTrigger{
-					UpdatedDesc: updatedDesc,
-					NewDesc:     *newDesc,
+		txn.Prepare(&client.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{Key: args.Key},
+				Commit:        true,
+				InternalCommitTrigger: &proto.InternalCommitTrigger{
+					SplitTrigger: &proto.SplitTrigger{
+						UpdatedDesc: updatedDesc,
+						NewDesc:     *newDesc,
+					},
+					Intents: []proto.Key{desc1Key, desc2Key},
 				},
-				Intents: []proto.Key{desc1Key, desc2Key},
 			},
-		}, &proto.EndTransactionResponse{})
+			Reply: &proto.EndTransactionResponse{},
+		})
 		return txn.Flush()
 	}); err != nil {
 		reply.SetGoError(util.Errorf("split at key %s failed: %s", splitKey, err))
@@ -2138,14 +2145,15 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Update the range descriptor for the receiving range.
 		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := txn.PreparePutProto(desc1Key, &updatedDesc); err != nil {
+		call, err := client.PutProtoCall(desc1Key, &updatedDesc)
+		if err != nil {
 			return err
 		}
+		txn.Prepare(call)
 
 		// Remove the range descriptor for the deleted range.
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
-		deleteResponse := &proto.DeleteResponse{}
-		txn.Prepare(proto.DeleteArgs(desc2Key), deleteResponse)
+		txn.Prepare(client.DeleteCall(desc2Key))
 
 		if err := MergeRangeAddressing(txn, desc, &updatedDesc); err != nil {
 			return err
@@ -2153,17 +2161,20 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		txn.Prepare(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: args.Key},
-			Commit:        true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				MergeTrigger: &proto.MergeTrigger{
-					UpdatedDesc:    updatedDesc,
-					SubsumedRaftID: subsumedDesc.RaftID,
+		txn.Prepare(&client.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{Key: args.Key},
+				Commit:        true,
+				InternalCommitTrigger: &proto.InternalCommitTrigger{
+					MergeTrigger: &proto.MergeTrigger{
+						UpdatedDesc:    updatedDesc,
+						SubsumedRaftID: subsumedDesc.RaftID,
+					},
+					Intents: []proto.Key{desc1Key, desc2Key},
 				},
-				Intents: []proto.Key{desc1Key, desc2Key},
 			},
-		}, &proto.EndTransactionResponse{})
+			Reply: &proto.EndTransactionResponse{},
+		})
 		return txn.Flush()
 	}); err != nil {
 		reply.SetGoError(util.Errorf("merge of range %d into %d failed: %s",
@@ -2212,27 +2223,32 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		if err := txn.PreparePutProto(descKey, &updatedDesc); err != nil {
+		call, err := client.PutProtoCall(descKey, &updatedDesc)
+		if err != nil {
 			return err
 		}
+		txn.Prepare(call)
 
 		// TODO(bdarnell): call UpdateRangeAddressing
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		txn.Prepare(&proto.EndTransactionRequest{
-			RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
-			Commit:        true,
-			InternalCommitTrigger: &proto.InternalCommitTrigger{
-				ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
-					NodeID:          replica.NodeID,
-					StoreID:         replica.StoreID,
-					ChangeType:      changeType,
-					UpdatedReplicas: updatedDesc.Replicas,
+		txn.Prepare(&client.Call{
+			Args: &proto.EndTransactionRequest{
+				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
+				Commit:        true,
+				InternalCommitTrigger: &proto.InternalCommitTrigger{
+					ChangeReplicasTrigger: &proto.ChangeReplicasTrigger{
+						NodeID:          replica.NodeID,
+						StoreID:         replica.StoreID,
+						ChangeType:      changeType,
+						UpdatedReplicas: updatedDesc.Replicas,
+					},
+					Intents: []proto.Key{descKey},
 				},
-				Intents: []proto.Key{descKey},
 			},
-		}, &proto.EndTransactionResponse{})
+			Reply: &proto.EndTransactionResponse{},
+		})
 		return txn.Flush()
 	})
 	if err != nil {

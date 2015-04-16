@@ -65,15 +65,19 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp proto.T
 // flush writes all dirty nodes and the tree to the transaction.
 func (tc *treeContext) flush() error {
 	if tc.dirty {
-		if err := tc.db.PreparePutProto(engine.KeyRangeTreeRoot, tc.tree); err != nil {
+		call, err := client.PutProtoCall(engine.KeyRangeTreeRoot, tc.tree)
+		if err != nil {
 			return err
 		}
+		tc.db.Prepare(call)
 	}
 	for _, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
-			if err := tc.db.PreparePutProto(engine.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node); err != nil {
+			call, err := client.PutProtoCall(engine.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node)
+			if err != nil {
 				return err
 			}
+			tc.db.Prepare(call)
 		}
 	}
 	return nil

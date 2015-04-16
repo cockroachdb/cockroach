@@ -124,7 +124,7 @@ func runPut(cmd *commander.Command, args []string) {
 		for i := 0; i < len(args); i += 2 {
 			key := proto.Key(args[i])
 			value := []byte(args[i+1])
-			txn.Prepare(proto.PutArgs(key, value), &proto.PutResponse{})
+			txn.Prepare(client.PutCall(key, value))
 		}
 		return nil
 	})
@@ -211,7 +211,7 @@ func runDel(cmd *commander.Command, args []string) {
 	err := kv.RunTransaction(opts, func(txn *client.KV) error {
 		for i := 0; i < len(args); i++ {
 			key := proto.Key(args[i])
-			txn.Prepare(proto.DeleteArgs(key), &proto.DeleteResponse{})
+			txn.Prepare(client.DeleteCall(key))
 		}
 		return nil
 	})

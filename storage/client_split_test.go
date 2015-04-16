@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -424,11 +425,13 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 
 	// Write zone configs for db3 & db4.
 	for _, k := range []string{"db4", "db3"} {
-		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)), zoneConfig)
+		call, _ := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)), zoneConfig)
+		store.DB().Prepare(call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
-		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)), acctConfig)
+		call, _ := client.PutProtoCall(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)), acctConfig)
+		store.DB().Prepare(call)
 	}
 	if err := store.DB().Flush(); err != nil {
 		t.Fatal(err)

@@ -82,16 +82,6 @@ func NewKV(ctx *Context, sender KVSender) *KV {
 	}
 }
 
-// Context returns a new Context that represents the current configuration.
-func (kv *KV) Context() *Context {
-	return &Context{
-		User:            kv.User,
-		UserPriority:    kv.UserPriority,
-		TxnRetryOptions: kv.TxnRetryOptions,
-		Clock:           kv.clock,
-	}
-}
-
 // Sender returns the sender supplied to NewKV, unless wrapped by a
 // transactional sender, in which case returns the unwrapped sender.
 func (kv *KV) Sender() KVSender {
@@ -123,7 +113,7 @@ func (kv *KV) Run(calls ...*Call) error {
 	}
 	if len(kv.prepared) > 0 || len(calls) > 1 {
 		for _, c := range calls {
-			kv.Prepare(c.Args, c.Reply)
+			kv.Prepare(c)
 		}
 		return kv.Flush()
 	}
@@ -159,11 +149,7 @@ func (kv *KV) Run(calls ...*Call) error {
 //
 // The supplied reply struct will not be valid until after a call
 // to Flush().
-func (kv *KV) Prepare(args proto.Request, reply proto.Response) {
-	call := &Call{
-		Args:  args,
-		Reply: reply,
-	}
+func (kv *KV) Prepare(call *Call) {
 	call.resetClientCmdID(kv.clock)
 	kv.prepared = append(kv.prepared, call)
 }
@@ -229,8 +215,10 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 
 	// Create a new KV for the transaction using a transactional KV sender.
 	txnSender := newTxnSender(kv.Sender(), opts)
-	curCtx := kv.Context()
-	txnKV := NewKV(curCtx, txnSender)
+	txnKV := &KV{}
+	*txnKV = *kv
+	txnKV.sender = txnSender
+	txnKV.prepared = nil
 
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
@@ -248,7 +236,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			etReply := &proto.EndTransactionResponse{}
 			// Prepare and flush for end txn in order to execute entire txn in
 			// a single round trip if possible.
-			txnKV.Prepare(etArgs, etReply)
+			txnKV.Prepare(&Call{etArgs, etReply})
 			err = txnKV.Flush()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -342,22 +330,4 @@ func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
 	}, &proto.PutResponse{})
-}
-
-// PreparePutProto sets the given key to the protobuf-serialized byte
-// string of msg. The resulting Put call is buffered and will not be
-// sent until a subsequent call to Flush. Returns marshalling errors
-// if encountered.
-func (kv *KV) PreparePutProto(key proto.Key, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	value := proto.Value{Bytes: data}
-	value.InitChecksum(key)
-	kv.Prepare(&proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
-		Value:         value,
-	}, &proto.PutResponse{})
-	return nil
 }

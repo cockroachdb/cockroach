@@ -493,10 +493,7 @@ func ExampleKV_Prepare() {
 	for i := 0; i < batchSize; i++ {
 		keys[i] = fmt.Sprintf("key-%03d", i)
 		values[i] = []byte(fmt.Sprintf("value-%03d", i))
-
-		putReq := proto.PutArgs(proto.Key(keys[i]), values[i])
-		putResp := &proto.PutResponse{}
-		kvClient.Prepare(putReq, putResp)
+		kvClient.Prepare(client.PutCall(proto.Key(keys[i]), values[i]))
 	}
 
 	// Flush all puts for parallel execution.
@@ -507,11 +504,13 @@ func ExampleKV_Prepare() {
 	// Scan for the newly inserted rows in parallel.
 	numScans := 3
 	rowsPerScan := batchSize / numScans
-	scanResponses := make([]proto.ScanResponse, numScans)
+	scanResponses := make([]*proto.ScanResponse, numScans)
 	for i := 0; i < numScans; i++ {
 		firstKey := proto.Key(keys[i*rowsPerScan])
 		lastKey := proto.Key(keys[((i+1)*rowsPerScan)-1])
-		kvClient.Prepare(proto.ScanArgs(firstKey, lastKey.Next(), int64(rowsPerScan)), &scanResponses[i])
+		call := client.ScanCall(firstKey, lastKey.Next(), int64(rowsPerScan))
+		scanResponses[i] = call.Reply.(*proto.ScanResponse)
+		kvClient.Prepare(call)
 	}
 	// Flush all scans for parallel execution.
 	if err := kvClient.Flush(); err != nil {
@@ -569,7 +568,7 @@ func ExampleKV_RunTransaction() {
 	putOpts := client.TransactionOptions{Name: "example put"}
 	err := kvClient.RunTransaction(&putOpts, func(txn *client.KV) error {
 		for i := 0; i < numKVPairs; i++ {
-			txn.Prepare(proto.PutArgs(proto.Key(keys[i]), values[i]), &proto.PutResponse{})
+			txn.Prepare(client.PutCall(proto.Key(keys[i]), values[i]))
 		}
 		// Note that the KV client is flushed automatically on transaction
 		// commit. Invoking Flush after individual API methods is only
@@ -582,11 +581,13 @@ func ExampleKV_RunTransaction() {
 	}
 
 	// Read back KV pairs inside a transaction.
-	getResponses := make([]proto.GetResponse, numKVPairs)
+	getResponses := make([]*proto.GetResponse, numKVPairs)
 	getOpts := client.TransactionOptions{Name: "example get"}
 	err = kvClient.RunTransaction(&getOpts, func(txn *client.KV) error {
 		for i := 0; i < numKVPairs; i++ {
-			txn.Prepare(proto.GetArgs(proto.Key(keys[i])), &getResponses[i])
+			call := client.GetCall(proto.Key(keys[i]))
+			getResponses[i] = call.Reply.(*proto.GetResponse)
+			txn.Prepare(call)
 		}
 		return nil
 	})
@@ -733,7 +734,6 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	rng, _ := util.NewPseudoRand()
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
-	resp := &proto.PutResponse{}
 	for t := 1; t <= numVersions; t++ {
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
@@ -743,9 +743,9 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				args := proto.PutArgs(proto.Key(keys[i]), util.RandBytes(rng, 1024))
-				args.Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
-				kv.Prepare(args, resp)
+				call := client.PutCall(proto.Key(keys[i]), util.RandBytes(rng, 1024))
+				call.Args.Header().Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
+				kv.Prepare(call)
 			}
 			if (i+1)%1000 == 0 {
 				if err := kv.Flush(); err != nil {

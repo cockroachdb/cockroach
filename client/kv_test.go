@@ -77,7 +77,7 @@ func TestKVPrepareAndFlush(t *testing.T) {
 		}))
 
 		for j := 0; j < i; j++ {
-			client.Prepare(testPutReq, &proto.PutResponse{})
+			client.Prepare(&Call{testPutReq, &proto.PutResponse{}})
 		}
 		if err := client.Flush(); err != nil {
 			t.Fatal(err)

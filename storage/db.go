@@ -29,11 +29,16 @@ import (
 type metaAction func(*client.KV, proto.Key, *proto.RangeDescriptor) error
 
 func putMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
-	return db.PreparePutProto(key, desc)
+	call, err := client.PutProtoCall(key, desc)
+	if err != nil {
+		return err
+	}
+	db.Prepare(call)
+	return nil
 }
 
 func delMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
-	db.Prepare(proto.DeleteArgs(key), &proto.DeleteResponse{})
+	db.Prepare(client.DeleteCall(key))
 	return nil
 }
 

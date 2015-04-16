@@ -21,6 +21,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // A Call is a pending database API call.
@@ -70,7 +71,7 @@ func IncrementCall(key proto.Key, increment int64) *Call {
 	}
 }
 
-// PutCall returns a C object initialized to put value
+// PutCall returns a Call object initialized to put value
 // as a byte slice at key.
 func PutCall(key proto.Key, valueBytes []byte) *Call {
 	value := proto.Value{Bytes: valueBytes}
@@ -84,6 +85,26 @@ func PutCall(key proto.Key, valueBytes []byte) *Call {
 		},
 		Reply: &proto.PutResponse{},
 	}
+}
+
+// PutProtoCall returns a Call object initialized to put the proto
+// message as a byte slice at key.
+func PutProtoCall(key proto.Key, msg gogoproto.Message) (*Call, error) {
+	data, err := gogoproto.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	value := proto.Value{Bytes: data}
+	value.InitChecksum(key)
+	return &Call{
+		Args: &proto.PutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: key,
+			},
+			Value: value,
+		},
+		Reply: &proto.PutResponse{},
+	}, nil
 }
 
 // DeleteCall returns a Call object initialized to delete the value at
