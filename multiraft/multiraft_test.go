@@ -308,7 +308,7 @@ func TestLeaderLease(t *testing.T) {
 	cmdID := makeCommandID()
 	cluster.nodes[0].SubmitCommand(groupID, cmdID, command)
 
-	// Wait for progress on the first two nodes.
+	// Wait for progress on all nodes.
 	for i := 0; i < len(cluster.nodes); i++ {
 		commit := <-cluster.events[i].CommandCommitted
 		if commit.CommandID != cmdID {

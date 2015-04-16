@@ -940,7 +940,8 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 // impact correctness.
 //
 // TODO(tschottdorf) having to unmarshal every single command just for leader
-// leases is horrible. Should do this in a way that's closer to MultiRaft.
+// leases is horrible, and the dependency on the Cockroach protos only makes
+// it worse. Should do this in a way that's closer to MultiRaft.
 // @bdarnell suggested adding a third parameter to the command encoding
 // that gives away the content (something like the protobuf tag ID, though
 // that's not readily accessible from the generated proto Go code).
