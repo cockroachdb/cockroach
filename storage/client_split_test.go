@@ -426,13 +426,13 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	// Write zone configs for db3 & db4.
 	var calls []*client.Call
 	for _, k := range []string{"db4", "db3"} {
-		call, _ := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
+		call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
 			zoneConfig, nil)
 		calls = append(calls, call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
-		call, _ := client.PutProtoCall(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
+		call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
 			acctConfig, nil)
 		calls = append(calls, call)
 	}

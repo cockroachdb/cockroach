@@ -2019,21 +2019,13 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
 		desc1Key := engine.RangeDescriptorKey(newDesc.StartKey)
-		call, err := client.PutProtoCall(desc1Key, newDesc, nil)
-		if err != nil {
-			return err
-		}
-		txn.Prepare(call)
+		txn.Prepare(client.PutProtoCall(desc1Key, newDesc, nil))
 		// Update existing range descriptor for first half of split.
 		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		call, err = client.PutProtoCall(desc2Key, &updatedDesc, nil)
-		if err != nil {
-			return err
-		}
-		txn.Prepare(call)
+		txn.Prepare(client.PutProtoCall(desc2Key, &updatedDesc, nil))
 		// Update range descriptor addressing record(s).
-		var calls []*client.Call
-		if calls, err = SplitRangeAddressing(newDesc, &updatedDesc); err != nil {
+		calls, err := SplitRangeAddressing(newDesc, &updatedDesc)
+		if err != nil {
 			return err
 		}
 		txn.Prepare(calls...)
@@ -2147,18 +2139,14 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		call, err := client.PutProtoCall(desc1Key, &updatedDesc, nil)
-		if err != nil {
-			return err
-		}
-		txn.Prepare(call)
+		txn.Prepare(client.PutProtoCall(desc1Key, &updatedDesc, nil))
 
 		// Remove the range descriptor for the deleted range.
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
 		txn.Prepare(client.DeleteCall(desc2Key, nil))
 
-		var calls []*client.Call
-		if calls, err = MergeRangeAddressing(desc, &updatedDesc); err != nil {
+		calls, err := MergeRangeAddressing(desc, &updatedDesc)
+		if err != nil {
 			return err
 		}
 		txn.Prepare(calls...)
@@ -2227,11 +2215,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		call, err := client.PutProtoCall(descKey, &updatedDesc, nil)
-		if err != nil {
-			return err
-		}
-		txn.Prepare(call)
+		txn.Prepare(client.PutProtoCall(descKey, &updatedDesc, nil))
 
 		// TODO(bdarnell): call UpdateRangeAddressing
 

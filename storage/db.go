@@ -26,20 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func([]*client.Call, proto.Key, *proto.RangeDescriptor) ([]*client.Call, error)
+type metaAction func([]*client.Call, proto.Key, *proto.RangeDescriptor) []*client.Call
 
-func putMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) ([]*client.Call, error) {
-	call, err := client.PutProtoCall(key, desc, nil)
-	if err != nil {
-		return nil, err
-	}
-	calls = append(calls, call)
-	return calls, nil
+func putMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+	return append(calls, client.PutProtoCall(key, desc, nil))
 }
 
-func delMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) ([]*client.Call, error) {
-	calls = append(calls, client.DeleteCall(key, nil))
-	return calls, nil
+func delMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+	return append(calls, client.DeleteCall(key, nil))
 }
 
 // SplitRangeAddressing creates (or overwrites if necessary) the meta1
@@ -97,24 +91,17 @@ func updateRangeAddressing(calls []*client.Call, desc *proto.RangeDescriptor,
 	// 2. the case of the range ending with a meta2 prefix. This means
 	// the range is full of meta2. We must update the relevant meta1
 	// entry pointing to the end of this range.
-	var err error
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
-		if calls, err = action(calls, engine.RangeMetaKey(desc.EndKey), desc); err != nil {
-			return nil, err
-		}
+		calls = action(calls, engine.RangeMetaKey(desc.EndKey), desc)
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		if calls, err = action(calls, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
-			return nil, err
-		}
+		calls = action(calls, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
 		if bytes.Equal(desc.StartKey, engine.KeyMin) ||
 			bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
-			if calls, err = action(calls, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
-				return nil, err
-			}
+			calls = action(calls, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc)
 		}
 	}
 	return calls, nil

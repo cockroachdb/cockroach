@@ -133,9 +133,5 @@ func (t *Txn) Put(key proto.Key, value []byte) error {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg.
 func (t *Txn) PutProto(key proto.Key, msg gogoproto.Message) error {
-	call, err := PutProtoCall(key, msg, nil)
-	if err != nil {
-		return err
-	}
-	return t.Run(call)
+	return t.Run(PutProtoCall(key, msg, nil))
 }

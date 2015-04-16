@@ -28,6 +28,7 @@ import (
 type Call struct {
 	Args  proto.Request  // The argument to the command
 	Reply proto.Response // The reply from the command
+	Err   error          // Error during call creation
 }
 
 // resetClientCmdID sets the client command ID if the call is for a
@@ -98,10 +99,10 @@ func PutCall(key proto.Key, valueBytes []byte, reply *proto.PutResponse) *Call {
 
 // PutProtoCall returns a Call object initialized to put the proto
 // message as a byte slice at key.
-func PutProtoCall(key proto.Key, msg gogoproto.Message, reply *proto.PutResponse) (*Call, error) {
+func PutProtoCall(key proto.Key, msg gogoproto.Message, reply *proto.PutResponse) *Call {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return &Call{Err: err}
 	}
 	if reply == nil {
 		reply = &proto.PutResponse{}
@@ -116,7 +117,7 @@ func PutProtoCall(key proto.Key, msg gogoproto.Message, reply *proto.PutResponse
 			Value: value,
 		},
 		Reply: reply,
-	}, nil
+	}
 }
 
 // DeleteCall returns a Call object initialized to delete the value at

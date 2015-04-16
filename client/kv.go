@@ -98,6 +98,13 @@ func (kv *KV) Run(calls ...*Call) (err error) {
 		return nil
 	}
 
+	// First check if any call contains an error.
+	for _, call := range calls {
+		if call.Err != nil {
+			return call.Err
+		}
+	}
+
 	if len(calls) == 1 {
 		c := calls[0]
 		if c.Args.Header().User == "" {
@@ -121,7 +128,7 @@ func (kv *KV) Run(calls ...*Call) (err error) {
 		bArgs.Add(call.Args)
 		replies = append(replies, call.Reply)
 	}
-	err = kv.Run(&Call{bArgs, bReply})
+	err = kv.Run(&Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -186,7 +193,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) 
 			etReply := &proto.EndTransactionResponse{}
 			// Prepare and flush for end txn in order to execute entire txn in
 			// a single round trip if possible.
-			txn.Prepare(&Call{etArgs, etReply})
+			txn.Prepare(&Call{Args: etArgs, Reply: etReply})
 			err = txn.Flush()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -202,7 +209,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) 
 	if err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
-		txn.Run(&Call{etArgs, etReply})
+		txn.Run(&Call{Args: etArgs, Reply: etReply})
 		if etReply.Header().GoError() != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
 		}
@@ -265,11 +272,7 @@ func (kv *KV) Put(key proto.Key, value []byte) error {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg.
 func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
-	call, err := PutProtoCall(key, msg, nil)
-	if err != nil {
-		return err
-	}
-	return kv.Run(call)
+	return kv.Run(PutProtoCall(key, msg, nil))
 }
 
 // putInternal writes the specified value to key.
@@ -279,5 +282,5 @@ func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
 		RequestHeader: proto.RequestHeader{Key: key},
 		Value:         value,
 	}
-	return kv.Run(&Call{req, &proto.PutResponse{}})
+	return kv.Run(&Call{Args: req, Reply: &proto.PutResponse{}})
 }

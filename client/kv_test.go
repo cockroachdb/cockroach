@@ -26,6 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 )
 
+func TestKVCallError(t *testing.T) {
+	count := 0
+	client := NewKV(nil, newTestSender(func(call *Call) {
+		count++
+	}))
+
+	testError := "test error"
+	if err := client.Run(&Call{Err: errors.New(testError)}); err == nil {
+		t.Fatalf("expected error, but found success")
+	} else if err.Error() != testError {
+		t.Fatalf("expected %s, but got %s", testError, err)
+	}
+}
+
 // TestKVTransactionEmptyFlush verifies that flushing without preparing any
 // calls is a noop.
 func TestKVTransactionEmptyFlush(t *testing.T) {
@@ -54,7 +68,7 @@ func TestKVClientCommandID(t *testing.T) {
 			t.Errorf("expected client command ID to be initialized")
 		}
 	}))
-	client.Run(&Call{testPutReq, &proto.PutResponse{}})
+	client.Run(&Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	if count != 1 {
 		t.Errorf("expected test sender to be invoked once; got %d", count)
 	}
@@ -81,7 +95,7 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 
 		client.RunTransaction(nil, func(txn *Txn) error {
 			for j := 0; j < i; j++ {
-				txn.Prepare(&Call{testPutReq, &proto.PutResponse{}})
+				txn.Prepare(&Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 			}
 			if err := txn.Flush(); err != nil {
 				t.Fatal(err)
@@ -152,7 +166,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 	}))
 	if err := client.RunTransaction(nil, func(txn *Txn) error {
 		reply := &proto.EndTransactionResponse{}
-		txn.Run(&Call{&proto.EndTransactionRequest{Commit: true}, reply})
+		txn.Run(&Call{Args: &proto.EndTransactionRequest{Commit: true}, Reply: reply})
 		if reply.GoError() != nil {
 			t.Fatal(reply.GoError())
 		}
@@ -221,7 +235,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 		}))
 		err := client.RunTransaction(nil, func(txn *Txn) error {
 			reply := &proto.PutResponse{}
-			return client.Run(&Call{testPutReq, reply})
+			return client.Run(&Call{Args: testPutReq, Reply: reply})
 		})
 		if test.retry {
 			if count != 2 {
