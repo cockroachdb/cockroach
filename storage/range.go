@@ -859,17 +859,31 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 				}
 			}
 		}
-	} else if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
-		// A ReadUncertaintyIntervalError contains the timestamp of the value
-		// that provoked the conflict. However, we forward the timestamp to the
-		// node's time here. The reason is that the caller (which is always
-		// transactional when this error occurs) in our implementation wants to
-		// use this information to extract a timestamp after which reads from
-		// the nodes are causally consistent with the transaction. This allows
-		// the node to be classified as without further uncertain reads for the
-		// remainder of the transaction.
-		// See the comment on proto.Transaction.CertainNodes.
-		err.ExistingTimestamp.Forward(r.rm.Clock().Now())
+	} else {
+		if index > 0 {
+			r.appliedIndex = index
+			// On failure, abandon the batch we've built up, but still update the
+			// applied index so we won't retry this command on restart.
+			if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
+				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil); err != nil {
+				// The reply header already contains an error which is going to be more useful
+				// the caller than this one, so just log it.
+				log.Errorf("failed to advance applied index: %s", err)
+			}
+		}
+
+		if err, ok := reply.Header().GoError().(*proto.ReadWithinUncertaintyIntervalError); ok {
+			// A ReadUncertaintyIntervalError contains the timestamp of the value
+			// that provoked the conflict. However, we forward the timestamp to the
+			// node's time here. The reason is that the caller (which is always
+			// transactional when this error occurs) in our implementation wants to
+			// use this information to extract a timestamp after which reads from
+			// the nodes are causally consistent with the transaction. This allows
+			// the node to be classified as without further uncertain reads for the
+			// remainder of the transaction.
+			// See the comment on proto.Transaction.CertainNodes.
+			err.ExistingTimestamp.Forward(r.rm.Clock().Now())
+		}
 	}
 
 	// Propagate the request timestamp (which may have changed).
