@@ -35,14 +35,13 @@ void protobuf_AssignDesc_cockroach_2fproto_2fstatus_2eproto() {
       "cockroach/proto/status.proto");
   GOOGLE_CHECK(file != NULL);
   StoreStatus_descriptor_ = file->message_type(0);
-  static const int StoreStatus_offsets_[7] = {
+  static const int StoreStatus_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, store_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, node_id_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, raft_ids_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, updated_at_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, range_count_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, started_at_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, used_bytes_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, max_bytes_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, updated_at_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(StoreStatus, stats_),
   };
   StoreStatus_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -84,17 +83,18 @@ void protobuf_AddDesc_cockroach_2fproto_2fstatus_2eproto() {
   already_here = true;
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+  ::cockroach::proto::protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\034cockroach/proto/status.proto\022\017cockroac"
-    "h.proto\032\024gogoproto/gogo.proto\"\360\001\n\013StoreS"
-    "tatus\022,\n\010store_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID"
-    "\332\336\037\007StoreID\022)\n\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006No"
-    "deID\332\336\037\006NodeID\022!\n\010raft_ids\030\003 \003(\003B\017\310\336\037\000\342\336"
-    "\037\007RaftIDs\022\030\n\nupdated_at\030\004 \001(\003B\004\310\336\037\000\022\030\n\ns"
-    "tarted_at\030\005 \001(\003B\004\310\336\037\000\022\030\n\nused_bytes\030\006 \001("
-    "\003B\004\310\336\037\000\022\027\n\tmax_bytes\030\007 \001(\003B\004\310\336\037\000B\023Z\005prot"
-    "o\340\342\036\001\310\342\036\001\320\342\036\001", 333);
+    "h.proto\032\032cockroach/proto/data.proto\032\024gog"
+    "oproto/gogo.proto\"\346\001\n\013StoreStatus\022,\n\010sto"
+    "re_id\030\001 \001(\005B\032\310\336\037\000\342\336\037\007StoreID\332\336\037\007StoreID\022"
+    ")\n\007node_id\030\002 \001(\005B\030\310\336\037\000\342\336\037\006NodeID\332\336\037\006Node"
+    "ID\022\031\n\013range_count\030\003 \001(\005B\004\310\336\037\000\022\030\n\nstarted"
+    "_at\030\004 \001(\003B\004\310\336\037\000\022\030\n\nupdated_at\030\005 \001(\003B\004\310\336\037"
+    "\000\022/\n\005stats\030\006 \001(\0132\032.cockroach.proto.MVCCS"
+    "tatsB\004\310\336\037\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 351);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/status.proto", &protobuf_RegisterTypes);
   StoreStatus::default_instance_ = new StoreStatus();
@@ -114,11 +114,10 @@ struct StaticDescriptorInitializer_cockroach_2fproto_2fstatus_2eproto {
 #ifndef _MSC_VER
 const int StoreStatus::kStoreIdFieldNumber;
 const int StoreStatus::kNodeIdFieldNumber;
-const int StoreStatus::kRaftIdsFieldNumber;
-const int StoreStatus::kUpdatedAtFieldNumber;
+const int StoreStatus::kRangeCountFieldNumber;
 const int StoreStatus::kStartedAtFieldNumber;
-const int StoreStatus::kUsedBytesFieldNumber;
-const int StoreStatus::kMaxBytesFieldNumber;
+const int StoreStatus::kUpdatedAtFieldNumber;
+const int StoreStatus::kStatsFieldNumber;
 #endif  // !_MSC_VER
 
 StoreStatus::StoreStatus()
@@ -128,6 +127,7 @@ StoreStatus::StoreStatus()
 }
 
 void StoreStatus::InitAsDefaultInstance() {
+  stats_ = const_cast< ::cockroach::proto::MVCCStats*>(&::cockroach::proto::MVCCStats::default_instance());
 }
 
 StoreStatus::StoreStatus(const StoreStatus& from)
@@ -141,10 +141,10 @@ void StoreStatus::SharedCtor() {
   _cached_size_ = 0;
   store_id_ = 0;
   node_id_ = 0;
-  updated_at_ = GOOGLE_LONGLONG(0);
+  range_count_ = 0;
   started_at_ = GOOGLE_LONGLONG(0);
-  used_bytes_ = GOOGLE_LONGLONG(0);
-  max_bytes_ = GOOGLE_LONGLONG(0);
+  updated_at_ = GOOGLE_LONGLONG(0);
+  stats_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -155,6 +155,7 @@ StoreStatus::~StoreStatus() {
 
 void StoreStatus::SharedDtor() {
   if (this != default_instance_) {
+    delete stats_;
   }
 }
 
@@ -190,15 +191,17 @@ void StoreStatus::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 123) {
-    ZR_(store_id_, node_id_);
-    ZR_(updated_at_, max_bytes_);
+  if (_has_bits_[0 / 32] & 63) {
+    ZR_(store_id_, updated_at_);
+    range_count_ = 0;
+    if (has_stats()) {
+      if (stats_ != NULL) stats_->::cockroach::proto::MVCCStats::Clear();
+    }
   }
 
 #undef OFFSET_OF_FIELD_
 #undef ZR_
 
-  raft_ids_.Clear();
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -238,47 +241,28 @@ bool StoreStatus::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_raft_ids;
+        if (input->ExpectTag(24)) goto parse_range_count;
         break;
       }
 
-      // repeated int64 raft_ids = 3;
+      // optional int32 range_count = 3;
       case 3: {
         if (tag == 24) {
-         parse_raft_ids:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 1, 24, input, this->mutable_raft_ids())));
-        } else if (tag == 26) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitiveNoInline<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, this->mutable_raft_ids())));
+         parse_range_count:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &range_count_)));
+          set_has_range_count();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_raft_ids;
-        if (input->ExpectTag(32)) goto parse_updated_at;
+        if (input->ExpectTag(32)) goto parse_started_at;
         break;
       }
 
-      // optional int64 updated_at = 4;
+      // optional int64 started_at = 4;
       case 4: {
         if (tag == 32) {
-         parse_updated_at:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &updated_at_)));
-          set_has_updated_at();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(40)) goto parse_started_at;
-        break;
-      }
-
-      // optional int64 started_at = 5;
-      case 5: {
-        if (tag == 40) {
          parse_started_at:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -287,33 +271,31 @@ bool StoreStatus::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(48)) goto parse_used_bytes;
+        if (input->ExpectTag(40)) goto parse_updated_at;
         break;
       }
 
-      // optional int64 used_bytes = 6;
-      case 6: {
-        if (tag == 48) {
-         parse_used_bytes:
+      // optional int64 updated_at = 5;
+      case 5: {
+        if (tag == 40) {
+         parse_updated_at:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &used_bytes_)));
-          set_has_used_bytes();
+                 input, &updated_at_)));
+          set_has_updated_at();
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(56)) goto parse_max_bytes;
+        if (input->ExpectTag(50)) goto parse_stats;
         break;
       }
 
-      // optional int64 max_bytes = 7;
-      case 7: {
-        if (tag == 56) {
-         parse_max_bytes:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &max_bytes_)));
-          set_has_max_bytes();
+      // optional .cockroach.proto.MVCCStats stats = 6;
+      case 6: {
+        if (tag == 50) {
+         parse_stats:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_stats()));
         } else {
           goto handle_unusual;
         }
@@ -356,30 +338,25 @@ void StoreStatus::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->node_id(), output);
   }
 
-  // repeated int64 raft_ids = 3;
-  for (int i = 0; i < this->raft_ids_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(
-      3, this->raft_ids(i), output);
+  // optional int32 range_count = 3;
+  if (has_range_count()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->range_count(), output);
   }
 
-  // optional int64 updated_at = 4;
-  if (has_updated_at()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->updated_at(), output);
-  }
-
-  // optional int64 started_at = 5;
+  // optional int64 started_at = 4;
   if (has_started_at()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->started_at(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->started_at(), output);
   }
 
-  // optional int64 used_bytes = 6;
-  if (has_used_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->used_bytes(), output);
+  // optional int64 updated_at = 5;
+  if (has_updated_at()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(5, this->updated_at(), output);
   }
 
-  // optional int64 max_bytes = 7;
-  if (has_max_bytes()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->max_bytes(), output);
+  // optional .cockroach.proto.MVCCStats stats = 6;
+  if (has_stats()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      6, this->stats(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -402,30 +379,26 @@ void StoreStatus::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->node_id(), target);
   }
 
-  // repeated int64 raft_ids = 3;
-  for (int i = 0; i < this->raft_ids_size(); i++) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteInt64ToArray(3, this->raft_ids(i), target);
+  // optional int32 range_count = 3;
+  if (has_range_count()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(3, this->range_count(), target);
   }
 
-  // optional int64 updated_at = 4;
-  if (has_updated_at()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->updated_at(), target);
-  }
-
-  // optional int64 started_at = 5;
+  // optional int64 started_at = 4;
   if (has_started_at()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->started_at(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->started_at(), target);
   }
 
-  // optional int64 used_bytes = 6;
-  if (has_used_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(6, this->used_bytes(), target);
+  // optional int64 updated_at = 5;
+  if (has_updated_at()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(5, this->updated_at(), target);
   }
 
-  // optional int64 max_bytes = 7;
-  if (has_max_bytes()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(7, this->max_bytes(), target);
+  // optional .cockroach.proto.MVCCStats stats = 6;
+  if (has_stats()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        6, this->stats(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -454,45 +427,35 @@ int StoreStatus::ByteSize() const {
           this->node_id());
     }
 
-    // optional int64 updated_at = 4;
-    if (has_updated_at()) {
+    // optional int32 range_count = 3;
+    if (has_range_count()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->updated_at());
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->range_count());
     }
 
-    // optional int64 started_at = 5;
+    // optional int64 started_at = 4;
     if (has_started_at()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->started_at());
     }
 
-    // optional int64 used_bytes = 6;
-    if (has_used_bytes()) {
+    // optional int64 updated_at = 5;
+    if (has_updated_at()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->used_bytes());
+          this->updated_at());
     }
 
-    // optional int64 max_bytes = 7;
-    if (has_max_bytes()) {
+    // optional .cockroach.proto.MVCCStats stats = 6;
+    if (has_stats()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->max_bytes());
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->stats());
     }
 
   }
-  // repeated int64 raft_ids = 3;
-  {
-    int data_size = 0;
-    for (int i = 0; i < this->raft_ids_size(); i++) {
-      data_size += ::google::protobuf::internal::WireFormatLite::
-        Int64Size(this->raft_ids(i));
-    }
-    total_size += 1 * this->raft_ids_size() + data_size;
-  }
-
   if (!unknown_fields().empty()) {
     total_size +=
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
@@ -518,7 +481,6 @@ void StoreStatus::MergeFrom(const ::google::protobuf::Message& from) {
 
 void StoreStatus::MergeFrom(const StoreStatus& from) {
   GOOGLE_CHECK_NE(&from, this);
-  raft_ids_.MergeFrom(from.raft_ids_);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
     if (from.has_store_id()) {
       set_store_id(from.store_id());
@@ -526,17 +488,17 @@ void StoreStatus::MergeFrom(const StoreStatus& from) {
     if (from.has_node_id()) {
       set_node_id(from.node_id());
     }
-    if (from.has_updated_at()) {
-      set_updated_at(from.updated_at());
+    if (from.has_range_count()) {
+      set_range_count(from.range_count());
     }
     if (from.has_started_at()) {
       set_started_at(from.started_at());
     }
-    if (from.has_used_bytes()) {
-      set_used_bytes(from.used_bytes());
+    if (from.has_updated_at()) {
+      set_updated_at(from.updated_at());
     }
-    if (from.has_max_bytes()) {
-      set_max_bytes(from.max_bytes());
+    if (from.has_stats()) {
+      mutable_stats()->::cockroach::proto::MVCCStats::MergeFrom(from.stats());
     }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
@@ -563,11 +525,10 @@ void StoreStatus::Swap(StoreStatus* other) {
   if (other != this) {
     std::swap(store_id_, other->store_id_);
     std::swap(node_id_, other->node_id_);
-    raft_ids_.Swap(&other->raft_ids_);
-    std::swap(updated_at_, other->updated_at_);
+    std::swap(range_count_, other->range_count_);
     std::swap(started_at_, other->started_at_);
-    std::swap(used_bytes_, other->used_bytes_);
-    std::swap(max_bytes_, other->max_bytes_);
+    std::swap(updated_at_, other->updated_at_);
+    std::swap(stats_, other->stats_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);

@@ -47,11 +47,7 @@ const (
 //  - Key count (count of all keys, including keys with deleted tombstones)
 //  - Value count (all versions, including deleted tombstones)
 //  - Intents (provisional values written during txns)
-type MVCCStats struct {
-	LiveBytes, KeyBytes, ValBytes, IntentBytes int64
-	LiveCount, KeyCount, ValCount, IntentCount int64
-	IntentAge, GCBytesAge, LastUpdateNanos     int64
-}
+type MVCCStats proto.MVCCStats
 
 // MergeStats merges accumulated stats to stat counters for specified range.
 func (ms *MVCCStats) MergeStats(engine Engine, raftID int64) {

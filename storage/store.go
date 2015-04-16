@@ -344,7 +344,7 @@ func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(defaultScanInterval, newStoreRangeIterator(s))
+	s.scanner = newRangeScanner(defaultScanInterval, newStoreRangeIterator(s), s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
 	s.splitQueue = newSplitQueue(db, gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
@@ -477,13 +477,10 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 
-	// Update the store status.
+	// Update the store status values.
 	s.status.StoreID = s.Ident.StoreID
 	s.status.NodeID = s.Ident.NodeID
 	s.status.StartedAt = now.WallTime
-	if err := s.updateStoreStatus(); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -1278,16 +1275,13 @@ func raftEntryFormatter(data []byte) string {
 }
 
 // updateStoreStatus updates the store's status proto.
-func (s *Store) updateStoreStatus() error {
+func (s *Store) updateStoreStatus() {
 	now := s.clock.Now().WallTime
 	s.status.UpdatedAt = now
-	s.status.RaftIDs = []int64{}
-	for raftID := range s.ranges {
-		s.status.RaftIDs = append(s.status.RaftIDs, raftID)
-	}
+	s.status.RangeCount = int32(len(s.ranges))
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	if err := engine.MVCCPutProto(s.engine, nil, key, proto.ZeroTimestamp, nil, s.status); err != nil {
-		return err
+	s.status.Stats = proto.MVCCStats(s.scanner.Stats().MVCC)
+	if err := s.db.Run(client.PutProtoCall(key, s.status)); err != nil {
+		util.Error(err)
 	}
-	return nil
 }

@@ -190,7 +190,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newRangeScanner(1*time.Millisecond, iter)
+	s := newRangeScanner(1*time.Millisecond, iter, nil)
 	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -234,7 +234,7 @@ func TestScannerTiming(t *testing.T) {
 	for i, duration := range durations {
 		iter := newTestIterator(count)
 		q := &testQueue{}
-		s := newRangeScanner(duration, iter)
+		s := newRangeScanner(duration, iter, nil)
 		s.AddQueues(q)
 		mc := hlc.NewManualClock(0)
 		clock := hlc.NewClock(mc.UnixNano)
@@ -257,7 +257,7 @@ func TestScannerEmptyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	iter := newTestIterator(0)
 	q := &testQueue{}
-	s := newRangeScanner(1*time.Millisecond, iter)
+	s := newRangeScanner(1*time.Millisecond, iter, nil)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
@@ -278,7 +278,7 @@ func TestScannerStats(t *testing.T) {
 	q := &testQueue{}
 	stopper := util.NewStopper()
 	defer stopper.Stop()
-	s := newRangeScanner(1*time.Millisecond, iter)
+	s := newRangeScanner(1*time.Millisecond, iter, nil)
 	s.AddQueues(q)
 	mc := hlc.NewManualClock(0)
 	clock := hlc.NewClock(mc.UnixNano)
