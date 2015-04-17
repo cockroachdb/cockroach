@@ -70,6 +70,9 @@ func (r rpcError) Error() string { return r.errMsg }
 // CanRetry implements the Retryable interface.
 func (r rpcError) CanRetry() bool { return true }
 
+// sendOneFn is overwritten in tests to mock sendOne.
+var sendOneFn = sendOne
+
 // A SendError indicates that too many RPCs to the replica
 // set failed to achieve requested number of successful responses.
 // canRetry is set depending on the types of errors encountered.
@@ -159,7 +162,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			}
 			reply := getReply()
 			log.V(1).Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
-			go sendOne(clients[index], opts.Timeout, method, args, reply, helperChan)
+			go sendOneFn(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
 		// Wait for completions.
 		select {

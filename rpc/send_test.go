@@ -156,6 +156,112 @@ func TestUnretryableError(t *testing.T) {
 	}
 }
 
+// TestComplexScenarios verifies various complex success/failure scenarios by
+// mocking sendOne.
+func TestComplexScenarios(t *testing.T) {
+	rpcContext := createNewTestRPCContext(t)
+
+	testCases := []struct {
+		numServers               int
+		numRequests              int
+		numErrors                int
+		numRetryableErrors       int
+		success                  bool
+		isRetryableErrorExpected bool
+	}{
+		// --- Success scenarios ---
+		{1, 1, 0, 0, true, false},
+		{5, 1, 0, 0, true, false},
+		{5, 5, 0, 0, true, false},
+		// There are some errors, but enough RPCs succeed.
+		{5, 1, 1, 0, true, false},
+		{5, 1, 4, 0, true, false},
+		{5, 3, 2, 0, true, false},
+
+		// --- Failure scenarios ---
+		// Too many requests.
+		{1, 5, 0, 0, false, false},
+		// All RPCs fail.
+		{5, 1, 5, 0, false, false},
+		// Some RPCs fail and we do not have enough remaining clients.
+		{5, 3, 3, 0, false, false},
+		// All RPCs fail, but some of the errors are retryable.
+		{5, 1, 5, 1, false, true},
+		{5, 3, 5, 3, false, true},
+		// Some RPCs fail, but we do have enough remaining clients and recoverable errors.
+		{5, 3, 3, 1, false, true},
+		{5, 3, 4, 2, false, true},
+	}
+	for i, test := range testCases {
+		// Copy the values to avoid data race. sendOneFn might
+		// be called after this test case finishes.
+		numErrors := test.numErrors
+		numRetryableErrors := test.numRetryableErrors
+
+		var serverAddrs []net.Addr
+		for j := 0; j < test.numServers; j++ {
+			s := createAndStartNewServer(rpcContext, t)
+			defer s.Close()
+			serverAddrs = append(serverAddrs, s.Addr())
+		}
+
+		opts := Options{
+			N:               test.numRequests,
+			Ordering:        OrderStable,
+			SendNextTimeout: 1 * time.Second,
+			Timeout:         1 * time.Second,
+		}
+		getArgs := func(addr net.Addr) interface{} {
+			return addr
+		}
+		getReply := func() interface{} {
+			return 0
+		}
+
+		// Mock sendOne.
+		sendOneFn = func(client *Client, timeout time.Duration, method string, args, reply interface{},
+			c chan interface{}) {
+			addr := args.(net.Addr)
+			addrID := -1
+			for serverAddrID, serverAddr := range serverAddrs {
+				if serverAddr.String() == addr.String() {
+					addrID = serverAddrID
+					break
+				}
+			}
+			if addrID == -1 {
+				t.Fatalf("%d: %v is not found in serverAddrs: %v", i, addr, serverAddrs)
+			}
+			if addrID < numErrors {
+				c <- SendError{
+					errMsg:   "test",
+					canRetry: addrID < numRetryableErrors,
+				}
+				return
+			}
+
+			c <- nil
+		}
+		defer func() { sendOneFn = sendOne }()
+
+		replies, err := Send(opts, "Heartbeat.Ping", serverAddrs, getArgs, getReply, rpcContext)
+		if test.success {
+			if len(replies) != test.numRequests {
+				t.Errorf("%d: %v replies are expected, but got %v", i, test.numRequests, len(replies))
+			}
+			continue
+		}
+
+		retryErr, ok := err.(util.Retryable)
+		if !ok {
+			t.Fatalf("%d: Unexpected error type: %v", i, err)
+		}
+		if retryErr.CanRetry() != test.isRetryableErrorExpected {
+			t.Errorf("%d: Unexpected error: %v", i, retryErr)
+		}
+	}
+}
+
 // createNewTestRPCContext creates an RPCContext used for test.
 func createNewTestRPCContext(t *testing.T) *Context {
 	tlsConfig, err := LoadTestTLSConfig()
