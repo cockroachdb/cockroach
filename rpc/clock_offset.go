@@ -93,8 +93,7 @@ func (l endpointList) Less(i, j int) bool {
 	return l[i].offset < l[j].offset
 }
 
-// newRemoteClockMonitor returns a monitor with the value of maxOffset, which
-// should be the maximum offset of all nodes in the server's cluster.
+// newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 	return &RemoteClockMonitor{
 		offsets: map[string]proto.RemoteOffset{},
@@ -198,7 +197,7 @@ func isHealthyOffsetInterval(i ClusterOffsetInterval, maxOffset time.Duration) b
 // commonly known as Marzullo's algorithm. If a remote clock is correct, its
 // offset interval should encompass this clock's offset from the cluster time
 // (see buildEndpointList()). If the majority of remote clock are correct, then
-// their intevals should overlap over some region, which should include the
+// their intervals should overlap over some region, which should include the
 // true offset from the cluster time. This algorithm returns this region.
 //
 // If an interval cannot be found, an error is returned, indicating that
