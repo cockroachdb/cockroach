@@ -40,7 +40,7 @@ import (
 // limit on number of attempts so we don't get stuck behind indefinite
 // backoff/retry loops. If MaxAttempts is reached, transaction will
 // return retry error.
-func setCorrectnessRetryOptions(lSender *LocalSender) {
+func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	client.DefaultTxnRetryOptions = util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  5 * time.Millisecond,

@@ -929,6 +929,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
+		reply.Header().SetGoError(err)
 		return err
 	}
 	if header.Timestamp.Equal(proto.ZeroTimestamp) {
@@ -941,6 +942,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 		// bounded by the max clock drift.
 		_, err := s.clock.Update(header.Timestamp)
 		if err != nil {
+			reply.Header().SetGoError(err)
 			return err
 		}
 	}
@@ -997,6 +999,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	if _, ok := err.(*util.RetryMaxAttemptsError); ok && header.Txn != nil {
 		reply.Header().SetGoError(proto.NewTransactionRetryError(header.Txn))
 	}
+
 	return reply.Header().GoError()
 }
 
