@@ -270,7 +270,7 @@ func TestRangeCanService(t *testing.T) {
 	gArgs.Txn = nil
 	err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true)
 	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
-		t.Errorf("expected range key mistmatch error: %s", err)
+		t.Errorf("expected range key mismatch error: %s", err)
 	}
 }
 
