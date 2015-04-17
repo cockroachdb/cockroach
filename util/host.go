@@ -18,8 +18,8 @@
 package util
 
 import (
+	"net"
 	"os"
-	"strings"
 )
 
 // EnsureHost takes a host:port pair, where the host portion is optional.
@@ -27,12 +27,13 @@ import (
 // the output will contain a host portion equal to the hostname (or
 // "127.0.0.1" as a fallback).
 func EnsureHost(addr string) string {
-	if !strings.HasPrefix(addr, ":") {
+	host, port, err := net.SplitHostPort(addr)
+	if host != "" || err != nil {
 		return addr
 	}
-	host, err := os.Hostname()
+	host, err = os.Hostname()
 	if err != nil {
 		host = "127.0.0.1"
 	}
-	return host + addr
+	return net.JoinHostPort(host, port)
 }

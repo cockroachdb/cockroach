@@ -121,7 +121,7 @@ func (ctx *Context) Init() error {
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 	if storeSpecs == nil || len(storeSpecs) == 0 {
 		return fmt.Errorf("invalid or empty engines specification %q, "+
-			"did you pass -stores?", ctx.Stores)
+			"did you specify -stores?", ctx.Stores)
 	}
 
 	ctx.Engines = nil
@@ -141,12 +141,12 @@ func (ctx *Context) Init() error {
 
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
-	resolvers, err := ctx.parseGossipBootstrapAddrs()
+	resolvers, err := ctx.parseGossipBootstrapResolvers()
 	if err != nil {
 		return err
 	}
 	if len(resolvers) == 0 {
-		return errors.New("no resolvers specified for gossip network, did you pass -gossip?")
+		return errors.New("no gossip addresses found, did you specify -gossip?")
 	}
 	ctx.GossipBootstrapResolvers = resolvers
 
@@ -170,12 +170,11 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 	return engine.NewRocksDB(attrs, path, ctx.CacheSize), nil
 }
 
-// parseGossipBootstrapAddrs parses a comma-separated list of
-// gossip bootstrap addresses or resolvers.
-func (ctx *Context) parseGossipBootstrapAddrs() ([]*gossip.Resolver, error) {
+// parseGossipBootstrapResolvers parses a comma-separated list of
+// gossip bootstrap resolvers.
+func (ctx *Context) parseGossipBootstrapResolvers() ([]*gossip.Resolver, error) {
 	var bootstrapResolvers []*gossip.Resolver
-	gossipBootstrap := ctx.GossipBootstrap
-	addresses := strings.Split(gossipBootstrap, ",")
+	addresses := strings.Split(ctx.GossipBootstrap, ",")
 	for _, address := range addresses {
 		if len(address) == 0 {
 			continue

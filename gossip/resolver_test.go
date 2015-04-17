@@ -17,16 +17,9 @@
 
 package gossip
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
 
 func TestParseResolverSpec(t *testing.T) {
-	myHost, err := os.Hostname()
-	if err != nil {
-		myHost = "127.0.0.1"
-	}
 	testCases := []struct {
 		input           string
 		success         bool
@@ -35,7 +28,7 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:8080", true, "tcp", "127.0.0.1:8080"},
-		{":8080", true, "tcp", myHost + ":8080"},
+		{":8080", true, "tcp", ":8080"},
 		{"127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"lb=127.0.0.1", true, "lb", "127.0.0.1"},
