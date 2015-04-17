@@ -103,7 +103,7 @@ func TestTimestampCache(t *testing.T) {
 }
 
 // TestTimestampCacheEviction verifies the eviction of
-// timestamp cache entries after minCacheWindow interval.
+// timestamp cache entries after MinTSCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	manual := hlc.NewManualClock(0)
@@ -116,8 +116,8 @@ func TestTimestampCacheEviction(t *testing.T) {
 	aTS := clock.Now()
 	tc.Add(proto.Key("a"), nil, aTS, proto.NoTxnMD5, true)
 
-	// Increment time by the minCacheWindow and add another key.
-	manual.Increment(minCacheWindow.Nanoseconds())
+	// Increment time by the MinTSCacheWindow and add another key.
+	manual.Increment(MinTSCacheWindow.Nanoseconds())
 	tc.Add(proto.Key("b"), nil, clock.Now(), proto.NoTxnMD5, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
