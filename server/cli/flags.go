@@ -63,7 +63,7 @@ func initFlags(ctx *server.Context) {
 		"comma-separated list of gossip addresses or resolvers for gossip bootstrap. "+
 		"Each item in the list has an optional type: [type=]<address>. "+
 		"Unspecified type means ip address or dns. Type can also be a load balancer (\"lb\"), "+
-		"or a unix socket (\"unix\")")
+		"a unix socket (\"unix\") or, for single-node systems, \"self\".")
 
 	flag.DurationVar(&ctx.GossipInterval, "gossip-interval", ctx.GossipInterval,
 		"approximate interval (time.Duration) for gossiping new information to peers.")

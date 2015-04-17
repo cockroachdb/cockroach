@@ -296,7 +296,7 @@ func (g *Gossip) hasIncoming(addr net.Addr) bool {
 // node, which is removed, if listed as a bootstrap host.
 func (g *Gossip) initializeBootstrapAddresses() {
 	if len(g.resolvers) == 0 {
-		log.Fatalf("no resolvers specified for gossip network (use -gossip)")
+		log.Fatalf("no resolvers specified for gossip network")
 	}
 	g.haveUnused = false
 	for _, resolver := range g.resolvers {

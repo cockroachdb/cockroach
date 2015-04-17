@@ -75,8 +75,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		return nil, util.Error("ctx must not be null")
 	}
 
-	// If the specified address includes no host component, use the hostname.
-	addr := util.EnsureHost(ctx.Addr)
+	addr := ctx.Addr
 	_, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)

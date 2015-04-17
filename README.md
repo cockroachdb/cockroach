@@ -50,20 +50,18 @@ Getting a Cockroach node up and running is easy. If you have the `cockroach` bin
 ```bash
 # Get the latest image from the registry. Skip if you already have an image
 # or if you built it yourself.
-$ docker pull cockroachdb/cockroach
-[...]
+docker pull cockroachdb/cockroach
 # Open a shell on a Cockroach container.
-$ docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
-root@82cb657cdc42:/cockroach#
+docker run -t -i -p 8080:8080 cockroachdb/cockroach shell
+# root@82cb657cdc42:/cockroach#
 ```
 
 Now we're in an environment that has everything set up, and we start by first initializing the cluster and then firing up the node:
 
 ```bash
-$ DIR=$(mktemp -d /tmp/dbXXX)
-$ ./cockroach init $DIR
-$ ./cockroach start -stores ssd="$DIR" -gossip :8080 &
-[...]
+DIR=$(mktemp -d /tmp/dbXXX)
+./cockroach init $DIR
+./cockroach start -stores ssd="$DIR" -gossip self:// &
 ```
 This initializes and starts a single-node cluster in the background.
 
@@ -71,30 +69,30 @@ This initializes and starts a single-node cluster in the background.
 
 Now let's talk to this node. The easiest way to do that is to use the `cockroach` binary - it comes with a simple built-in client:
 
-```
+```bash
 # Put the values a->1, b->2, c->3, d->4.
-$ ./cockroach put a 1 b 2 c 3 d 4
-$ ./cockroach scan
-"a"     1
-"b"     2
-"c"     3
-"d"     4
+./cockroach put a 1 b 2 c 3 d 4
+./cockroach scan
+# "a"     1
+# "b"     2
+# "c"     3
+# "d"     4
 # Scans do not include the end key.
-$ ./cockroach scan b d
-"b"     2
-"c"     3
-$ ./cockroach del c
-$ ./cockroach scan
-"a"     1
-"b"     2
-"d"     4
+./cockroach scan b d
+# "b"     2
+# "c"     3
+./cockroach del c
+./cockroach scan
+# "a"     1
+# "b"     2
+# "d"     4
 # Counters are also available:
-$ ./cockroach inc mycnt 5
-5
-$ ./cockroach inc mycnt -3
-2
-$ ./cockroach get mycnt
-2
+./cockroach inc mycnt 5
+# 5
+./cockroach inc mycnt -3
+#2
+./cockroach get mycnt
+#2
 ```
 
 Check out `./cockroach help` to see all available commands.
@@ -110,14 +108,14 @@ if you're using boot2docker, you don't want to curl `localhost` - find out
 the correct endpoint using `boot2docker ip`.
 
 ```bash
-$ curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
+curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416616834949813367,"logical":0}}}
 ```
 
 ```bash
-$ curl http://localhost:8080/kv/rest/entry/Cockroach
+curl http://localhost:8080/kv/rest/entry/Cockroach
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416616886486257568,"logical":0}},"value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}
@@ -126,7 +124,7 @@ Note that `SGVsbG8=` equals `base64("Hello")`.
 
 Among other things, you can also scan a key range:
 ```bash
-$ curl "http://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
+curl "http://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416617120031733436,"logical":0}},"rows":[{"key":"Q29ja3JvYWNo","value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}]}
@@ -149,8 +147,8 @@ Once you've built your image, you may want to run the tests:
 Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
 
 ```bash
-$ docker run -p 8080:8080 -v /data cockroachdb/cockroach init /data
-$ docker run -p 8080:8080 -d --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach start -stores ssd=/data
+docker run -p 8080:8080 -v /data cockroachdb/cockroach init /data
+docker run -p 8080:8080 -d --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach start -stores ssd=/data -gossip self://
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
