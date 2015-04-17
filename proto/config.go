@@ -20,7 +20,6 @@ package proto
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,10 +115,10 @@ func (r *RangeDescriptor) ContainsKey(key []byte) bool {
 // key range from start to end.
 func (r *RangeDescriptor) ContainsKeyRange(start, end []byte) bool {
 	if len(end) == 0 {
-		end = append(append([]byte(nil), start...), byte(0))
+		return r.ContainsKey(start)
 	}
 	if bytes.Compare(end, start) < 0 {
-		panic(fmt.Sprintf("start key is larger than end key %q > %q", string(start), string(end)))
+		return false
 	}
 	return bytes.Compare(start, r.StartKey) >= 0 && bytes.Compare(r.EndKey, end) >= 0
 }

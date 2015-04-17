@@ -294,18 +294,22 @@ func (r *Range) getLease() *proto.Lease {
 // cannot service the command as specified. This is of the case in
 // the event that the replica is not the leader.
 func (r *Range) canServiceCmd(method string, args proto.Request) error {
+	header := args.Header()
 	if !r.IsLeader() {
-		if !proto.IsReadOnly(method) || args.Header().ReadConsistency == proto.CONSISTENT {
+		if !proto.IsReadOnly(method) || header.ReadConsistency == proto.CONSISTENT {
 			// TODO(spencer): when we happen to know the leader, fill it in here via replica.
 			return &proto.NotLeaderError{}
 		}
 	}
 	if proto.IsReadOnly(method) {
-		if args.Header().ReadConsistency == proto.CONSENSUS {
+		if header.ReadConsistency == proto.CONSENSUS {
 			return util.Errorf("consensus reads not implemented")
-		} else if args.Header().ReadConsistency == proto.INCONSISTENT && args.Header().Txn != nil {
+		} else if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
 			return util.Errorf("cannot allow inconsistent reads within a transaction")
 		}
+	}
+	if !r.ContainsKeyRange(header.Key, header.EndKey) {
+		return proto.NewRangeKeyMismatchError(header.Key, header.EndKey, r.Desc())
 	}
 	return nil
 }
