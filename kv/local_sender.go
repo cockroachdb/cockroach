@@ -97,7 +97,6 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.
 func (ls *LocalSender) Send(call *client.Call) {
-	call.Reply.Header().Error = nil
 	var err error
 	var store *storage.Store
 
@@ -119,24 +118,14 @@ func (ls *LocalSender) Send(call *client.Call) {
 	if err != nil {
 		call.Reply.Header().SetGoError(err)
 	} else {
-		if header := call.Args.Header(); header.Txn != nil {
-			// For calls that read data, we can avoid uncertainty related
-			// retries in certain situations.
-			// If the node is in "CertainNodes", we need not worry about
-			// uncertain reads any more. Setting MaxTimestamp=Timestamp
-			// for the operation accomplishes that.
-			// See proto.Transaction.CertainNodes for details.
-			if header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
-				// Make sure that when this retryable function returns,
-				// MaxTimestamp is restored. On retries, there is no
-				// guarantee that the request gets routed to the same node
-				// as the replica may have moved.
-				defer func(ts proto.Timestamp) {
-					header.Txn.MaxTimestamp = ts
-				}(header.Txn.MaxTimestamp)
-				// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
-				header.Txn.MaxTimestamp = header.Txn.Timestamp
-			}
+		// For calls that read data within a txn, we can avoid uncertainty
+		// related retries in certain situations. If the node is in
+		// "CertainNodes", we need not worry about uncertain reads any
+		// more. Setting MaxTimestamp=Timestamp for the operation
+		// accomplishes that. See proto.Transaction.CertainNodes for details.
+		if header.Txn != nil && header.Txn.CertainNodes.Contains(header.Replica.NodeID) {
+			// MaxTimestamp = Timestamp corresponds to no clock uncertainty.
+			header.Txn.MaxTimestamp = header.Txn.Timestamp
 		}
 		store.ExecuteCmd(call.Method, call.Args, call.Reply)
 	}
