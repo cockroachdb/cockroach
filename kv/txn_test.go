@@ -479,13 +479,11 @@ func TestTxnTimestampRegression(t *testing.T) {
 	}
 }
 
-// When the gap between two writes in a txn is bigger than 10 seconds,
-// lowWater in timestamp cache can increase to the timestamp of the
-// first write as side effect of read in another txn, but when the txn
-// committed, the write's timestamp is not increased. so another txn
-// two reads before and after the second write will get different
-// value.
-func TestTxnRepeatGetDifferentValue(t *testing.T) {
+// TestTxnLongDelayBetweenWritesWithConcurrentRead simulates a
+// situation where the delay between two writes in a txn is longer
+// than 10 seconds.
+// See issue #676 for full details about original bug.
+func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	db, _, _, mClock, _, stopper, err := createTestDB()
 	if err != nil {
 		t.Fatal(err)
@@ -495,7 +493,7 @@ func TestTxnRepeatGetDifferentValue(t *testing.T) {
 	keyA := proto.Key("a")
 	keyB := proto.Key("b")
 	ch := make(chan struct{})
-	// Use snapshot isolation
+	// Use snapshot isolation.
 	txnAOpts := &client.TransactionOptions{
 		Name:      "txnA",
 		Isolation: proto.SNAPSHOT,
@@ -510,37 +508,37 @@ func TestTxnRepeatGetDifferentValue(t *testing.T) {
 			if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
 				return err
 			}
-			// Notify txnB do 1st get(b)
+			// Notify txnB do 1st get(b).
 			ch <- struct{}{}
-			// Wait for txnB notify us to put(b)
+			// Wait for txnB notify us to put(b).
 			<-ch
-			// Write now to keyB
+			// Write now to keyB.
 			if err := txn.Call(proto.Put, proto.PutArgs(keyB, []byte("value2")), &proto.PutResponse{}); err != nil {
 				return err
 			}
 			return nil
 		})
-		// Notify txnB do 2nd get(b)
+		// Notify txnB do 2nd get(b).
 		ch <- struct{}{}
 	}()
 
-	// Wait till txnA finish put(a)
+	// Wait till txnA finish put(a).
 	<-ch
-	// Delay 12 seconds
-	mClock.Set(time.Duration(12 * time.Second).Nanoseconds())
+	// Delay for longer than the cache window.
+	mClock.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	err = db.RunTransaction(txnBOpts, func(txn *client.KV) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 
-		// Attempt to get first keyB
+		// Attempt to get first keyB.
 		if err := txn.Call(proto.Get, proto.GetArgs(keyB), gr1); err != nil {
 			return err
 		}
-		// Notify txnA put(b)
+		// Notify txnA put(b).
 		ch <- struct{}{}
-		// Wait for txnA finish commit
+		// Wait for txnA finish commit.
 		<-ch
-		// get(b) again
+		// get(b) again.
 		if err := txn.Call(proto.Get, proto.GetArgs(keyB), gr2); err != nil {
 			return err
 		}
@@ -555,10 +553,11 @@ func TestTxnRepeatGetDifferentValue(t *testing.T) {
 	}
 }
 
-// When two writes in a txn is interleaved by a range split, the second write
-// may redirect to the new range, this new range will have a new lowWater
-// in it's timestamp cache. But the second write don't push its timestamp.
-// So another txn two reads before and after the range split will get different value.
+// TestTxnRepeatGetWithRangeSplit simulates two writes in a single
+// transaction, with a range split occurring between. The second write
+// is sent to the new range. The test verifies that another transaction
+// reading before and after the split will read the same values.
+// See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	db, _, _, mClock, _, stopper, err := createTestDB()
 	if err != nil {
@@ -570,7 +569,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	keyC := proto.Key("c")
 	splitKey := proto.Key("b")
 	ch := make(chan struct{})
-	// Use snapshot isolation
+	// Use snapshot isolation.
 	txnAOpts := &client.TransactionOptions{
 		Name:      "txnA",
 		Isolation: proto.SNAPSHOT,
@@ -585,9 +584,9 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
 				return err
 			}
-			// Notify txnB do 1st get(c)
+			// Notify txnB do 1st get(c).
 			ch <- struct{}{}
-			// Wait for txnB notify us to put(c)
+			// Wait for txnB notify us to put(c).
 			<-ch
 			// Write now to keyC, which will keep timestamp.
 			if err := txn.Call(proto.Put, proto.PutArgs(keyC, []byte("value2")), &proto.PutResponse{}); err != nil {
@@ -595,29 +594,29 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			}
 			return nil
 		})
-		// Notify txnB do 2nd get(c)
+		// Notify txnB do 2nd get(c).
 		ch <- struct{}{}
 	}()
 
-	// Wait till txnA finish put(a)
+	// Wait till txnA finish put(a).
 	<-ch
 
 	err = db.RunTransaction(txnBOpts, func(txn *client.KV) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 
-		// First get keyC, value will be nil
+		// First get keyC, value will be nil.
 		if err := txn.Call(proto.Get, proto.GetArgs(keyC), gr1); err != nil {
 			return err
 		}
-		mClock.Set(time.Duration(1 * time.Second).Nanoseconds())
-		// Split range by keyB
+		mClock.Set(time.Second.Nanoseconds())
+		// Split range by keyB.
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
 		if err := db.Call(proto.AdminSplit, req, resp); err != nil {
 			t.Fatal(err)
 		}
-		// Wait till split complete
+		// Wait till split complete.
 		// Check that we split 1 times in allotted time.
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the txn records.
@@ -629,11 +628,11 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}, 6*time.Second); err != nil {
 			t.Errorf("failed to split 1 times: %s", err)
 		}
-		// Notify txnA put(c)
+		// Notify txnA put(c).
 		ch <- struct{}{}
-		// Wait for txnA finish commit
+		// Wait for txnA finish commit.
 		<-ch
-		// Get(c) again
+		// Get(c) again.
 		if err := txn.Call(proto.Get, proto.GetArgs(keyC), gr2); err != nil {
 			return err
 		}

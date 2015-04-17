@@ -28,12 +28,12 @@ import (
 )
 
 const (
-	// minCacheWindow specifies the minimum duration to hold entries in
+	// MinTSCacheWindow specifies the minimum duration to hold entries in
 	// the cache before allowing eviction. After this window expires,
 	// transactions writing to this node with timestamps lagging by more
 	// than minCacheWindow will necessarily have to advance their commit
 	// timestamp.
-	minCacheWindow = 10 * time.Second
+	MinTSCacheWindow = 10 * time.Second
 )
 
 // A TimestampCache maintains an interval tree FIFO cache of keys or
@@ -169,12 +169,12 @@ func (tc *TimestampCache) MergeInto(dest *TimestampCache, clear bool) {
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no
-// longer within the minCacheWindow.
+// longer within the MinTSCacheWindow.
 func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
 	ce := value.(cacheEntry)
 	// Compute the edge of the cache window.
 	edge := tc.latest
-	edge.WallTime -= minCacheWindow.Nanoseconds()
+	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
 	if !edge.Less(ce.timestamp) {
