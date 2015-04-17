@@ -18,6 +18,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,11 +34,10 @@ import (
 
 // Context defaults.
 const (
-	defaultAddr            = ":8080"
-	defaultMaxOffset       = 250 * time.Millisecond
-	defaultGossipInterval  = 2 * time.Second
-	defaultGossipBootstrap = ":8080"
-	defaultCacheSize       = 1 << 30 // GB
+	defaultAddr           = ":8080"
+	defaultMaxOffset      = 250 * time.Millisecond
+	defaultGossipInterval = 2 * time.Second
+	defaultCacheSize      = 1 << 30 // GB
 )
 
 // Context holds parameters needed to setup a server.
@@ -103,23 +104,24 @@ type Context struct {
 // NewContext returns a Context with default values.
 func NewContext() *Context {
 	return &Context{
-		Addr:            defaultAddr,
-		MaxOffset:       defaultMaxOffset,
-		GossipInterval:  defaultGossipInterval,
-		GossipBootstrap: defaultGossipBootstrap,
-		CacheSize:       defaultCacheSize,
+		Addr:           defaultAddr,
+		MaxOffset:      defaultMaxOffset,
+		GossipInterval: defaultGossipInterval,
+		CacheSize:      defaultCacheSize,
 	}
 }
 
 // Init interprets the stores parameter to initialize a slice of
-// engine.Engine objects and parses node attributes.
+// engine.Engine objects, parses node attributes, and initializes
+// the gossip bootstrap resolvers.
 func (ctx *Context) Init() error {
 	var err error
 	storesRE := regexp.MustCompile(`([^=]+)=([^,]+)(,|$)`)
 	// Error if regexp doesn't match.
 	storeSpecs := storesRE.FindAllStringSubmatch(ctx.Stores, -1)
 	if storeSpecs == nil || len(storeSpecs) == 0 {
-		return util.Errorf("invalid or empty engines specification %q", ctx.Stores)
+		return fmt.Errorf("invalid or empty engines specification %q, "+
+			"did you pass -stores?", ctx.Stores)
 	}
 
 	ctx.Engines = nil
@@ -139,9 +141,12 @@ func (ctx *Context) Init() error {
 
 	ctx.NodeAttributes = parseAttributes(ctx.Attrs)
 
-	resolvers, err := parseGossipBootstrapAddrs(ctx.GossipBootstrap)
+	resolvers, err := ctx.parseGossipBootstrapAddrs()
 	if err != nil {
 		return err
+	}
+	if len(resolvers) == 0 {
+		return errors.New("no resolvers specified for gossip network, did you pass -gossip?")
 	}
 	ctx.GossipBootstrapResolvers = resolvers
 
@@ -165,6 +170,33 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 	return engine.NewRocksDB(attrs, path, ctx.CacheSize), nil
 }
 
+// parseGossipBootstrapAddrs parses a comma-separated list of
+// gossip bootstrap addresses or resolvers.
+func (ctx *Context) parseGossipBootstrapAddrs() ([]*gossip.Resolver, error) {
+	var bootstrapResolvers []*gossip.Resolver
+	gossipBootstrap := ctx.GossipBootstrap
+	addresses := strings.Split(gossipBootstrap, ",")
+	for _, address := range addresses {
+		if len(address) == 0 {
+			continue
+		}
+		// Special case self:// to pick a nice address that resolves
+		// uniquely for use in Gossip. This avoids having to specify
+		// the port for single-node clusters twice (once in -addr,
+		// once in -gossip).
+		if strings.HasPrefix(address, "self://") {
+			address = util.EnsureHost(ctx.Addr)
+		}
+		resolver, err := gossip.NewResolver(address)
+		if err != nil {
+			return nil, err
+		}
+		bootstrapResolvers = append(bootstrapResolvers, resolver)
+	}
+
+	return bootstrapResolvers, nil
+}
+
 // parseAttributes parses a colon-separated list of strings,
 // filtering empty strings (i.e. "::" will yield no attributes.
 // Returns the list of strings as Attributes.
@@ -176,23 +208,4 @@ func parseAttributes(attrsStr string) proto.Attributes {
 		}
 	}
 	return proto.Attributes{Attrs: filtered}
-}
-
-// parseGossipBootstrapAddrs parses a comma-separated list of
-// gossip bootstrap addresses or resolvers.
-func parseGossipBootstrapAddrs(gossipBootstrap string) ([]*gossip.Resolver, error) {
-	var bootstrapResolvers []*gossip.Resolver
-	addresses := strings.Split(gossipBootstrap, ",")
-	for _, address := range addresses {
-		if len(address) == 0 {
-			continue
-		}
-		resolver, err := gossip.NewResolver(address)
-		if err != nil {
-			return nil, err
-		}
-		bootstrapResolvers = append(bootstrapResolvers, resolver)
-	}
-
-	return bootstrapResolvers, nil
 }
