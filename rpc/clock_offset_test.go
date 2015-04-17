@@ -319,6 +319,38 @@ func TestFindOffsetIntervalTwoClocks(t *testing.T) {
 	assertMajorityIntervalError(remoteClocks, t)
 }
 
+// TestFindOffsetWithLargeError tests a case where offset errors are
+// bigger than the max offset (e.g., a case where heartbeat messages
+// to the node are having high latency).
+func TestFindOffsetWithLargeError(t *testing.T) {
+	maxOffset := 100 * time.Nanosecond
+
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(maxOffset)
+	offsets := map[string]proto.RemoteOffset{}
+	// Offsets are bigger than maxOffset, but Errors are also bigger than Offset.
+	offsets["0"] = proto.RemoteOffset{Offset: 110, Error: 300}
+	offsets["1"] = proto.RemoteOffset{Offset: 120, Error: 300}
+	offsets["2"] = proto.RemoteOffset{Offset: 130, Error: 300}
+
+	remoteClocks := &RemoteClockMonitor{
+		offsets: offsets,
+		lClock:  clock,
+	}
+
+	interval, err := remoteClocks.findOffsetInterval()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedInterval := ClusterOffsetInterval{Lowerbound: -270, Upperbound: 510}
+	if interval != expectedInterval {
+		t.Errorf("expected interval %v, instead %v", expectedInterval, interval)
+	}
+	// The interval is still considered healthy.
+	assertIntervalHealth(true, interval, maxOffset, t)
+}
+
 // TestIsHealthyOffsetInterval tests if we correctly determine if
 // a ClusterOffsetInterval is healthy or not i.e. if it indicates that the
 // local clock has too great an offset or not.
