@@ -105,6 +105,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Listen listens on the configured address but does not start
 // accepting connections until Serve is called.
 func (s *Server) Listen() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	ln, err := tlsListen(s.addr.Network(), s.addr.String(), s.context.tlsConfig)
 	if err != nil {
 		return err
@@ -116,9 +118,7 @@ func (s *Server) Listen() error {
 		s.Close()
 		return err
 	}
-	s.mu.Lock()
 	s.addr = addr
-	s.mu.Unlock()
 
 	return nil
 }
@@ -152,7 +152,7 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 		// TLS certificate. But if the port is different, it should be because
 		// we asked for ":0" and got an arbitrary unused port; that needs to be
 		// reflected in our addr.
-		oldHost, oldPort, err := net.SplitHostPort(oldAddr.String())
+		host, oldPort, err := net.SplitHostPort(util.EnsureHost(oldAddr.String()))
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse original addr '%s': %v",
 				oldAddr.String(), err)
@@ -167,7 +167,7 @@ func updatedAddr(oldAddr, newAddr net.Addr) (net.Addr, error) {
 			log.Warningf("asked for port %s, got %s", oldPort, newPort)
 		}
 
-		return util.MakeRawAddr("tcp", net.JoinHostPort(oldHost, newPort)), nil
+		return util.MakeRawAddr("tcp", net.JoinHostPort(host, newPort)), nil
 
 	case "unix":
 		if oldAddr.String() != newAddr.String() {

@@ -91,11 +91,6 @@ func NewResolver(spec string) (*Resolver, error) {
 			"valid types are 'tcp', 'lb', 'unix'", spec)
 	}
 
-	// If we're on tcp or lb make sure we fill in the host when not specified (eg: ":8080")
-	if resolverType == "tcp" || resolverType == "lb" {
-		address = util.EnsureHost(address)
-	}
-
 	return &Resolver{resolverType, address, false}, nil
 }
 
