@@ -263,6 +263,15 @@ func TestRangeCanService(t *testing.T) {
 	}
 
 	// TODO(spencer): verify non-leader inconsistent read works.
+
+	// Verify range checking.
+	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
+	gArgs.Key = proto.Key("b")
+	gArgs.Txn = nil
+	err := tc.rng.AddCmd(proto.Get, gArgs, gReply, true)
+	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
+		t.Errorf("expected range key mistmatch error: %s", err)
+	}
 }
 
 // TestRangeGossipFirstRange verifies that the first range gossips its
