@@ -112,6 +112,8 @@ func createTestDB() (db *client.KV, eng engine.Engine, clock *hlc.Clock,
 	if err = store.Start(stopper); err != nil {
 		return
 	}
+	r, err := store.GetRange(1)
+	r.WaitForElection()
 	return
 }
 
