@@ -70,6 +70,9 @@ func (r rpcError) Error() string { return r.errMsg }
 // CanRetry implements the Retryable interface.
 func (r rpcError) CanRetry() bool { return true }
 
+// sendOneFn is overwritten in tests to mock sendOne.
+var sendOneFn = sendOne
+
 // A SendError indicates that too many RPCs to the replica
 // set failed to achieve requested number of successful responses.
 // canRetry is set depending on the types of errors encountered.
@@ -96,6 +99,13 @@ func (s SendError) CanRetry() bool { return s.canRetry }
 // number of required replies.
 func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.Addr) interface{},
 	getReply func() interface{}, context *Context) ([]interface{}, error) {
+
+	if opts.N <= 0 {
+		return nil, SendError{
+			errMsg:   fmt.Sprintf("opts.N must be positive: %d", opts.N),
+			canRetry: false,
+		}
+	}
 
 	if len(addrs) < opts.N {
 		return nil, SendError{
@@ -152,7 +162,7 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 			}
 			reply := getReply()
 			log.V(1).Infof("%s: sending request to %s: %+v", method, clients[index].Addr(), args)
-			go sendOne(clients[index], opts.Timeout, method, args, reply, helperChan)
+			go sendOneFn(clients[index], opts.Timeout, method, args, reply, helperChan)
 		}
 		// Wait for completions.
 		select {
@@ -166,11 +176,11 @@ func Send(opts Options, method string, addrs []net.Addr, getArgs func(addr net.A
 				if log.V(1) {
 					log.Warningf("%s: error reply: %+v", method, t)
 				}
-				remainingRPCs := len(clients) - errors
-				if remainingRPCs < opts.N {
+				remainingNonErrorRPCs := len(clients) - errors
+				if remainingNonErrorRPCs < opts.N {
 					return nil, SendError{
 						errMsg:   fmt.Sprintf("too many errors encountered (%d of %d total): %v", errors, len(clients), t),
-						canRetry: retryableErrors+remainingRPCs > len(clients),
+						canRetry: remainingNonErrorRPCs+retryableErrors >= opts.N,
 					}
 				}
 				// Send to additional replicas if available.
