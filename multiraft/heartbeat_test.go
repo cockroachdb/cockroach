@@ -21,11 +21,9 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
-	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/coreos/etcd/raft/raftpb"
 )
 
@@ -33,11 +31,11 @@ import (
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
 func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f func(*RaftMessageRequest) bool) {
-	if stopper != nil {
-		defer stopper.SetStopped()
+	if stopper == nil {
+		// Just to avoid listening on a nil channel below.
+		stopper = util.NewStopper()
 	}
 	for {
-		t := time.After(500 * time.Millisecond)
 		select {
 		case e, ok := <-ch:
 			if !ok {
@@ -47,8 +45,6 @@ func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f fu
 			if f(e.args.(*RaftMessageRequest)) {
 				return
 			}
-		case <-t:
-			log.Warning("timeout when reading from intercept channel")
 		case <-stopper.ShouldStop():
 			return
 		}
@@ -225,8 +221,9 @@ func validateHeartbeatSingleGroup(nodeCount, tickCount int, t *testing.T) {
 			return cnt.Sum() >= expCnt.Sum()
 		})
 	// Once done counting, simply process messages.
-	stopper.AddWorker()
-	go processEventsUntil(transport.Events, stopper, alwaysFalse)
+	stopper.RunWorker(func() {
+		processEventsUntil(transport.Events, stopper, alwaysFalse)
+	})
 	<-blocker
 	if !reflect.DeepEqual(actCnt, expCnt) {
 		t.Errorf("actual and expected heartbeat counts differ for %d nodes, "+
@@ -331,7 +328,6 @@ func TestHeartbeatMultipleGroupsJointLeader(t *testing.T) {
 			expCntSecondPhase, actCnt)
 	}
 	// Keep processing without inspection and shutdown cluster.
-	stopper.AddWorker()
 	go processEventsUntil(transport.Events, stopper, alwaysFalse)
 	<-done
 	stopper.Stop()

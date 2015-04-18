@@ -166,6 +166,8 @@ type RangeManager interface {
 	ProposeRaftCommand(cmdIDKey, proto.InternalRaftCommand) <-chan error
 	RemoveRange(rng *Range) error
 	SplitRange(origRng, newRng *Range) error
+
+	startGroup(raftID int64) error
 }
 
 // A Range is a contiguous keyspace with writes managed via an
@@ -188,6 +190,8 @@ type Range struct {
 	appliedIndex uint64
 	lease        unsafe.Pointer // Information for leader lease
 	stopper      *util.Stopper
+	// TODO(tschottdorf)
+	election chan struct{}
 
 	sync.RWMutex                 // Protects the following fields (and Desc)
 	cmdQ         *CommandQueue   // Enforce at most one command is running per key(s)
@@ -206,6 +210,7 @@ func NewRange(desc *proto.RangeDescriptor, rm RangeManager) (*Range, error) {
 		tsCache:     NewTimestampCache(rm.Clock()),
 		respCache:   NewResponseCache(desc.RaftID, rm.Engine()),
 		pendingCmds: map[cmdIDKey]*pendingCmd{},
+		election:    make(chan struct{}, 100),
 	}
 	r.SetDesc(desc)
 
@@ -1458,9 +1463,14 @@ func (r *Range) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest, repl
 	// r.grantLeaderLease(args.Lease)
 }
 
-// requestLeaderLease sends a request to obtain or extend a leader lease for this
-// replica.
+// requestLeaderLease sends a request to obtain or extend a leader lease for
+// this replica. Being a first mover, it registers itself as a task with the
+// stopper.
 func (r *Range) requestLeaderLease(term uint64) {
+	if !r.stopper.StartTask() {
+		return
+	}
+	defer r.stopper.FinishTask()
 	// Prepare a Raft command to get a leader lease for the replica
 	// of that group that lives in our store.
 	wallTime := r.rm.Clock().PhysicalNow()
@@ -2225,4 +2235,13 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
 	}
 	return nil
+}
+
+// WaitForElection waits for an election event to reach this Range.
+// It is mostly useful for testing.
+func (r *Range) WaitForElection() {
+	// Make sure the group is active before trying this.
+	r.rm.startGroup(r.Desc().RaftID)
+	<-r.election
+	return
 }

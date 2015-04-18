@@ -407,7 +407,8 @@ func TestMembershipChange(t *testing.T) {
 	// Create a group with a single member, cluster.nodes[0].
 	groupID := uint64(1)
 	cluster.createGroup(groupID, 0, 1)
-	cluster.triggerElection(0, groupID)
+	// An automatic election is triggered since this is a single-node Raft group.
+	//cluster.triggerElection(0, groupID)
 	cluster.waitForElection(0)
 
 	// Consume and apply the membership change events.

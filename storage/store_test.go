@@ -558,6 +558,10 @@ func TestStoreExecuteCmdOutOfRange(t *testing.T) {
 	defer stopper.Stop()
 	// Split the range and then remove the second half to clear up some space.
 	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
+	// This shouldn't be necessary, but without it, the range sometimes
+	// gets removed before the election is finished, and then Raft panics.
+	// See #702.
+	rng.WaitForElection()
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)
 	}

@@ -283,11 +283,13 @@ func (c *StoreConfig) setDefaults() {
 	}
 }
 
-// TestStoreConfig is a StoreConfig for use in tests which uses very short timeouts.
+// TestStoreConfig is a StoreConfig for use in tests.
+// It uses a high default timeout since most test scenarios elect a leader
+// automatically upon creating the group.
 var TestStoreConfig = StoreConfig{
-	RaftTickInterval:           time.Millisecond,
+	RaftTickInterval:           100 * time.Millisecond,
 	RaftHeartbeatIntervalTicks: 1,
-	RaftElectionTimeoutTicks:   5,
+	RaftElectionTimeoutTicks:   2,
 }
 
 // A Store maintains a map of ranges by start key. A Store corresponds
@@ -791,7 +793,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	if err != nil {
 		return err
 	}
-	if err := s.multiraft.CreateGroup(uint64(newRng.Desc().RaftID)); err != nil {
+	if err := s.startGroup(newRng.Desc().RaftID); err != nil {
 		return err
 	}
 	return nil
@@ -834,13 +836,14 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 // AddRange adds the range to the store's range map and to the sorted
 // rangesByKey slice.
 func (s *Store) AddRange(rng *Range) error {
+	log.Errorf("adding range")
 	s.mu.Lock()
 	err := s.addRangeInternal(rng, true)
 	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	if err := s.multiraft.CreateGroup(uint64(rng.Desc().RaftID)); err != nil {
+	if err := s.startGroup(rng.Desc().RaftID); err != nil {
 		return err
 	}
 	return nil
@@ -1073,6 +1076,12 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	return wiErr
 }
 
+// startGroup creates and starts the given Raft group.
+// Calls to existing groups are allowed, but have no effect.
+func (s *Store) startGroup(raftID int64) error {
+	return s.multiraft.CreateGroup(uint64(raftID))
+}
+
 // ProposeRaftCommand submits a command to raft. The command is processed
 // asynchronously and an error or nil will be written to the returned
 // channel when it is committed or aborted (but note that committed does
@@ -1083,7 +1092,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
+	err := s.startGroup(cmd.RaftID)
 	if err != nil {
 		ch := make(chan error, 1)
 		ch <- err
@@ -1171,6 +1180,8 @@ func (s *Store) processRaft() {
 						log.Warning(err)
 						continue
 					}
+					// TODO(tschottdorf)
+					r.election <- struct{}{}
 					if e.NodeID != s.RaftNodeID() {
 						// TODO(tschottdorf): Fatalf if we think we have a leader
 						// lease for that group, during which we're not supposed to

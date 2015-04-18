@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -420,7 +420,7 @@ func newState(m *MultiRaft) *state {
 
 func (s *state) start(stopper *util.Stopper) {
 	s.stopper = stopper
-	s.stopper.RunWorker(func() {
+	stopper.RunWorker(func() {
 		log.V(1).Infof("node %v starting", s.nodeID)
 		s.writeTask.start(s.stopper)
 		// These maps form a kind of state machine: We don't want to read from the
@@ -649,6 +649,11 @@ func (s *state) createGroup(groupID uint64) error {
 		}
 	}
 
+	// Automatically campaign and elect a leader for this group if there's
+	// exactly one known node for this group.
+	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == NodeID(cs.Nodes[0]) {
+		s.multiNode.Campaign(context.Background(), groupID)
+	}
 	return nil
 }
 
