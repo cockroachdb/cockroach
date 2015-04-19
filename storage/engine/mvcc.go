@@ -437,7 +437,7 @@ var getBufferPool = sync.Pool{
 // The values of multiple versions for the given key should
 // be organized as follows:
 // ...
-// keyA : MVCCMetatata of keyA
+// keyA : MVCCMetadata of keyA
 // keyA_Timestamp_n : value of version_n
 // keyA_Timestamp_n-1 : value of version_n-1
 // ...
