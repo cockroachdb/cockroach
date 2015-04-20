@@ -68,7 +68,7 @@ all timestamp-suffixed MVCC version keys sort consecutively with the
 metadata key. We use an escape-based encoding which transforms all nul
 ("\x00") characters in the key and is terminated with the sequence
 "\x00\x01", which is guaranteed to not occur elsewhere in the encoded
-value.
+value. See util/encoding/encoding.go for more details.
 
 We considered inlining the most recent MVCC version in the
 MVCCMetadata. This would reduce the storage overhead of storing the
