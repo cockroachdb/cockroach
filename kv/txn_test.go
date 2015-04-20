@@ -163,7 +163,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 		}
 		readValue := []byte(fmt.Sprintf("value-%d", i+skipCount))
 		pr := proto.PutResponse{}
-		s.KV.Run(&client.Call{
+		s.KV.Run(client.Call{
 			Args: &proto.PutRequest{
 				RequestHeader: proto.RequestHeader{
 					Key: key,
@@ -175,7 +175,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			t.Errorf("%d: got write error: %v", i, err)
 		}
 		gr := proto.GetResponse{}
-		s.KV.Run(&client.Call{
+		s.KV.Run(client.Call{
 			Args: &proto.GetRequest{
 				RequestHeader: proto.RequestHeader{
 					Key:       key,
@@ -212,7 +212,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			if err := txnDB.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				// Read within the transaction.
 				gr := proto.GetResponse{}
-				txn.Run(&client.Call{
+				txn.Run(client.Call{
 					Args: &proto.GetRequest{
 						RequestHeader: proto.RequestHeader{
 							Key:       key,
@@ -604,7 +604,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Split range by keyB.
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := s.KV.Run(&client.Call{Args: req, Reply: resp}); err != nil {
+		if err := s.KV.Run(client.Call{Args: req, Reply: resp}); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.

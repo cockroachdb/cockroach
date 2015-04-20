@@ -106,7 +106,7 @@ func (tm *txnMetadata) close(txn *proto.Transaction, resolved []proto.Key, sende
 		log.V(1).Infof("cleaning up %d intent(s) for transaction %s", tm.keys.Len(), txn)
 	}
 	for _, o := range tm.keys.GetOverlaps(engine.KeyMin, engine.KeyMax) {
-		call := &client.Call{
+		call := client.Call{
 			Args: &proto.InternalResolveIntentRequest{
 				RequestHeader: proto.RequestHeader{
 					Timestamp: txn.Timestamp,
@@ -190,7 +190,7 @@ func NewTxnCoordSender(wrapped client.KVSender, clock *hlc.Clock, linearizable b
 // Send implements the client.KVSender interface. If the call is part
 // of a transaction, the coordinator will initialize the transaction
 // if it's not nil but has an empty ID.
-func (tc *TxnCoordSender) Send(call *client.Call) {
+func (tc *TxnCoordSender) Send(call client.Call) {
 	header := call.Args.Header()
 	tc.maybeBeginTxn(header)
 
@@ -234,7 +234,7 @@ func (tc *TxnCoordSender) maybeBeginTxn(header *proto.RequestHeader) {
 // key range is recorded as live intents for eventual cleanup upon
 // transaction commit. Upon successful txn commit, initiates cleanup
 // of intents.
-func (tc *TxnCoordSender) sendOne(call *client.Call) {
+func (tc *TxnCoordSender) sendOne(call client.Call) {
 	var startNS int64
 	header := call.Args.Header()
 	// If this call is part of a transaction...
@@ -352,7 +352,7 @@ func (tc *TxnCoordSender) sendBatch(batchArgs *proto.BatchRequest, batchReply *p
 	for i := range batchArgs.Requests {
 		// Initialize args header values where appropriate.
 		args := batchArgs.Requests[i].GetValue().(proto.Request)
-		call := &client.Call{Args: args}
+		call := client.Call{Args: args}
 		if args.Header().User == "" {
 			args.Header().User = batchArgs.User
 		}
@@ -498,7 +498,7 @@ func (tc *TxnCoordSender) heartbeat(txn *proto.Transaction) {
 				}
 				request.Header().Timestamp = tc.clock.Now()
 				reply := &proto.InternalHeartbeatTxnResponse{}
-				call := &client.Call{
+				call := client.Call{
 					Args:  request,
 					Reply: reply,
 				}

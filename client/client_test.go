@@ -70,7 +70,7 @@ func (ss *notifyingSender) wait() {
 	ss.waiter = nil
 }
 
-func (ss *notifyingSender) Send(call *client.Call) {
+func (ss *notifyingSender) Send(call client.Call) {
 	ss.wrapped.Send(call)
 	if ss.waiter != nil {
 		ss.waiter.Done()
@@ -175,7 +175,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 						reply := args.CreateReply()
 						var err error
 						for i := 0; ; i++ {
-							err = kvClient.Run(&client.Call{Args: args, Reply: reply})
+							err = kvClient.Run(client.Call{Args: args, Reply: reply})
 							if _, ok := err.(*proto.WriteIntentError); !ok {
 								break
 							}
@@ -361,7 +361,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 	kvClient.User = storage.UserRoot
 
 	kvClient.Run(client.PutCall(proto.Key("a"), []byte{}))
-	kvClient.Run(&client.Call{
+	kvClient.Run(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("b"),
@@ -396,7 +396,7 @@ func TestKVClientBatch(t *testing.T) {
 	kvClient.User = storage.UserRoot
 
 	keys := []proto.Key{}
-	calls := []*client.Call{}
+	calls := []client.Call{}
 	for i := 0; i < 10; i++ {
 		key := proto.Key(fmt.Sprintf("key %02d", i))
 		keys = append(keys, key)
@@ -415,7 +415,7 @@ func TestKVClientBatch(t *testing.T) {
 	}
 
 	// Now try 2 scans.
-	calls = []*client.Call{
+	calls = []client.Call{
 		client.ScanCall(proto.Key("key 00"), proto.Key("key 05"), 0),
 		client.ScanCall(proto.Key("key 05"), proto.Key("key 10"), 0),
 	}
@@ -512,7 +512,7 @@ func ExampleKV_RunMultiple() {
 	batchSize := 12
 	keys := make([]string, batchSize)
 	values := make([][]byte, batchSize)
-	calls := []*client.Call{}
+	calls := []client.Call{}
 	for i := 0; i < batchSize; i++ {
 		keys[i] = fmt.Sprintf("key-%03d", i)
 		values[i] = []byte(fmt.Sprintf("value-%03d", i))
@@ -756,7 +756,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	keys := make([]proto.Key, numKeys)
 	nvs := make([]int, numKeys)
 	for t := 1; t <= numVersions; t++ {
-		var calls []*client.Call
+		var calls []client.Call
 		for i := 0; i < numKeys; i++ {
 			if t == 1 {
 				keys[i] = proto.Key(encoding.EncodeUvarint([]byte("key-"), uint64(i)))

@@ -51,7 +51,7 @@ func (db *DB) storeData(r Resolution, data proto.TimeSeriesData) error {
 
 		// TODO(mrtracy): If there are multiple values to merge, they could be
 		// batched together instead of being called individually.
-		if err := db.kv.Run(&client.Call{
+		if err := db.kv.Run(client.Call{
 			Args: &proto.InternalMergeRequest{
 				RequestHeader: proto.RequestHeader{
 					Key: key,

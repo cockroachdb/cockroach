@@ -56,7 +56,7 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 }
 
 type runner interface {
-	Run(calls ...*client.Call) error
+	Run(calls ...client.Call) error
 }
 
 // The following structs and methods provide a mechanism for verifying
@@ -197,7 +197,7 @@ func sumCmd(c *cmd, db runner, t *testing.T) error {
 		sum += v
 	}
 	r := &proto.PutResponse{}
-	err := db.Run(&client.Call{
+	err := db.Run(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{Key: c.getKey()},
 			Value:         proto.Value{Integer: gogoproto.Int64(sum)},
@@ -210,7 +210,7 @@ func sumCmd(c *cmd, db runner, t *testing.T) error {
 // commitCmd commits the transaction.
 func commitCmd(c *cmd, db runner, t *testing.T) error {
 	r := &proto.EndTransactionResponse{}
-	err := db.Run(&client.Call{Args: &proto.EndTransactionRequest{Commit: true}, Reply: r})
+	err := db.Run(client.Call{Args: &proto.EndTransactionRequest{Commit: true}, Reply: r})
 	c.debug = fmt.Sprintf("[ts=%d]", r.Timestamp.Logical)
 	return err
 }

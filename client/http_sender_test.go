@@ -81,11 +81,7 @@ func TestHTTPSenderSend(t *testing.T) {
 
 	sender := createTestHTTPSender(addr)
 	reply := &proto.PutResponse{}
-	call := &Call{
-		Args:  testPutReq,
-		Reply: reply,
-	}
-	sender.Send(call)
+	sender.Send(Call{Args: testPutReq, Reply: reply})
 	if reply.GoError() != nil {
 		t.Errorf("expected success; got %s", reply.GoError())
 	}
@@ -137,11 +133,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 
 		sender := createTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
-		call := &Call{
-			Args:  testPutReq,
-			Reply: reply,
-		}
-		sender.Send(call)
+		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if test.retry {
 			if count != 2 {
 				t.Errorf("%d: expected retry", i)
@@ -199,8 +191,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		s = server
 		sender := createTestHTTPSender(addr)
 		reply := &proto.PutResponse{}
-		call := &Call{Args: testPutReq, Reply: reply}
-		sender.Send(call)
+		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if reply.GoError() != nil {
 			t.Errorf("%d: expected success; got %s", i, reply.GoError())
 		}

@@ -47,8 +47,8 @@ func (c *Call) Method() string {
 }
 
 // GetCall returns a Call object initialized to get the value at key.
-func GetCall(key proto.Key) *Call {
-	return &Call{
+func GetCall(key proto.Key) Call {
+	return Call{
 		Args: &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -60,8 +60,8 @@ func GetCall(key proto.Key) *Call {
 
 // IncrementCall returns a Call object initialized to increment the
 // value at key by increment.
-func IncrementCall(key proto.Key, increment int64) *Call {
-	return &Call{
+func IncrementCall(key proto.Key, increment int64) Call {
+	return Call{
 		Args: &proto.IncrementRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -74,10 +74,10 @@ func IncrementCall(key proto.Key, increment int64) *Call {
 
 // PutCall returns a Call object initialized to put value
 // as a byte slice at key.
-func PutCall(key proto.Key, valueBytes []byte) *Call {
+func PutCall(key proto.Key, valueBytes []byte) Call {
 	value := proto.Value{Bytes: valueBytes}
 	value.InitChecksum(key)
-	return &Call{
+	return Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -90,14 +90,14 @@ func PutCall(key proto.Key, valueBytes []byte) *Call {
 
 // PutProtoCall returns a Call object initialized to put the proto
 // message as a byte slice at key.
-func PutProtoCall(key proto.Key, msg gogoproto.Message) *Call {
+func PutProtoCall(key proto.Key, msg gogoproto.Message) Call {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
-		return &Call{Err: err}
+		return Call{Err: err}
 	}
 	value := proto.Value{Bytes: data}
 	value.InitChecksum(key)
-	return &Call{
+	return Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -110,8 +110,8 @@ func PutProtoCall(key proto.Key, msg gogoproto.Message) *Call {
 
 // DeleteCall returns a Call object initialized to delete the value at
 // key.
-func DeleteCall(key proto.Key) *Call {
-	return &Call{
+func DeleteCall(key proto.Key) Call {
+	return Call{
 		Args: &proto.DeleteRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
@@ -123,8 +123,8 @@ func DeleteCall(key proto.Key) *Call {
 
 // DeleteRangeCall returns a Call object initialized to delete the
 // values in the given key range (excluding the endpoint).
-func DeleteRangeCall(startKey, endKey proto.Key) *Call {
-	return &Call{
+func DeleteRangeCall(startKey, endKey proto.Key) Call {
+	return Call{
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    startKey,
@@ -137,8 +137,8 @@ func DeleteRangeCall(startKey, endKey proto.Key) *Call {
 
 // ScanCall returns a Call object initialized to scan from start to
 // end keys with max results.
-func ScanCall(key, endKey proto.Key, maxResults int64) *Call {
-	return &Call{
+func ScanCall(key, endKey proto.Key, maxResults int64) Call {
+	return Call{
 		Args: &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:    key,

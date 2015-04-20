@@ -22,12 +22,12 @@ package client
 // safe.
 type Txn struct {
 	kv       KV
-	prepared []*Call
+	prepared []Call
 }
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (t *Txn) Run(calls ...*Call) error {
+func (t *Txn) Run(calls ...Call) error {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -55,7 +55,7 @@ func (t *Txn) Run(calls ...*Call) error {
 // with the KV interface, but potentially removes the optimization to
 // send the EndTransaction in the same batch as the final set of
 // prepared calls.
-func (t *Txn) Prepare(calls ...*Call) {
+func (t *Txn) Prepare(calls ...Call) {
 	for _, c := range calls {
 		c.resetClientCmdID(t.kv.clock)
 	}

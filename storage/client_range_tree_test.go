@@ -143,7 +143,7 @@ func splitRange(db *client.KV, key proto.Key) error {
 		SplitKey: key,
 	}
 	resp := &proto.AdminSplitResponse{}
-	return db.Run(&client.Call{Args: req, Reply: resp})
+	return db.Run(client.Call{Args: req, Reply: resp})
 }
 
 // TestSetupRangeTree ensures that SetupRangeTree correctly setups up the range

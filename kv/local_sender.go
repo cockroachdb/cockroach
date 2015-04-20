@@ -96,7 +96,7 @@ func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
 // up from the store map if specified by header.Replica; otherwise,
 // the command is being executed locally, and the replica is
 // determined via lookup through each store's LookupRange method.
-func (ls *LocalSender) Send(call *client.Call) {
+func (ls *LocalSender) Send(call client.Call) {
 	var err error
 	var store *storage.Store
 

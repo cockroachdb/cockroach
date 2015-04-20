@@ -116,7 +116,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		log.Infof("starting split at key %q...", splitKey)
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := s.KV.Run(&client.Call{Args: req, Reply: resp}); err != nil {
+		if err := s.KV.Run(client.Call{Args: req, Reply: resp}); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)

@@ -101,7 +101,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".
-	if err := db.Run(&client.Call{
+	if err := db.Run(client.Call{
 		Args: &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("b"),
