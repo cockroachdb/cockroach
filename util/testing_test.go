@@ -76,3 +76,18 @@ func TestTrueWithin(t *testing.T) {
 		t.Errorf("unexpected error on method which returns true after 5 invocations: %v", err)
 	}
 }
+
+func TestSucceedsWithin(t *testing.T) {
+	// Try a method which always succeeds.
+	SucceedsWithin(t, 1*time.Millisecond, func() error { return nil })
+
+	// Try a method which suceeds on 5th invocation.
+	count := 0
+	SucceedsWithin(t, 1*time.Millisecond, func() error {
+		count++
+		if count >= 5 {
+			return nil
+		}
+		return Errorf("not yet")
+	})
+}

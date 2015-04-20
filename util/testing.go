@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/util/log"
@@ -81,6 +82,9 @@ func CreateTestAddr(network string) net.Addr {
 // invoked immediately at first and then successively with an
 // exponential backoff starting at 1ns and ending at the specified
 // duration.
+//
+// This method is deprecated; use SucceedsWithin instead.
+// TODO(bdarnell): convert existing uses of IsTrueWithin to SucceedsWithin.
 func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 	total := time.Duration(0)
 	for wait := time.Duration(1); total < duration; wait *= 2 {
@@ -91,4 +95,23 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 		total += wait
 	}
 	return fmt.Errorf("condition failed to evaluate true within %s", duration)
+}
+
+// SucceedsWithin fails the test (with t.Fatal) unless the supplied
+// function runs without error within the specified duration. The
+// function is invoked immediately at first and then successively with
+// an exponential backoff starting at 1ns and ending at the specified
+// duration.
+func SucceedsWithin(t *testing.T, duration time.Duration, fn func() error) {
+	total := time.Duration(0)
+	var lastErr error
+	for wait := time.Duration(1); total < duration; wait *= 2 {
+		lastErr = fn()
+		if lastErr == nil {
+			return
+		}
+		time.Sleep(wait)
+		total += wait
+	}
+	t.Fatalf("condition failed to evaluate within %s: %s", duration, lastErr)
 }
