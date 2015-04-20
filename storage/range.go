@@ -1459,7 +1459,8 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *engine.MVCCStats, a
 
 // InternalLeaderLease evaluates and responds to a request to grant a leader lease.
 func (r *Range) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest, reply *proto.InternalLeaderLeaseResponse) {
-	// TODO(tschottdorf)
+	// TODO(tschottdorf) stub for now to get tests working.
+	r.setLease(&args.Lease)
 	// r.grantLeaderLease(args.Lease)
 }
 
@@ -1485,6 +1486,7 @@ func (r *Range) requestLeaderLease(term uint64) {
 		RaftID: r.Desc().RaftID,
 	}
 	args := &proto.InternalLeaderLeaseRequest{
+		RequestHeader: proto.RequestHeader{Key: r.Desc().StartKey},
 		Lease: proto.Lease{
 			Expiration: wallTime + duration,
 			Duration:   duration,
