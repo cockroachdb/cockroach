@@ -53,7 +53,7 @@ func TestTxnDBBasics(t *testing.T) {
 			Name:      "test",
 			Isolation: proto.SNAPSHOT,
 		}
-		err := s.DB.RunTransaction(txnOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
 			// Put transactional value.
 			if err := txn.Call(proto.Put, proto.PutArgs(key, value), &proto.PutResponse{}); err != nil {
 				return err
@@ -61,7 +61,7 @@ func TestTxnDBBasics(t *testing.T) {
 
 			// Attempt to read outside of txn.
 			gr := &proto.GetResponse{}
-			if err := s.DB.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
+			if err := s.KV.Call(proto.Get, proto.GetArgs(key), gr); err != nil {
 				return err
 			}
 			if gr.Value != nil {
@@ -90,7 +90,7 @@ func TestTxnDBBasics(t *testing.T) {
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
 		gr := &proto.GetResponse{}
-		err = s.DB.Call(proto.Get, proto.GetArgs(key), gr)
+		err = s.KV.Call(proto.Get, proto.GetArgs(key), gr)
 		if commit {
 			if err != nil || gr.Value == nil || !bytes.Equal(gr.Value.Bytes, value) {
 				t.Errorf("expected success reading value: %+v, %s", gr.Value, err)
@@ -115,7 +115,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Manual.Increment(1)
-		if tErr := s.DB.RunTransaction(txnOpts, func(txn *client.KV) error {
+		if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
 			pr := &proto.PutResponse{}
 			pa := proto.PutArgs(key, []byte(fmt.Sprintf("value-%d", i)))
 			if err := txn.Call(proto.Put, pa, pr); err != nil {
@@ -161,7 +161,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 		}
 		readValue := []byte(fmt.Sprintf("value-%d", i+skipCount))
 		pr := proto.PutResponse{}
-		s.DB.Call(proto.Put, &proto.PutRequest{
+		s.KV.Call(proto.Put, &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
 			},
@@ -171,7 +171,7 @@ func verifyUncertainty(concurrency int, maxOffset time.Duration, t *testing.T) {
 			t.Errorf("%d: got write error: %v", i, err)
 		}
 		gr := proto.GetResponse{}
-		s.DB.Call(proto.Get, &proto.GetRequest{
+		s.KV.Call(proto.Get, &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       key,
 				Timestamp: s.Clock.Now(),
@@ -300,7 +300,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 	}
 	gr := &proto.GetResponse{}
 	i := -1
-	tErr := s.DB.RunTransaction(txnOpts, func(txn *client.KV) error {
+	tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
 		i++
 		s.Manual.Increment(1)
 		futureTS := s.Clock.Now()
@@ -370,7 +370,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.DB.RunTransaction(txnOpts, func(txn *client.KV) error {
+	if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
@@ -432,19 +432,19 @@ func TestTxnTimestampRegression(t *testing.T) {
 		Name:      "test",
 		Isolation: proto.SNAPSHOT,
 	}
-	err := s.DB.RunTransaction(txnOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnOpts, func(txn *client.KV) error {
 		// Put transactional value.
 		if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
 			return err
 		}
 
 		// Attempt to read outside of txn (this will push timestamp of transaction).
-		if err := s.DB.Call(proto.Get, proto.GetArgs(keyA), &proto.GetResponse{}); err != nil {
+		if err := s.KV.Call(proto.Get, proto.GetArgs(keyA), &proto.GetResponse{}); err != nil {
 			return err
 		}
 
 		// Now, read again outside of txn to warmup timestamp cache with higher timestamp.
-		if err := s.DB.Call(proto.Get, proto.GetArgs(keyB), &proto.GetResponse{}); err != nil {
+		if err := s.KV.Call(proto.Get, proto.GetArgs(keyB), &proto.GetResponse{}); err != nil {
 			return err
 		}
 
@@ -480,7 +480,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 		Isolation: proto.SNAPSHOT,
 	}
 	go func() {
-		err := s.DB.RunTransaction(txnAOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnAOpts, func(txn *client.KV) error {
 			// Put transactional value.
 			if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
 				return err
@@ -506,7 +506,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	<-ch
 	// Delay for longer than the cache window.
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
-	err := s.DB.RunTransaction(txnBOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnBOpts, func(txn *client.KV) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 
@@ -556,7 +556,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		Isolation: proto.SNAPSHOT,
 	}
 	go func() {
-		err := s.DB.RunTransaction(txnAOpts, func(txn *client.KV) error {
+		err := s.KV.RunTransaction(txnAOpts, func(txn *client.KV) error {
 			// Put transactional value.
 			if err := txn.Call(proto.Put, proto.PutArgs(keyA, []byte("value1")), &proto.PutResponse{}); err != nil {
 				return err
@@ -581,7 +581,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 
-	err := s.DB.RunTransaction(txnBOpts, func(txn *client.KV) error {
+	err := s.KV.RunTransaction(txnBOpts, func(txn *client.KV) error {
 		gr1 := &proto.GetResponse{}
 		gr2 := &proto.GetResponse{}
 
@@ -593,7 +593,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Split range by keyB.
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := s.DB.Call(proto.AdminSplit, req, resp); err != nil {
+		if err := s.KV.Call(proto.AdminSplit, req, resp); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.
@@ -601,7 +601,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the txn records.
 			resp := &proto.ScanResponse{}
-			if err := s.DB.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+			if err := s.KV.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", err)
 			}
 			return len(resp.Rows) >= 2

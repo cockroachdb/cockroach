@@ -44,27 +44,27 @@ import (
 type testModel struct {
 	t         testing.TB
 	modelData map[string]*proto.Value
-	*kv.TestLocalServer
-	tsDB *DB
+	*kv.LocalTestCluster
+	DB *DB
 }
 
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
 func newTestModel(t *testing.T) *testModel {
 	return &testModel{
-		t:               t,
-		modelData:       make(map[string]*proto.Value),
-		TestLocalServer: &kv.TestLocalServer{},
+		t:                t,
+		modelData:        make(map[string]*proto.Value),
+		LocalTestCluster: &kv.LocalTestCluster{},
 	}
 }
 
 // Start constructs and starts the local test server and creates a
 // time series DB.
 func (tm *testModel) Start() {
-	if err := tm.TestLocalServer.Start(); err != nil {
+	if err := tm.LocalTestCluster.Start(); err != nil {
 		tm.t.Fatal(err)
 	}
-	tm.tsDB = NewDB(tm.DB)
+	tm.DB = NewDB(tm.KV)
 }
 
 // getActualData returns the actual value of all time series keys in the
@@ -145,7 +145,7 @@ func (tm *testModel) assertKeyCount(expected int) {
 // in both the model and the system under test.
 func (tm *testModel) storeTimeSeriesData(r Resolution, data proto.TimeSeriesData) {
 	// Store data in the system under test.
-	if err := tm.tsDB.storeData(r, data); err != nil {
+	if err := tm.DB.storeData(r, data); err != nil {
 		tm.t.Fatalf("error storing time series data: %s", err.Error())
 	}
 
