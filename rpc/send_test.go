@@ -156,6 +156,45 @@ func TestUnretryableError(t *testing.T) {
 	}
 }
 
+// TestClientNotReady verifies that Send gets an RPC error when a client
+// does not become ready.
+func TestClientNotReady(t *testing.T) {
+	rpcContext := createNewTestRPCContext(t)
+
+	opts := Options{
+		N:               1,
+		Ordering:        OrderStable,
+		SendNextTimeout: 1 * time.Nanosecond,
+		Timeout:         1 * time.Nanosecond,
+	}
+	// Send RPC to an address where no server is running.
+	_, err := sendPing(opts, []net.Addr{util.CreateTestAddr("tcp")}, rpcContext)
+	if err == nil {
+		t.Fatalf("Unexpected success")
+	}
+	retryErr, ok := err.(util.Retryable)
+	if !ok {
+		t.Fatalf("Unexpected error type: %v", err)
+	}
+	if !retryErr.CanRetry() {
+		t.Errorf("Expected retryable error: %v", retryErr)
+	}
+
+	// Send the RPC again with no timeout.
+	opts.SendNextTimeout = 0 * time.Nanosecond
+	opts.Timeout = 0 * time.Nanosecond
+	c := make(chan interface{})
+	go func() {
+		sendPing(opts, []net.Addr{util.CreateTestAddr("tcp")}, rpcContext)
+		close(c)
+	}()
+	select {
+	case <-c:
+		t.Fatalf("Unexpected end of rpc call")
+	case <-time.After(1 * time.Millisecond):
+	}
+}
+
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
