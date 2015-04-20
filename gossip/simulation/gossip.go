@@ -78,6 +78,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/gossip/simulation"
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -99,22 +100,22 @@ var (
 
 // edge is a helper struct which describes an edge in the dot output graph.
 type edge struct {
-	dest    string // Address of destination
-	added   bool   // True if edge was recently added
-	deleted bool   // True if edge was recently deleted
+	dest    proto.NodeID // Node ID of destination
+	added   bool         // True if edge was recently added
+	deleted bool         // True if edge was recently deleted
 }
 
 // edgeMap is a map from node address to a list of edges. A helper
 // method is provided to simplify adding edges.
-type edgeMap map[string][]edge
+type edgeMap map[proto.NodeID][]edge
 
 // addEdge creates a list of edges if one doesn't yet exist for the
-// specified node address.
-func (em edgeMap) addEdge(addr string, e edge) {
-	if _, ok := em[addr]; !ok {
-		em[addr] = make([]edge, 0, 1)
+// specified node ID.
+func (em edgeMap) addEdge(nodeID proto.NodeID, e edge) {
+	if _, ok := em[nodeID]; !ok {
+		em[nodeID] = make([]edge, 0, 1)
 	}
-	em[addr] = append(em[addr], e)
+	em[nodeID] = append(em[nodeID], e)
 }
 
 // outputDotFile generates a .dot file describing the current state of
@@ -165,14 +166,14 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 	for _, simNode := range network.Nodes {
 		node := simNode.Gossip
 		incoming := node.Incoming()
-		for _, iAddr := range incoming {
-			e := edge{dest: simNode.Addr.String()}
-			key := fmt.Sprintf("%s:%s", iAddr.String(), simNode.Addr)
+		for _, iNode := range incoming {
+			e := edge{dest: node.GetNodeID()}
+			key := fmt.Sprintf("%d:%d", iNode, node.GetNodeID())
 			if _, ok := edgeSet[key]; !ok {
 				e.added = true
 			}
 			delete(edgeSet, key)
-			outgoingMap.addEdge(iAddr.String(), e)
+			outgoingMap.addEdge(iNode, e)
 		}
 		if len(incoming) > maxIncoming {
 			maxIncoming = len(incoming)
@@ -183,7 +184,11 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 	for key, e := range edgeSet {
 		e.added = false
 		e.deleted = true
-		outgoingMap.addEdge(strings.Split(key, ":")[0], e)
+		nodeID, err := strconv.Atoi(strings.Split(key, ":")[0])
+		if err != nil {
+			log.Fatal(err)
+		}
+		outgoingMap.addEdge(proto.NodeID(nodeID), e)
 		delete(edgeSet, key)
 	}
 
@@ -227,9 +232,9 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 		}
 		f.WriteString(fmt.Sprintf("\t%s [%sfontsize=%d,label=\"{%s|MH=%d, AA=%s, SA=%d}\"]\n",
 			node.GetNodeID(), nodeColor, fontSize, node.GetNodeID(), node.MaxHops(), age, sentinelAge))
-		outgoing := outgoingMap[simNode.Addr.String()]
+		outgoing := outgoingMap[node.GetNodeID()]
 		for _, e := range outgoing {
-			destSimNode, ok := network.GetNodeFromAddr(e.dest)
+			destSimNode, ok := network.GetNodeFromID(e.dest)
 			if !ok {
 				continue
 			}
@@ -242,7 +247,7 @@ func outputDotFile(dotFN string, cycle int, network *simulation.Network, edgeSet
 			}
 			f.WriteString(fmt.Sprintf("\t%s -> %s%s\n", node.GetNodeID(), dest.GetNodeID(), style))
 			if !e.deleted {
-				edgeSet[fmt.Sprintf("%s:%s", simNode.Addr, e.dest)] = e
+				edgeSet[fmt.Sprintf("%d:%d", node.GetNodeID(), e.dest)] = e
 			}
 		}
 	}
@@ -298,7 +303,7 @@ func main() {
 
 	edgeSet := make(map[string]edge)
 
-	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval, "")
+	n := simulation.NewNetwork(nodeCount, *networkType, gossipInterval)
 	n.SimulateNetwork(
 		func(cycle int, network *simulation.Network) bool {
 			if cycle == numCycles {

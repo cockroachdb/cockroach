@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"net"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -175,29 +174,12 @@ func (e *NotBootstrappedError) Error() string {
 	return "store has not been bootstrapped"
 }
 
-// NodeDescriptor holds details on node physical/network topology.
-type NodeDescriptor struct {
-	NodeID  proto.NodeID
-	Address net.Addr
-	Attrs   proto.Attributes // node specific attributes (e.g. datacenter, machine info)
-}
-
-// NodeIDToAddress looks up the address of the node from the given Gossip instance.
-func NodeIDToAddress(g *gossip.Gossip, nodeID proto.NodeID) (net.Addr, error) {
-	nodeIDKey := gossip.MakeNodeIDKey(nodeID)
-	info, err := g.GetInfo(nodeIDKey)
-	if info == nil || err != nil {
-		return nil, util.Errorf("Unable to lookup address for node: %d. Error: %s", nodeID, err)
-	}
-	return info.(*NodeDescriptor).Address, nil
-}
-
 // StoreDescriptor holds store information including store attributes,
 // node descriptor and store capacity.
 type StoreDescriptor struct {
 	StoreID  proto.StoreID
 	Attrs    proto.Attributes // store specific attributes (e.g. ssd, hdd, mem)
-	Node     NodeDescriptor
+	Node     gossip.NodeDescriptor
 	Capacity engine.StoreCapacity
 }
 
@@ -510,7 +492,7 @@ func (s *Store) configGossipUpdate(key string, contentsChanged bool) {
 }
 
 // GossipCapacity broadcasts the node's capacity on the gossip network.
-func (s *Store) GossipCapacity(n *NodeDescriptor) {
+func (s *Store) GossipCapacity(n *gossip.NodeDescriptor) {
 	storeDesc, err := s.Descriptor(n)
 	if err != nil {
 		log.Warningf("problem getting store descriptor for store %+v: %v", s.Ident, err)
@@ -908,7 +890,7 @@ func (s *Store) Capacity() (engine.StoreCapacity, error) {
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor(nodeDesc *NodeDescriptor) (*StoreDescriptor, error) {
+func (s *Store) Descriptor(nodeDesc *gossip.NodeDescriptor) (*StoreDescriptor, error) {
 	capacity, err := s.Capacity()
 	if err != nil {
 		return nil, err

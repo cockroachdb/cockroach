@@ -76,6 +76,7 @@ type Client struct {
 	offset       proto.RemoteOffset // Latest measured clock offset from the server
 	clock        *hlc.Clock
 	remoteClocks *RemoteClockMonitor
+	cached       bool
 }
 
 // NewClient returns a client RPC stub for the specified address
@@ -92,9 +93,11 @@ type Client struct {
 // method is invoked.
 func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client {
 	clientMu.Lock()
-	if c, ok := clients[addr.String()]; ok {
-		clientMu.Unlock()
-		return c
+	if !context.DisableCache {
+		if c, ok := clients[addr.String()]; ok {
+			clientMu.Unlock()
+			return c
+		}
 	}
 	c := &Client{
 		addr:         addr,
@@ -102,8 +105,11 @@ func NewClient(addr net.Addr, opts *util.RetryOptions, context *Context) *Client
 		Closed:       make(chan struct{}),
 		clock:        context.localClock,
 		remoteClocks: context.RemoteClocks,
+		cached:       !context.DisableCache,
 	}
-	clients[c.Addr().String()] = c
+	if !context.DisableCache {
+		clients[c.Addr().String()] = c
+	}
 	clientMu.Unlock()
 
 	go c.connect(opts, context)
@@ -118,6 +124,7 @@ func (c *Client) connect(opts *util.RetryOptions, context *Context) {
 		retryOpts = *opts
 	}
 	retryOpts.Tag = fmt.Sprintf("client %s connection", c.addr)
+	retryOpts.Stopper = context.stopper
 
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		conn, err := tlsDialHTTP(c.addr.Network(), c.addr.String(), context.tlsConfig)
@@ -193,13 +200,17 @@ func (c *Client) RemoteOffset() proto.RemoteOffset {
 func (c *Client) Close() {
 	clientMu.Lock()
 	if !c.closed {
-		delete(clients, c.Addr().String())
+		if c.cached {
+			delete(clients, c.Addr().String())
+		}
 		c.mu.Lock()
 		c.healthy = false
 		c.closed = true
 		c.mu.Unlock()
 		close(c.Closed)
-		c.Client.Close()
+		if c.Client != nil {
+			c.Client.Close()
+		}
 	}
 	clientMu.Unlock()
 }

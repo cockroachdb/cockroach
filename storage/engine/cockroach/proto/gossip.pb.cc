@@ -57,7 +57,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fgossip_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Addr));
   GossipRequest_descriptor_ = file->message_type(1);
-  static const int GossipRequest_offsets_[4] = {
+  static const int GossipRequest_offsets_[5] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GossipRequest, node_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GossipRequest, addr_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GossipRequest, l_addr_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(GossipRequest, max_seq_),
@@ -132,13 +133,14 @@ void protobuf_AddDesc_cockroach_2fproto_2fgossip_2eproto() {
     "\n\034cockroach/proto/gossip.proto\022\017cockroac"
     "h.proto\032\024gogoproto/gogo.proto\"4\n\004Addr\022\025\n"
     "\007network\030\001 \001(\tB\004\310\336\037\000\022\025\n\007address\030\002 \001(\tB\004\310"
-    "\336\037\000\"\223\001\n\rGossipRequest\022)\n\004addr\030\001 \001(\0132\025.co"
-    "ckroach.proto.AddrB\004\310\336\037\000\022+\n\006l_addr\030\002 \001(\013"
-    "2\025.cockroach.proto.AddrB\004\310\336\037\000\022\025\n\007max_seq"
-    "\030\003 \001(\003B\004\310\336\037\000\022\023\n\005delta\030\004 \001(\014B\004\310\336\037\000\"O\n\016Gos"
-    "sipResponse\022\023\n\005delta\030\001 \001(\014B\004\310\336\037\000\022(\n\talte"
-    "rnate\030\002 \001(\0132\025.cockroach.proto.AddrB\007Z\005pr"
-    "oto", 363);
+    "\336\037\000\"\276\001\n\rGossipRequest\022)\n\007node_id\030\001 \001(\005B\030"
+    "\310\336\037\000\342\336\037\006NodeID\332\336\037\006NodeID\022)\n\004addr\030\002 \001(\0132\025"
+    ".cockroach.proto.AddrB\004\310\336\037\000\022+\n\006l_addr\030\003 "
+    "\001(\0132\025.cockroach.proto.AddrB\004\310\336\037\000\022\025\n\007max_"
+    "seq\030\004 \001(\003B\004\310\336\037\000\022\023\n\005delta\030\005 \001(\014B\004\310\336\037\000\"O\n\016"
+    "GossipResponse\022\023\n\005delta\030\001 \001(\014B\004\310\336\037\000\022(\n\ta"
+    "lternate\030\002 \001(\0132\025.cockroach.proto.AddrB\007Z"
+    "\005proto", 406);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/gossip.proto", &protobuf_RegisterTypes);
   Addr::default_instance_ = new Addr();
@@ -464,6 +466,7 @@ void Addr::Swap(Addr* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
+const int GossipRequest::kNodeIdFieldNumber;
 const int GossipRequest::kAddrFieldNumber;
 const int GossipRequest::kLAddrFieldNumber;
 const int GossipRequest::kMaxSeqFieldNumber;
@@ -491,6 +494,7 @@ GossipRequest::GossipRequest(const GossipRequest& from)
 void GossipRequest::SharedCtor() {
   ::google::protobuf::internal::GetEmptyString();
   _cached_size_ = 0;
+  node_id_ = 0;
   addr_ = NULL;
   l_addr_ = NULL;
   max_seq_ = GOOGLE_LONGLONG(0);
@@ -535,7 +539,8 @@ GossipRequest* GossipRequest::New() const {
 }
 
 void GossipRequest::Clear() {
-  if (_has_bits_[0 / 32] & 15) {
+  if (_has_bits_[0 / 32] & 31) {
+    node_id_ = 0;
     if (has_addr()) {
       if (addr_ != NULL) addr_->::cockroach::proto::Addr::Clear();
     }
@@ -563,34 +568,49 @@ bool GossipRequest::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.Addr addr = 1;
+      // optional int32 node_id = 1;
       case 1: {
-        if (tag == 10) {
+        if (tag == 8) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &node_id_)));
+          set_has_node_id();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(18)) goto parse_addr;
+        break;
+      }
+
+      // optional .cockroach.proto.Addr addr = 2;
+      case 2: {
+        if (tag == 18) {
+         parse_addr:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_addr()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(18)) goto parse_l_addr;
+        if (input->ExpectTag(26)) goto parse_l_addr;
         break;
       }
 
-      // optional .cockroach.proto.Addr l_addr = 2;
-      case 2: {
-        if (tag == 18) {
+      // optional .cockroach.proto.Addr l_addr = 3;
+      case 3: {
+        if (tag == 26) {
          parse_l_addr:
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_l_addr()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_max_seq;
+        if (input->ExpectTag(32)) goto parse_max_seq;
         break;
       }
 
-      // optional int64 max_seq = 3;
-      case 3: {
-        if (tag == 24) {
+      // optional int64 max_seq = 4;
+      case 4: {
+        if (tag == 32) {
          parse_max_seq:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -599,13 +619,13 @@ bool GossipRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(34)) goto parse_delta;
+        if (input->ExpectTag(42)) goto parse_delta;
         break;
       }
 
-      // optional bytes delta = 4;
-      case 4: {
-        if (tag == 34) {
+      // optional bytes delta = 5;
+      case 5: {
+        if (tag == 42) {
          parse_delta:
           DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
                 input, this->mutable_delta()));
@@ -641,27 +661,32 @@ failure:
 void GossipRequest::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.GossipRequest)
-  // optional .cockroach.proto.Addr addr = 1;
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
+  }
+
+  // optional .cockroach.proto.Addr addr = 2;
   if (has_addr()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->addr(), output);
+      2, this->addr(), output);
   }
 
-  // optional .cockroach.proto.Addr l_addr = 2;
+  // optional .cockroach.proto.Addr l_addr = 3;
   if (has_l_addr()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->l_addr(), output);
+      3, this->l_addr(), output);
   }
 
-  // optional int64 max_seq = 3;
+  // optional int64 max_seq = 4;
   if (has_max_seq()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->max_seq(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->max_seq(), output);
   }
 
-  // optional bytes delta = 4;
+  // optional bytes delta = 5;
   if (has_delta()) {
     ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
-      4, this->delta(), output);
+      5, this->delta(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -674,30 +699,35 @@ void GossipRequest::SerializeWithCachedSizes(
 ::google::protobuf::uint8* GossipRequest::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.GossipRequest)
-  // optional .cockroach.proto.Addr addr = 1;
+  // optional int32 node_id = 1;
+  if (has_node_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(1, this->node_id(), target);
+  }
+
+  // optional .cockroach.proto.Addr addr = 2;
   if (has_addr()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        1, this->addr(), target);
+        2, this->addr(), target);
   }
 
-  // optional .cockroach.proto.Addr l_addr = 2;
+  // optional .cockroach.proto.Addr l_addr = 3;
   if (has_l_addr()) {
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
-        2, this->l_addr(), target);
+        3, this->l_addr(), target);
   }
 
-  // optional int64 max_seq = 3;
+  // optional int64 max_seq = 4;
   if (has_max_seq()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(3, this->max_seq(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(4, this->max_seq(), target);
   }
 
-  // optional bytes delta = 4;
+  // optional bytes delta = 5;
   if (has_delta()) {
     target =
       ::google::protobuf::internal::WireFormatLite::WriteBytesToArray(
-        4, this->delta(), target);
+        5, this->delta(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -712,28 +742,35 @@ int GossipRequest::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.Addr addr = 1;
+    // optional int32 node_id = 1;
+    if (has_node_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->node_id());
+    }
+
+    // optional .cockroach.proto.Addr addr = 2;
     if (has_addr()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->addr());
     }
 
-    // optional .cockroach.proto.Addr l_addr = 2;
+    // optional .cockroach.proto.Addr l_addr = 3;
     if (has_l_addr()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->l_addr());
     }
 
-    // optional int64 max_seq = 3;
+    // optional int64 max_seq = 4;
     if (has_max_seq()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->max_seq());
     }
 
-    // optional bytes delta = 4;
+    // optional bytes delta = 5;
     if (has_delta()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::BytesSize(
@@ -767,6 +804,9 @@ void GossipRequest::MergeFrom(const ::google::protobuf::Message& from) {
 void GossipRequest::MergeFrom(const GossipRequest& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_node_id()) {
+      set_node_id(from.node_id());
+    }
     if (from.has_addr()) {
       mutable_addr()->::cockroach::proto::Addr::MergeFrom(from.addr());
     }
@@ -802,6 +842,7 @@ bool GossipRequest::IsInitialized() const {
 
 void GossipRequest::Swap(GossipRequest* other) {
   if (other != this) {
+    std::swap(node_id_, other->node_id_);
     std::swap(addr_, other->addr_);
     std::swap(l_addr_, other->l_addr_);
     std::swap(max_seq_, other->max_seq_);

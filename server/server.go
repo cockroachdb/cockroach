@@ -98,7 +98,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
-	rpcContext := rpc.NewContext(s.clock, tlsConfig)
+	rpcContext := rpc.NewContext(s.clock, tlsConfig, stopper)
 	go rpcContext.RemoteClocks.MonitorRemoteOffsets()
 
 	s.rpc = rpc.NewServer(util.MakeRawAddr("tcp", addr), rpcContext)
@@ -142,7 +142,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 		if err != nil {
 			return err
 		}
-		s.gossip.SetResolvers([]*gossip.Resolver{selfResolver})
+		s.gossip.SetResolvers([]gossip.Resolver{selfResolver})
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 

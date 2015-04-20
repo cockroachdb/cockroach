@@ -31,25 +31,30 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
+type clientInfo struct {
+	id   proto.NodeID
+	addr *proto.Addr
+}
+
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	interval      time.Duration       // Interval at which to gossip fresh info
-	mu            sync.Mutex          // Mutex protects is (infostore) & incoming
-	ready         *sync.Cond          // Broadcasts wakeup to waiting gossip requests
-	is            *infoStore          // The backing infostore
-	closed        bool                // True if server was closed
-	incoming      *addrSet            // Incoming client addresses
-	clientAddrMap map[string]net.Addr // Incoming client's local address -> client's server address
+	interval time.Duration         // Interval at which to gossip fresh info
+	mu       sync.Mutex            // Mutex protects is (infostore) & incoming
+	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+	is       *infoStore            // The backing infostore
+	closed   bool                  // True if server was closed
+	incoming *nodeSet              // Incoming client node IDs
+	lAddrMap map[string]clientInfo // Incoming client's local address -> client's node info
 }
 
 // newServer creates and returns a server struct.
 func newServer(interval time.Duration) *server {
 	s := &server{
-		is:            newInfoStore(nil),
-		interval:      interval,
-		incoming:      newAddrSet(MaxPeers),
-		clientAddrMap: map[string]net.Addr{},
+		is:       newInfoStore(0, nil),
+		interval: interval,
+		incoming: newNodeSet(MaxPeers),
+		lAddrMap: map[string]clientInfo{},
 	}
 	s.ready = sync.NewCond(&s.mu)
 	return s
@@ -73,16 +78,23 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 
 	// If there is no more capacity to accept incoming clients, return
 	// a random already-being-serviced incoming client as an alternate.
-	if !s.incoming.hasAddr(addr) {
+	if !s.incoming.hasNode(args.NodeID) {
 		if !s.incoming.hasSpace() {
-			reply.Alternate = proto.FromNetAddr(s.incoming.selectRandom())
-			return nil
+			idx := rand.Intn(len(s.lAddrMap))
+			count := 0
+			for _, cInfo := range s.lAddrMap {
+				if count == idx {
+					reply.Alternate = cInfo.addr
+					return nil
+				}
+				count++
+			}
 		}
-		s.incoming.addAddr(addr)
+		s.incoming.addNode(args.NodeID)
 		// This lookup map allows the incoming client to be removed from
 		// the incoming addr set when its connection is closed. See
 		// server.serveConn() below.
-		s.clientAddrMap[lAddr.String()] = addr
+		s.lAddrMap[lAddr.String()] = clientInfo{args.NodeID, &args.Addr}
 	}
 
 	// Update infostore with gossiped infos.
@@ -103,14 +115,16 @@ func (s *server) Gossip(args *proto.GossipRequest, reply *proto.GossipResponse) 
 		return util.Errorf("gossip server shutdown")
 	}
 	// Return reciprocal delta.
-	delta := s.is.delta(addr, args.MaxSeq)
+	delta := s.is.delta(args.NodeID, args.MaxSeq)
 	if delta != nil {
 		var buf bytes.Buffer
 		if err := gob.NewEncoder(&buf).Encode(delta); err != nil {
 			log.Fatalf("infostore could not be encoded: %s", err)
 		}
 		reply.Delta = buf.Bytes()
-		log.Infof("gossip: client %s sent %d info(s)", addr, delta.infoCount())
+		if delta.infoCount() > 0 {
+			log.Infof("gossip: client %s sent %d info(s)", addr, delta.infoCount())
+		}
 	}
 	return nil
 }
@@ -162,7 +176,7 @@ func (s *server) stop() {
 func (s *server) onClose(conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if clientAddr, ok := s.clientAddrMap[conn.RemoteAddr().String()]; ok {
-		s.incoming.removeAddr(clientAddr)
+	if cInfo, ok := s.lAddrMap[conn.RemoteAddr().String()]; ok {
+		s.incoming.removeNode(cInfo.id)
 	}
 }

@@ -47,10 +47,15 @@ func TestParseGossipBootstrapAddrs(t *testing.T) {
 	if err := ctx.Init(); err != nil {
 		t.Fatalf("Failed to initialize the context: %v", err)
 	}
-	expected := []*gossip.Resolver{
-		{"tcp", "localhost:12345", false},
-		{"tcp", "localhost:23456", false},
+	r1, err := gossip.NewResolver("tcp=localhost:12345")
+	if err != nil {
+		t.Fatal(err)
 	}
+	r2, err := gossip.NewResolver("tcp=localhost:23456")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := []gossip.Resolver{r1, r2}
 	if !reflect.DeepEqual(ctx.GossipBootstrapResolvers, expected) {
 		t.Fatalf("Unexpected bootstrap addresses: %v, expected: %v", ctx.GossipBootstrapResolvers, expected)
 	}

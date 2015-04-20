@@ -193,35 +193,42 @@ class GossipRequest : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.proto.Addr addr = 1;
+  // optional int32 node_id = 1;
+  inline bool has_node_id() const;
+  inline void clear_node_id();
+  static const int kNodeIdFieldNumber = 1;
+  inline ::google::protobuf::int32 node_id() const;
+  inline void set_node_id(::google::protobuf::int32 value);
+
+  // optional .cockroach.proto.Addr addr = 2;
   inline bool has_addr() const;
   inline void clear_addr();
-  static const int kAddrFieldNumber = 1;
+  static const int kAddrFieldNumber = 2;
   inline const ::cockroach::proto::Addr& addr() const;
   inline ::cockroach::proto::Addr* mutable_addr();
   inline ::cockroach::proto::Addr* release_addr();
   inline void set_allocated_addr(::cockroach::proto::Addr* addr);
 
-  // optional .cockroach.proto.Addr l_addr = 2;
+  // optional .cockroach.proto.Addr l_addr = 3;
   inline bool has_l_addr() const;
   inline void clear_l_addr();
-  static const int kLAddrFieldNumber = 2;
+  static const int kLAddrFieldNumber = 3;
   inline const ::cockroach::proto::Addr& l_addr() const;
   inline ::cockroach::proto::Addr* mutable_l_addr();
   inline ::cockroach::proto::Addr* release_l_addr();
   inline void set_allocated_l_addr(::cockroach::proto::Addr* l_addr);
 
-  // optional int64 max_seq = 3;
+  // optional int64 max_seq = 4;
   inline bool has_max_seq() const;
   inline void clear_max_seq();
-  static const int kMaxSeqFieldNumber = 3;
+  static const int kMaxSeqFieldNumber = 4;
   inline ::google::protobuf::int64 max_seq() const;
   inline void set_max_seq(::google::protobuf::int64 value);
 
-  // optional bytes delta = 4;
+  // optional bytes delta = 5;
   inline bool has_delta() const;
   inline void clear_delta();
-  static const int kDeltaFieldNumber = 4;
+  static const int kDeltaFieldNumber = 5;
   inline const ::std::string& delta() const;
   inline void set_delta(const ::std::string& value);
   inline void set_delta(const char* value);
@@ -232,6 +239,8 @@ class GossipRequest : public ::google::protobuf::Message {
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.GossipRequest)
  private:
+  inline void set_has_node_id();
+  inline void clear_has_node_id();
   inline void set_has_addr();
   inline void clear_has_addr();
   inline void set_has_l_addr();
@@ -249,6 +258,7 @@ class GossipRequest : public ::google::protobuf::Message {
   ::cockroach::proto::Addr* l_addr_;
   ::google::protobuf::int64 max_seq_;
   ::std::string* delta_;
+  ::google::protobuf::int32 node_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fgossip_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fgossip_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fgossip_2eproto();
@@ -515,15 +525,39 @@ inline void Addr::set_allocated_address(::std::string* address) {
 
 // GossipRequest
 
-// optional .cockroach.proto.Addr addr = 1;
-inline bool GossipRequest::has_addr() const {
+// optional int32 node_id = 1;
+inline bool GossipRequest::has_node_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void GossipRequest::set_has_addr() {
+inline void GossipRequest::set_has_node_id() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void GossipRequest::clear_has_addr() {
+inline void GossipRequest::clear_has_node_id() {
   _has_bits_[0] &= ~0x00000001u;
+}
+inline void GossipRequest::clear_node_id() {
+  node_id_ = 0;
+  clear_has_node_id();
+}
+inline ::google::protobuf::int32 GossipRequest::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.GossipRequest.node_id)
+  return node_id_;
+}
+inline void GossipRequest::set_node_id(::google::protobuf::int32 value) {
+  set_has_node_id();
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.GossipRequest.node_id)
+}
+
+// optional .cockroach.proto.Addr addr = 2;
+inline bool GossipRequest::has_addr() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void GossipRequest::set_has_addr() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void GossipRequest::clear_has_addr() {
+  _has_bits_[0] &= ~0x00000002u;
 }
 inline void GossipRequest::clear_addr() {
   if (addr_ != NULL) addr_->::cockroach::proto::Addr::Clear();
@@ -556,15 +590,15 @@ inline void GossipRequest::set_allocated_addr(::cockroach::proto::Addr* addr) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.GossipRequest.addr)
 }
 
-// optional .cockroach.proto.Addr l_addr = 2;
+// optional .cockroach.proto.Addr l_addr = 3;
 inline bool GossipRequest::has_l_addr() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
+  return (_has_bits_[0] & 0x00000004u) != 0;
 }
 inline void GossipRequest::set_has_l_addr() {
-  _has_bits_[0] |= 0x00000002u;
+  _has_bits_[0] |= 0x00000004u;
 }
 inline void GossipRequest::clear_has_l_addr() {
-  _has_bits_[0] &= ~0x00000002u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void GossipRequest::clear_l_addr() {
   if (l_addr_ != NULL) l_addr_->::cockroach::proto::Addr::Clear();
@@ -597,15 +631,15 @@ inline void GossipRequest::set_allocated_l_addr(::cockroach::proto::Addr* l_addr
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.GossipRequest.l_addr)
 }
 
-// optional int64 max_seq = 3;
+// optional int64 max_seq = 4;
 inline bool GossipRequest::has_max_seq() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
+  return (_has_bits_[0] & 0x00000008u) != 0;
 }
 inline void GossipRequest::set_has_max_seq() {
-  _has_bits_[0] |= 0x00000004u;
+  _has_bits_[0] |= 0x00000008u;
 }
 inline void GossipRequest::clear_has_max_seq() {
-  _has_bits_[0] &= ~0x00000004u;
+  _has_bits_[0] &= ~0x00000008u;
 }
 inline void GossipRequest::clear_max_seq() {
   max_seq_ = GOOGLE_LONGLONG(0);
@@ -621,15 +655,15 @@ inline void GossipRequest::set_max_seq(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.GossipRequest.max_seq)
 }
 
-// optional bytes delta = 4;
+// optional bytes delta = 5;
 inline bool GossipRequest::has_delta() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void GossipRequest::set_has_delta() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void GossipRequest::clear_has_delta() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void GossipRequest::clear_delta() {
   if (delta_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {

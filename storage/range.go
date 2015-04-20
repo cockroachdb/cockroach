@@ -54,7 +54,6 @@ func init() {
 	gob.Register(&proto.ZoneConfig{})
 	gob.Register(proto.RangeDescriptor{})
 	gob.Register(proto.Transaction{})
-	gob.Register(&NodeDescriptor{})
 }
 
 var (

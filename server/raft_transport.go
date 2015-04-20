@@ -112,7 +112,7 @@ func (t *rpcTransport) Send(id multiraft.NodeID, req *multiraft.RaftMessageReque
 	}
 
 	nodeID, _ := storage.DecodeRaftNodeID(id)
-	addr, err := storage.NodeIDToAddress(t.gossip, nodeID)
+	addr, err := t.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return err
 	}

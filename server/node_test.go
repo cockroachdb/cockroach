@@ -51,7 +51,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 
 	stopper := util.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(clock, tlsConfig)
+	rpcContext := rpc.NewContext(clock, tlsConfig, stopper)
 	rpcServer := rpc.NewServer(addr, rpcContext)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		if gossipBS == addr {
 			gossipBS = rpcServer.Addr()
 		}
-		g.SetResolvers([]*gossip.Resolver{gossip.NewResolverFromAddress(gossipBS)})
+		g.SetResolvers([]gossip.Resolver{gossip.NewResolverFromAddress(gossipBS)})
 		g.Start(rpcServer, stopper)
 	}
 	db := client.NewKV(nil, kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, g))
@@ -210,12 +210,12 @@ func TestNodeJoin(t *testing.T) {
 	if err := util.IsTrueWithin(func() bool {
 		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
 			return false
-		} else if addr2 := val.(*storage.NodeDescriptor).Address.String(); addr2 != server2.Addr().String() {
+		} else if addr2 := val.(*gossip.NodeDescriptor).Address.String(); addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
 		if val, err := node2.gossip.GetInfo(node1Key); err != nil {
 			return false
-		} else if addr1 := val.(*storage.NodeDescriptor).Address.String(); addr1 != server1.Addr().String() {
+		} else if addr1 := val.(*gossip.NodeDescriptor).Address.String(); addr1 != server1.Addr().String() {
 			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())
 		}
 		return true

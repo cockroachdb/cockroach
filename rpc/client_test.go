@@ -40,7 +40,7 @@ func TestClientHeartbeat(t *testing.T) {
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := NewContext(clock, tlsConfig)
+	rpcContext := NewContext(clock, tlsConfig, nil)
 	addr := util.CreateTestAddr("tcp")
 	s := NewServer(addr, rpcContext)
 	if err := s.Start(); err != nil {
@@ -52,6 +52,30 @@ func TestClientHeartbeat(t *testing.T) {
 		t.Fatal("expected cached client to be returned while healthy")
 	}
 	<-c.Ready
+	s.Close()
+}
+
+func TestClientNoCache(t *testing.T) {
+	tlsConfig, err := LoadTestTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := hlc.NewClock(hlc.UnixNano)
+	rpcContext := NewContext(clock, tlsConfig, nil)
+	rpcContext.DisableCache = true
+
+	addr := util.CreateTestAddr("tcp")
+	s := NewServer(addr, rpcContext)
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	c1 := NewClient(s.Addr(), nil, rpcContext)
+	<-c1.Ready
+	c2 := NewClient(s.Addr(), nil, rpcContext)
+	<-c2.Ready
+	if c1 == c2 {
+		t.Errorf("expected different clients with cache disabled: %s != %s", c1, c2)
+	}
 	s.Close()
 }
 
@@ -102,7 +126,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Create a client that is 10 nanoseconds behind the server.
 	advancing := AdvancingClock{time: 0, advancementInterval: 10}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewContext(clientClock, s.context.tlsConfig)
+	context := NewContext(clientClock, s.context.tlsConfig, nil)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -146,7 +170,7 @@ func TestDelayedOffsetMeasurement(t *testing.T) {
 		advancementInterval: maximumClockReadingDelay.Nanoseconds() + 1,
 	}
 	clientClock := hlc.NewClock(advancing.UnixNano)
-	context := NewContext(clientClock, s.context.tlsConfig)
+	context := NewContext(clientClock, s.context.tlsConfig, nil)
 	c := NewClient(s.Addr(), nil, context)
 	<-c.Ready
 
@@ -186,7 +210,7 @@ func TestFailedOffestMeasurement(t *testing.T) {
 	// Create a client that never receives a heartbeat after the first.
 	clientManual := hlc.NewManualClock(0)
 	clientClock := hlc.NewClock(clientManual.UnixNano)
-	context := NewContext(clientClock, s.context.tlsConfig)
+	context := NewContext(clientClock, s.context.tlsConfig, nil)
 	c := NewClient(s.Addr(), nil, context)
 	heartbeat.ready <- struct{}{} // Allow one heartbeat for initialization.
 	<-c.Ready
@@ -225,7 +249,7 @@ func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
 
 	// Create the server so that we can register a manual clock.
 	addr := util.CreateTestAddr("tcp")
-	serverContext := NewContext(serverClock, tlsConfig)
+	serverContext := NewContext(serverClock, tlsConfig, nil)
 	s := &Server{
 		Server:  rpc.NewServer(),
 		context: serverContext,

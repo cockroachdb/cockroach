@@ -70,7 +70,7 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 	g.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
 	g.AddInfo(gossip.KeyFirstRangeDescriptor, testRangeDescriptor, time.Hour)
 	nodeIDKey := gossip.MakeNodeIDKey(1)
-	g.AddInfo(nodeIDKey, &storage.NodeDescriptor{
+	g.AddInfo(nodeIDKey, &gossip.NodeDescriptor{
 		NodeID:  1,
 		Address: testAddress,
 		Attrs:   proto.Attributes{Attrs: []string{"attr1", "attr2"}},
@@ -83,7 +83,7 @@ func makeTestGossip(t *testing.T) *gossip.Gossip {
 // remote requests.
 func TestSendRPCOrder(t *testing.T) {
 	g := makeTestGossip(t)
-	g.SetNodeID(1)
+	g.SetNodeDescriptor(&gossip.NodeDescriptor{NodeID: 1})
 	raftID := int64(99)
 
 	nodeAttrs := map[int32][]string{
@@ -206,7 +206,7 @@ func TestSendRPCOrder(t *testing.T) {
 		for i := int32(1); i <= 5; i++ {
 			addr := util.MakeRawAddr("tcp", fmt.Sprintf("%d", i))
 			addrToNode[addr.String()] = i
-			nd := &storage.NodeDescriptor{
+			nd := &gossip.NodeDescriptor{
 				NodeID:  proto.NodeID(i),
 				Address: addr,
 			}

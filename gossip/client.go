@@ -46,6 +46,7 @@ func init() {
 
 // client is a client-side RPC connection to a gossip peer node.
 type client struct {
+	peerID      proto.NodeID  // Peer node ID; 0 until first gossip response
 	addr        net.Addr      // Peer node network address
 	rpcClient   *rpc.Client   // RPC client
 	forwardAddr net.Addr      // Set if disconnected with an alternate addr
@@ -67,9 +68,9 @@ func newClient(addr net.Addr) *client {
 // channel. If the client experienced an error, its err field will
 // be set. This method starts client processing in a goroutine and
 // returns immediately.
-func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
+func (c *client) start(g *Gossip, done chan *client, context *rpc.Context, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
-		c.rpcClient = rpc.NewClient(c.addr, nil, g.RPCContext)
+		c.rpcClient = rpc.NewClient(c.addr, nil, context)
 		select {
 		case <-c.rpcClient.Ready:
 			// Success!
@@ -81,9 +82,9 @@ func (c *client) start(g *Gossip, done chan *client, stopper *util.Stopper) {
 
 		// Start gossipping and wait for disconnect or error.
 		c.lastFresh = time.Now().UnixNano()
-		err := c.gossip(g, stopper)
-		if err != nil {
-			c.err = util.Errorf("gossip client: %s", err)
+		c.err = c.gossip(g, stopper)
+		if c.err != nil {
+			c.rpcClient.Close()
 		}
 		done <- c
 	})
@@ -101,17 +102,10 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 	localMaxSeq := int64(0)
 	remoteMaxSeq := int64(-1)
 	for {
-		// Do a periodic check to determine whether this outgoing client
-		// is duplicating work already being done by an incoming client.
-		// To avoid mutual shutdown, we only shutdown our client if our
-		// server address is lexicographically less than the other.
-		if g.hasIncoming(c.addr) && g.is.NodeAddr.String() < c.addr.String() {
-			return util.Errorf("stopping outgoing client %s; already have incoming", c.addr)
-		}
-
 		// Compute the delta of local node's infostore to send with request.
 		g.mu.Lock()
-		delta := g.is.delta(c.addr, localMaxSeq)
+		delta := g.is.delta(c.peerID, localMaxSeq)
+		g.mu.Unlock()
 		var deltaBytes []byte
 		if delta != nil {
 			localMaxSeq = delta.MaxSeq
@@ -121,10 +115,10 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 			}
 			deltaBytes = buf.Bytes()
 		}
-		g.mu.Unlock()
 
 		// Send gossip with timeout.
 		args := &proto.GossipRequest{
+			NodeID: g.is.NodeID,
 			Addr:   *proto.FromNetAddr(g.is.NodeAddr),
 			LAddr:  *proto.FromNetAddr(c.rpcClient.LocalAddr()),
 			MaxSeq: remoteMaxSeq,
@@ -135,7 +129,6 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 		select {
 		case <-gossipCall.Done:
 			if gossipCall.Error != nil {
-				c.rpcClient.Close()
 				return gossipCall.Error
 			}
 		case <-c.rpcClient.Closed:
@@ -150,12 +143,11 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 
 		// Handle remote forwarding.
 		if reply.Alternate != nil {
-			log.Infof("received forward from %s to %s", c.addr, reply.Alternate)
 			var err error
 			if c.forwardAddr, err = reply.Alternate.NetAddr(); err != nil {
 				return util.Errorf("unable to resolve alternate address: %s: %s", reply.Alternate, err)
 			}
-			return nil
+			return util.Errorf("received forward from %s to %s", c.addr, reply.Alternate)
 		}
 
 		// Combine remote node's infostore delta with ours.
@@ -167,6 +159,8 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 			}
 			log.V(1).Infof("received gossip reply delta from %s: %s", c.addr, delta)
 			g.mu.Lock()
+			c.peerID = delta.NodeID
+			g.outgoing.addNode(c.peerID)
 			freshCount := g.is.combine(delta)
 			if freshCount > 0 {
 				c.lastFresh = now
@@ -178,8 +172,15 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 			g.mu.Unlock()
 		}
 
+		// Check whether this outgoing client is duplicating work already
+		// being done by an incoming client. To avoid mutual shutdown, we
+		// only shutdown our client if our node ID is less than the peer's.
+		nodeID := g.GetNodeID()
+		if g.hasIncoming(c.peerID) && nodeID < c.peerID {
+			return util.Errorf("stopping outgoing client %d @ %s; already have incoming", c.peerID, c.addr)
+		}
 		// Check whether peer node is too boring--disconnect if yes.
-		if (now - c.lastFresh) > int64(maxWaitForNewGossip) {
+		if nodeID != c.peerID && (now-c.lastFresh) > int64(maxWaitForNewGossip) {
 			return util.Errorf("peer is too boring")
 		}
 	}

@@ -95,7 +95,7 @@ type DistSender struct {
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
 	// descriptor is unknown.
-	nodeDescriptor *storage.NodeDescriptor
+	nodeDescriptor *gossip.NodeDescriptor
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -133,7 +133,7 @@ type DistSenderContext struct {
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
-	nodeDescriptor *storage.NodeDescriptor
+	nodeDescriptor *gossip.NodeDescriptor
 	// The RPC dispatcher. Defaults to rpc.Send but can be changed here
 	// for testing purposes.
 	rpcSend           rpcSendFn
@@ -356,14 +356,14 @@ func (ds *DistSender) optimizeReplicaOrder(replicas proto.ReplicaSlice) rpc.Orde
 // We must jump through hoops here to get the node descriptor because it's not available
 // until after the node has joined the gossip network and been allowed to initialize
 // its stores.
-func (ds *DistSender) getNodeDescriptor() *storage.NodeDescriptor {
+func (ds *DistSender) getNodeDescriptor() *gossip.NodeDescriptor {
 	if ds.nodeDescriptor != nil {
 		return ds.nodeDescriptor
 	}
 	ownNodeID := ds.gossip.GetNodeID()
 	if nodeDesc, err := ds.gossip.GetInfo(
 		gossip.MakeNodeIDKey(ownNodeID)); err == nil && ownNodeID > 0 {
-		ds.nodeDescriptor = nodeDesc.(*storage.NodeDescriptor)
+		ds.nodeDescriptor = nodeDesc.(*gossip.NodeDescriptor)
 	} else {
 		log.Infof("unable to determine this node's attributes for replica " +
 			"selection; node is most likely bootstrapping")
@@ -409,7 +409,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 	var addrs []net.Addr
 	replicaMap := map[string]*proto.Replica{}
 	for i := range replicas {
-		addr, err := storage.NodeIDToAddress(ds.gossip, replicas[i].NodeID)
+		addr, err := ds.gossip.GetNodeIDAddress(replicas[i].NodeID)
 		if err != nil {
 			log.V(1).Infof("node %d address is not gossiped", replicas[i].NodeID)
 			continue

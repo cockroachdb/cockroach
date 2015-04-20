@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -48,11 +49,12 @@ type callback struct {
 //
 // infoStores are not thread safe.
 type infoStore struct {
-	Infos     infoMap  `json:"infos,omitempty"`  // Map from key to info
-	Groups    groupMap `json:"groups,omitempty"` // Map from key prefix to groups of infos
-	NodeAddr  net.Addr `json:"-"`                // Address of node owning this info store: "host:port"
-	MaxSeq    int64    `json:"-"`                // Maximum sequence number inserted
-	seqGen    int64    // Sequence generator incremented each time info is added
+	Infos     infoMap      `json:"infos,omitempty"`  // Map from key to info
+	Groups    groupMap     `json:"groups,omitempty"` // Map from key prefix to groups of infos
+	NodeID    proto.NodeID `json:"-"`                // Owning node's ID
+	NodeAddr  net.Addr     `json:"-"`                // Address of node owning this info store: "host:port"
+	MaxSeq    int64        `json:"-"`                // Maximum sequence number inserted
+	seqGen    int64        // Sequence generator incremented each time info is added
 	callbacks []callback
 }
 
@@ -115,10 +117,11 @@ var (
 // newInfoStore allocates and returns a new infoStore.
 // "NodeAddr" is the address of the node owning the infostore
 // in "host:port" format.
-func newInfoStore(nodeAddr net.Addr) *infoStore {
+func newInfoStore(nodeID proto.NodeID, nodeAddr net.Addr) *infoStore {
 	return &infoStore{
 		Infos:    infoMap{},
 		Groups:   groupMap{},
+		NodeID:   nodeID,
 		NodeAddr: nodeAddr,
 	}
 }
@@ -137,8 +140,8 @@ func (is *infoStore) newInfo(key string, val interface{}, ttl time.Duration) *in
 		Val:       val,
 		Timestamp: now,
 		TTLStamp:  ttlStamp,
-		NodeAddr:  is.NodeAddr,
-		peerAddr:  is.NodeAddr,
+		NodeID:    is.NodeID,
+		peerID:    is.NodeID,
 		seq:       is.seqGen,
 	}
 }
@@ -356,7 +359,7 @@ func (is *infoStore) combine(delta *infoStore) int {
 		is.seqGen++
 		i.seq = is.seqGen
 		i.Hops++
-		i.peerAddr = delta.NodeAddr
+		i.peerID = delta.NodeID
 		if is.addInfo(i) == nil {
 			freshCount++
 		}
@@ -371,12 +374,12 @@ func (is *infoStore) combine(delta *infoStore) int {
 // from node requesting delta are ignored.
 //
 // Returns nil if there are no deltas.
-func (is *infoStore) delta(addr net.Addr, seq int64) *infoStore {
+func (is *infoStore) delta(nodeID proto.NodeID, seq int64) *infoStore {
 	if seq >= is.MaxSeq {
 		return nil
 	}
 
-	delta := newInfoStore(is.NodeAddr)
+	delta := newInfoStore(is.NodeID, is.NodeAddr)
 
 	// Compute delta of groups and infos.
 	is.visitInfos(func(g *group) error {
@@ -384,7 +387,7 @@ func (is *infoStore) delta(addr net.Addr, seq int64) *infoStore {
 		delta.registerGroup(gDelta)
 		return nil
 	}, func(i *info) error {
-		if i.isFresh(addr, seq) {
+		if i.isFresh(nodeID, seq) {
 			delta.addInfo(i)
 		}
 		return nil
@@ -394,51 +397,40 @@ func (is *infoStore) delta(addr net.Addr, seq int64) *infoStore {
 	return delta
 }
 
-// distant returns an addrSet of node addresses for gossip peers which
-// originated infos with info.Hops > maxHops.
-func (is *infoStore) distant(maxHops uint32) *addrSet {
-	addrMap := make(map[string]net.Addr)
+// distant returns a nodeSet for gossip peers which originated infos
+// with info.Hops > maxHops.
+func (is *infoStore) distant(maxHops uint32) *nodeSet {
+	ns := newNodeSet(0)
 	is.visitInfos(nil, func(i *info) error {
 		if i.Hops > maxHops {
-			addrMap[i.NodeAddr.String()] = i.NodeAddr
+			ns.addNode(i.NodeID)
 		}
 		return nil
 	})
-
-	// Build and return array of addresses.
-	addrs := newAddrSet(len(addrMap))
-	for _, addr := range addrMap {
-		addrs.addAddr(addr)
-	}
-	return addrs
+	return ns
 }
 
-// leastUseful determines which node from amongst the node addresses
-// listed in addrs is currently contributing the least. Returns nil
-// if addrs is empty.
-func (is *infoStore) leastUseful(addrs *addrSet) net.Addr {
-	contrib := make(map[string]int, addrs.len())
-	for key := range addrs.addrs {
-		contrib[key] = 0
+// leastUseful determines which node ID from amongst the set is
+// currently contributing the least. Returns 0 if nodes is empty.
+func (is *infoStore) leastUseful(nodes *nodeSet) proto.NodeID {
+	contrib := make(map[proto.NodeID]int, nodes.len())
+	for node := range nodes.nodes {
+		contrib[node] = 0
 	}
 	is.visitInfos(nil, func(i *info) error {
-		if addrs.hasAddr(i.peerAddr) {
-			contrib[i.peerAddr.String()]++
-		}
+		contrib[i.peerID]++
 		return nil
 	})
 
 	least := math.MaxInt32
-	var leastKey string
-	for key, count := range contrib {
-		if count < least {
-			least = count
-			leastKey = key
+	var leastNode proto.NodeID
+	for id, count := range contrib {
+		if nodes.hasNode(id) {
+			if count < least {
+				least = count
+				leastNode = id
+			}
 		}
 	}
-
-	if least == math.MaxInt32 {
-		return nil
-	}
-	return addrs.addrs[leastKey]
+	return leastNode
 }

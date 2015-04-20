@@ -18,9 +18,9 @@
 package gossip
 
 import (
-	"net"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -33,12 +33,12 @@ type info struct {
 	// implement the util.Ordered interface to be used with groups.
 	// For single infos any type is allowed.
 	Val       interface{}
-	Timestamp int64    `json:"-"` // Wall time at origination (Unix-nanos)
-	TTLStamp  int64    `json:"-"` // Wall time before info is discarded (Unix-nanos)
-	Hops      uint32   `json:"-"` // Number of hops from originator
-	NodeAddr  net.Addr `json:"-"` // Originating node in "host:port" format
-	peerAddr  net.Addr // Proximate peer which passed us the info
-	seq       int64    // Sequence number for incremental updates
+	Timestamp int64        `json:"-"` // Wall time at origination (Unix-nanos)
+	TTLStamp  int64        `json:"-"` // Wall time before info is discarded (Unix-nanos)
+	Hops      uint32       `json:"-"` // Number of hops from originator
+	NodeID    proto.NodeID `json:"-"` // Originating node's ID
+	peerID    proto.NodeID // Proximate peer's ID which passed us the info
+	seq       int64        // Sequence number for incremental updates
 }
 
 // infoPrefix returns the text preceding the last period within
@@ -76,15 +76,15 @@ func (i *info) expired(now int64) bool {
 
 // isFresh returns true if the info has a sequence number newer
 // than seq and wasn't either passed directly or originated from
-// the same address as addr.
-func (i *info) isFresh(addr net.Addr, seq int64) bool {
+// the same node.
+func (i *info) isFresh(nodeID proto.NodeID, seq int64) bool {
 	if i.seq <= seq {
 		return false
 	}
-	if i.NodeAddr.String() == addr.String() {
+	if nodeID != 0 && i.NodeID == nodeID {
 		return false
 	}
-	if i.peerAddr.String() == addr.String() {
+	if nodeID != 0 && i.peerID == nodeID {
 		return false
 	}
 	return true

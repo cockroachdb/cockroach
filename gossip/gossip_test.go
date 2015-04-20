@@ -15,49 +15,21 @@
 //
 // Author: Spencer Kimball (spencer.kimball@gmail.com)
 
-package gossip_test
+package gossip
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/gossip"
-	"github.com/cockroachdb/cockroach/gossip/simulation"
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
-// verifyConvergence verifies that info from each node is visible from
-// every node in the network within numCycles cycles of the gossip protocol.
-// NOTE: This test is non-deterministic because it involves multiple goroutines
-// that may not all be able to keep up if the given interval is too small.
-// As a rule of thumb, increase the interval until the same number of cycles are used
-// for both race and non-race tests; this indicates that no goroutines are being
-// left behind by CPU limits.
-// TODO(spencer): figure out a more deterministic setup, advancing the clock
-// manually and counting cycles accurately instead of relying on real-time sleeps.
-func verifyConvergence(numNodes, maxCycles int, interval time.Duration, t *testing.T) {
-	network := simulation.NewNetwork(numNodes, "unix", interval)
-
-	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
-		t.Errorf("expected a fully-connected network within %d cycles; took %d",
-			maxCycles, connectedCycle)
-	}
-	network.Stop()
-}
-
-// TestConvergence verifies a 10 node gossip network converges within
-// 8 cycles.
-func TestConvergence(t *testing.T) {
-	// 100 milliseconds to accommodate race tests on slower hardware.
-	verifyConvergence(10, 8, 100*time.Millisecond, t)
-}
-
 // TestGossipInfoStore verifies operation of gossip instance infostore.
 func TestGossipInfoStore(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), nil)
+	g := New(rpcContext, TestInterval, TestBootstrap)
 	g.AddInfo("i", int64(1), time.Hour)
 	if val, err := g.GetInfo("i"); val.(int64) != int64(1) || err != nil {
 		t.Errorf("error fetching int64: %v", err)
@@ -84,11 +56,11 @@ func TestGossipInfoStore(t *testing.T) {
 // TestGossipGroupsInfoStore verifies gossiping of groups via the
 // gossip instance infostore.
 func TestGossipGroupsInfoStore(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), nil)
+	g := New(rpcContext, TestInterval, TestBootstrap)
 
 	// For int64.
-	g.RegisterGroup("i", 3, gossip.MinGroup)
+	g.RegisterGroup("i", 3, MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("i.%d", i), int64(i), time.Hour)
 	}
@@ -109,7 +81,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For float64.
-	g.RegisterGroup("f", 3, gossip.MinGroup)
+	g.RegisterGroup("f", 3, MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("f.%d", i), float64(i), time.Hour)
 	}
@@ -127,7 +99,7 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	}
 
 	// For string.
-	g.RegisterGroup("s", 3, gossip.MinGroup)
+	g.RegisterGroup("s", 3, MinGroup)
 	for i := 0; i < 3; i++ {
 		g.AddInfo(fmt.Sprintf("s.%d", i), fmt.Sprintf("%d", i), time.Hour)
 	}
@@ -141,6 +113,52 @@ func TestGossipGroupsInfoStore(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		if values[i].(string) != fmt.Sprintf("%d", i) {
 			t.Errorf("index %d has incorrect value: %d, expected %s", i, values[i], fmt.Sprintf("%d", i))
+		}
+	}
+}
+
+func TestGossipGetNextBootstrapAddress(t *testing.T) {
+	resolverSpecs := []string{
+		"127.0.0.1:9000",
+		"tcp=127.0.0.1:9001",
+		"unix=/tmp/unix-socket12345",
+		"lb=127.0.0.1:9002",
+		"foo=127.0.0.1:9003", // error should not resolve.
+		"lb=",                // error should not resolve.
+		"localhost:9004",
+		"lb=127.0.0.1:9005",
+	}
+
+	resolvers := []Resolver{}
+	for _, rs := range resolverSpecs {
+		resolver, err := NewResolver(rs)
+		if err == nil {
+			resolvers = append(resolvers, resolver)
+		}
+	}
+	if len(resolvers) != 6 {
+		t.Errorf("expected 6 resolvers; got %d", len(resolvers))
+	}
+	g := New(nil, TestInterval, resolvers)
+
+	// Using specified resolvers, fetch bootstrap addresses 10 times
+	// and verify the results match expected addresses.
+	expAddresses := []string{
+		"127.0.0.1:9001",
+		"/tmp/unix-socket12345",
+		"127.0.0.1:9002",
+		"localhost:9004",
+		"127.0.0.1:9005",
+		"127.0.0.1:9000",
+		"127.0.0.1:9002",
+		"127.0.0.1:9005",
+		"127.0.0.1:9002",
+		"127.0.0.1:9005",
+	}
+	for i := 0; i < 10; i++ {
+		addr := g.getNextBootstrapAddress()
+		if addr.String() != expAddresses[i] {
+			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addr.String())
 		}
 	}
 }

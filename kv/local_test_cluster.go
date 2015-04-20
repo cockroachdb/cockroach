@@ -111,11 +111,11 @@ type LocalTestCluster struct {
 func (ltc *LocalTestCluster) Start() error {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
-	rpcContext := rpc.NewContext(ltc.Clock, rpc.LoadInsecureTLSConfig())
+	ltc.Stopper = util.NewStopper()
+	rpcContext := rpc.NewContext(ltc.Clock, rpc.LoadInsecureTLSConfig(), ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())
-	ltc.Stopper = util.NewStopper()
 	sender := NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
 	ltc.KV = client.NewKV(nil, sender)
 	ltc.KV.User = storage.UserRoot
