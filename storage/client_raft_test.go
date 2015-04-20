@@ -18,6 +18,7 @@
 package storage_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -263,7 +264,7 @@ func TestRestoreReplicas(t *testing.T) {
 	// cutting off the process too soon currently results in a corrupted range.
 	time.Sleep(500 * time.Millisecond)
 
-	mtc.Restart(t)
+	mtc.restart()
 
 	// Send a command on each store. The follower will forward to the leader and both
 	// commands will eventually commit.
@@ -481,4 +482,53 @@ func TestStoreRangeReplicate(t *testing.T) {
 	}, 1*time.Second); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestProgressWithDownNode verifies that a surviving quorum can make progress
+// with a downed node.
+func TestProgressWithDownNode(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	mtc := startMultiTestContext(t, 3)
+	defer mtc.Stop()
+
+	raftID := int64(1)
+	mtc.replicateRange(raftID, 0, 1, 2)
+
+	incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the first increment propagates to all the engines.
+	verify := func(expected []int64) {
+		util.SucceedsWithin(t, time.Second, func() error {
+			values := []int64{}
+			for _, eng := range mtc.engines {
+				val, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
+				if err != nil {
+					return err
+				}
+				values = append(values, val.GetInteger())
+			}
+			if !reflect.DeepEqual(expected, values) {
+				return util.Errorf("expected %v, got %v", expected, values)
+			}
+			return nil
+		})
+	}
+	verify([]int64{5, 5, 5})
+
+	// Stop one of the replicas and issue a new increment.
+	mtc.stopStore(1)
+	incArgs, incResp = incrementArgs([]byte("a"), 11, raftID, mtc.stores[0].StoreID())
+	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+		t.Fatal(err)
+	}
+
+	// The new increment can be seen on both live replicas.
+	verify([]int64{16, 5, 16})
+
+	// Once the downed node is restarted, it will catch up.
+	mtc.restartStore(1)
+	verify([]int64{16, 16, 16})
 }

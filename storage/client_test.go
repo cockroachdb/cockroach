@@ -30,6 +30,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
@@ -87,6 +88,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 }
 
 type multiTestContext struct {
+	t           *testing.T
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	gossip      *gossip.Gossip
@@ -104,7 +106,16 @@ type multiTestContext struct {
 	transportStopper *util.Stopper
 }
 
+// startMultiTestContext is a convenience function to create, start, and return
+// a multiTestContext.
+func startMultiTestContext(t *testing.T, numStores int) *multiTestContext {
+	m := &multiTestContext{}
+	m.Start(t, numStores)
+	return m
+}
+
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
+	m.t = t
 	if m.manualClock == nil {
 		m.manualClock = hlc.NewManualClock(0)
 	}
@@ -198,31 +209,62 @@ func (m *multiTestContext) addStore(t *testing.T) {
 
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
-func (m *multiTestContext) StopStore(i int) {
+func (m *multiTestContext) stopStore(i int) {
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
 	m.stores[i] = nil
 }
 
-// RestartStore restarts a store previously stopped with StopStore.
-func (m *multiTestContext) RestartStore(i int, t *testing.T) {
+// restartStore restarts a store previously stopped with StopStore.
+func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = util.NewStopper()
 	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport,
 		storage.TestStoreConfig)
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
-		t.Fatal(err)
+		m.t.Fatal(err)
 	}
 }
 
-// Restart stops and restarts all stores but leaves the engines intact,
+// restart stops and restarts all stores but leaves the engines intact,
 // so the stores should contain the same persistent storage as before.
-func (m *multiTestContext) Restart(t *testing.T) {
+func (m *multiTestContext) restart() {
 	for i := range m.stores {
-		m.StopStore(i)
+		m.stopStore(i)
 	}
 	for i := range m.stores {
-		m.RestartStore(i, t)
+		m.restartStore(i)
 	}
+}
+
+// replicateRange replicates the given range onto the given stores.
+func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, dests ...int) {
+	rng, err := m.stores[sourceStoreIndex].GetRange(raftID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	for _, dest := range dests {
+		err = rng.ChangeReplicas(proto.ADD_REPLICA,
+			proto.Replica{
+				NodeID:  m.stores[dest].Ident.NodeID,
+				StoreID: m.stores[dest].Ident.StoreID,
+			})
+		if err != nil {
+			m.t.Fatal(err)
+		}
+	}
+
+	// Wait for the replication to complete on all destination nodes.
+	util.SucceedsWithin(m.t, time.Second, func() error {
+		for _, dest := range dests {
+			// Use LookupRange(keys) instead of GetRange(raftID) to ensure that the
+			// snaphost has been transferred and the descriptor initialized.
+			if m.stores[dest].LookupRange(rng.Desc().StartKey, rng.Desc().StartKey) == nil {
+				return util.Errorf("range not found on store %d", dest)
+			}
+		}
+		return nil
+	})
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to
