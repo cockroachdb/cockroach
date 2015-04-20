@@ -237,7 +237,7 @@ func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		}
 	}
 	key := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-	if err := db.PutProto(key, config); err != nil {
+	if err := db.Run(client.PutProtoCall(key, config)); err != nil {
 		return err
 	}
 	return nil
@@ -280,14 +280,20 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		configkey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-		var ok bool
-		if ok, _, err = db.GetProto(configkey, config); err != nil {
+		call := client.GetCall(configkey)
+		if err = db.Run(call); err != nil {
 			return
 		}
-		// On get, if there's no config for the requested prefix,
-		// return a not found error.
-		if !ok {
-			err = util.Errorf("no config found for key prefix %q", path)
+		reply := call.Reply.(*proto.GetResponse)
+		if reply.Value == nil {
+			err = util.Errorf("%s: no value present", configkey)
+			return
+		}
+		if reply.Value.Integer != nil {
+			err = util.Errorf("%s: unexpected integer value: %+v", configkey, reply.Value)
+			return
+		}
+		if err = gogoproto.Unmarshal(reply.Value.Bytes, config); err != nil {
 			return
 		}
 		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)

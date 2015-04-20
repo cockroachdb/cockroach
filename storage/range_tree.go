@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // cachedNode is an in memory cache for use during range tree manipulations.
@@ -76,17 +77,27 @@ func (tc *treeContext) flush() error {
 	return nil
 }
 
+func getProto(txn *client.Txn, key proto.Key, msg gogoproto.Message) error {
+	call := client.GetCall(key)
+	if err := txn.Run(call); err != nil {
+		return err
+	}
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Value == nil {
+		return util.Errorf("%s: no value present", key)
+	}
+	if reply.Value.Integer != nil {
+		return util.Errorf("%s: unexpected integer value: %+v", key, reply.Value)
+	}
+	return gogoproto.Unmarshal(reply.Value.Bytes, msg)
+}
+
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
 func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := &proto.RangeTree{}
-	ok, _, err := txn.GetProto(engine.KeyRangeTreeRoot, tree)
-	if err != nil {
+	if err := getProto(txn, engine.KeyRangeTreeRoot, tree); err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, util.Errorf("Could not find the range tree:%s", engine.KeyRangeTreeRoot)
-	}
-
 	return &treeContext{
 		txn:   txn,
 		tree:  tree,
@@ -127,12 +138,8 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := &proto.RangeTreeNode{}
-	ok, _, err := tc.txn.GetProto(engine.RangeTreeNodeKey(*key), node)
-	if err != nil {
+	if err := getProto(tc.txn, engine.RangeTreeNodeKey(*key), node); err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, util.Errorf("Could not find the range tree node:%s", engine.RangeTreeNodeKey(*key))
 	}
 	tc.nodes[keyString] = cachedNode{
 		node:  node,

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/leaktest"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // TODO(bram): Increase TotalSplits drastically if performance allows.
@@ -75,6 +76,21 @@ func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
 	return nil
 }
 
+func getProto(kv *client.KV, key proto.Key, msg gogoproto.Message) error {
+	call := client.GetCall(key)
+	if err := kv.Run(call); err != nil {
+		return err
+	}
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Value == nil {
+		return util.Errorf("%s: no value present", key)
+	}
+	if reply.Value.Integer != nil {
+		return util.Errorf("%s: unexpected integer value: %+v", key, reply.Value)
+	}
+	return gogoproto.Unmarshal(reply.Value.Bytes, msg)
+}
+
 // treeNodesEqual compares the expectedTree from the provided key to the actual
 // nodes retrieved from the db.  It recursively calls itself on both left and
 // right children if they exist.
@@ -84,23 +100,19 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 		return util.Errorf("Expected does not contain a node for %s", key)
 	}
 	actualNode := &proto.RangeTreeNode{}
-	ok, _, err := db.GetProto(engine.RangeTreeNodeKey(key), actualNode)
-	if err != nil {
+	if err := getProto(db, engine.RangeTreeNodeKey(key), actualNode); err != nil {
 		return err
 	}
-	if !ok {
-		return util.Errorf("Could not find the range tree node for range:%s; expected:%+v", key, expectedNode)
-	}
-	if err = nodesEqual(key, expectedNode, *actualNode); err != nil {
+	if err := nodesEqual(key, expectedNode, *actualNode); err != nil {
 		return err
 	}
 	if expectedNode.LeftKey != nil {
-		if err = treeNodesEqual(db, expected, *expectedNode.LeftKey); err != nil {
+		if err := treeNodesEqual(db, expected, *expectedNode.LeftKey); err != nil {
 			return err
 		}
 	}
 	if expectedNode.RightKey != nil {
-		if err = treeNodesEqual(db, expected, *expectedNode.RightKey); err != nil {
+		if err := treeNodesEqual(db, expected, *expectedNode.RightKey); err != nil {
 			return err
 		}
 	}
@@ -112,12 +124,8 @@ func treeNodesEqual(db *client.KV, expected testRangeTree, key proto.Key) error 
 func treesEqual(db *client.KV, expected testRangeTree) error {
 	// Compare the tree roots.
 	actualTree := &proto.RangeTree{}
-	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, actualTree)
-	if err != nil {
+	if err := getProto(db, engine.KeyRangeTreeRoot, actualTree); err != nil {
 		return err
-	}
-	if !ok {
-		return util.Errorf("Could not find the range tree root:%s", engine.KeyRangeTreeRoot)
 	}
 	if !reflect.DeepEqual(&expected.Tree, actualTree) {
 		return util.Errorf("Range tree root is not as expected - expected:%+v - actual:%+v", expected.Tree, actualTree)
@@ -607,12 +615,8 @@ func (k Key) Compare(b llrb.Comparable) int {
 func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error {
 	// Retrieve the node form the range tree.
 	rtNode := &proto.RangeTreeNode{}
-	ok, _, err := db.GetProto(engine.RangeTreeNodeKey(*key), rtNode)
-	if err != nil {
+	if err := getProto(db, engine.RangeTreeNodeKey(*key), rtNode); err != nil {
 		return err
-	}
-	if !ok {
-		return util.Errorf("Could not find the range tree node for range:%s", key)
 	}
 
 	bNode := &proto.RangeTreeNode{
@@ -628,16 +632,16 @@ func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error
 		rightKey := proto.Key(biogoNode.Right.Elem.(Key))
 		bNode.RightKey = &rightKey
 	}
-	if err = nodesEqual(*key, *bNode, *rtNode); err != nil {
+	if err := nodesEqual(*key, *bNode, *rtNode); err != nil {
 		return err
 	}
 	if rtNode.LeftKey != nil {
-		if err = compareBiogoNode(db, biogoNode.Left, rtNode.LeftKey); err != nil {
+		if err := compareBiogoNode(db, biogoNode.Left, rtNode.LeftKey); err != nil {
 			return err
 		}
 	}
 	if rtNode.RightKey != nil {
-		if err = compareBiogoNode(db, biogoNode.Right, rtNode.RightKey); err != nil {
+		if err := compareBiogoNode(db, biogoNode.Right, rtNode.RightKey); err != nil {
 			return err
 		}
 	}
@@ -648,19 +652,10 @@ func compareBiogoNode(db *client.KV, biogoNode *llrb.Node, key *proto.Key) error
 // contain the same values in the same order.
 func compareBiogoTree(db *client.KV, biogoTree *llrb.Tree) error {
 	rt := &proto.RangeTree{}
-	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, rt)
-	if err != nil {
+	if err := getProto(db, engine.KeyRangeTreeRoot, rt); err != nil {
 		return err
 	}
-	if !ok {
-		return util.Errorf("Could not find the range tree root:%s", engine.KeyRangeTreeRoot)
-	}
-
-	if err = compareBiogoNode(db, biogoTree.Root, &rt.RootKey); err != nil {
-		return err
-	}
-
-	return nil
+	return compareBiogoNode(db, biogoTree.Root, &rt.RootKey)
 }
 
 // TestRandomSplits splits the keyspace a total of TotalSplits number of times.

@@ -148,7 +148,8 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	if err := s.KV.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	if err := s.KV.Run(call); err != nil {
 		t.Fatal(err)
 	}
 

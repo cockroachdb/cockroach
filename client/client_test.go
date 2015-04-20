@@ -301,17 +301,21 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 	}
 
 	key := proto.Key("zone-config")
-	if err := kvClient.PutProto(key, zoneConfig); err != nil {
+	if err := kvClient.Run(client.PutProtoCall(key, zoneConfig)); err != nil {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
-	readZoneConfig := &proto.ZoneConfig{}
-	ok, ts, err := kvClient.GetProto(key, readZoneConfig)
-	if !ok || err != nil {
-		t.Fatalf("unable to get proto ok? %t: %s", ok, err)
+	call := client.GetCall(key)
+	if err := kvClient.Run(call); err != nil {
+		t.Fatalf("unable to get proto: %v", err)
 	}
-	if ts.Equal(proto.ZeroTimestamp) {
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Timestamp.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
+	}
+	readZoneConfig := &proto.ZoneConfig{}
+	if err := gogoproto.Unmarshal(reply.Value.Bytes, readZoneConfig); err != nil {
+		t.Fatalf("unable to unmarshal proto: %v", err)
 	}
 	if !gogoproto.Equal(zoneConfig, readZoneConfig) {
 		t.Errorf("expected zone configs equal; %+v != %+v", zoneConfig, readZoneConfig)
@@ -328,19 +332,20 @@ func TestKVClientGetAndPut(t *testing.T) {
 
 	key := proto.Key("key")
 	value := []byte("value")
-	if err := kvClient.Put(key, value); err != nil {
+	if err := kvClient.Run(client.PutCall(key, value)); err != nil {
 		t.Fatalf("unable to put value: %s", err)
 	}
 
-	ok, readValue, ts, err := kvClient.Get(key)
-	if !ok || err != nil {
-		t.Fatalf("unable to get value ok? %t: %s", ok, err)
+	call := client.GetCall(key)
+	if err := kvClient.Run(call); err != nil {
+		t.Fatalf("unable to get value: %v", err)
 	}
-	if ts.Equal(proto.ZeroTimestamp) {
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Timestamp.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
 	}
-	if !bytes.Equal(value, readValue) {
-		t.Errorf("expected values equal; %+v != %+v", value, readValue)
+	if !bytes.Equal(value, reply.Value.Bytes) {
+		t.Errorf("expected values equal; %+v != %+v", value, reply.Value.Bytes)
 	}
 }
 

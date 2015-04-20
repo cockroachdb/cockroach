@@ -17,12 +17,6 @@
 
 package client
 
-import (
-	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/util"
-	gogoproto "github.com/gogo/protobuf/proto"
-)
-
 // Txn provides serial access to a KV store via Run and parallel
 // access via Prepare and Flush. A Txn instance is not thread
 // safe.
@@ -74,62 +68,4 @@ func (t *Txn) Flush() error {
 	calls := t.prepared
 	t.prepared = nil
 	return t.kv.Run(calls...)
-}
-
-// Get fetches the value at the specified key. Returns true on success
-// or false if the key was not found. The timestamp of the write is
-// returned as the second return value. The first result parameter is
-// "ok": true if a value was found for the requested key; false
-// otherwise. An error is returned on error fetching from underlying
-// storage or deserializing value.
-func (t *Txn) Get(key proto.Key) (bool, []byte, proto.Timestamp, error) {
-	value, err := t.getInternal(key)
-	if err != nil || value == nil {
-		return false, nil, proto.Timestamp{}, err
-	}
-	if value.Integer != nil {
-		return false, nil, proto.Timestamp{}, util.Errorf("unexpected integer value at key %s: %+v", key, value)
-	}
-	return true, value.Bytes, *value.Timestamp, nil
-}
-
-// GetProto fetches the value at the specified key and unmarshals it
-// using a protobuf decoder. See comments for GetI for details on
-// return values.
-func (t *Txn) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
-	value, err := t.getInternal(key)
-	if err != nil || value == nil {
-		return false, proto.Timestamp{}, err
-	}
-	if value.Integer != nil {
-		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
-	}
-	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
-		return true, *value.Timestamp, err
-	}
-	return true, *value.Timestamp, nil
-}
-
-// getInternal fetches the requested key and returns the value.
-func (t *Txn) getInternal(key proto.Key) (*proto.Value, error) {
-	call := GetCall(key)
-	reply := call.Reply.(*proto.GetResponse)
-	if err := t.Run(call); err != nil {
-		return nil, err
-	}
-	if reply.Value != nil {
-		return reply.Value, reply.Value.Verify(key)
-	}
-	return nil, nil
-}
-
-// Put writes the specified byte slice value to key.
-func (t *Txn) Put(key proto.Key, value []byte) error {
-	return t.Run(PutCall(key, value))
-}
-
-// PutProto sets the given key to the protobuf-serialized byte string
-// of msg.
-func (t *Txn) PutProto(key proto.Key, msg gogoproto.Message) error {
-	return t.Run(PutProtoCall(key, msg))
 }

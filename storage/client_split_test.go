@@ -392,7 +392,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: maxBytes,
 	}
-	if err := store.DB().PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	if err := store.DB().Run(call); err != nil {
 		t.Fatal(err)
 	}
 
