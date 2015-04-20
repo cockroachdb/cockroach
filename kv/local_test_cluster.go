@@ -108,31 +108,31 @@ type LocalTestCluster struct {
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (tls *LocalTestCluster) Start() error {
-	tls.Manual = hlc.NewManualClock(0)
-	tls.Clock = hlc.NewClock(tls.Manual.UnixNano)
-	rpcContext := rpc.NewContext(tls.Clock, rpc.LoadInsecureTLSConfig())
-	tls.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
-	tls.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
-	tls.lSender = newRetryableLocalSender(NewLocalSender())
-	tls.Stopper = util.NewStopper()
-	sender := NewTxnCoordSender(tls.lSender, tls.Clock, false, tls.Stopper)
-	tls.KV = client.NewKV(nil, sender)
-	tls.KV.User = storage.UserRoot
+func (ltc *LocalTestCluster) Start() error {
+	ltc.Manual = hlc.NewManualClock(0)
+	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
+	rpcContext := rpc.NewContext(ltc.Clock, rpc.LoadInsecureTLSConfig())
+	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
+	ltc.lSender = newRetryableLocalSender(NewLocalSender())
+	ltc.Stopper = util.NewStopper()
+	sender := NewTxnCoordSender(ltc.lSender, ltc.Clock, false, ltc.Stopper)
+	ltc.KV = client.NewKV(nil, sender)
+	ltc.KV.User = storage.UserRoot
 	transport := multiraft.NewLocalRPCTransport()
-	tls.Stopper.AddCloser(transport)
-	tls.Store = storage.NewStore(tls.Clock, tls.Eng, tls.KV, tls.Gossip, transport, storage.TestStoreConfig)
-	if err := tls.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, tls.Stopper); err != nil {
+	ltc.Stopper.AddCloser(transport)
+	ltc.Store = storage.NewStore(ltc.Clock, ltc.Eng, ltc.KV, ltc.Gossip, transport, storage.TestStoreConfig)
+	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
 		return err
 	}
-	tls.lSender.AddStore(tls.Store)
-	if err := tls.Store.BootstrapRange(); err != nil {
+	ltc.lSender.AddStore(ltc.Store)
+	if err := ltc.Store.BootstrapRange(); err != nil {
 		return err
 	}
-	if err := tls.Store.Start(tls.Stopper); err != nil {
+	if err := ltc.Store.Start(ltc.Stopper); err != nil {
 		return err
 	}
-	rng, err := tm.store.GetRange(1)
+	rng, err := ltc.Store.GetRange(1)
 	if err != nil {
 		return err
 	}
@@ -144,6 +144,6 @@ func (tls *LocalTestCluster) Start() error {
 }
 
 // Stop stops the cluster.
-func (tls *LocalTestCluster) Stop() {
-	tls.Stopper.Stop()
+func (ltc *LocalTestCluster) Stop() {
+	ltc.Stopper.Stop()
 }
