@@ -87,8 +87,8 @@ func (ts *TestServer) Start() error {
 	}
 	if ts.CertDir == "" {
 		// Always load server certs. Not sure if this path is a good assumption though,
-		// something relative might be best.
-		ts.CertDir = path.Join(os.ExpandEnv("$GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
+		// we should be using embedded certs (see rpc/tls:LoadTestTLSConfig).
+		ts.CertDir = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
 	}
 
 	ctx := NewContext()

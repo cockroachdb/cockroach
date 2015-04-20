@@ -144,7 +144,8 @@ func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
 
 	return &TLSConfig{
 		config: &tls.Config{
-			RootCAs:            certPool,
+			RootCAs: certPool,
+			// TODO(marc): remove once we have a certificate deployment story in place.
 			InsecureSkipVerify: true,
 
 			// Use only TLS v1.2
