@@ -426,14 +426,16 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	// Write zone configs for db3 & db4.
 	var calls []*client.Call
 	for _, k := range []string{"db4", "db3"} {
-		call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
-			zoneConfig, nil)
+		call := client.PutProtoCall(
+			engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
+			zoneConfig)
 		calls = append(calls, call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
-		call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
-			acctConfig, nil)
+		call := client.PutProtoCall(
+			engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
+			acctConfig)
 		calls = append(calls, call)
 	}
 	if err := store.DB().Run(calls...); err != nil {
@@ -451,8 +453,9 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		resp := &proto.ScanResponse{}
-		if err := store.DB().Run(client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0, resp)); err != nil {
+		call := client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+		resp := call.Reply.(*proto.ScanResponse)
+		if err := store.DB().Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		var keys []proto.Key

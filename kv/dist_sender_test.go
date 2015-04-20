@@ -229,7 +229,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 		// Always create the parameters for Scan, only the Header() is used
 		// anyways so it doesn't matter.
-		call := client.ScanCall(proto.Key("b"), proto.Key("y"), 0, nil)
+		call := client.ScanCall(proto.Key("b"), proto.Key("y"), 0)
 		args := call.Args.(*proto.ScanRequest)
 		args.Header().RaftID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
@@ -275,8 +275,9 @@ func TestRetryOnNotLeaderError(t *testing.T) {
 		}),
 	}
 	ds := NewDistSender(ctx, g)
-	reply := &proto.PutResponse{}
-	ds.Send(client.PutCall(proto.Key("a"), []byte("value"), reply))
+	call := client.PutCall(proto.Key("a"), []byte("value"))
+	reply := call.Reply.(*proto.PutResponse)
+	ds.Send(call)
 	if err := reply.GoError(); err != nil {
 		t.Errorf("put encountered error: %s", err)
 	}
@@ -337,8 +338,9 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		rpcSend: testFn,
 	}
 	ds := NewDistSender(ctx, g)
-	sr := &proto.ScanResponse{}
-	ds.Send(client.ScanCall(proto.Key("a"), proto.Key("d"), 0, sr))
+	call := client.ScanCall(proto.Key("a"), proto.Key("d"), 0)
+	sr := call.Reply.(*proto.ScanResponse)
+	ds.Send(call)
 	if err := sr.GoError(); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}

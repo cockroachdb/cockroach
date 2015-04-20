@@ -55,8 +55,8 @@ func runLsRanges(cmd *commander.Command, args []string) {
 	}
 
 	kv := makeKVClient()
-	resp := &proto.ScanResponse{}
-	call := client.ScanCall(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000, resp)
+	call := client.ScanCall(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
+	resp := call.Reply.(*proto.ScanResponse)
 	if err := kv.Run(call); err != nil {
 		fmt.Fprintf(os.Stderr, "scan failed: %s\n", err)
 		os.Exit(1)

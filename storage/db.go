@@ -29,11 +29,11 @@ import (
 type metaAction func([]*client.Call, proto.Key, *proto.RangeDescriptor) []*client.Call
 
 func putMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
-	return append(calls, client.PutProtoCall(key, desc, nil))
+	return append(calls, client.PutProtoCall(key, desc))
 }
 
 func delMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
-	return append(calls, client.DeleteCall(key, nil))
+	return append(calls, client.DeleteCall(key))
 }
 
 // SplitRangeAddressing creates (or overwrites if necessary) the meta1

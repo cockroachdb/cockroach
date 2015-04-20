@@ -47,26 +47,20 @@ func (c *Call) Method() string {
 }
 
 // GetCall returns a Call object initialized to get the value at key.
-func GetCall(key proto.Key, reply *proto.GetResponse) *Call {
-	if reply == nil {
-		reply = &proto.GetResponse{}
-	}
+func GetCall(key proto.Key) *Call {
 	return &Call{
 		Args: &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
 			},
 		},
-		Reply: reply,
+		Reply: &proto.GetResponse{},
 	}
 }
 
 // IncrementCall returns a Call object initialized to increment the
 // value at key by increment.
-func IncrementCall(key proto.Key, increment int64, reply *proto.IncrementResponse) *Call {
-	if reply == nil {
-		reply = &proto.IncrementResponse{}
-	}
+func IncrementCall(key proto.Key, increment int64) *Call {
 	return &Call{
 		Args: &proto.IncrementRequest{
 			RequestHeader: proto.RequestHeader{
@@ -74,16 +68,13 @@ func IncrementCall(key proto.Key, increment int64, reply *proto.IncrementRespons
 			},
 			Increment: increment,
 		},
-		Reply: reply,
+		Reply: &proto.IncrementResponse{},
 	}
 }
 
 // PutCall returns a Call object initialized to put value
 // as a byte slice at key.
-func PutCall(key proto.Key, valueBytes []byte, reply *proto.PutResponse) *Call {
-	if reply == nil {
-		reply = &proto.PutResponse{}
-	}
+func PutCall(key proto.Key, valueBytes []byte) *Call {
 	value := proto.Value{Bytes: valueBytes}
 	value.InitChecksum(key)
 	return &Call{
@@ -93,19 +84,16 @@ func PutCall(key proto.Key, valueBytes []byte, reply *proto.PutResponse) *Call {
 			},
 			Value: value,
 		},
-		Reply: reply,
+		Reply: &proto.PutResponse{},
 	}
 }
 
 // PutProtoCall returns a Call object initialized to put the proto
 // message as a byte slice at key.
-func PutProtoCall(key proto.Key, msg gogoproto.Message, reply *proto.PutResponse) *Call {
+func PutProtoCall(key proto.Key, msg gogoproto.Message) *Call {
 	data, err := gogoproto.Marshal(msg)
 	if err != nil {
 		return &Call{Err: err}
-	}
-	if reply == nil {
-		reply = &proto.PutResponse{}
 	}
 	value := proto.Value{Bytes: data}
 	value.InitChecksum(key)
@@ -116,32 +104,26 @@ func PutProtoCall(key proto.Key, msg gogoproto.Message, reply *proto.PutResponse
 			},
 			Value: value,
 		},
-		Reply: reply,
+		Reply: &proto.PutResponse{},
 	}
 }
 
 // DeleteCall returns a Call object initialized to delete the value at
 // key.
-func DeleteCall(key proto.Key, reply *proto.DeleteResponse) *Call {
-	if reply == nil {
-		reply = &proto.DeleteResponse{}
-	}
+func DeleteCall(key proto.Key) *Call {
 	return &Call{
 		Args: &proto.DeleteRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: key,
 			},
 		},
-		Reply: reply,
+		Reply: &proto.DeleteResponse{},
 	}
 }
 
 // DeleteRangeCall returns a Call object initialized to delete the
 // values in the given key range (excluding the endpoint).
-func DeleteRangeCall(startKey, endKey proto.Key, reply *proto.DeleteRangeResponse) *Call {
-	if reply == nil {
-		reply = &proto.DeleteRangeResponse{}
-	}
+func DeleteRangeCall(startKey, endKey proto.Key) *Call {
 	return &Call{
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
@@ -149,16 +131,13 @@ func DeleteRangeCall(startKey, endKey proto.Key, reply *proto.DeleteRangeRespons
 				EndKey: endKey,
 			},
 		},
-		Reply: reply,
+		Reply: &proto.DeleteRangeResponse{},
 	}
 }
 
 // ScanCall returns a Call object initialized to scan from start to
 // end keys with max results.
-func ScanCall(key, endKey proto.Key, maxResults int64, reply *proto.ScanResponse) *Call {
-	if reply == nil {
-		reply = &proto.ScanResponse{}
-	}
+func ScanCall(key, endKey proto.Key, maxResults int64) *Call {
 	return &Call{
 		Args: &proto.ScanRequest{
 			RequestHeader: proto.RequestHeader{
@@ -167,6 +146,6 @@ func ScanCall(key, endKey proto.Key, maxResults int64, reply *proto.ScanResponse
 			},
 			MaxResults: maxResults,
 		},
-		Reply: reply,
+		Reply: &proto.ScanResponse{},
 	}
 }

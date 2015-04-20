@@ -254,8 +254,9 @@ func (kv *KV) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timest
 
 // getInternal fetches the requested key and returns the value.
 func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
-	reply := &proto.GetResponse{}
-	if err := kv.Run(GetCall(key, reply)); err != nil {
+	call := GetCall(key)
+	reply := call.Reply.(*proto.GetResponse)
+	if err := kv.Run(call); err != nil {
 		return nil, err
 	}
 	if reply.Value != nil {
@@ -266,13 +267,13 @@ func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
 
 // Put writes the specified byte slice value to key.
 func (kv *KV) Put(key proto.Key, value []byte) error {
-	return kv.Run(PutCall(key, value, nil))
+	return kv.Run(PutCall(key, value))
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg.
 func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
-	return kv.Run(PutProtoCall(key, msg, nil))
+	return kv.Run(PutProtoCall(key, msg))
 }
 
 // putInternal writes the specified value to key.
