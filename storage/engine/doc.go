@@ -61,20 +61,14 @@ recent version timestamp. This avoids using an expensive merge
 iterator to scan the most recent version. It also allows us to
 leverage RocksDB's bloom filters.
 
-The 7-bit binary encoding used on the MVCC keys allows arbitrary keys
-to be stored in the map (no restrictions on intermediate nil-bytes,
-for example), while still sorting lexicographically and guaranteeing
-that all timestamp-suffixed MVCC version keys sort consecutively with
-the metadata key. It should be noted that the 7-bit binary encoding is
-distasteful and we'd like to substitute it with something which
-preserves at least 7-bit ascii visibility, but has the same sort
-properties. We considered using RocksDB's custom key comparator
-functionality, but the attendant risks seemed too great. What risks?
-Mostly that RocksDB is unlikely to have tested custom key comparators
-with their more advanced (and ever-growing) functionality. Further,
-bugs in our code (both C++ and Go) related to the custom comparator
-seemed more likely to be painful than just dealing with the 7-bit
-binary encoding.
+The binary encoding used on the MVCC keys allows arbitrary keys to be
+stored in the map (no restrictions on intermediate nil-bytes, for
+example), while still sorting lexicographically and guaranteeing that
+all timestamp-suffixed MVCC version keys sort consecutively with the
+metadata key. We use an escape-based encoding which transforms all nul
+("\x00") characters in the key and is terminated with the sequence
+"\x00\x01", which is guaranteed to not occur elsewhere in the encoded
+value. See util/encoding/encoding.go for more details.
 
 We considered inlining the most recent MVCC version in the
 MVCCMetadata. This would reduce the storage overhead of storing the
