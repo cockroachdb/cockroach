@@ -94,7 +94,7 @@ func NewResolver(spec string) (*Resolver, error) {
 	return &Resolver{resolverType, address, false}, nil
 }
 
-// NewResolverFromAddress take a net.Addr and contructs a resolver.
+// NewResolverFromAddress takes a net.Addr and constructs a resolver.
 func NewResolverFromAddress(addr net.Addr) *Resolver {
 	switch addr.Network() {
 	case "tcp", "unix":
