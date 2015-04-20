@@ -90,11 +90,8 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 // 10 concurrent goroutines are each running successive transactions
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
-	db, _, _, _, _, stopper, err := createTestDB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stopper.Stop()
+	s := createTestDB(t)
+	defer s.Stop()
 
 	// This channel shuts the whole apparatus down.
 	done := make(chan struct{})
@@ -109,7 +106,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
-		go startTestWriter(db, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
+		go startTestWriter(s.KV, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
 	// Execute the consecutive splits.
@@ -121,7 +118,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		log.Infof("starting split at key %q...", splitKey)
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := db.Call(proto.AdminSplit, req, resp); err != nil {
+		if err := s.KV.Call(proto.AdminSplit, req, resp); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
@@ -139,11 +136,8 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // TestRangeSplitsWithWritePressure sets the zone config max bytes for
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
-	db, eng, _, _, _, stopper, err := createTestDB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stopper.Stop()
+	s := createTestDB(t)
+	defer s.Stop()
 	setTestRetryOptions()
 
 	// Rewrite a zone config with low max bytes.
@@ -156,7 +150,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	if err := db.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	if err := s.KV.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,13 +158,13 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go startTestWriter(db, int64(0), 1<<15, &wg, nil, nil, done, t)
+	go startTestWriter(s.KV, int64(0), 1<<15, &wg, nil, nil, done, t)
 
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
 		resp := &proto.ScanResponse{}
-		if err := db.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+		if err := s.KV.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		return len(resp.Rows) >= 5
@@ -188,7 +182,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	if err := util.IsTrueWithin(func() bool {
-		if _, err := engine.MVCCScan(eng, engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
+		if _, err := engine.MVCCScan(s.Eng, engine.KeyLocalMax, engine.KeyMax, 0, proto.MaxTimestamp, true, nil); err != nil {
 			log.Infof("mvcc scan should be clean: %s", err)
 			return false
 		}
