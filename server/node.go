@@ -20,7 +20,6 @@ package server
 import (
 	"container/list"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -89,7 +88,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 	if err := db.Run(client.Call{
 		Args: &proto.IncrementRequest{
 			RequestHeader: proto.RequestHeader{
-				Key:  engine.MakeKey(engine.KeyStoreIDGeneratorPrefix, []byte(strconv.Itoa(int(nodeID)))),
+				Key:  engine.KeyStoreIDGenerator,
 				User: storage.UserRoot,
 			},
 			Increment: inc,
