@@ -651,6 +651,20 @@ func (s *state) createGroup(groupID uint64) error {
 
 	// Automatically campaign and elect a leader for this group if there's
 	// exactly one known node for this group.
+	//
+	// A grey area for this being correct happens in the case when we're
+	// currently in the progress of adding a second node to the group,
+	// with the change committed but not applied.
+	// Upon restarting, the node would immediately elect itself and only
+	// then apply the config change, where really it should be applying
+	// first and then waiting for the majority (which would now require
+	// two votes, not only its own).
+	// However, in that special case, the second node has no chance to
+	// be elected master while this node restarts (as it's aware of the
+	// configuration and knows it needs two votes), so the worst that
+	// could happen is both nodes ending up in candidate state, timing
+	// out and then voting again. This is expected to be an extremely
+	// rare event.
 	if len(cs.Nodes) == 1 && s.MultiRaft.nodeID == NodeID(cs.Nodes[0]) {
 		s.multiNode.Campaign(context.Background(), groupID)
 	}
@@ -839,6 +853,11 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 							// redundant since most pending proposals won't benefit from this but
 							// config changes should be rare enough (and the size of the pending queue
 							// small enough) that it doesn't really matter.
+							//
+							// TODO(tschottdorf) move this reproposal mechanism
+							// up to the storage layer, where it's aware of the
+							// response cache. Currently commands can get
+							// executed multiple times when leadership changes.
 							for _, prop := range g.pending {
 								s.proposalChan <- prop
 							}

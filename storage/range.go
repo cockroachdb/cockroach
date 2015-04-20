@@ -890,7 +890,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 			if err := engine.MVCCPut(r.rm.Engine(), nil, engine.RaftAppliedIndexKey(r.Desc().RaftID),
 				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil); err != nil {
 				// The reply header already contains an error which is going to be more useful
-				// the caller than this one, so just log it.
+				// to the caller than this one, so just log it.
 				log.Errorf("failed to advance applied index: %s", err)
 			}
 		}
@@ -1647,8 +1647,11 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	}
 
 	var cs raftpb.ConfState
-	for _, rep := range r.Desc().Replicas {
-		cs.Nodes = append(cs.Nodes, uint64(MakeRaftNodeID(rep.NodeID, rep.StoreID)))
+	// For uninitalized ranges, membership is unknown at this point.
+	if found || r.isInitialized() {
+		for _, rep := range r.Desc().Replicas {
+			cs.Nodes = append(cs.Nodes, uint64(MakeRaftNodeID(rep.NodeID, rep.StoreID)))
+		}
 	}
 
 	return hs, cs, nil
