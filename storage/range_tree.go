@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // cachedNode is an in memory cache for use during range tree manipulations.
@@ -33,7 +34,7 @@ type cachedNode struct {
 // RangeTree is used to hold the relevant context information for any
 // operations on the range tree.
 type treeContext struct {
-	db    *client.KV
+	txn   *client.Txn
 	tree  *proto.RangeTree
 	dirty bool
 	nodes map[string]cachedNode
@@ -65,33 +66,40 @@ func SetupRangeTree(batch engine.Engine, ms *engine.MVCCStats, timestamp proto.T
 // flush writes all dirty nodes and the tree to the transaction.
 func (tc *treeContext) flush() error {
 	if tc.dirty {
-		if err := tc.db.PreparePutProto(engine.KeyRangeTreeRoot, tc.tree); err != nil {
-			return err
-		}
+		tc.txn.Prepare(client.PutProtoCall(engine.KeyRangeTreeRoot, tc.tree))
 	}
 	for _, cachedNode := range tc.nodes {
 		if cachedNode.dirty {
-			if err := tc.db.PreparePutProto(engine.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node); err != nil {
-				return err
-			}
+			call := client.PutProtoCall(engine.RangeTreeNodeKey(cachedNode.node.Key), cachedNode.node)
+			tc.txn.Prepare(call)
 		}
 	}
 	return nil
 }
 
+func getProto(txn *client.Txn, key proto.Key, msg gogoproto.Message) error {
+	call := client.GetCall(key)
+	if err := txn.Run(call); err != nil {
+		return err
+	}
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Value == nil {
+		return util.Errorf("%s: no value present", key)
+	}
+	if reply.Value.Integer != nil {
+		return util.Errorf("%s: unexpected integer value: %+v", key, reply.Value)
+	}
+	return gogoproto.Unmarshal(reply.Value.Bytes, msg)
+}
+
 // GetRangeTree fetches the RangeTree proto and sets up the range tree context.
-func getRangeTree(db *client.KV) (*treeContext, error) {
+func getRangeTree(txn *client.Txn) (*treeContext, error) {
 	tree := &proto.RangeTree{}
-	ok, _, err := db.GetProto(engine.KeyRangeTreeRoot, tree)
-	if err != nil {
+	if err := getProto(txn, engine.KeyRangeTreeRoot, tree); err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, util.Errorf("Could not find the range tree:%s", engine.KeyRangeTreeRoot)
-	}
-
 	return &treeContext{
-		db:    db,
+		txn:   txn,
 		tree:  tree,
 		dirty: false,
 		nodes: map[string]cachedNode{},
@@ -130,12 +138,8 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 
 	// We don't have it cached so fetch it and add it to the cache.
 	node := &proto.RangeTreeNode{}
-	ok, _, err := tc.db.GetProto(engine.RangeTreeNodeKey(*key), node)
-	if err != nil {
+	if err := getProto(tc.txn, engine.RangeTreeNodeKey(*key), node); err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, util.Errorf("Could not find the range tree node:%s", engine.RangeTreeNodeKey(*key))
 	}
 	tc.nodes[keyString] = cachedNode{
 		node:  node,
@@ -148,8 +152,8 @@ func (tc *treeContext) getNode(key *proto.Key) (*proto.RangeTreeNode, error) {
 // from operations that create new ranges, such as range.splitTrigger.
 // TODO(bram): Can we optimize this by inserting as a child of the range being
 // split?
-func InsertRange(db *client.KV, key proto.Key) error {
-	tc, err := getRangeTree(db)
+func InsertRange(txn *client.Txn, key proto.Key) error {
+	tc, err := getRangeTree(txn)
 	if err != nil {
 		return err
 	}

@@ -96,7 +96,7 @@ func (ia *IDAllocator) Allocate() int64 {
 // special allocationTrigger ID is inserted which causes allocation
 // to occur before IDs run out to hide Increment latency.
 func (ia *IDAllocator) allocateBlock(incr int64) {
-	ir := &proto.IncrementResponse{}
+	var ir *proto.IncrementResponse
 	retryOpts := IDAllocationRetryOpts
 	retryOpts.Stopper = ia.stopper
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
@@ -104,7 +104,9 @@ func (ia *IDAllocator) allocateBlock(incr int64) {
 			return util.RetryBreak, util.Errorf("id allocator exiting as stopper is draining")
 		}
 		idKey := ia.idKey.Load().(proto.Key)
-		if err := ia.db.Call(proto.Increment, proto.IncrementArgs(idKey, incr), ir); err != nil {
+		call := client.IncrementCall(idKey, incr)
+		ir = call.Reply.(*proto.IncrementResponse)
+		if err := ia.db.Run(call); err != nil {
 			log.Warningf("unable to allocate %d ids from %s: %s", incr, ia.idKey, err)
 			ia.stopper.FinishTask()
 			return util.RetryContinue, err

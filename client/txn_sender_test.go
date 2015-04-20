@@ -55,7 +55,7 @@ func (ts *testSender) Send(call *Call) {
 		header.Txn.ID = txnID
 	}
 	call.Reply.Reset()
-	switch call.Method {
+	switch call.Method() {
 	case proto.Put:
 		gogoproto.Merge(call.Reply, testPutResp)
 	default:
@@ -96,7 +96,7 @@ func TestTxnSenderRequestTxnTimestamp(t *testing.T) {
 	}), &TransactionOptions{})
 
 	for testIdx = range testCases {
-		ts.Send(&Call{Method: proto.Put, Args: testPutReq, Reply: &proto.PutResponse{}})
+		ts.Send(&Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
@@ -108,7 +108,7 @@ func TestTxnSenderResetTxnOnAbort(t *testing.T) {
 	}), &TransactionOptions{})
 
 	reply := &proto.PutResponse{}
-	ts.Send(&Call{Method: proto.Put, Args: testPutReq, Reply: reply})
+	ts.Send(&Call{Args: testPutReq, Reply: reply})
 
 	if len(ts.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")

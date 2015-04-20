@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 )
 
 // A DB interface provides methods to access a datastore
@@ -61,16 +62,18 @@ func (db *structuredDB) PutSchema(s *Schema) error {
 	if err := gob.NewEncoder(&buf).Encode(s); err != nil {
 		return err
 	}
-	return db.kvDB.Put(k, buf.Bytes())
+	return db.kvDB.Run(client.PutCall(k, buf.Bytes()))
 }
 
 // DeleteSchema removes s from the kv store.
 func (db *structuredDB) DeleteSchema(s *Schema) error {
-	return db.kvDB.Call(proto.Delete, &proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
-			Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
+	return db.kvDB.Run(&client.Call{
+		Args: &proto.DeleteRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: engine.MakeKey(engine.KeySchemaPrefix, proto.Key(s.Key)),
+			},
 		},
-	}, &proto.DeleteResponse{})
+		Reply: &proto.DeleteResponse{}})
 }
 
 // GetSchema returns the Schema with the given key, or nil if
@@ -79,14 +82,22 @@ func (db *structuredDB) DeleteSchema(s *Schema) error {
 func (db *structuredDB) GetSchema(key string) (*Schema, error) {
 	s := &Schema{}
 	k := engine.MakeKey(engine.KeySchemaPrefix, proto.Key(key))
-	found, v, _, err := db.kvDB.Get(k)
-	if err != nil || !found {
+	call := client.GetCall(k)
+	if err := db.kvDB.Run(call); err != nil {
 		return nil, err
+	}
+	reply := call.Reply.(*proto.GetResponse)
+	if reply.Value == nil {
+		// No value present.
+		return nil, nil
+	}
+	if reply.Value.Integer != nil {
+		return nil, util.Errorf("%s: unexpected integer value: %+v", k, reply.Value)
 	}
 	// TODO(pmattis): This is an inappropriate use of gob. Replace with
 	// something else.
-	if err := gob.NewDecoder(bytes.NewBuffer(v)).Decode(s); err != nil {
+	if err := gob.NewDecoder(bytes.NewBuffer(reply.Value.Bytes)).Decode(s); err != nil {
 		return nil, err
 	}
-	return s, err
+	return s, nil
 }

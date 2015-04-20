@@ -194,14 +194,14 @@ func (s *RESTServer) handleRangeAction(w http.ResponseWriter, r *http.Request) {
 			scanReq.MaxResults = limit
 		}
 		results = &proto.ScanResponse{}
-		err = s.db.Call(proto.Scan, scanReq, results)
+		err = s.db.Run(&client.Call{Args: scanReq, Reply: results})
 	} else if r.Method == methodDelete {
 		deleteReq := &proto.DeleteRangeRequest{RequestHeader: reqHeader}
 		if limit > 0 {
 			deleteReq.MaxEntriesToDelete = limit
 		}
 		results = &proto.DeleteRangeResponse{}
-		err = s.db.Call(proto.DeleteRange, deleteReq, results)
+		err = s.db.Run(&client.Call{Args: deleteReq, Reply: results})
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -229,13 +229,15 @@ func (s *RESTServer) handleCounterAction(w http.ResponseWriter, r *http.Request,
 	}
 
 	ir := &proto.IncrementResponse{}
-	if err := s.db.Call(proto.Increment, &proto.IncrementRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
+	if err := s.db.Run(&client.Call{
+		Args: &proto.IncrementRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: storage.UserRoot,
+			},
+			Increment: inputVal,
 		},
-		Increment: inputVal,
-	}, ir); err != nil {
+		Reply: ir}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -250,13 +252,15 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, key
 	}
 	defer r.Body.Close()
 	pr := &proto.PutResponse{}
-	if err := s.db.Call(proto.Put, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
+	if err := s.db.Run(&client.Call{
+		Args: &proto.PutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: storage.UserRoot,
+			},
+			Value: proto.Value{Bytes: b},
 		},
-		Value: proto.Value{Bytes: b},
-	}, pr); err != nil {
+		Reply: pr}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -265,12 +269,13 @@ func (s *RESTServer) handlePutAction(w http.ResponseWriter, r *http.Request, key
 
 func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	gr := &proto.GetResponse{}
-	if err := s.db.Call(proto.Get, &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
-		},
-	}, gr); err != nil {
+	if err := s.db.Run(&client.Call{
+		Args: &proto.GetRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: storage.UserRoot,
+			},
+		}, Reply: gr}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -284,12 +289,13 @@ func (s *RESTServer) handleGetAction(w http.ResponseWriter, r *http.Request, key
 
 func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	cr := &proto.ContainsResponse{}
-	if err := s.db.Call(proto.Contains, &proto.ContainsRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
-		},
-	}, cr); err != nil {
+	if err := s.db.Run(&client.Call{
+		Args: &proto.ContainsRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: storage.UserRoot,
+			},
+		}, Reply: cr}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -302,12 +308,13 @@ func (s *RESTServer) handleHeadAction(w http.ResponseWriter, r *http.Request, ke
 
 func (s *RESTServer) handleDeleteAction(w http.ResponseWriter, r *http.Request, key proto.Key) {
 	dr := &proto.DeleteResponse{}
-	if err := s.db.Call(proto.Delete, &proto.DeleteRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  key,
-			User: storage.UserRoot,
-		},
-	}, dr); err != nil {
+	if err := s.db.Run(&client.Call{
+		Args: &proto.DeleteRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  key,
+				User: storage.UserRoot,
+			},
+		}, Reply: dr}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

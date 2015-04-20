@@ -255,237 +255,6 @@ func IsTransactional(method string) bool {
 	return ok
 }
 
-// GetArgs returns a GetRequest object initialized to get the
-// value at key.
-func GetArgs(key Key) *GetRequest {
-	return &GetRequest{
-		RequestHeader: RequestHeader{
-			Key: key,
-		},
-	}
-}
-
-// IncrementArgs returns an IncrementRequest object initialized to
-// increment the value at key by increment.
-func IncrementArgs(key Key, increment int64) *IncrementRequest {
-	return &IncrementRequest{
-		RequestHeader: RequestHeader{
-			Key: key,
-		},
-		Increment: increment,
-	}
-}
-
-// PutArgs returns a PutRequest object initialized to put value
-// as a byte slice at key.
-func PutArgs(key Key, valueBytes []byte) *PutRequest {
-	value := Value{Bytes: valueBytes}
-	value.InitChecksum(key)
-	return &PutRequest{
-		RequestHeader: RequestHeader{
-			Key: key,
-		},
-		Value: value,
-	}
-}
-
-// DeleteArgs returns a DeleteRequest object initialized to delete
-// the value at key.
-func DeleteArgs(key Key) *DeleteRequest {
-	return &DeleteRequest{
-		RequestHeader: RequestHeader{
-			Key: key,
-		},
-	}
-}
-
-// DeleteRangeArgs returns a DeleteRangeRequest object initialized to delete
-// the values in the given key range (excluding the endpoint).
-func DeleteRangeArgs(startKey, endKey Key) *DeleteRangeRequest {
-	return &DeleteRangeRequest{
-		RequestHeader: RequestHeader{
-			Key:    startKey,
-			EndKey: endKey,
-		},
-	}
-}
-
-// ScanArgs returns a ScanRequest object initialized to scan
-// from start to end keys with max results.
-func ScanArgs(key, endKey Key, maxResults int64) *ScanRequest {
-	return &ScanRequest{
-		RequestHeader: RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		MaxResults: maxResults,
-	}
-}
-
-// MethodForRequest returns the method name corresponding to the type
-// of the request.
-func MethodForRequest(req Request) (string, error) {
-	switch req.(type) {
-	case *ContainsRequest:
-		return Contains, nil
-	case *GetRequest:
-		return Get, nil
-	case *PutRequest:
-		return Put, nil
-	case *ConditionalPutRequest:
-		return ConditionalPut, nil
-	case *IncrementRequest:
-		return Increment, nil
-	case *DeleteRequest:
-		return Delete, nil
-	case *DeleteRangeRequest:
-		return DeleteRange, nil
-	case *ScanRequest:
-		return Scan, nil
-	case *EndTransactionRequest:
-		return EndTransaction, nil
-	case *ReapQueueRequest:
-		return ReapQueue, nil
-	case *EnqueueUpdateRequest:
-		return EnqueueUpdate, nil
-	case *EnqueueMessageRequest:
-		return EnqueueMessage, nil
-	case *BatchRequest:
-		return Batch, nil
-	case *AdminSplitRequest:
-		return AdminSplit, nil
-	case *AdminMergeRequest:
-		return AdminMerge, nil
-	case *InternalHeartbeatTxnRequest:
-		return InternalHeartbeatTxn, nil
-	case *InternalGCRequest:
-		return InternalGC, nil
-	case *InternalPushTxnRequest:
-		return InternalPushTxn, nil
-	case *InternalResolveIntentRequest:
-		return InternalResolveIntent, nil
-	case *InternalMergeRequest:
-		return InternalMerge, nil
-	case *InternalTruncateLogRequest:
-		return InternalTruncateLog, nil
-	case *InternalLeaderLeaseRequest:
-		return InternalLeaderLease, nil
-	}
-	return "", util.Errorf("unhandled request %T", req)
-}
-
-// CreateArgsAndReply returns allocated request and response pairs
-// according to the specified method.
-func CreateArgsAndReply(method string) (args Request, reply Response, err error) {
-	if args, err = CreateArgs(method); err != nil {
-		return
-	}
-	reply, err = CreateReply(method)
-	return
-}
-
-// CreateArgs returns an allocated request according to the specified method.
-func CreateArgs(method string) (Request, error) {
-	switch method {
-	case Contains:
-		return &ContainsRequest{}, nil
-	case Get:
-		return &GetRequest{}, nil
-	case Put:
-		return &PutRequest{}, nil
-	case ConditionalPut:
-		return &ConditionalPutRequest{}, nil
-	case Increment:
-		return &IncrementRequest{}, nil
-	case Delete:
-		return &DeleteRequest{}, nil
-	case DeleteRange:
-		return &DeleteRangeRequest{}, nil
-	case Scan:
-		return &ScanRequest{}, nil
-	case EndTransaction:
-		return &EndTransactionRequest{}, nil
-	case ReapQueue:
-		return &ReapQueueRequest{}, nil
-	case EnqueueUpdate:
-		return &EnqueueUpdateRequest{}, nil
-	case EnqueueMessage:
-		return &EnqueueMessageRequest{}, nil
-	case Batch:
-		return &BatchRequest{}, nil
-	case AdminSplit:
-		return &AdminSplitRequest{}, nil
-	case AdminMerge:
-		return &AdminMergeRequest{}, nil
-	case InternalHeartbeatTxn:
-		return &InternalHeartbeatTxnRequest{}, nil
-	case InternalGC:
-		return &InternalGCRequest{}, nil
-	case InternalPushTxn:
-		return &InternalPushTxnRequest{}, nil
-	case InternalResolveIntent:
-		return &InternalResolveIntentRequest{}, nil
-	case InternalMerge:
-		return &InternalMergeRequest{}, nil
-	case InternalTruncateLog:
-		return &InternalTruncateLogRequest{}, nil
-	case InternalLeaderLease:
-		return &InternalLeaderLeaseRequest{}, nil
-	}
-	return nil, util.Errorf("unhandled method %s", method)
-}
-
-// CreateReply returns an allocated response according to the specified method.
-func CreateReply(method string) (Response, error) {
-	switch method {
-	case Contains:
-		return &ContainsResponse{}, nil
-	case Get:
-		return &GetResponse{}, nil
-	case Put:
-		return &PutResponse{}, nil
-	case ConditionalPut:
-		return &ConditionalPutResponse{}, nil
-	case Increment:
-		return &IncrementResponse{}, nil
-	case Delete:
-		return &DeleteResponse{}, nil
-	case DeleteRange:
-		return &DeleteRangeResponse{}, nil
-	case Scan:
-		return &ScanResponse{}, nil
-	case EndTransaction:
-		return &EndTransactionResponse{}, nil
-	case ReapQueue:
-		return &ReapQueueResponse{}, nil
-	case EnqueueUpdate:
-		return &EnqueueUpdateResponse{}, nil
-	case EnqueueMessage:
-		return &EnqueueMessageResponse{}, nil
-	case Batch:
-		return &BatchResponse{}, nil
-	case AdminSplit:
-		return &AdminSplitResponse{}, nil
-	case AdminMerge:
-		return &AdminMergeResponse{}, nil
-	case InternalHeartbeatTxn:
-		return &InternalHeartbeatTxnResponse{}, nil
-	case InternalGC:
-		return &InternalGCResponse{}, nil
-	case InternalPushTxn:
-		return &InternalPushTxnResponse{}, nil
-	case InternalResolveIntent:
-		return &InternalResolveIntentResponse{}, nil
-	case InternalMerge:
-		return &InternalMergeResponse{}, nil
-	case InternalTruncateLog:
-		return &InternalTruncateLogResponse{}, nil
-	case InternalLeaderLease:
-		return &InternalLeaderLeaseResponse{}, nil
-	}
-	return nil, util.Errorf("unhandled method %s", method)
-}
-
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
@@ -496,6 +265,10 @@ type Request interface {
 	gogoproto.Message
 	// Header returns the request header.
 	Header() *RequestHeader
+	// Method returns the request method name.
+	Method() string
+	// CreateReply creates a new response object.
+	CreateReply() Response
 }
 
 // Response is an interface for RPC responses.
@@ -698,3 +471,141 @@ type Countable interface {
 func (sr *ScanResponse) Count() int64 {
 	return int64(len(sr.Rows))
 }
+
+// Method implements the Request interface.
+func (*ContainsRequest) Method() string { return Contains }
+
+// Method implements the Request interface.
+func (*GetRequest) Method() string { return Get }
+
+// Method implements the Request interface.
+func (*PutRequest) Method() string { return Put }
+
+// Method implements the Request interface.
+func (*ConditionalPutRequest) Method() string { return ConditionalPut }
+
+// Method implements the Request interface.
+func (*IncrementRequest) Method() string { return Increment }
+
+// Method implements the Request interface.
+func (*DeleteRequest) Method() string { return Delete }
+
+// Method implements the Request interface.
+func (*DeleteRangeRequest) Method() string { return DeleteRange }
+
+// Method implements the Request interface.
+func (*ScanRequest) Method() string { return Scan }
+
+// Method implements the Request interface.
+func (*EndTransactionRequest) Method() string { return EndTransaction }
+
+// Method implements the Request interface.
+func (*ReapQueueRequest) Method() string { return ReapQueue }
+
+// Method implements the Request interface.
+func (*EnqueueUpdateRequest) Method() string { return EnqueueUpdate }
+
+// Method implements the Request interface.
+func (*EnqueueMessageRequest) Method() string { return EnqueueMessage }
+
+// Method implements the Request interface.
+func (*BatchRequest) Method() string { return Batch }
+
+// Method implements the Request interface.
+func (*AdminSplitRequest) Method() string { return AdminSplit }
+
+// Method implements the Request interface.
+func (*AdminMergeRequest) Method() string { return AdminMerge }
+
+// Method implements the Request interface.
+func (*InternalHeartbeatTxnRequest) Method() string { return InternalHeartbeatTxn }
+
+// Method implements the Request interface.
+func (*InternalGCRequest) Method() string { return InternalGC }
+
+// Method implements the Request interface.
+func (*InternalPushTxnRequest) Method() string { return InternalPushTxn }
+
+// Method implements the Request interface.
+func (*InternalRangeLookupRequest) Method() string { return InternalRangeLookup }
+
+// Method implements the Request interface.
+func (*InternalResolveIntentRequest) Method() string { return InternalResolveIntent }
+
+// Method implements the Request interface.
+func (*InternalMergeRequest) Method() string { return InternalMerge }
+
+// Method implements the Request interface.
+func (*InternalLeaderLeaseRequest) Method() string { return InternalLeaderLease }
+
+// Method implements the Request interface.
+func (*InternalTruncateLogRequest) Method() string { return InternalTruncateLog }
+
+// CreateReply implements the Request interface.
+func (*ContainsRequest) CreateReply() Response { return &ContainsResponse{} }
+
+// CreateReply implements the Request interface.
+func (*GetRequest) CreateReply() Response { return &GetResponse{} }
+
+// CreateReply implements the Request interface.
+func (*PutRequest) CreateReply() Response { return &PutResponse{} }
+
+// CreateReply implements the Request interface.
+func (*ConditionalPutRequest) CreateReply() Response { return &ConditionalPutResponse{} }
+
+// CreateReply implements the Request interface.
+func (*IncrementRequest) CreateReply() Response { return &IncrementResponse{} }
+
+// CreateReply implements the Request interface.
+func (*DeleteRequest) CreateReply() Response { return &DeleteResponse{} }
+
+// CreateReply implements the Request interface.
+func (*DeleteRangeRequest) CreateReply() Response { return &DeleteRangeResponse{} }
+
+// CreateReply implements the Request interface.
+func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
+
+// CreateReply implements the Request interface.
+func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
+
+// CreateReply implements the Request interface.
+func (*ReapQueueRequest) CreateReply() Response { return &ReapQueueResponse{} }
+
+// CreateReply implements the Request interface.
+func (*EnqueueUpdateRequest) CreateReply() Response { return &EnqueueUpdateResponse{} }
+
+// CreateReply implements the Request interface.
+func (*EnqueueMessageRequest) CreateReply() Response { return &EnqueueMessageResponse{} }
+
+// CreateReply implements the Request interface.
+func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
+
+// CreateReply implements the Request interface.
+func (*AdminSplitRequest) CreateReply() Response { return &AdminSplitResponse{} }
+
+// CreateReply implements the Request interface.
+func (*AdminMergeRequest) CreateReply() Response { return &AdminMergeResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalHeartbeatTxnRequest) CreateReply() Response { return &InternalHeartbeatTxnResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalGCRequest) CreateReply() Response { return &InternalGCResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalPushTxnRequest) CreateReply() Response { return &InternalPushTxnResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalRangeLookupRequest) CreateReply() Response { return &InternalRangeLookupResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalResolveIntentRequest) CreateReply() Response { return &InternalResolveIntentResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalMergeRequest) CreateReply() Response { return &InternalMergeResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalTruncateLogRequest) CreateReply() Response { return &InternalTruncateLogResponse{} }
+
+// CreateReply implements the Request interface.
+func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLeaderLeaseResponse{} }

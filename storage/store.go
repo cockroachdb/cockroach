@@ -1036,7 +1036,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		Abort:     proto.IsReadWrite(method), // abort if cmd is read/write
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
-	s.db.Call(proto.InternalPushTxn, pushArgs, pushReply)
+	s.db.Run(&client.Call{Args: pushArgs, Reply: pushReply})
 	if pushErr := pushReply.GoError(); pushErr != nil {
 		log.V(1).Infof("push %q failed: %s", pushArgs.Header().Key, pushErr)
 

@@ -33,6 +33,8 @@ type txnSender struct {
 	txn     *proto.Transaction
 }
 
+var defaultTxnOpts = TransactionOptions{}
+
 // newTxnSender returns a new instance of txnSender which wraps a
 // KVSender and uses the supplied transaction options.
 func newTxnSender(wrapped KVSender, opts *TransactionOptions) *txnSender {
@@ -67,13 +69,13 @@ func (ts *txnSender) Send(call *Call) {
 	case nil:
 		// Check for whether the transaction was ended as a direct call
 		// or as part of a batch.
-		switch call.Method {
+		switch call.Method() {
 		case proto.EndTransaction:
 			ts.txnEnd = true
 		case proto.Batch:
 			for _, batchReq := range call.Args.(*proto.BatchRequest).Requests {
 				req := batchReq.GetValue().(proto.Request)
-				if method, err := proto.MethodForRequest(req); err == nil && method == proto.EndTransaction {
+				if req.Method() == proto.EndTransaction {
 					ts.txnEnd = true
 				}
 			}

@@ -71,7 +71,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// lookup, etc, ad nauseam.
 	success := make(chan struct{})
 	go func() {
-		if err := db.Call(proto.Get, proto.GetArgs(proto.Key("a")), &proto.GetResponse{}); err != nil {
+		if err := db.Run(client.GetCall(proto.Key("a"))); err != nil {
 			t.Fatal(err)
 		}
 		close(success)
@@ -101,13 +101,15 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".
-	if err := db.Call(proto.AdminSplit,
-		&proto.AdminSplitRequest{
+	if err := db.Run(&client.Call{
+		Args: &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("b"),
 			},
 			SplitKey: proto.Key("b"),
-		}, &proto.AdminSplitResponse{}); err != nil {
+		},
+		Reply: &proto.AdminSplitResponse{},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,14 +123,14 @@ func TestMultiRangeScan(t *testing.T) {
 
 	// Write keys "a" and "b".
 	for _, key := range []proto.Key{proto.Key("a"), proto.Key("b")} {
-		pr := &proto.PutResponse{}
-		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+		if err := db.Run(client.PutCall(key, []byte("value"))); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	sr := &proto.ScanResponse{}
-	if err := db.Call(proto.Scan, proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0), sr); err != nil {
+	call := client.ScanCall(proto.Key("a"), proto.Key("c"), 0)
+	sr := call.Reply.(*proto.ScanResponse)
+	if err := db.Run(call); err != nil {
 		t.Fatalf("unexpected error on scan: %s", err)
 	}
 	if l := len(sr.Rows); l != 2 {
@@ -147,8 +149,9 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	keys := []proto.Key{proto.Key("a"), proto.Key("b")}
 	ts := []proto.Timestamp{}
 	for _, key := range keys {
-		pr := &proto.PutResponse{}
-		if err := db.Call(proto.Put, proto.PutArgs(key, []byte("value")), pr); err != nil {
+		call := client.PutCall(key, []byte("value"))
+		pr := call.Reply.(*proto.PutResponse)
+		if err := db.Run(call); err != nil {
 			t.Fatal(err)
 		}
 		ts = append(ts, pr.Timestamp)
@@ -161,11 +164,12 @@ func TestMultiRangeScanInconsistent(t *testing.T) {
 	manual := hlc.NewManualClock(ts[1].WallTime - 1)
 	clock := hlc.NewClock(manual.UnixNano)
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, s.Gossip())
-	sa := proto.ScanArgs(proto.Key("a"), proto.Key("c"), 0)
+	call := client.ScanCall(proto.Key("a"), proto.Key("c"), 0)
+	sr := call.Reply.(*proto.ScanResponse)
+	sa := call.Args.(*proto.ScanRequest)
 	sa.ReadConsistency = proto.INCONSISTENT
 	sa.User = storage.UserRoot
-	sr := &proto.ScanResponse{}
-	ds.Send(&client.Call{Method: proto.Scan, Args: sa, Reply: sr})
+	ds.Send(call)
 	if err := sr.GoError(); err != nil {
 		t.Fatal(err)
 	}

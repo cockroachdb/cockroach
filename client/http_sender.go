@@ -90,7 +90,7 @@ func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
 // response.
 func (s *HTTPSender) Send(call *Call) {
 	retryOpts := HTTPRetryOptions
-	retryOpts.Tag = fmt.Sprintf("http %s", call.Method)
+	retryOpts.Tag = fmt.Sprintf("http %s", call.Method())
 
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		resp, err := s.post(call)
@@ -145,7 +145,7 @@ func (s *HTTPSender) post(call *Call) (*http.Response, error) {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s://%s%s%s", KVDBScheme, s.server, KVDBEndpoint, call.Method)
+	url := fmt.Sprintf("%s://%s%s%s", KVDBScheme, s.server, KVDBEndpoint, call.Method())
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, util.Errorf("unable to create request: %s", err)

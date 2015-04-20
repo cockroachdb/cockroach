@@ -58,7 +58,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 			return
 		default:
 			first := true
-			err := db.RunTransaction(txnOpts, func(txn *client.KV) error {
+			err := db.RunTransaction(txnOpts, func(txn *client.Txn) error {
 				if first && txnChannel != nil {
 					txnChannel <- struct{}{}
 				} else if !first && retries != nil {
@@ -68,9 +68,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := util.RandBytes(src, 10)
 					val := util.RandBytes(src, int(src.Int31n(valBytes)))
-					req := &proto.PutRequest{RequestHeader: proto.RequestHeader{Key: key}, Value: proto.Value{Bytes: val}}
-					resp := &proto.PutResponse{}
-					if err := txn.Call(proto.Put, req, resp); err != nil {
+					if err := txn.Run(client.PutCall(key, val)); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err
 					}
@@ -118,7 +116,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		log.Infof("starting split at key %q...", splitKey)
 		req := &proto.AdminSplitRequest{RequestHeader: proto.RequestHeader{Key: splitKey}, SplitKey: splitKey}
 		resp := &proto.AdminSplitResponse{}
-		if err := s.KV.Call(proto.AdminSplit, req, resp); err != nil {
+		if err := s.KV.Run(&client.Call{Args: req, Reply: resp}); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof("split at key %q complete", splitKey)
@@ -150,7 +148,8 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	if err := s.KV.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	if err := s.KV.Run(call); err != nil {
 		t.Fatal(err)
 	}
 
@@ -163,8 +162,9 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
-		resp := &proto.ScanResponse{}
-		if err := s.KV.Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+		call := client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+		resp := call.Reply.(*proto.ScanResponse)
+		if err := s.KV.Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		return len(resp.Rows) >= 5

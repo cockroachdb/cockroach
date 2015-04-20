@@ -26,8 +26,9 @@ import (
 
 // TransactionOptions are parameters for use with KV.RunTransaction.
 type TransactionOptions struct {
-	Name      string // Concise desc of txn for debugging
-	Isolation proto.IsolationType
+	Name         string // Concise desc of txn for debugging
+	Isolation    proto.IsolationType
+	UserPriority int32
 }
 
 // KVSender is an interface for sending a request to a Key-Value
@@ -44,8 +45,8 @@ type Clock interface {
 	Now() int64
 }
 
-// KV provides serial access to a KV store via Call and parallel
-// access via Prepare and Flush. A KV instance is not thread safe.
+// KV provides access to a KV store. A KV instance is safe for
+// concurrent use by multiple goroutines.
 type KV struct {
 	// User is the default user to set on API calls. If User is set to
 	// non-empty in call arguments, this value is ignored.
@@ -56,9 +57,8 @@ type KV struct {
 	UserPriority    int32
 	TxnRetryOptions util.RetryOptions
 
-	sender   KVSender
-	clock    Clock
-	prepared []*Call
+	sender KVSender
+	clock  Clock
 }
 
 // NewKV creates a new instance of KV using the specified sender. To
@@ -80,16 +80,6 @@ func NewKV(ctx *Context, sender KVSender) *KV {
 	}
 }
 
-// Context returns a new Context that represents the current configuration.
-func (kv *KV) Context() *Context {
-	return &Context{
-		User:            kv.User,
-		UserPriority:    kv.UserPriority,
-		TxnRetryOptions: kv.TxnRetryOptions,
-		Clock:           kv.clock,
-	}
-}
-
 // Sender returns the sender supplied to NewKV, unless wrapped by a
 // transactional sender, in which case returns the unwrapped sender.
 func (kv *KV) Sender() KVSender {
@@ -101,84 +91,46 @@ func (kv *KV) Sender() KVSender {
 	}
 }
 
-// Call invokes the KV command synchronously and returns the response
-// and error, if applicable. If preceeding calls have been made to
-// Prepare() without a call to Flush(), this call is prepared and
-// then all prepared calls are flushed.
-func (kv *KV) Call(method string, args proto.Request, reply proto.Response) error {
-	if len(kv.prepared) > 0 {
-		kv.Prepare(method, args, reply)
-		return kv.Flush()
+// Run runs the specified calls synchronously in a single batch and
+// returns any errors.
+func (kv *KV) Run(calls ...*Call) (err error) {
+	if len(calls) == 0 {
+		return nil
 	}
-	if args.Header().User == "" {
-		args.Header().User = kv.User
-	}
-	if args.Header().UserPriority == nil && kv.UserPriority != 0 {
-		args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
-	}
-	call := &Call{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
-	}
-	call.resetClientCmdID(kv.clock)
-	kv.sender.Send(call)
-	err := call.Reply.Header().GoError()
-	if err != nil {
-		log.Infof("failed %s: %s", call.Method, err)
-	}
-	return err
-}
 
-// Prepare accepts a KV API call, specified by method name, arguments
-// and a reply struct. The call will be buffered locally until the
-// first call to Flush(), at which time it will be sent for execution
-// as part of a batch call. Using Prepare/Flush parallelizes queries
-// and updates and should be used where possible for efficiency.
-//
-// For clients using an HTTP sender, Prepare/Flush allows multiple
-// commands to be sent over the same connection. For transactional
-// clients, Prepare/Flush can dramatically improve efficiency by
-// compressing multiple writes into a single atomic update in the
-// event that the writes are to keys within a single range. However,
-// using Prepare/Flush alone will not guarantee atomicity. Clients
-// must use a transaction for that purpose.
-//
-// The supplied reply struct will not be valid until after a call
-// to Flush().
-func (kv *KV) Prepare(method string, args proto.Request, reply proto.Response) {
-	call := &Call{
-		Method: method,
-		Args:   args,
-		Reply:  reply,
+	// First check if any call contains an error. This allows the
+	// generation of a Call to create an error that is reported
+	// here. See PutProtoCall for an example.
+	for _, call := range calls {
+		if call.Err != nil {
+			return call.Err
+		}
 	}
-	call.resetClientCmdID(kv.clock)
-	kv.prepared = append(kv.prepared, call)
-}
 
-// Flush sends all previously prepared calls, buffered by invocations
-// of Prepare(). The calls are organized into a single batch command
-// and sent together. Flush returns nil if all prepared calls are
-// executed successfully. Otherwise, Flush returns the first error,
-// where calls are executed in the order in which they were prepared.
-// After Flush returns, all prepared reply structs will be valid.
-func (kv *KV) Flush() (err error) {
-	if len(kv.prepared) == 0 {
-		return
-	} else if len(kv.prepared) == 1 {
-		call := kv.prepared[0]
-		kv.prepared = []*Call{}
-		err = kv.Call(call.Method, call.Args, call.Reply)
+	if len(calls) == 1 {
+		c := calls[0]
+		if c.Args.Header().User == "" {
+			c.Args.Header().User = kv.User
+		}
+		if c.Args.Header().UserPriority == nil && kv.UserPriority != 0 {
+			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
+		}
+		c.resetClientCmdID(kv.clock)
+		kv.sender.Send(c)
+		err = c.Reply.Header().GoError()
+		if err != nil {
+			log.Infof("failed %s: %s", c.Method, err)
+		}
 		return
 	}
-	replies := make([]proto.Response, 0, len(kv.prepared))
+
+	replies := make([]proto.Response, 0, len(calls))
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
-	for _, call := range kv.prepared {
+	for _, call := range calls {
 		bArgs.Add(call.Args)
 		replies = append(replies, call.Reply)
 	}
-	kv.prepared = []*Call{}
-	err = kv.Call(proto.Batch, bArgs, bReply)
+	err = kv.Run(&Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -210,23 +162,30 @@ func (kv *KV) Flush() (err error) {
 //
 // Calling RunTransaction on the transactional KV client which is
 // supplied to the retryable function is an error.
-func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) error) error {
+func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) error) error {
 	if _, ok := kv.sender.(*txnSender); ok {
 		return util.Errorf("cannot invoke RunTransaction on an already-transactional client")
 	}
 
 	// Create a new KV for the transaction using a transactional KV sender.
+	if opts == nil {
+		opts = &defaultTxnOpts
+	}
 	txnSender := newTxnSender(kv.Sender(), opts)
-	curCtx := kv.Context()
-	txnKV := NewKV(curCtx, txnSender)
+	txn := &Txn{}
+	txn.kv = *kv
+	txn.kv.sender = txnSender
+	if opts != &defaultTxnOpts {
+		txn.kv.UserPriority = opts.UserPriority
+	}
 
 	// Run retryable in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	retryOpts := kv.TxnRetryOptions
 	retryOpts.Tag = opts.Name
-	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
+	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		txnSender.txnEnd = false // always reset before [re]starting txn
-		err := retryable(txnKV)
+		err := retryable(txn)
 		if err == nil && !txnSender.txnEnd {
 			// If there were no errors running retryable, commit the txn. This
 			// may block waiting for outstanding writes to complete in case
@@ -236,8 +195,8 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			etReply := &proto.EndTransactionResponse{}
 			// Prepare and flush for end txn in order to execute entire txn in
 			// a single round trip if possible.
-			txnKV.Prepare(proto.EndTransaction, etArgs, etReply)
-			err = txnKV.Flush()
+			txn.Prepare(&Call{Args: etArgs, Reply: etReply})
+			err = txn.Flush()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
 			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
@@ -248,104 +207,15 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *KV) e
 			// By default, fall through and return RetryBreak.
 		}
 		return util.RetryBreak, err
-	}); err != nil && !txnSender.txnEnd {
+	})
+	if err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
-		txnKV.Call(proto.EndTransaction, etArgs, etReply)
+		txn.Run(&Call{Args: etArgs, Reply: etReply})
 		if etReply.Header().GoError() != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
 		}
 		return err
 	}
-	return nil
-}
-
-// Get fetches the value at the specified key. Returns true on success
-// or false if the key was not found. The timestamp of the write is
-// returned as the second return value. The first result parameter is
-// "ok": true if a value was found for the requested key; false
-// otherwise. An error is returned on error fetching from underlying
-// storage or deserializing value.
-func (kv *KV) Get(key proto.Key) (bool, []byte, proto.Timestamp, error) {
-	value, err := kv.getInternal(key)
-	if err != nil || value == nil {
-		return false, nil, proto.Timestamp{}, err
-	}
-	if value.Integer != nil {
-		return false, nil, proto.Timestamp{}, util.Errorf("unexpected integer value at key %s: %+v", key, value)
-	}
-	return true, value.Bytes, *value.Timestamp, nil
-}
-
-// GetProto fetches the value at the specified key and unmarshals it
-// using a protobuf decoder. See comments for GetI for details on
-// return values.
-func (kv *KV) GetProto(key proto.Key, msg gogoproto.Message) (bool, proto.Timestamp, error) {
-	value, err := kv.getInternal(key)
-	if err != nil || value == nil {
-		return false, proto.Timestamp{}, err
-	}
-	if value.Integer != nil {
-		return false, proto.Timestamp{}, util.Errorf("unexpected integer value at key %q: %+v", key, value)
-	}
-	if err := gogoproto.Unmarshal(value.Bytes, msg); err != nil {
-		return true, *value.Timestamp, err
-	}
-	return true, *value.Timestamp, nil
-}
-
-// getInternal fetches the requested key and returns the value.
-func (kv *KV) getInternal(key proto.Key) (*proto.Value, error) {
-	reply := &proto.GetResponse{}
-	if err := kv.Call(proto.Get, &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
-	}, reply); err != nil {
-		return nil, err
-	}
-	if reply.Value != nil {
-		return reply.Value, reply.Value.Verify(key)
-	}
-	return nil, nil
-}
-
-// Put writes the specified byte slice value to key.
-func (kv *KV) Put(key proto.Key, value []byte) error {
-	return kv.putInternal(key, proto.Value{Bytes: value})
-}
-
-// PutProto sets the given key to the protobuf-serialized byte string
-// of msg.
-func (kv *KV) PutProto(key proto.Key, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	return kv.putInternal(key, proto.Value{Bytes: data})
-}
-
-// putInternal writes the specified value to key.
-func (kv *KV) putInternal(key proto.Key, value proto.Value) error {
-	value.InitChecksum(key)
-	return kv.Call(proto.Put, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
-		Value:         value,
-	}, &proto.PutResponse{})
-}
-
-// PreparePutProto sets the given key to the protobuf-serialized byte
-// string of msg. The resulting Put call is buffered and will not be
-// sent until a subsequent call to Flush. Returns marshalling errors
-// if encountered.
-func (kv *KV) PreparePutProto(key proto.Key, msg gogoproto.Message) error {
-	data, err := gogoproto.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	value := proto.Value{Bytes: data}
-	value.InitChecksum(key)
-	kv.Prepare(proto.Put, &proto.PutRequest{
-		RequestHeader: proto.RequestHeader{Key: key},
-		Value:         value,
-	}, &proto.PutResponse{})
 	return nil
 }

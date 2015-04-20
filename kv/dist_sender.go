@@ -472,14 +472,14 @@ func (ds *DistSender) Send(call *client.Call) {
 
 	// TODO: Refactor this method into more manageable pieces.
 	// Verify permissions.
-	if err := ds.verifyPermissions(call.Method, call.Args.Header()); err != nil {
+	if err := ds.verifyPermissions(call.Method(), call.Args.Header()); err != nil {
 		call.Reply.Header().SetGoError(err)
 		return
 	}
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	retryOpts := ds.rpcRetryOptions
-	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method)
+	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method())
 
 	// responses and descNext are only used when executing across ranges.
 	var responses []proto.Response
@@ -536,14 +536,14 @@ func (ds *DistSender) Send(call *client.Call) {
 					// Make a new reply object for this call.
 					reply = gogoproto.Clone(call.Reply).(proto.Response)
 				}
-				err = ds.sendRPC(desc, call.Method, args, reply)
+				err = ds.sendRPC(desc, call.Method(), args, reply)
 				if err == nil && reply.Header().Error != nil {
 					err = reply.Header().GoError()
 				}
 			}
 
 			if err != nil {
-				log.Warningf("failed to invoke %s: %s", call.Method, err)
+				log.Warningf("failed to invoke %s: %s", call.Method(), err)
 				// If retryable, allow retry. For range not found or range
 				// key mismatch errors, we don't backoff on the retry,
 				// but reset the backoff loop so we can retry immediately.

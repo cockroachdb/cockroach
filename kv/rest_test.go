@@ -466,12 +466,13 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 		t.Fatalf("expected body to be %q; got %q", encBody, string(pr.Value.Bytes))
 	}
 	gr := &proto.GetResponse{}
-	if err := db.Call(proto.Get, &proto.GetRequest{
-		RequestHeader: proto.RequestHeader{
-			Key:  proto.Key("\x00some/key that encodes世界"),
-			User: storage.UserRoot,
-		},
-	}, gr); err != nil {
+	if err := db.Run(&client.Call{
+		Args: &proto.GetRequest{
+			RequestHeader: proto.RequestHeader{
+				Key:  proto.Key("\x00some/key that encodes世界"),
+				User: storage.UserRoot,
+			},
+		}, Reply: gr}); err != nil {
 		t.Errorf("unable to fetch values from local db: %s", err)
 	}
 	if !bytes.Equal(gr.Value.Bytes, []byte(encBody)) {

@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -391,7 +392,8 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: maxBytes,
 	}
-	if err := store.DB().PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig); err != nil {
+	call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	if err := store.DB().Run(call); err != nil {
 		t.Fatal(err)
 	}
 
@@ -423,14 +425,21 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 	zoneConfig := &proto.ZoneConfig{}
 
 	// Write zone configs for db3 & db4.
+	var calls []*client.Call
 	for _, k := range []string{"db4", "db3"} {
-		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)), zoneConfig)
+		call := client.PutProtoCall(
+			engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key(k)),
+			zoneConfig)
+		calls = append(calls, call)
 	}
 	// Write accounting configs for db1 & db2.
 	for _, k := range []string{"db2", "db1"} {
-		store.DB().PreparePutProto(engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)), acctConfig)
+		call := client.PutProtoCall(
+			engine.MakeKey(engine.KeyConfigAccountingPrefix, proto.Key(k)),
+			acctConfig)
+		calls = append(calls, call)
 	}
-	if err := store.DB().Flush(); err != nil {
+	if err := store.DB().Run(calls...); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof("wrote updated configs")
@@ -445,8 +454,9 @@ func TestStoreRangeSplitOnConfigs(t *testing.T) {
 		engine.MakeKey(proto.Key("\x00\x00meta2"), engine.KeyMax),
 	}
 	if err := util.IsTrueWithin(func() bool {
-		resp := &proto.ScanResponse{}
-		if err := store.DB().Call(proto.Scan, proto.ScanArgs(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0), resp); err != nil {
+		call := client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+		resp := call.Reply.(*proto.ScanResponse)
+		if err := store.DB().Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)
 		}
 		var keys []proto.Key

@@ -26,42 +26,45 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func(*client.KV, proto.Key, *proto.RangeDescriptor) error
+type metaAction func([]*client.Call, proto.Key, *proto.RangeDescriptor) []*client.Call
 
-func putMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
-	return db.PreparePutProto(key, desc)
+func putMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+	return append(calls, client.PutProtoCall(key, desc))
 }
 
-func delMeta(db *client.KV, key proto.Key, desc *proto.RangeDescriptor) error {
-	db.Prepare(proto.Delete, proto.DeleteArgs(key), &proto.DeleteResponse{})
-	return nil
+func delMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+	return append(calls, client.DeleteCall(key))
 }
 
 // SplitRangeAddressing creates (or overwrites if necessary) the meta1
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
-func SplitRangeAddressing(db *client.KV, left, right *proto.RangeDescriptor) error {
-	if err := updateRangeAddressing(db, left, putMeta); err != nil {
-		return err
+func SplitRangeAddressing(left, right *proto.RangeDescriptor) ([]*client.Call, error) {
+	var calls []*client.Call
+	var err error
+	if calls, err = updateRangeAddressing(calls, left, putMeta); err != nil {
+		return nil, err
 	}
-	if err := updateRangeAddressing(db, right, putMeta); err != nil {
-		return err
+	if calls, err = updateRangeAddressing(calls, right, putMeta); err != nil {
+		return nil, err
 	}
-	return nil
+	return calls, nil
 }
 
 // MergeRangeAddressing removes subsumed meta1 and meta2 range
 // addressing records caused by merging and updates the records for
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
-func MergeRangeAddressing(db *client.KV, left, merged *proto.RangeDescriptor) error {
-	if err := updateRangeAddressing(db, left, delMeta); err != nil {
-		return err
+func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]*client.Call, error) {
+	var calls []*client.Call
+	var err error
+	if calls, err = updateRangeAddressing(calls, left, delMeta); err != nil {
+		return nil, err
 	}
-	if err := updateRangeAddressing(db, merged, putMeta); err != nil {
-		return err
+	if calls, err = updateRangeAddressing(calls, merged, putMeta); err != nil {
+		return nil, err
 	}
-	return nil
+	return calls, nil
 }
 
 // updateRangeAddressing updates or deletes the range addressing
@@ -78,33 +81,28 @@ func MergeRangeAddressing(db *client.KV, left, merged *proto.RangeDescriptor) er
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is KeyMin or meta2:
 //         - meta1(KeyMax)
-func updateRangeAddressing(db *client.KV, desc *proto.RangeDescriptor, action metaAction) error {
+func updateRangeAddressing(calls []*client.Call, desc *proto.RangeDescriptor,
+	action metaAction) ([]*client.Call, error) {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||
 		bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {
-		return util.Errorf("meta1 addressing records cannot be split: %+v", desc)
+		return nil, util.Errorf("meta1 addressing records cannot be split: %+v", desc)
 	}
 	// 2. the case of the range ending with a meta2 prefix. This means
 	// the range is full of meta2. We must update the relevant meta1
 	// entry pointing to the end of this range.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta2Prefix) {
-		if err := action(db, engine.RangeMetaKey(desc.EndKey), desc); err != nil {
-			return err
-		}
+		calls = action(calls, engine.RangeMetaKey(desc.EndKey), desc)
 	} else {
 		// 3. the range ends with a normal user key, so we must update the
 		// relevant meta2 entry pointing to the end of this range.
-		if err := action(db, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc); err != nil {
-			return err
-		}
+		calls = action(calls, engine.MakeKey(engine.KeyMeta2Prefix, desc.EndKey), desc)
 		// 3a. the range starts with KeyMin or a meta2 addressing record,
 		// update the meta1 entry for KeyMax.
 		if bytes.Equal(desc.StartKey, engine.KeyMin) ||
 			bytes.HasPrefix(desc.StartKey, engine.KeyMeta2Prefix) {
-			if err := action(db, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc); err != nil {
-				return err
-			}
+			calls = action(calls, engine.MakeKey(engine.KeyMeta1Prefix, engine.KeyMax), desc)
 		}
 	}
-	return nil
+	return calls, nil
 }
