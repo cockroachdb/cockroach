@@ -100,6 +100,7 @@ type multiTestContext struct {
 	db          *client.KV
 	engines     []engine.Engine
 	stores      []*storage.Store
+	idents      []proto.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
 	// test individually. clientStopper is for 'db', transportStopper is
 	// for 'transport', and the 'stoppers' slice corresponds to the
@@ -217,12 +218,16 @@ func (m *multiTestContext) addStore(t *testing.T) {
 	}
 	m.stores = append(m.stores, store)
 	m.sender.AddStore(store)
+	// Save the store identities for later so we can use them in
+	// replication operations even while the store is stopped.
+	m.idents = append(m.idents, store.Ident)
 	m.stoppers = append(m.stoppers, stopper)
 }
 
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
+	m.sender.RemoveStore(m.stores[i])
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
 	m.stores[i] = nil
@@ -237,6 +242,7 @@ func (m *multiTestContext) restartStore(i int) {
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
+	m.sender.AddStore(m.stores[i])
 }
 
 // restart stops and restarts all stores but leaves the engines intact,
@@ -279,6 +285,26 @@ func (m *multiTestContext) replicateRange(raftID int64, sourceStoreIndex int, de
 		}
 		return nil
 	})
+}
+
+func (m *multiTestContext) unreplicateRange(raftID int64, source, dest int) {
+	rng, err := m.stores[source].GetRange(raftID)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	err = rng.ChangeReplicas(proto.REMOVE_REPLICA,
+		proto.Replica{
+			NodeID:  m.idents[dest].NodeID,
+			StoreID: m.idents[dest].StoreID,
+		})
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	// Removing a range doesn't have any immediately-visible side
+	// effects, (and the removed node may be stopped) so return as soon
+	// as the removal has committed on the leader.
 }
 
 // getArgs returns a GetRequest and GetResponse pair addressed to

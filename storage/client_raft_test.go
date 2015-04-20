@@ -533,3 +533,76 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc.restartStore(1)
 	verify([]int64{16, 16, 16})
 }
+
+func TestReplicateAddAndRemove(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	// Run the test twice, once adding the replacement before removing
+	// the downed node, and once removing the downed node first.
+	for _, addFirst := range []bool{true, false} {
+		mtc := startMultiTestContext(t, 4)
+		defer mtc.Stop()
+
+		// Replicate the initial range to three of the four nodes.
+		raftID := int64(1)
+		mtc.replicateRange(raftID, 0, 3, 1)
+
+		incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
+		if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
+			t.Fatal(err)
+		}
+
+		verify := func(expected []int64) {
+			util.SucceedsWithin(t, time.Second, func() error {
+				values := []int64{}
+				for _, eng := range mtc.engines {
+					val, err := engine.MVCCGet(eng, proto.Key("a"), mtc.clock.Now(), true, nil)
+					if err != nil {
+						return err
+					}
+					values = append(values, val.GetInteger())
+				}
+				if !reflect.DeepEqual(expected, values) {
+					return util.Errorf("expected %v, got %v", expected, values)
+				}
+				return nil
+			})
+		}
+
+		// The first increment is visible on all three replicas.
+		verify([]int64{5, 5, 0, 5})
+
+		// Stop a store and replace it.
+		mtc.stopStore(1)
+		if addFirst {
+			mtc.replicateRange(raftID, 0, 2)
+			mtc.unreplicateRange(raftID, 0, 1)
+		} else {
+			mtc.unreplicateRange(raftID, 0, 1)
+			mtc.replicateRange(raftID, 0, 2)
+		}
+		verify([]int64{5, 5, 5, 5})
+
+		// Ensure that the rest of the group can make progress.
+		incArgs, incResp = incrementArgs([]byte("a"), 11, raftID, mtc.stores[0].StoreID())
+		if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
+			t.Fatal(err)
+		}
+		verify([]int64{16, 5, 16, 16})
+
+		// Bring the downed store back up (required for a clean shutdown).
+		mtc.restartStore(1)
+
+		// Node 1 never sees the increment that was added while it was
+		// down. Perform another increment on the live nodes to verify.
+		incArgs, incResp = incrementArgs([]byte("a"), 23, raftID, mtc.stores[0].StoreID())
+		if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
+			t.Fatal(err)
+		}
+		verify([]int64{39, 5, 39, 39})
+
+		// TODO(bdarnell): when we have GC of removed ranges, verify that
+		// the downed node removes the data from this range after coming
+		// back up.
+	}
+}

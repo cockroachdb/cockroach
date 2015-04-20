@@ -72,17 +72,21 @@ func goroutineLeaked() bool {
 		// not counting goroutines for leakage in -short mode
 		return false
 	}
-	gs := interestingGoroutines()
+	var stackCount map[string]int
+	for i := 0; i < 8; i++ {
+		gs := interestingGoroutines()
 
-	n := 0
-	stackCount := make(map[string]int)
-	for _, g := range gs {
-		stackCount[g]++
-		n++
-	}
+		n := 0
+		stackCount = make(map[string]int)
+		for _, g := range gs {
+			stackCount[g]++
+			n++
+		}
 
-	if n == 0 {
-		return false
+		if n == 0 {
+			return false
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	fmt.Fprintf(os.Stderr, "Too many goroutines running after tests.\n")
 	for stack, count := range stackCount {
@@ -109,6 +113,7 @@ func AfterTest(t testing.TB) {
 		"net.(*netFD).connect(":                        "a timing out dial",
 		").noteClientGone(":                            "a closenotifier sender",
 		"created by net/rpc.NewClientWithCodec":        "an rpc client",
+		"created by net/rpc.(*Server.ServeCodec)":      "an rpc server connection",
 		"(*Store).Start":                               "a store",
 		"(*Range).AddCmd":                              "a range command",
 	}
