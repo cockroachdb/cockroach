@@ -57,9 +57,6 @@ func (t *Txn) Run(calls ...*Call) error {
 // event that the writes are to keys within a single range. However,
 // using Prepare/Flush alone will not guarantee atomicity. Clients
 // must use a transaction for that purpose.
-//
-// The supplied reply struct will not be valid until after a call
-// to Flush().
 func (t *Txn) Prepare(calls ...*Call) {
 	for _, c := range calls {
 		c.resetClientCmdID(t.kv.clock)
