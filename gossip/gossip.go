@@ -167,6 +167,7 @@ func (g *Gossip) GetNodeID() proto.NodeID {
 // and sets the infostore's node ID.
 func (g *Gossip) SetNodeDescriptor(desc *NodeDescriptor) error {
 	nodeIDKey := MakeNodeIDKey(desc.NodeID)
+	log.Infof("gossiping node descriptor %+v", desc)
 	if err := g.AddInfo(nodeIDKey, desc, ttlNodeIDGossip); err != nil {
 		return util.Errorf("couldn't gossip descriptor for node %d: %v", desc.NodeID, err)
 	}
