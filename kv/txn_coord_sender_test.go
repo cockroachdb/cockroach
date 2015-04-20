@@ -39,6 +39,7 @@ func createTestDB(t testing.TB) *LocalTestCluster {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
+	return s
 }
 
 // makeTS creates a new timestamp.

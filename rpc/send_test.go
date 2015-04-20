@@ -307,7 +307,7 @@ func createNewTestRPCContext(t *testing.T) *Context {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig)
+	return NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
 }
 
 // createAndStartNewServer creates and starts a new server with a test address.
