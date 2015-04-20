@@ -95,7 +95,13 @@ type multiTestContext struct {
 	db          *client.KV
 	engines     []engine.Engine
 	stores      []*storage.Store
-	stopper     *util.Stopper
+	// We use multiple stoppers so we can restart different parts of the
+	// test individually. clientStopper is for 'db', transportStopper is
+	// for 'transport', and the 'stoppers' slice corresponds to the
+	// 'stores'.
+	clientStopper    *util.Stopper
+	stoppers         []*util.Stopper
+	transportStopper *util.Stopper
 }
 
 func (m *multiTestContext) Start(t *testing.T, numStores int) {
@@ -115,11 +121,11 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.sender == nil {
 		m.sender = kv.NewLocalSender()
 	}
-	if m.stopper == nil {
-		m.stopper = util.NewStopper()
+	if m.clientStopper == nil {
+		m.clientStopper = util.NewStopper()
 	}
 	if m.db == nil {
-		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false, m.stopper)
+		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false, m.clientStopper)
 		m.db = client.NewKV(nil, txnSender)
 		m.db.User = storage.UserRoot
 	}
@@ -127,11 +133,22 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	for i := 0; i < numStores; i++ {
 		m.addStore(t)
 	}
-	m.stopper.AddCloser(m.transport)
+	if m.transportStopper == nil {
+		m.transportStopper = util.NewStopper()
+	}
+	m.transportStopper.AddCloser(m.transport)
 }
 
 func (m *multiTestContext) Stop() {
-	m.stopper.Stop()
+	m.clientStopper.Stop()
+	for _, s := range m.stoppers {
+		s.Stop()
+	}
+	m.transportStopper.Stop()
+	// Remove the extra engine refcounts.
+	for _, e := range m.engines {
+		e.Close()
+	}
 }
 
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
@@ -145,14 +162,21 @@ func (m *multiTestContext) addStore(t *testing.T) {
 		eng = engine.NewInMem(proto.Attributes{}, 1<<20)
 		m.engines = append(m.engines, eng)
 		needBootstrap = true
+		// Add an extra refcount to the engine so the underlying rocksdb instances
+		// aren't closed when stopping and restarting the stores.
+		// These refcounts are removed in Stop().
+		if err := eng.Open(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
+	stopper := util.NewStopper()
 	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport, storage.TestStoreConfig)
 	if needBootstrap {
 		err := store.Bootstrap(proto.StoreIdent{
 			NodeID:  proto.NodeID(idx + 1),
 			StoreID: proto.StoreID(idx + 1),
-		}, m.stopper)
+		}, stopper)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,34 +188,40 @@ func (m *multiTestContext) addStore(t *testing.T) {
 			}
 		}
 	}
-	if err := store.Start(m.stopper); err != nil {
+	if err := store.Start(stopper); err != nil {
 		t.Fatal(err)
 	}
 	m.stores = append(m.stores, store)
 	m.sender.AddStore(store)
+	m.stoppers = append(m.stoppers, stopper)
+}
+
+// StopStore stops a store but leaves the engine intact.
+// All stopped stores must be restarted before multiTestContext.Stop is called.
+func (m *multiTestContext) StopStore(i int) {
+	m.stoppers[i].Stop()
+	m.stoppers[i] = nil
+	m.stores[i] = nil
+}
+
+// RestartStore restarts a store previously stopped with StopStore.
+func (m *multiTestContext) RestartStore(i int, t *testing.T) {
+	m.stoppers[i] = util.NewStopper()
+	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport,
+		storage.TestStoreConfig)
+	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Restart stops and restarts all stores but leaves the engines intact,
 // so the stores should contain the same persistent storage as before.
 func (m *multiTestContext) Restart(t *testing.T) {
-	// Add extra ref counts to engines so the underlying rocksdb instances
-	// aren't closed when stopping and restarting the stores.
-	for _, e := range m.engines {
-		if err := e.Open(); err != nil {
-			t.Fatal(err)
-		}
+	for i := range m.stores {
+		m.StopStore(i)
 	}
-	nanos := m.manualClock.UnixNano() + 1
-	engines := m.engines
-	m.Stop()
-	*m = multiTestContext{
-		manualClock: hlc.NewManualClock(nanos),
-		engines:     engines,
-	}
-	m.Start(t, len(engines))
-	// Remove extra ref counts.
-	for _, e := range m.engines {
-		e.Close()
+	for i := range m.stores {
+		m.RestartStore(i, t)
 	}
 }
 
