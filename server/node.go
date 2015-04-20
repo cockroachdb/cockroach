@@ -518,3 +518,9 @@ func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.Inte
 func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
 	return n.executeCmd(proto.InternalTruncateLog, args, reply)
 }
+
+// InternalLeaderLease .
+func (n *Node) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
+	reply *proto.InternalLeaderLeaseResponse) error {
+	return n.executeCmd(proto.InternalLeaderLease, args, reply)
+}
