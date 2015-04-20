@@ -104,6 +104,9 @@ type testContext struct {
 	clock         *hlc.Clock
 	stopper       *util.Stopper
 	bootstrapMode bootstrapMode
+	// when true, do not automatically create the Raft group for the first
+	// range and wait for elections.
+	dormantRaft bool
 }
 
 // testContext.Start initializes the test context with a single range covering the
@@ -167,6 +170,14 @@ func (tc *testContext) Start(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc.rangeID = tc.rng.Desc().RaftID
+	}
+
+	if !tc.dormantRaft {
+		// Make sure that the group is running.
+		// MultiRaft will automatically elect a leader if the group contains
+		// only one member.
+		tc.store.startGroup(1)
+		tc.rng.WaitForElection()
 	}
 }
 
@@ -1742,7 +1753,9 @@ func TestRaftStorage(t *testing.T) {
 	var tc testContext
 	storagetest.RunTests(t,
 		func(t *testing.T) storagetest.WriteableStorage {
-			tc = testContext{}
+			// Make sure the Raft group doesn't auto-start, or the elections
+			// will write HardState which confuses storagetest.
+			tc = testContext{dormantRaft: true}
 			tc.Start(t)
 			return tc.rng
 		},

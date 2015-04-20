@@ -144,6 +144,9 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	rng := splitTestRange(store, engine.KeyMin, proto.Key("a"), t)
+	// Make sure to wait for elections before removing; see #702.
+	// TODO(tschottdorf) maybe remove once #702 closes.
+	rng.WaitForElection()
 	if err := store.RemoveRange(rng); err != nil {
 		t.Fatal(err)
 	}

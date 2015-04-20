@@ -120,6 +120,14 @@ func (tm *testModel) Start() {
 	if err := tm.store.Start(tm.stopper); err != nil {
 		tm.t.Fatal(err)
 	}
+	rng, err := tm.store.GetRange(1)
+	if err != nil {
+		tm.t.Fatal(err)
+	}
+	// Without this, we'll very sporadically have test failures here since
+	// Raft commands are retried, bypassing the response cache.
+	// TODO(tschottdorf): remove the trigger when we've fixed the above.
+	rng.WaitForElection()
 
 	tm.initConfigs()
 
