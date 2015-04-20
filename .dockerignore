@@ -1,6 +1,8 @@
+.bootstrap
 cockroach
 .git/FETCH_HEAD
 .git/modules
+.git/hooks
 *.test
 */*.test
 */*/*.test
