@@ -45,12 +45,16 @@ func (t *Txn) Run(calls ...*Call) error {
 // and should be used where possible for efficiency.
 //
 // For clients using an HTTP sender, Prepare/Flush allows multiple
-// commands to be sent over the same connection. For transactional
-// clients, Prepare/Flush can dramatically improve efficiency by
-// compressing multiple writes into a single atomic update in the
-// event that the writes are to keys within a single range. However,
-// using Prepare/Flush alone will not guarantee atomicity. Clients
-// must use a transaction for that purpose.
+// commands to be sent over the same connection. Prepare/Flush can
+// dramatically improve efficiency by compressing multiple writes into
+// a single atomic update in the event that the writes are to keys
+// within a single range.
+//
+// TODO(pmattis): Can Prepare/Flush be replaced with a Batch struct?
+// Doing so could potentially make the Txn interface more symmetric
+// with the KV interface, but potentially removes the optimization to
+// send the EndTransaction in the same batch as the final set of
+// prepared calls.
 func (t *Txn) Prepare(calls ...*Call) {
 	for _, c := range calls {
 		c.resetClientCmdID(t.kv.clock)
