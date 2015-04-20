@@ -486,6 +486,7 @@ func postURL(url string, body io.Reader, t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := httpDoReq(req)
+	defer resp.Body.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,6 +501,7 @@ func getURL(url string, t *testing.T) string {
 		t.Fatal(err)
 	}
 	resp, err := httpDoReq(req)
+	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)

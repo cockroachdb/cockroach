@@ -102,17 +102,9 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
 			RootCAs:    certPool,
 			ClientCAs:  certPool,
 
-			// Ciphers from http://golang.org/src/crypto/tls/cipher_suites.go
-			// but with RC4 and 3DES removed.
-			CipherSuites: []uint16{
-				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
+			// Use the default cipher suite from golang (RC4 is going away in 1.5).
+			// Prefer the server-specified suite.
+			PreferServerCipherSuites: true,
 
 			// Use only TLS v1.2.
 			MinVersion: tls.VersionTLS12,
