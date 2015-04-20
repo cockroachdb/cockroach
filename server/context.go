@@ -172,7 +172,7 @@ func (ctx *Context) initEngine(attrsStr, path string) (engine.Engine, error) {
 
 // parseGossipBootstrapResolvers parses a comma-separated list of
 // gossip bootstrap resolvers.
-func (ctx *Context) parseGossipBootstrapResolvers() ([]*gossip.Resolver, error) {
+func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 	var bootstrapResolvers []gossip.Resolver
 	addresses := strings.Split(ctx.GossipBootstrap, ",")
 	for _, address := range addresses {
