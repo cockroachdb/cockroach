@@ -21,6 +21,9 @@ dependencies:
     # Cache" will make sure we start with a clean slate.
     - mkdir -p ~/docker
     - if [[ -e ~/docker/base.tar ]]; then docker load -i ~/docker/base.tar; fi
+    # Pretend we're already bootstrapped, so that `make` doesn't try to get us
+    # started which is impossible without a working Go env.
+    - touch .bootstrap && make '.git/hooks/*'
     - ./build/build-docker-dev.sh
     - docker save "cockroachdb/cockroach-devbase" > ~/docker/base.tar
     - if [[ ! -e ~/docker/dnsmasq.tar ]]; then docker pull "cockroachdb/dnsmasq" && docker save "cockroachdb/dnsmasq" > ~/docker/dnsmasq.tar; else docker load -i ~/docker/dnsmasq.tar; fi
@@ -50,7 +53,8 @@ test:
       if [ "${CIRCLE_BRANCH}" = "master" ] && [ -n "${GITHUB_API_TOKEN}" ] && [ -s "${CIRCLE_ARTIFACTS}/excerpt.txt" ]; then
         curl -X POST -H "Authorization: token ${GITHUB_API_TOKEN}" \
           "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues" \
-          -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }"
+          -d "{ \"title\": \"Test failure in CI build ${CIRCLE_BUILD_NUM}\", \"body\": \"The following test appears to have failed:\n\n[#${CIRCLE_BUILD_NUM}](https://circleci.com/gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/${CIRCLE_BUILD_NUM}):\n\n\`\`\`\n$(python -c 'import json,sys; print json.dumps(sys.stdin.read()).strip("\"")' < ${CIRCLE_ARTIFACTS}/excerpt.txt)\n\`\`\`\nPlease assign, take a look and update the issue accordingly.\", \"labels\": [\"test-failure\"] }" &> /dev/null
+        echo "Found test/race failures in test logs, see excerpt.log and the newly created issue on our issue tracker"
       else
         echo "Not posting an issue."
       fi
