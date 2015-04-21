@@ -406,7 +406,7 @@ func (n *Node) gossipCapacities() {
 }
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
-func (n *Node) executeCmd(method string, args proto.Request, reply proto.Response) error {
+func (n *Node) executeCmd(args proto.Request, reply proto.Response) error {
 	n.lSender.Send(client.Call{Args: args, Reply: reply})
 	return nil
 }
@@ -415,111 +415,111 @@ func (n *Node) executeCmd(method string, args proto.Request, reply proto.Respons
 
 // Contains .
 func (n *Node) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
-	return n.executeCmd(proto.Contains, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // Get .
 func (n *Node) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
-	return n.executeCmd(proto.Get, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // Put .
 func (n *Node) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
-	return n.executeCmd(proto.Put, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // ConditionalPut .
 func (n *Node) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
-	return n.executeCmd(proto.ConditionalPut, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // Increment .
 func (n *Node) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
-	return n.executeCmd(proto.Increment, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // Delete .
 func (n *Node) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
-	return n.executeCmd(proto.Delete, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // DeleteRange .
 func (n *Node) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
-	return n.executeCmd(proto.DeleteRange, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // Scan .
 func (n *Node) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
-	return n.executeCmd(proto.Scan, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // EndTransaction .
 func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
-	return n.executeCmd(proto.EndTransaction, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // ReapQueue .
 func (n *Node) ReapQueue(args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) error {
-	return n.executeCmd(proto.ReapQueue, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // EnqueueUpdate .
 func (n *Node) EnqueueUpdate(args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) error {
-	return n.executeCmd(proto.EnqueueUpdate, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // EnqueueMessage .
 func (n *Node) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) error {
-	return n.executeCmd(proto.EnqueueMessage, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // AdminSplit .
 func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
-	return n.executeCmd(proto.AdminSplit, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // AdminMerge .
 func (n *Node) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
-	return n.executeCmd(proto.AdminMerge, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalRangeLookup .
 func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
-	return n.executeCmd(proto.InternalRangeLookup, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalHeartbeatTxn .
 func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
-	return n.executeCmd(proto.InternalHeartbeatTxn, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalGC .
 func (n *Node) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
-	return n.executeCmd(proto.InternalGC, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalPushTxn .
 func (n *Node) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
-	return n.executeCmd(proto.InternalPushTxn, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalResolveIntent .
 func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
-	return n.executeCmd(proto.InternalResolveIntent, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalMerge .
 func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
-	return n.executeCmd(proto.InternalMerge, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalTruncateLog .
 func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
-	return n.executeCmd(proto.InternalTruncateLog, args, reply)
+	return n.executeCmd(args, reply)
 }
 
 // InternalLeaderLease .
 func (n *Node) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
 	reply *proto.InternalLeaderLeaseResponse) error {
-	return n.executeCmd(proto.InternalLeaderLease, args, reply)
+	return n.executeCmd(args, reply)
 }
