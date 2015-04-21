@@ -49,8 +49,8 @@ func adminSplitArgs(key, splitKey []byte, raftID int64, storeID proto.StoreID) (
 	return args, reply
 }
 
-func verifyRangeStats(eng engine.Engine, raftID int64, expMS engine.MVCCStats, t *testing.T) {
-	var ms engine.MVCCStats
+func verifyRangeStats(eng engine.Engine, raftID int64, expMS proto.MVCCStats, t *testing.T) {
+	var ms proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(eng, raftID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 	// Verify empty range has empty stats.
 	rng := store.LookupRange(proto.Key("\x01"), nil)
-	verifyRangeStats(store.Engine(), rng.Desc().RaftID, engine.MVCCStats{}, t)
+	verifyRangeStats(store.Engine(), rng.Desc().RaftID, proto.MVCCStats{}, t)
 
 	// Write random data.
 	src := rand.New(rand.NewSource(0))
@@ -303,7 +303,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		}
 	}
 	// Get the range stats now that we have data.
-	var ms engine.MVCCStats
+	var ms proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &ms); err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var msLeft, msRight engine.MVCCStats
+	var msLeft, msRight proto.MVCCStats
 	if err := engine.MVCCGetRangeStats(store.Engine(), rng.Desc().RaftID, &msLeft); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	}
 
 	// The stats should be exactly equal when added.
-	expMS := engine.MVCCStats{
+	expMS := proto.MVCCStats{
 		LiveBytes:   msLeft.LiveBytes + msRight.LiveBytes,
 		KeyBytes:    msLeft.KeyBytes + msRight.KeyBytes,
 		ValBytes:    msLeft.ValBytes + msRight.ValBytes,

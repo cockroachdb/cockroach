@@ -64,7 +64,7 @@ type rangeIterator interface {
 // aggregation of MVCC stats across all ranges in the store.
 type storeStats struct {
 	RangeCount int
-	MVCC       engine.MVCCStats
+	MVCC       proto.MVCCStats
 }
 
 // A rangeScanner iterates over ranges at a measured pace in order to
@@ -160,7 +160,7 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 						q.MaybeAdd(rng, clock.Now())
 					}
 					stats.RangeCount++
-					stats.MVCC.Accumulate(rng.stats.GetMVCC())
+					engine.Accumulate(&stats.MVCC, rng.stats.GetMVCC())
 				} else {
 					// Otherwise, we're done with the iteration. Reset iteration and start time.
 					rs.iter.Reset()
