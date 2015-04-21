@@ -192,15 +192,16 @@ func NewDistSender(ctx *DistSenderContext, gossip *gossip.Gossip) *DistSender {
 // for permission. For example, if a scan crosses two permission
 // configs, both configs must allow read permissions or the entire
 // scan will fail.
-func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHeader) error {
+func (ds *DistSender) verifyPermissions(args proto.Request) error {
 	// The root user can always proceed.
+	header := args.Header()
 	if header.User == storage.UserRoot {
 		return nil
 	}
 	// Check for admin methods.
-	if proto.NeedAdminPerm(method) {
+	if proto.IsAdmin(args) {
 		if header.User != storage.UserRoot {
-			return util.Errorf("user %q cannot invoke admin command %s", header.User, method)
+			return util.Errorf("user %q cannot invoke admin command %s", header.User, args.Method())
 		}
 		return nil
 	}
@@ -210,7 +211,7 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 		return util.Errorf("permissions not available via gossip")
 	}
 	if configMap == nil {
-		return util.Errorf("perm configs not available; cannot execute %s", method)
+		return util.Errorf("perm configs not available; cannot execute %s", args.Method())
 	}
 	permMap := configMap.(storage.PrefixConfigMap)
 	headerEnd := header.EndKey
@@ -232,10 +233,10 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 			hasPerm := false
 			permMap.VisitPrefixesHierarchically(start, func(start, end proto.Key, config interface{}) (bool, error) {
 				perm := config.(*proto.PermConfig)
-				if proto.NeedReadPerm(method) && !perm.CanRead(header.User) {
+				if proto.IsRead(args) && !perm.CanRead(header.User) {
 					return false, nil
 				}
-				if proto.NeedWritePerm(method) && !perm.CanWrite(header.User) {
+				if proto.IsWrite(args) && !perm.CanWrite(header.User) {
 					return false, nil
 				}
 				// Return done = true, as permissions have been granted by this config.
@@ -243,7 +244,8 @@ func (ds *DistSender) verifyPermissions(method string, header *proto.RequestHead
 				return true, nil
 			})
 			if !hasPerm {
-				return false, util.Errorf("user %q cannot invoke %s at %q-%q", header.User, method, start, end)
+				return false, util.Errorf("user %q cannot invoke %s at %q-%q",
+					header.User, args.Method(), start, end)
 			}
 			return false, nil
 		})
@@ -267,7 +269,7 @@ func (ds *DistSender) internalRangeLookup(key proto.Key, info *proto.RangeDescri
 		MaxRanges: ds.rangeLookupMaxRanges,
 	}
 	reply := &proto.InternalRangeLookupResponse{}
-	if err := ds.sendRPC(info, "InternalRangeLookup", args, reply); err != nil {
+	if err := ds.sendRPC(info, args, reply); err != nil {
 		return nil, err
 	}
 	if reply.Error != nil {
@@ -378,10 +380,10 @@ func (ds *DistSender) getNodeDescriptor() *gossip.NodeDescriptor {
 // server must succeed. Returns an RPC error if the request could not be sent.
 // Note that the reply may contain a higher level error and must be checked in
 // addition to the RPC error.
-func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
+func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 	args proto.Request, reply proto.Response) error {
 	if len(desc.Replicas) == 0 {
-		return util.Errorf("%s: replicas set is empty", method)
+		return util.Errorf("%s: replicas set is empty", args.Method())
 	}
 
 	// Copy and rearrange the replicas suitably, then return the desired order.
@@ -394,8 +396,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 
 	// If this request needs to go to a leader and we know who that is, move
 	// it to the front and send requests in order.
-	if args.Header().ReadConsistency != proto.INCONSISTENT ||
-		proto.IsReadWrite(method) {
+	if args.Header().ReadConsistency != proto.INCONSISTENT || proto.IsWrite(args) {
 		if leader := ds.leaderCache.Lookup(proto.RaftID(desc.RaftID)); leader != nil {
 			i, _ := replicas.FindReplica(leader.StoreID)
 			if i >= 0 {
@@ -456,7 +457,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 		}
 		return gogoproto.Clone(reply)
 	}
-	_, err := ds.rpcSend(rpcOpts, "Node."+method, addrs, getArgs, getReply, ds.gossip.RPCContext)
+	_, err := ds.rpcSend(rpcOpts, "Node."+args.Method(), addrs, getArgs, getReply, ds.gossip.RPCContext)
 	return err
 }
 
@@ -472,7 +473,7 @@ func (ds *DistSender) Send(call client.Call) {
 
 	// TODO: Refactor this method into more manageable pieces.
 	// Verify permissions.
-	if err := ds.verifyPermissions(call.Method(), call.Args.Header()); err != nil {
+	if err := ds.verifyPermissions(call.Args); err != nil {
 		call.Reply.Header().SetGoError(err)
 		return
 	}
@@ -536,7 +537,7 @@ func (ds *DistSender) Send(call client.Call) {
 					// Make a new reply object for this call.
 					reply = gogoproto.Clone(call.Reply).(proto.Response)
 				}
-				err = ds.sendRPC(desc, call.Method(), args, reply)
+				err = ds.sendRPC(desc, args, reply)
 				if err == nil && reply.Header().Error != nil {
 					err = reply.Header().GoError()
 				}

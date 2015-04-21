@@ -48,53 +48,44 @@ func verifyRequest(args proto.Request) error {
 }
 
 // createArgsAndReply returns allocated request and response pairs
-// according to the specified method.
-func createArgsAndReply(method string) (proto.Request, proto.Response, error) {
+// according to the specified method. Note that createArgsAndReply
+// only knows about public methods and explicitly returns nil for
+// internal methods. Do not change this behavior without also fixing
+// DBServer.ServeHTTP.
+func createArgsAndReply(method string) (proto.Request, proto.Response) {
 	switch method {
 	case proto.Contains:
-		return &proto.ContainsRequest{}, &proto.ContainsResponse{}, nil
+		return &proto.ContainsRequest{}, &proto.ContainsResponse{}
 	case proto.Get:
-		return &proto.GetRequest{}, &proto.GetResponse{}, nil
+		return &proto.GetRequest{}, &proto.GetResponse{}
 	case proto.Put:
-		return &proto.PutRequest{}, &proto.PutResponse{}, nil
+		return &proto.PutRequest{}, &proto.PutResponse{}
 	case proto.ConditionalPut:
-		return &proto.ConditionalPutRequest{}, &proto.ConditionalPutResponse{}, nil
+		return &proto.ConditionalPutRequest{}, &proto.ConditionalPutResponse{}
 	case proto.Increment:
-		return &proto.IncrementRequest{}, &proto.IncrementResponse{}, nil
+		return &proto.IncrementRequest{}, &proto.IncrementResponse{}
 	case proto.Delete:
-		return &proto.DeleteRequest{}, &proto.DeleteResponse{}, nil
+		return &proto.DeleteRequest{}, &proto.DeleteResponse{}
 	case proto.DeleteRange:
-		return &proto.DeleteRangeRequest{}, &proto.DeleteRangeResponse{}, nil
+		return &proto.DeleteRangeRequest{}, &proto.DeleteRangeResponse{}
 	case proto.Scan:
-		return &proto.ScanRequest{}, &proto.ScanResponse{}, nil
+		return &proto.ScanRequest{}, &proto.ScanResponse{}
 	case proto.EndTransaction:
-		return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}, nil
+		return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}
 	case proto.ReapQueue:
-		return &proto.ReapQueueRequest{}, &proto.ReapQueueResponse{}, nil
+		return &proto.ReapQueueRequest{}, &proto.ReapQueueResponse{}
 	case proto.EnqueueUpdate:
-		return &proto.EnqueueUpdateRequest{}, &proto.EnqueueUpdateResponse{}, nil
+		return &proto.EnqueueUpdateRequest{}, &proto.EnqueueUpdateResponse{}
 	case proto.EnqueueMessage:
-		return &proto.EnqueueMessageRequest{}, &proto.EnqueueMessageResponse{}, nil
+		return &proto.EnqueueMessageRequest{}, &proto.EnqueueMessageResponse{}
 	case proto.Batch:
-		return &proto.BatchRequest{}, &proto.BatchResponse{}, nil
+		return &proto.BatchRequest{}, &proto.BatchResponse{}
 	case proto.AdminSplit:
-		return &proto.AdminSplitRequest{}, &proto.AdminSplitResponse{}, nil
+		return &proto.AdminSplitRequest{}, &proto.AdminSplitResponse{}
 	case proto.AdminMerge:
-		return &proto.AdminMergeRequest{}, &proto.AdminMergeResponse{}, nil
-	case proto.InternalHeartbeatTxn:
-		return &proto.InternalHeartbeatTxnRequest{}, &proto.InternalHeartbeatTxnResponse{}, nil
-	case proto.InternalGC:
-		return &proto.InternalGCRequest{}, &proto.InternalGCResponse{}, nil
-	case proto.InternalPushTxn:
-		return &proto.InternalPushTxnRequest{}, &proto.InternalPushTxnResponse{}, nil
-	case proto.InternalResolveIntent:
-		return &proto.InternalResolveIntentRequest{}, &proto.InternalResolveIntentResponse{}, nil
-	case proto.InternalMerge:
-		return &proto.InternalMergeRequest{}, &proto.InternalMergeResponse{}, nil
-	case proto.InternalTruncateLog:
-		return &proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}, nil
+		return &proto.AdminMergeRequest{}, &proto.AdminMergeResponse{}
 	}
-	return nil, nil, util.Errorf("unhandled method %s", method)
+	return nil, nil
 }
 
 // A DBServer provides an HTTP server endpoint serving the key-value API.
@@ -123,7 +114,8 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	method = strings.TrimPrefix(method, DBPrefix)
-	if !proto.IsPublic(method) {
+	args, reply := createArgsAndReply(method)
+	if args == nil {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
@@ -133,11 +125,6 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	args, reply, err := createArgsAndReply(method)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := util.UnmarshalRequest(r, reqBody, args, allowedEncodings); err != nil {

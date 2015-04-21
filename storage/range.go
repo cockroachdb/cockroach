@@ -81,7 +81,7 @@ var (
 // consistent results each time. Should only be used in tests in the
 // storage package but needs to be exported due to circular import
 // issues.
-var TestingCommandFilter func(string, proto.Request, proto.Response) bool
+var TestingCommandFilter func(proto.Request, proto.Response) bool
 
 // raftInitialLogIndex is the starting point for the raft log. We bootstrap
 // the raft membership by synthesizing a snapshot as if there were some
@@ -297,15 +297,15 @@ func (r *Range) getLease() *proto.Lease {
 // canServiceCmd returns an error in the event that the range replica
 // cannot service the command as specified. This is of the case in
 // the event that the replica is not the leader.
-func (r *Range) canServiceCmd(method string, args proto.Request) error {
+func (r *Range) canServiceCmd(args proto.Request) error {
 	header := args.Header()
 	if !r.IsLeader() {
-		if !proto.IsReadOnly(method) || header.ReadConsistency == proto.CONSISTENT {
+		if !proto.IsReadOnly(args) || header.ReadConsistency == proto.CONSISTENT {
 			// TODO(spencer): when we happen to know the leader, fill it in here via replica.
 			return &proto.NotLeaderError{}
 		}
 	}
-	if proto.IsReadOnly(method) {
+	if proto.IsReadOnly(args) {
 		if header.ReadConsistency == proto.CONSENSUS {
 			return util.Errorf("consensus reads not implemented")
 		} else if header.ReadConsistency == proto.INCONSISTENT && header.Txn != nil {
@@ -398,19 +398,18 @@ func (r *Range) SetLastVerificationTimestamp(timestamp proto.Timestamp) error {
 // command queue. If wait is false, read-write commands are added to
 // Raft without waiting for their completion.
 func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) error {
-	method := args.Method()
-	if err := r.canServiceCmd(method, args); err != nil {
+	if err := r.canServiceCmd(args); err != nil {
 		reply.Header().SetGoError(err)
 		return err
 	}
 
 	// Differentiate between read-only and read-write.
-	if proto.IsAdmin(method) {
-		return r.addAdminCmd(method, args, reply)
-	} else if proto.IsReadOnly(method) {
-		return r.addReadOnlyCmd(method, args, reply)
+	if proto.IsAdmin(args) {
+		return r.addAdminCmd(args, reply)
+	} else if proto.IsReadOnly(args) {
+		return r.addReadOnlyCmd(args, reply)
 	}
-	return r.addReadWriteCmd(method, args, reply, wait)
+	return r.addReadWriteCmd(args, reply, wait)
 }
 
 // beginCmd waits for any overlapping, already-executing commands via
@@ -432,14 +431,14 @@ func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
 // addAdminCmd executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
-func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Response) error {
-	switch method {
-	case proto.AdminSplit:
+func (r *Range) addAdminCmd(args proto.Request, reply proto.Response) error {
+	switch args.(type) {
+	case *proto.AdminSplitRequest:
 		r.AdminSplit(args.(*proto.AdminSplitRequest), reply.(*proto.AdminSplitResponse))
-	case proto.AdminMerge:
+	case *proto.AdminMergeRequest:
 		r.AdminMerge(args.(*proto.AdminMergeRequest), reply.(*proto.AdminMergeResponse))
 	default:
-		return util.Errorf("unrecognized admin command type: %s", method)
+		return util.Errorf("unrecognized admin command type: %s", args.Method())
 	}
 	return reply.Header().GoError()
 }
@@ -447,12 +446,12 @@ func (r *Range) addAdminCmd(method string, args proto.Request, reply proto.Respo
 // addReadOnlyCmd updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the read queue.
-func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Response) error {
+func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 	header := args.Header()
 
 	// If read-consistency is set to INCONSISTENT, run directly.
 	if header.ReadConsistency == proto.INCONSISTENT {
-		return r.executeCmd(0, method, args, reply)
+		return r.executeCmd(0, args, reply)
 	}
 
 	// Add the read to the command queue to gate subsequent
@@ -474,14 +473,14 @@ func (r *Range) addReadOnlyCmd(method string, args proto.Request, reply proto.Re
 	// timestamps. This is because the read-timestamp-cache prevents it
 	// for the active leader and leadership changes force the
 	// read-timestamp-cache to reset its low water mark.
-	if err := r.canServiceCmd(method, args); err != nil {
+	if err := r.canServiceCmd(args); err != nil {
 		return err
 	}
-	err := r.executeCmd(0, method, args, reply)
+	err := r.executeCmd(0, args, reply)
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
-	if err == nil && UsesTimestampCache(method) {
+	if err == nil && UsesTimestampCache(args.Method()) {
 		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), true /* readOnly */)
 	}
 	r.cmdQ.Remove(cmdKey)
@@ -515,7 +514,7 @@ func (r *Range) getCmdID(args proto.Request) (cmdID proto.ClientCmdID) {
 // command is submitted to Raft. Upon completion, the write is removed
 // from the read queue and the reply is added to the response cache.
 // If wait is true, will block until the command is complete.
-func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.Response, wait bool) error {
+func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait bool) error {
 	// Check the response cache in case this is a replay. This call
 	// may block if the same command is already underway.
 	header := args.Header()
@@ -546,7 +545,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 	// writes, send WriteTooOldError; for reads, update the write's
 	// timestamp. When the write returns, the updated timestamp will
 	// inform the final commit timestamp.
-	if UsesTimestampCache(method) {
+	if UsesTimestampCache(args.Method()) {
 		r.Lock()
 		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
 		r.Unlock()
@@ -608,7 +607,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// of this write on success. This ensures a strictly higher
 		// timestamp for successive writes to the same key or key range.
 		r.Lock()
-		if err == nil && UsesTimestampCache(method) {
+		if err == nil && UsesTimestampCache(args.Method()) {
 			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
 		}
 		r.cmdQ.Remove(cmdKey)
@@ -618,7 +617,7 @@ func (r *Range) addReadWriteCmd(method string, args proto.Request, reply proto.R
 		// log execution errors so they're surfaced somewhere.
 		if !wait && err != nil {
 			log.Warningf("non-synchronous execution of %s with %+v failed: %s",
-				method, args, err)
+				args.Method(), args, err)
 		}
 		return err
 	}
@@ -651,7 +650,7 @@ func (r *Range) processRaftCommand(idKey cmdIDKey, index uint64,
 		// This command originated elsewhere so we must create a new reply buffer.
 		reply = args.CreateReply()
 	}
-	err := r.executeCmd(index, method, args, reply)
+	err := r.executeCmd(index, args, reply)
 	if cmd != nil {
 		cmd.done <- err
 	} else if err != nil {
@@ -780,7 +779,7 @@ func (r *Range) maybeSplit() {
 // errors which should be classified as a ReplicaCorruptionError--when those
 // bubble up to the point where we've just tried to execute a Raft command, the
 // Raft replica would need to stall itself.
-func (r *Range) executeCmd(index uint64, method string, args proto.Request,
+func (r *Range) executeCmd(index uint64, args proto.Request,
 	reply proto.Response) error {
 	// Verify key is contained within range here to catch any range split
 	// or merge activity.
@@ -792,7 +791,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if TestingCommandFilter != nil && TestingCommandFilter(method, args, reply) {
+	if TestingCommandFilter != nil && TestingCommandFilter(args, reply) {
 		return reply.Header().GoError()
 	}
 
@@ -801,49 +800,49 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	// Create an engine.MVCCStats instance.
 	ms := engine.MVCCStats{}
 
-	switch method {
-	case proto.Contains:
+	switch args.(type) {
+	case *proto.ContainsRequest:
 		r.Contains(batch, args.(*proto.ContainsRequest), reply.(*proto.ContainsResponse))
-	case proto.Get:
+	case *proto.GetRequest:
 		r.Get(batch, args.(*proto.GetRequest), reply.(*proto.GetResponse))
-	case proto.Put:
+	case *proto.PutRequest:
 		r.Put(batch, &ms, args.(*proto.PutRequest), reply.(*proto.PutResponse))
-	case proto.ConditionalPut:
+	case *proto.ConditionalPutRequest:
 		r.ConditionalPut(batch, &ms, args.(*proto.ConditionalPutRequest), reply.(*proto.ConditionalPutResponse))
-	case proto.Increment:
+	case *proto.IncrementRequest:
 		r.Increment(batch, &ms, args.(*proto.IncrementRequest), reply.(*proto.IncrementResponse))
-	case proto.Delete:
+	case *proto.DeleteRequest:
 		r.Delete(batch, &ms, args.(*proto.DeleteRequest), reply.(*proto.DeleteResponse))
-	case proto.DeleteRange:
+	case *proto.DeleteRangeRequest:
 		r.DeleteRange(batch, &ms, args.(*proto.DeleteRangeRequest), reply.(*proto.DeleteRangeResponse))
-	case proto.Scan:
+	case *proto.ScanRequest:
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
-	case proto.EndTransaction:
+	case *proto.EndTransactionRequest:
 		r.EndTransaction(batch, &ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
-	case proto.ReapQueue:
+	case *proto.ReapQueueRequest:
 		r.ReapQueue(batch, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
-	case proto.EnqueueUpdate:
+	case *proto.EnqueueUpdateRequest:
 		r.EnqueueUpdate(batch, args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
-	case proto.EnqueueMessage:
+	case *proto.EnqueueMessageRequest:
 		r.EnqueueMessage(batch, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
-	case proto.InternalRangeLookup:
+	case *proto.InternalRangeLookupRequest:
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
-	case proto.InternalHeartbeatTxn:
+	case *proto.InternalHeartbeatTxnRequest:
 		r.InternalHeartbeatTxn(batch, args.(*proto.InternalHeartbeatTxnRequest), reply.(*proto.InternalHeartbeatTxnResponse))
-	case proto.InternalGC:
+	case *proto.InternalGCRequest:
 		r.InternalGC(batch, &ms, args.(*proto.InternalGCRequest), reply.(*proto.InternalGCResponse))
-	case proto.InternalPushTxn:
+	case *proto.InternalPushTxnRequest:
 		r.InternalPushTxn(batch, args.(*proto.InternalPushTxnRequest), reply.(*proto.InternalPushTxnResponse))
-	case proto.InternalResolveIntent:
+	case *proto.InternalResolveIntentRequest:
 		r.InternalResolveIntent(batch, &ms, args.(*proto.InternalResolveIntentRequest), reply.(*proto.InternalResolveIntentResponse))
-	case proto.InternalMerge:
+	case *proto.InternalMergeRequest:
 		r.InternalMerge(batch, &ms, args.(*proto.InternalMergeRequest), reply.(*proto.InternalMergeResponse))
-	case proto.InternalTruncateLog:
+	case *proto.InternalTruncateLogRequest:
 		r.InternalTruncateLog(batch, &ms, args.(*proto.InternalTruncateLogRequest), reply.(*proto.InternalTruncateLogResponse))
-	case proto.InternalLeaderLease:
+	case *proto.InternalLeaderLeaseRequest:
 		r.InternalLeaderLease(args.(*proto.InternalLeaderLeaseRequest), reply.(*proto.InternalLeaderLeaseResponse))
 	default:
-		return util.Errorf("unrecognized command %s", method)
+		return util.Errorf("unrecognized command %s", args.Method())
 	}
 
 	// On success, flush the MVCC stats to the batch and commit.
@@ -861,7 +860,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 			}
 		}
 
-		if proto.IsReadWrite(method) {
+		if proto.IsWrite(args) {
 			r.stats.MergeMVCCStats(batch, &ms, header.Timestamp.WallTime)
 			if err := batch.Commit(); err != nil {
 				reply.Header().SetGoError(err)
@@ -871,6 +870,7 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
 				// Maybe update gossip configs on a put.
+				method := args.Method()
 				if (method == proto.Put || method == proto.ConditionalPut) && header.Key.Less(engine.KeySystemMax) {
 					r.maybeUpdateGossipConfigs(header.Key)
 				}
@@ -906,13 +906,13 @@ func (r *Range) executeCmd(index uint64, method string, args proto.Request,
 	// Propagate the request timestamp (which may have changed).
 	reply.Header().Timestamp = args.Header().Timestamp
 
-	log.V(1).Infof("executed %s command %+v: %+v", method, args, reply)
+	log.V(1).Infof("executed %s command %+v: %+v", args.Method(), args, reply)
 
 	// Add this command's result to the response cache if this is a
 	// read/write method. This must be done as part of the execution of
 	// raft commands so that every replica maintains the same responses
 	// to continue request idempotence when leadership changes.
-	if proto.IsReadWrite(method) {
+	if proto.IsWrite(args) {
 		if putErr := r.respCache.PutResponse(args.Header().CmdID, reply); putErr != nil {
 			log.Errorf("unable to write result of %+v: %+v to the response cache: %s",
 				args, reply, putErr)

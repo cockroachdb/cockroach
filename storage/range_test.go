@@ -375,7 +375,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -417,7 +417,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(0, proto.Put, req, reply); err != nil {
+	if err := tc.rng.executeCmd(0, req, reply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -685,7 +685,7 @@ func TestRangeCommandQueue(t *testing.T) {
 
 	// Intercept commands with matching command IDs and block them.
 	blockingDone := make(chan struct{}, 1)
-	TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
 		if args.Header().User == "Foo" {
 			<-blockingDone
 		}
@@ -787,7 +787,7 @@ func TestRangeCommandQueueInconsistent(t *testing.T) {
 
 	key := proto.Key("key1")
 	blockingDone := make(chan struct{})
-	TestingCommandFilter = func(method string, args proto.Request, reply proto.Response) bool {
+	TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
 		if args.Header().CmdID.Random == 1 {
 			<-blockingDone
 		}
@@ -1782,7 +1782,7 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs, pReply := putArgs(key, value, 1, tc.store.StoreID())
-	if err := tc.rng.executeCmd(0, proto.Put, pArgs, pReply); err != nil {
+	if err := tc.rng.executeCmd(0, pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
@@ -1800,7 +1800,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 	reply := &proto.ConditionalPutResponse{}
-	err := tc.rng.executeCmd(0, proto.ConditionalPut, args, reply)
+	err := tc.rng.executeCmd(0, args, reply)
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)

@@ -242,7 +242,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		// Set the timestamp to the original timestamp for read-only
 		// commands and to the transaction timestamp for read/write
 		// commands.
-		if proto.IsReadOnly(call.Method()) {
+		if proto.IsReadOnly(call.Args) {
 			header.Timestamp = header.Txn.OrigTimestamp
 		} else {
 			header.Timestamp = header.Txn.Timestamp
@@ -270,7 +270,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 	// If successful, we're in a transaction, and the command leaves
 	// transactional intents, add the key or key range to the intents map.
 	// If the transaction metadata doesn't yet exist, create it.
-	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactional(call.Method()) {
+	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactional(call.Args) {
 		tc.Lock()
 		var ok bool
 		var txnMeta *txnMetadata

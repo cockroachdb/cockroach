@@ -103,18 +103,23 @@ func TestSendRPCOrder(t *testing.T) {
 				return util.Errorf("unexpected ordering, wanted %v, got %v",
 					expOrder, o.Ordering)
 			}
+			var actualAddrs []int32
 			for i, a := range addrs {
-				if len(addrs) != len(expAddrs) || (expAddrs[i] > 0 &&
-					addrToNode[a.String()] != int32(expAddrs[i])) {
-					return util.Errorf("addresses changed: %s", addrs)
+				if expAddrs[i] == 0 {
+					actualAddrs = append(actualAddrs, 0)
+				} else {
+					actualAddrs = append(actualAddrs, addrToNode[a.String()])
 				}
+			}
+			if !reflect.DeepEqual(expAddrs, actualAddrs) {
+				return util.Errorf("expected %d, but found %d", expAddrs, actualAddrs)
 			}
 			return nil
 		}
 	}
 
 	testCases := []struct {
-		method string
+		args   proto.Request
 		attrs  []string
 		fn     func(rpc.Options, []net.Addr) error
 		leader int32 // 0 for not caching a leader.
@@ -127,16 +132,16 @@ func TestSendRPCOrder(t *testing.T) {
 	}{
 		// Inconsistent Scan without matching attributes.
 		{
-			method: "Scan",
-			attrs:  []string{},
-			fn:     makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			args:  &proto.ScanRequest{},
+			attrs: []string{},
+			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
 		// Inconsistent Scan with matching attributes.
 		// Should move the two nodes matching the attributes to the front and
 		// go stable.
 		{
-			method: "Scan",
-			attrs:  nodeAttrs[5],
+			args:  &proto.ScanRequest{},
+			attrs: nodeAttrs[5],
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
 		},
@@ -144,7 +149,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Scan without matching attributes that requires but does not find
 		// a leader.
 		{
-			method:     "Scan",
+			args:       &proto.ScanRequest{},
 			attrs:      []string{},
 			fn:         makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 			consistent: true,
@@ -152,16 +157,16 @@ func TestSendRPCOrder(t *testing.T) {
 		// Put without matching attributes that requires but does not find leader.
 		// Should go random and not change anything.
 		{
-			method: "Put",
-			attrs:  []string{"nomatch"},
-			fn:     makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
+			args:  &proto.PutRequest{},
+			attrs: []string{"nomatch"},
+			fn:    makeVerifier(rpc.OrderRandom, []int32{1, 2, 3, 4, 5}),
 		},
 		// Put with matching attributes but no leader.
 		// Should move the two nodes matching the attributes to the front and
 		// go stable.
 		{
-			method: "Put",
-			attrs:  append(nodeAttrs[5], "irrelevant"),
+			args:  &proto.PutRequest{},
+			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first two resulting addresses.
 			fn: makeVerifier(rpc.OrderStable, []int32{5, 4, 0, 0, 0}),
 		},
@@ -170,8 +175,8 @@ func TestSendRPCOrder(t *testing.T) {
 		// Should address the leader and the two nodes matching the attributes
 		// (the last and second to last) in that order.
 		{
-			method: "Put",
-			attrs:  append(nodeAttrs[5], "irrelevant"),
+			args:  &proto.PutRequest{},
+			attrs: append(nodeAttrs[5], "irrelevant"),
 			// Compare only the first three resulting addresses.
 			fn:     makeVerifier(rpc.OrderStable, []int32{2, 5, 4, 0, 0}),
 			leader: 2,
@@ -230,14 +235,14 @@ func TestSendRPCOrder(t *testing.T) {
 		// Always create the parameters for Scan, only the Header() is used
 		// anyways so it doesn't matter.
 		call := client.ScanCall(proto.Key("b"), proto.Key("y"), 0)
-		args := call.Args.(*proto.ScanRequest)
+		args := tc.args
 		args.Header().RaftID = raftID // Not used in this test, but why not.
 		if !tc.consistent {
 			args.Header().ReadConsistency = proto.INCONSISTENT
 		}
 		// Kill the cached NodeDescriptor, enforcing a lookup from Gossip.
 		ds.nodeDescriptor = nil
-		if err := ds.sendRPC(&descriptor, tc.method, args, call.Reply); err != nil {
+		if err := ds.sendRPC(&descriptor, args, call.Reply); err != nil {
 			t.Errorf("%d: %s", n, err)
 		}
 	}
@@ -403,81 +408,109 @@ func TestVerifyPermissions(t *testing.T) {
 	}
 	ds.gossip.AddInfo(gossip.KeyConfigPermission, configMap, time.Hour)
 
-	readOnlyMethods := make([]string, 0, len(proto.ReadMethods))
-	writeOnlyMethods := make([]string, 0, len(proto.WriteMethods))
-	readWriteMethods := make([]string, 0, len(proto.ReadMethods)+len(proto.WriteMethods))
-	for readM := range proto.ReadMethods {
-		if proto.IsReadOnly(readM) {
-			readOnlyMethods = append(readOnlyMethods, readM)
-		} else {
-			readWriteMethods = append(readWriteMethods, readM)
-		}
+	allRequestTypes := []proto.Request{
+		&proto.ContainsRequest{},
+		&proto.GetRequest{},
+		&proto.PutRequest{},
+		&proto.ConditionalPutRequest{},
+		&proto.IncrementRequest{},
+		&proto.DeleteRequest{},
+		&proto.DeleteRangeRequest{},
+		&proto.ScanRequest{},
+		&proto.EndTransactionRequest{},
+		&proto.ReapQueueRequest{},
+		&proto.EnqueueUpdateRequest{},
+		&proto.EnqueueMessageRequest{},
+		&proto.BatchRequest{},
+		&proto.AdminSplitRequest{},
+		&proto.AdminMergeRequest{},
+		&proto.InternalHeartbeatTxnRequest{},
+		&proto.InternalGCRequest{},
+		&proto.InternalPushTxnRequest{},
+		&proto.InternalRangeLookupRequest{},
+		&proto.InternalResolveIntentRequest{},
+		&proto.InternalMergeRequest{},
+		&proto.InternalTruncateLogRequest{},
+		&proto.InternalLeaderLeaseRequest{},
 	}
-	for writeM := range proto.WriteMethods {
-		if !proto.NeedReadPerm(writeM) {
-			writeOnlyMethods = append(writeOnlyMethods, writeM)
+
+	var readOnlyRequests []proto.Request
+	var writeOnlyRequests []proto.Request
+	var readWriteRequests []proto.Request
+
+	for _, r := range allRequestTypes {
+		if proto.IsRead(r) && !proto.IsWrite(r) {
+			readOnlyRequests = append(readOnlyRequests, r)
+		}
+		if proto.IsWrite(r) && !proto.IsRead(r) {
+			writeOnlyRequests = append(writeOnlyRequests, r)
+		}
+		if proto.IsRead(r) && proto.IsWrite(r) {
+			readWriteRequests = append(readWriteRequests, r)
 		}
 	}
 
 	testData := []struct {
 		// Permission-based db methods from the storage package.
-		methods          []string
+		requests         []proto.Request
 		user             string
 		startKey, endKey proto.Key
 		hasPermission    bool
 	}{
 		// Test permissions within a single range
-		{readOnlyMethods, "read1", engine.KeyMin, engine.KeyMin, true},
-		{readOnlyMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{readOnlyMethods, "write1", engine.KeyMin, engine.KeyMin, false},
-		{readOnlyMethods, "random", engine.KeyMin, engine.KeyMin, false},
-		{readWriteMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{readWriteMethods, "read1", engine.KeyMin, engine.KeyMin, false},
-		{readWriteMethods, "write1", engine.KeyMin, engine.KeyMin, false},
-		{writeOnlyMethods, "write1", engine.KeyMin, engine.KeyMin, true},
-		{writeOnlyMethods, "rw1", engine.KeyMin, engine.KeyMin, true},
-		{writeOnlyMethods, "read1", engine.KeyMin, engine.KeyMin, false},
-		{writeOnlyMethods, "random", engine.KeyMin, engine.KeyMin, false},
+		{readOnlyRequests, "read1", engine.KeyMin, engine.KeyMin, true},
+		{readOnlyRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
+		{readOnlyRequests, "write1", engine.KeyMin, engine.KeyMin, false},
+		{readOnlyRequests, "random", engine.KeyMin, engine.KeyMin, false},
+		{readWriteRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
+		{readWriteRequests, "read1", engine.KeyMin, engine.KeyMin, false},
+		{readWriteRequests, "write1", engine.KeyMin, engine.KeyMin, false},
+		{writeOnlyRequests, "write1", engine.KeyMin, engine.KeyMin, true},
+		{writeOnlyRequests, "rw1", engine.KeyMin, engine.KeyMin, true},
+		{writeOnlyRequests, "read1", engine.KeyMin, engine.KeyMin, false},
+		{writeOnlyRequests, "random", engine.KeyMin, engine.KeyMin, false},
 		// Test permissions hierarchically.
-		{readOnlyMethods, "read1", proto.Key("a"), proto.Key("a1"), true},
-		{readWriteMethods, "rw1", proto.Key("a"), proto.Key("a1"), true},
-		{writeOnlyMethods, "write1", proto.Key("a"), proto.Key("a1"), true},
+		{readOnlyRequests, "read1", proto.Key("a"), proto.Key("a1"), true},
+		{readWriteRequests, "rw1", proto.Key("a"), proto.Key("a1"), true},
+		{writeOnlyRequests, "write1", proto.Key("a"), proto.Key("a1"), true},
 		// Test permissions across both ranges.
-		{readOnlyMethods, "readAll", engine.KeyMin, proto.Key("b"), true},
-		{readOnlyMethods, "read1", engine.KeyMin, proto.Key("b"), true},
-		{readOnlyMethods, "read2", engine.KeyMin, proto.Key("b"), false},
-		{readOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
-		{readWriteMethods, "rwAll", engine.KeyMin, proto.Key("b"), true},
-		{readWriteMethods, "rw1", engine.KeyMin, proto.Key("b"), true},
-		{readWriteMethods, "random", engine.KeyMin, proto.Key("b"), false},
-		{writeOnlyMethods, "writeAll", engine.KeyMin, proto.Key("b"), true},
-		{writeOnlyMethods, "write1", engine.KeyMin, proto.Key("b"), true},
-		{writeOnlyMethods, "write2", engine.KeyMin, proto.Key("b"), false},
-		{writeOnlyMethods, "random", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyRequests, "readAll", engine.KeyMin, proto.Key("b"), true},
+		{readOnlyRequests, "read1", engine.KeyMin, proto.Key("b"), true},
+		{readOnlyRequests, "read2", engine.KeyMin, proto.Key("b"), false},
+		{readOnlyRequests, "random", engine.KeyMin, proto.Key("b"), false},
+		{readWriteRequests, "rwAll", engine.KeyMin, proto.Key("b"), true},
+		{readWriteRequests, "rw1", engine.KeyMin, proto.Key("b"), true},
+		{readWriteRequests, "random", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyRequests, "writeAll", engine.KeyMin, proto.Key("b"), true},
+		{writeOnlyRequests, "write1", engine.KeyMin, proto.Key("b"), true},
+		{writeOnlyRequests, "write2", engine.KeyMin, proto.Key("b"), false},
+		{writeOnlyRequests, "random", engine.KeyMin, proto.Key("b"), false},
 		// Test permissions within and around the boundaries of a range,
 		// representatively using rw methods.
-		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("b"), true},
-		{readWriteMethods, "rwAll", proto.Key("a"), proto.Key("b"), true},
-		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("a"), true},
-		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("a1"), true},
-		{readWriteMethods, "rw2", proto.Key("a"), proto.Key("b1"), false},
-		{readWriteMethods, "rw2", proto.Key("a3"), proto.Key("a4"), true},
-		{readWriteMethods, "rw2", proto.Key("a3"), proto.Key("b1"), false},
+		{readWriteRequests, "rw2", proto.Key("a"), proto.Key("b"), true},
+		{readWriteRequests, "rwAll", proto.Key("a"), proto.Key("b"), true},
+		{readWriteRequests, "rw2", proto.Key("a"), proto.Key("a"), true},
+		{readWriteRequests, "rw2", proto.Key("a"), proto.Key("a1"), true},
+		{readWriteRequests, "rw2", proto.Key("a"), proto.Key("b1"), false},
+		{readWriteRequests, "rw2", proto.Key("a3"), proto.Key("a4"), true},
+		{readWriteRequests, "rw2", proto.Key("a3"), proto.Key("b1"), false},
 	}
 
 	for i, test := range testData {
-		for _, method := range test.methods {
-			err := ds.verifyPermissions(
-				method,
-				&proto.RequestHeader{
-					User: test.user, Key: test.startKey, EndKey: test.endKey})
+		for _, r := range test.requests {
+			*r.Header() = proto.RequestHeader{
+				User:   test.user,
+				Key:    test.startKey,
+				EndKey: test.endKey,
+			}
+			err := ds.verifyPermissions(r)
 			if err != nil && test.hasPermission {
 				t.Errorf("test %d: user %s should have had permission to %s, err: %s",
-					i, test.user, method, err.Error())
+					i, test.user, r.Method(), err.Error())
 				break
 			} else if err == nil && !test.hasPermission {
 				t.Errorf("test %d: user %s should not have had permission to %s",
-					i, test.user, method)
+					i, test.user, r.Method())
 				break
 			}
 		}
