@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"testing"
 
@@ -38,7 +39,13 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-var testContext = NewContext()
+func newTestContext() *Context {
+	newContext := NewContext()
+	newContext.Certs = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
+	return newContext
+}
+
+var testContext = newTestContext()
 
 // startTestServer starts a test server. The server will be initialized with an
 // in-memory engine and will execute a split at key "m" so that

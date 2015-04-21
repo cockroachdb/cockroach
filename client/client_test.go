@@ -588,7 +588,7 @@ func ExampleKV_RunTransaction() {
 
 	// Insert all KV pairs inside a transaction.
 	putOpts := client.TransactionOptions{Name: "example put"}
-	err := kvClient.RunTransaction(&putOpts, func(txn *client.Txn) error {
+	err = kvClient.RunTransaction(&putOpts, func(txn *client.Txn) error {
 		for i := 0; i < numKVPairs; i++ {
 			txn.Prepare(client.PutCall(proto.Key(keys[i]), values[i]))
 		}

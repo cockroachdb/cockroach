@@ -1,68 +1,10 @@
-Certificate:
-    Data:
-        Version: 3 (0x2)
-        Serial Number: 1 (0x1)
-        Signature Algorithm: sha1WithRSAEncryption
-        Issuer: C=US, ST=New York, L=New York, O=Cockroach, CN=Test CA
-        Validity
-            Not Before: Aug  2 14:18:00 2014 GMT
-            Not After : Aug  2 14:18:00 2015 GMT
-        Subject: C=US, ST=New York, O=Cockroach, OU=test, CN=localhost
-        Subject Public Key Info:
-            Public Key Algorithm: rsaEncryption
-            RSA Public Key: (1024 bit)
-                Modulus (1024 bit):
-                    00:d3:fa:57:44:b1:bb:58:d4:de:43:ec:da:e7:c7:
-                    97:fe:78:4a:e8:fa:f0:18:fc:a7:69:93:7f:9f:85:
-                    23:57:cf:e8:19:ce:96:72:fc:29:0a:eb:30:9f:26:
-                    2d:71:ad:c3:85:08:17:00:a0:19:51:aa:56:5c:d0:
-                    92:39:c3:97:e5:fe:df:34:06:76:93:76:c9:7d:fa:
-                    35:08:83:8d:8b:3a:d1:65:bd:22:7f:87:b7:a5:3a:
-                    88:03:3c:f7:79:b3:23:45:84:40:21:e3:9e:cb:bf:
-                    d2:2c:30:f0:ff:b6:3f:b3:e1:dc:26:7c:28:7a:44:
-                    8c:44:2b:bb:46:6d:ec:3b:3d
-                Exponent: 65537 (0x10001)
-        X509v3 extensions:
-            X509v3 Basic Constraints: 
-                CA:FALSE
-            X509v3 Key Usage: 
-                Digital Signature, Non Repudiation, Key Encipherment
-            X509v3 Extended Key Usage: 
-                TLS Web Client Authentication, TLS Web Server Authentication
-            X509v3 Subject Key Identifier: 
-                CF:4C:10:ED:4D:55:04:94:A3:C0:19:5A:CA:2C:88:9F:89:9D:1B:36
-            X509v3 Authority Key Identifier: 
-                keyid:F2:73:FA:A3:73:30:8F:EA:89:05:4F:C3:15:E1:21:BB:A4:5A:55:AA
-                DirName:/C=US/ST=New York/L=New York/O=Cockroach/CN=Test CA
-                serial:81:DA:7E:69:EF:3E:94:4D
-
-            X509v3 Subject Alternative Name: 
-                IP Address:127.0.0.1
-    Signature Algorithm: sha1WithRSAEncryption
-        09:5e:29:02:3f:fd:d0:56:8b:01:e2:78:97:00:db:1b:99:b6:
-        43:9e:fc:1a:48:1c:c0:e7:3d:53:f2:7b:0c:cd:9e:c0:3d:1b:
-        fe:b8:bc:68:85:7f:4a:06:d1:7a:18:ad:a3:99:1d:2f:53:d3:
-        01:b8:f2:9c:ac:e5:f3:46:a4:74:d9:57:35:94:cb:76:a1:f2:
-        62:f4:06:ca:93:99:3b:dc:f3:ad:6f:75:6a:59:0d:0e:c4:96:
-        9c:0a:04:ac:95:9d:d1:02:c1:f7:50:d6:5f:da:63:ff:3e:5a:
-        2d:48:11:e1:d0:3a:9c:87:25:35:bb:f6:f2:15:be:d2:69:f9:
-        6d:d7
 -----BEGIN CERTIFICATE-----
-MIIDHzCCAoigAwIBAgIBATANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJVUzER
-MA8GA1UECBMITmV3IFlvcmsxETAPBgNVBAcTCE5ldyBZb3JrMRIwEAYDVQQKEwlD
-b2Nrcm9hY2gxEDAOBgNVBAMTB1Rlc3QgQ0EwHhcNMTQwODAyMTQxODAwWhcNMTUw
-ODAyMTQxODAwWjBXMQswCQYDVQQGEwJVUzERMA8GA1UECBMITmV3IFlvcmsxEjAQ
-BgNVBAoTCUNvY2tyb2FjaDENMAsGA1UECxMEdGVzdDESMBAGA1UEAxMJbG9jYWxo
-b3N0MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDT+ldEsbtY1N5D7Nrnx5f+
-eEro+vAY/Kdpk3+fhSNXz+gZzpZy/CkK6zCfJi1xrcOFCBcAoBlRqlZc0JI5w5fl
-/t80BnaTdsl9+jUIg42LOtFlvSJ/h7elOogDPPd5syNFhEAh457Lv9IsMPD/tj+z
-4dwmfCh6RIxEK7tGbew7PQIDAQABo4H4MIH1MAkGA1UdEwQCMAAwCwYDVR0PBAQD
-AgXgMB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATAdBgNVHQ4EFgQUz0wQ
-7U1VBJSjwBlayiyIn4mdGzYwgYsGA1UdIwSBgzCBgIAU8nP6o3Mwj+qJBU/DFeEh
-u6RaVaqhXaRbMFkxCzAJBgNVBAYTAlVTMREwDwYDVQQIEwhOZXcgWW9yazERMA8G
-A1UEBxMITmV3IFlvcmsxEjAQBgNVBAoTCUNvY2tyb2FjaDEQMA4GA1UEAxMHVGVz
-dCBDQYIJAIHafmnvPpRNMA8GA1UdEQQIMAaHBH8AAAEwDQYJKoZIhvcNAQEFBQAD
-gYEACV4pAj/90FaLAeJ4lwDbG5m2Q578GkgcwOc9U/J7DM2ewD0b/ri8aIV/SgbR
-ehito5kdL1PTAbjynKzl80akdNlXNZTLdqHyYvQGypOZO9zzrW91alkNDsSWnAoE
-rJWd0QLB91DWX9pj/z5aLUgR4dA6nIclNbv28hW+0mn5bdc=
+MIIBeDCCAR+gAwIBAgIQGAlz0pShpevt6ghv0hMXLzAKBggqhkjOPQQDAjAUMRIw
+EAYDVQQKEwlDb2Nrcm9hY2gwHhcNMTUwNDIxMTcyNTA5WhcNMTYwNDIwMTcyNTA5
+WjAUMRIwEAYDVQQKEwlDb2Nrcm9hY2gwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNC
+AAT4eXXHOZcfuacRPbxzT8jyN6Gaz/9+uwhQDZHTRgbZtwnFReUsFkBbM9PLsnNs
+GDnWbO+/7isCuc55d7yxwmYpo1MwUTAOBgNVHQ8BAf8EBAMCAOAwHQYDVR0lBBYw
+FAYIKwYBBQUHAwEGCCsGAQUFBwMCMA8GA1UdEwEB/wQFMAMCAQIwDwYDVR0RBAgw
+BocEfwAAATAKBggqhkjOPQQDAgNHADBEAiBxvxlN0Wr+PwRjL0ITuEU2gZbVugBq
+ey/tUGMsxfnYRAIgMjtdjYosLZ7NPtzo2K4GEASoH1Ea7cBX0eRJqzgFeEU=
 -----END CERTIFICATE-----

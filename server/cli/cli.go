@@ -72,6 +72,10 @@ var allCmds = &commander.Commander{
 		exterminateCmd,
 		quitCmd,
 
+		// Certificate commands.
+		mkCACertCmd,
+		mkNodeCertCmd,
+
 		// Key/value commands.
 		getCmd,
 		putCmd,

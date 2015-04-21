@@ -85,11 +85,8 @@ func (ts *TestServer) Start() error {
 	if ts.Addr == "" {
 		ts.Addr = "127.0.0.1:0"
 	}
-	if ts.CertDir == "" {
-		// Always load server certs. Not sure if this path is a good assumption though,
-		// we should be using embedded certs (see rpc/tls:LoadTestTLSConfig).
-		ts.CertDir = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
-	}
+	// Always load server certs. Not sure if this path is a good assumption though.
+	ts.CertDir = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
 
 	ctx := NewContext()
 	ctx.Addr = ts.Addr
