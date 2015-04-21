@@ -22,6 +22,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // testAddr is a fake net.Addr replacement for unittesting.
@@ -54,16 +56,16 @@ func TestPrefix(t *testing.T) {
 
 func TestSort(t *testing.T) {
 	infos := infoSlice{
-		{"a", 3.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"b", 1.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"c", 2.1, 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"d", 2.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
-		{"e", -1.0, 0, 0, 0, emptyAddr, emptyAddr, 0},
+		{"a", 3.0, 0, 0, 0, 0, 0, 0},
+		{"b", 1.0, 0, 0, 0, 0, 0, 0},
+		{"c", 2.1, 0, 0, 0, 0, 0, 0},
+		{"d", 2.0, 0, 0, 0, 0, 0, 0},
+		{"e", -1.0, 0, 0, 0, 0, 0, 0},
 	}
 
 	// Verify forward sort.
 	sort.Sort(infos)
-	last := &info{"last", -math.MaxFloat64, 0, 0, 0, emptyAddr, emptyAddr, 0}
+	last := &info{"last", -math.MaxFloat64, 0, 0, 0, 0, 0, 0}
 	for _, i := range infos {
 		if i.less(last) {
 			t.Errorf("info val %v not increasing", i.Val)
@@ -73,7 +75,7 @@ func TestSort(t *testing.T) {
 
 	// Verify reverse sort.
 	sort.Sort(sort.Reverse(infos))
-	last = &info{"last", math.MaxFloat64, 0, 0, 0, emptyAddr, emptyAddr, 0}
+	last = &info{"last", math.MaxFloat64, 0, 0, 0, 0, 0, 0}
 	for _, i := range infos {
 		if !i.less(last) {
 			t.Errorf("info val %v not decreasing", i.Val)
@@ -84,7 +86,7 @@ func TestSort(t *testing.T) {
 
 func TestExpired(t *testing.T) {
 	now := time.Now().UnixNano()
-	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, emptyAddr, emptyAddr, 0}
+	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, 0, 0, 0}
 	if i.expired(now) {
 		t.Error("premature expiration")
 	}
@@ -96,20 +98,24 @@ func TestExpired(t *testing.T) {
 func TestIsFresh(t *testing.T) {
 	const seq = 10
 	now := time.Now().UnixNano()
-	addr1 := testAddr("<test-addr1>")
-	addr2 := testAddr("<test-addr2>")
-	addr3 := testAddr("<test-addr3>")
-	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, addr1, addr2, seq}
-	if !i.isFresh(addr3, seq-1) {
+	node1 := proto.NodeID(1)
+	node2 := proto.NodeID(2)
+	node3 := proto.NodeID(3)
+	i := info{"a", float64(1), now, now + int64(time.Millisecond), 0, node1, node2, seq}
+	if !i.isFresh(node3, seq-1) {
 		t.Error("info should be fresh:", i)
 	}
-	if i.isFresh(addr3, seq+1) {
+	if i.isFresh(node3, seq+1) {
 		t.Error("info should not be fresh:", i)
 	}
-	if i.isFresh(addr1, seq-1) {
+	if i.isFresh(node1, seq-1) {
 		t.Error("info should not be fresh:", i)
 	}
-	if i.isFresh(addr2, seq-1) {
+	if i.isFresh(node2, seq-1) {
 		t.Error("info should not be fresh:", i)
+	}
+	// Using node 0 will always yield fresh data.
+	if !i.isFresh(0, 0) {
+		t.Error("info should be fresh from node0:", i)
 	}
 }

@@ -28,14 +28,18 @@ message Addr {
 
 // GossipRequest is the request struct passed with the Gossip RPC.
 message GossipRequest {
-  // Address of requesting node's server.
-  optional Addr addr = 1 [(gogoproto.nullable) = false];
-  // Local address of client on requesting node.
-  optional Addr l_addr = 2 [(gogoproto.nullable) = false];
+  // Requesting node's ID.
+  optional int32 node_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  // Address of the requesting client.
+  optional Addr addr = 2 [(gogoproto.nullable) = false];
+  // Local address of client on requesting node (this is a kludge to
+  // allow gossip to know when client connections are dropped).
+  optional Addr l_addr = 3 [(gogoproto.nullable) = false];
   // Maximum sequence number of gossip from this peer.
-  optional int64 max_seq = 3 [(gogoproto.nullable) = false];
+  optional int64 max_seq = 4 [(gogoproto.nullable) = false];
   // Reciprocal delta of new info since last gossip.
-  optional bytes delta = 4 [(gogoproto.nullable) = false];
+  optional bytes delta = 5 [(gogoproto.nullable) = false];
 }
 
 // GossipResponse is returned from the Gossip.Gossip RPC.

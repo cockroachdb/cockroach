@@ -112,8 +112,11 @@ type testContext struct {
 // testContext.Start initializes the test context with a single range covering the
 // entire keyspace.
 func (tc *testContext) Start(t *testing.T) {
+	if tc.stopper == nil {
+		tc.stopper = util.NewStopper()
+	}
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
+		rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), tc.stopper)
 		tc.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if tc.manualClock == nil {
@@ -127,9 +130,6 @@ func (tc *testContext) Start(t *testing.T) {
 	}
 	if tc.transport == nil {
 		tc.transport = multiraft.NewLocalRPCTransport()
-	}
-	if tc.stopper == nil {
-		tc.stopper = util.NewStopper()
 	}
 	tc.stopper.AddCloser(tc.transport)
 

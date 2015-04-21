@@ -42,8 +42,6 @@ const (
 	gossipGroupLimit = 100
 	// gossipInterval is the interval for gossiping storage-related info.
 	gossipInterval = 1 * time.Minute
-	// ttlNodeIDGossip is time-to-live for node ID -> address.
-	ttlNodeIDGossip = 0 * time.Second
 )
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -56,11 +54,11 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID     string                 // UUID for Cockroach cluster
-	Descriptor    storage.NodeDescriptor // Node ID, network/physical topology
-	storeConfig   storage.StoreConfig    // Store/Raft configuration.
-	gossip        *gossip.Gossip         // Nodes gossip cluster ID, node ID -> host:port
-	db            *client.KV             // KV DB client; used to access global id generators
+	ClusterID     string                // UUID for Cockroach cluster
+	Descriptor    gossip.NodeDescriptor // Node ID, network/physical topology
+	storeConfig   storage.StoreConfig   // Store/Raft configuration.
+	gossip        *gossip.Gossip        // Nodes gossip cluster ID, node ID -> host:port
+	db            *client.KV            // KV DB client; used to access global id generators
 	raftTransport multiraft.Transport
 	lSender       *kv.LocalSender // Local KV sender for access to node-local stores
 }
@@ -78,7 +76,7 @@ func allocateNodeID(db *client.KV) (proto.NodeID, error) {
 			Increment: 1,
 		},
 		Reply: iReply}); err != nil {
-		return 0, util.Errorf("unable to allocate node ID: %v", err)
+		return 0, util.Errorf("unable to allocate node ID: %s", err)
 	}
 	return proto.NodeID(iReply.NewValue), nil
 }
@@ -97,7 +95,7 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 			Increment: inc,
 		},
 		Reply: iReply}); err != nil {
-		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %v", inc, nodeID, err)
+		return 0, util.Errorf("unable to allocate %d store IDs for node %d: %s", inc, nodeID, err)
 	}
 	return proto.StoreID(iReply.NewValue - inc + 1), nil
 }
@@ -144,11 +142,11 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 	// Initialize node and store ids after the fact to account
 	// for use of node ID = 1 and store ID = 1.
 	if nodeID, err := allocateNodeID(localDB); nodeID != sIdent.NodeID || err != nil {
-		return nil, util.Errorf("expected to intialize node id allocator to %d, got %d: %v",
+		return nil, util.Errorf("expected to intialize node id allocator to %d, got %d: %s",
 			sIdent.NodeID, nodeID, err)
 	}
 	if storeID, err := allocateStoreIDs(sIdent.NodeID, 1, localDB); storeID != sIdent.StoreID || err != nil {
-		return nil, util.Errorf("expected to intialize store id allocator to %d, got %d: %v",
+		return nil, util.Errorf("expected to intialize store id allocator to %d, got %d: %s",
 			sIdent.StoreID, storeID, err)
 	}
 
@@ -204,16 +202,11 @@ func (n *Node) initNodeID(id proto.NodeID) {
 
 		log.Infof("new node allocated ID %d", n.Descriptor.NodeID)
 	}
-
+	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
-
-	nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
-	if err = n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
-		log.Fatalf("couldn't gossip descriptor for node %d: %v", n.Descriptor.NodeID, err)
+	if err = n.gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
-	// Setting the NodeID as the name of the gossip instance allows the
-	// DistSender to look up the own node's descriptor from the gossip network.
-	n.gossip.SetNodeID(n.Descriptor.NodeID)
 }
 
 // start starts the node by registering the storage instance for the
@@ -280,11 +273,14 @@ func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *ut
 	// to the gossip network is necessary to get the cluster ID.
 	n.connectGossip()
 
+	// If no NodeID has been assigned yet, allocate a new node ID by
+	// supplying 0 to initNodeID.
+	if n.Descriptor.NodeID == 0 {
+		n.initNodeID(0)
+	}
+
 	// Bootstrap any uninitialized stores asynchronously.
 	if bootstraps.Len() > 0 {
-		// If no NodeID has been assigned yet, allocate a new node ID by
-		// supplying 0 to initNodeID.
-		n.initNodeID(0)
 		go n.bootstrapStores(bootstraps, stopper)
 	}
 
@@ -356,7 +352,7 @@ func (n *Node) connectGossip() {
 
 	val, err := n.gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil || val == nil {
-		log.Fatalf("unable to ascertain cluster ID from gossip network: %v", err)
+		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
 	}
 	gossipClusterID := val.(string)
 
@@ -367,14 +363,6 @@ func (n *Node) connectGossip() {
 			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
 	}
 	log.Infof("node connected via gossip and verified as part of cluster %q", gossipClusterID)
-
-	// Gossip node address keyed by node ID.
-	if n.Descriptor.NodeID != 0 {
-		nodeIDKey := gossip.MakeNodeIDKey(n.Descriptor.NodeID)
-		if err := n.gossip.AddInfo(nodeIDKey, &n.Descriptor, ttlNodeIDGossip); err != nil {
-			log.Errorf("couldn't gossip address for node %d: %v", n.Descriptor.NodeID, err)
-		}
-	}
 }
 
 // startGossip loops on a periodic ticker to gossip node-related

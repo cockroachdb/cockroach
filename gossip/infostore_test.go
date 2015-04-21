@@ -25,6 +25,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/proto"
 )
 
 // testAddr and emptyAddr are defined in info_test.go.
@@ -32,7 +34,7 @@ import (
 // TestRegisterGroup registers two groups and verifies operation of
 // belongsToGroup.
 func TestRegisterGroup(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 
 	groupA := newGroup("a", 1, MinGroup)
 	if is.registerGroup(groupA) != nil {
@@ -71,7 +73,7 @@ func TestRegisterGroup(t *testing.T) {
 // TestZeroDuration verifies that specifying a zero duration sets
 // TTLStamp to max int64.
 func TestZeroDuration(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	info := is.newInfo("a", float64(1), 0*time.Second)
 	if info.TTLStamp != math.MaxInt64 {
 		t.Errorf("expected zero duration to get max TTLStamp: %d", info.TTLStamp)
@@ -80,7 +82,7 @@ func TestZeroDuration(t *testing.T) {
 
 // TestNewInfo creates new info objects. Verify sequence increments.
 func TestNewInfo(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info2 := is.newInfo("a", float64(1), time.Second)
 	if info1.seq != info2.seq-1 {
@@ -91,7 +93,7 @@ func TestNewInfo(t *testing.T) {
 // TestInfoStoreGetInfo adds an info, and makes sure it can be fetched
 // via getInfo. Also, verifies a non-existent info can't be fetched.
 func TestInfoStoreGetInfo(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo("a", float64(1), time.Second)
 	if err := is.addInfo(i); err != nil {
 		t.Error(err)
@@ -113,7 +115,7 @@ func TestInfoStoreGetInfo(t *testing.T) {
 // Verify TTL is respected on info fetched by key
 // and group.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	i := is.newInfo("a", float64(1), time.Nanosecond)
 	if err := is.addInfo(i); err != nil {
 		t.Error(err)
@@ -127,7 +129,7 @@ func TestInfoStoreGetInfoTTL(t *testing.T) {
 // Add infos using same key, same and lesser timestamp; verify no
 // replacement.
 func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	if err := is.addInfo(info1); err != nil {
 		t.Error(err)
@@ -149,7 +151,7 @@ func TestAddInfoSameKeyLessThanEqualTimestamp(t *testing.T) {
 
 // Add infos using same key, same timestamp; verify no replacement.
 func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info2 := is.newInfo("a", float64(2), time.Second)
 	if err1, err2 := is.addInfo(info1), is.addInfo(info2); err1 != nil || err2 != nil {
@@ -160,7 +162,7 @@ func TestAddInfoSameKeyGreaterTimestamp(t *testing.T) {
 // Verify that adding two infos with different hops but same keys
 // always chooses the minimum hops.
 func TestAddInfoSameKeyDifferentHops(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	info1 := is.newInfo("a", float64(1), time.Second)
 	info1.Hops = 1
 	info2 := is.newInfo("a", float64(2), time.Second)
@@ -193,7 +195,7 @@ func TestAddInfoSameKeyDifferentHops(t *testing.T) {
 // verify ordering. Add an additional non-group info and fetch that as
 // well.
 func TestAddGroupInfos(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 
 	group := newGroup("a", 10, MinGroup)
 	if is.registerGroup(group) != nil {
@@ -268,7 +270,7 @@ func TestAddGroupInfos(t *testing.T) {
 // Verify infostore combination with overlapping group and non-group
 // infos.
 func TestCombine(t *testing.T) {
-	is1 := newInfoStore(emptyAddr)
+	is1 := newInfoStore(1, emptyAddr)
 
 	group1 := newGroup("a", 10, MinGroup)
 	group1Overlap := newGroup("b", 10, MinGroup)
@@ -287,7 +289,7 @@ func TestCombine(t *testing.T) {
 		t.Error("unable to add info1Overlap:", err)
 	}
 
-	is2 := newInfoStore(testAddr("peer"))
+	is2 := newInfoStore(2, testAddr("peer"))
 
 	group2 := newGroup("c", 10, MinGroup)
 	group2Overlap := newGroup("b", 10, MinGroup)
@@ -314,7 +316,7 @@ func TestCombine(t *testing.T) {
 	if len(infosA) != 2 || infosA[0].Key != "a.a" || infosA[1].Key != "a.b" {
 		t.Error("group a missing", infosA[0], infosA[1])
 	}
-	if infosA[0].peerAddr.String() != "<test-addr>" || infosA[1].peerAddr.String() != "<test-addr>" {
+	if infosA[0].peerID != 1 || infosA[1].peerID != 1 {
 		t.Error("infoA peer nodes not set properly", infosA[0], infosA[1])
 	}
 
@@ -322,7 +324,7 @@ func TestCombine(t *testing.T) {
 	if len(infosB) != 1 || infosB[0].Key != "b.a" || infosB[0].Val != info2Overlap.Val {
 		t.Error("group b missing", infosB)
 	}
-	if infosB[0].peerAddr.String() != "peer" {
+	if infosB[0].peerID != 2 {
 		t.Error("infoB peer node not set properly", infosB[0])
 	}
 
@@ -330,7 +332,7 @@ func TestCombine(t *testing.T) {
 	if len(infosC) != 2 || infosC[0].Key != "c.a" || infosC[1].Key != "c.b" {
 		t.Error("group c missing", infosC)
 	}
-	if infosC[0].peerAddr.String() != "peer" || infosC[1].peerAddr.String() != "peer" {
+	if infosC[0].peerID != 2 || infosC[1].peerID != 2 {
 		t.Error("infoC peer nodes not set properly", infosC[0], infosC[1])
 	}
 
@@ -350,7 +352,7 @@ func TestCombine(t *testing.T) {
 // Helper method creates an infostore with two groups with 10
 // infos each and 10 non-group infos.
 func createTestInfoStore(t *testing.T) *infoStore {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 
 	groupA := newGroup("a", 10, MinGroup)
 	groupB := newGroup("b", 10, MinGroup)
@@ -380,7 +382,7 @@ func TestInfoStoreDelta(t *testing.T) {
 
 	// Verify deltas with successive sequence numbers.
 	for i := 0; i < 10; i++ {
-		delta := is.delta(testAddr("<client-addr>"), int64(i*3))
+		delta := is.delta(2, int64(i*3))
 		infosA := delta.getGroupInfos("a")
 		infosB := delta.getGroupInfos("b")
 		if len(infosA) != 10-i || len(infosB) != 10-i {
@@ -407,7 +409,7 @@ func TestInfoStoreDelta(t *testing.T) {
 		}
 	}
 
-	if delta := is.delta(emptyAddr, int64(30)); delta != nil {
+	if delta := is.delta(2, int64(30)); delta != nil {
 		t.Error("fetching delta of infostore at maximum sequence number should return nil")
 	}
 }
@@ -415,71 +417,71 @@ func TestInfoStoreDelta(t *testing.T) {
 // TestInfoStoreDistant verifies selection of infos from store with
 // Hops > maxHops.
 func TestInfoStoreDistant(t *testing.T) {
-	addrs := []testAddr{
-		"<addr1>",
-		"<addr2>",
-		"<addr3>",
+	nodes := []proto.NodeID{
+		proto.NodeID(1),
+		proto.NodeID(2),
+		proto.NodeID(3),
 	}
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	// Add info from each address, with hop count equal to index+1.
-	for i := 0; i < len(addrs); i++ {
+	for i := 0; i < len(nodes); i++ {
 		inf := is.newInfo(fmt.Sprintf("b.%d", i), float64(i), time.Second)
 		inf.Hops = uint32(i + 1)
-		inf.NodeAddr = addrs[i]
+		inf.NodeID = nodes[i]
 		is.addInfo(inf)
 	}
 
-	for i := 0; i < len(addrs); i++ {
-		addrs := is.distant(uint32(i))
-		if addrs.len() != 3-i {
-			t.Errorf("%d addresses (not %d) should be over maxHops = %d", 3-i, addrs.len(), i)
+	for i := 0; i < len(nodes); i++ {
+		nodes := is.distant(uint32(i))
+		if nodes.len() != 3-i {
+			t.Errorf("%d nodes (not %d) should be over maxHops = %d", 3-i, nodes.len(), i)
 		}
 	}
 }
 
-// TestLeastUseful verifies that the least-contributing peer address
+// TestLeastUseful verifies that the least-contributing peer node
 // can be determined.
 func TestLeastUseful(t *testing.T) {
-	addrs := []testAddr{
-		"<addr1>",
-		"<addr2>",
+	nodes := []proto.NodeID{
+		proto.NodeID(1),
+		proto.NodeID(2),
 	}
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 
-	set := newAddrSet(3)
-	if is.leastUseful(set) != nil {
-		t.Error("not expecting an address from an empty set")
+	set := newNodeSet(3)
+	if is.leastUseful(set) != 0 {
+		t.Error("not expecting a node from an empty set")
 	}
 
 	inf1 := is.newInfo("a1", float64(1), time.Second)
-	inf1.peerAddr = addrs[0]
+	inf1.peerID = 1
 	is.addInfo(inf1)
-	if is.leastUseful(set) != nil {
-		t.Error("not expecting an address from an empty set")
+	if is.leastUseful(set) != 0 {
+		t.Error("not expecting a node from an empty set")
 	}
 
-	set.addAddr(addrs[0])
-	if is.leastUseful(set) != addrs[0] {
-		t.Error("expecting addrs[0] as least useful")
+	set.addNode(nodes[0])
+	if is.leastUseful(set) != nodes[0] {
+		t.Error("expecting nodes[0] as least useful")
 	}
 
 	inf2 := is.newInfo("a2", float64(2), time.Second)
-	inf2.peerAddr = addrs[0]
+	inf2.peerID = 1
 	is.addInfo(inf2)
-	if is.leastUseful(set) != addrs[0] {
-		t.Error("expecting addrs[0] as least useful")
+	if is.leastUseful(set) != nodes[0] {
+		t.Error("expecting nodes[0] as least useful")
 	}
 
-	set.addAddr(addrs[1])
-	if is.leastUseful(set) != addrs[1] {
-		t.Error("expecting addrs[1] as least useful")
+	set.addNode(nodes[1])
+	if is.leastUseful(set) != nodes[1] {
+		t.Error("expecting nodes[1] as least useful")
 	}
 
 	inf3 := is.newInfo("a3", float64(3), time.Second)
-	inf3.peerAddr = addrs[1]
+	inf3.peerID = 2
 	is.addInfo(inf3)
-	if is.leastUseful(set) != addrs[1] {
-		t.Error("expecting addrs[1] as least useful")
+	if is.leastUseful(set) != nodes[1] {
+		t.Error("expecting nodes[1] as least useful")
 	}
 }
 
@@ -503,7 +505,7 @@ func (cr *callbackRecord) Keys() []string {
 }
 
 func TestCallbacks(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	wg := &sync.WaitGroup{}
 	cb1 := callbackRecord{wg: wg}
 	cb2 := callbackRecord{wg: wg}
@@ -571,7 +573,7 @@ func TestCallbacks(t *testing.T) {
 // registered if there are items which match its regexp in the
 // infostore.
 func TestRegisterCallback(t *testing.T) {
-	is := newInfoStore(emptyAddr)
+	is := newInfoStore(1, emptyAddr)
 	wg := &sync.WaitGroup{}
 	cb := callbackRecord{wg: wg}
 

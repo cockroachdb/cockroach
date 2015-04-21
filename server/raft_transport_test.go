@@ -40,7 +40,7 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 }
 
 func TestSendAndReceive(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), nil)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses
@@ -79,7 +79,7 @@ func TestSendAndReceive(t *testing.T) {
 			}
 
 			if err := g.AddInfo(gossip.MakeNodeIDKey(protoNodeID),
-				&storage.NodeDescriptor{Address: server.Addr()},
+				&gossip.NodeDescriptor{Address: server.Addr()},
 				time.Hour); err != nil {
 				t.Fatal(err)
 			}

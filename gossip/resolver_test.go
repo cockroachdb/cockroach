@@ -17,7 +17,11 @@
 
 package gossip
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/util"
+)
 
 func TestParseResolverSpec(t *testing.T) {
 	testCases := []struct {
@@ -28,7 +32,7 @@ func TestParseResolverSpec(t *testing.T) {
 	}{
 		// Ports are not checked at parsing time. They are at GetAddress time though.
 		{"127.0.0.1:8080", true, "tcp", "127.0.0.1:8080"},
-		{":8080", true, "tcp", ":8080"},
+		{":8080", true, "tcp", util.EnsureHost(":8080")},
 		{"127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"tcp=127.0.0.1", true, "tcp", "127.0.0.1"},
 		{"lb=127.0.0.1", true, "lb", "127.0.0.1"},
@@ -46,10 +50,10 @@ func TestParseResolverSpec(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if resolver.ResolverType != tc.resolverType {
+		if resolver.Type() != tc.resolverType {
 			t.Errorf("#%d: expected resolverType=%s, got %+v", tcNum, tc.resolverType, resolver)
 		}
-		if resolver.Address != tc.resolverAddress {
+		if resolver.Addr() != tc.resolverAddress {
 			t.Errorf("#%d: expected resolverAddress=%s, got %+v", tcNum, tc.resolverAddress, resolver)
 		}
 	}
@@ -57,25 +61,27 @@ func TestParseResolverSpec(t *testing.T) {
 
 func TestGetAddress(t *testing.T) {
 	testCases := []struct {
-		resolverType    string
-		resolverAddress string
-		success         bool
-		oneShot         bool
-		addressType     string
-		addressValue    string
+		resolverSpec string
+		success      bool
+		oneShot      bool
+		addressType  string
+		addressValue string
 	}{
-		{"tcp", "127.0.0.1:8080", true, true, "tcp", "127.0.0.1:8080"},
-		{"tcp", "127.0.0.1", false, false, "", ""},
-		{"tcp", "localhost:80", true, true, "tcp", "localhost:80"},
+		{"tcp=127.0.0.1:8080", true, true, "tcp", "127.0.0.1:8080"},
+		{"tcp=127.0.0.1", false, false, "", ""},
+		{"tcp=localhost:80", true, true, "tcp", "localhost:80"},
 		// We should test unresolvable dns too, but this would be fragile.
-		{"lb", "localhost:80", true, false, "tcp", "localhost:80"},
-		{"lb", "127.0.0.1:80", true, false, "tcp", "127.0.0.1:80"},
-		{"lb", "127.0.0.1", false, false, "", ""},
-		{"unix", "/tmp/foo", true, true, "unix", "/tmp/foo"},
+		{"lb=localhost:80", true, false, "tcp", "localhost:80"},
+		{"lb=127.0.0.1:80", true, false, "tcp", "127.0.0.1:80"},
+		{"lb=127.0.0.1", false, false, "", ""},
+		{"unix=/tmp/foo", true, true, "unix", "/tmp/foo"},
 	}
 
 	for tcNum, tc := range testCases {
-		resolver := &Resolver{tc.resolverType, tc.resolverAddress, false}
+		resolver, err := NewResolver(tc.resolverSpec)
+		if err != nil {
+			t.Fatal(err)
+		}
 		address, err := resolver.GetAddress()
 		if (err == nil) != tc.success {
 			t.Errorf("#%d: expected success=%t, got err=%v", tcNum, tc.success, err)
@@ -83,7 +89,7 @@ func TestGetAddress(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if resolver.IsExhausted != tc.oneShot {
+		if resolver.IsExhausted() != tc.oneShot {
 			t.Errorf("#%d: expected exhausted resolver=%t, but is: %+v", tcNum, tc.oneShot, resolver)
 		}
 		if address.Network() != tc.addressType {

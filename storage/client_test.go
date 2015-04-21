@@ -60,9 +60,9 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool) (*storage.Store, *util.Stopper) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	stopper := util.NewStopper()
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
+	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock, false, stopper)
 	db := client.NewKV(nil, sender)
@@ -123,7 +123,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
 	if m.gossip == nil {
-		rpcContext := rpc.NewContext(m.clock, rpc.LoadInsecureTLSConfig())
+		rpcContext := rpc.NewContext(m.clock, rpc.LoadInsecureTLSConfig(), nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if m.transport == nil {

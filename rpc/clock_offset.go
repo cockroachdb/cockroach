@@ -119,6 +119,9 @@ func newRemoteClockMonitor(clock *hlc.Clock) *RemoteClockMonitor {
 // monitorInterval to be too large, else we might end up relying on old
 // information.
 func (r *RemoteClockMonitor) UpdateOffset(addr string, offset proto.RemoteOffset) {
+	if r == nil {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	oldOffset, ok := r.offsets[addr]

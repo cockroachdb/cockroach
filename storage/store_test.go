@@ -91,8 +91,8 @@ func (db *testSender) Send(call client.Call) {
 // and a stopper. The caller is responsible for stopping the stopper
 // upon completion.
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig())
 	stopper := util.NewStopper()
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)
 	clock := hlc.NewClock(manual.UnixNano)
