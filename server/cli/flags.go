@@ -78,6 +78,11 @@ func initFlags(ctx *server.Context) {
 
 	flag.Int64Var(&ctx.CacheSize, "cache-size", ctx.CacheSize, "total size in bytes for "+
 		"caches, shared evenly if there are multiple storage devices.")
+
+	flag.DurationVar(&ctx.ScanInterval, "scan-interval", ctx.ScanInterval, "specify "+
+		"--scan_interval to adjust the target for the duration of a single scan "+
+		"through a store's ranges. The scan is slowed as necessary to approximately"+
+		"achieve this duration.")
 }
 
 func init() {

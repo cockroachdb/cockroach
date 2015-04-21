@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"golang.org/x/net/context"
 )
 
 func TestLocalSenderAddStore(t *testing.T) {
@@ -123,16 +124,18 @@ func splitTestRange(store *storage.Store, key, splitKey proto.Key, t *testing.T)
 }
 
 func TestLocalSenderLookupReplica(t *testing.T) {
+	ctx := storage.TestStoreContext
 	manualClock := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manualClock.UnixNano)
+	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
+	ctx.Context = context.Background()
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()
 	stopper := util.NewStopper()
 	defer stopper.Stop()
-	db := client.NewKV(nil, NewTxnCoordSender(ls, clock, false, stopper))
-	transport := multiraft.NewLocalRPCTransport()
-	defer transport.Close()
-	store := storage.NewStore(clock, eng, db, nil, transport, storage.TestStoreConfig)
+	ctx.DB = client.NewKV(nil, NewTxnCoordSender(ls, ctx.Clock, false, stopper))
+	ctx.Transport = multiraft.NewLocalRPCTransport()
+	defer ctx.Transport.Close()
+	store := storage.NewStore(ctx, eng)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +166,9 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	}
 	for i, rng := range ranges {
 		e[i] = engine.NewInMem(proto.Attributes{}, 1<<20)
-		transport := multiraft.NewLocalRPCTransport()
-		defer transport.Close()
-		s[i] = storage.NewStore(clock, e[i], db, nil, transport, storage.TestStoreConfig)
+		ctx.Transport = multiraft.NewLocalRPCTransport()
+		defer ctx.Transport.Close()
+		s[i] = storage.NewStore(ctx, e[i])
 		s[i].Ident.StoreID = rng.storeID
 		if err := s[i].Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: rng.storeID}, stopper); err != nil {
 			t.Fatal(err)

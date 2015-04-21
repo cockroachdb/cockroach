@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -53,13 +54,10 @@ const (
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	ClusterID     string                // UUID for Cockroach cluster
-	Descriptor    gossip.NodeDescriptor // Node ID, network/physical topology
-	storeConfig   storage.StoreConfig   // Store/Raft configuration.
-	gossip        *gossip.Gossip        // Nodes gossip cluster ID, node ID -> host:port
-	db            *client.KV            // KV DB client; used to access global id generators
-	raftTransport multiraft.Transport
-	lSender       *kv.LocalSender // Local KV sender for access to node-local stores
+	ClusterID  string                // UUID for Cockroach cluster
+	Descriptor gossip.NodeDescriptor // Node ID, network/physical topology
+	ctx        storage.StoreContext  // Context to use and pass to stores
+	lSender    *kv.LocalSender       // Local KV sender for access to node-local stores
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -111,13 +109,18 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 		NodeID:    1,
 		StoreID:   1,
 	}
-	clock := hlc.NewClock(hlc.UnixNano)
+	ctx := storage.StoreContext{}
+	ctx.Context = context.Background()
+	ctx.ScanInterval = 10 * time.Minute
+	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, clock, false, stopper))
+	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
+	ctx.DB = localDB
+	ctx.Transport = multiraft.NewLocalRPCTransport()
 	// The bootstrapping store will not connect to other nodes so its StoreConfig
 	// doesn't really matter.
-	s := storage.NewStore(clock, eng, localDB, nil, multiraft.NewLocalRPCTransport(), storage.StoreConfig{})
+	s := storage.NewStore(ctx, eng)
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {
@@ -153,14 +156,10 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 }
 
 // NewNode returns a new instance of Node.
-func NewNode(db *client.KV, gossip *gossip.Gossip, storeConfig storage.StoreConfig,
-	raftTransport multiraft.Transport) *Node {
+func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		storeConfig:   storeConfig,
-		gossip:        gossip,
-		db:            db,
-		raftTransport: raftTransport,
-		lSender:       kv.NewLocalSender(),
+		ctx:     ctx,
+		lSender: kv.NewLocalSender(),
 	}
 }
 
@@ -191,7 +190,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	var err error
 	if id == 0 {
-		id, err = allocateNodeID(n.db)
+		id, err = allocateNodeID(n.ctx.DB)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -203,7 +202,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 	}
 	// Gossip the node descriptor to make this node addressable by node ID.
 	n.Descriptor.NodeID = id
-	if err = n.gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
+	if err = n.ctx.Gossip.SetNodeDescriptor(&n.Descriptor); err != nil {
 		log.Fatalf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 }
@@ -211,15 +210,15 @@ func (n *Node) initNodeID(id proto.NodeID) {
 // start starts the node by registering the storage instance for the
 // RPC service "Node" and initializing stores for each specified
 // engine. Launches periodic store gossiping in a goroutine.
-func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
-	engines []engine.Engine, attrs proto.Attributes, stopper *util.Stopper) error {
+func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
+	attrs proto.Attributes, stopper *util.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
 	if err := rpcServer.RegisterName("Node", n); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 
 	// Initialize stores, including bootstrapping new ones.
-	if err := n.initStores(clock, engines, stopper); err != nil {
+	if err := n.initStores(engines, stopper); err != nil {
 		return err
 	}
 	n.startGossip(stopper)
@@ -233,15 +232,14 @@ func (n *Node) start(rpcServer *rpc.Server, clock *hlc.Clock,
 // the Store doesn't yet have a valid ident, it's added to the
 // bootstraps list for initialization once the cluster and node IDs
 // have been determined.
-func (n *Node) initStores(clock *hlc.Clock, engines []engine.Engine, stopper *util.Stopper) error {
+func (n *Node) initStores(engines []engine.Engine, stopper *util.Stopper) error {
 	bootstraps := list.New()
 
 	if len(engines) == 0 {
 		return util.Error("no engines")
 	}
 	for _, e := range engines {
-		// TODO(bdarnell): make StoreConfig configurable.
-		s := storage.NewStore(clock, e, n.db, n.gossip, n.raftTransport, n.storeConfig)
+		s := storage.NewStore(n.ctx, e)
 		// Initialize each store in turn, handling un-bootstrapped errors by
 		// adding the store to the bootstraps list.
 		if err := s.Start(stopper); err != nil {
@@ -316,7 +314,7 @@ func (n *Node) bootstrapStores(bootstraps *list.List, stopper *util.Stopper) {
 	// Bootstrap all waiting stores by allocating a new store id for
 	// each and invoking store.Bootstrap() to persist.
 	inc := int64(bootstraps.Len())
-	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.db)
+	firstID, err := allocateStoreIDs(n.Descriptor.NodeID, inc, n.ctx.DB)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -347,9 +345,9 @@ func (n *Node) connectGossip() {
 	log.Infof("connecting to gossip network to verify cluster ID...")
 	// No timeout or stop condition is needed here. Log statements should be
 	// sufficient for diagnosing this type of condition.
-	<-n.gossip.Connected
+	<-n.ctx.Gossip.Connected
 
-	val, err := n.gossip.GetInfo(gossip.KeyClusterID)
+	val, err := n.ctx.Gossip.GetInfo(gossip.KeyClusterID)
 	if err != nil || val == nil {
 		log.Fatalf("unable to ascertain cluster ID from gossip network: %s", err)
 	}

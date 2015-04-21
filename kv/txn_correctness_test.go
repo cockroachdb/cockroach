@@ -50,7 +50,7 @@ func setCorrectnessRetryOptions(lSender *retryableLocalSender) {
 	}
 
 	lSender.VisitStores(func(s *storage.Store) error {
-		s.RetryOpts = client.DefaultTxnRetryOptions
+		s.SetRangeRetryOptions(client.DefaultTxnRetryOptions)
 		return nil
 	})
 }

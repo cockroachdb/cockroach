@@ -62,14 +62,16 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	bootstrap bool) (*storage.Store, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	ctx := storage.TestStoreContext
+	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock, false, stopper)
-	db := client.NewKV(nil, sender)
-	db.User = storage.UserRoot
+	ctx.Clock = clock
+	ctx.DB = client.NewKV(nil, sender)
+	ctx.DB.User = storage.UserRoot
+	ctx.Transport = multiraft.NewLocalRPCTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(clock, eng, db, g, multiraft.NewLocalRPCTransport(),
-		storage.TestStoreConfig)
+	store := storage.NewStore(ctx, eng)
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
@@ -162,6 +164,15 @@ func (m *multiTestContext) Stop() {
 	}
 }
 
+func (m *multiTestContext) makeContext() storage.StoreContext {
+	ctx := storage.TestStoreContext
+	ctx.Clock = m.clock
+	ctx.DB = m.db
+	ctx.Gossip = m.gossip
+	ctx.Transport = m.transport
+	return ctx
+}
+
 // AddStore creates a new store on the same Transport but doesn't create any ranges.
 func (m *multiTestContext) addStore(t *testing.T) {
 	idx := len(m.stores)
@@ -182,7 +193,8 @@ func (m *multiTestContext) addStore(t *testing.T) {
 	}
 
 	stopper := util.NewStopper()
-	store := storage.NewStore(m.clock, eng, m.db, m.gossip, m.transport, storage.TestStoreConfig)
+	ctx := m.makeContext()
+	store := storage.NewStore(ctx, eng)
 	if needBootstrap {
 		err := store.Bootstrap(proto.StoreIdent{
 			NodeID:  proto.NodeID(idx + 1),
@@ -218,8 +230,9 @@ func (m *multiTestContext) stopStore(i int) {
 // restartStore restarts a store previously stopped with StopStore.
 func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = util.NewStopper()
-	m.stores[i] = storage.NewStore(m.clock, m.engines[i], m.db, m.gossip, m.transport,
-		storage.TestStoreConfig)
+
+	ctx := m.makeContext()
+	m.stores[i] = storage.NewStore(ctx, m.engines[i])
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}

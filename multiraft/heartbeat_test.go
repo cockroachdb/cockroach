@@ -31,10 +31,6 @@ import (
 // until either the given conditional returns true, the channel is closed or a
 // read on the channel times out.
 func processEventsUntil(ch <-chan *interceptMessage, stopper *util.Stopper, f func(*RaftMessageRequest) bool) {
-	if stopper == nil {
-		// Just to avoid listening on a nil channel below.
-		stopper = util.NewStopper()
-	}
 	for {
 		select {
 		case e, ok := <-ch:

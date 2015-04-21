@@ -24,5 +24,6 @@ github.com/jteeuwen/go-bindata 7362d4b6b2ce6a7d3c28b523a6e40629f4d81116
 github.com/kisielk/errcheck eb516cb958915b69ad14384890b4d37bd910c9f3
 github.com/kisielk/gotool d678387370a2eb9b5b0a33218bc8c9d8de15b6be
 github.com/robfig/glock 78c45da050a4d993d12ad07e8ddb10a4891ac701
+golang.org/x/net 169f42267807fe93f4a4b0150583e410aefafe4e
 golang.org/x/tools 4744be3abc70249546ce31c32fa9b5a5e96b5ad1
 gopkg.in/yaml.v1 9f9df34309c04878acc86042b16630b0f696e1de
