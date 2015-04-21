@@ -300,15 +300,11 @@ type StoreContext struct {
 	ScanInterval time.Duration
 }
 
-// Valid returns true if the StoreContext appears correctly populated.
+// Valid returns true if the StoreContext is populated correctly.
 func (sc *StoreContext) Valid() bool {
-	// Gossip is allowed to be nil for testing purposes.
-	// KV as well.
-	// TODO(tschottdorf) change the above two things in those tests.
-	return sc.Clock != nil &&
+	return sc.Clock != nil && sc.DB != nil && sc.Gossip != nil &&
 		sc.Transport != nil && sc.RaftTickInterval != 0 &&
 		sc.RaftHeartbeatIntervalTicks > 0 && sc.RaftElectionTimeoutTicks > 0
-
 }
 
 // setDefaults initializes unset fields in StoreConfig to values
@@ -324,23 +320,24 @@ func (sc *StoreContext) setDefaults() {
 	if sc.RaftElectionTimeoutTicks == 0 {
 		sc.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
 	}
-	// If the scanner runs in tests, we explode because often Gossip
-	// is nil.
-	// TODO(tschottdorf) update all tests so that they have a basic Gossip
-	// instance.
+	// A ScanInterval of 0 is not great in tests, especially in those
+	// that do not have a proper Gossip instance.
 	if sc.ScanInterval == 0 {
 		sc.ScanInterval = 10 * time.Minute
 	}
-
 }
 
 // NewStore returns a new instance of a store.
 func NewStore(ctx StoreContext, eng engine.Engine) *Store {
 	// TODO(tschottdorf) find better place to set these defaults.
 	ctx.setDefaults()
+
+	if !ctx.Valid() {
+		panic(fmt.Sprintf("invalid store configuration: %+v", &ctx))
+	}
+
 	sf := newStoreFinder(ctx.Gossip)
 	s := &Store{
-		// Make a copy - makes it easier for tests to reuse the Context.
 		ctx:         ctx,
 		StoreFinder: sf,
 		engine:      eng,
@@ -404,12 +401,6 @@ func (s *Store) IsStarted() bool {
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(stopper *util.Stopper) error {
-	// Validity check only here since some tests have a weird order of setting
-	// this up.
-	if !s.ctx.Valid() {
-		panic(fmt.Sprintf("invalid store configuration: %+v", &s.ctx))
-	}
-
 	s.stopper = stopper
 
 	if s.Ident.NodeID == 0 {

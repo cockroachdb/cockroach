@@ -152,7 +152,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 	}
 	s.gossip.Start(s.rpc, s.stopper)
 
-	if err := s.node.start(s.rpc, s.clock, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
+	if err := s.node.start(s.rpc, s.ctx.Engines, s.ctx.NodeAttributes, s.stopper); err != nil {
 		return err
 	}
 

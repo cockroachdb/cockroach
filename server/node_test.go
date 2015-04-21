@@ -78,8 +78,8 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
 func createAndStartTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *Node, *util.Stopper) {
-	rpcServer, clock, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(rpcServer, clock, engines, proto.Attributes{}, stopper); err != nil {
+	rpcServer, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	if err := node.start(rpcServer, engines, proto.Attributes{}, stopper); err != nil {
 		t.Fatal(err)
 	}
 	return rpcServer, node, stopper
@@ -250,8 +250,8 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	server, clock, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
-	if err := node.start(server, clock, engines, proto.Attributes{}, stopper); err == nil {
+	server, _, node, stopper := createTestNode(util.CreateTestAddr("tcp"), engines, nil, t)
+	if err := node.start(server, engines, proto.Attributes{}, stopper); err == nil {
 		t.Errorf("unexpected success")
 	}
 	stopper.Stop()

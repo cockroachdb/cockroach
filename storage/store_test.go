@@ -99,6 +99,8 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
+	// Dummy, replaced momentarily.
+	ctx.DB = &client.KV{}
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := NewStore(ctx, eng)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
@@ -120,6 +122,10 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
+	// Dummy Gossip.
+	ctx.Gossip = gossip.New(&rpc.Context{}, 10*time.Hour, nil)
+	// Dummy KV.
+	ctx.DB = &client.KV{}
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper := util.NewStopper()
@@ -172,6 +178,10 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	manual := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	ctx.Transport = multiraft.NewLocalRPCTransport()
+	// Dummy Gossip.
+	ctx.Gossip = gossip.New(&rpc.Context{}, 10*time.Hour, nil)
+	// Dummy KV.
+	ctx.DB = &client.KV{}
 	stopper := util.NewStopper()
 	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
