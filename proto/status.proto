@@ -19,6 +19,7 @@ syntax = "proto2";
 package cockroach.proto;
 option go_package = "proto";
 
+import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -27,25 +28,14 @@ option (gogoproto.unmarshaler_all) = true;
 
 // StoreStatus contains the stats needed to calculate the current status of a
 // store.
-// TODO(bram): add significantly more statistics.
 message StoreStatus {  
-  // The storeID for this store.
   optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
-  // The node id associated with this store.
   optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
-  // A list of the raft_ids (ranges) available through this store.
-  repeated int64 raft_ids = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftIDs"];
-
-  // Time based statistics.
-  // The last time this was updated, note that this is not the time it was 
-  // written to the DB, but when this measurement was taken.
-  optional int64 updated_at = 4 [(gogoproto.nullable) = false];
-  // The last time this node was started.
-  optional int64 started_at = 5 [(gogoproto.nullable) = false];
-
-  // Size based statistics.
-  // The number of bytes currently being used by this store.
-  optional int64 used_bytes = 6 [(gogoproto.nullable) = false];
-  // The maximum number of bytes available.
-  optional int64 max_bytes = 7 [(gogoproto.nullable) = false];
+  optional int32 range_count = 3 [(gogoproto.nullable) = false];
+  // The last time this store was started.
+  optional int64 started_at = 4 [(gogoproto.nullable) = false];
+  // The last time this status was updated.
+  optional int64 updated_at = 5 [(gogoproto.nullable) = false];
+  // All current aggregated stats are contained in MVCCStats.
+  optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
 }

@@ -324,3 +324,26 @@ message TimeSeriesData {
   // Datapoints representing one or more measurements taken from the variable.
   repeated TimeSeriesDatapoint datapoints = 3;
 }
+
+// MVCCStats tracks byte and instance counts for:
+//  - Live key/values (i.e. what a scan at current time will reveal;
+//    note that this includes intent keys and values, but not keys and
+//    values with most recent value deleted)
+//  - Key bytes (includes all keys, even those with most recent value deleted)
+//  - Value bytes (includes all versions)
+//  - Key count (count of all keys, including keys with deleted tombstones)
+//  - Value count (all versions, including deleted tombstones)
+//  - Intents (provisional values written during txns)
+message MVCCStats {
+  optional int64 live_bytes = 1 [(gogoproto.nullable) = false];
+  optional int64 key_bytes = 2 [(gogoproto.nullable) = false];
+  optional int64 val_bytes = 3 [(gogoproto.nullable) = false];
+  optional int64 intent_bytes = 4 [(gogoproto.nullable) = false];
+  optional int64 live_count = 5 [(gogoproto.nullable) = false];
+  optional int64 key_count = 6 [(gogoproto.nullable) = false];
+  optional int64 val_count = 7 [(gogoproto.nullable) = false];
+  optional int64 intent_count = 8 [(gogoproto.nullable) = false];
+  optional int64 intent_age = 9 [(gogoproto.nullable) = false];
+  optional int64 gc_bytes_age = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "GCBytesAge" ];
+  optional int64 last_update_nanos = 11 [(gogoproto.nullable) = false];
+}

@@ -77,16 +77,19 @@ type rangeScanner struct {
 	removed  chan *Range    // Ranges to remove from queues
 	count    int64          // Count of times through the scanning loop
 	stats    unsafe.Pointer // Latest store stats object; updated atomically
+	scanFn   func()         // Function called at each complete scan iteration
 }
 
-// newRangeScanner creates a new range scanner with the provided
-// loop interval, range iterator, and range queues.
-func newRangeScanner(interval time.Duration, iter rangeIterator) *rangeScanner {
+// newRangeScanner creates a new range scanner with the provided loop interval,
+// range iterator, and range queues.  If scanFn is not nil, after a complete
+// loop that function will be called.
+func newRangeScanner(interval time.Duration, iter rangeIterator, scanFn func()) *rangeScanner {
 	return &rangeScanner{
 		interval: interval,
 		iter:     iter,
 		removed:  make(chan *Range, 10),
 		stats:    unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
+		scanFn:   scanFn,
 	}
 }
 
@@ -167,6 +170,9 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 					// Store the most recent scan results in the scanner's stats.
 					atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
 					stats = &storeStats{}
+					if rs.scanFn != nil {
+						rs.scanFn()
+					}
 					log.V(6).Infof("reset range scan iteration")
 				}
 				stopper.FinishTask()
