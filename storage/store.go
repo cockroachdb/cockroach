@@ -306,7 +306,7 @@ func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.DB != nil && sc.Gossip != nil &&
 		sc.Context != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
-		sc.RaftElectionTimeoutTicks > 0
+		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0
 }
 
 // setDefaults initializes unset fields in StoreConfig to values
@@ -321,11 +321,6 @@ func (sc *StoreContext) setDefaults() {
 	}
 	if sc.RaftElectionTimeoutTicks == 0 {
 		sc.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
-	}
-	// A ScanInterval of 0 is not great in tests, especially in those
-	// that do not have a proper Gossip instance.
-	if sc.ScanInterval == 0 {
-		sc.ScanInterval = 10 * time.Minute
 	}
 }
 

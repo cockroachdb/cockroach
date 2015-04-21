@@ -114,6 +114,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 	ctx.Context = context.Background()
 	// Dummy gossip, not actually used.
 	ctx.Gossip = gossip.New(&rpc.Context{}, 10*time.Hour, nil)
+	ctx.ScanInterval = 10 * time.Minute
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()

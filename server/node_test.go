@@ -55,6 +55,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	stopper := util.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(ctx.Clock, tlsConfig, stopper)
+	ctx.ScanInterval = 10 * time.Hour
 	rpcServer := rpc.NewServer(addr, rpcContext)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
