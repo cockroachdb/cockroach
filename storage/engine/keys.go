@@ -21,7 +21,6 @@ package engine
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/util/encoding"
@@ -53,7 +52,7 @@ func StoreStatKey(stat proto.Key) proto.Key {
 // StoreStatusKey returns the key for accessing the store status for the
 // specified store ID.
 func StoreStatusKey(storeID int32) proto.Key {
-	return MakeKey(KeyStatusStorePrefix, proto.Key(strconv.FormatInt(int64(storeID), 10)))
+	return MakeKey(KeyStatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID)))
 }
 
 // MakeRangeIDKey creates a range-local key based on the range's
