@@ -88,7 +88,7 @@ func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
 // and been executed successfully. We retry here to eventually get
 // through with the same client command ID and be given the cached
 // response.
-func (s *HTTPSender) Send(call *Call) {
+func (s *HTTPSender) Send(call Call) {
 	retryOpts := HTTPRetryOptions
 	retryOpts.Tag = fmt.Sprintf("http %s", call.Method())
 
@@ -138,7 +138,7 @@ func (s *HTTPSender) Send(call *Call) {
 // type is set to application/x-protobuf.
 //
 // On success, the response body is unmarshalled into call.Reply.
-func (s *HTTPSender) post(call *Call) (*http.Response, error) {
+func (s *HTTPSender) post(call Call) (*http.Response, error) {
 	// Marshal the args into a request body.
 	body, err := gogoproto.Marshal(call.Args)
 	if err != nil {

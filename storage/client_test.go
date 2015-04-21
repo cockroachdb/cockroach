@@ -409,7 +409,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 	for i, test := range testCases {
 		left := &proto.RangeDescriptor{RaftID: int64(i * 2), StartKey: test.leftStart, EndKey: test.leftEnd}
 		right := &proto.RangeDescriptor{RaftID: int64(i*2 + 1), StartKey: test.rightStart, EndKey: test.rightEnd}
-		var calls []*client.Call
+		var calls []client.Call
 		if test.split {
 			var err error
 			if calls, err = storage.SplitRangeAddressing(left, right); err != nil {

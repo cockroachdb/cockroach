@@ -152,11 +152,7 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a call and invoke through sender.
-	call := &client.Call{
-		Args:  args,
-		Reply: reply,
-	}
-	s.sender.Send(call)
+	s.sender.Send(client.Call{Args: args, Reply: reply})
 
 	// Marshal the response.
 	body, contentType, err := util.MarshalResponse(r, reply, allowedEncodings)

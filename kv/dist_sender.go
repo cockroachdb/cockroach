@@ -468,7 +468,7 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor, method string,
 // Scan or DeleteRange requests), Send sends requests to the
 // individual ranges sequentially and combines the results
 // transparently.
-func (ds *DistSender) Send(call *client.Call) {
+func (ds *DistSender) Send(call client.Call) {
 
 	// TODO: Refactor this method into more manageable pieces.
 	// Verify permissions.

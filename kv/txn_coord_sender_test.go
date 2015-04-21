@@ -85,7 +85,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	putReq := createPutRequest(proto.Key("a"), []byte("value"), txn)
 
 	// Put request will create a new transaction.
-	if err := s.KV.Run(&client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+	if err := s.KV.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
 	}
 	txnMeta, ok := coord.txns[string(txn.ID)]
@@ -102,7 +102,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	coord.Lock()
 	s.Manual.Set(1)
 	coord.Unlock()
-	if err := s.KV.Run(&client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+	if err := s.KV.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(coord.txns) != 1 {
@@ -122,7 +122,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	s.KV.Sender().Send(&client.Call{
+	s.KV.Sender().Send(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -160,7 +160,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 
 	reply := &proto.PutResponse{}
-	s.KV.Sender().Send(&client.Call{
+	s.KV.Sender().Send(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -208,7 +208,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		// Trick the coordinator into using the EndKey for coordinator
 		// resolve keys interval cache.
 		putReq.EndKey = rng.end
-		if err := s.KV.Run(&client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
+		if err := s.KV.Run(client.Call{Args: putReq, Reply: &proto.PutResponse{}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -233,12 +233,12 @@ func TestTxnCoordSenderMultipleTxns(t *testing.T) {
 
 	txn1 := newTxn(s.KV, s.Clock, proto.Key("a"))
 	txn2 := newTxn(s.KV, s.Clock, proto.Key("b"))
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn1),
 		Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(proto.Key("b"), []byte("value"), txn2),
 		Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	coord.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.KV, s.Clock, proto.Key("a"))
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
@@ -293,7 +293,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(db *client.KV, txn *proto.Transaction) (bool, *proto.Transaction, error) {
 	hr := &proto.InternalHeartbeatTxnResponse{}
-	if err := db.Run(&client.Call{
+	if err := db.Run(client.Call{
 		Args: &proto.InternalHeartbeatTxnRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: txn.Key,
@@ -333,7 +333,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 	txn := newTxn(s.KV, s.Clock, proto.Key("a"))
 	pReply := &proto.PutResponse{}
 	key := proto.Key("a")
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
 		Reply: pReply}); err != nil {
 		t.Fatal(err)
@@ -342,7 +342,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	s.KV.Sender().Send(&client.Call{
+	s.KV.Sender().Send(client.Call{
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
@@ -369,7 +369,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	key := proto.Key("a")
 	txn := newTxn(s.KV, s.Clock, key)
 	txn.Priority = 1
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(key, []byte("value"), txn),
 		Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
@@ -386,7 +386,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		PusheeTxn: *txn,
 		Abort:     true,
 	}
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  pushArgs,
 		Reply: &proto.InternalPushTxnResponse{}}); err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 		},
 		Commit: true,
 	}
-	err := s.KV.Run(&client.Call{
+	err := s.KV.Run(client.Call{
 		Args:  etArgs,
 		Reply: &proto.EndTransactionResponse{}})
 	switch err.(type) {
@@ -427,7 +427,7 @@ func TestTxnCoordSenderGC(t *testing.T) {
 	coord.heartbeatInterval = 1 * time.Millisecond
 
 	txn := newTxn(s.KV, s.Clock, proto.Key("a"))
-	if err := s.KV.Run(&client.Call{
+	if err := s.KV.Run(client.Call{
 		Args:  createPutRequest(proto.Key("a"), []byte("value"), txn),
 		Reply: &proto.PutResponse{}}); err != nil {
 		t.Fatal(err)
@@ -451,16 +451,16 @@ func TestTxnCoordSenderGC(t *testing.T) {
 }
 
 type testSender struct {
-	handler func(call *client.Call)
+	handler func(call client.Call)
 }
 
-func newTestSender(handler func(*client.Call)) *testSender {
+func newTestSender(handler func(client.Call)) *testSender {
 	return &testSender{
 		handler: handler,
 	}
 }
 
-func (ts *testSender) Send(call *client.Call) {
+func (ts *testSender) Send(call client.Call) {
 	ts.handler(call)
 }
 
@@ -514,11 +514,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	for i, test := range testCases {
 		stopper := util.NewStopper()
 		defer stopper.Stop()
-		ts := NewTxnCoordSender(newTestSender(func(call *client.Call) {
+		ts := NewTxnCoordSender(newTestSender(func(call client.Call) {
 			call.Reply.Header().SetGoError(test.err)
 		}), clock, false, stopper)
 		reply := &proto.PutResponse{}
-		ts.Send(&client.Call{Args: testPutReq, Reply: reply})
+		ts.Send(client.Call{Args: testPutReq, Reply: reply})
 
 		if reflect.TypeOf(test.err) != reflect.TypeOf(reply.GoError()) {
 			t.Fatalf("%d: expected %T; got %T", i, test.err, reply.GoError())

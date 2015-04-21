@@ -26,21 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
-type metaAction func([]*client.Call, proto.Key, *proto.RangeDescriptor) []*client.Call
+type metaAction func([]client.Call, proto.Key, *proto.RangeDescriptor) []client.Call
 
-func putMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+func putMeta(calls []client.Call, key proto.Key, desc *proto.RangeDescriptor) []client.Call {
 	return append(calls, client.PutProtoCall(key, desc))
 }
 
-func delMeta(calls []*client.Call, key proto.Key, desc *proto.RangeDescriptor) []*client.Call {
+func delMeta(calls []client.Call, key proto.Key, desc *proto.RangeDescriptor) []client.Call {
 	return append(calls, client.DeleteCall(key))
 }
 
 // SplitRangeAddressing creates (or overwrites if necessary) the meta1
 // and meta2 range addressing records for the left and right ranges
 // caused by a split.
-func SplitRangeAddressing(left, right *proto.RangeDescriptor) ([]*client.Call, error) {
-	var calls []*client.Call
+func SplitRangeAddressing(left, right *proto.RangeDescriptor) ([]client.Call, error) {
+	var calls []client.Call
 	var err error
 	if calls, err = updateRangeAddressing(calls, left, putMeta); err != nil {
 		return nil, err
@@ -55,8 +55,8 @@ func SplitRangeAddressing(left, right *proto.RangeDescriptor) ([]*client.Call, e
 // addressing records caused by merging and updates the records for
 // the new merged range. Left is the range descriptor for the "left"
 // range before merging and merged describes the left to right merge.
-func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]*client.Call, error) {
-	var calls []*client.Call
+func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]client.Call, error) {
+	var calls []client.Call
 	var err error
 	if calls, err = updateRangeAddressing(calls, left, delMeta); err != nil {
 		return nil, err
@@ -81,8 +81,8 @@ func MergeRangeAddressing(left, merged *proto.RangeDescriptor) ([]*client.Call, 
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is KeyMin or meta2:
 //         - meta1(KeyMax)
-func updateRangeAddressing(calls []*client.Call, desc *proto.RangeDescriptor,
-	action metaAction) ([]*client.Call, error) {
+func updateRangeAddressing(calls []client.Call, desc *proto.RangeDescriptor,
+	action metaAction) ([]client.Call, error) {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, engine.KeyMeta1Prefix) ||
 		bytes.HasPrefix(desc.StartKey, engine.KeyMeta1Prefix) {

@@ -36,7 +36,7 @@ type TransactionOptions struct {
 type KVSender interface {
 	// Send invokes the Call.Method with Call.Args and sets the result
 	// in Call.Reply.
-	Send(*Call)
+	Send(Call)
 }
 
 // A Clock is an interface which provides the current time.
@@ -93,7 +93,7 @@ func (kv *KV) Sender() KVSender {
 
 // Run runs the specified calls synchronously in a single batch and
 // returns any errors.
-func (kv *KV) Run(calls ...*Call) (err error) {
+func (kv *KV) Run(calls ...Call) (err error) {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -130,7 +130,7 @@ func (kv *KV) Run(calls ...*Call) (err error) {
 		bArgs.Add(call.Args)
 		replies = append(replies, call.Reply)
 	}
-	err = kv.Run(&Call{Args: bArgs, Reply: bReply})
+	err = kv.Run(Call{Args: bArgs, Reply: bReply})
 
 	// Recover from protobuf merge panics.
 	defer func() {
@@ -195,7 +195,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) 
 			etReply := &proto.EndTransactionResponse{}
 			// Prepare and flush for end txn in order to execute entire txn in
 			// a single round trip if possible.
-			txn.Prepare(&Call{Args: etArgs, Reply: etReply})
+			txn.Prepare(Call{Args: etArgs, Reply: etReply})
 			err = txn.Flush()
 		}
 		if restartErr, ok := err.(proto.TransactionRestartError); ok {
@@ -211,7 +211,7 @@ func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) 
 	if err != nil && !txnSender.txnEnd {
 		etArgs := &proto.EndTransactionRequest{Commit: false}
 		etReply := &proto.EndTransactionResponse{}
-		txn.Run(&Call{Args: etArgs, Reply: etReply})
+		txn.Run(Call{Args: etArgs, Reply: etReply})
 		if etReply.Header().GoError() != nil {
 			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
 		}

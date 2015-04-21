@@ -70,7 +70,7 @@ type testSender struct {
 // tests in this package. Batches and transactions are not
 // supported. Since kv/ depends on storage/, we can't get access to a
 // coordinator sender from here.
-func (db *testSender) Send(call *client.Call) {
+func (db *testSender) Send(call client.Call) {
 	if call.Method() == proto.EndTransaction || call.Method() == proto.Batch {
 		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method()))
 		return

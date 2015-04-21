@@ -53,7 +53,7 @@ func TestKVDBCoverage(t *testing.T) {
 	putReq := &proto.PutRequest{Value: proto.Value{Bytes: value1}}
 	putReq.Key = key
 	putResp := &proto.PutResponse{}
-	if err := kvClient.Run(&client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
 		t.Fatalf("%s, %s", err, putResp.GoError())
 	}
 
@@ -61,7 +61,7 @@ func TestKVDBCoverage(t *testing.T) {
 	containsReq := &proto.ContainsRequest{}
 	containsReq.Key = key
 	containsResp := &proto.ContainsResponse{}
-	if err := kvClient.Run(&client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
 		t.Fatalf("%s, %s", err, containsResp.GoError())
 	}
 	if !containsResp.Exists {
@@ -75,7 +75,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 	cPutReq.Key = key
 	cPutResp := &proto.ConditionalPutResponse{}
-	if err := kvClient.Run(&client.Call{Args: cPutReq, Reply: cPutResp}); err != nil || cPutResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: cPutReq, Reply: cPutResp}); err != nil || cPutResp.Error != nil {
 		t.Fatalf("%s, %s", err, cPutResp.GoError())
 	}
 
@@ -83,7 +83,7 @@ func TestKVDBCoverage(t *testing.T) {
 	getReq := &proto.GetRequest{}
 	getReq.Key = key
 	getResp := &proto.GetResponse{}
-	if err := kvClient.Run(&client.Call{Args: getReq, Reply: getResp}); err != nil || getResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: getReq, Reply: getResp}); err != nil || getResp.Error != nil {
 		t.Fatalf("%s, %s", err, getResp.GoError())
 	}
 	if !bytes.Equal(getResp.Value.Bytes, value2) {
@@ -94,7 +94,7 @@ func TestKVDBCoverage(t *testing.T) {
 	incrReq := &proto.IncrementRequest{Increment: 10}
 	incrReq.Key = proto.Key("i")
 	incrResp := &proto.IncrementResponse{}
-	if err := kvClient.Run(&client.Call{Args: incrReq, Reply: incrResp}); err != nil || incrResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: incrReq, Reply: incrResp}); err != nil || incrResp.Error != nil {
 		t.Fatalf("%s, %s", err, incrResp.GoError())
 	}
 	if incrResp.NewValue != incrReq.Increment {
@@ -105,10 +105,10 @@ func TestKVDBCoverage(t *testing.T) {
 	delReq := &proto.DeleteRequest{}
 	delReq.Key = key
 	delResp := &proto.DeleteResponse{}
-	if err := kvClient.Run(&client.Call{Args: delReq, Reply: delResp}); err != nil || delResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: delReq, Reply: delResp}); err != nil || delResp.Error != nil {
 		t.Fatalf("%s, %s", err, delResp.GoError())
 	}
-	if err := kvClient.Run(&client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: containsReq, Reply: containsResp}); err != nil || containsResp.Error != nil {
 		t.Fatalf("%s, %s", err, containsResp.GoError())
 	}
 	if containsResp.Exists {
@@ -123,7 +123,7 @@ func TestKVDBCoverage(t *testing.T) {
 	}
 	for _, kv := range keyValues {
 		putReq.Key, putReq.Value = kv.Key, kv.Value
-		if err := kvClient.Run(&client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
+		if err := kvClient.Run(client.Call{Args: putReq, Reply: putResp}); err != nil || putResp.Error != nil {
 			t.Fatalf("%s, %s", err, putResp.GoError())
 		}
 	}
@@ -131,7 +131,7 @@ func TestKVDBCoverage(t *testing.T) {
 	scanReq.Key = proto.Key("a")
 	scanReq.EndKey = proto.Key("c").Next()
 	scanResp := &proto.ScanResponse{}
-	if err := kvClient.Run(&client.Call{Args: scanReq, Reply: scanResp}); err != nil || scanResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: scanReq, Reply: scanResp}); err != nil || scanResp.Error != nil {
 		t.Fatalf("%s, %s", err, scanResp.GoError())
 	}
 	if len(scanResp.Rows) != len(keyValues) {
@@ -147,7 +147,7 @@ func TestKVDBCoverage(t *testing.T) {
 	deleteRangeReq.Key = proto.Key("a")
 	deleteRangeReq.EndKey = proto.Key("c").Next()
 	deleteRangeResp := &proto.DeleteRangeResponse{}
-	if err := kvClient.Run(&client.Call{Args: deleteRangeReq, Reply: deleteRangeResp}); err != nil || deleteRangeResp.Error != nil {
+	if err := kvClient.Run(client.Call{Args: deleteRangeReq, Reply: deleteRangeResp}); err != nil || deleteRangeResp.Error != nil {
 		t.Fatalf("%s, %s", err, deleteRangeResp.GoError())
 	}
 	if deleteRangeResp.NumDeleted != int64(len(keyValues)) {
@@ -177,7 +177,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 	kvClient := createTestClient(addr)
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
-		err := kvClient.Run(&client.Call{Args: test.args, Reply: test.reply})
+		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})
 		if err == nil {
 			t.Errorf("%d: unexpected success calling %s", i, test.args.Method())
 		} else if err.Error() != "404 Not Found" {
@@ -198,7 +198,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 		// Make an EndTransaction request which would fail if not
 		// stripped. In this case, we set the start key to "bar" for a
 		// split of the default range; start key must be "" in this case.
-		return txn.Run(&client.Call{
+		return txn.Run(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: proto.Key("foo")},
 				Commit:        true,

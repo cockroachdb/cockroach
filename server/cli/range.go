@@ -109,7 +109,7 @@ func runSplitRange(cmd *commander.Command, args []string) {
 		SplitKey: splitKey,
 	}
 	resp := &proto.AdminSplitResponse{}
-	if err := kv.Run(&client.Call{Args: req, Reply: resp}); err != nil {
+	if err := kv.Run(client.Call{Args: req, Reply: resp}); err != nil {
 		fmt.Fprintf(os.Stderr, "split failed: %s\n", err)
 		os.Exit(1)
 	}
@@ -139,7 +139,7 @@ func runMergeRange(cmd *commander.Command, args []string) {
 		},
 	}
 	resp := &proto.AdminMergeResponse{}
-	if err := kv.Run(&client.Call{Args: req, Reply: resp}); err != nil {
+	if err := kv.Run(client.Call{Args: req, Reply: resp}); err != nil {
 		fmt.Fprintf(os.Stderr, "merge failed: %s\n", err)
 		os.Exit(1)
 	}

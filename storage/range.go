@@ -2038,7 +2038,7 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		}
 		// End the transaction manually, instead of letting RunTransaction
 		// loop do it, in order to provide a split trigger.
-		txn.Prepare(&client.Call{
+		txn.Prepare(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: args.Key},
 				Commit:        true,
@@ -2153,7 +2153,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
-		txn.Prepare(&client.Call{
+		txn.Prepare(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: args.Key},
 				Commit:        true,
@@ -2221,7 +2221,7 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a commit trigger.
-		txn.Prepare(&client.Call{
+		txn.Prepare(client.Call{
 			Args: &proto.EndTransactionRequest{
 				RequestHeader: proto.RequestHeader{Key: updatedDesc.StartKey},
 				Commit:        true,

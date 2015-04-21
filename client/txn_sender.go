@@ -51,7 +51,7 @@ func newTxnSender(wrapped KVSender, opts *TransactionOptions) *txnSender {
 // to attach txn message to each request and update it on each
 // response. In the event of a transaction abort, reset txn with a
 // minimum priority.
-func (ts *txnSender) Send(call *Call) {
+func (ts *txnSender) Send(call Call) {
 	// Send call through wrapped sender.
 	call.Args.Header().Txn = ts.txn
 	ts.wrapped.Send(call)

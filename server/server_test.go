@@ -275,7 +275,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
-	if err := s.node.db.Run(&client.Call{
+	if err := s.node.db.Run(client.Call{
 		Args: &proto.AdminSplitRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: proto.Key("m"),
@@ -286,7 +286,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	writes := []proto.Key{proto.Key("a"), proto.Key("z")}
-	get := &client.Call{
+	get := client.Call{
 		Args: &proto.GetRequest{
 			RequestHeader: proto.RequestHeader{
 				Key: writes[0],
@@ -300,7 +300,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	if err := get.Reply.Header().GoError(); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
-	var call *client.Call
+	var call client.Call
 	for i, k := range writes {
 		call = client.PutCall(k, k)
 		call.Args.Header().User = storage.UserRoot
@@ -325,7 +325,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		}
 	}
 
-	del := &client.Call{
+	del := client.Call{
 		Args: &proto.DeleteRangeRequest{
 			RequestHeader: proto.RequestHeader{
 				User:      storage.UserRoot,
@@ -384,7 +384,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
 		for _, sk := range tc.splitKeys {
-			if err := s.node.db.Run(&client.Call{
+			if err := s.node.db.Run(client.Call{
 				Args: &proto.AdminSplitRequest{
 					RequestHeader: proto.RequestHeader{
 						Key: sk,
@@ -396,7 +396,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			}
 		}
 
-		var call *client.Call
+		var call client.Call
 		for _, k := range tc.keys {
 			call = client.PutCall(k, k)
 			call.Args.Header().User = storage.UserRoot

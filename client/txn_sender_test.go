@@ -38,16 +38,16 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 }
 
 type testSender struct {
-	handler func(call *Call) // called after standard servicing
+	handler func(call Call) // called after standard servicing
 }
 
-func newTestSender(handler func(*Call)) *testSender {
+func newTestSender(handler func(Call)) *testSender {
 	return &testSender{
 		handler: handler,
 	}
 }
 
-func (ts *testSender) Send(call *Call) {
+func (ts *testSender) Send(call Call) {
 	header := call.Args.Header()
 	header.UserPriority = gogoproto.Int32(-1)
 	if header.Txn != nil && len(header.Txn.ID) == 0 {
@@ -87,7 +87,7 @@ func TestTxnSenderRequestTxnTimestamp(t *testing.T) {
 	}
 
 	testIdx := 0
-	ts := newTxnSender(newTestSender(func(call *Call) {
+	ts := newTxnSender(newTestSender(func(call Call) {
 		test := testCases[testIdx]
 		if !test.expRequestTS.Equal(call.Args.Header().Txn.Timestamp) {
 			t.Errorf("%d: expected ts %s got %s", testIdx, test.expRequestTS, call.Args.Header().Txn.Timestamp)
@@ -96,19 +96,19 @@ func TestTxnSenderRequestTxnTimestamp(t *testing.T) {
 	}), &TransactionOptions{})
 
 	for testIdx = range testCases {
-		ts.Send(&Call{Args: testPutReq, Reply: &proto.PutResponse{}})
+		ts.Send(Call{Args: testPutReq, Reply: &proto.PutResponse{}})
 	}
 }
 
 // TestTxnSenderResetTxnOnAbort verifies transaction is reset on abort.
 func TestTxnSenderResetTxnOnAbort(t *testing.T) {
-	ts := newTxnSender(newTestSender(func(call *Call) {
+	ts := newTxnSender(newTestSender(func(call Call) {
 		call.Reply.Header().Txn = gogoproto.Clone(call.Args.Header().Txn).(*proto.Transaction)
 		call.Reply.Header().SetGoError(&proto.TransactionAbortedError{})
 	}), &TransactionOptions{})
 
 	reply := &proto.PutResponse{}
-	ts.Send(&Call{Args: testPutReq, Reply: reply})
+	ts.Send(Call{Args: testPutReq, Reply: reply})
 
 	if len(ts.txn.ID) != 0 {
 		t.Errorf("expected txn to be cleared")
