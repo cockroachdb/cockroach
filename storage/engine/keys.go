@@ -446,9 +446,8 @@ var (
 	KeyRaftIDGenerator = MakeKey(KeySystemPrefix, proto.Key("raft-idgen"))
 	// KeySchemaPrefix specifies key prefixes for schema definitions.
 	KeySchemaPrefix = MakeKey(KeySystemPrefix, proto.Key("schema"))
-	// KeyStoreIDGeneratorPrefix specifies key prefixes for sequence
-	// generators, one per node, for store IDs.
-	KeyStoreIDGeneratorPrefix = MakeKey(KeySystemPrefix, proto.Key("store-idgen-"))
+	// KeyStoreIDGenerator is the global store ID generator sequence.
+	KeyStoreIDGenerator = MakeKey(KeySystemPrefix, proto.Key("store-idgen"))
 	// KeyRangeTreeRoot specifies the root range in the range tree.
 	KeyRangeTreeRoot = MakeKey(KeySystemPrefix, proto.Key("range-tree-root"))
 
