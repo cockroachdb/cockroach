@@ -20,6 +20,7 @@ syntax = "proto2";
 package cockroach.proto;
 option go_package = "proto";
 
+import "cockroach/proto/data.proto";
 import "gogoproto/gogo.proto";
 
 // RemoteOffset keeps track of this client's estimate of its offset from a
@@ -47,6 +48,8 @@ message PingRequest {
   optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
   // The address of the client.
   optional string addr = 3 [(gogoproto.nullable) = false];
+  // Time when the request was sent, measured with the HLC clock.
+  optional Timestamp client_timestamp = 4 [(gogoproto.nullable) = false];
 }
 
 // A PingResponse contains the echoed ping request string.
@@ -54,4 +57,6 @@ message PingResponse {
   // An echo of value sent with PingRequest.
   optional string pong = 1 [(gogoproto.nullable) = false];
   optional int64 server_time = 2 [(gogoproto.nullable) = false];
+  // Time when the request was handled, measured with HLC clock.
+  optional Timestamp server_timestamp = 3 [(gogoproto.nullable) = false];
 }

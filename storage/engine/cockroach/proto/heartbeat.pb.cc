@@ -58,10 +58,11 @@ void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(RemoteOffset));
   PingRequest_descriptor_ = file->message_type(1);
-  static const int PingRequest_offsets_[3] = {
+  static const int PingRequest_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingRequest, ping_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingRequest, offset_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingRequest, addr_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingRequest, client_timestamp_),
   };
   PingRequest_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -75,9 +76,10 @@ void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(PingRequest));
   PingResponse_descriptor_ = file->message_type(2);
-  static const int PingResponse_offsets_[2] = {
+  static const int PingResponse_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingResponse, pong_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingResponse, server_time_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(PingResponse, server_timestamp_),
   };
   PingResponse_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -127,17 +129,22 @@ void protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto() {
   already_here = true;
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
+  ::cockroach::proto::protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   ::gogoproto::protobuf_AddDesc_gogoproto_2fgogo_2eproto();
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
     "\n\037cockroach/proto/heartbeat.proto\022\017cockr"
-    "oach.proto\032\024gogoproto/gogo.proto\"T\n\014Remo"
-    "teOffset\022\024\n\006offset\030\001 \001(\003B\004\310\336\037\000\022\023\n\005error\030"
-    "\002 \001(\003B\004\310\336\037\000\022\031\n\013measured_at\030\003 \001(\003B\004\310\336\037\000\"j"
-    "\n\013PingRequest\022\022\n\004ping\030\001 \001(\tB\004\310\336\037\000\0223\n\006off"
-    "set\030\002 \001(\0132\035.cockroach.proto.RemoteOffset"
-    "B\004\310\336\037\000\022\022\n\004addr\030\003 \001(\tB\004\310\336\037\000\"=\n\014PingRespon"
-    "se\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013server_time\030\002 "
-    "\001(\003B\004\310\336\037\000B\007Z\005proto", 338);
+    "oach.proto\032\032cockroach/proto/data.proto\032\024"
+    "gogoproto/gogo.proto\"T\n\014RemoteOffset\022\024\n\006"
+    "offset\030\001 \001(\003B\004\310\336\037\000\022\023\n\005error\030\002 \001(\003B\004\310\336\037\000\022"
+    "\031\n\013measured_at\030\003 \001(\003B\004\310\336\037\000\"\246\001\n\013PingReque"
+    "st\022\022\n\004ping\030\001 \001(\tB\004\310\336\037\000\0223\n\006offset\030\002 \001(\0132\035"
+    ".cockroach.proto.RemoteOffsetB\004\310\336\037\000\022\022\n\004a"
+    "ddr\030\003 \001(\tB\004\310\336\037\000\022:\n\020client_timestamp\030\004 \001("
+    "\0132\032.cockroach.proto.TimestampB\004\310\336\037\000\"y\n\014P"
+    "ingResponse\022\022\n\004pong\030\001 \001(\tB\004\310\336\037\000\022\031\n\013serve"
+    "r_time\030\002 \001(\003B\004\310\336\037\000\022:\n\020server_timestamp\030\003"
+    " \001(\0132\032.cockroach.proto.TimestampB\004\310\336\037\000B\007"
+    "Z\005proto", 487);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/heartbeat.proto", &protobuf_RegisterTypes);
   RemoteOffset::default_instance_ = new RemoteOffset();
@@ -474,6 +481,7 @@ void RemoteOffset::Swap(RemoteOffset* other) {
 const int PingRequest::kPingFieldNumber;
 const int PingRequest::kOffsetFieldNumber;
 const int PingRequest::kAddrFieldNumber;
+const int PingRequest::kClientTimestampFieldNumber;
 #endif  // !_MSC_VER
 
 PingRequest::PingRequest()
@@ -484,6 +492,7 @@ PingRequest::PingRequest()
 
 void PingRequest::InitAsDefaultInstance() {
   offset_ = const_cast< ::cockroach::proto::RemoteOffset*>(&::cockroach::proto::RemoteOffset::default_instance());
+  client_timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
 }
 
 PingRequest::PingRequest(const PingRequest& from)
@@ -499,6 +508,7 @@ void PingRequest::SharedCtor() {
   ping_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   offset_ = NULL;
   addr_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  client_timestamp_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -516,6 +526,7 @@ void PingRequest::SharedDtor() {
   }
   if (this != default_instance_) {
     delete offset_;
+    delete client_timestamp_;
   }
 }
 
@@ -541,7 +552,7 @@ PingRequest* PingRequest::New() const {
 }
 
 void PingRequest::Clear() {
-  if (_has_bits_[0 / 32] & 7) {
+  if (_has_bits_[0 / 32] & 15) {
     if (has_ping()) {
       if (ping_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
         ping_->clear();
@@ -554,6 +565,9 @@ void PingRequest::Clear() {
       if (addr_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
         addr_->clear();
       }
+    }
+    if (has_client_timestamp()) {
+      if (client_timestamp_ != NULL) client_timestamp_->::cockroach::proto::Timestamp::Clear();
     }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
@@ -612,6 +626,19 @@ bool PingRequest::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(34)) goto parse_client_timestamp;
+        break;
+      }
+
+      // optional .cockroach.proto.Timestamp client_timestamp = 4;
+      case 4: {
+        if (tag == 34) {
+         parse_client_timestamp:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_client_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -667,6 +694,12 @@ void PingRequest::SerializeWithCachedSizes(
       3, this->addr(), output);
   }
 
+  // optional .cockroach.proto.Timestamp client_timestamp = 4;
+  if (has_client_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      4, this->client_timestamp(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -706,6 +739,13 @@ void PingRequest::SerializeWithCachedSizes(
         3, this->addr(), target);
   }
 
+  // optional .cockroach.proto.Timestamp client_timestamp = 4;
+  if (has_client_timestamp()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        4, this->client_timestamp(), target);
+  }
+
   if (!unknown_fields().empty()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -737,6 +777,13 @@ int PingRequest::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::StringSize(
           this->addr());
+    }
+
+    // optional .cockroach.proto.Timestamp client_timestamp = 4;
+    if (has_client_timestamp()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->client_timestamp());
     }
 
   }
@@ -775,6 +822,9 @@ void PingRequest::MergeFrom(const PingRequest& from) {
     if (from.has_addr()) {
       set_addr(from.addr());
     }
+    if (from.has_client_timestamp()) {
+      mutable_client_timestamp()->::cockroach::proto::Timestamp::MergeFrom(from.client_timestamp());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -801,6 +851,7 @@ void PingRequest::Swap(PingRequest* other) {
     std::swap(ping_, other->ping_);
     std::swap(offset_, other->offset_);
     std::swap(addr_, other->addr_);
+    std::swap(client_timestamp_, other->client_timestamp_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
@@ -821,6 +872,7 @@ void PingRequest::Swap(PingRequest* other) {
 #ifndef _MSC_VER
 const int PingResponse::kPongFieldNumber;
 const int PingResponse::kServerTimeFieldNumber;
+const int PingResponse::kServerTimestampFieldNumber;
 #endif  // !_MSC_VER
 
 PingResponse::PingResponse()
@@ -830,6 +882,7 @@ PingResponse::PingResponse()
 }
 
 void PingResponse::InitAsDefaultInstance() {
+  server_timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
 }
 
 PingResponse::PingResponse(const PingResponse& from)
@@ -844,6 +897,7 @@ void PingResponse::SharedCtor() {
   _cached_size_ = 0;
   pong_ = const_cast< ::std::string*>(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   server_time_ = GOOGLE_LONGLONG(0);
+  server_timestamp_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -857,6 +911,7 @@ void PingResponse::SharedDtor() {
     delete pong_;
   }
   if (this != default_instance_) {
+    delete server_timestamp_;
   }
 }
 
@@ -882,13 +937,16 @@ PingResponse* PingResponse::New() const {
 }
 
 void PingResponse::Clear() {
-  if (_has_bits_[0 / 32] & 3) {
+  if (_has_bits_[0 / 32] & 7) {
     if (has_pong()) {
       if (pong_ != &::google::protobuf::internal::GetEmptyStringAlreadyInited()) {
         pong_->clear();
       }
     }
     server_time_ = GOOGLE_LONGLONG(0);
+    if (has_server_timestamp()) {
+      if (server_timestamp_ != NULL) server_timestamp_->::cockroach::proto::Timestamp::Clear();
+    }
   }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
@@ -928,6 +986,19 @@ bool PingResponse::MergePartialFromCodedStream(
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
                  input, &server_time_)));
           set_has_server_time();
+        } else {
+          goto handle_unusual;
+        }
+        if (input->ExpectTag(26)) goto parse_server_timestamp;
+        break;
+      }
+
+      // optional .cockroach.proto.Timestamp server_timestamp = 3;
+      case 3: {
+        if (tag == 26) {
+         parse_server_timestamp:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_server_timestamp()));
         } else {
           goto handle_unusual;
         }
@@ -975,6 +1046,12 @@ void PingResponse::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->server_time(), output);
   }
 
+  // optional .cockroach.proto.Timestamp server_timestamp = 3;
+  if (has_server_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      3, this->server_timestamp(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -1001,6 +1078,13 @@ void PingResponse::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->server_time(), target);
   }
 
+  // optional .cockroach.proto.Timestamp server_timestamp = 3;
+  if (has_server_timestamp()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        3, this->server_timestamp(), target);
+  }
+
   if (!unknown_fields().empty()) {
     target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
         unknown_fields(), target);
@@ -1025,6 +1109,13 @@ int PingResponse::ByteSize() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int64Size(
           this->server_time());
+    }
+
+    // optional .cockroach.proto.Timestamp server_timestamp = 3;
+    if (has_server_timestamp()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->server_timestamp());
     }
 
   }
@@ -1060,6 +1151,9 @@ void PingResponse::MergeFrom(const PingResponse& from) {
     if (from.has_server_time()) {
       set_server_time(from.server_time());
     }
+    if (from.has_server_timestamp()) {
+      mutable_server_timestamp()->::cockroach::proto::Timestamp::MergeFrom(from.server_timestamp());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -1085,6 +1179,7 @@ void PingResponse::Swap(PingResponse* other) {
   if (other != this) {
     std::swap(pong_, other->pong_);
     std::swap(server_time_, other->server_time_);
+    std::swap(server_timestamp_, other->server_timestamp_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
