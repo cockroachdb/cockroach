@@ -20,13 +20,10 @@ package kv
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -131,8 +128,6 @@ func TestLocalSenderLookupReplica(t *testing.T) {
 	manualClock := hlc.NewManualClock(0)
 	ctx.Clock = hlc.NewClock(manualClock.UnixNano)
 	ctx.Context = context.Background()
-	// Dummy Gossip.
-	ctx.Gossip = gossip.New(&rpc.Context{}, 10*time.Hour, nil)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
 	ls := NewLocalSender()
 	stopper := util.NewStopper()

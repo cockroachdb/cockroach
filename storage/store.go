@@ -302,9 +302,10 @@ type StoreContext struct {
 }
 
 // Valid returns true if the StoreContext is populated correctly.
+// We don't check for Gossip and DB since some of our tests pass
+// that as nil.
 func (sc *StoreContext) Valid() bool {
-	return sc.Clock != nil && sc.DB != nil && sc.Gossip != nil &&
-		sc.Context != nil && sc.Transport != nil &&
+	return sc.Clock != nil && sc.Context != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval > 0
 }
@@ -355,36 +356,6 @@ func NewStore(ctx StoreContext, eng engine.Engine) *Store {
 	return s
 
 }
-
-// NewStore returns a new instance of a store.
-//func NewStore(clock *hlc.Clock, eng engine.Engine, db *client.KV, gossip *gossip.Gossip,
-//	transport multiraft.Transport, config StoreConfig) *Store {
-//	config.setDefaults()
-//	sf := newStoreFinder(gossip)
-//	s := &Store{
-//		StoreFinder: sf,
-//		StoreConfig: config,
-//		RetryOpts:   defaultRangeRetryOptions,
-//		clock:       clock,
-//		engine:      eng,
-//		db:          db,
-//		allocator:   newAllocator(sf.findStores),
-//		gossip:      gossip,
-//		transport:   transport,
-//		ranges:      map[int64]*Range{},
-//		status:      &proto.StoreStatus{},
-//	}
-//
-//	// Add range scanner and configure with queues.
-//	s.scanner = newRangeScanner(defaultScanInterval, newStoreRangeIterator(s))
-//	s.gcQueue = newGCQueue()
-//	s.splitQueue = newSplitQueue(db, gossip)
-//	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
-//	s.replicateQueue = newReplicateQueue(gossip, s.allocator, clock)
-//	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue)
-//
-//	return s
-//}
 
 // String formats a store for debug output.
 func (s *Store) String() string {

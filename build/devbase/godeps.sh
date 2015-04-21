@@ -38,12 +38,14 @@ github.com/biogo/store/llrb
 github.com/cockroachdb/c-protobuf
 github.com/cockroachdb/c-rocksdb
 github.com/cockroachdb/c-snappy
-github.com/jteeuwen/go-bindata/go-bindata
+github.com/coreos/etcd/Godeps/_workspace/src/github.com/gogo/protobuf/proto
+github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context
 github.com/coreos/etcd/raft
 github.com/coreos/etcd/raft/raftpb
 github.com/elazarl/go-bindata-assetfs
 github.com/gogo/protobuf/proto
 github.com/golang/glog
+golang.org/x/net/context
 gopkg.in/yaml.v1
 "
 
