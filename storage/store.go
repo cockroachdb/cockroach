@@ -73,6 +73,7 @@ var (
 		RaftHeartbeatIntervalTicks: 1,
 		RaftElectionTimeoutTicks:   2,
 		ScanInterval:               10 * time.Minute,
+		Context:                    context.Background(),
 	}
 )
 
@@ -271,7 +272,7 @@ var _ multiraft.Storage = &Store{}
 // A StoreContext encompasses the auxiliary objects and configuration
 // required to create a store.
 // All fields holding a pointer or an interface are required to create
-// a store; the rest will have sane defaults set.
+// a store; the rest will have sane defaults set if omitted.
 type StoreContext struct {
 	Clock     *hlc.Clock
 	DB        *client.KV
@@ -303,8 +304,9 @@ type StoreContext struct {
 // Valid returns true if the StoreContext is populated correctly.
 func (sc *StoreContext) Valid() bool {
 	return sc.Clock != nil && sc.DB != nil && sc.Gossip != nil &&
-		sc.Transport != nil && sc.RaftTickInterval != 0 &&
-		sc.RaftHeartbeatIntervalTicks > 0 && sc.RaftElectionTimeoutTicks > 0
+		sc.Context != nil && sc.Transport != nil &&
+		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
+		sc.RaftElectionTimeoutTicks > 0
 }
 
 // setDefaults initializes unset fields in StoreConfig to values

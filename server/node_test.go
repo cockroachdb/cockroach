@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"golang.org/x/net/context"
 )
 
 // createTestNode creates an rpc server using the specified address,
@@ -49,6 +50,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		t.Fatal(err)
 	}
 	ctx := storage.StoreContext{}
+	ctx.Context = context.Background()
 
 	stopper := util.NewStopper()
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)

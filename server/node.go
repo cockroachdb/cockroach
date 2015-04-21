@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -110,6 +111,7 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 		StoreID:   1,
 	}
 	ctx := storage.StoreContext{}
+	ctx.Context = context.Background()
 	// Dummy gossip, not actually used.
 	ctx.Gossip = gossip.New(&rpc.Context{}, 10*time.Hour, nil)
 	ctx.Clock = hlc.NewClock(hlc.UnixNano)

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -124,6 +125,7 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		DB:        s.kv,
 		Gossip:    s.gossip,
 		Transport: s.raftTransport,
+		Context:   context.Background(),
 	}
 	s.node = NewNode(nCtx)
 	s.admin = newAdminServer(s.kv, s.stopper)
