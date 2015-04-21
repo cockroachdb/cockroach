@@ -38,6 +38,7 @@ const (
 	defaultMaxOffset      = 250 * time.Millisecond
 	defaultGossipInterval = 2 * time.Second
 	defaultCacheSize      = 1 << 30 // GB
+	defaultScanInterval   = 10 * time.Minute
 )
 
 // Context holds parameters needed to setup a server.
@@ -99,6 +100,10 @@ type Context struct {
 	// GossipBootstrapResolvers is a list of gossip resolvers used
 	// to find bootstrap nodes for connecting to the gossip network.
 	GossipBootstrapResolvers []gossip.Resolver
+
+	// ScanInterval determines a duration during which each range should be
+	// visited approximately once by the range scanner.
+	ScanInterval time.Duration
 }
 
 // NewContext returns a Context with default values.
@@ -108,6 +113,7 @@ func NewContext() *Context {
 		MaxOffset:      defaultMaxOffset,
 		GossipInterval: defaultGossipInterval,
 		CacheSize:      defaultCacheSize,
+		ScanInterval:   defaultScanInterval,
 	}
 }
 

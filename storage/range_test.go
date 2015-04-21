@@ -134,7 +134,11 @@ func (tc *testContext) Start(t *testing.T) {
 	tc.stopper.AddCloser(tc.transport)
 
 	if tc.store == nil {
-		tc.store = NewStore(tc.clock, tc.engine, nil, tc.gossip, tc.transport, TestStoreConfig)
+		ctx := TestStoreContext
+		ctx.Clock = tc.clock
+		ctx.Gossip = tc.gossip
+		ctx.Transport = tc.transport
+		tc.store = NewStore(ctx, tc.engine)
 		if err := tc.store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, tc.stopper); err != nil {
 			t.Fatal(err)
 		}
@@ -146,7 +150,7 @@ func (tc *testContext) Start(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		tc.store.db = client.NewKV(nil, &testSender{store: tc.store})
+		tc.store.ctx.DB = client.NewKV(nil, &testSender{store: tc.store})
 		if err := tc.store.Start(tc.stopper); err != nil {
 			t.Fatal(err)
 		}
@@ -231,7 +235,10 @@ func TestRangeContains(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano)
 	transport := multiraft.NewLocalRPCTransport()
 	defer transport.Close()
-	store := NewStore(clock, e, nil, nil, multiraft.NewLocalRPCTransport(), TestStoreConfig)
+	ctx := TestStoreContext
+	ctx.Clock = clock
+	ctx.Transport = multiraft.NewLocalRPCTransport()
+	store := NewStore(ctx, e)
 	r, err := NewRange(desc, store)
 	if err != nil {
 		t.Fatal(err)

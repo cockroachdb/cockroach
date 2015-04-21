@@ -51,7 +51,7 @@ var testIdent = proto.StoreIdent{
 // of attempts so we don't get stuck behind indefinite backoff/retry
 // loops.
 func setTestRetryOptions(s *Store) {
-	s.RetryOpts = util.RetryOptions{
+	s.ctx.RangeRetryOptions = util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
 		MaxBackoff:  2 * time.Millisecond,
 		Constant:    2,
@@ -93,16 +93,18 @@ func (db *testSender) Send(call client.Call) {
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
-	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
+	ctx := TestStoreContext
+	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 10<<20)
+	ctx.Transport = multiraft.NewLocalRPCTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := NewStore(clock, eng, nil, g, multiraft.NewLocalRPCTransport(), TestStoreConfig)
+	store := NewStore(ctx, eng)
 	if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 		t.Fatal(err)
 	}
-	store.db = client.NewKV(nil, &testSender{store: store})
+	store.ctx.DB = client.NewKV(nil, &testSender{store: store})
 	if err := store.BootstrapRange(); err != nil {
 		t.Fatal(err)
 	}
@@ -115,14 +117,15 @@ func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)
+	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
+	ctx.Clock = hlc.NewClock(manual.UnixNano)
 	eng := engine.NewInMem(proto.Attributes{}, 1<<20)
-	transport := multiraft.NewLocalRPCTransport()
+	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper := util.NewStopper()
-	stopper.AddCloser(transport)
+	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
-	store := NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
+	store := NewStore(ctx, eng)
 
 	// Can't start as haven't bootstrapped.
 	if err := store.Start(stopper); err == nil {
@@ -145,7 +148,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store = NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
+	store = NewStore(ctx, eng)
 	if err := store.Start(stopper); err != nil {
 		t.Errorf("failure initializing bootstrapped store: %s", err)
 	}
@@ -165,13 +168,14 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	if err := eng.Put(proto.EncodedKey("foo"), []byte("bar")); err != nil {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
+	ctx := TestStoreContext
 	manual := hlc.NewManualClock(0)
-	clock := hlc.NewClock(manual.UnixNano)
-	transport := multiraft.NewLocalRPCTransport()
+	ctx.Clock = hlc.NewClock(manual.UnixNano)
+	ctx.Transport = multiraft.NewLocalRPCTransport()
 	stopper := util.NewStopper()
-	stopper.AddCloser(transport)
+	stopper.AddCloser(ctx.Transport)
 	defer stopper.Stop()
-	store := NewStore(clock, eng, nil, nil, transport, TestStoreConfig)
+	store := NewStore(ctx, eng)
 
 	// Can't init as haven't bootstrapped.
 	if err := store.Start(stopper); err == nil {
@@ -435,13 +439,13 @@ func TestStoreExecuteCmdUpdateTime(t *testing.T) {
 	store, _, stopper := createTestStore(t)
 	defer stopper.Stop()
 	args, reply := getArgs([]byte("a"), 1, store.StoreID())
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += (100 * time.Millisecond).Nanoseconds()
 	err := store.ExecuteCmd(args, reply)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := store.clock.Timestamp()
+	ts := store.ctx.Clock.Timestamp()
 	if ts.WallTime != args.Timestamp.WallTime || ts.Logical <= args.Timestamp.Logical {
 		t.Errorf("expected store clock to advance to %s; got %s", args.Timestamp, ts)
 	}
@@ -463,9 +467,9 @@ func TestStoreExecuteCmdWithZeroTime(t *testing.T) {
 	}
 	// The Logical time will increase over the course of the command
 	// execution so we can only rely on comparing the WallTime.
-	if reply.Timestamp.WallTime != store.clock.Timestamp().WallTime {
+	if reply.Timestamp.WallTime != store.ctx.Clock.Timestamp().WallTime {
 		t.Errorf("expected reply to have store clock time %s; got %s",
-			store.clock.Timestamp(), reply.Timestamp)
+			store.ctx.Clock.Timestamp(), reply.Timestamp)
 	}
 }
 
@@ -482,9 +486,9 @@ func TestStoreExecuteCmdWithClockOffset(t *testing.T) {
 	mc.Set(1)
 	// Set clock max offset to 250ms.
 	maxOffset := 250 * time.Millisecond
-	store.clock.SetMaxOffset(maxOffset)
+	store.ctx.Clock.SetMaxOffset(maxOffset)
 	// Set args timestamp to exceed max offset.
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Timestamp.WallTime += maxOffset.Nanoseconds() + 1
 	err := store.ExecuteCmd(args, reply)
 	if err == nil {
@@ -640,7 +644,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 	key := engine.MakeKey(engine.KeyConfigZonePrefix, proto.Key("a"))
 	pArgs, pReply := putArgs(key, data, 1, store.StoreID())
-	pArgs.Timestamp = store.clock.Now()
+	pArgs.Timestamp = store.ctx.Clock.Now()
 	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
 		t.Fatal(err)
 	}
@@ -668,8 +672,8 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 	for i, resolvable := range []bool{true, false} {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
-		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
+		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
+		pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
 		if resolvable {
 			pushee.Priority = 1
 			pusher.Priority = 2 // Pusher will win.
@@ -680,14 +684,14 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 		// First lay down intent using the pushee's txn.
 		pArgs, pReply := putArgs(key, []byte("value"), 1, store.StoreID())
-		pArgs.Timestamp = store.clock.Now()
+		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pushee
 		if err := store.ExecuteCmd(pArgs, pReply); err != nil {
 			t.Fatal(err)
 		}
 
 		// Now, try a put using the pusher's txn.
-		pArgs.Timestamp = store.clock.Now()
+		pArgs.Timestamp = store.ctx.Clock.Now()
 		pArgs.Txn = pusher
 		err := store.ExecuteCmd(pArgs, pReply)
 		if resolvable {
@@ -727,21 +731,21 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	defer stopper.Stop()
 
 	key := proto.Key("a")
-	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
-	pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
+	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
+	pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
 	pushee.Priority = 1
 	pusher.Priority = 2 // Pusher will win.
 
 	// First lay down intent using the pushee's txn.
 	args, reply := incrementArgs(key, 1, 1, store.StoreID())
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	if err := store.ExecuteCmd(args, reply); err != nil {
 		t.Fatal(err)
 	}
 
 	// Now, try a put using the pusher's txn.
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pusher
 	args.Increment = 2
 	if err := store.ExecuteCmd(args, reply); err != nil {
@@ -776,8 +780,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	}
 	for i, test := range testCases {
 		key := proto.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
-		pushee := newTransaction("test", key, 1, test.pusheeIso, store.clock)
+		pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
+		pushee := newTransaction("test", key, 1, test.pusheeIso, store.ctx.Clock)
 		if test.resolvable {
 			pushee.Priority = 1
 			pusher.Priority = 2 // Pusher will win.
@@ -788,13 +792,13 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// First, write original value.
 		args, reply := putArgs(key, []byte("value1"), 1, store.StoreID())
-		args.Timestamp = store.clock.Now()
+		args.Timestamp = store.ctx.Clock.Now()
 		if err := store.ExecuteCmd(args, reply); err != nil {
 			t.Fatal(err)
 		}
 
 		// Second, lay down intent using the pushee's txn.
-		args.Timestamp = store.clock.Now()
+		args.Timestamp = store.ctx.Clock.Now()
 		args.Txn = pushee
 		args.Value.Bytes = []byte("value2")
 		if err := store.ExecuteCmd(args, reply); err != nil {
@@ -803,7 +807,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 		// Now, try to read value using the pusher's txn.
 		gArgs, gReply := getArgs(key, 1, store.StoreID())
-		gArgs.Timestamp = store.clock.Now()
+		gArgs.Timestamp = store.ctx.Clock.Now()
 		gArgs.Txn = pusher
 		err := store.ExecuteCmd(gArgs, gReply)
 		if test.resolvable {
@@ -866,20 +870,20 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	defer stopper.Stop()
 
 	key := proto.Key("a")
-	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
-	pushee := newTransaction("test", key, 1, proto.SNAPSHOT, store.clock)
+	pusher := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
+	pushee := newTransaction("test", key, 1, proto.SNAPSHOT, store.ctx.Clock)
 	pushee.Priority = 2
 	pusher.Priority = 1 // Pusher would lose based on priority.
 
 	// First, write original value.
 	args, reply := putArgs(key, []byte("value1"), 1, store.StoreID())
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	if err := store.ExecuteCmd(args, reply); err != nil {
 		t.Fatal(err)
 	}
 
 	// Lay down intent using the pushee's txn.
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Txn = pushee
 	args.Value.Bytes = []byte("value2")
 	if err := store.ExecuteCmd(args, reply); err != nil {
@@ -888,7 +892,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 
 	// Now, try to read value using the pusher's txn.
 	gArgs, gReply := getArgs(key, 1, store.StoreID())
-	gArgs.Timestamp = store.clock.Now()
+	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.Txn = pusher
 	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
@@ -920,7 +924,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	defer stopper.Stop()
 
 	key := proto.Key("a")
-	pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.clock)
+	pushee := newTransaction("test", key, 1, proto.SERIALIZABLE, store.ctx.Clock)
 	pushee.Priority = 0 // pushee should lose all conflicts
 
 	// First, lay down intent from pushee.
@@ -933,7 +937,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 
 	// Now, try to read outside a transaction.
 	gArgs, gReply := getArgs(key, 1, store.StoreID())
-	gArgs.Timestamp = store.clock.Now()
+	gArgs.Timestamp = store.ctx.Clock.Now()
 	gArgs.UserPriority = gogoproto.Int32(math.MaxInt32)
 	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
 		t.Errorf("expected read to succeed: %s", err)
@@ -942,7 +946,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Next, try to write outside of a transaction. We will succeed in pushing txn.
-	args.Timestamp = store.clock.Now()
+	args.Timestamp = store.ctx.Clock.Now()
 	args.Value.Bytes = []byte("value2")
 	args.Txn = nil
 	args.UserPriority = gogoproto.Int32(math.MaxInt32)
@@ -1005,8 +1009,8 @@ func TestStoreReadInconsistent(t *testing.T) {
 
 	// Next, write intents for keyA and keyB.
 	args.Value.Bytes = []byte("value2")
-	txnA := newTransaction("test", keyA, 1, proto.SERIALIZABLE, store.clock)
-	txnB := newTransaction("test", keyB, 1, proto.SERIALIZABLE, store.clock)
+	txnA := newTransaction("test", keyA, 1, proto.SERIALIZABLE, store.ctx.Clock)
+	txnB := newTransaction("test", keyB, 1, proto.SERIALIZABLE, store.ctx.Clock)
 	for _, txn := range []*proto.Transaction{txnA, txnB} {
 		args.Key = txn.Key
 		args.Timestamp = txn.Timestamp

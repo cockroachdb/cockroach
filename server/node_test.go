@@ -48,10 +48,11 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx := storage.StoreContext{}
 
 	stopper := util.NewStopper()
-	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := rpc.NewContext(clock, tlsConfig, stopper)
+	ctx.Clock = hlc.NewClock(hlc.UnixNano)
+	rpcContext := rpc.NewContext(ctx.Clock, tlsConfig, stopper)
 	rpcServer := rpc.NewServer(addr, rpcContext)
 	if err := rpcServer.Start(); err != nil {
 		t.Fatal(err)
@@ -65,10 +66,13 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 		g.SetResolvers([]gossip.Resolver{gossip.NewResolverFromAddress(gossipBS)})
 		g.Start(rpcServer, stopper)
 	}
-	db := client.NewKV(nil, kv.NewDistSender(&kv.DistSenderContext{Clock: clock}, g))
+	ctx.Gossip = g
+	ctx.DB = client.NewKV(nil,
+		kv.NewDistSender(&kv.DistSenderContext{Clock: ctx.Clock}, g))
 	// TODO(bdarnell): arrange to have the transport closed.
-	node := NewNode(db, g, storage.TestStoreConfig, multiraft.NewLocalRPCTransport())
-	return rpcServer, clock, node, stopper
+	ctx.Transport = multiraft.NewLocalRPCTransport()
+	node := NewNode(ctx)
+	return rpcServer, ctx.Clock, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
@@ -208,12 +212,12 @@ func TestNodeJoin(t *testing.T) {
 	node1Key := gossip.MakeNodeIDKey(node1.Descriptor.NodeID)
 	node2Key := gossip.MakeNodeIDKey(node2.Descriptor.NodeID)
 	if err := util.IsTrueWithin(func() bool {
-		if val, err := node1.gossip.GetInfo(node2Key); err != nil {
+		if val, err := node1.ctx.Gossip.GetInfo(node2Key); err != nil {
 			return false
 		} else if addr2 := val.(*gossip.NodeDescriptor).Address.String(); addr2 != server2.Addr().String() {
 			t.Errorf("addr2 gossip %s doesn't match addr2 address %s", addr2, server2.Addr().String())
 		}
-		if val, err := node2.gossip.GetInfo(node1Key); err != nil {
+		if val, err := node2.ctx.Gossip.GetInfo(node1Key); err != nil {
 			return false
 		} else if addr1 := val.(*gossip.NodeDescriptor).Address.String(); addr1 != server1.Addr().String() {
 			t.Errorf("addr1 gossip %s doesn't match addr1 address %s", addr1, server1.Addr().String())

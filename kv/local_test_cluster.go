@@ -56,7 +56,7 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 	// range split, which is exposed here as a RangeKeyMismatchError.
 	// If we fail with two in a row, it's a fatal test error.
 	retryOpts := util.RetryOptions{
-		Tag:         fmt.Sprintf("routing %s locally", call.Method),
+		Tag:         fmt.Sprintf("routing %s locally", call.Method()),
 		MaxAttempts: 2,
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
@@ -121,7 +121,12 @@ func (ltc *LocalTestCluster) Start() error {
 	ltc.KV.User = storage.UserRoot
 	transport := multiraft.NewLocalRPCTransport()
 	ltc.Stopper.AddCloser(transport)
-	ltc.Store = storage.NewStore(ltc.Clock, ltc.Eng, ltc.KV, ltc.Gossip, transport, storage.TestStoreConfig)
+	sCtx := storage.TestStoreContext
+	sCtx.Clock = ltc.Clock
+	sCtx.DB = ltc.KV
+	sCtx.Gossip = ltc.Gossip
+	sCtx.Transport = transport
+	ltc.Store = storage.NewStore(sCtx, ltc.Eng)
 	if err := ltc.Store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, ltc.Stopper); err != nil {
 		return err
 	}
