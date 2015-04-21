@@ -41,7 +41,7 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
   [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 
-`git checkout -b andybons/update-readme`
+`git checkout -b $USER/update-readme`
 
 + Hack away and commit your changes locally using `git add` and `git commit`.
 
@@ -49,7 +49,7 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 
 + When you’re ready for review, create a remote branch from your local branch. You may want to `git fetch origin` and run `git rebase origin/master` on your local feature branch before.
 
-`git push -u origin andybons/update-readme`
+`git push -u origin $USER/update-readme`
 
 + Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request).
 
@@ -58,7 +58,7 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 + Once ready to land your change, squash your commits. Where n is the number of commits in your branch, run
 `git rebase -i HEAD~n`
 
- and subsequently update your remote (you will have to force the push, `git push -f andybons mybranch`). The pull request will update.
+ and subsequently update your remote (you will have to force the push, `git push -f $USER mybranch`). The pull request will update.
 
 + If you do not have write access to the repository and your pull request requires a manual merge, you may be asked to rebase again,
   `git fetch origin; git rebase -i origin/master` and update the PR again. Otherwise, you are free to merge your branch into origin/master directly or rebase first as you deem appropriate.
