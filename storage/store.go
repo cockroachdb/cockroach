@@ -907,7 +907,7 @@ func (s *Store) Descriptor(nodeDesc *gossip.NodeDescriptor) (*StoreDescriptor, e
 // ExecuteCmd fetches a range based on the header's replica, assembles
 // method, args & reply into a Raft Cmd struct and executes the
 // command using the fetched range.
-func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Response) error {
+func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 	// If the request has a zero timestamp, initialize to this node's clock.
 	header := args.Header()
 	if err := verifyKeys(header.Key, header.EndKey); err != nil {
@@ -930,6 +930,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 	}
 
 	// Backoff and retry loop for handling errors.
+	method := args.Method()
 	retryOpts := s.RetryOpts
 	retryOpts.Tag = fmt.Sprintf("store: %s", method)
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
@@ -943,7 +944,7 @@ func (s *Store) ExecuteCmd(method string, args proto.Request, reply proto.Respon
 			return util.RetryBreak, err
 		}
 
-		if err = rng.AddCmd(method, args, reply, true); err == nil {
+		if err = rng.AddCmd(args, reply, true); err == nil {
 			return util.RetryBreak, nil
 		}
 
@@ -1048,7 +1049,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 	}
 	resolveReply := &proto.InternalResolveIntentResponse{}
 	// Add resolve command with wait=false to add to Raft but not wait for completion.
-	if resolveErr := rng.AddCmd(proto.InternalResolveIntent, resolveArgs, resolveReply, false); resolveErr != nil {
+	if resolveErr := rng.AddCmd(resolveArgs, resolveReply, false); resolveErr != nil {
 		log.Warningf("resolve of key %q failed: %s", wiErr.Key, resolveErr)
 	}
 

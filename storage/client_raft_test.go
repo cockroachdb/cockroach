@@ -49,7 +49,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	get := func(store *storage.Store, raftID int64, key proto.Key) int64 {
 		args, resp := getArgs(key, raftID, store.StoreID())
-		err := store.ExecuteCmd(proto.Get, args, resp)
+		err := store.ExecuteCmd(args, resp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(raftID int64, key proto.Key, value int64) (*proto.IncrementResponse, error) {
 			args, resp := incrementArgs(key, value, raftID, store.StoreID())
-			err := store.ExecuteCmd(proto.Increment, args, resp)
+			err := store.ExecuteCmd(args, resp)
 			return resp, err
 		}
 
@@ -83,7 +83,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			t.Fatal(err)
 		}
 		splitArgs, splitResp := adminSplitArgs(engine.KeyMin, splitKey, raftID, store.StoreID())
-		if err := store.ExecuteCmd(proto.AdminSplit, splitArgs, splitResp); err != nil {
+		if err := store.ExecuteCmd(splitArgs, splitResp); err != nil {
 			t.Fatal(err)
 		}
 		raftID2 = store.LookupRange(key2, nil).Desc().RaftID
@@ -108,11 +108,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
 	incArgs, incReply := incrementArgs(key1, 0, raftID, store.StoreID())
-	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+	if err := store.ExecuteCmd(incArgs, incReply); err != nil {
 		t.Fatal(err)
 	}
 	incArgs, incReply = incrementArgs(key2, 0, raftID2, store.StoreID())
-	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+	if err := store.ExecuteCmd(incArgs, incReply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,14 +145,14 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 		// Write a bytes value so the increment will fail.
 		putArgs, putReply := putArgs(proto.Key("a"), []byte("asdf"), 1, store.StoreID())
-		if err := store.ExecuteCmd(proto.Put, putArgs, putReply); err != nil {
+		if err := store.ExecuteCmd(putArgs, putReply); err != nil {
 			t.Fatal(err)
 		}
 
 		// Try and fail to increment the key. It is important for this test that the
 		// failure be the last thing in the raft log when the store is stopped.
 		incArgs, incReply := incrementArgs(proto.Key("a"), 42, 1, store.StoreID())
-		if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err == nil {
+		if err := store.ExecuteCmd(incArgs, incReply); err == nil {
 			t.Fatal("did not get expected error")
 		}
 	}()
@@ -167,7 +167,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	// Issue a no-op write to lazily initialize raft on the range.
 	incArgs, incReply := incrementArgs(proto.Key("b"), 0, 1, store.StoreID())
-	if err := store.ExecuteCmd(proto.Increment, incArgs, incReply); err != nil {
+	if err := store.ExecuteCmd(incArgs, incReply); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,7 +187,7 @@ func TestReplicateRange(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +217,7 @@ func TestReplicateRange(t *testing.T) {
 	// Also applies to other tests in this file.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
-		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
 		return getResp.Value.GetInteger() == 5
@@ -242,7 +242,7 @@ func TestRestoreReplicas(t *testing.T) {
 	// Perform an increment before replication to ensure that commands are not
 	// repeated on restarts.
 	incArgs, incResp := incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,17 +270,17 @@ func TestRestoreReplicas(t *testing.T) {
 	// Send a command on each store. The follower will forward to the leader and both
 	// commands will eventually commit.
 	incArgs, incResp = incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[1].StoreID())
-	if err := mtc.stores[1].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[1].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
-		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
 		return getResp.Value.GetInteger() == 39
@@ -390,7 +390,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs, incResp := incrementArgs([]byte("a"), 5, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -403,13 +403,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
 	truncArgs, truncResp := internalTruncateLogArgs(index+1, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.InternalTruncateLog, truncArgs, truncResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(truncArgs, truncResp); err != nil {
 		t.Fatal(err)
 	}
 
 	// Issue a second command post-truncation.
 	incArgs, incResp = incrementArgs([]byte("a"), 11, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -426,7 +426,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Once it catches up, the effects of both commands can be seen.
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
-		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
 		log.Infof("read value %d", getResp.Value.GetInteger())
@@ -438,13 +438,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
 	incArgs, incResp = incrementArgs([]byte("a"), 23, 1, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := util.IsTrueWithin(func() bool {
 		getArgs, getResp := getArgs([]byte("a"), 1, mtc.stores[1].StoreID())
-		if err := mtc.stores[1].ExecuteCmd(proto.Get, getArgs, getResp); err != nil {
+		if err := mtc.stores[1].ExecuteCmd(getArgs, getResp); err != nil {
 			return false
 		}
 		log.Infof("read value %d", getResp.Value.GetInteger())
@@ -496,7 +496,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc.replicateRange(raftID, 0, 1, 2)
 
 	incArgs, incResp := incrementArgs([]byte("a"), 5, raftID, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -522,7 +522,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// Stop one of the replicas and issue a new increment.
 	mtc.stopStore(1)
 	incArgs, incResp = incrementArgs([]byte("a"), 11, raftID, mtc.stores[0].StoreID())
-	if err := mtc.stores[0].ExecuteCmd(proto.Increment, incArgs, incResp); err != nil {
+	if err := mtc.stores[0].ExecuteCmd(incArgs, incResp); err != nil {
 		t.Fatal(err)
 	}
 
