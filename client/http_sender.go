@@ -41,8 +41,6 @@ const (
 	// HTTP requests for the KV API.
 	KVDBEndpoint = "/kv/db/"
 	// KVDBScheme is the scheme for connecting to the kvdb endpoint.
-	// TODO(spencer): change this to CONSTANT https. We shouldn't be
-	// supporting http here at all.
 	KVDBScheme = "https"
 	// StatusTooManyRequests indicates client should retry due to
 	// server having too many requests.
