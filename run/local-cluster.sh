@@ -124,7 +124,6 @@ for i in $(seq 1 $NODES); do
   if [[ $i == 1 ]]; then
       docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init -certs=${CERTS_DIR} $VOL 2> /dev/null
       NODE_ARGS="${NODE_ARGS} --volumes-from=cockroach-init"
-      # TODO(tobias): do we need to figure out how to clean up this volume?
   fi
 
   # Start Cockroach docker container and corral HTTP port and docker

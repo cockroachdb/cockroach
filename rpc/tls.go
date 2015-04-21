@@ -106,8 +106,8 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
 			// Prefer the server-specified suite.
 			PreferServerCipherSuites: true,
 
-			// Use only TLS v1.2.
-			MinVersion: tls.VersionTLS12,
+			// Lots of things don't support 1.2. Let's try 1.1.
+			MinVersion: tls.VersionTLS11,
 
 			// Should we disable session resumption? This may break forward secrecy.
 			// SessionTicketsDisabled: true,
