@@ -26,23 +26,23 @@ import (
 	"code.google.com/p/go-commander"
 )
 
-// A mkCACert command generates a CA certificate and stores it
+// A createCACert command generates a CA certificate and stores it
 // in the cert directory.
-var mkCACertCmd = &commander.Command{
-	UsageLine: "mk-ca-cert [options]",
+var createCACertCmd = &commander.Command{
+	UsageLine: "create-ca-cert [options]",
 	Short:     "create CA cert and key",
 	Long: `
 Generates a new key pair, a new CA certificate and writes them to
 individual files in the directory specified by --certs (required).
 `,
-	Run:  runMkCACert,
+	Run:  runCreateCACert,
 	Flag: *flag.CommandLine,
 }
 
-// runMkCACert generates key pair and CA certificate and writes them
+// runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runMkCACert(cmd *commander.Command, args []string) {
-	err := security.RunMakeCACert(Context)
+func runCreateCACert(cmd *commander.Command, args []string) {
+	err := security.RunCreateCACert(Context)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
 		osExit(1)
@@ -50,10 +50,10 @@ func runMkCACert(cmd *commander.Command, args []string) {
 	}
 }
 
-// A mkNodeCert command generates a node certificate and stores it
+// A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
-var mkNodeCertCmd = &commander.Command{
-	UsageLine: "mk-node-cert [options] <host 1> <host 2> ... <host N>",
+var createNodeCertCmd = &commander.Command{
+	UsageLine: "create-node-cert [options] <host 1> <host 2> ... <host N>",
 	Short:     "create node cert and key\n",
 	Long: `
 Generates a new key pair, a new node certificate and writes them to
@@ -61,14 +61,14 @@ individual files in the directory specified by --certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).
 `,
-	Run:  runMkNodeCert,
+	Run:  runCreateNodeCert,
 	Flag: *flag.CommandLine,
 }
 
-// runMkNodeCert generates key pair and CA certificate and writes them
+// runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
-func runMkNodeCert(cmd *commander.Command, args []string) {
-	err := security.RunMakeNodeCert(Context, args)
+func runCreateNodeCert(cmd *commander.Command, args []string) {
+	err := security.RunCreateNodeCert(Context, args)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)
 		osExit(1)

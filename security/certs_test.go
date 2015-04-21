@@ -36,29 +36,29 @@ func TestGenerateCerts(t *testing.T) {
 
 	context.Certs = ""
 	// Try certs generation with empty Certs dir argument.
-	err := RunMakeCACert(context)
+	err := RunCreateCACert(context)
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
-	err = RunMakeNodeCert(context, []string{"localhost"})
+	err = RunCreateNodeCert(context, []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	context.Certs = certsDir
 	// Try generating node certs without CA certs present.
-	err = RunMakeNodeCert(context, []string{"localhost"})
+	err = RunCreateNodeCert(context, []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Now try in the proper order.
-	err = RunMakeCACert(context)
+	err = RunCreateCACert(context)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = RunMakeNodeCert(context, []string{"localhost"})
+	err = RunCreateNodeCert(context, []string{"localhost"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -72,12 +72,12 @@ func TestUseCerts(t *testing.T) {
 
 	context := server.NewContext()
 	context.Certs = certsDir
-	err := RunMakeCACert(context)
+	err := RunCreateCACert(context)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = RunMakeNodeCert(context, []string{"127.0.0.1"})
+	err = RunCreateNodeCert(context, []string{"127.0.0.1"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

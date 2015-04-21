@@ -73,8 +73,8 @@ var allCmds = &commander.Commander{
 		quitCmd,
 
 		// Certificate commands.
-		mkCACertCmd,
-		mkNodeCertCmd,
+		createCACertCmd,
+		createNodeCertCmd,
 
 		// Key/value commands.
 		getCmd,

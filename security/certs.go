@@ -46,9 +46,9 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 		return err
 	}
 
-	// Write certificate to file. We write the plain-text certificate and the pem-encoded one.
+	// Write certificate to file.
 	certFilePath := path.Join(ctx.Certs, prefix+".crt")
-	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return util.Errorf("error creating certificate file %s: %s", certFilePath, err)
 	}
@@ -65,7 +65,7 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 
 	// Write key to file.
 	keyFilePath := path.Join(ctx.Certs, prefix+".key")
-	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return util.Errorf("error create key file %s: %s", keyFilePath, err)
 	}
@@ -83,11 +83,17 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 	return nil
 }
 
-// RunMakeCACert is the entry-point from the command-line interface
+// RunCreateCACert is the entry-point from the command-line interface
 // to generate CA cert and key.
-func RunMakeCACert(ctx *server.Context) error {
+func RunCreateCACert(ctx *server.Context) error {
 	if ctx.Certs == "" {
 		return util.Errorf("no certs directory specified, use --certs")
+	}
+
+	// Make the directory first.
+	err := os.MkdirAll(ctx.Certs, 0755)
+	if err != nil {
+		return util.Errorf("error creating certs directory %s: %s", ctx.Certs, err)
 	}
 
 	// Generate certificate.
@@ -100,9 +106,9 @@ func RunMakeCACert(ctx *server.Context) error {
 	return err
 }
 
-// RunMakeNodeCert is the entry-point from the command-line interface
+// RunCreateNodeCert is the entry-point from the command-line interface
 // to generate node cert and key.
-func RunMakeNodeCert(ctx *server.Context, hosts []string) error {
+func RunCreateNodeCert(ctx *server.Context, hosts []string) error {
 	if ctx.Certs == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
