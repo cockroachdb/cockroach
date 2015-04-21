@@ -194,6 +194,10 @@ func (g *Gossip) GetNodeIDAddress(nodeID proto.NodeID) (net.Addr, error) {
 	return g.getNodeIDAddressLocked(nodeID)
 }
 
+// getNodeIDAddressLocked looks up the address of the node by ID. The
+// mutex is assumed held by the caller. This method is called by
+// externally via GetNodeIDAddress or internally when looking up a
+// "distant" node address to connect directly to.
 func (g *Gossip) getNodeIDAddressLocked(nodeID proto.NodeID) (net.Addr, error) {
 	nodeIDKey := MakeNodeIDKey(nodeID)
 	if i := g.is.getInfo(nodeIDKey); i != nil {
