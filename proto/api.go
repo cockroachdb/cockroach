@@ -74,190 +74,46 @@ const (
 	AdminMerge = "AdminMerge"
 )
 
-type stringSet map[string]struct{}
-
-func (s stringSet) keys() []string {
-	keys := make([]string, 0, len(s))
-	for k := range s {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 // A RaftID is a unique ID associated to a Raft consensus group.
 type RaftID int64
-
-// TODO(spencer): replaces these individual maps with a bitmask or
-//   equivalent listing each method's attributes.
-
-// AllMethods specifies the complete set of methods.
-var AllMethods = stringSet{
-	Contains:              {},
-	Get:                   {},
-	Put:                   {},
-	ConditionalPut:        {},
-	Increment:             {},
-	Delete:                {},
-	DeleteRange:           {},
-	Scan:                  {},
-	EndTransaction:        {},
-	ReapQueue:             {},
-	EnqueueUpdate:         {},
-	EnqueueMessage:        {},
-	AdminSplit:            {},
-	AdminMerge:            {},
-	Batch:                 {},
-	InternalHeartbeatTxn:  {},
-	InternalGC:            {},
-	InternalPushTxn:       {},
-	InternalResolveIntent: {},
-	InternalMerge:         {},
-	InternalTruncateLog:   {},
-}
-
-// PublicMethods specifies the set of methods accessible via the
-// public key-value API.
-var PublicMethods = stringSet{
-	Contains:       {},
-	Get:            {},
-	Put:            {},
-	ConditionalPut: {},
-	Increment:      {},
-	Delete:         {},
-	DeleteRange:    {},
-	Scan:           {},
-	EndTransaction: {},
-	ReapQueue:      {},
-	EnqueueUpdate:  {},
-	EnqueueMessage: {},
-	Batch:          {},
-	AdminSplit:     {},
-	AdminMerge:     {},
-}
-
-// InternalMethods specifies the set of methods accessible only
-// via the internal node RPC API.
-var InternalMethods = stringSet{
-	InternalHeartbeatTxn:  {},
-	InternalGC:            {},
-	InternalPushTxn:       {},
-	InternalResolveIntent: {},
-	InternalMerge:         {},
-	InternalTruncateLog:   {},
-}
-
-// ReadMethods specifies the set of methods which read and return data.
-var ReadMethods = stringSet{
-	Contains:            {},
-	Get:                 {},
-	ConditionalPut:      {},
-	Increment:           {},
-	Scan:                {},
-	ReapQueue:           {},
-	InternalRangeLookup: {},
-}
-
-// WriteMethods specifies the set of methods which write data.
-var WriteMethods = stringSet{
-	Put:                   {},
-	ConditionalPut:        {},
-	Increment:             {},
-	Delete:                {},
-	DeleteRange:           {},
-	EndTransaction:        {},
-	ReapQueue:             {},
-	EnqueueUpdate:         {},
-	EnqueueMessage:        {},
-	Batch:                 {},
-	InternalHeartbeatTxn:  {},
-	InternalGC:            {},
-	InternalPushTxn:       {},
-	InternalResolveIntent: {},
-	InternalMerge:         {},
-	InternalTruncateLog:   {},
-}
-
-// TxnMethods specifies the set of methods which leave key intents
-// during transactions.
-var TxnMethods = stringSet{
-	Put:            {},
-	ConditionalPut: {},
-	Increment:      {},
-	Delete:         {},
-	DeleteRange:    {},
-	ReapQueue:      {},
-	EnqueueUpdate:  {},
-	EnqueueMessage: {},
-}
-
-// adminMethods specifies the set of methods which are neither
-// read-only nor read-write commands but instead execute directly on
-// the Raft leader.
-var adminMethods = stringSet{
-	AdminSplit: {},
-	AdminMerge: {},
-}
-
-// NeedReadPerm returns true if the specified method requires read permissions.
-func NeedReadPerm(method string) bool {
-	_, ok := ReadMethods[method]
-	return ok
-}
-
-// NeedWritePerm returns true if the specified method requires write permissions.
-func NeedWritePerm(method string) bool {
-	_, ok := WriteMethods[method]
-	return ok
-}
-
-// NeedAdminPerm returns true if the specified method requires admin permissions.
-func NeedAdminPerm(method string) bool {
-	_, ok := adminMethods[method]
-	return ok
-}
-
-// IsPublic returns true if the specified method is in the public
-// key-value API.
-func IsPublic(method string) bool {
-	_, ok := PublicMethods[method]
-	return ok
-}
-
-// IsInternal returns true if the specified method is only available
-// via the internal node RPC API.
-func IsInternal(method string) bool {
-	_, ok := InternalMethods[method]
-	return ok
-}
-
-// IsReadOnly returns true if the specified method only requires read
-// permissions.
-func IsReadOnly(method string) bool {
-	return NeedReadPerm(method) && !NeedWritePerm(method)
-}
-
-// IsReadWrite returns true if the specified method requires write
-// permissions.
-func IsReadWrite(method string) bool {
-	return NeedWritePerm(method)
-}
-
-// IsAdmin returns true if the specified method requires admin
-// permissions.
-func IsAdmin(method string) bool {
-	return NeedAdminPerm(method)
-}
-
-// IsTransactional returns true if the specified method can be part of
-// a transaction.
-func IsTransactional(method string) bool {
-	_, ok := TxnMethods[method]
-	return ok
-}
 
 // IsEmpty returns true if the client command ID has zero values.
 func (ccid ClientCmdID) IsEmpty() bool {
 	return ccid.WallTime == 0 && ccid.Random == 0
+}
+
+const (
+	isAdmin = 1 << iota
+	isRead
+	isWrite
+	isTxn
+)
+
+// IsAdmin returns true if the request requires admin permissions.
+func IsAdmin(args Request) bool {
+	return (args.flags() & isAdmin) != 0
+}
+
+// IsRead returns true if the request requires read permissions.
+func IsRead(args Request) bool {
+	return (args.flags() & isRead) != 0
+}
+
+// IsWrite returns true if the request requires read permissions.
+func IsWrite(args Request) bool {
+	return (args.flags() & isWrite) != 0
+}
+
+// IsReadOnly returns true if the request only requires read
+// permissions.
+func IsReadOnly(args Request) bool {
+	return IsRead(args) && !IsWrite(args)
+}
+
+// IsTransactional returns true if the request can be part of a
+// transaction.
+func IsTransactional(args Request) bool {
+	return (args.flags() & isTxn) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -269,6 +125,7 @@ type Request interface {
 	Method() string
 	// CreateReply creates a new response object.
 	CreateReply() Response
+	flags() int
 }
 
 // Response is an interface for RPC responses.
@@ -609,3 +466,27 @@ func (*InternalTruncateLogRequest) CreateReply() Response { return &InternalTrun
 
 // CreateReply implements the Request interface.
 func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLeaderLeaseResponse{} }
+
+func (*ContainsRequest) flags() int              { return isRead }
+func (*GetRequest) flags() int                   { return isRead }
+func (*PutRequest) flags() int                   { return isWrite | isTxn }
+func (*ConditionalPutRequest) flags() int        { return isRead | isWrite | isTxn }
+func (*IncrementRequest) flags() int             { return isRead | isWrite | isTxn }
+func (*DeleteRequest) flags() int                { return isWrite | isTxn }
+func (*DeleteRangeRequest) flags() int           { return isWrite | isTxn }
+func (*ScanRequest) flags() int                  { return isRead }
+func (*EndTransactionRequest) flags() int        { return isWrite }
+func (*ReapQueueRequest) flags() int             { return isRead | isWrite | isTxn }
+func (*EnqueueUpdateRequest) flags() int         { return isWrite | isTxn }
+func (*EnqueueMessageRequest) flags() int        { return isWrite | isTxn }
+func (*BatchRequest) flags() int                 { return isWrite }
+func (*AdminSplitRequest) flags() int            { return isAdmin }
+func (*AdminMergeRequest) flags() int            { return isAdmin }
+func (*InternalHeartbeatTxnRequest) flags() int  { return isWrite }
+func (*InternalGCRequest) flags() int            { return isWrite }
+func (*InternalPushTxnRequest) flags() int       { return isWrite }
+func (*InternalRangeLookupRequest) flags() int   { return isRead }
+func (*InternalResolveIntentRequest) flags() int { return isWrite }
+func (*InternalMergeRequest) flags() int         { return isWrite }
+func (*InternalTruncateLogRequest) flags() int   { return isWrite }
+func (*InternalLeaderLeaseRequest) flags() int   { return isWrite }

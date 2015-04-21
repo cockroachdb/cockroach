@@ -951,9 +951,8 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 	}
 
 	// Backoff and retry loop for handling errors.
-	method := args.Method()
 	retryOpts := s.ctx.RangeRetryOptions
-	retryOpts.Tag = fmt.Sprintf("store: %s", method)
+	retryOpts.Tag = fmt.Sprintf("store: %s", args.Method())
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		// Add the command to the range for execution; exit retry loop on success.
 		reply.Reset()
@@ -973,7 +972,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 		// because this is the code path with the requesting client
 		// waiting. We don't want every replica to attempt to resolve the
 		// intent independently, so we can't do it in Range.executeCmd.
-		err = s.maybeResolveWriteIntentError(rng, method, args, reply)
+		err = s.maybeResolveWriteIntentError(rng, args, reply)
 
 		switch t := err.(type) {
 		case *proto.WriteTooOldError:
@@ -988,7 +987,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 				return util.RetryReset, nil
 			}
 			// Otherwise, update timestamp on read/write and backoff / retry.
-			if proto.IsReadWrite(method) && header.Timestamp.Less(t.Txn.Timestamp) {
+			if proto.IsWrite(args) && header.Timestamp.Less(t.Txn.Timestamp) {
 				header.Timestamp = t.Txn.Timestamp
 				header.Timestamp.Logical++
 			}
@@ -1015,14 +1014,14 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 // error's Resolved flag to true so the client retries the command
 // immediately. If the push fails, we set the error's Resolved flag to
 // false so that the client backs off before reissuing the command.
-func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args proto.Request, reply proto.Response) error {
+func (s *Store) maybeResolveWriteIntentError(rng *Range, args proto.Request, reply proto.Response) error {
 	err := reply.Header().GoError()
 	wiErr, ok := err.(*proto.WriteIntentError)
 	if !ok {
 		return err
 	}
 
-	log.V(1).Infof("resolving write intent on %s %q: %s", method, args.Header().Key, wiErr)
+	log.V(1).Infof("resolving write intent on %s %q: %s", args.Method(), args.Header().Key, wiErr)
 
 	// Attempt to push the transaction which created the conflicting intent.
 	pushArgs := &proto.InternalPushTxnRequest{
@@ -1034,7 +1033,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 			Txn:          args.Header().Txn,
 		},
 		PusheeTxn: wiErr.Txn,
-		Abort:     proto.IsReadWrite(method), // abort if cmd is read/write
+		Abort:     proto.IsWrite(args), // abort if cmd is read/write
 	}
 	pushReply := &proto.InternalPushTxnResponse{}
 	s.ctx.DB.Run(client.Call{Args: pushArgs, Reply: pushReply})
@@ -1045,7 +1044,7 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, method string, args pro
 		// push failure, not the original write intent error. The push
 		// failure will instruct the client to restart the transaction
 		// with a backoff.
-		if args.Header().Txn != nil && proto.IsReadWrite(method) {
+		if args.Header().Txn != nil && proto.IsWrite(args) {
 			reply.Header().SetGoError(pushErr)
 			return pushErr
 		}

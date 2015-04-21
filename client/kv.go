@@ -119,7 +119,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 		kv.sender.Send(c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
-			log.Infof("failed %s: %s", c.Method, err)
+			log.Infof("failed %s: %s", c.Method(), err)
 		}
 		return
 	}
