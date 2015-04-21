@@ -54,16 +54,22 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 	return createTestStoreWithEngine(t,
 		engine.NewInMem(proto.Attributes{}, 10<<20),
 		hlc.NewClock(hlc.NewManualClock(0).UnixNano),
-		true)
+		true, nil)
 }
 
 // createTestStoreWithEngine creates a test store using the given engine and clock.
 // The caller is responsible for closing the store on exit.
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
-	bootstrap bool) (*storage.Store, *util.Stopper) {
+	bootstrap bool, context *storage.StoreContext) (*storage.Store, *util.Stopper) {
 	stopper := util.NewStopper()
 	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
-	ctx := storage.TestStoreContext
+	var ctx *storage.StoreContext
+	if context == nil {
+		ctx = &storage.StoreContext{}
+		*ctx = storage.TestStoreContext
+	} else {
+		ctx = context
+	}
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
 	sender := kv.NewTxnCoordSender(lSender, clock, false, stopper)
@@ -72,7 +78,7 @@ func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock
 	ctx.DB.User = storage.UserRoot
 	ctx.Transport = multiraft.NewLocalRPCTransport()
 	// TODO(bdarnell): arrange to have the transport closed.
-	store := storage.NewStore(ctx, eng)
+	store := storage.NewStore(*ctx, eng)
 	if bootstrap {
 		if err := store.Bootstrap(proto.StoreIdent{NodeID: 1, StoreID: 1}, stopper); err != nil {
 			t.Fatal(err)
