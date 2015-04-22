@@ -194,7 +194,7 @@ func (t *Txn) updateNeedsEndTxn(calls []Call) {
 
 func (t *Txn) updateNeedsEndTxnRequest(r proto.Request) {
 	if !t.needsEndTxn {
-		t.needsEndTxn = proto.IsTransactional(r)
+		t.needsEndTxn = proto.IsTransactionWrite(r)
 	} else if _, ok := r.(*proto.EndTransactionRequest); ok {
 		t.needsEndTxn = false
 	}

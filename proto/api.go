@@ -86,7 +86,7 @@ const (
 	isAdmin = 1 << iota
 	isRead
 	isWrite
-	isTxn
+	isTxnWrite
 )
 
 // IsAdmin returns true if the request requires admin permissions.
@@ -110,10 +110,10 @@ func IsReadOnly(args Request) bool {
 	return IsRead(args) && !IsWrite(args)
 }
 
-// IsTransactional returns true if the request can be part of a
-// transaction.
-func IsTransactional(args Request) bool {
-	return (args.flags() & isTxn) != 0
+// IsTransactionWrite returns true if the request produces write
+// intents when used within a transaction.
+func IsTransactionWrite(args Request) bool {
+	return (args.flags() & isTxnWrite) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -469,16 +469,16 @@ func (*InternalLeaderLeaseRequest) CreateReply() Response { return &InternalLead
 
 func (*ContainsRequest) flags() int              { return isRead }
 func (*GetRequest) flags() int                   { return isRead }
-func (*PutRequest) flags() int                   { return isWrite | isTxn }
-func (*ConditionalPutRequest) flags() int        { return isRead | isWrite | isTxn }
-func (*IncrementRequest) flags() int             { return isRead | isWrite | isTxn }
-func (*DeleteRequest) flags() int                { return isWrite | isTxn }
-func (*DeleteRangeRequest) flags() int           { return isWrite | isTxn }
+func (*PutRequest) flags() int                   { return isWrite | isTxnWrite }
+func (*ConditionalPutRequest) flags() int        { return isRead | isWrite | isTxnWrite }
+func (*IncrementRequest) flags() int             { return isRead | isWrite | isTxnWrite }
+func (*DeleteRequest) flags() int                { return isWrite | isTxnWrite }
+func (*DeleteRangeRequest) flags() int           { return isWrite | isTxnWrite }
 func (*ScanRequest) flags() int                  { return isRead }
 func (*EndTransactionRequest) flags() int        { return isWrite }
-func (*ReapQueueRequest) flags() int             { return isRead | isWrite | isTxn }
-func (*EnqueueUpdateRequest) flags() int         { return isWrite | isTxn }
-func (*EnqueueMessageRequest) flags() int        { return isWrite | isTxn }
+func (*ReapQueueRequest) flags() int             { return isRead | isWrite | isTxnWrite }
+func (*EnqueueUpdateRequest) flags() int         { return isWrite | isTxnWrite }
+func (*EnqueueMessageRequest) flags() int        { return isWrite | isTxnWrite }
 func (*BatchRequest) flags() int                 { return isWrite }
 func (*AdminSplitRequest) flags() int            { return isAdmin }
 func (*AdminMergeRequest) flags() int            { return isAdmin }

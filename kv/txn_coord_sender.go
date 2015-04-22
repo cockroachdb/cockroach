@@ -270,7 +270,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 	// If successful, we're in a transaction, and the command leaves
 	// transactional intents, add the key or key range to the intents map.
 	// If the transaction metadata doesn't yet exist, create it.
-	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactional(call.Args) {
+	if call.Reply.Header().GoError() == nil && header.Txn != nil && proto.IsTransactionWrite(call.Args) {
 		tc.Lock()
 		var ok bool
 		var txnMeta *txnMetadata
