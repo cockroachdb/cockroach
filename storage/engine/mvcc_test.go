@@ -1325,7 +1325,7 @@ func TestFindSplitKey(t *testing.T) {
 	engine := NewInMem(proto.Attributes{}, 1<<20)
 	defer engine.Close()
 
-	ms := &MVCCStats{}
+	ms := &proto.MVCCStats{}
 	// Generate a series of KeyValues, each containing targetLength
 	// bytes, writing key #i to (encoded) key #i through the MVCC
 	// facility. Assuming that this translates roughly into same-length
@@ -1340,7 +1340,7 @@ func TestFindSplitKey(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ms.MergeStats(engine, raftID) // write stats
+	MergeStats(ms, engine, raftID) // write stats
 	snap := engine.NewSnapshot()
 	defer snap.Close()
 	humanSplitKey, err := MVCCFindSplitKey(snap, raftID, KeyMin, KeyMax)
@@ -1435,14 +1435,14 @@ func TestFindValidSplitKeys(t *testing.T) {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
 		defer engine.Close()
 
-		ms := &MVCCStats{}
+		ms := &proto.MVCCStats{}
 		val := proto.Value{Bytes: []byte(strings.Repeat("X", 10))}
 		for _, k := range test.keys {
 			if err := MVCCPut(engine, ms, []byte(k), makeTS(0, 1), val, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, raftID) // write stats
+		MergeStats(ms, engine, raftID) // write stats
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		rangeStart := test.keys[0]
@@ -1516,7 +1516,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 		engine := NewInMem(proto.Attributes{}, 1<<20)
 		defer engine.Close()
 
-		ms := &MVCCStats{}
+		ms := &proto.MVCCStats{}
 		var expKey proto.Key
 		for j, keySize := range test.keySizes {
 			key := proto.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
@@ -1528,7 +1528,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ms.MergeStats(engine, raftID) // write stats
+		MergeStats(ms, engine, raftID) // write stats
 		snap := engine.NewSnapshot()
 		defer snap.Close()
 		splitKey, err := MVCCFindSplitKey(snap, raftID, proto.Key("\x01"), proto.KeyMax)
@@ -1551,7 +1551,7 @@ func encodedSize(msg gogoproto.Message, t *testing.T) int64 {
 	return int64(len(data))
 }
 
-func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
+func verifyStats(debug string, ms *proto.MVCCStats, expMS *proto.MVCCStats, t *testing.T) {
 	// ...And verify stats.
 	if ms.LiveBytes != expMS.LiveBytes {
 		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
@@ -1591,7 +1591,7 @@ func verifyStats(debug string, ms *MVCCStats, expMS *MVCCStats, t *testing.T) {
 func TestMVCCStatsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
-	ms := &MVCCStats{}
+	ms := &proto.MVCCStats{}
 
 	// Verify size of mvccVersionTimestampSize.
 	ts := makeTS(1*1E9, 0)
@@ -1611,7 +1611,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	vKeySize := mvccVersionTimestampSize
 	vValSize := encodedSize(&proto.MVCCValue{Value: &value}, t)
 
-	expMS := &MVCCStats{
+	expMS := &proto.MVCCStats{
 		LiveBytes: mKeySize + mValSize + vKeySize + vValSize,
 		LiveCount: 1,
 		KeyBytes:  mKeySize + vKeySize,
@@ -1630,7 +1630,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	m2ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: txn}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := encodedSize(&proto.MVCCValue{Deleted: true}, t)
-	expMS2 := &MVCCStats{
+	expMS2 := &proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize,
 		KeyCount:    1,
 		ValBytes:    m2ValSize + vValSize + v2ValSize,
@@ -1672,7 +1672,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	mVal2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Txn: txn}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := encodedSize(&proto.MVCCValue{Value: &value2}, t)
-	expMS3 := &MVCCStats{
+	expMS3 := &proto.MVCCStats{
 		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:    2,
 		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
@@ -1695,7 +1695,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	m3ValSize := encodedSize(&proto.MVCCMetadata{Timestamp: ts4, Deleted: true}, t)
 	m2Val2Size := encodedSize(&proto.MVCCMetadata{Timestamp: ts4}, t)
-	expMS4 := &MVCCStats{
+	expMS4 := &proto.MVCCStats{
 		KeyBytes:   mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
 		KeyCount:   2,
 		ValBytes:   m3ValSize + vValSize + v2ValSize + m2Val2Size + vVal2Size,
@@ -1729,7 +1729,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	rng, seed := util.NewPseudoRand()
 	log.Infof("using pseudo random number generator with seed %d", seed)
 	engine := createTestEngine()
-	ms := &MVCCStats{}
+	ms := &proto.MVCCStats{}
 
 	// Now, generate a random sequence of puts, deletes and resolves.
 	// Each put and delete may or may not involve a txn. Resolves may
@@ -1808,7 +1808,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 func TestMVCCGarbageCollect(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
-	ms := &MVCCStats{}
+	ms := &proto.MVCCStats{}
 
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)

@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
@@ -34,7 +35,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 	defer tc.Stop()
 
 	s := tc.rng.stats
-	if !reflect.DeepEqual(s.MVCCStats, engine.MVCCStats{}) {
+	if !reflect.DeepEqual(s.MVCCStats, proto.MVCCStats{}) {
 		t.Errorf("expected empty stats; got %+v", s.MVCCStats)
 	}
 }
@@ -44,7 +45,7 @@ func TestRangeStatsInit(t *testing.T) {
 	tc := testContext{}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := engine.MVCCStats{
+	ms := proto.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        3,
@@ -57,7 +58,7 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	ms.SetStats(tc.engine, 1)
+	engine.SetStats(&ms, tc.engine, 1)
 
 	s, err := newRangeStats(1, tc.engine)
 	if err != nil {
@@ -75,7 +76,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 	tc.Start(t)
 	defer tc.Stop()
-	ms := engine.MVCCStats{
+	ms := proto.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        2,
@@ -90,7 +91,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	}
 	tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 10*1E9)
 	tc.rng.stats.Update(ms)
-	expMS := engine.MVCCStats{
+	expMS := proto.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,
 		ValBytes:        2,
@@ -113,7 +114,7 @@ func TestRangeStatsMerge(t *testing.T) {
 	// Merge again, but with 10 more ns.
 	tc.rng.stats.MergeMVCCStats(tc.engine, &ms, 20*1E9)
 	tc.rng.stats.Update(ms)
-	expMS = engine.MVCCStats{
+	expMS = proto.MVCCStats{
 		LiveBytes:       2,
 		KeyBytes:        4,
 		ValBytes:        4,

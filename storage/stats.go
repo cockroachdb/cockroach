@@ -20,6 +20,7 @@ package storage
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 )
 
@@ -32,9 +33,9 @@ import (
 // processing goroutine and should never be individually updated; use
 // Update() instead. For access from other goroutines, use GetMVCC().
 type rangeStats struct {
-	raftID           int64
-	sync.Mutex       // Protects MVCCStats
-	engine.MVCCStats // embedded, cached version of stat values
+	raftID          int64
+	sync.Mutex      // Protects MVCCStats
+	proto.MVCCStats // embedded, cached version of stat values
 }
 
 // newRangeStats creates a new instance of rangeStats using the
@@ -53,7 +54,7 @@ func newRangeStats(raftID int64, e engine.Engine) (*rangeStats, error) {
 // GetMVCC returns a copy of the underlying MVCCStats. Use this for
 // thread-safe access from goroutines other than the store multiraft
 // processing goroutine.
-func (rs *rangeStats) GetMVCC() engine.MVCCStats {
+func (rs *rangeStats) GetMVCC() proto.MVCCStats {
 	rs.Lock()
 	defer rs.Unlock()
 	return rs.MVCCStats
@@ -71,30 +72,30 @@ func (rs *rangeStats) GetSize() int64 {
 // MVCC operations into the range's stats. The intent age is augmented
 // by multiplying the previous intent count by the elapsed nanos since
 // the last update to range stats.
-func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *engine.MVCCStats, nowNanos int64) {
+func (rs *rangeStats) MergeMVCCStats(e engine.Engine, ms *proto.MVCCStats, nowNanos int64) {
 	// Augment the current intent age.
 	diffSeconds := nowNanos/1E9 - rs.LastUpdateNanos/1E9
 	ms.LastUpdateNanos = nowNanos - rs.LastUpdateNanos
 	ms.IntentAge += rs.IntentCount * diffSeconds
 	ms.GCBytesAge += engine.MVCCComputeGCBytesAge(rs.KeyBytes+rs.ValBytes-rs.LiveBytes, diffSeconds)
-	ms.MergeStats(e, rs.raftID)
+	engine.MergeStats(ms, e, rs.raftID)
 }
 
 // SetStats sets stats wholesale.
-func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms engine.MVCCStats) {
+func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms proto.MVCCStats) {
 	rs.Lock()
 	defer rs.Unlock()
 	rs.MVCCStats = ms
-	ms.SetStats(e, rs.raftID)
+	engine.SetStats(&ms, e, rs.raftID)
 }
 
 // Update updates the rangeStats' internal values for lastUpdateNanos and
 // intentCount. This method should be invoked only after a successful
 // commit of merged values to the underlying engine.
-func (rs *rangeStats) Update(ms engine.MVCCStats) {
+func (rs *rangeStats) Update(ms proto.MVCCStats) {
 	rs.Lock()
 	defer rs.Unlock()
-	rs.Accumulate(ms)
+	engine.Accumulate(&rs.MVCCStats, ms)
 }
 
 // GetAvgIntentAge returns the average age of outstanding intents,

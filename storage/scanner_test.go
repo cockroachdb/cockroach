@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/leaktest"
@@ -50,7 +49,7 @@ func newTestIterator(count int) *testIterator {
 	for i := range ti.ranges {
 		ti.ranges[i].stats = &rangeStats{
 			raftID: int64(i),
-			MVCCStats: engine.MVCCStats{
+			MVCCStats: proto.MVCCStats{
 				KeyBytes:  1,
 				ValBytes:  2,
 				KeyCount:  1,

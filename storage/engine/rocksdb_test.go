@@ -453,7 +453,7 @@ func runMVCCMerge(value *proto.Value, numKeys int, b *testing.B) {
 	// Use parallelism if specified when test is run.
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ms := MVCCStats{}
+			ms := proto.MVCCStats{}
 			if err := MVCCMerge(rocksdb, &ms, keys[rand.Intn(numKeys)], *value); err != nil {
 				b.Fatal(err)
 			}

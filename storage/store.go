@@ -660,7 +660,7 @@ func (s *Store) BootstrapRange() error {
 		},
 	}
 	batch := s.engine.NewBatch()
-	ms := &engine.MVCCStats{}
+	ms := &proto.MVCCStats{}
 	now := s.ctx.Clock.Now()
 
 	// Range descriptor.
@@ -723,7 +723,7 @@ func (s *Store) BootstrapRange() error {
 		return err
 	}
 
-	ms.MergeStats(batch, 1)
+	engine.MergeStats(ms, batch, 1)
 	if err := batch.Commit(); err != nil {
 		return err
 	}

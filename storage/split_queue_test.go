@@ -87,7 +87,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	splitQ := newSplitQueue(nil, tc.gossip)
 
 	for i, test := range testCases {
-		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), engine.MVCCStats{KeyBytes: test.bytes})
+		tc.rng.stats.SetMVCCStats(tc.rng.rm.Engine(), proto.MVCCStats{KeyBytes: test.bytes})
 		copy := *tc.rng.Desc()
 		copy.StartKey = test.start
 		copy.EndKey = test.end
