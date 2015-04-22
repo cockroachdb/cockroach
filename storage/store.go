@@ -46,9 +46,7 @@ const (
 	// cache entries.
 	GCResponseCacheExpiration = 1 * time.Hour
 	// raftIDAllocCount is the number of Raft IDs to allocate per allocation.
-	raftIDAllocCount = 10
-	// defaultScanInterval is the default value for the scan interval.
-	// command line flag.
+	raftIDAllocCount                = 10
 	defaultRaftTickInterval         = 10 * time.Millisecond
 	defaultHeartbeatIntervalTicks   = 3
 	defaultRaftElectionTimeoutTicks = 15
