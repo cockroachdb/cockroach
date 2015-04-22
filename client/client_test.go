@@ -157,8 +157,8 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 					go func() {
 						args := gogoproto.Clone(test.args).(proto.Request)
 						args.Header().Key = key
-						if args.Method() == proto.Put {
-							args.(*proto.PutRequest).Value.Bytes = []byte("value")
+						if put, ok := args.(*proto.PutRequest); ok {
+							put.Value.Bytes = []byte("value")
 						}
 						reply := args.CreateReply()
 						var err error
@@ -190,7 +190,8 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 		if err := kvClient.Run(call); err != nil {
 			t.Fatalf("%d: expected success getting %q: %s", i, key, err)
 		}
-		if test.canPush || test.args.Method() == proto.Get {
+
+		if _, isGet := test.args.(*proto.GetRequest); isGet || test.canPush {
 			if !bytes.Equal(getReply.Value.Bytes, []byte("txn-value")) {
 				t.Errorf("%d: expected \"txn-value\"; got %q", i, getReply.Value.Bytes)
 			}

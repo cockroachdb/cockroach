@@ -72,7 +72,8 @@ type testSender struct {
 // supported. Since kv/ depends on storage/, we can't get access to a
 // coordinator sender from here.
 func (db *testSender) Send(call client.Call) {
-	if call.Method() == proto.EndTransaction || call.Method() == proto.Batch {
+	switch call.Args.(type) {
+	case *proto.EndTransactionRequest, *proto.BatchRequest:
 		call.Reply.Header().SetGoError(util.Errorf("%s method not supported", call.Method()))
 		return
 	}

@@ -130,7 +130,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	numIncrements := 0
 
 	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
-		if args.Method() == proto.Increment && args.Header().Key.Equal(proto.Key("a")) {
+		if _, ok := args.(*proto.IncrementRequest); ok && args.Header().Key.Equal(proto.Key("a")) {
 			numIncrements++
 		}
 		return false
@@ -321,7 +321,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		storage.TestingCommandFilter = nil
 	}()
 	storage.TestingCommandFilter = func(args proto.Request, reply proto.Response) bool {
-		if args.Method() == proto.EndTransaction && args.(*proto.EndTransactionRequest).Commit == true {
+		if et, ok := args.(*proto.EndTransactionRequest); ok && et.Commit {
 			reply.Header().SetGoError(util.Errorf("boom"))
 			return true
 		}
