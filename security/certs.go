@@ -86,7 +86,7 @@ func writeCertificateAndKey(certsDir string, prefix string,
 // to generate CA cert and key.
 func RunCreateCACert(certsDir string) error {
 	if certsDir == "" {
-		return util.Errorf("no certs directory specified, use --certs")
+		return util.Errorf("no certs directory specified, use -certs")
 	}
 
 	// Make the directory first.
@@ -109,7 +109,7 @@ func RunCreateCACert(certsDir string) error {
 // to generate node cert and key.
 func RunCreateNodeCert(certsDir string, hosts []string) error {
 	if certsDir == "" {
-		return util.Errorf("no certs directory specified, use --certs")
+		return util.Errorf("no certs directory specified, use -certs")
 	}
 	if len(hosts) == 0 {
 		return util.Errorf("no hosts specified. Need at least one")

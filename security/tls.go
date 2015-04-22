@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	// EmbeddedPrefix is the prefix to the --certs arg that indicates embedded certs.
+	// EmbeddedPrefix is the prefix to the -certs arg that indicates embedded certs.
 	EmbeddedPrefix = "embedded="
 )
 
