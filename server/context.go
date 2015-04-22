@@ -108,10 +108,10 @@ type Context struct {
 	// visited approximately once by the range scanner.
 	ScanInterval time.Duration
 
-	// HTTPClient is a lazily-initialized http client.
+	// httpClient is a lazily-initialized http client.
 	// It should be accessed through Context.GetHTTPClient() which will
 	// initialize if needed.
-	HTTPClient *http.Client
+	httpClient *http.Client
 }
 
 // NewContext returns a Context with default values.
@@ -217,10 +217,10 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 // In the worst case, we'll be creating more than one.
 func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	var err error
-	if ctx.HTTPClient == nil {
-		ctx.HTTPClient, err = client.NewHTTPClient(ctx.Certs)
+	if ctx.httpClient == nil {
+		ctx.httpClient, err = client.NewHTTPClient(ctx.Certs)
 	}
-	return ctx.HTTPClient, err
+	return ctx.httpClient, err
 }
 
 // parseAttributes parses a colon-separated list of strings,
