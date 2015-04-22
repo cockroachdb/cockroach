@@ -20,7 +20,6 @@ package server
 import (
 	"os"
 	"path"
-	"time"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -37,8 +36,27 @@ func StartTestServer() *TestServer {
 	if err := s.Start(); err != nil {
 		log.Fatalf("Could not start server: %v", err)
 	}
-	log.Infof("Test server listening on https: %s", s.Addr)
+	log.Infof("Test server listening on https: %s", s.ServingAddr())
 	return s
+}
+
+// NewTestContext returns a context for testing. It overrides the
+// Certs with the test certs directory.
+// TODO(marc): use embedded certs.
+func NewTestContext() *Context {
+	ctx := NewContext()
+
+	// MaxOffset is the maximum offset for clocks in the cluster.
+	// This is mostly irrelevant except when testing reads within
+	// uncertainty intervals.
+	ctx.MaxOffset = 0
+
+	ctx.Certs = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
+	// Addr defaults to localhost with port set at time of call to
+	// Start() to an available port.
+	// Call TestServer.ServingAddr() for the full address (including bound port).
+	ctx.Addr = "127.0.0.1:0"
+	return ctx
 }
 
 // A TestServer encapsulates an in-memory instantiation of a cockroach
@@ -52,16 +70,8 @@ func StartTestServer() *TestServer {
 //
 // TODO(spencer): add support for multiple stores.
 type TestServer struct {
-	// CertDir specifies the directory containing certs for SSL
-	// connections. Default will load insecure TLS config.
-	CertDir string
-	// MaxOffset is the maximum offset for clocks in the cluster.
-	// This is mostly irrelevant except when testing reads within
-	// uncertainty intervals.
-	MaxOffset time.Duration
-	// Addr defaults to localhost with port set at time of call to
-	// Start() to an available port.
-	Addr          string
+	// Ctx is the context used by this server.
+	Ctx           *Context
 	SkipBootstrap bool
 	// server is the embedded Cockroach server struct.
 	*Server
@@ -88,24 +98,15 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
-// TestServer.Addr after Start() for client connections. Use Stop()
+// TestServer.ServingAddr() after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ts *TestServer) Start() error {
-	// We update these with the actual port once the servers
-	// have been launched for the purpose of this test.
-	if ts.Addr == "" {
-		ts.Addr = "127.0.0.1:0"
+	if ts.Ctx == nil {
+		ts.Ctx = NewTestContext()
 	}
-	// Always load server certs. Not sure if this path is a good assumption though.
-	ts.CertDir = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
-
-	ctx := NewContext()
-	ctx.Addr = ts.Addr
-	ctx.Certs = ts.CertDir
-	ctx.MaxOffset = ts.MaxOffset
 
 	var err error
-	ts.Server, err = NewServer(ctx, util.NewStopper())
+	ts.Server, err = NewServer(ts.Ctx, util.NewStopper())
 	if err != nil {
 		return util.Errorf("could not init server: %s", err)
 	}
@@ -113,7 +114,7 @@ func (ts *TestServer) Start() error {
 	if ts.Engine == nil {
 		ts.Engine = engine.NewInMem(proto.Attributes{}, 100<<20)
 	}
-	ctx.Engines = []engine.Engine{ts.Engine}
+	ts.Ctx.Engines = []engine.Engine{ts.Engine}
 	if !ts.SkipBootstrap {
 		stopper := util.NewStopper()
 		_, err := BootstrapCluster("cluster-1", ts.Engine, stopper)
@@ -126,11 +127,13 @@ func (ts *TestServer) Start() error {
 	if err != nil {
 		return util.Errorf("could not start server: %s", err)
 	}
-	// Update the configuration variables to reflect the actual
-	// ports bound.
-	ts.Addr = ts.rpc.Addr().String()
 
 	return nil
+}
+
+// ServingAddr returns the rpc server's address. Should be used by clients.
+func (ts *TestServer) ServingAddr() string {
+	return ts.rpc.Addr().String()
 }
 
 // Stop stops the TestServer.

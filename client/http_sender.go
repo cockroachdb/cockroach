@@ -68,10 +68,10 @@ var HTTPRetryOptions = util.RetryOptions{
 func NewHTTPClient(certsDir string) (*http.Client, error) {
 	var tlsConfig *tls.Config
 	if certsDir == "" {
-		log.Infof("no certificates directory specified: using insecure TLS")
+		log.V(1).Infof("no certificates directory specified: using insecure TLS")
 		tlsConfig = rpc.LoadInsecureClientTLSConfig().Config()
 	} else {
-		log.Infof("setting up TLS from certificates directory: %s", certsDir)
+		log.V(1).Infof("setting up TLS from certificates directory: %s", certsDir)
 		cfg, err := rpc.LoadClientTLSConfigFromDir(certsDir)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)

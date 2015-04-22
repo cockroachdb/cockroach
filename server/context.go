@@ -20,11 +20,14 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -105,6 +108,13 @@ type Context struct {
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
 	ScanInterval time.Duration
+
+	// httpClient is a lazily-initialized http client.
+	// It should be accessed through Context.GetHTTPClient() which will
+	// initialize if needed.
+	httpClient *http.Client
+	// Protecs httpClient.
+	httpClientMu sync.Mutex
 }
 
 // NewContext returns a Context with default values.
@@ -202,6 +212,18 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 	}
 
 	return bootstrapResolvers, nil
+}
+
+// GetHTTPClient returns the context http client, initializing it
+// if needed. It uses the context Certs.
+func (ctx *Context) GetHTTPClient() (*http.Client, error) {
+	ctx.httpClientMu.Lock()
+	defer ctx.httpClientMu.Unlock()
+	var err error
+	if ctx.httpClient == nil {
+		ctx.httpClient, err = client.NewHTTPClient(ctx.Certs)
+	}
+	return ctx.httpClient, err
 }
 
 // parseAttributes parses a colon-separated list of strings,
