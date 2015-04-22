@@ -58,7 +58,7 @@ func startServer(t *testing.T) (string, *client.KV, *util.Stopper) {
 	}
 	mux := http.NewServeMux()
 	mux.Handle(RESTPrefix, NewRESTServer(db))
-	mux.Handle(DBPrefix, NewDBServer(db.Sender()))
+	mux.Handle(DBPrefix, NewDBServer(db.Sender))
 	server := httptest.NewTLSServer(mux)
 	stopper.AddCloser(server)
 	addr := server.Listener.Addr().String()

@@ -150,7 +150,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 				if count == 1 {
 					// We use a "notifying" sender here, which allows us to know exactly when the
 					// call has been processed; otherwise, we'd be dependent on timing.
-					kvClient.Sender().(*notifyingSender).reset(&wg)
+					kvClient.Sender.(*notifyingSender).reset(&wg)
 					// We must try the non-txn put or get in a goroutine because
 					// it might have to retry and will only succeed immediately in
 					// the event we can push.
@@ -173,7 +173,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 							t.Fatalf("%d: expected success on non-txn call to %s; got %s", i, err, args.Method())
 						}
 					}()
-					kvClient.Sender().(*notifyingSender).wait()
+					kvClient.Sender.(*notifyingSender).wait()
 				}
 				return nil
 			})
@@ -711,6 +711,8 @@ func TestConcurrentIncrements(t *testing.T) {
 	}
 }
 
+const valueSize = 1 << 10
+
 func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestServer, *client.KV) {
 	const cacheSize = 8 << 30 // 8 GB
 	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
@@ -747,7 +749,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 			// Only write values if this iteration is less than the random
 			// number of versions chosen for this key.
 			if t <= nvs[i] {
-				call := client.PutCall(proto.Key(keys[i]), util.RandBytes(rng, 1024))
+				call := client.PutCall(proto.Key(keys[i]), util.RandBytes(rng, valueSize))
 				call.Args.Header().Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
 				calls = append(calls, call)
 			}
@@ -775,12 +777,12 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 // keys over all of the data, restarting at the beginning of the
 // keyspace, as many times as necessary.
 func runClientScan(numRows, numVersions int, b *testing.B) {
-	// TODO(pmattis): Bump this to 100K when scanning across ranges is fixed.
-	const numKeys = 10000
+	const numKeys = 100000
+
 	s, kv := setupClientBenchData(numVersions, numKeys, b)
 	defer s.Stop()
 
-	b.SetBytes(int64(numRows * 1024))
+	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {

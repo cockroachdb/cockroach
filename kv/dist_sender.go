@@ -19,7 +19,6 @@ package kv
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"time"
 
@@ -480,7 +479,7 @@ func (ds *DistSender) Send(call client.Call) {
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	retryOpts := ds.rpcRetryOptions
-	retryOpts.Tag = fmt.Sprintf("routing %s rpc", call.Method())
+	retryOpts.Tag = "routing " + call.Method() + " rpc"
 
 	// responses and descNext are only used when executing across ranges.
 	var responses []proto.Response

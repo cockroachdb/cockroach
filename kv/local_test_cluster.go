@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
+	gogoproto "github.com/gogo/protobuf/proto"
 )
 
 // retryableLocalSender provides a retry option in the event of range
@@ -59,6 +60,12 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 	retryOpts := util.RetryOptions{
 		Tag:         fmt.Sprintf("routing %s locally", call.Method()),
 		MaxAttempts: 2,
+	}
+	// In local tests, the RPCs are not actually sent over the wire. We
+	// need to clone the Txn in order to avoid unexpected sharing
+	// between TxnCoordSender and client.Txn.
+	if header := call.Args.Header(); header.Txn != nil {
+		header.Txn = gogoproto.Clone(header.Txn).(*proto.Transaction)
 	}
 	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		call.Reply.Header().Error = nil

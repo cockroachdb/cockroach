@@ -39,6 +39,15 @@ type KVSender interface {
 	Send(Call)
 }
 
+// KVSenderFunc is an adapter to allow the use of ordinary functions
+// as KVSenders.
+type KVSenderFunc func(Call)
+
+// Send calls f(c).
+func (f KVSenderFunc) Send(c Call) {
+	f(c)
+}
+
 // A Clock is an interface which provides the current time.
 type Clock interface {
 	// Now returns nanoseconds since the Jan 1, 1970 GMT.
@@ -56,9 +65,8 @@ type KV struct {
 	// ignored.
 	UserPriority    int32
 	TxnRetryOptions util.RetryOptions
-
-	sender KVSender
-	clock  Clock
+	Sender          KVSender
+	clock           Clock
 }
 
 // NewKV creates a new instance of KV using the specified sender. To
@@ -72,22 +80,11 @@ func NewKV(ctx *Context, sender KVSender) *KV {
 		ctx = NewContext()
 	}
 	return &KV{
-		sender:          sender,
+		Sender:          sender,
 		User:            ctx.User,
 		UserPriority:    ctx.UserPriority,
 		TxnRetryOptions: ctx.TxnRetryOptions,
 		clock:           ctx.Clock,
-	}
-}
-
-// Sender returns the sender supplied to NewKV, unless wrapped by a
-// transactional sender, in which case returns the unwrapped sender.
-func (kv *KV) Sender() KVSender {
-	switch t := kv.sender.(type) {
-	case *txnSender:
-		return t.wrapped
-	default:
-		return t
 	}
 }
 
@@ -116,7 +113,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 			c.Args.Header().UserPriority = gogoproto.Int32(kv.UserPriority)
 		}
 		c.resetClientCmdID(kv.clock)
-		kv.sender.Send(c)
+		kv.Sender.Send(c)
 		err = c.Reply.Header().GoError()
 		if err != nil {
 			log.Infof("failed %s: %s", c.Method(), err)
@@ -159,63 +156,7 @@ func (kv *KV) Run(calls ...Call) (err error) {
 // automatically committed otherwise. retryable should have no side
 // effects which could cause problems in the event it must be run more
 // than once. The opts struct contains transaction settings.
-//
-// Calling RunTransaction on the transactional KV client which is
-// supplied to the retryable function is an error.
 func (kv *KV) RunTransaction(opts *TransactionOptions, retryable func(txn *Txn) error) error {
-	if _, ok := kv.sender.(*txnSender); ok {
-		return util.Errorf("cannot invoke RunTransaction on an already-transactional client")
-	}
-
-	// Create a new KV for the transaction using a transactional KV sender.
-	if opts == nil {
-		opts = &defaultTxnOpts
-	}
-	txnSender := newTxnSender(kv.Sender(), opts)
-	txn := &Txn{}
-	txn.kv = *kv
-	txn.kv.sender = txnSender
-	if opts != &defaultTxnOpts {
-		txn.kv.UserPriority = opts.UserPriority
-	}
-
-	// Run retryable in a retry loop until we encounter a success or
-	// error condition this loop isn't capable of handling.
-	retryOpts := kv.TxnRetryOptions
-	retryOpts.Tag = opts.Name
-	err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
-		txnSender.txnEnd = false // always reset before [re]starting txn
-		err := retryable(txn)
-		if err == nil && !txnSender.txnEnd {
-			// If there were no errors running retryable, commit the txn. This
-			// may block waiting for outstanding writes to complete in case
-			// retryable didn't -- we need the most recent of all response
-			// timestamps in order to commit.
-			etArgs := &proto.EndTransactionRequest{Commit: true}
-			etReply := &proto.EndTransactionResponse{}
-			// Prepare and flush for end txn in order to execute entire txn in
-			// a single round trip if possible.
-			txn.Prepare(Call{Args: etArgs, Reply: etReply})
-			err = txn.Flush()
-		}
-		if restartErr, ok := err.(proto.TransactionRestartError); ok {
-			if restartErr.CanRestartTransaction() == proto.TransactionRestart_IMMEDIATE {
-				return util.RetryReset, nil
-			} else if restartErr.CanRestartTransaction() == proto.TransactionRestart_BACKOFF {
-				return util.RetryContinue, nil
-			}
-			// By default, fall through and return RetryBreak.
-		}
-		return util.RetryBreak, err
-	})
-	if err != nil && !txnSender.txnEnd {
-		etArgs := &proto.EndTransactionRequest{Commit: false}
-		etReply := &proto.EndTransactionResponse{}
-		txn.Run(Call{Args: etArgs, Reply: etReply})
-		if etReply.Header().GoError() != nil {
-			log.Errorf("failure aborting transaction: %s; abort caused by: %s", etReply.Header().GoError(), err)
-		}
-		return err
-	}
-	return nil
+	txn := newTxn(kv, opts)
+	return txn.exec(retryable)
 }

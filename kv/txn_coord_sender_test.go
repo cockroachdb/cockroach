@@ -52,7 +52,7 @@ func makeTS(walltime int64, logical int32) proto.Timestamp {
 
 // getCoord type casts the db's sender to a coordinator and returns it.
 func getCoord(db *client.KV) *TxnCoordSender {
-	return db.Sender().(*TxnCoordSender)
+	return db.Sender.(*TxnCoordSender)
 }
 
 // newTxn begins a transaction.
@@ -122,7 +122,7 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 
 	reply := &proto.PutResponse{}
 	key := proto.Key("key")
-	s.KV.Sender().Send(client.Call{
+	s.KV.Sender.Send(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          key,
@@ -160,7 +160,7 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	defer s.Stop()
 
 	reply := &proto.PutResponse{}
-	s.KV.Sender().Send(client.Call{
+	s.KV.Sender.Send(client.Call{
 		Args: &proto.PutRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:          proto.Key("key"),
@@ -342,7 +342,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		t.Fatal(pReply.GoError())
 	}
 	etReply := &proto.EndTransactionResponse{}
-	s.KV.Sender().Send(client.Call{
+	s.KV.Sender.Send(client.Call{
 		Args: &proto.EndTransactionRequest{
 			RequestHeader: proto.RequestHeader{
 				Key:       txn.Key,
