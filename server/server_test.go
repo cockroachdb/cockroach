@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
@@ -73,31 +74,10 @@ func createTestConfigFile(body string) string {
 	return f.Name()
 }
 
-// createTempDirs creates "count" temporary directories and returns
-// the paths to each as a slice.
-func createTempDirs(count int, t *testing.T) []string {
-	tmp := make([]string, count)
-	for i := 0; i < count; i++ {
-		var err error
-		if tmp[i], err = ioutil.TempDir("", "_server_test"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return tmp
-}
-
-// resetTestData recursively removes all files written to the
-// directories specified as parameters.
-func resetTestData(dirs []string) {
-	for _, dir := range dirs {
-		os.RemoveAll(dir)
-	}
-}
-
 // TestInitEngine tests whether the data directory string is parsed correctly.
 func TestInitEngine(t *testing.T) {
-	tmp := createTempDirs(5, t)
-	defer resetTestData(tmp)
+	tmp := util.CreateNTempDirs(t, "_server_test", 5)
+	defer util.CleanupDirs(tmp)
 
 	testCases := []struct {
 		key       string           // data directory
@@ -148,8 +128,8 @@ func TestInitEngine(t *testing.T) {
 // TestInitEngines tests whether multiple engines specified as a
 // single comma-separated list are parsed correctly.
 func TestInitEngines(t *testing.T) {
-	tmp := createTempDirs(2, t)
-	defer resetTestData(tmp)
+	tmp := util.CreateNTempDirs(t, "_server_test", 2)
+	defer util.CleanupDirs(tmp)
 
 	ctx := NewContext()
 	ctx.Stores = fmt.Sprintf("mem=1000,mem:ddr3=1000,ssd=%s,hdd:7200rpm=%s", tmp[0], tmp[1])

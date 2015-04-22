@@ -48,16 +48,6 @@ func tempLocalhostAddr() string {
 	return "127.0.0.1:0"
 }
 
-// CreateTempDirectory creates a temporary directory or fails trying.
-// TODO(marc): cleanup in a separate PR, this is no longer needed.
-func CreateTempDirectory() string {
-	loc, err := ioutil.TempDir("", "rocksdb_test")
-	if err != nil {
-		panic(fmt.Sprintf("%v", err))
-	}
-	return loc
-}
-
 // CreateTempDir creates a temporary directory and returns its path.
 // You should usually call defer CleanupDir(dir) right after.
 func CreateTempDir(t *testing.T, prefix string) string {
