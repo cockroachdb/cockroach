@@ -23,8 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"path"
 	"strings"
 	"testing"
 
@@ -42,7 +40,7 @@ import (
 
 func newTestContext() *Context {
 	newContext := NewContext()
-	newContext.Certs = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
+	newContext.Certs = security.EmbeddedPrefix + "test_certs"
 	return newContext
 }
 

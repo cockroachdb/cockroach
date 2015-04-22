@@ -23,9 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
-	"github.com/cockroachdb/cockroach/util/hlc"
 )
 
 func TestInvalidAddrLength(t *testing.T) {
@@ -43,7 +41,7 @@ func TestInvalidAddrLength(t *testing.T) {
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 	s := createAndStartNewServer(rpcContext, t)
 	defer s.Close()
 
@@ -65,7 +63,7 @@ func TestSendToOneClient(t *testing.T) {
 // TestSendToMultipleClients verifies that Send correctly sends
 // multiple requests to multiple server using the heartbeat RPC.
 func TestSendToMultipleClients(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 	numServers := 4
 	var addrs []net.Addr
 	for i := 0; i < numServers; i++ {
@@ -94,7 +92,7 @@ func TestSendToMultipleClients(t *testing.T) {
 // TestRetryableError verifies that Send returns a retryable error
 // when it hits an RPC error.
 func TestRetryableError(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 	s := createAndStartNewServer(rpcContext, t)
 
 	// Wait until the server becomes ready and shut down the server.
@@ -127,7 +125,7 @@ func TestRetryableError(t *testing.T) {
 // TestUnretryableError verifies that Send returns an unretryable
 // error when it hits a critical error.
 func TestUnretryableError(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 	s := createAndStartNewServer(rpcContext, t)
 
 	opts := Options{
@@ -160,7 +158,7 @@ func TestUnretryableError(t *testing.T) {
 // TestClientNotReady verifies that Send gets an RPC error when a client
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 
 	opts := Options{
 		N:               1,
@@ -199,7 +197,7 @@ func TestClientNotReady(t *testing.T) {
 // TestComplexScenarios verifies various complex success/failure scenarios by
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
-	rpcContext := createNewTestRPCContext(t)
+	rpcContext := NewTestContext(t)
 
 	testCases := []struct {
 		numServers               int
@@ -300,15 +298,6 @@ func TestComplexScenarios(t *testing.T) {
 			t.Errorf("%d: Unexpected error: %v", i, retryErr)
 		}
 	}
-}
-
-// createNewTestRPCContext creates an RPCContext used for test.
-func createNewTestRPCContext(t *testing.T) *Context {
-	tlsConfig, err := security.LoadTestTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
 }
 
 // createAndStartNewServer creates and starts a new server with a test address.

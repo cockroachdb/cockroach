@@ -23,7 +23,7 @@ import (
 )
 
 func TestLoadTLSConfig(t *testing.T) {
-	wrapperConfig, err := LoadTestTLSConfig()
+	wrapperConfig, err := LoadTLSConfigFromDir(EmbeddedPrefix + "test_certs")
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}

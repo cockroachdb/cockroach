@@ -25,10 +25,15 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util"
+)
+
+const (
+	EmbeddedPrefix = "embedded:"
 )
 
 // TLSConfig contains the TLS settings for a Cockroach node. Currently it's
@@ -54,7 +59,11 @@ func (c *TLSConfig) Config() *tls.Config {
 // - ca.crt   -- the certificate of the cluster CA
 // - node.crt -- the certificate of this node; should be signed by the CA
 // - node.key -- the private key of this node
+// If the path is prefixed with "embedded:", load the embedded certs.
 func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+	if strings.HasPrefix(certDir, EmbeddedPrefix) {
+		return LoadTestTLSConfig(certDir[len(EmbeddedPrefix):])
+	}
 	certPEM, err := ioutil.ReadFile(path.Join(certDir, "node.crt"))
 	if err != nil {
 		return nil, err
@@ -64,6 +73,24 @@ func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 		return nil, err
 	}
 	caPEM, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return nil, err
+	}
+	return LoadTLSConfig(certPEM, keyPEM, caPEM)
+}
+
+// LoadTestTLSConfig loads the embedded certs. This is only called from
+// LoadTLSConfigFromDir when the certdir path starts with "embedded:".
+func LoadTestTLSConfig(certDir string) (*TLSConfig, error) {
+	certPEM, err := securitytest.Asset(path.Join(certDir, "node.crt"))
+	if err != nil {
+		return nil, err
+	}
+	keyPEM, err := securitytest.Asset(path.Join(certDir, "node.key"))
+	if err != nil {
+		return nil, err
+	}
+	caPEM, err := securitytest.Asset(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +146,20 @@ func LoadInsecureTLSConfig() *TLSConfig {
 // LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
 // specified directory. The directory must contain ca.crt.
 func LoadClientTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+	if strings.HasPrefix(certDir, EmbeddedPrefix) {
+		return LoadTestClientTLSConfig(certDir[len(EmbeddedPrefix):])
+	}
 	caPEM, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return nil, err
+	}
+	return LoadClientTLSConfig(caPEM)
+}
+
+// LoadTestClientTLSConfig loads the embedded certs. This is only called from
+// LoadClientTLSConfigFromDir when the certdir path starts with "embedded:".
+func LoadTestClientTLSConfig(certDir string) (*TLSConfig, error) {
+	caPEM, err := securitytest.Asset(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}
@@ -146,26 +186,6 @@ func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
 			MinVersion: tls.VersionTLS12,
 		},
 	}, nil
-}
-
-// LoadTestTLSConfig loads the test TLSConfig included with the project. It requires
-// a path to the project root, loading the certs from assets bundled with the test.
-// TODO Maybe instead of returning err, take a testing.T?  And move to tls_test?
-func LoadTestTLSConfig() (*TLSConfig, error) {
-	certDir := "./test_certs"
-	certPEM, err := securitytest.Asset(path.Join(certDir, "node.crt"))
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := securitytest.Asset(path.Join(certDir, "node.key"))
-	if err != nil {
-		return nil, err
-	}
-	caPEM, err := securitytest.Asset(path.Join(certDir, "ca.crt"))
-	if err != nil {
-		return nil, err
-	}
-	return LoadTLSConfig(certPEM, keyPEM, caPEM)
 }
 
 // LoadInsecureClientTLSConfig creates a TLSConfig that disables TLS.
