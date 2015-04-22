@@ -24,6 +24,7 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/extension_set.h>
 #include <google/protobuf/unknown_field_set.h>
+#include "cockroach/proto/data.pb.h"
 #include "gogoproto/gogo.pb.h"
 // @@protoc_insertion_point(includes)
 
@@ -226,6 +227,15 @@ class PingRequest : public ::google::protobuf::Message {
   inline ::std::string* release_addr();
   inline void set_allocated_addr(::std::string* addr);
 
+  // optional .cockroach.proto.Timestamp client_timestamp = 4;
+  inline bool has_client_timestamp() const;
+  inline void clear_client_timestamp();
+  static const int kClientTimestampFieldNumber = 4;
+  inline const ::cockroach::proto::Timestamp& client_timestamp() const;
+  inline ::cockroach::proto::Timestamp* mutable_client_timestamp();
+  inline ::cockroach::proto::Timestamp* release_client_timestamp();
+  inline void set_allocated_client_timestamp(::cockroach::proto::Timestamp* client_timestamp);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.PingRequest)
  private:
   inline void set_has_ping();
@@ -234,6 +244,8 @@ class PingRequest : public ::google::protobuf::Message {
   inline void clear_has_offset();
   inline void set_has_addr();
   inline void clear_has_addr();
+  inline void set_has_client_timestamp();
+  inline void clear_has_client_timestamp();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -242,6 +254,7 @@ class PingRequest : public ::google::protobuf::Message {
   ::std::string* ping_;
   ::cockroach::proto::RemoteOffset* offset_;
   ::std::string* addr_;
+  ::cockroach::proto::Timestamp* client_timestamp_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fheartbeat_2eproto();
@@ -323,12 +336,23 @@ class PingResponse : public ::google::protobuf::Message {
   inline ::google::protobuf::int64 server_time() const;
   inline void set_server_time(::google::protobuf::int64 value);
 
+  // optional .cockroach.proto.Timestamp server_timestamp = 3;
+  inline bool has_server_timestamp() const;
+  inline void clear_server_timestamp();
+  static const int kServerTimestampFieldNumber = 3;
+  inline const ::cockroach::proto::Timestamp& server_timestamp() const;
+  inline ::cockroach::proto::Timestamp* mutable_server_timestamp();
+  inline ::cockroach::proto::Timestamp* release_server_timestamp();
+  inline void set_allocated_server_timestamp(::cockroach::proto::Timestamp* server_timestamp);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.PingResponse)
  private:
   inline void set_has_pong();
   inline void clear_has_pong();
   inline void set_has_server_time();
   inline void clear_has_server_time();
+  inline void set_has_server_timestamp();
+  inline void clear_has_server_timestamp();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -336,6 +360,7 @@ class PingResponse : public ::google::protobuf::Message {
   mutable int _cached_size_;
   ::std::string* pong_;
   ::google::protobuf::int64 server_time_;
+  ::cockroach::proto::Timestamp* server_timestamp_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fheartbeat_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fheartbeat_2eproto();
   friend void protobuf_ShutdownFile_cockroach_2fproto_2fheartbeat_2eproto();
@@ -619,6 +644,47 @@ inline void PingRequest::set_allocated_addr(::std::string* addr) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PingRequest.addr)
 }
 
+// optional .cockroach.proto.Timestamp client_timestamp = 4;
+inline bool PingRequest::has_client_timestamp() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void PingRequest::set_has_client_timestamp() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void PingRequest::clear_has_client_timestamp() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void PingRequest::clear_client_timestamp() {
+  if (client_timestamp_ != NULL) client_timestamp_->::cockroach::proto::Timestamp::Clear();
+  clear_has_client_timestamp();
+}
+inline const ::cockroach::proto::Timestamp& PingRequest::client_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.PingRequest.client_timestamp)
+  return client_timestamp_ != NULL ? *client_timestamp_ : *default_instance_->client_timestamp_;
+}
+inline ::cockroach::proto::Timestamp* PingRequest::mutable_client_timestamp() {
+  set_has_client_timestamp();
+  if (client_timestamp_ == NULL) client_timestamp_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.PingRequest.client_timestamp)
+  return client_timestamp_;
+}
+inline ::cockroach::proto::Timestamp* PingRequest::release_client_timestamp() {
+  clear_has_client_timestamp();
+  ::cockroach::proto::Timestamp* temp = client_timestamp_;
+  client_timestamp_ = NULL;
+  return temp;
+}
+inline void PingRequest::set_allocated_client_timestamp(::cockroach::proto::Timestamp* client_timestamp) {
+  delete client_timestamp_;
+  client_timestamp_ = client_timestamp;
+  if (client_timestamp) {
+    set_has_client_timestamp();
+  } else {
+    clear_has_client_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PingRequest.client_timestamp)
+}
+
 // -------------------------------------------------------------------
 
 // PingResponse
@@ -721,6 +787,47 @@ inline void PingResponse::set_server_time(::google::protobuf::int64 value) {
   set_has_server_time();
   server_time_ = value;
   // @@protoc_insertion_point(field_set:cockroach.proto.PingResponse.server_time)
+}
+
+// optional .cockroach.proto.Timestamp server_timestamp = 3;
+inline bool PingResponse::has_server_timestamp() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void PingResponse::set_has_server_timestamp() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void PingResponse::clear_has_server_timestamp() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void PingResponse::clear_server_timestamp() {
+  if (server_timestamp_ != NULL) server_timestamp_->::cockroach::proto::Timestamp::Clear();
+  clear_has_server_timestamp();
+}
+inline const ::cockroach::proto::Timestamp& PingResponse::server_timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.PingResponse.server_timestamp)
+  return server_timestamp_ != NULL ? *server_timestamp_ : *default_instance_->server_timestamp_;
+}
+inline ::cockroach::proto::Timestamp* PingResponse::mutable_server_timestamp() {
+  set_has_server_timestamp();
+  if (server_timestamp_ == NULL) server_timestamp_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.PingResponse.server_timestamp)
+  return server_timestamp_;
+}
+inline ::cockroach::proto::Timestamp* PingResponse::release_server_timestamp() {
+  clear_has_server_timestamp();
+  ::cockroach::proto::Timestamp* temp = server_timestamp_;
+  server_timestamp_ = NULL;
+  return temp;
+}
+inline void PingResponse::set_allocated_server_timestamp(::cockroach::proto::Timestamp* server_timestamp) {
+  delete server_timestamp_;
+  server_timestamp_ = server_timestamp;
+  if (server_timestamp) {
+    set_has_server_timestamp();
+  } else {
+    clear_has_server_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.PingResponse.server_timestamp)
 }
 
 

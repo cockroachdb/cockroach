@@ -63,8 +63,10 @@ type PingRequest struct {
 	// The last offset the client measured with the server.
 	Offset RemoteOffset `protobuf:"bytes,2,opt,name=offset" json:"offset"`
 	// The address of the client.
-	Addr             string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
-	XXX_unrecognized []byte `json:"-"`
+	Addr string `protobuf:"bytes,3,opt,name=addr" json:"addr"`
+	// Time when the request was sent, measured with the HLC clock.
+	ClientTimestamp  Timestamp `protobuf:"bytes,4,opt,name=client_timestamp" json:"client_timestamp"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *PingRequest) Reset()         { *m = PingRequest{} }
@@ -92,12 +94,21 @@ func (m *PingRequest) GetAddr() string {
 	return ""
 }
 
+func (m *PingRequest) GetClientTimestamp() Timestamp {
+	if m != nil {
+		return m.ClientTimestamp
+	}
+	return Timestamp{}
+}
+
 // A PingResponse contains the echoed ping request string.
 type PingResponse struct {
 	// An echo of value sent with PingRequest.
-	Pong             string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
-	ServerTime       int64  `protobuf:"varint,2,opt,name=server_time" json:"server_time"`
-	XXX_unrecognized []byte `json:"-"`
+	Pong       string `protobuf:"bytes,1,opt,name=pong" json:"pong"`
+	ServerTime int64  `protobuf:"varint,2,opt,name=server_time" json:"server_time"`
+	// Time when the request was handled, measured with HLC clock.
+	ServerTimestamp  Timestamp `protobuf:"bytes,3,opt,name=server_timestamp" json:"server_timestamp"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *PingResponse) Reset()         { *m = PingResponse{} }
@@ -116,6 +127,13 @@ func (m *PingResponse) GetServerTime() int64 {
 		return m.ServerTime
 	}
 	return 0
+}
+
+func (m *PingResponse) GetServerTimestamp() Timestamp {
+	if m != nil {
+		return m.ServerTimestamp
+	}
+	return Timestamp{}
 }
 
 func init() {

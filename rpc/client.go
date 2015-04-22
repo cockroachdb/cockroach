@@ -237,7 +237,10 @@ func (c *Client) startHeartbeat() {
 // it measures the clock of the remote to determine the node's clock offset
 // from the remote.
 func (c *Client) heartbeat() error {
-	request := &proto.PingRequest{Offset: c.RemoteOffset(), Addr: c.LocalAddr().String()}
+	request := &proto.PingRequest{
+		Offset:          c.RemoteOffset(),
+		Addr:            c.LocalAddr().String(),
+		ClientTimestamp: c.clock.Timestamp()}
 	response := &proto.PingResponse{}
 	sendTime := c.clock.PhysicalNow()
 	call := c.Go("Heartbeat.Ping", request, response, nil)
@@ -248,6 +251,7 @@ func (c *Client) heartbeat() error {
 		c.mu.Lock()
 		c.healthy = true
 		c.offset.MeasuredAt = receiveTime
+		c.clock.Update(response.ServerTimestamp)
 		if receiveTime-sendTime > maximumClockReadingDelay.Nanoseconds() {
 			c.offset = proto.InfiniteOffset
 		} else {

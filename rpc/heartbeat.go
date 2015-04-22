@@ -39,6 +39,7 @@ type HeartbeatService struct {
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(args *proto.PingRequest, reply *proto.PingResponse) error {
+	hs.clock.Update(args.ClientTimestamp)
 	reply.Pong = args.Ping
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
