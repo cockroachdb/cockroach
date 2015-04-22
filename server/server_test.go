@@ -154,13 +154,13 @@ func TestInitEngines(t *testing.T) {
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	s.Stop()
 }
 
 // TestHealth verifies that health endpoint return "ok".
 func TestHealth(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	defer s.Stop()
 	url := "https://" + s.ServingAddr() + healthPath
 	resp, err := client.CreateTestHTTPClient().Get(url)
@@ -182,7 +182,7 @@ func TestHealth(t *testing.T) {
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	defer s.Stop()
 	// We can't use the standard test client. Create our own.
 	tlsConfig := security.LoadInsecureClientTLSConfig().Config()
@@ -249,7 +249,7 @@ func TestAcceptEncoding(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands which access multiple
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	defer s.Stop()
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
@@ -358,7 +358,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		s := StartTestServer()
+		s := StartTestServer(t)
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 

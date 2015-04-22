@@ -20,6 +20,7 @@ package server
 import (
 	"os"
 	"path"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
@@ -31,10 +32,14 @@ import (
 )
 
 // StartTestServer starts a in-memory test server.
-func StartTestServer() *TestServer {
+func StartTestServer(t *testing.T) *TestServer {
 	s := &TestServer{}
 	if err := s.Start(); err != nil {
-		log.Fatalf("Could not start server: %v", err)
+		if t != nil {
+			t.Fatalf("Could not start server: %v", err)
+		} else {
+			log.Fatalf("Could not start server: %v", err)
+		}
 	}
 	log.Infof("Test server listening on https: %s", s.ServingAddr())
 	return s
