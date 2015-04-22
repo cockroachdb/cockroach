@@ -53,31 +53,33 @@ func verifyRequest(args proto.Request) error {
 // internal methods. Do not change this behavior without also fixing
 // DBServer.ServeHTTP.
 func createArgsAndReply(method string) (proto.Request, proto.Response) {
-	switch method {
-	case proto.Contains:
-		return &proto.ContainsRequest{}, &proto.ContainsResponse{}
-	case proto.Get:
-		return &proto.GetRequest{}, &proto.GetResponse{}
-	case proto.Put:
-		return &proto.PutRequest{}, &proto.PutResponse{}
-	case proto.ConditionalPut:
-		return &proto.ConditionalPutRequest{}, &proto.ConditionalPutResponse{}
-	case proto.Increment:
-		return &proto.IncrementRequest{}, &proto.IncrementResponse{}
-	case proto.Delete:
-		return &proto.DeleteRequest{}, &proto.DeleteResponse{}
-	case proto.DeleteRange:
-		return &proto.DeleteRangeRequest{}, &proto.DeleteRangeResponse{}
-	case proto.Scan:
-		return &proto.ScanRequest{}, &proto.ScanResponse{}
-	case proto.EndTransaction:
-		return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}
-	case proto.Batch:
-		return &proto.BatchRequest{}, &proto.BatchResponse{}
-	case proto.AdminSplit:
-		return &proto.AdminSplitRequest{}, &proto.AdminSplitResponse{}
-	case proto.AdminMerge:
-		return &proto.AdminMergeRequest{}, &proto.AdminMergeResponse{}
+	if m, ok := proto.AllMethods[method]; ok {
+		switch m {
+		case proto.Contains:
+			return &proto.ContainsRequest{}, &proto.ContainsResponse{}
+		case proto.Get:
+			return &proto.GetRequest{}, &proto.GetResponse{}
+		case proto.Put:
+			return &proto.PutRequest{}, &proto.PutResponse{}
+		case proto.ConditionalPut:
+			return &proto.ConditionalPutRequest{}, &proto.ConditionalPutResponse{}
+		case proto.Increment:
+			return &proto.IncrementRequest{}, &proto.IncrementResponse{}
+		case proto.Delete:
+			return &proto.DeleteRequest{}, &proto.DeleteResponse{}
+		case proto.DeleteRange:
+			return &proto.DeleteRangeRequest{}, &proto.DeleteRangeResponse{}
+		case proto.Scan:
+			return &proto.ScanRequest{}, &proto.ScanResponse{}
+		case proto.EndTransaction:
+			return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}
+		case proto.Batch:
+			return &proto.BatchRequest{}, &proto.BatchResponse{}
+		case proto.AdminSplit:
+			return &proto.AdminSplitRequest{}, &proto.AdminSplitResponse{}
+		case proto.AdminMerge:
+			return &proto.AdminMergeRequest{}, &proto.AdminMergeResponse{}
+		}
 	}
 	return nil, nil
 }

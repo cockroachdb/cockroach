@@ -109,25 +109,29 @@ var configDescriptors = []*configDescriptor{
 	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 
-// tsCacheRequests specifies the set of requests which affect the
+// tsCacheMethods specifies the set of methods which affect the
 // timestamp cache.
-var tsCacheRequests = map[reflect.Type]bool{
-	reflect.TypeOf((*proto.ContainsRequest)(nil)):              true,
-	reflect.TypeOf((*proto.GetRequest)(nil)):                   true,
-	reflect.TypeOf((*proto.PutRequest)(nil)):                   true,
-	reflect.TypeOf((*proto.ConditionalPutRequest)(nil)):        true,
-	reflect.TypeOf((*proto.IncrementRequest)(nil)):             true,
-	reflect.TypeOf((*proto.ScanRequest)(nil)):                  true,
-	reflect.TypeOf((*proto.DeleteRequest)(nil)):                true,
-	reflect.TypeOf((*proto.DeleteRangeRequest)(nil)):           true,
-	reflect.TypeOf((*proto.InternalResolveIntentRequest)(nil)): true,
-	reflect.TypeOf((*proto.InternalMergeRequest)(nil)):         true,
+var tsCacheMethods = [...]bool{
+	proto.Contains:              true,
+	proto.Get:                   true,
+	proto.Put:                   true,
+	proto.ConditionalPut:        true,
+	proto.Increment:             true,
+	proto.Scan:                  true,
+	proto.Delete:                true,
+	proto.DeleteRange:           true,
+	proto.InternalResolveIntent: true,
+	proto.InternalMerge:         true,
 }
 
 // usesTimestampCache returns true if the request affects or is
 // affected by the timestamp cache.
 func usesTimestampCache(r proto.Request) bool {
-	return tsCacheRequests[reflect.TypeOf(r)]
+	m := r.Method()
+	if m < 0 || m >= proto.Method(len(tsCacheMethods)) {
+		return false
+	}
+	return tsCacheMethods[m]
 }
 
 // A pendingCmd holds the reply buffer and a done channel for a command
