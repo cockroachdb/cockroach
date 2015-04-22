@@ -56,16 +56,6 @@ const (
 	Scan = "Scan"
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction = "EndTransaction"
-	// ReapQueue scans and deletes messages from a recipient message
-	// queue. ReapQueueRequest invocations must be part of an extant
-	// transaction or they fail. Returns the reaped queue messsages, up to
-	// the requested maximum. If fewer than the maximum were returned,
-	// then the queue is empty.
-	ReapQueue = "ReapQueue"
-	// EnqueueUpdate enqueues an update for eventual execution.
-	EnqueueUpdate = "EnqueueUpdate"
-	// EnqueueMessage enqueues a message for delivery to an inbox.
-	EnqueueMessage = "EnqueueMessage"
 	// Batch executes a set of commands in parallel.
 	Batch = "Batch"
 	// AdminSplit is called to coordinate a split of a range.
@@ -357,15 +347,6 @@ func (*ScanRequest) Method() string { return Scan }
 func (*EndTransactionRequest) Method() string { return EndTransaction }
 
 // Method implements the Request interface.
-func (*ReapQueueRequest) Method() string { return ReapQueue }
-
-// Method implements the Request interface.
-func (*EnqueueUpdateRequest) Method() string { return EnqueueUpdate }
-
-// Method implements the Request interface.
-func (*EnqueueMessageRequest) Method() string { return EnqueueMessage }
-
-// Method implements the Request interface.
 func (*BatchRequest) Method() string { return Batch }
 
 // Method implements the Request interface.
@@ -426,15 +407,6 @@ func (*ScanRequest) CreateReply() Response { return &ScanResponse{} }
 func (*EndTransactionRequest) CreateReply() Response { return &EndTransactionResponse{} }
 
 // CreateReply implements the Request interface.
-func (*ReapQueueRequest) CreateReply() Response { return &ReapQueueResponse{} }
-
-// CreateReply implements the Request interface.
-func (*EnqueueUpdateRequest) CreateReply() Response { return &EnqueueUpdateResponse{} }
-
-// CreateReply implements the Request interface.
-func (*EnqueueMessageRequest) CreateReply() Response { return &EnqueueMessageResponse{} }
-
-// CreateReply implements the Request interface.
 func (*BatchRequest) CreateReply() Response { return &BatchResponse{} }
 
 // CreateReply implements the Request interface.
@@ -476,9 +448,6 @@ func (*DeleteRequest) flags() int                { return isWrite | isTxnWrite }
 func (*DeleteRangeRequest) flags() int           { return isWrite | isTxnWrite }
 func (*ScanRequest) flags() int                  { return isRead }
 func (*EndTransactionRequest) flags() int        { return isWrite }
-func (*ReapQueueRequest) flags() int             { return isRead | isWrite | isTxnWrite }
-func (*EnqueueUpdateRequest) flags() int         { return isWrite | isTxnWrite }
-func (*EnqueueMessageRequest) flags() int        { return isWrite | isTxnWrite }
 func (*BatchRequest) flags() int                 { return isWrite }
 func (*AdminSplitRequest) flags() int            { return isAdmin }
 func (*AdminMergeRequest) flags() int            { return isAdmin }

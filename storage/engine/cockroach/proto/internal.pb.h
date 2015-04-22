@@ -1627,9 +1627,6 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     kDelete = 4,
     kDeleteRange = 5,
     kEndTransaction = 6,
-    kReapQueue = 7,
-    kEnqueueUpdate = 8,
-    kEnqueueMessage = 9,
     kInternalHeartbeatTxn = 10,
     kInternalPushTxn = 11,
     kInternalResolveIntent = 12,
@@ -1723,33 +1720,6 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline ::cockroach::proto::EndTransactionResponse* release_end_transaction();
   inline void set_allocated_end_transaction(::cockroach::proto::EndTransactionResponse* end_transaction);
 
-  // optional .cockroach.proto.ReapQueueResponse reap_queue = 7;
-  inline bool has_reap_queue() const;
-  inline void clear_reap_queue();
-  static const int kReapQueueFieldNumber = 7;
-  inline const ::cockroach::proto::ReapQueueResponse& reap_queue() const;
-  inline ::cockroach::proto::ReapQueueResponse* mutable_reap_queue();
-  inline ::cockroach::proto::ReapQueueResponse* release_reap_queue();
-  inline void set_allocated_reap_queue(::cockroach::proto::ReapQueueResponse* reap_queue);
-
-  // optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 8;
-  inline bool has_enqueue_update() const;
-  inline void clear_enqueue_update();
-  static const int kEnqueueUpdateFieldNumber = 8;
-  inline const ::cockroach::proto::EnqueueUpdateResponse& enqueue_update() const;
-  inline ::cockroach::proto::EnqueueUpdateResponse* mutable_enqueue_update();
-  inline ::cockroach::proto::EnqueueUpdateResponse* release_enqueue_update();
-  inline void set_allocated_enqueue_update(::cockroach::proto::EnqueueUpdateResponse* enqueue_update);
-
-  // optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 9;
-  inline bool has_enqueue_message() const;
-  inline void clear_enqueue_message();
-  static const int kEnqueueMessageFieldNumber = 9;
-  inline const ::cockroach::proto::EnqueueMessageResponse& enqueue_message() const;
-  inline ::cockroach::proto::EnqueueMessageResponse* mutable_enqueue_message();
-  inline ::cockroach::proto::EnqueueMessageResponse* release_enqueue_message();
-  inline void set_allocated_enqueue_message(::cockroach::proto::EnqueueMessageResponse* enqueue_message);
-
   // optional .cockroach.proto.InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
   inline bool has_internal_heartbeat_txn() const;
   inline void clear_internal_heartbeat_txn();
@@ -1813,9 +1783,6 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline void set_has_delete_();
   inline void set_has_delete_range();
   inline void set_has_end_transaction();
-  inline void set_has_reap_queue();
-  inline void set_has_enqueue_update();
-  inline void set_has_enqueue_message();
   inline void set_has_internal_heartbeat_txn();
   inline void set_has_internal_push_txn();
   inline void set_has_internal_resolve_intent();
@@ -1838,9 +1805,6 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     ::cockroach::proto::DeleteResponse* delete__;
     ::cockroach::proto::DeleteRangeResponse* delete_range_;
     ::cockroach::proto::EndTransactionResponse* end_transaction_;
-    ::cockroach::proto::ReapQueueResponse* reap_queue_;
-    ::cockroach::proto::EnqueueUpdateResponse* enqueue_update_;
-    ::cockroach::proto::EnqueueMessageResponse* enqueue_message_;
     ::cockroach::proto::InternalHeartbeatTxnResponse* internal_heartbeat_txn_;
     ::cockroach::proto::InternalPushTxnResponse* internal_push_txn_;
     ::cockroach::proto::InternalResolveIntentResponse* internal_resolve_intent_;
@@ -1892,9 +1856,6 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     kDeleteRange = 7,
     kScan = 8,
     kEndTransaction = 9,
-    kReapQueue = 10,
-    kEnqueueUpdate = 11,
-    kEnqueueMessage = 12,
     kBatch = 30,
     kInternalRangeLookup = 31,
     kInternalHeartbeatTxn = 32,
@@ -2018,33 +1979,6 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline ::cockroach::proto::EndTransactionRequest* release_end_transaction();
   inline void set_allocated_end_transaction(::cockroach::proto::EndTransactionRequest* end_transaction);
 
-  // optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-  inline bool has_reap_queue() const;
-  inline void clear_reap_queue();
-  static const int kReapQueueFieldNumber = 10;
-  inline const ::cockroach::proto::ReapQueueRequest& reap_queue() const;
-  inline ::cockroach::proto::ReapQueueRequest* mutable_reap_queue();
-  inline ::cockroach::proto::ReapQueueRequest* release_reap_queue();
-  inline void set_allocated_reap_queue(::cockroach::proto::ReapQueueRequest* reap_queue);
-
-  // optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-  inline bool has_enqueue_update() const;
-  inline void clear_enqueue_update();
-  static const int kEnqueueUpdateFieldNumber = 11;
-  inline const ::cockroach::proto::EnqueueUpdateRequest& enqueue_update() const;
-  inline ::cockroach::proto::EnqueueUpdateRequest* mutable_enqueue_update();
-  inline ::cockroach::proto::EnqueueUpdateRequest* release_enqueue_update();
-  inline void set_allocated_enqueue_update(::cockroach::proto::EnqueueUpdateRequest* enqueue_update);
-
-  // optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-  inline bool has_enqueue_message() const;
-  inline void clear_enqueue_message();
-  static const int kEnqueueMessageFieldNumber = 12;
-  inline const ::cockroach::proto::EnqueueMessageRequest& enqueue_message() const;
-  inline ::cockroach::proto::EnqueueMessageRequest* mutable_enqueue_message();
-  inline ::cockroach::proto::EnqueueMessageRequest* release_enqueue_message();
-  inline void set_allocated_enqueue_message(::cockroach::proto::EnqueueMessageRequest* enqueue_message);
-
   // optional .cockroach.proto.BatchRequest batch = 30;
   inline bool has_batch() const;
   inline void clear_batch();
@@ -2138,9 +2072,6 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
   inline void set_has_delete_range();
   inline void set_has_scan();
   inline void set_has_end_transaction();
-  inline void set_has_reap_queue();
-  inline void set_has_enqueue_update();
-  inline void set_has_enqueue_message();
   inline void set_has_batch();
   inline void set_has_internal_range_lookup();
   inline void set_has_internal_heartbeat_txn();
@@ -2169,9 +2100,6 @@ class InternalRaftCommandUnion : public ::google::protobuf::Message {
     ::cockroach::proto::DeleteRangeRequest* delete_range_;
     ::cockroach::proto::ScanRequest* scan_;
     ::cockroach::proto::EndTransactionRequest* end_transaction_;
-    ::cockroach::proto::ReapQueueRequest* reap_queue_;
-    ::cockroach::proto::EnqueueUpdateRequest* enqueue_update_;
-    ::cockroach::proto::EnqueueMessageRequest* enqueue_message_;
     ::cockroach::proto::BatchRequest* batch_;
     ::cockroach::proto::InternalRangeLookupRequest* internal_range_lookup_;
     ::cockroach::proto::InternalHeartbeatTxnRequest* internal_heartbeat_txn_;
@@ -4421,135 +4349,6 @@ inline void ReadWriteCmdResponse::set_allocated_end_transaction(::cockroach::pro
   }
 }
 
-// optional .cockroach.proto.ReapQueueResponse reap_queue = 7;
-inline bool ReadWriteCmdResponse::has_reap_queue() const {
-  return value_case() == kReapQueue;
-}
-inline void ReadWriteCmdResponse::set_has_reap_queue() {
-  _oneof_case_[0] = kReapQueue;
-}
-inline void ReadWriteCmdResponse::clear_reap_queue() {
-  if (has_reap_queue()) {
-    delete value_.reap_queue_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::ReapQueueResponse& ReadWriteCmdResponse::reap_queue() const {
-  return has_reap_queue() ? *value_.reap_queue_
-                      : ::cockroach::proto::ReapQueueResponse::default_instance();
-}
-inline ::cockroach::proto::ReapQueueResponse* ReadWriteCmdResponse::mutable_reap_queue() {
-  if (!has_reap_queue()) {
-    clear_value();
-    set_has_reap_queue();
-    value_.reap_queue_ = new ::cockroach::proto::ReapQueueResponse;
-  }
-  return value_.reap_queue_;
-}
-inline ::cockroach::proto::ReapQueueResponse* ReadWriteCmdResponse::release_reap_queue() {
-  if (has_reap_queue()) {
-    clear_has_value();
-    ::cockroach::proto::ReapQueueResponse* temp = value_.reap_queue_;
-    value_.reap_queue_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void ReadWriteCmdResponse::set_allocated_reap_queue(::cockroach::proto::ReapQueueResponse* reap_queue) {
-  clear_value();
-  if (reap_queue) {
-    set_has_reap_queue();
-    value_.reap_queue_ = reap_queue;
-  }
-}
-
-// optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 8;
-inline bool ReadWriteCmdResponse::has_enqueue_update() const {
-  return value_case() == kEnqueueUpdate;
-}
-inline void ReadWriteCmdResponse::set_has_enqueue_update() {
-  _oneof_case_[0] = kEnqueueUpdate;
-}
-inline void ReadWriteCmdResponse::clear_enqueue_update() {
-  if (has_enqueue_update()) {
-    delete value_.enqueue_update_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::EnqueueUpdateResponse& ReadWriteCmdResponse::enqueue_update() const {
-  return has_enqueue_update() ? *value_.enqueue_update_
-                      : ::cockroach::proto::EnqueueUpdateResponse::default_instance();
-}
-inline ::cockroach::proto::EnqueueUpdateResponse* ReadWriteCmdResponse::mutable_enqueue_update() {
-  if (!has_enqueue_update()) {
-    clear_value();
-    set_has_enqueue_update();
-    value_.enqueue_update_ = new ::cockroach::proto::EnqueueUpdateResponse;
-  }
-  return value_.enqueue_update_;
-}
-inline ::cockroach::proto::EnqueueUpdateResponse* ReadWriteCmdResponse::release_enqueue_update() {
-  if (has_enqueue_update()) {
-    clear_has_value();
-    ::cockroach::proto::EnqueueUpdateResponse* temp = value_.enqueue_update_;
-    value_.enqueue_update_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void ReadWriteCmdResponse::set_allocated_enqueue_update(::cockroach::proto::EnqueueUpdateResponse* enqueue_update) {
-  clear_value();
-  if (enqueue_update) {
-    set_has_enqueue_update();
-    value_.enqueue_update_ = enqueue_update;
-  }
-}
-
-// optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 9;
-inline bool ReadWriteCmdResponse::has_enqueue_message() const {
-  return value_case() == kEnqueueMessage;
-}
-inline void ReadWriteCmdResponse::set_has_enqueue_message() {
-  _oneof_case_[0] = kEnqueueMessage;
-}
-inline void ReadWriteCmdResponse::clear_enqueue_message() {
-  if (has_enqueue_message()) {
-    delete value_.enqueue_message_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::EnqueueMessageResponse& ReadWriteCmdResponse::enqueue_message() const {
-  return has_enqueue_message() ? *value_.enqueue_message_
-                      : ::cockroach::proto::EnqueueMessageResponse::default_instance();
-}
-inline ::cockroach::proto::EnqueueMessageResponse* ReadWriteCmdResponse::mutable_enqueue_message() {
-  if (!has_enqueue_message()) {
-    clear_value();
-    set_has_enqueue_message();
-    value_.enqueue_message_ = new ::cockroach::proto::EnqueueMessageResponse;
-  }
-  return value_.enqueue_message_;
-}
-inline ::cockroach::proto::EnqueueMessageResponse* ReadWriteCmdResponse::release_enqueue_message() {
-  if (has_enqueue_message()) {
-    clear_has_value();
-    ::cockroach::proto::EnqueueMessageResponse* temp = value_.enqueue_message_;
-    value_.enqueue_message_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void ReadWriteCmdResponse::set_allocated_enqueue_message(::cockroach::proto::EnqueueMessageResponse* enqueue_message) {
-  clear_value();
-  if (enqueue_message) {
-    set_has_enqueue_message();
-    value_.enqueue_message_ = enqueue_message;
-  }
-}
-
 // optional .cockroach.proto.InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
 inline bool ReadWriteCmdResponse::has_internal_heartbeat_txn() const {
   return value_case() == kInternalHeartbeatTxn;
@@ -5205,135 +5004,6 @@ inline void InternalRaftCommandUnion::set_allocated_end_transaction(::cockroach:
   if (end_transaction) {
     set_has_end_transaction();
     value_.end_transaction_ = end_transaction;
-  }
-}
-
-// optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-inline bool InternalRaftCommandUnion::has_reap_queue() const {
-  return value_case() == kReapQueue;
-}
-inline void InternalRaftCommandUnion::set_has_reap_queue() {
-  _oneof_case_[0] = kReapQueue;
-}
-inline void InternalRaftCommandUnion::clear_reap_queue() {
-  if (has_reap_queue()) {
-    delete value_.reap_queue_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::ReapQueueRequest& InternalRaftCommandUnion::reap_queue() const {
-  return has_reap_queue() ? *value_.reap_queue_
-                      : ::cockroach::proto::ReapQueueRequest::default_instance();
-}
-inline ::cockroach::proto::ReapQueueRequest* InternalRaftCommandUnion::mutable_reap_queue() {
-  if (!has_reap_queue()) {
-    clear_value();
-    set_has_reap_queue();
-    value_.reap_queue_ = new ::cockroach::proto::ReapQueueRequest;
-  }
-  return value_.reap_queue_;
-}
-inline ::cockroach::proto::ReapQueueRequest* InternalRaftCommandUnion::release_reap_queue() {
-  if (has_reap_queue()) {
-    clear_has_value();
-    ::cockroach::proto::ReapQueueRequest* temp = value_.reap_queue_;
-    value_.reap_queue_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void InternalRaftCommandUnion::set_allocated_reap_queue(::cockroach::proto::ReapQueueRequest* reap_queue) {
-  clear_value();
-  if (reap_queue) {
-    set_has_reap_queue();
-    value_.reap_queue_ = reap_queue;
-  }
-}
-
-// optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-inline bool InternalRaftCommandUnion::has_enqueue_update() const {
-  return value_case() == kEnqueueUpdate;
-}
-inline void InternalRaftCommandUnion::set_has_enqueue_update() {
-  _oneof_case_[0] = kEnqueueUpdate;
-}
-inline void InternalRaftCommandUnion::clear_enqueue_update() {
-  if (has_enqueue_update()) {
-    delete value_.enqueue_update_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::EnqueueUpdateRequest& InternalRaftCommandUnion::enqueue_update() const {
-  return has_enqueue_update() ? *value_.enqueue_update_
-                      : ::cockroach::proto::EnqueueUpdateRequest::default_instance();
-}
-inline ::cockroach::proto::EnqueueUpdateRequest* InternalRaftCommandUnion::mutable_enqueue_update() {
-  if (!has_enqueue_update()) {
-    clear_value();
-    set_has_enqueue_update();
-    value_.enqueue_update_ = new ::cockroach::proto::EnqueueUpdateRequest;
-  }
-  return value_.enqueue_update_;
-}
-inline ::cockroach::proto::EnqueueUpdateRequest* InternalRaftCommandUnion::release_enqueue_update() {
-  if (has_enqueue_update()) {
-    clear_has_value();
-    ::cockroach::proto::EnqueueUpdateRequest* temp = value_.enqueue_update_;
-    value_.enqueue_update_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void InternalRaftCommandUnion::set_allocated_enqueue_update(::cockroach::proto::EnqueueUpdateRequest* enqueue_update) {
-  clear_value();
-  if (enqueue_update) {
-    set_has_enqueue_update();
-    value_.enqueue_update_ = enqueue_update;
-  }
-}
-
-// optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-inline bool InternalRaftCommandUnion::has_enqueue_message() const {
-  return value_case() == kEnqueueMessage;
-}
-inline void InternalRaftCommandUnion::set_has_enqueue_message() {
-  _oneof_case_[0] = kEnqueueMessage;
-}
-inline void InternalRaftCommandUnion::clear_enqueue_message() {
-  if (has_enqueue_message()) {
-    delete value_.enqueue_message_;
-    clear_has_value();
-  }
-}
-inline const ::cockroach::proto::EnqueueMessageRequest& InternalRaftCommandUnion::enqueue_message() const {
-  return has_enqueue_message() ? *value_.enqueue_message_
-                      : ::cockroach::proto::EnqueueMessageRequest::default_instance();
-}
-inline ::cockroach::proto::EnqueueMessageRequest* InternalRaftCommandUnion::mutable_enqueue_message() {
-  if (!has_enqueue_message()) {
-    clear_value();
-    set_has_enqueue_message();
-    value_.enqueue_message_ = new ::cockroach::proto::EnqueueMessageRequest;
-  }
-  return value_.enqueue_message_;
-}
-inline ::cockroach::proto::EnqueueMessageRequest* InternalRaftCommandUnion::release_enqueue_message() {
-  if (has_enqueue_message()) {
-    clear_has_value();
-    ::cockroach::proto::EnqueueMessageRequest* temp = value_.enqueue_message_;
-    value_.enqueue_message_ = NULL;
-    return temp;
-  } else {
-    return NULL;
-  }
-}
-inline void InternalRaftCommandUnion::set_allocated_enqueue_message(::cockroach::proto::EnqueueMessageRequest* enqueue_message) {
-  clear_value();
-  if (enqueue_message) {
-    set_has_enqueue_message();
-    value_.enqueue_message_ = enqueue_message;
   }
 }
 

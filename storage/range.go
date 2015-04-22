@@ -120,9 +120,6 @@ var tsCacheRequests = map[reflect.Type]bool{
 	reflect.TypeOf((*proto.ScanRequest)(nil)):                  true,
 	reflect.TypeOf((*proto.DeleteRequest)(nil)):                true,
 	reflect.TypeOf((*proto.DeleteRangeRequest)(nil)):           true,
-	reflect.TypeOf((*proto.ReapQueueRequest)(nil)):             true,
-	reflect.TypeOf((*proto.EnqueueUpdateRequest)(nil)):         true,
-	reflect.TypeOf((*proto.EnqueueMessageRequest)(nil)):        true,
 	reflect.TypeOf((*proto.InternalResolveIntentRequest)(nil)): true,
 	reflect.TypeOf((*proto.InternalMergeRequest)(nil)):         true,
 }
@@ -818,12 +815,6 @@ func (r *Range) executeCmd(index uint64, args proto.Request,
 		r.Scan(batch, args.(*proto.ScanRequest), reply.(*proto.ScanResponse))
 	case *proto.EndTransactionRequest:
 		r.EndTransaction(batch, &ms, args.(*proto.EndTransactionRequest), reply.(*proto.EndTransactionResponse))
-	case *proto.ReapQueueRequest:
-		r.ReapQueue(batch, args.(*proto.ReapQueueRequest), reply.(*proto.ReapQueueResponse))
-	case *proto.EnqueueUpdateRequest:
-		r.EnqueueUpdate(batch, args.(*proto.EnqueueUpdateRequest), reply.(*proto.EnqueueUpdateResponse))
-	case *proto.EnqueueMessageRequest:
-		r.EnqueueMessage(batch, args.(*proto.EnqueueMessageRequest), reply.(*proto.EnqueueMessageResponse))
 	case *proto.InternalRangeLookupRequest:
 		r.InternalRangeLookup(batch, args.(*proto.InternalRangeLookupRequest), reply.(*proto.InternalRangeLookupResponse))
 	case *proto.InternalHeartbeatTxnRequest:
@@ -1092,27 +1083,6 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 			}
 		}
 	}
-}
-
-// ReapQueue destructively queries messages from a delivery inbox
-// queue. This method must be called from within a transaction.
-func (r *Range) ReapQueue(batch engine.Engine, args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
-}
-
-// EnqueueUpdate sidelines an update for asynchronous execution.
-// AccumulateTS updates are sent this way. Eventually-consistent indexes
-// are also built using update queues. Crucially, the enqueue happens
-// as part of the caller's transaction, so is guaranteed to be
-// executed if the transaction succeeded.
-func (r *Range) EnqueueUpdate(batch engine.Engine, args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
-}
-
-// EnqueueMessage enqueues a message (Value) for delivery to a
-// recipient inbox.
-func (r *Range) EnqueueMessage(batch engine.Engine, args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) {
-	reply.SetGoError(util.Error("unimplemented"))
 }
 
 // InternalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor

@@ -443,21 +443,6 @@ func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.En
 	return n.executeCmd(args, reply)
 }
 
-// ReapQueue .
-func (n *Node) ReapQueue(args *proto.ReapQueueRequest, reply *proto.ReapQueueResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-// EnqueueUpdate .
-func (n *Node) EnqueueUpdate(args *proto.EnqueueUpdateRequest, reply *proto.EnqueueUpdateResponse) error {
-	return n.executeCmd(args, reply)
-}
-
-// EnqueueMessage .
-func (n *Node) EnqueueMessage(args *proto.EnqueueMessageRequest, reply *proto.EnqueueMessageResponse) error {
-	return n.executeCmd(args, reply)
-}
-
 // AdminSplit .
 func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
 	return n.executeCmd(args, reply)

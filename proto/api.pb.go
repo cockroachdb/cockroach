@@ -37,12 +37,6 @@
 		ScanResponse
 		EndTransactionRequest
 		EndTransactionResponse
-		ReapQueueRequest
-		ReapQueueResponse
-		EnqueueUpdateRequest
-		EnqueueUpdateResponse
-		EnqueueMessageRequest
-		EnqueueMessageResponse
 		RequestUnion
 		ResponseUnion
 		BatchRequest
@@ -644,102 +638,6 @@ func (m *EndTransactionResponse) GetCommitWait() int64 {
 	return 0
 }
 
-// A ReapQueueRequest is arguments to the ReapQueue() method. It
-// specifies the recipient inbox key to which messages are waiting
-// to be reapted and also the maximum number of results to return.
-type ReapQueueRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// Maximum results to return; must be > 0.
-	MaxResults       int64  `protobuf:"varint,2,opt,name=max_results" json:"max_results"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *ReapQueueRequest) Reset()         { *m = ReapQueueRequest{} }
-func (m *ReapQueueRequest) String() string { return proto1.CompactTextString(m) }
-func (*ReapQueueRequest) ProtoMessage()    {}
-
-func (m *ReapQueueRequest) GetMaxResults() int64 {
-	if m != nil {
-		return m.MaxResults
-	}
-	return 0
-}
-
-// A ReapQueueResponse is the return value from the ReapQueue() method.
-type ReapQueueResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Messages         []Value `protobuf:"bytes,2,rep,name=messages" json:"messages"`
-	XXX_unrecognized []byte  `json:"-"`
-}
-
-func (m *ReapQueueResponse) Reset()         { *m = ReapQueueResponse{} }
-func (m *ReapQueueResponse) String() string { return proto1.CompactTextString(m) }
-func (*ReapQueueResponse) ProtoMessage()    {}
-
-func (m *ReapQueueResponse) GetMessages() []Value {
-	if m != nil {
-		return m.Messages
-	}
-	return nil
-}
-
-// An EnqueueUpdateRequest is arguments to the EnqueueUpdate() method.
-// It specifies the update to enqueue for asynchronous execution.
-// Update is an instance of one of the following messages: PutRequest,
-// IncrementRequest, DeleteRequest, DeleteRangeRequest, or
-// AccountingRequest.
-type EnqueueUpdateRequest struct {
-	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *EnqueueUpdateRequest) Reset()         { *m = EnqueueUpdateRequest{} }
-func (m *EnqueueUpdateRequest) String() string { return proto1.CompactTextString(m) }
-func (*EnqueueUpdateRequest) ProtoMessage()    {}
-
-// An EnqueueUpdateResponse is the return value from the
-// EnqueueUpdate() method.
-type EnqueueUpdateResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *EnqueueUpdateResponse) Reset()         { *m = EnqueueUpdateResponse{} }
-func (m *EnqueueUpdateResponse) String() string { return proto1.CompactTextString(m) }
-func (*EnqueueUpdateResponse) ProtoMessage()    {}
-
-// An EnqueueMessageRequest is arguments to the EnqueueMessage() method.
-// It specifies the recipient inbox key and the message (an arbitrary
-// byte slice value).
-type EnqueueMessageRequest struct {
-	RequestHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	// Message value to delivery to inbox.
-	Msg              Value  `protobuf:"bytes,2,opt,name=msg" json:"msg"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *EnqueueMessageRequest) Reset()         { *m = EnqueueMessageRequest{} }
-func (m *EnqueueMessageRequest) String() string { return proto1.CompactTextString(m) }
-func (*EnqueueMessageRequest) ProtoMessage()    {}
-
-func (m *EnqueueMessageRequest) GetMsg() Value {
-	if m != nil {
-		return m.Msg
-	}
-	return Value{}
-}
-
-// An EnqueueMessageResponse is the return value from the
-// EnqueueMessage() method.
-type EnqueueMessageResponse struct {
-	ResponseHeader   `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	XXX_unrecognized []byte `json:"-"`
-}
-
-func (m *EnqueueMessageResponse) Reset()         { *m = EnqueueMessageResponse{} }
-func (m *EnqueueMessageResponse) String() string { return proto1.CompactTextString(m) }
-func (*EnqueueMessageResponse) ProtoMessage()    {}
-
 // A RequestUnion contains exactly one of the optional requests.
 type RequestUnion struct {
 	Contains         *ContainsRequest       `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
@@ -751,9 +649,6 @@ type RequestUnion struct {
 	DeleteRange      *DeleteRangeRequest    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan             *ScanRequest           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
 	EndTransaction   *EndTransactionRequest `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	ReapQueue        *ReapQueueRequest      `protobuf:"bytes,10,opt,name=reap_queue" json:"reap_queue,omitempty"`
-	EnqueueUpdate    *EnqueueUpdateRequest  `protobuf:"bytes,11,opt,name=enqueue_update" json:"enqueue_update,omitempty"`
-	EnqueueMessage   *EnqueueMessageRequest `protobuf:"bytes,12,opt,name=enqueue_message" json:"enqueue_message,omitempty"`
 	XXX_unrecognized []byte                 `json:"-"`
 }
 
@@ -824,27 +719,6 @@ func (m *RequestUnion) GetEndTransaction() *EndTransactionRequest {
 	return nil
 }
 
-func (m *RequestUnion) GetReapQueue() *ReapQueueRequest {
-	if m != nil {
-		return m.ReapQueue
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetEnqueueUpdate() *EnqueueUpdateRequest {
-	if m != nil {
-		return m.EnqueueUpdate
-	}
-	return nil
-}
-
-func (m *RequestUnion) GetEnqueueMessage() *EnqueueMessageRequest {
-	if m != nil {
-		return m.EnqueueMessage
-	}
-	return nil
-}
-
 // A ResponseUnion contains exactly one of the optional responses.
 type ResponseUnion struct {
 	Contains         *ContainsResponse       `protobuf:"bytes,1,opt,name=contains" json:"contains,omitempty"`
@@ -856,9 +730,6 @@ type ResponseUnion struct {
 	DeleteRange      *DeleteRangeResponse    `protobuf:"bytes,7,opt,name=delete_range" json:"delete_range,omitempty"`
 	Scan             *ScanResponse           `protobuf:"bytes,8,opt,name=scan" json:"scan,omitempty"`
 	EndTransaction   *EndTransactionResponse `protobuf:"bytes,9,opt,name=end_transaction" json:"end_transaction,omitempty"`
-	ReapQueue        *ReapQueueResponse      `protobuf:"bytes,10,opt,name=reap_queue" json:"reap_queue,omitempty"`
-	EnqueueUpdate    *EnqueueUpdateResponse  `protobuf:"bytes,11,opt,name=enqueue_update" json:"enqueue_update,omitempty"`
-	EnqueueMessage   *EnqueueMessageResponse `protobuf:"bytes,12,opt,name=enqueue_message" json:"enqueue_message,omitempty"`
 	XXX_unrecognized []byte                  `json:"-"`
 }
 
@@ -925,27 +796,6 @@ func (m *ResponseUnion) GetScan() *ScanResponse {
 func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 	if m != nil {
 		return m.EndTransaction
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetReapQueue() *ReapQueueResponse {
-	if m != nil {
-		return m.ReapQueue
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetEnqueueUpdate() *EnqueueUpdateResponse {
-	if m != nil {
-		return m.EnqueueUpdate
-	}
-	return nil
-}
-
-func (m *ResponseUnion) GetEnqueueMessage() *EnqueueMessageResponse {
-	if m != nil {
-		return m.EnqueueMessage
 	}
 	return nil
 }
@@ -3001,464 +2851,6 @@ func (m *EndTransactionResponse) Unmarshal(data []byte) error {
 	}
 	return nil
 }
-func (m *ReapQueueRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxResults", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.MaxResults |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
-func (m *ReapQueueResponse) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Messages", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Messages = append(m.Messages, Value{})
-			m.Messages[len(m.Messages)-1].Unmarshal(data[index:postIndex])
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
-func (m *EnqueueUpdateRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
-func (m *EnqueueUpdateResponse) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
-func (m *EnqueueMessageRequest) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.RequestHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Msg", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Msg.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
-func (m *EnqueueMessageResponse) Unmarshal(data []byte) error {
-	l := len(data)
-	index := 0
-	for index < l {
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if index >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[index]
-			index++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ResponseHeader", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.ResponseHeader.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		default:
-			var sizeOfWire int
-			for {
-				sizeOfWire++
-				wire >>= 7
-				if wire == 0 {
-					break
-				}
-			}
-			index -= sizeOfWire
-			skippy, err := github_com_gogo_protobuf_proto.Skip(data[index:])
-			if err != nil {
-				return err
-			}
-			if (index + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, data[index:index+skippy]...)
-			index += skippy
-		}
-	}
-	return nil
-}
 func (m *RequestUnion) Unmarshal(data []byte) error {
 	l := len(data)
 	index := 0
@@ -3718,87 +3110,6 @@ func (m *RequestUnion) Unmarshal(data []byte) error {
 				m.EndTransaction = &EndTransactionRequest{}
 			}
 			if err := m.EndTransaction.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReapQueue", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.ReapQueue == nil {
-				m.ReapQueue = &ReapQueueRequest{}
-			}
-			if err := m.ReapQueue.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 11:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EnqueueUpdate", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.EnqueueUpdate == nil {
-				m.EnqueueUpdate = &EnqueueUpdateRequest{}
-			}
-			if err := m.EnqueueUpdate.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 12:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EnqueueMessage", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.EnqueueMessage == nil {
-				m.EnqueueMessage = &EnqueueMessageRequest{}
-			}
-			if err := m.EnqueueMessage.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -4084,87 +3395,6 @@ func (m *ResponseUnion) Unmarshal(data []byte) error {
 				m.EndTransaction = &EndTransactionResponse{}
 			}
 			if err := m.EndTransaction.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReapQueue", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.ReapQueue == nil {
-				m.ReapQueue = &ReapQueueResponse{}
-			}
-			if err := m.ReapQueue.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 11:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EnqueueUpdate", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.EnqueueUpdate == nil {
-				m.EnqueueUpdate = &EnqueueUpdateResponse{}
-			}
-			if err := m.EnqueueUpdate.Unmarshal(data[index:postIndex]); err != nil {
-				return err
-			}
-			index = postIndex
-		case 12:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EnqueueMessage", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			postIndex := index + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.EnqueueMessage == nil {
-				m.EnqueueMessage = &EnqueueMessageResponse{}
-			}
-			if err := m.EnqueueMessage.Unmarshal(data[index:postIndex]); err != nil {
 				return err
 			}
 			index = postIndex
@@ -4685,15 +3915,6 @@ func (this *RequestUnion) GetValue() interface{} {
 	if this.EndTransaction != nil {
 		return this.EndTransaction
 	}
-	if this.ReapQueue != nil {
-		return this.ReapQueue
-	}
-	if this.EnqueueUpdate != nil {
-		return this.EnqueueUpdate
-	}
-	if this.EnqueueMessage != nil {
-		return this.EnqueueMessage
-	}
 	return nil
 }
 
@@ -4717,12 +3938,6 @@ func (this *RequestUnion) SetValue(value interface{}) bool {
 		this.Scan = vt
 	case *EndTransactionRequest:
 		this.EndTransaction = vt
-	case *ReapQueueRequest:
-		this.ReapQueue = vt
-	case *EnqueueUpdateRequest:
-		this.EnqueueUpdate = vt
-	case *EnqueueMessageRequest:
-		this.EnqueueMessage = vt
 	default:
 		return false
 	}
@@ -4756,15 +3971,6 @@ func (this *ResponseUnion) GetValue() interface{} {
 	if this.EndTransaction != nil {
 		return this.EndTransaction
 	}
-	if this.ReapQueue != nil {
-		return this.ReapQueue
-	}
-	if this.EnqueueUpdate != nil {
-		return this.EnqueueUpdate
-	}
-	if this.EnqueueMessage != nil {
-		return this.EnqueueMessage
-	}
 	return nil
 }
 
@@ -4788,12 +3994,6 @@ func (this *ResponseUnion) SetValue(value interface{}) bool {
 		this.Scan = vt
 	case *EndTransactionResponse:
 		this.EndTransaction = vt
-	case *ReapQueueResponse:
-		this.ReapQueue = vt
-	case *EnqueueUpdateResponse:
-		this.EnqueueUpdate = vt
-	case *EnqueueMessageResponse:
-		this.EnqueueMessage = vt
 	default:
 		return false
 	}
@@ -5093,81 +4293,6 @@ func (m *EndTransactionResponse) Size() (n int) {
 	return n
 }
 
-func (m *ReapQueueRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = m.RequestHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	n += 1 + sovApi(uint64(m.MaxResults))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *ReapQueueResponse) Size() (n int) {
-	var l int
-	_ = l
-	l = m.ResponseHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if len(m.Messages) > 0 {
-		for _, e := range m.Messages {
-			l = e.Size()
-			n += 1 + l + sovApi(uint64(l))
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *EnqueueUpdateRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = m.RequestHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *EnqueueUpdateResponse) Size() (n int) {
-	var l int
-	_ = l
-	l = m.ResponseHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *EnqueueMessageRequest) Size() (n int) {
-	var l int
-	_ = l
-	l = m.RequestHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	l = m.Msg.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *EnqueueMessageResponse) Size() (n int) {
-	var l int
-	_ = l
-	l = m.ResponseHeader.Size()
-	n += 1 + l + sovApi(uint64(l))
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *RequestUnion) Size() (n int) {
 	var l int
 	_ = l
@@ -5205,18 +4330,6 @@ func (m *RequestUnion) Size() (n int) {
 	}
 	if m.EndTransaction != nil {
 		l = m.EndTransaction.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.ReapQueue != nil {
-		l = m.ReapQueue.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EnqueueUpdate != nil {
-		l = m.EnqueueUpdate.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EnqueueMessage != nil {
-		l = m.EnqueueMessage.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -5262,18 +4375,6 @@ func (m *ResponseUnion) Size() (n int) {
 	}
 	if m.EndTransaction != nil {
 		l = m.EndTransaction.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.ReapQueue != nil {
-		l = m.ReapQueue.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EnqueueUpdate != nil {
-		l = m.EnqueueUpdate.Size()
-		n += 1 + l + sovApi(uint64(l))
-	}
-	if m.EnqueueMessage != nil {
-		l = m.EnqueueMessage.Size()
 		n += 1 + l + sovApi(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -6163,203 +5264,6 @@ func (m *EndTransactionResponse) MarshalTo(data []byte) (n int, err error) {
 	return i, nil
 }
 
-func (m *ReapQueueRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ReapQueueRequest) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n33, err := m.RequestHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n33
-	data[i] = 0x10
-	i++
-	i = encodeVarintApi(data, i, uint64(m.MaxResults))
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *ReapQueueResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *ReapQueueResponse) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n34, err := m.ResponseHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n34
-	if len(m.Messages) > 0 {
-		for _, msg := range m.Messages {
-			data[i] = 0x12
-			i++
-			i = encodeVarintApi(data, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(data[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *EnqueueUpdateRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EnqueueUpdateRequest) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n35, err := m.RequestHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n35
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *EnqueueUpdateResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EnqueueUpdateResponse) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n36, err := m.ResponseHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n36
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *EnqueueMessageRequest) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EnqueueMessageRequest) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n37, err := m.RequestHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n37
-	data[i] = 0x12
-	i++
-	i = encodeVarintApi(data, i, uint64(m.Msg.Size()))
-	n38, err := m.Msg.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n38
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
-func (m *EnqueueMessageResponse) Marshal() (data []byte, err error) {
-	size := m.Size()
-	data = make([]byte, size)
-	n, err := m.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
-}
-
-func (m *EnqueueMessageResponse) MarshalTo(data []byte) (n int, err error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	data[i] = 0xa
-	i++
-	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n39, err := m.ResponseHeader.MarshalTo(data[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n39
-	if m.XXX_unrecognized != nil {
-		i += copy(data[i:], m.XXX_unrecognized)
-	}
-	return i, nil
-}
-
 func (m *RequestUnion) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -6379,121 +5283,91 @@ func (m *RequestUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Contains.Size()))
-		n40, err := m.Contains.MarshalTo(data[i:])
+		n33, err := m.Contains.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n40
+		i += n33
 	}
 	if m.Get != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n41, err := m.Get.MarshalTo(data[i:])
+		n34, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n41
+		i += n34
 	}
 	if m.Put != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n42, err := m.Put.MarshalTo(data[i:])
+		n35, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n42
+		i += n35
 	}
 	if m.ConditionalPut != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n43, err := m.ConditionalPut.MarshalTo(data[i:])
+		n36, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n43
+		i += n36
 	}
 	if m.Increment != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n44, err := m.Increment.MarshalTo(data[i:])
+		n37, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n44
+		i += n37
 	}
 	if m.Delete != nil {
 		data[i] = 0x32
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n45, err := m.Delete.MarshalTo(data[i:])
+		n38, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n45
+		i += n38
 	}
 	if m.DeleteRange != nil {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n46, err := m.DeleteRange.MarshalTo(data[i:])
+		n39, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n46
+		i += n39
 	}
 	if m.Scan != nil {
 		data[i] = 0x42
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n47, err := m.Scan.MarshalTo(data[i:])
+		n40, err := m.Scan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n47
+		i += n40
 	}
 	if m.EndTransaction != nil {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n48, err := m.EndTransaction.MarshalTo(data[i:])
+		n41, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n48
-	}
-	if m.ReapQueue != nil {
-		data[i] = 0x52
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ReapQueue.Size()))
-		n49, err := m.ReapQueue.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n49
-	}
-	if m.EnqueueUpdate != nil {
-		data[i] = 0x5a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.EnqueueUpdate.Size()))
-		n50, err := m.EnqueueUpdate.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n50
-	}
-	if m.EnqueueMessage != nil {
-		data[i] = 0x62
-		i++
-		i = encodeVarintApi(data, i, uint64(m.EnqueueMessage.Size()))
-		n51, err := m.EnqueueMessage.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n51
+		i += n41
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -6520,121 +5394,91 @@ func (m *ResponseUnion) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Contains.Size()))
-		n52, err := m.Contains.MarshalTo(data[i:])
+		n42, err := m.Contains.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n52
+		i += n42
 	}
 	if m.Get != nil {
 		data[i] = 0x12
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Get.Size()))
-		n53, err := m.Get.MarshalTo(data[i:])
+		n43, err := m.Get.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n53
+		i += n43
 	}
 	if m.Put != nil {
 		data[i] = 0x1a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Put.Size()))
-		n54, err := m.Put.MarshalTo(data[i:])
+		n44, err := m.Put.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n54
+		i += n44
 	}
 	if m.ConditionalPut != nil {
 		data[i] = 0x22
 		i++
 		i = encodeVarintApi(data, i, uint64(m.ConditionalPut.Size()))
-		n55, err := m.ConditionalPut.MarshalTo(data[i:])
+		n45, err := m.ConditionalPut.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n55
+		i += n45
 	}
 	if m.Increment != nil {
 		data[i] = 0x2a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Increment.Size()))
-		n56, err := m.Increment.MarshalTo(data[i:])
+		n46, err := m.Increment.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n56
+		i += n46
 	}
 	if m.Delete != nil {
 		data[i] = 0x32
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Delete.Size()))
-		n57, err := m.Delete.MarshalTo(data[i:])
+		n47, err := m.Delete.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n57
+		i += n47
 	}
 	if m.DeleteRange != nil {
 		data[i] = 0x3a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.DeleteRange.Size()))
-		n58, err := m.DeleteRange.MarshalTo(data[i:])
+		n48, err := m.DeleteRange.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n58
+		i += n48
 	}
 	if m.Scan != nil {
 		data[i] = 0x42
 		i++
 		i = encodeVarintApi(data, i, uint64(m.Scan.Size()))
-		n59, err := m.Scan.MarshalTo(data[i:])
+		n49, err := m.Scan.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n59
+		i += n49
 	}
 	if m.EndTransaction != nil {
 		data[i] = 0x4a
 		i++
 		i = encodeVarintApi(data, i, uint64(m.EndTransaction.Size()))
-		n60, err := m.EndTransaction.MarshalTo(data[i:])
+		n50, err := m.EndTransaction.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n60
-	}
-	if m.ReapQueue != nil {
-		data[i] = 0x52
-		i++
-		i = encodeVarintApi(data, i, uint64(m.ReapQueue.Size()))
-		n61, err := m.ReapQueue.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n61
-	}
-	if m.EnqueueUpdate != nil {
-		data[i] = 0x5a
-		i++
-		i = encodeVarintApi(data, i, uint64(m.EnqueueUpdate.Size()))
-		n62, err := m.EnqueueUpdate.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n62
-	}
-	if m.EnqueueMessage != nil {
-		data[i] = 0x62
-		i++
-		i = encodeVarintApi(data, i, uint64(m.EnqueueMessage.Size()))
-		n63, err := m.EnqueueMessage.MarshalTo(data[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n63
+		i += n50
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
@@ -6660,11 +5504,11 @@ func (m *BatchRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n64, err := m.RequestHeader.MarshalTo(data[i:])
+	n51, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n64
+	i += n51
 	if len(m.Requests) > 0 {
 		for _, msg := range m.Requests {
 			data[i] = 0x12
@@ -6701,11 +5545,11 @@ func (m *BatchResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n65, err := m.ResponseHeader.MarshalTo(data[i:])
+	n52, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n65
+	i += n52
 	if len(m.Responses) > 0 {
 		for _, msg := range m.Responses {
 			data[i] = 0x12
@@ -6742,19 +5586,19 @@ func (m *AdminSplitRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n66, err := m.RequestHeader.MarshalTo(data[i:])
+	n53, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n66
+	i += n53
 	data[i] = 0x12
 	i++
 	i = encodeVarintApi(data, i, uint64(m.SplitKey.Size()))
-	n67, err := m.SplitKey.MarshalTo(data[i:])
+	n54, err := m.SplitKey.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n67
+	i += n54
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -6779,11 +5623,11 @@ func (m *AdminSplitResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n68, err := m.ResponseHeader.MarshalTo(data[i:])
+	n55, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n68
+	i += n55
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -6808,11 +5652,11 @@ func (m *AdminMergeRequest) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.RequestHeader.Size()))
-	n69, err := m.RequestHeader.MarshalTo(data[i:])
+	n56, err := m.RequestHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n69
+	i += n56
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
@@ -6837,11 +5681,11 @@ func (m *AdminMergeResponse) MarshalTo(data []byte) (n int, err error) {
 	data[i] = 0xa
 	i++
 	i = encodeVarintApi(data, i, uint64(m.ResponseHeader.Size()))
-	n70, err := m.ResponseHeader.MarshalTo(data[i:])
+	n57, err := m.ResponseHeader.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n70
+	i += n57
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}

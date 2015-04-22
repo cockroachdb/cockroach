@@ -124,12 +124,6 @@ const cockroach::proto::ResponseHeader* GetResponseHeader(const cockroach::proto
     return &rwResp.delete_range().header();
   } else if (rwResp.has_end_transaction()) {
     return &rwResp.end_transaction().header();
-  } else if (rwResp.has_reap_queue()) {
-    return &rwResp.reap_queue().header();
-  } else if (rwResp.has_enqueue_update()) {
-    return &rwResp.enqueue_update().header();
-  } else if (rwResp.has_enqueue_message()) {
-    return &rwResp.enqueue_message().header();
   } else if (rwResp.has_internal_heartbeat_txn()) {
     return &rwResp.internal_heartbeat_txn().header();
   } else if (rwResp.has_internal_gc()) {
@@ -512,8 +506,8 @@ bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* l
     new_ts.set_start_timestamp_nanos(val_ts.start_timestamp_nanos());
     new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
 
-    // Sort values in the ts value. 
-    std::sort(val_ts.mutable_samples()->pointer_begin(), 
+    // Sort values in the ts value.
+    std::sort(val_ts.mutable_samples()->pointer_begin(),
               val_ts.mutable_samples()->pointer_end(),
               TimeSeriesSampleOrdering);
 
@@ -526,7 +520,7 @@ bool ConsolidateTimeSeriesValue(cockroach::proto::Value *val, rocksdb::Logger* l
         // Create an empty sample in the output collection with the selected
         // offset.  Accumulate data from all samples at the front of the sample
         // collection which match the selected timestamp. This behavior is
-        // needed because even a single value may have duplicated offsets. 
+        // needed because even a single value may have duplicated offsets.
         cockroach::proto::InternalTimeSeriesSample* ns = new_ts.add_samples();
         ns->set_offset(front->offset());
         while (front != end && front->offset() == ns->offset()) {
