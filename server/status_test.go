@@ -72,7 +72,7 @@ func TestStatusLocalStacks(t *testing.T) {
 // Json results. The content type of the responses is always
 // "application/json".
 func TestStatusJson(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	defer s.Stop()
 
 	type TestCase struct {
@@ -130,7 +130,7 @@ func TestStatusJson(t *testing.T) {
 // TestStatusGossipJson ensures that the output response for the full gossip
 // info contains the required fields.
 func TestStatusGossipJson(t *testing.T) {
-	s := StartTestServer()
+	s := StartTestServer(t)
 	defer s.Stop()
 
 	type prefixedInfo struct {

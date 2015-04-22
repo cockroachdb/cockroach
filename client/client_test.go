@@ -87,7 +87,7 @@ func createTestNotifyClient(addr string) *client.KV {
 // where the non-transactional put can push the txn, we expect the
 // transaction's value to be written after all retries are complete.
 func TestKVClientRetryNonTxn(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	s.SetRangeRetryOptions(util.RetryOptions{
 		Backoff:     1 * time.Millisecond,
@@ -209,7 +209,7 @@ func TestKVClientRetryNonTxn(t *testing.T) {
 // TestKVClientRunTransaction verifies some simple transaction isolation
 // semantics.
 func TestKVClientRunTransaction(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.TxnRetryOptions.Backoff = 1 * time.Millisecond
@@ -275,7 +275,7 @@ func TestKVClientRunTransaction(t *testing.T) {
 // TestKVClientGetAndPutProto verifies gets and puts of protobufs using the
 // KV client's convenience methods.
 func TestKVClientGetAndPutProto(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
@@ -314,7 +314,7 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 // TestKVClientGetAndPut verifies gets and puts of using the KV
 // client's convenience methods.
 func TestKVClientGetAndPut(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
@@ -344,7 +344,7 @@ func TestKVClientGetAndPut(t *testing.T) {
 // gob codec because gob treats pointer values and non-pointer values
 // as equivalent and elides zero-valued defaults on decode.
 func TestKVClientEmptyValues(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
@@ -379,7 +379,7 @@ func TestKVClientEmptyValues(t *testing.T) {
 // TestKVClientBatch runs a batch of increment calls and then verifies
 // the results.
 func TestKVClientBatch(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
@@ -439,7 +439,7 @@ func TestKVClientBatch(t *testing.T) {
 // a value for a given key.
 func ExampleKV_Run1() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer()
+	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
 	// Key Value Client initialization.
@@ -482,7 +482,7 @@ func ExampleKV_Run1() {
 // then used to begin execution of all the prepared operations.
 func ExampleKV_RunMultiple() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer()
+	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
 	// Key Value Client initialization.
@@ -549,7 +549,7 @@ func ExampleKV_RunMultiple() {
 // multiple Key Value API operations inside a transaction.
 func ExampleKV_RunTransaction() {
 	// Using built-in test server for this example code.
-	serv := server.StartTestServer()
+	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
 	// Key Value Client initialization.
@@ -696,7 +696,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 // for the concrete situation described in:
 // https://groups.google.com/forum/#!topic/cockroach-db/LdrC5_T0VNw
 func TestConcurrentIncrements(t *testing.T) {
-	s := server.StartTestServer()
+	s := server.StartTestServer(t)
 	defer s.Stop()
 	kvClient := createTestNotifyClient(s.ServingAddr())
 	kvClient.User = storage.UserRoot
