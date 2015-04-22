@@ -60,7 +60,7 @@ range_max_bytes: 67108864
 			t.Fatal(err)
 		}
 		req.Header.Add("Content-Type", "text/yaml")
-		_, err = sendAdminRequest(req)
+		_, err = sendAdminRequest(testContext, req)
 		if err == nil {
 			t.Errorf("%d: expected error", i)
 		} else if !re.MatchString(err.Error()) {

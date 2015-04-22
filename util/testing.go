@@ -49,12 +49,50 @@ func tempLocalhostAddr() string {
 }
 
 // CreateTempDirectory creates a temporary directory or fails trying.
+// TODO(marc): cleanup in a separate PR, this is no longer needed.
 func CreateTempDirectory() string {
 	loc, err := ioutil.TempDir("", "rocksdb_test")
 	if err != nil {
 		panic(fmt.Sprintf("%v", err))
 	}
 	return loc
+}
+
+// CreateTempDir creates a temporary directory and returns its path.
+// You should usually call defer CleanupDir(dir) right after.
+func CreateTempDir(t *testing.T, prefix string) string {
+	dir, err := ioutil.TempDir("", prefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// CreateNTempDirs creates N temporary directories and returns a slice
+// of paths.
+// You should usually call defer CleanupDirs(dirs) right after.
+func CreateNTempDirs(t *testing.T, prefix string, n int) []string {
+	dirs := make([]string, n)
+	var err error
+	for i := 0; i < n; i++ {
+		dirs[i], err = ioutil.TempDir("", prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dirs
+}
+
+// CleanupDir removes the passed-in directory and all contents. Errors are ignored.
+func CleanupDir(dir string) {
+	os.RemoveAll(dir)
+}
+
+// CleanupDirs removes all passed-in directories and their contents.
+func CleanupDirs(dirs []string) {
+	for _, dir := range dirs {
+		os.RemoveAll(dir)
+	}
 }
 
 // CreateTestAddr creates an unused address for testing. The "network"

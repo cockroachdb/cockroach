@@ -35,6 +35,7 @@ import (
 // Context defaults.
 const (
 	defaultAddr           = ":8080"
+	defaultCertsDir       = "certs"
 	defaultMaxOffset      = 250 * time.Millisecond
 	defaultGossipInterval = 2 * time.Second
 	defaultCacheSize      = 1 << 30 // GB
@@ -110,6 +111,7 @@ type Context struct {
 func NewContext() *Context {
 	return &Context{
 		Addr:           defaultAddr,
+		Certs:          defaultCertsDir,
 		MaxOffset:      defaultMaxOffset,
 		GossipInterval: defaultGossipInterval,
 		CacheSize:      defaultCacheSize,

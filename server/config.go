@@ -59,8 +59,7 @@ func runGetConfig(ctx *Context, prefix, keyPrefix string) {
 		return
 	}
 	req.Header.Add("Accept", "text/yaml")
-	// TODO(spencer): need to move to SSL.
-	b, err := sendAdminRequest(req)
+	b, err := sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)
 		return
@@ -95,7 +94,7 @@ func runLsConfigs(ctx *Context, prefix, pattern string) {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
-	b, err := sendAdminRequest(req)
+	b, err := sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)
 		return
@@ -150,8 +149,7 @@ func runRmConfig(ctx *Context, prefix, keyPrefix string) {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
 	}
-	// TODO(spencer): need to move to SSL.
-	_, err = sendAdminRequest(req)
+	_, err = sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)
 		return
@@ -193,8 +191,7 @@ func runSetConfig(ctx *Context, prefix, keyPrefix, configFileName string) {
 		return
 	}
 	req.Header.Add("Content-Type", "text/yaml")
-	// TODO(spencer): need to move to SSL.
-	_, err = sendAdminRequest(req)
+	_, err = sendAdminRequest(ctx, req)
 	if err != nil {
 		log.Errorf("admin REST request failed: %s", err)
 		return

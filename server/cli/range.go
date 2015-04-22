@@ -54,7 +54,12 @@ func runLsRanges(cmd *commander.Command, args []string) {
 		startKey = engine.KeyMeta2Prefix
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	call := client.ScanCall(startKey, engine.KeyMeta2Prefix.PrefixEnd(), 1000)
 	resp := call.Reply.(*proto.ScanResponse)
 	if err := kv.Run(call); err != nil {
@@ -101,7 +106,12 @@ func runSplitRange(cmd *commander.Command, args []string) {
 		splitKey = proto.Key(args[1])
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	req := &proto.AdminSplitRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: key,
@@ -132,7 +142,12 @@ func runMergeRange(cmd *commander.Command, args []string) {
 		return
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	req := &proto.AdminMergeRequest{
 		RequestHeader: proto.RequestHeader{
 			Key: proto.Key(args[0]),

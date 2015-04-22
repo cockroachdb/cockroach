@@ -96,12 +96,21 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
 	return &TLSConfig{
 		config: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			RootCAs:      certPool,
-			ClientCAs:    certPool,
+			// TODO(marc): clients are bad about this. We should switch to
+			// tls.RequireAndVerifyClientCert once client certs are properly set.
+			ClientAuth: tls.VerifyClientCertIfGiven,
+			RootCAs:    certPool,
+			ClientCAs:  certPool,
 
-			// TODO(jqmp): Set CipherSuites?
-			// TODO(jqmp): Set MinVersion?
+			// Use the default cipher suite from golang (RC4 is going away in 1.5).
+			// Prefer the server-specified suite.
+			PreferServerCipherSuites: true,
+
+			// Lots of things don't support 1.2. Let's try 1.1.
+			MinVersion: tls.VersionTLS11,
+
+			// Should we disable session resumption? This may break forward secrecy.
+			// SessionTicketsDisabled: true,
 		},
 	}, nil
 }
@@ -111,6 +120,38 @@ func LoadInsecureTLSConfig() *TLSConfig {
 	return &TLSConfig{
 		config: nil,
 	}
+}
+
+// LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
+// specified directory. The directory must contain ca.crt.
+func LoadClientTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+	caPEM, err := ioutil.ReadFile(path.Join(certDir, "ca.crt"))
+	if err != nil {
+		return nil, err
+	}
+	return LoadClientTLSConfig(caPEM)
+}
+
+// LoadClientTLSConfig creates a client TLSConfig from the supplied byte strings containing
+// the certificate of the cluster CA.
+func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
+	certPool := x509.NewCertPool()
+
+	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
+		err := util.Error("failed to parse PEM data to pool")
+		return nil, err
+	}
+
+	return &TLSConfig{
+		config: &tls.Config{
+			RootCAs: certPool,
+			// TODO(marc): remove once we have a certificate deployment story in place.
+			InsecureSkipVerify: true,
+
+			// Use only TLS v1.2
+			MinVersion: tls.VersionTLS12,
+		},
+	}, nil
 }
 
 // LoadTestTLSConfig loads the test TLSConfig included with the project. It requires
@@ -131,6 +172,15 @@ func LoadTestTLSConfig() (*TLSConfig, error) {
 		return nil, err
 	}
 	return LoadTLSConfig(certPEM, keyPEM, caPEM)
+}
+
+// LoadInsecureClientTLSConfig creates a TLSConfig that disables TLS.
+func LoadInsecureClientTLSConfig() *TLSConfig {
+	return &TLSConfig{
+		config: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
 }
 
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of

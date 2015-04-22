@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -45,7 +46,7 @@ func startAdminServer() (string, *util.Stopper) {
 	admin := newAdminServer(db, stopper)
 	mux := http.NewServeMux()
 	admin.registerHandlers(mux)
-	httpServer := httptest.NewServer(mux)
+	httpServer := httptest.NewTLSServer(mux)
 	stopper.AddCloser(httpServer)
 
 	if strings.HasPrefix(httpServer.URL, "http://") {
@@ -59,7 +60,8 @@ func startAdminServer() (string, *util.Stopper) {
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	client := client.CreateTestHTTPClient()
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}

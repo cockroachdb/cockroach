@@ -26,8 +26,11 @@ import (
 	"net/http"
 	"time"
 
+	"crypto/tls"
+
 	"code.google.com/p/snappy-go/snappy"
 
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -38,9 +41,7 @@ const (
 	// HTTP requests for the KV API.
 	KVDBEndpoint = "/kv/db/"
 	// KVDBScheme is the scheme for connecting to the kvdb endpoint.
-	// TODO(spencer): change this to CONSTANT https. We shouldn't be
-	// supporting http here at all.
-	KVDBScheme = "http"
+	KVDBScheme = "https"
 	// StatusTooManyRequests indicates client should retry due to
 	// server having too many requests.
 	StatusTooManyRequests = 429
@@ -61,6 +62,25 @@ var HTTPRetryOptions = util.RetryOptions{
 	MaxAttempts: 0, // retry indefinitely
 }
 
+// NewHTTPClient initializes a new http client. If certsDir is not empty,
+// it initializes the TLS config from the certificates in the specified
+// directory.
+func NewHTTPClient(certsDir string) (*http.Client, error) {
+	var tlsConfig *tls.Config
+	if certsDir == "" {
+		log.Infof("no certificates directory specified: using insecure TLS")
+		tlsConfig = rpc.LoadInsecureClientTLSConfig().Config()
+	} else {
+		log.Infof("setting up TLS from certificates directory: %s", certsDir)
+		cfg, err := rpc.LoadClientTLSConfigFromDir(certsDir)
+		if err != nil {
+			return nil, util.Errorf("error setting up client TLS config: %s", err)
+		}
+		tlsConfig = cfg.Config()
+	}
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}, nil
+}
+
 // HTTPSender is an implementation of KVSender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
@@ -71,13 +91,15 @@ type HTTPSender struct {
 }
 
 // NewHTTPSender returns a new instance of HTTPSender.
-func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
+func NewHTTPSender(server string, certsDir string) (*HTTPSender, error) {
+	client, err := NewHTTPClient(certsDir)
+	if err != nil {
+		return nil, err
+	}
 	return &HTTPSender{
 		server: server,
-		client: &http.Client{
-			Transport: transport,
-		},
-	}
+		client: client,
+	}, nil
 }
 
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
@@ -90,13 +112,13 @@ func NewHTTPSender(server string, transport *http.Transport) *HTTPSender {
 // response.
 func (s *HTTPSender) Send(call Call) {
 	retryOpts := HTTPRetryOptions
-	retryOpts.Tag = fmt.Sprintf("http %s", call.Method())
+	retryOpts.Tag = fmt.Sprintf("https %s", call.Method())
 
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		resp, err := s.post(call)
 		if err != nil {
 			if resp != nil {
-				log.Warningf("failed to send HTTP request with status code %d", resp.StatusCode)
+				log.Warningf("failed to send HTTP request with status code %d, %s", resp.StatusCode, resp.Status)
 				// See if we can retry based on HTTP response code.
 				switch resp.StatusCode {
 				case http.StatusServiceUnavailable, http.StatusGatewayTimeout, StatusTooManyRequests:

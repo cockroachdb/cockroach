@@ -27,6 +27,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -47,7 +48,7 @@ func startStatusServer() (*httptest.Server, *util.Stopper) {
 	status := newStatusServer(db, nil)
 	mux := http.NewServeMux()
 	status.registerHandlers(mux)
-	httpServer := httptest.NewServer(mux)
+	httpServer := httptest.NewTLSServer(mux)
 	stopper.AddCloser(httpServer)
 	return httpServer, stopper
 }
@@ -98,12 +99,12 @@ func TestStatusJson(t *testing.T) {
 	for _, spec := range testCases {
 		contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
 		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", "http://"+s.Addr+spec.keyPrefix, nil)
+			req, err := http.NewRequest("GET", "https://"+s.Addr+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			req.Header.Set("Accept", contentType)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := client.CreateTestHTTPClient().Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -165,13 +166,13 @@ func TestStatusGossipJson(t *testing.T) {
 
 	contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
 	for _, contentType := range contentTypes {
-		req, err := http.NewRequest("GET", "http://"+s.Addr+statusGossipKeyPrefix, nil)
+		req, err := http.NewRequest("GET", "https://"+s.Addr+statusGossipKeyPrefix, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		req.Header.Set("Accept", contentType)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.CreateTestHTTPClient().Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -19,8 +19,8 @@ DNSMASQ_NAME="${HOSTNAME:-local}-cockroach-dns"
 COCKROACH_NAME="${HOSTNAME:-local}-roachnode"
 
 # Determine running containers.
-CONTAINERS_RUN=$(docker ps | egrep -e '-roachnode|-cockroach-dns' | awk '{print $1}')
-CONTAINERS=$(docker ps -a | egrep -e '-roachnode|-cockroach-dns' | awk '{print $1}')
+CONTAINERS_RUN=$(docker ps | egrep -e '-roachnode|-cockroach-dns|cockroach-init|cockroach-certs' | awk '{print $1}')
+CONTAINERS=$(docker ps -a | egrep -e '-roachnode|-cockroach-dns|cockroach-init|cockroach-certs' | awk '{print $1}')
 
 # Parse [start|stop] directive.
 if [[ $1 == "start" ]]; then
@@ -75,10 +75,11 @@ trap finish EXIT
 # Shell script cleanup for failure.
 function fail {
   docker kill ${CIDS[*]} > /dev/null
-  docker rm ${CIDS[*]} > /dev/null
+  docker rm -v ${CIDS[*]} > /dev/null
   docker kill $DNS_CID > /dev/null
-  docker rm $DNS_CID > /dev/null
-  docker rm $INIT_CID > /dev/null
+  docker rm -v $DNS_CID > /dev/null
+  docker rm -v cockroach-init > /dev/null
+  docker rm -v cockroach-certs > /dev/null
   exit 1
 }
 
@@ -95,24 +96,34 @@ echo "* ${DNSMASQ_NAME}"
 # Local ports.
 PORT=8080
 
+# Start a data volume node for shared data.
+CERTS_DIR="/certs"
+CERTS_NAME="cockroach-certs"
+NODE_ADDRESSES=""
+for i in $(seq 1 $NODES); do
+  NODE_ADDRESSES="${NODE_ADDRESSES} ${COCKROACH_NAME}${i}.local"
+done
+
+# Generate certs.
+docker run -d -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} create-ca-cert --certs=${CERTS_DIR} 2> /dev/null
+docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} create-node-cert --certs=${CERTS_DIR} ${NODE_ADDRESSES} 2> /dev/null
+
 # Start all nodes.
 for i in $(seq 1 $NODES); do
   HOSTS[$i]="$COCKROACH_NAME$i.local"
   VOL="/data$i"
 
   # Command args specify two data directories per instance to simulate two physical devices.
-  START_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT"
+  START_ARGS="-gossip=${HOSTS[1]}:$PORT -stores=ssd=$VOL -addr=${HOSTS[$i]}:$PORT -certs=${CERTS_DIR}"
   # Log (almost) everything.
   #START_ARGS="${START_ARGS} -v 7"
   # Node-specific arguments for node container.
-  NODE_ARGS="--hostname=${HOSTS[$i]} --name=${HOSTS[$i]} --dns=$DNS_IP"
+  NODE_ARGS="--hostname=${HOSTS[$i]} --volumes-from=${CERTS_NAME} --name=${HOSTS[$i]} --dns=$DNS_IP"
 
   # If this is the first node, initialize the cluster first.
   if [[ $i == 1 ]]; then
-      docker run -v $VOL $COCKROACH_IMAGE init $VOL 2> /dev/null
-      INIT_CID=$(docker ps -q -n 1)
-      NODE_ARGS="${NODE_ARGS} --volumes-from=$INIT_CID"
-      # TODO(tobias): do we need to figure out how to clean up this volume?
+      docker run -v $VOL --volumes-from=${CERTS_NAME} --name=cockroach-init $COCKROACH_IMAGE init -certs=${CERTS_DIR} $VOL 2> /dev/null
+      NODE_ARGS="${NODE_ARGS} --volumes-from=cockroach-init"
   fi
 
   # Start Cockroach docker container and corral HTTP port and docker
@@ -140,10 +151,10 @@ if [[ $DOCKERHOST != "127.0.0.1" ]]; then
 fi
 
 # Fetch the local status contents from node 1 and verify build information is present.
-LOCAL_URL="$DOCKERHOST:${PORTS[1]}/_status/local/"
-LOCAL=$(curl --noproxy '*' -s $LOCAL_URL)
+LOCAL_URL="https://$DOCKERHOST:${PORTS[1]}/_status/local/"
+LOCAL=$(curl --noproxy '*' -k -s $LOCAL_URL)
 if [[ -z $LOCAL ]]; then
-  echo "Failed to fetch status from node 1"
+	echo "Failed to fetch status from node 1 (${LOCAL_URL})"
   docker logs ${CIDS[1]}
   fail
 fi
@@ -165,8 +176,8 @@ for ATTEMPT in $(seq 1 $MAX_WAIT); do
   FOUND=0
   for i in $(seq 1 $NODES); do
     FOUND_NAMES=""
-    GOSSIP_URL="$DOCKERHOST:${PORTS[$i]}/_status/gossip"
-    GOSSIP=$(curl --noproxy '*' -s $GOSSIP_URL)
+    GOSSIP_URL="https://$DOCKERHOST:${PORTS[$i]}/_status/gossip"
+    GOSSIP=$(curl --noproxy '*' -k -s -m 1 $GOSSIP_URL)
     for j in $(seq 1 $((2*NODES))); do
       if [[ ! -z $(echo $GOSSIP | grep "node:$j") ]]; then
         FOUND=$((FOUND+1))

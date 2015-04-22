@@ -23,14 +23,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 
@@ -40,15 +38,15 @@ import (
 var osExit = os.Exit
 var osStderr = os.Stderr
 
-func makeKVClient() *client.KV {
-	transport := &http.Transport{
-		TLSClientConfig: rpc.LoadInsecureTLSConfig().Config(),
+func makeKVClient() (*client.KV, error) {
+	httpSender, err := client.NewHTTPSender(util.EnsureHost(Context.Addr), Context.Certs)
+	if err != nil {
+		return nil, err
 	}
-	kv := client.NewKV(nil, client.NewHTTPSender(
-		util.EnsureHost(Context.Addr), transport))
+	kv := client.NewKV(nil, httpSender)
 	// TODO(pmattis): Initialize this to something more reasonable
 	kv.User = "root"
-	return kv
+	return kv, nil
 }
 
 // A getCmd command gets the value for the specified key.
@@ -67,7 +65,12 @@ func runGet(cmd *commander.Command, args []string) {
 		cmd.Usage()
 		return
 	}
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	key := proto.Key(args[0])
 	call := client.GetCall(key)
 	resp := call.Reply.(*proto.GetResponse)
@@ -119,9 +122,14 @@ func runPut(cmd *commander.Command, args []string) {
 		}
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err := kv.RunTransaction(opts, func(txn *client.Txn) error {
+	err = kv.RunTransaction(opts, func(txn *client.Txn) error {
 		for i := 0; i < len(args); i += 2 {
 			key := proto.Key(args[i])
 			value := []byte(args[i+1])
@@ -160,7 +168,12 @@ func runInc(cmd *commander.Command, args []string) {
 		return
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	amount := 1
 	if len(args) >= 2 {
 		var err error
@@ -208,9 +221,14 @@ func runDel(cmd *commander.Command, args []string) {
 		}
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
-	err := kv.RunTransaction(opts, func(txn *client.Txn) error {
+	err = kv.RunTransaction(opts, func(txn *client.Txn) error {
 		for i := 0; i < len(args); i++ {
 			key := proto.Key(args[i])
 			txn.Prepare(client.DeleteCall(key))
@@ -264,7 +282,12 @@ func runScan(cmd *commander.Command, args []string) {
 		endKey = proto.KeyMax
 	}
 
-	kv := makeKVClient()
+	kv, err := makeKVClient()
+	if err != nil {
+		fmt.Fprintf(osStderr, "failed to initialize KV client: %s", err)
+		osExit(1)
+		return
+	}
 	// TODO(pmattis): Add a flag for the number of results to scan.
 	call := client.ScanCall(startKey, endKey, 1000)
 	resp := call.Reply.(*proto.ScanResponse)

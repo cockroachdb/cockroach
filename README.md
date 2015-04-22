@@ -60,7 +60,12 @@ Now we're in an environment that has everything set up, and we start by first in
 
 ```bash
 DIR=$(mktemp -d /tmp/dbXXX)
+# Initialize CA and server certificates. Default directory is -certs=certs
+./cockroach create-ca-cert
+./cockroach create-node-cert 127.0.0.1 localhost
+# Initialize data directories.
 ./cockroach init $DIR
+# Start the server.
 ./cockroach start -stores ssd="$DIR" -gossip self:// &
 ```
 This initializes and starts a single-node cluster in the background.
@@ -100,7 +105,7 @@ Check out `./cockroach help` to see all available commands.
 ##### REST
 
 Cockroach also exposes a REST API. You can use the [REST Explorer at
-localhost:8080](http://localhost:8080/#rest-explorer) or talk directly to it.
+localhost:8080](https://localhost:8080/#rest-explorer) or talk directly to it.
 
 Note that if you're using the Docker container, you want to do this in a new shell
 and not inside the container, which does not have cURL installed. Note also that
@@ -108,14 +113,14 @@ if you're using boot2docker, you don't want to curl `localhost` - find out
 the correct endpoint using `boot2docker ip`.
 
 ```bash
-curl -X POST -d "Hello" http://localhost:8080/kv/rest/entry/Cockroach
+curl -k -X POST -d "Hello" https://localhost:8080/kv/rest/entry/Cockroach
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416616834949813367,"logical":0}}}
 ```
 
 ```bash
-curl http://localhost:8080/kv/rest/entry/Cockroach
+curl -k https://localhost:8080/kv/rest/entry/Cockroach
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416616886486257568,"logical":0}},"value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}
@@ -124,7 +129,7 @@ Note that `SGVsbG8=` equals `base64("Hello")`.
 
 Among other things, you can also scan a key range:
 ```bash
-curl "http://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
+curl -k "https://localhost:8080/kv/rest/range/?start=Ca&end=Cozz&limit=10"
 ```
 ```json
 {"header":{"timestamp":{"wall_time":1416617120031733436,"logical":0}},"rows":[{"key":"Q29ja3JvYWNo","value":{"bytes":"SGVsbG8=","timestamp":{"wall_time":1416616834949813367,"logical":0}}}]}
