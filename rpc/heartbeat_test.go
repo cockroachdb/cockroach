@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -83,13 +82,9 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	tlsConfig, err := security.LoadTestTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sContext := NewTestContext(t)
 	serverAddr := util.CreateTestAddr("tcp")
 	// Start heartbeat.
-	sContext := NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
 	s := NewServer(serverAddr, sContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)

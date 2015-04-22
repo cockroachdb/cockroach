@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -35,14 +34,9 @@ func init() {
 }
 
 func TestClientHeartbeat(t *testing.T) {
-	tlsConfig, err := security.LoadTestTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := NewContext(clock, tlsConfig, nil)
+	rpcContext := NewTestContext(t)
 	addr := util.CreateTestAddr("tcp")
+
 	s := NewServer(addr, rpcContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -57,15 +51,10 @@ func TestClientHeartbeat(t *testing.T) {
 }
 
 func TestClientNoCache(t *testing.T) {
-	tlsConfig, err := security.LoadTestTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	clock := hlc.NewClock(hlc.UnixNano)
-	rpcContext := NewContext(clock, tlsConfig, nil)
+	rpcContext := NewTestContext(t)
 	rpcContext.DisableCache = true
-
 	addr := util.CreateTestAddr("tcp")
+
 	s := NewServer(addr, rpcContext)
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -243,14 +232,12 @@ func (ac *AdvancingClock) UnixNano() int64 {
 // addr. Be sure to close the server when done. Building the server manually
 // like this allows for manual registration of the heartbeat service.
 func createTestServer(serverClock *hlc.Clock, t *testing.T) *Server {
-	tlsConfig, err := security.LoadTestTLSConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Create a test context, but override the clock.
+	serverContext := NewTestContext(t)
+	serverContext.localClock = serverClock
 
 	// Create the server so that we can register a manual clock.
 	addr := util.CreateTestAddr("tcp")
-	serverContext := NewContext(serverClock, tlsConfig, nil)
 	s := &Server{
 		Server:  rpc.NewServer(),
 		context: serverContext,

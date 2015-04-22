@@ -18,12 +18,11 @@
 package server
 
 import (
-	"os"
-	"path"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -56,7 +55,8 @@ func NewTestContext() *Context {
 	// uncertainty intervals.
 	ctx.MaxOffset = 0
 
-	ctx.Certs = path.Join(os.Getenv("GOPATH"), "src/github.com/cockroachdb/cockroach/resource/test_certs")
+	// Load certs from embedded files.
+	ctx.Certs = security.EmbeddedPrefix + "test_certs"
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).

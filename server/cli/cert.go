@@ -33,7 +33,7 @@ var createCACertCmd = &commander.Command{
 	Short:     "create CA cert and key",
 	Long: `
 Generates a new key pair, a new CA certificate and writes them to
-individual files in the directory specified by --certs (required).
+individual files in the directory specified by -certs (required).
 `,
 	Run:  runCreateCACert,
 	Flag: *flag.CommandLine,
@@ -57,7 +57,7 @@ var createNodeCertCmd = &commander.Command{
 	Short:     "create node cert and key\n",
 	Long: `
 Generates a new key pair, a new node certificate and writes them to
-individual files in the directory specified by --certs (required).
+individual files in the directory specified by -certs (required).
 The certs directory should contain a CA cert and key.
 At least one host should be passed in (either IP address of dns name).
 `,
