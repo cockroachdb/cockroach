@@ -125,9 +125,9 @@ func (rs *rangeScanner) RemoveRange(rng *Range) {
 	rs.removed <- rng
 }
 
-// heartBeat returns a duration between iterations to allow us to pace
+// paceInterval returns a duration between iterations to allow us to pace
 // the scan.
-func (rs *rangeScanner) heartBeat(start time.Time) time.Duration {
+func (rs *rangeScanner) paceInterval(start time.Time) time.Duration {
 	elapsed := time.Now().Sub(start)
 	remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
 	if remainingNanos < 0 {
@@ -137,15 +137,14 @@ func (rs *rangeScanner) heartBeat(start time.Time) time.Duration {
 	if count < 1 {
 		count = 1
 	}
-	timeInterval := time.Duration(remainingNanos / int64(count))
-	log.V(6).Infof("next range scan iteration in %s", timeInterval)
-	return timeInterval
+	interval := time.Duration(remainingNanos / int64(count))
+	log.V(6).Infof("next range scan iteration in %s", interval)
+	return interval
 }
 
 // scanLoop loops endlessly, scanning through ranges available via
 // the range iterator, or until the scanner is stopped. The iteration
-// is paced using a heart beat to complete a full scan in approximately
-// the scan interval.
+// is paced to complete a full scan in approximately the scan interval.
 func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 	stopper.RunWorker(func() {
 		start := time.Now()
@@ -153,7 +152,7 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 
 		for {
 			select {
-			case <-time.After(rs.heartBeat(start)):
+			case <-time.After(rs.paceInterval(start)):
 				if !stopper.StartTask() {
 					continue
 				}
