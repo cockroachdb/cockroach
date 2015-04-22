@@ -28,7 +28,18 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/log"
 )
+
+// StartTestServer starts a in-memory test server.
+func StartTestServer() *TestServer {
+	s := &TestServer{}
+	if err := s.Start(); err != nil {
+		log.Fatalf("Could not start server: %v", err)
+	}
+	log.Infof("Test server listening on https: %s", s.Addr)
+	return s
+}
 
 // A TestServer encapsulates an in-memory instantiation of a cockroach
 // node with a single store. Example usage of a TestServer follows:
