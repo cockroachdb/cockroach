@@ -195,8 +195,8 @@ func (tc *TxnCoordSender) Send(call client.Call) {
 	tc.maybeBeginTxn(header)
 
 	// Process batch specially; otherwise, send via wrapped sender.
-	if call.Method() == proto.Batch {
-		tc.sendBatch(call.Args.(*proto.BatchRequest), call.Reply.(*proto.BatchResponse))
+	if breq, ok := call.Args.(*proto.BatchRequest); ok {
+		tc.sendBatch(breq, call.Reply.(*proto.BatchResponse))
 	} else {
 		tc.sendOne(call)
 	}
@@ -248,7 +248,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 			header.Timestamp = header.Txn.Timestamp
 		}
 		// End transaction must have its key set to the txn ID.
-		if call.Method() == proto.EndTransaction {
+		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			header.Key = header.Txn.Key
 			// Remember when EndTransaction started in case we want to
 			// be linearizable.
@@ -312,7 +312,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 	case nil:
 		var txn *proto.Transaction
 		var resolved []proto.Key
-		if call.Method() == proto.EndTransaction {
+		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			txn = call.Reply.Header().Txn
 			// If the -linearizable flag is set, we want to make sure that
 			// all the clocks in the system are past the commit timestamp

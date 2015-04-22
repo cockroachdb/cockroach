@@ -46,8 +46,8 @@ func newTestSender(handler func(Call)) KVSenderFunc {
 			header.Txn.ID = txnID
 		}
 		call.Reply.Reset()
-		switch call.Method() {
-		case proto.Put:
+		switch call.Args.(type) {
+		case *proto.PutRequest:
 			gogoproto.Merge(call.Reply, testPutResp)
 		default:
 			// Do nothing.

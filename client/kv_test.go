@@ -78,18 +78,11 @@ func TestKVClientCommandID(t *testing.T) {
 // call without a batch and more than one prepared calls with a batch.
 func TestKVTransactionPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
-		count := 0
+		var calls []string
 		client := NewKV(nil, newTestSender(func(call Call) {
-			count++
-			if i == 1 && call.Method() == proto.Batch {
-				t.Error("expected non-batch for a single buffered call")
-			} else if i > 1 {
-				if call.Method() != proto.Batch && call.Method() != proto.EndTransaction {
-					t.Error("expected batch for > 1 buffered calls")
-				}
-				if call.Args.Header().CmdID.WallTime == 0 {
-					t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
-				}
+			calls = append(calls, call.Method())
+			if call.Args.Header().CmdID.WallTime == 0 {
+				t.Errorf("expected batch client command ID to be initialized: %v", call.Args.Header().CmdID)
 			}
 		}))
 
@@ -100,11 +93,15 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 			if err := txn.Flush(); err != nil {
 				t.Fatal(err)
 			}
-			if count != 1 {
-				t.Errorf("expected test sender to be invoked once; got %d", count)
-			}
 			return nil
 		})
+		expectedCalls := []string{"Batch", "EndTransaction"}
+		if i == 1 {
+			expectedCalls[0] = "Put"
+		}
+		if !reflect.DeepEqual(expectedCalls, calls) {
+			t.Errorf("expected %s, got %s", expectedCalls, calls)
+		}
 	}
 }
 
@@ -198,7 +195,7 @@ func TestKVCommitTransactionOnce(t *testing.T) {
 // upon failed invocation of the retryable func.
 func TestKVAbortReadOnlyTransaction(t *testing.T) {
 	client := NewKV(nil, newTestSender(func(call Call) {
-		if call.Method() == proto.EndTransaction {
+		if _, ok := call.Args.(*proto.EndTransactionRequest); ok {
 			t.Errorf("did not expect EndTransaction")
 		}
 	}))
@@ -257,7 +254,7 @@ func TestKVRunTransactionRetryOnErrors(t *testing.T) {
 	for i, test := range testCases {
 		count := 0
 		client := NewKV(ctx, newTestSender(func(call Call) {
-			if call.Method() == proto.Put {
+			if _, ok := call.Args.(*proto.PutRequest); ok {
 				count++
 				if count == 1 {
 					call.Reply.Header().SetGoError(test.err)

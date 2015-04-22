@@ -109,29 +109,28 @@ var configDescriptors = []*configDescriptor{
 	{engine.KeyConfigZonePrefix, gossip.KeyConfigZone, proto.ZoneConfig{}},
 }
 
-// tsCacheMethods specifies the set of methods which affect the
+// tsCacheRequests specifies the set of requests which affect the
 // timestamp cache.
-var tsCacheMethods = map[string]struct{}{
-	proto.Contains:              {},
-	proto.Get:                   {},
-	proto.Put:                   {},
-	proto.ConditionalPut:        {},
-	proto.Increment:             {},
-	proto.Scan:                  {},
-	proto.Delete:                {},
-	proto.DeleteRange:           {},
-	proto.ReapQueue:             {},
-	proto.EnqueueUpdate:         {},
-	proto.EnqueueMessage:        {},
-	proto.InternalResolveIntent: {},
-	proto.InternalMerge:         {},
+var tsCacheRequests = map[reflect.Type]bool{
+	reflect.TypeOf((*proto.ContainsRequest)(nil)):              true,
+	reflect.TypeOf((*proto.GetRequest)(nil)):                   true,
+	reflect.TypeOf((*proto.PutRequest)(nil)):                   true,
+	reflect.TypeOf((*proto.ConditionalPutRequest)(nil)):        true,
+	reflect.TypeOf((*proto.IncrementRequest)(nil)):             true,
+	reflect.TypeOf((*proto.ScanRequest)(nil)):                  true,
+	reflect.TypeOf((*proto.DeleteRequest)(nil)):                true,
+	reflect.TypeOf((*proto.DeleteRangeRequest)(nil)):           true,
+	reflect.TypeOf((*proto.ReapQueueRequest)(nil)):             true,
+	reflect.TypeOf((*proto.EnqueueUpdateRequest)(nil)):         true,
+	reflect.TypeOf((*proto.EnqueueMessageRequest)(nil)):        true,
+	reflect.TypeOf((*proto.InternalResolveIntentRequest)(nil)): true,
+	reflect.TypeOf((*proto.InternalMergeRequest)(nil)):         true,
 }
 
-// UsesTimestampCache returns true if the method affects or is
+// usesTimestampCache returns true if the request affects or is
 // affected by the timestamp cache.
-func UsesTimestampCache(method string) bool {
-	_, ok := tsCacheMethods[method]
-	return ok
+func usesTimestampCache(r proto.Request) bool {
+	return tsCacheRequests[reflect.TypeOf(r)]
 }
 
 // A pendingCmd holds the reply buffer and a done channel for a command
@@ -480,7 +479,7 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 
 	// Only update the timestamp cache if the command succeeded.
 	r.Lock()
-	if err == nil && UsesTimestampCache(args.Method()) {
+	if err == nil && usesTimestampCache(args) {
 		r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, header.Txn.MD5(), true /* readOnly */)
 	}
 	r.cmdQ.Remove(cmdKey)
@@ -545,7 +544,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	// writes, send WriteTooOldError; for reads, update the write's
 	// timestamp. When the write returns, the updated timestamp will
 	// inform the final commit timestamp.
-	if UsesTimestampCache(args.Method()) {
+	if usesTimestampCache(args) {
 		r.Lock()
 		rTS, wTS := r.tsCache.GetMax(header.Key, header.EndKey, txnMD5)
 		r.Unlock()
@@ -607,7 +606,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		// of this write on success. This ensures a strictly higher
 		// timestamp for successive writes to the same key or key range.
 		r.Lock()
-		if err == nil && UsesTimestampCache(args.Method()) {
+		if err == nil && usesTimestampCache(args) {
 			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
 		}
 		r.cmdQ.Remove(cmdKey)
@@ -870,9 +869,11 @@ func (r *Range) executeCmd(index uint64, args proto.Request,
 				// If the commit succeeded, potentially add range to split queue.
 				r.maybeSplit()
 				// Maybe update gossip configs on a put.
-				method := args.Method()
-				if (method == proto.Put || method == proto.ConditionalPut) && header.Key.Less(engine.KeySystemMax) {
-					r.maybeUpdateGossipConfigs(header.Key)
+				switch args.(type) {
+				case *proto.PutRequest, *proto.ConditionalPutRequest:
+					if header.Key.Less(engine.KeySystemMax) {
+						r.maybeUpdateGossipConfigs(header.Key)
+					}
 				}
 			}
 		}
