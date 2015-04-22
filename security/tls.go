@@ -27,7 +27,7 @@ import (
 	"path"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/rpc/rpctest"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -153,15 +153,15 @@ func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
 // TODO Maybe instead of returning err, take a testing.T?  And move to tls_test?
 func LoadTestTLSConfig() (*TLSConfig, error) {
 	certDir := "./test_certs"
-	certPEM, err := rpctest.Asset(path.Join(certDir, "node.crt"))
+	certPEM, err := securitytest.Asset(path.Join(certDir, "node.crt"))
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := rpctest.Asset(path.Join(certDir, "node.key"))
+	keyPEM, err := securitytest.Asset(path.Join(certDir, "node.key"))
 	if err != nil {
 		return nil, err
 	}
-	caPEM, err := rpctest.Asset(path.Join(certDir, "ca.crt"))
+	caPEM, err := securitytest.Asset(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
 	}

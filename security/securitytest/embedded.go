@@ -1,4 +1,4 @@
-package rpctest
+package securitytest
 
 import (
 	"bytes"

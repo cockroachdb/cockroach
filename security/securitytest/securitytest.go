@@ -15,8 +15,8 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-// Package rpctest embeds the TLS test certificates.
-package rpctest
+// Package securitytest embeds the TLS test certificates.
+package securitytest
 
-//go:generate go-bindata -pkg rpctest -mode 0644 -modtime 1400000000 -o ./embedded.go -prefix ../../resource ../../resource/test_certs/...
+//go:generate go-bindata -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -prefix ../../resource ../../resource/test_certs/...
 //go:generate goimports -w embedded.go
