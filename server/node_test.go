@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -45,7 +46,7 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *hlc.Clock, *Node, *util.Stopper) {
-	tlsConfig, err := rpc.LoadTestTLSConfig()
+	tlsConfig, err := security.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}

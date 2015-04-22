@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -303,7 +304,7 @@ func TestComplexScenarios(t *testing.T) {
 
 // createNewTestRPCContext creates an RPCContext used for test.
 func createNewTestRPCContext(t *testing.T) *Context {
-	tlsConfig, err := LoadTestTLSConfig()
+	tlsConfig, err := security.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}

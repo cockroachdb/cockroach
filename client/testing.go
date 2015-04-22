@@ -20,13 +20,13 @@ package client
 import (
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 )
 
 // CreateTestHTTPClient initialises a new http client with insecure TLS config.
 // TODO(marc): load test certs when enforced.
 func CreateTestHTTPClient() *http.Client {
-	tlsConfig := rpc.LoadInsecureClientTLSConfig().Config()
+	tlsConfig := security.LoadInsecureClientTLSConfig().Config()
 	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 }
 

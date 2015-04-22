@@ -25,7 +25,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -33,7 +32,7 @@ import (
 // them out to the individual files.
 // The certificate is written to <prefix>.crt and the key to <prefix>.key.
 // TODO(marc): figure out how to include the plaintext certificate in the .crt file.
-func writeCertificateAndKey(ctx *server.Context, prefix string,
+func writeCertificateAndKey(certsDir string, prefix string,
 	certificate []byte, key crypto.PrivateKey) error {
 	// Get PEM blocks for certificate and private key.
 	certBlock, err := certificatePEMBlock(certificate)
@@ -47,7 +46,7 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 	}
 
 	// Write certificate to file.
-	certFilePath := path.Join(ctx.Certs, prefix+".crt")
+	certFilePath := path.Join(certsDir, prefix+".crt")
 	certFile, err := os.OpenFile(certFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return util.Errorf("error creating certificate file %s: %s", certFilePath, err)
@@ -64,7 +63,7 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 	}
 
 	// Write key to file.
-	keyFilePath := path.Join(ctx.Certs, prefix+".key")
+	keyFilePath := path.Join(certsDir, prefix+".key")
 	keyFile, err := os.OpenFile(keyFilePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return util.Errorf("error create key file %s: %s", keyFilePath, err)
@@ -85,15 +84,15 @@ func writeCertificateAndKey(ctx *server.Context, prefix string,
 
 // RunCreateCACert is the entry-point from the command-line interface
 // to generate CA cert and key.
-func RunCreateCACert(ctx *server.Context) error {
-	if ctx.Certs == "" {
+func RunCreateCACert(certsDir string) error {
+	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
 
 	// Make the directory first.
-	err := os.MkdirAll(ctx.Certs, 0755)
+	err := os.MkdirAll(certsDir, 0755)
 	if err != nil {
-		return util.Errorf("error creating certs directory %s: %s", ctx.Certs, err)
+		return util.Errorf("error creating certs directory %s: %s", certsDir, err)
 	}
 
 	// Generate certificate.
@@ -102,14 +101,14 @@ func RunCreateCACert(ctx *server.Context) error {
 		return util.Errorf("error creating CA certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(ctx, "ca", certificate, key)
+	err = writeCertificateAndKey(certsDir, "ca", certificate, key)
 	return err
 }
 
 // RunCreateNodeCert is the entry-point from the command-line interface
 // to generate node cert and key.
-func RunCreateNodeCert(ctx *server.Context, hosts []string) error {
-	if ctx.Certs == "" {
+func RunCreateNodeCert(certsDir string, hosts []string) error {
+	if certsDir == "" {
 		return util.Errorf("no certs directory specified, use --certs")
 	}
 	if len(hosts) == 0 {
@@ -117,8 +116,8 @@ func RunCreateNodeCert(ctx *server.Context, hosts []string) error {
 	}
 
 	// Load the CA certificate.
-	caCertPath := path.Join(ctx.Certs, "ca.crt")
-	caKeyPath := path.Join(ctx.Certs, "ca.key")
+	caCertPath := path.Join(certsDir, "ca.crt")
+	caKeyPath := path.Join(certsDir, "ca.key")
 	// LoadX509KeyPair does a bunch of validation, including len(Certificates) != 0.
 	caCert, err := tls.LoadX509KeyPair(caCertPath, caKeyPath)
 	if err != nil {
@@ -138,6 +137,6 @@ func RunCreateNodeCert(ctx *server.Context, hosts []string) error {
 		return util.Errorf("error creating node certificate and key: %s", err)
 	}
 
-	err = writeCertificateAndKey(ctx, "node", certificate, key)
+	err = writeCertificateAndKey(certsDir, "node", certificate, key)
 	return err
 }

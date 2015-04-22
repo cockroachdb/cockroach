@@ -15,14 +15,14 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package security
+package security_test
 
 import (
 	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -32,33 +32,29 @@ func TestGenerateCerts(t *testing.T) {
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 
-	context := server.NewContext()
-
-	context.Certs = ""
 	// Try certs generation with empty Certs dir argument.
-	err := RunCreateCACert(context)
+	err := security.RunCreateCACert("")
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
-	err = RunCreateNodeCert(context, []string{"localhost"})
+	err = security.RunCreateNodeCert("", []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
-	context.Certs = certsDir
 	// Try generating node certs without CA certs present.
-	err = RunCreateNodeCert(context, []string{"localhost"})
+	err = security.RunCreateNodeCert(certsDir, []string{"localhost"})
 	if err == nil {
 		t.Fatalf("Expected error, but got none")
 	}
 
 	// Now try in the proper order.
-	err = RunCreateCACert(context)
+	err = security.RunCreateCACert(certsDir)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = RunCreateNodeCert(context, []string{"localhost"})
+	err = security.RunCreateNodeCert(certsDir, []string{"localhost"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -70,24 +66,22 @@ func TestUseCerts(t *testing.T) {
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 
-	context := server.NewContext()
-	context.Certs = certsDir
-	err := RunCreateCACert(context)
+	err := security.RunCreateCACert(certsDir)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	err = RunCreateNodeCert(context, []string{"127.0.0.1"})
+	err = security.RunCreateNodeCert(certsDir, []string{"127.0.0.1"})
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
 	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
-	_, err = rpc.LoadTLSConfigFromDir(certsDir)
+	_, err = security.LoadTLSConfigFromDir(certsDir)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	_, err = rpc.LoadClientTLSConfigFromDir(certsDir)
+	_, err = security.LoadClientTLSConfigFromDir(certsDir)
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

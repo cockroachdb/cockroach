@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -40,7 +41,7 @@ func (s ChannelServer) RaftMessage(req *multiraft.RaftMessageRequest,
 }
 
 func TestSendAndReceive(t *testing.T) {
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), nil)
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), nil)
 	g := gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 
 	// Create several servers, each of which has two stores (A multiraft node ID addresses

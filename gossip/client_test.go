@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -36,7 +37,7 @@ const (
 // startGossip creates local and remote gossip instances.
 // The remote gossip instance launches its gossip service.
 func startGossip(t *testing.T) (local, remote *Gossip, stopper *util.Stopper) {
-	tlsConfig := rpc.LoadInsecureTLSConfig()
+	tlsConfig := security.LoadInsecureTLSConfig()
 	lclock := hlc.NewClock(hlc.UnixNano)
 	lRPCContext := rpc.NewContext(lclock, tlsConfig, nil)
 

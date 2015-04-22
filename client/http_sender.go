@@ -30,7 +30,7 @@ import (
 
 	"code.google.com/p/snappy-go/snappy"
 
-	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -69,10 +69,10 @@ func NewHTTPClient(certsDir string) (*http.Client, error) {
 	var tlsConfig *tls.Config
 	if certsDir == "" {
 		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		tlsConfig = rpc.LoadInsecureClientTLSConfig().Config()
+		tlsConfig = security.LoadInsecureClientTLSConfig().Config()
 	} else {
 		log.V(1).Infof("setting up TLS from certificates directory: %s", certsDir)
-		cfg, err := rpc.LoadClientTLSConfigFromDir(certsDir)
+		cfg, err := security.LoadClientTLSConfigFromDir(certsDir)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}

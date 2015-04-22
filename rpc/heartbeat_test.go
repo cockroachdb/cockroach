@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -82,7 +83,7 @@ func TestManualHeartbeat(t *testing.T) {
 }
 
 func TestUpdateOffsetOnHeartbeat(t *testing.T) {
-	tlsConfig, err := LoadTestTLSConfig()
+	tlsConfig, err := security.LoadTestTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}

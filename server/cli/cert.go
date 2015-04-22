@@ -42,7 +42,7 @@ individual files in the directory specified by --certs (required).
 // runCreateCACert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateCACert(cmd *commander.Command, args []string) {
-	err := security.RunCreateCACert(Context)
+	err := security.RunCreateCACert(Context.Certs)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate CA certificate: %s\n", err)
 		osExit(1)
@@ -68,7 +68,7 @@ At least one host should be passed in (either IP address of dns name).
 // runCreateNodeCert generates key pair and CA certificate and writes them
 // to their corresponding files.
 func runCreateNodeCert(cmd *commander.Command, args []string) {
-	err := security.RunCreateNodeCert(Context, args)
+	err := security.RunCreateNodeCert(Context.Certs, args)
 	if err != nil {
 		fmt.Fprintf(osStderr, "failed to generate node certificate: %s\n", err)
 		osExit(1)

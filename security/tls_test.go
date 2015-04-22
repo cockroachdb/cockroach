@@ -15,7 +15,7 @@
 //
 // Author: jqmp (jaqueramaphan@gmail.com)
 
-package rpc
+package security
 
 import (
 	"crypto/x509"
