@@ -401,9 +401,6 @@ func newState(m *MultiRaft) *state {
 		groups:    make(map[uint64]*group),
 		nodes:     make(map[NodeID]*node),
 		writeTask: newWriteTask(m.Storage),
-		clock: func() int64 {
-			return time.Now().UnixNano()
-		},
 	}
 }
 
@@ -464,18 +461,6 @@ func (s *state) start(stopper *util.Stopper) {
 							log.Warningf("Error creating group %d: %s", req.GroupID, err)
 							break
 						}
-					}
-
-					// If this node has granted a leader lease, it should not
-					// be able to receive votes. We already block outgoing
-					// vote requests, but since nodes vote for themselves
-					// at the Raft level, only here do we make sure that
-					// the leader lease cannot be violated.
-					if req.Message.Type == raftpb.MsgVoteResp &&
-						s.groups[req.GroupID].leaseGrantedUntil > s.clock() {
-						log.V(6).Infof("node %v has granted a leader lease; dropping incoming %s from %v",
-							s.nodeID, req.Message.Type, req.Message.From)
-						continue
 					}
 
 					if err := s.multiNode.Step(context.Background(), req.GroupID, req.Message); err != nil {
