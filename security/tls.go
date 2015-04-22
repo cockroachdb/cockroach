@@ -34,7 +34,7 @@ import (
 
 const (
 	// EmbeddedPrefix is the prefix to the --certs arg that indicates embedded certs.
-	EmbeddedPrefix = "embedded:"
+	EmbeddedPrefix = "embedded="
 )
 
 // TLSConfig contains the TLS settings for a Cockroach node. Currently it's
@@ -60,7 +60,7 @@ func (c *TLSConfig) Config() *tls.Config {
 // - ca.crt   -- the certificate of the cluster CA
 // - node.crt -- the certificate of this node; should be signed by the CA
 // - node.key -- the private key of this node
-// If the path is prefixed with "embedded:", load the embedded certs.
+// If the path is prefixed with "embedded=", load the embedded certs.
 func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 	if strings.HasPrefix(certDir, EmbeddedPrefix) {
 		return LoadTestTLSConfig(certDir[len(EmbeddedPrefix):])
@@ -81,7 +81,7 @@ func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 }
 
 // LoadTestTLSConfig loads the embedded certs. This is only called from
-// LoadTLSConfigFromDir when the certdir path starts with "embedded:".
+// LoadTLSConfigFromDir when the certdir path starts with "embedded=".
 func LoadTestTLSConfig(certDir string) (*TLSConfig, error) {
 	certPEM, err := securitytest.Asset(path.Join(certDir, "node.crt"))
 	if err != nil {
@@ -158,7 +158,7 @@ func LoadClientTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 }
 
 // LoadTestClientTLSConfig loads the embedded certs. This is only called from
-// LoadClientTLSConfigFromDir when the certdir path starts with "embedded:".
+// LoadClientTLSConfigFromDir when the certdir path starts with "embedded=".
 func LoadTestClientTLSConfig(certDir string) (*TLSConfig, error) {
 	caPEM, err := securitytest.Asset(path.Join(certDir, "ca.crt"))
 	if err != nil {
