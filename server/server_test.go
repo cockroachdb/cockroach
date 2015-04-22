@@ -47,18 +47,6 @@ func newTestContext() *Context {
 
 var testContext = newTestContext()
 
-// startTestServer starts a test server. The server will be initialized with an
-// in-memory engine and will execute a split at key "m" so that
-// it will end up having two logical ranges.
-func startTestServer(t *testing.T) *TestServer {
-	s := &TestServer{}
-	if err := s.Start(); err != nil {
-		t.Fatalf("Could not start server: %v", err)
-	}
-	log.Infof("Test server listening on https: %s", s.Addr)
-	return s
-}
-
 // createTestConfigFile creates a temporary file and writes the
 // testConfig yaml data to it. The caller is responsible for
 // removing it. Returns the filename for a subsequent call to
@@ -186,13 +174,13 @@ func TestInitEngines(t *testing.T) {
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
 // been specified.
 func TestSelfBootstrap(t *testing.T) {
-	s := startTestServer(t)
+	s := StartTestServer()
 	s.Stop()
 }
 
 // TestHealth verifies that health endpoint return "ok".
 func TestHealth(t *testing.T) {
-	s := startTestServer(t)
+	s := StartTestServer()
 	defer s.Stop()
 	url := "https://" + s.Addr + healthPath
 	resp, err := client.CreateTestHTTPClient().Get(url)
@@ -214,7 +202,7 @@ func TestHealth(t *testing.T) {
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.
 func TestAcceptEncoding(t *testing.T) {
-	s := startTestServer(t)
+	s := StartTestServer()
 	defer s.Stop()
 	// We can't use the standard test client. Create our own.
 	tlsConfig := rpc.LoadInsecureClientTLSConfig().Config()
@@ -281,7 +269,7 @@ func TestAcceptEncoding(t *testing.T) {
 // TestMultiRangeScanDeleteRange tests that commands which access multiple
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
-	s := startTestServer(t)
+	s := StartTestServer()
 	defer s.Stop()
 	ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 	tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
@@ -390,7 +378,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		s := startTestServer(t)
+		s := StartTestServer()
 		ds := kv.NewDistSender(&kv.DistSenderContext{Clock: s.Clock()}, s.Gossip())
 		tds := kv.NewTxnCoordSender(ds, s.Clock(), testContext.Linearizable, s.stopper)
 
