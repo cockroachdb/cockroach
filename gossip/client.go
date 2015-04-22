@@ -105,6 +105,7 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 		// Compute the delta of local node's infostore to send with request.
 		g.mu.Lock()
 		delta := g.is.delta(c.peerID, localMaxSeq)
+		nodeID := g.is.NodeID // needs to be accessed with the lock held
 		g.mu.Unlock()
 		var deltaBytes []byte
 		if delta != nil {
@@ -118,7 +119,7 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 
 		// Send gossip with timeout.
 		args := &proto.GossipRequest{
-			NodeID: g.is.NodeID,
+			NodeID: nodeID,
 			Addr:   *proto.FromNetAddr(g.is.NodeAddr),
 			LAddr:  *proto.FromNetAddr(c.rpcClient.LocalAddr()),
 			MaxSeq: remoteMaxSeq,
@@ -175,7 +176,6 @@ func (c *client) gossip(g *Gossip, stopper *util.Stopper) error {
 		// Check whether this outgoing client is duplicating work already
 		// being done by an incoming client. To avoid mutual shutdown, we
 		// only shutdown our client if our node ID is less than the peer's.
-		nodeID := g.GetNodeID()
 		if g.hasIncoming(c.peerID) && nodeID < c.peerID {
 			return util.Errorf("stopping outgoing client %d @ %s; already have incoming", c.peerID, c.addr)
 		}
