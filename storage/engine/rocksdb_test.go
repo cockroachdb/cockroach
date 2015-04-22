@@ -73,17 +73,16 @@ func encodeTransaction(timestamp proto.Timestamp, t *testing.T) []byte {
 func TestRocksDBCompaction(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	gob.Register(proto.Timestamp{})
-	loc := util.CreateTempDirectory()
 	rocksdb := newMemRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
 	err := rocksdb.Open()
 	if err != nil {
-		t.Fatalf("could not create new rocksdb db instance at %s: %v", loc, err)
+		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
 	}
 	rocksdb.SetGCTimeouts(1, 2)
 	defer func(t *testing.T) {
 		rocksdb.Close()
 		if err := rocksdb.Destroy(); err != nil {
-			t.Errorf("could not delete rocksdb db at %s: %v", loc, err)
+			t.Errorf("could not delete in-memory rocksdb db: %v", err)
 		}
 	}(t)
 
