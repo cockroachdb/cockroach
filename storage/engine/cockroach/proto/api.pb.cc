@@ -84,24 +84,6 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* EndTransactionResponse_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   EndTransactionResponse_reflection_ = NULL;
-const ::google::protobuf::Descriptor* ReapQueueRequest_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  ReapQueueRequest_reflection_ = NULL;
-const ::google::protobuf::Descriptor* ReapQueueResponse_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  ReapQueueResponse_reflection_ = NULL;
-const ::google::protobuf::Descriptor* EnqueueUpdateRequest_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  EnqueueUpdateRequest_reflection_ = NULL;
-const ::google::protobuf::Descriptor* EnqueueUpdateResponse_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  EnqueueUpdateResponse_reflection_ = NULL;
-const ::google::protobuf::Descriptor* EnqueueMessageRequest_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  EnqueueMessageRequest_reflection_ = NULL;
-const ::google::protobuf::Descriptor* EnqueueMessageResponse_descriptor_ = NULL;
-const ::google::protobuf::internal::GeneratedMessageReflection*
-  EnqueueMessageResponse_reflection_ = NULL;
 const ::google::protobuf::Descriptor* RequestUnion_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   RequestUnion_reflection_ = NULL;
@@ -115,9 +97,6 @@ struct RequestUnionOneofInstance {
   const ::cockroach::proto::DeleteRangeRequest* delete_range_;
   const ::cockroach::proto::ScanRequest* scan_;
   const ::cockroach::proto::EndTransactionRequest* end_transaction_;
-  const ::cockroach::proto::ReapQueueRequest* reap_queue_;
-  const ::cockroach::proto::EnqueueUpdateRequest* enqueue_update_;
-  const ::cockroach::proto::EnqueueMessageRequest* enqueue_message_;
 }* RequestUnion_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* ResponseUnion_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
@@ -132,9 +111,6 @@ struct ResponseUnionOneofInstance {
   const ::cockroach::proto::DeleteRangeResponse* delete_range_;
   const ::cockroach::proto::ScanResponse* scan_;
   const ::cockroach::proto::EndTransactionResponse* end_transaction_;
-  const ::cockroach::proto::ReapQueueResponse* reap_queue_;
-  const ::cockroach::proto::EnqueueUpdateResponse* enqueue_update_;
-  const ::cockroach::proto::EnqueueMessageResponse* enqueue_message_;
 }* ResponseUnion_default_oneof_instance_ = NULL;
 const ::google::protobuf::Descriptor* BatchRequest_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
@@ -507,101 +483,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(EndTransactionResponse));
-  ReapQueueRequest_descriptor_ = file->message_type(21);
-  static const int ReapQueueRequest_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueRequest, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueRequest, max_results_),
-  };
-  ReapQueueRequest_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      ReapQueueRequest_descriptor_,
-      ReapQueueRequest::default_instance_,
-      ReapQueueRequest_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueRequest, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueRequest, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(ReapQueueRequest));
-  ReapQueueResponse_descriptor_ = file->message_type(22);
-  static const int ReapQueueResponse_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueResponse, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueResponse, messages_),
-  };
-  ReapQueueResponse_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      ReapQueueResponse_descriptor_,
-      ReapQueueResponse::default_instance_,
-      ReapQueueResponse_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueResponse, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ReapQueueResponse, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(ReapQueueResponse));
-  EnqueueUpdateRequest_descriptor_ = file->message_type(23);
-  static const int EnqueueUpdateRequest_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateRequest, header_),
-  };
-  EnqueueUpdateRequest_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      EnqueueUpdateRequest_descriptor_,
-      EnqueueUpdateRequest::default_instance_,
-      EnqueueUpdateRequest_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateRequest, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateRequest, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(EnqueueUpdateRequest));
-  EnqueueUpdateResponse_descriptor_ = file->message_type(24);
-  static const int EnqueueUpdateResponse_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateResponse, header_),
-  };
-  EnqueueUpdateResponse_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      EnqueueUpdateResponse_descriptor_,
-      EnqueueUpdateResponse::default_instance_,
-      EnqueueUpdateResponse_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateResponse, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueUpdateResponse, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(EnqueueUpdateResponse));
-  EnqueueMessageRequest_descriptor_ = file->message_type(25);
-  static const int EnqueueMessageRequest_offsets_[2] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageRequest, header_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageRequest, msg_),
-  };
-  EnqueueMessageRequest_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      EnqueueMessageRequest_descriptor_,
-      EnqueueMessageRequest::default_instance_,
-      EnqueueMessageRequest_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageRequest, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageRequest, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(EnqueueMessageRequest));
-  EnqueueMessageResponse_descriptor_ = file->message_type(26);
-  static const int EnqueueMessageResponse_offsets_[1] = {
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageResponse, header_),
-  };
-  EnqueueMessageResponse_reflection_ =
-    new ::google::protobuf::internal::GeneratedMessageReflection(
-      EnqueueMessageResponse_descriptor_,
-      EnqueueMessageResponse::default_instance_,
-      EnqueueMessageResponse_offsets_,
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageResponse, _has_bits_[0]),
-      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(EnqueueMessageResponse, _unknown_fields_),
-      -1,
-      ::google::protobuf::DescriptorPool::generated_pool(),
-      ::google::protobuf::MessageFactory::generated_factory(),
-      sizeof(EnqueueMessageResponse));
-  RequestUnion_descriptor_ = file->message_type(27);
-  static const int RequestUnion_offsets_[13] = {
+  RequestUnion_descriptor_ = file->message_type(21);
+  static const int RequestUnion_offsets_[10] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, contains_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, get_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, put_),
@@ -611,9 +494,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, delete_range_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, scan_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, end_transaction_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, reap_queue_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, enqueue_update_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(RequestUnion_default_oneof_instance_, enqueue_message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(RequestUnion, value_),
   };
   RequestUnion_reflection_ =
@@ -629,8 +509,8 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(RequestUnion));
-  ResponseUnion_descriptor_ = file->message_type(28);
-  static const int ResponseUnion_offsets_[13] = {
+  ResponseUnion_descriptor_ = file->message_type(22);
+  static const int ResponseUnion_offsets_[10] = {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, contains_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, get_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, put_),
@@ -640,9 +520,6 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, delete_range_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, scan_),
     PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, end_transaction_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, reap_queue_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, enqueue_update_),
-    PROTO2_GENERATED_DEFAULT_ONEOF_FIELD_OFFSET(ResponseUnion_default_oneof_instance_, enqueue_message_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(ResponseUnion, value_),
   };
   ResponseUnion_reflection_ =
@@ -658,7 +535,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(ResponseUnion));
-  BatchRequest_descriptor_ = file->message_type(29);
+  BatchRequest_descriptor_ = file->message_type(23);
   static const int BatchRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchRequest, requests_),
@@ -674,7 +551,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(BatchRequest));
-  BatchResponse_descriptor_ = file->message_type(30);
+  BatchResponse_descriptor_ = file->message_type(24);
   static const int BatchResponse_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(BatchResponse, responses_),
@@ -690,7 +567,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(BatchResponse));
-  AdminSplitRequest_descriptor_ = file->message_type(31);
+  AdminSplitRequest_descriptor_ = file->message_type(25);
   static const int AdminSplitRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminSplitRequest, header_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminSplitRequest, split_key_),
@@ -706,7 +583,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(AdminSplitRequest));
-  AdminSplitResponse_descriptor_ = file->message_type(32);
+  AdminSplitResponse_descriptor_ = file->message_type(26);
   static const int AdminSplitResponse_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminSplitResponse, header_),
   };
@@ -721,7 +598,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(AdminSplitResponse));
-  AdminMergeRequest_descriptor_ = file->message_type(33);
+  AdminMergeRequest_descriptor_ = file->message_type(27);
   static const int AdminMergeRequest_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminMergeRequest, header_),
   };
@@ -736,7 +613,7 @@ void protobuf_AssignDesc_cockroach_2fproto_2fapi_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(AdminMergeRequest));
-  AdminMergeResponse_descriptor_ = file->message_type(34);
+  AdminMergeResponse_descriptor_ = file->message_type(28);
   static const int AdminMergeResponse_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(AdminMergeResponse, header_),
   };
@@ -807,18 +684,6 @@ void protobuf_RegisterTypes(const ::std::string&) {
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     EndTransactionResponse_descriptor_, &EndTransactionResponse::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    ReapQueueRequest_descriptor_, &ReapQueueRequest::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    ReapQueueResponse_descriptor_, &ReapQueueResponse::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    EnqueueUpdateRequest_descriptor_, &EnqueueUpdateRequest::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    EnqueueUpdateResponse_descriptor_, &EnqueueUpdateResponse::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    EnqueueMessageRequest_descriptor_, &EnqueueMessageRequest::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
-    EnqueueMessageResponse_descriptor_, &EnqueueMessageResponse::default_instance());
-  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     RequestUnion_descriptor_, &RequestUnion::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     ResponseUnion_descriptor_, &ResponseUnion::default_instance());
@@ -881,18 +746,6 @@ void protobuf_ShutdownFile_cockroach_2fproto_2fapi_2eproto() {
   delete EndTransactionRequest_reflection_;
   delete EndTransactionResponse::default_instance_;
   delete EndTransactionResponse_reflection_;
-  delete ReapQueueRequest::default_instance_;
-  delete ReapQueueRequest_reflection_;
-  delete ReapQueueResponse::default_instance_;
-  delete ReapQueueResponse_reflection_;
-  delete EnqueueUpdateRequest::default_instance_;
-  delete EnqueueUpdateRequest_reflection_;
-  delete EnqueueUpdateResponse::default_instance_;
-  delete EnqueueUpdateResponse_reflection_;
-  delete EnqueueMessageRequest::default_instance_;
-  delete EnqueueMessageRequest_reflection_;
-  delete EnqueueMessageResponse::default_instance_;
-  delete EnqueueMessageResponse_reflection_;
   delete RequestUnion::default_instance_;
   delete RequestUnion_default_oneof_instance_;
   delete RequestUnion_reflection_;
@@ -992,76 +845,51 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
     "\n\026EndTransactionResponse\0229\n\006header\030\001 \001(\013"
     "2\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320"
     "\336\037\001\022\031\n\013commit_wait\030\002 \001(\003B\004\310\336\037\000\022\031\n\010resolv"
-    "ed\030\003 \003(\014B\007\332\336\037\003Key\"g\n\020ReapQueueRequest\0228\n"
-    "\006header\030\001 \001(\0132\036.cockroach.proto.RequestH"
-    "eaderB\010\310\336\037\000\320\336\037\001\022\031\n\013max_results\030\002 \001(\003B\004\310\336"
-    "\037\000\"~\n\021ReapQueueResponse\0229\n\006header\030\001 \001(\0132"
-    "\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000\320\336"
-    "\037\001\022.\n\010messages\030\002 \003(\0132\026.cockroach.proto.V"
-    "alueB\004\310\336\037\000\"P\n\024EnqueueUpdateRequest\0228\n\006he"
-    "ader\030\001 \001(\0132\036.cockroach.proto.RequestHead"
-    "erB\010\310\336\037\000\320\336\037\001\"R\n\025EnqueueUpdateResponse\0229\n"
-    "\006header\030\001 \001(\0132\037.cockroach.proto.Response"
-    "HeaderB\010\310\336\037\000\320\336\037\001\"|\n\025EnqueueMessageReques"
-    "t\0228\n\006header\030\001 \001(\0132\036.cockroach.proto.Requ"
-    "estHeaderB\010\310\336\037\000\320\336\037\001\022)\n\003msg\030\002 \001(\0132\026.cockr"
-    "oach.proto.ValueB\004\310\336\037\000\"S\n\026EnqueueMessage"
-    "Response\0229\n\006header\030\001 \001(\0132\037.cockroach.pro"
-    "to.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"\303\005\n\014RequestU"
-    "nion\0224\n\010contains\030\001 \001(\0132 .cockroach.proto"
-    ".ContainsRequestH\000\022*\n\003get\030\002 \001(\0132\033.cockro"
-    "ach.proto.GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.co"
-    "ckroach.proto.PutRequestH\000\022A\n\017conditiona"
-    "l_put\030\004 \001(\0132&.cockroach.proto.Conditiona"
-    "lPutRequestH\000\0226\n\tincrement\030\005 \001(\0132!.cockr"
-    "oach.proto.IncrementRequestH\000\0220\n\006delete\030"
-    "\006 \001(\0132\036.cockroach.proto.DeleteRequestH\000\022"
-    ";\n\014delete_range\030\007 \001(\0132#.cockroach.proto."
-    "DeleteRangeRequestH\000\022,\n\004scan\030\010 \001(\0132\034.coc"
-    "kroach.proto.ScanRequestH\000\022A\n\017end_transa"
-    "ction\030\t \001(\0132&.cockroach.proto.EndTransac"
-    "tionRequestH\000\0227\n\nreap_queue\030\n \001(\0132!.cock"
-    "roach.proto.ReapQueueRequestH\000\022\?\n\016enqueu"
-    "e_update\030\013 \001(\0132%.cockroach.proto.Enqueue"
-    "UpdateRequestH\000\022A\n\017enqueue_message\030\014 \001(\013"
-    "2&.cockroach.proto.EnqueueMessageRequest"
-    "H\000:\004\310\240\037\001B\007\n\005value\"\320\005\n\rResponseUnion\0225\n\010c"
-    "ontains\030\001 \001(\0132!.cockroach.proto.Contains"
-    "ResponseH\000\022+\n\003get\030\002 \001(\0132\034.cockroach.prot"
-    "o.GetResponseH\000\022+\n\003put\030\003 \001(\0132\034.cockroach"
-    ".proto.PutResponseH\000\022B\n\017conditional_put\030"
-    "\004 \001(\0132\'.cockroach.proto.ConditionalPutRe"
-    "sponseH\000\0227\n\tincrement\030\005 \001(\0132\".cockroach."
-    "proto.IncrementResponseH\000\0221\n\006delete\030\006 \001("
-    "\0132\037.cockroach.proto.DeleteResponseH\000\022<\n\014"
-    "delete_range\030\007 \001(\0132$.cockroach.proto.Del"
-    "eteRangeResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cockr"
-    "oach.proto.ScanResponseH\000\022B\n\017end_transac"
-    "tion\030\t \001(\0132\'.cockroach.proto.EndTransact"
-    "ionResponseH\000\0228\n\nreap_queue\030\n \001(\0132\".cock"
-    "roach.proto.ReapQueueResponseH\000\022@\n\016enque"
-    "ue_update\030\013 \001(\0132&.cockroach.proto.Enqueu"
-    "eUpdateResponseH\000\022B\n\017enqueue_message\030\014 \001"
-    "(\0132\'.cockroach.proto.EnqueueMessageRespo"
-    "nseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchRequest\0228\n\006"
-    "header\030\001 \001(\0132\036.cockroach.proto.RequestHe"
-    "aderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003(\0132\035.cockr"
-    "oach.proto.RequestUnionB\004\310\336\037\000\"\203\001\n\rBatchR"
-    "esponse\0229\n\006header\030\001 \001(\0132\037.cockroach.prot"
-    "o.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\tresponses\030"
-    "\002 \003(\0132\036.cockroach.proto.ResponseUnionB\004\310"
-    "\336\037\000\"m\n\021AdminSplitRequest\0228\n\006header\030\001 \001(\013"
-    "2\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320\336"
-    "\037\001\022\036\n\tsplit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003Key\"O\n\022Ad"
-    "minSplitResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\"M\n\021A"
-    "dminMergeRequest\0228\n\006header\030\001 \001(\0132\036.cockr"
-    "oach.proto.RequestHeaderB\010\310\336\037\000\320\336\037\001\"O\n\022Ad"
-    "minMergeResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
-    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001*L\n\023R"
-    "eadConsistencyType\022\016\n\nCONSISTENT\020\000\022\r\n\tCO"
-    "NSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243\036\000B\023Z\005pro"
-    "to\340\342\036\001\310\342\036\001\320\342\036\001", 5494);
+    "ed\030\003 \003(\014B\007\332\336\037\003Key\"\206\004\n\014RequestUnion\0224\n\010co"
+    "ntains\030\001 \001(\0132 .cockroach.proto.ContainsR"
+    "equestH\000\022*\n\003get\030\002 \001(\0132\033.cockroach.proto."
+    "GetRequestH\000\022*\n\003put\030\003 \001(\0132\033.cockroach.pr"
+    "oto.PutRequestH\000\022A\n\017conditional_put\030\004 \001("
+    "\0132&.cockroach.proto.ConditionalPutReques"
+    "tH\000\0226\n\tincrement\030\005 \001(\0132!.cockroach.proto"
+    ".IncrementRequestH\000\0220\n\006delete\030\006 \001(\0132\036.co"
+    "ckroach.proto.DeleteRequestH\000\022;\n\014delete_"
+    "range\030\007 \001(\0132#.cockroach.proto.DeleteRang"
+    "eRequestH\000\022,\n\004scan\030\010 \001(\0132\034.cockroach.pro"
+    "to.ScanRequestH\000\022A\n\017end_transaction\030\t \001("
+    "\0132&.cockroach.proto.EndTransactionReques"
+    "tH\000:\004\310\240\037\001B\007\n\005value\"\220\004\n\rResponseUnion\0225\n\010"
+    "contains\030\001 \001(\0132!.cockroach.proto.Contain"
+    "sResponseH\000\022+\n\003get\030\002 \001(\0132\034.cockroach.pro"
+    "to.GetResponseH\000\022+\n\003put\030\003 \001(\0132\034.cockroac"
+    "h.proto.PutResponseH\000\022B\n\017conditional_put"
+    "\030\004 \001(\0132\'.cockroach.proto.ConditionalPutR"
+    "esponseH\000\0227\n\tincrement\030\005 \001(\0132\".cockroach"
+    ".proto.IncrementResponseH\000\0221\n\006delete\030\006 \001"
+    "(\0132\037.cockroach.proto.DeleteResponseH\000\022<\n"
+    "\014delete_range\030\007 \001(\0132$.cockroach.proto.De"
+    "leteRangeResponseH\000\022-\n\004scan\030\010 \001(\0132\035.cock"
+    "roach.proto.ScanResponseH\000\022B\n\017end_transa"
+    "ction\030\t \001(\0132\'.cockroach.proto.EndTransac"
+    "tionResponseH\000:\004\310\240\037\001B\007\n\005value\"\177\n\014BatchRe"
+    "quest\0228\n\006header\030\001 \001(\0132\036.cockroach.proto."
+    "RequestHeaderB\010\310\336\037\000\320\336\037\001\0225\n\010requests\030\002 \003("
+    "\0132\035.cockroach.proto.RequestUnionB\004\310\336\037\000\"\203"
+    "\001\n\rBatchResponse\0229\n\006header\030\001 \001(\0132\037.cockr"
+    "oach.proto.ResponseHeaderB\010\310\336\037\000\320\336\037\001\0227\n\tr"
+    "esponses\030\002 \003(\0132\036.cockroach.proto.Respons"
+    "eUnionB\004\310\336\037\000\"m\n\021AdminSplitRequest\0228\n\006hea"
+    "der\030\001 \001(\0132\036.cockroach.proto.RequestHeade"
+    "rB\010\310\336\037\000\320\336\037\001\022\036\n\tsplit_key\030\002 \001(\014B\013\310\336\037\000\332\336\037\003"
+    "Key\"O\n\022AdminSplitResponse\0229\n\006header\030\001 \001("
+    "\0132\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000"
+    "\320\336\037\001\"M\n\021AdminMergeRequest\0228\n\006header\030\001 \001("
+    "\0132\036.cockroach.proto.RequestHeaderB\010\310\336\037\000\320"
+    "\336\037\001\"O\n\022AdminMergeResponse\0229\n\006header\030\001 \001("
+    "\0132\037.cockroach.proto.ResponseHeaderB\010\310\336\037\000"
+    "\320\336\037\001*L\n\023ReadConsistencyType\022\016\n\nCONSISTEN"
+    "T\020\000\022\r\n\tCONSENSUS\020\001\022\020\n\014INCONSISTENT\020\002\032\004\210\243"
+    "\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 4503);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/api.proto", &protobuf_RegisterTypes);
   ClientCmdID::default_instance_ = new ClientCmdID();
@@ -1085,12 +913,6 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
   ScanResponse::default_instance_ = new ScanResponse();
   EndTransactionRequest::default_instance_ = new EndTransactionRequest();
   EndTransactionResponse::default_instance_ = new EndTransactionResponse();
-  ReapQueueRequest::default_instance_ = new ReapQueueRequest();
-  ReapQueueResponse::default_instance_ = new ReapQueueResponse();
-  EnqueueUpdateRequest::default_instance_ = new EnqueueUpdateRequest();
-  EnqueueUpdateResponse::default_instance_ = new EnqueueUpdateResponse();
-  EnqueueMessageRequest::default_instance_ = new EnqueueMessageRequest();
-  EnqueueMessageResponse::default_instance_ = new EnqueueMessageResponse();
   RequestUnion::default_instance_ = new RequestUnion();
   RequestUnion_default_oneof_instance_ = new RequestUnionOneofInstance;
   ResponseUnion::default_instance_ = new ResponseUnion();
@@ -1122,12 +944,6 @@ void protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto() {
   ScanResponse::default_instance_->InitAsDefaultInstance();
   EndTransactionRequest::default_instance_->InitAsDefaultInstance();
   EndTransactionResponse::default_instance_->InitAsDefaultInstance();
-  ReapQueueRequest::default_instance_->InitAsDefaultInstance();
-  ReapQueueResponse::default_instance_->InitAsDefaultInstance();
-  EnqueueUpdateRequest::default_instance_->InitAsDefaultInstance();
-  EnqueueUpdateResponse::default_instance_->InitAsDefaultInstance();
-  EnqueueMessageRequest::default_instance_->InitAsDefaultInstance();
-  EnqueueMessageResponse::default_instance_->InitAsDefaultInstance();
   RequestUnion::default_instance_->InitAsDefaultInstance();
   ResponseUnion::default_instance_->InitAsDefaultInstance();
   BatchRequest::default_instance_->InitAsDefaultInstance();
@@ -7112,1494 +6928,6 @@ void EndTransactionResponse::Swap(EndTransactionResponse* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
-const int ReapQueueRequest::kHeaderFieldNumber;
-const int ReapQueueRequest::kMaxResultsFieldNumber;
-#endif  // !_MSC_VER
-
-ReapQueueRequest::ReapQueueRequest()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.ReapQueueRequest)
-}
-
-void ReapQueueRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
-}
-
-ReapQueueRequest::ReapQueueRequest(const ReapQueueRequest& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.ReapQueueRequest)
-}
-
-void ReapQueueRequest::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  max_results_ = GOOGLE_LONGLONG(0);
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-ReapQueueRequest::~ReapQueueRequest() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.ReapQueueRequest)
-  SharedDtor();
-}
-
-void ReapQueueRequest::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void ReapQueueRequest::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* ReapQueueRequest::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return ReapQueueRequest_descriptor_;
-}
-
-const ReapQueueRequest& ReapQueueRequest::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-ReapQueueRequest* ReapQueueRequest::default_instance_ = NULL;
-
-ReapQueueRequest* ReapQueueRequest::New() const {
-  return new ReapQueueRequest;
-}
-
-void ReapQueueRequest::Clear() {
-  if (_has_bits_[0 / 32] & 3) {
-    if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
-    }
-    max_results_ = GOOGLE_LONGLONG(0);
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool ReapQueueRequest::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.ReapQueueRequest)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(16)) goto parse_max_results;
-        break;
-      }
-
-      // optional int64 max_results = 2;
-      case 2: {
-        if (tag == 16) {
-         parse_max_results:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &max_results_)));
-          set_has_max_results();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.ReapQueueRequest)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.ReapQueueRequest)
-  return false;
-#undef DO_
-}
-
-void ReapQueueRequest::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.ReapQueueRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  // optional int64 max_results = 2;
-  if (has_max_results()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->max_results(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.ReapQueueRequest)
-}
-
-::google::protobuf::uint8* ReapQueueRequest::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ReapQueueRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  // optional int64 max_results = 2;
-  if (has_max_results()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->max_results(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.ReapQueueRequest)
-  return target;
-}
-
-int ReapQueueRequest::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.RequestHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-    // optional int64 max_results = 2;
-    if (has_max_results()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->max_results());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void ReapQueueRequest::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const ReapQueueRequest* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const ReapQueueRequest*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void ReapQueueRequest::MergeFrom(const ReapQueueRequest& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
-    }
-    if (from.has_max_results()) {
-      set_max_results(from.max_results());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void ReapQueueRequest::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void ReapQueueRequest::CopyFrom(const ReapQueueRequest& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool ReapQueueRequest::IsInitialized() const {
-
-  return true;
-}
-
-void ReapQueueRequest::Swap(ReapQueueRequest* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(max_results_, other->max_results_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata ReapQueueRequest::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = ReapQueueRequest_descriptor_;
-  metadata.reflection = ReapQueueRequest_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int ReapQueueResponse::kHeaderFieldNumber;
-const int ReapQueueResponse::kMessagesFieldNumber;
-#endif  // !_MSC_VER
-
-ReapQueueResponse::ReapQueueResponse()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.ReapQueueResponse)
-}
-
-void ReapQueueResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
-}
-
-ReapQueueResponse::ReapQueueResponse(const ReapQueueResponse& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.ReapQueueResponse)
-}
-
-void ReapQueueResponse::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-ReapQueueResponse::~ReapQueueResponse() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.ReapQueueResponse)
-  SharedDtor();
-}
-
-void ReapQueueResponse::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void ReapQueueResponse::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* ReapQueueResponse::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return ReapQueueResponse_descriptor_;
-}
-
-const ReapQueueResponse& ReapQueueResponse::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-ReapQueueResponse* ReapQueueResponse::default_instance_ = NULL;
-
-ReapQueueResponse* ReapQueueResponse::New() const {
-  return new ReapQueueResponse;
-}
-
-void ReapQueueResponse::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
-  }
-  messages_.Clear();
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool ReapQueueResponse::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.ReapQueueResponse)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_messages;
-        break;
-      }
-
-      // repeated .cockroach.proto.Value messages = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_messages:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-                input, add_messages()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_messages;
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.ReapQueueResponse)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.ReapQueueResponse)
-  return false;
-#undef DO_
-}
-
-void ReapQueueResponse::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.ReapQueueResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  // repeated .cockroach.proto.Value messages = 2;
-  for (int i = 0; i < this->messages_size(); i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->messages(i), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.ReapQueueResponse)
-}
-
-::google::protobuf::uint8* ReapQueueResponse::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.ReapQueueResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  // repeated .cockroach.proto.Value messages = 2;
-  for (int i = 0; i < this->messages_size(); i++) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        2, this->messages(i), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.ReapQueueResponse)
-  return target;
-}
-
-int ReapQueueResponse::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-  }
-  // repeated .cockroach.proto.Value messages = 2;
-  total_size += 1 * this->messages_size();
-  for (int i = 0; i < this->messages_size(); i++) {
-    total_size +=
-      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-        this->messages(i));
-  }
-
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void ReapQueueResponse::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const ReapQueueResponse* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const ReapQueueResponse*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void ReapQueueResponse::MergeFrom(const ReapQueueResponse& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  messages_.MergeFrom(from.messages_);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void ReapQueueResponse::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void ReapQueueResponse::CopyFrom(const ReapQueueResponse& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool ReapQueueResponse::IsInitialized() const {
-
-  return true;
-}
-
-void ReapQueueResponse::Swap(ReapQueueResponse* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    messages_.Swap(&other->messages_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata ReapQueueResponse::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = ReapQueueResponse_descriptor_;
-  metadata.reflection = ReapQueueResponse_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int EnqueueUpdateRequest::kHeaderFieldNumber;
-#endif  // !_MSC_VER
-
-EnqueueUpdateRequest::EnqueueUpdateRequest()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.EnqueueUpdateRequest)
-}
-
-void EnqueueUpdateRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
-}
-
-EnqueueUpdateRequest::EnqueueUpdateRequest(const EnqueueUpdateRequest& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.EnqueueUpdateRequest)
-}
-
-void EnqueueUpdateRequest::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-EnqueueUpdateRequest::~EnqueueUpdateRequest() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.EnqueueUpdateRequest)
-  SharedDtor();
-}
-
-void EnqueueUpdateRequest::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void EnqueueUpdateRequest::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* EnqueueUpdateRequest::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return EnqueueUpdateRequest_descriptor_;
-}
-
-const EnqueueUpdateRequest& EnqueueUpdateRequest::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-EnqueueUpdateRequest* EnqueueUpdateRequest::default_instance_ = NULL;
-
-EnqueueUpdateRequest* EnqueueUpdateRequest::New() const {
-  return new EnqueueUpdateRequest;
-}
-
-void EnqueueUpdateRequest::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool EnqueueUpdateRequest::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.EnqueueUpdateRequest)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.EnqueueUpdateRequest)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.EnqueueUpdateRequest)
-  return false;
-#undef DO_
-}
-
-void EnqueueUpdateRequest::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.EnqueueUpdateRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.EnqueueUpdateRequest)
-}
-
-::google::protobuf::uint8* EnqueueUpdateRequest::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EnqueueUpdateRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.EnqueueUpdateRequest)
-  return target;
-}
-
-int EnqueueUpdateRequest::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.RequestHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void EnqueueUpdateRequest::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const EnqueueUpdateRequest* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const EnqueueUpdateRequest*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void EnqueueUpdateRequest::MergeFrom(const EnqueueUpdateRequest& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void EnqueueUpdateRequest::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void EnqueueUpdateRequest::CopyFrom(const EnqueueUpdateRequest& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool EnqueueUpdateRequest::IsInitialized() const {
-
-  return true;
-}
-
-void EnqueueUpdateRequest::Swap(EnqueueUpdateRequest* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata EnqueueUpdateRequest::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = EnqueueUpdateRequest_descriptor_;
-  metadata.reflection = EnqueueUpdateRequest_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int EnqueueUpdateResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
-
-EnqueueUpdateResponse::EnqueueUpdateResponse()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.EnqueueUpdateResponse)
-}
-
-void EnqueueUpdateResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
-}
-
-EnqueueUpdateResponse::EnqueueUpdateResponse(const EnqueueUpdateResponse& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.EnqueueUpdateResponse)
-}
-
-void EnqueueUpdateResponse::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-EnqueueUpdateResponse::~EnqueueUpdateResponse() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.EnqueueUpdateResponse)
-  SharedDtor();
-}
-
-void EnqueueUpdateResponse::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void EnqueueUpdateResponse::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* EnqueueUpdateResponse::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return EnqueueUpdateResponse_descriptor_;
-}
-
-const EnqueueUpdateResponse& EnqueueUpdateResponse::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-EnqueueUpdateResponse* EnqueueUpdateResponse::default_instance_ = NULL;
-
-EnqueueUpdateResponse* EnqueueUpdateResponse::New() const {
-  return new EnqueueUpdateResponse;
-}
-
-void EnqueueUpdateResponse::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool EnqueueUpdateResponse::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.EnqueueUpdateResponse)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.EnqueueUpdateResponse)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.EnqueueUpdateResponse)
-  return false;
-#undef DO_
-}
-
-void EnqueueUpdateResponse::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.EnqueueUpdateResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.EnqueueUpdateResponse)
-}
-
-::google::protobuf::uint8* EnqueueUpdateResponse::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EnqueueUpdateResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.EnqueueUpdateResponse)
-  return target;
-}
-
-int EnqueueUpdateResponse::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void EnqueueUpdateResponse::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const EnqueueUpdateResponse* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const EnqueueUpdateResponse*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void EnqueueUpdateResponse::MergeFrom(const EnqueueUpdateResponse& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void EnqueueUpdateResponse::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void EnqueueUpdateResponse::CopyFrom(const EnqueueUpdateResponse& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool EnqueueUpdateResponse::IsInitialized() const {
-
-  return true;
-}
-
-void EnqueueUpdateResponse::Swap(EnqueueUpdateResponse* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata EnqueueUpdateResponse::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = EnqueueUpdateResponse_descriptor_;
-  metadata.reflection = EnqueueUpdateResponse_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int EnqueueMessageRequest::kHeaderFieldNumber;
-const int EnqueueMessageRequest::kMsgFieldNumber;
-#endif  // !_MSC_VER
-
-EnqueueMessageRequest::EnqueueMessageRequest()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.EnqueueMessageRequest)
-}
-
-void EnqueueMessageRequest::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::RequestHeader*>(&::cockroach::proto::RequestHeader::default_instance());
-  msg_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
-}
-
-EnqueueMessageRequest::EnqueueMessageRequest(const EnqueueMessageRequest& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.EnqueueMessageRequest)
-}
-
-void EnqueueMessageRequest::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  msg_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-EnqueueMessageRequest::~EnqueueMessageRequest() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.EnqueueMessageRequest)
-  SharedDtor();
-}
-
-void EnqueueMessageRequest::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-    delete msg_;
-  }
-}
-
-void EnqueueMessageRequest::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* EnqueueMessageRequest::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return EnqueueMessageRequest_descriptor_;
-}
-
-const EnqueueMessageRequest& EnqueueMessageRequest::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-EnqueueMessageRequest* EnqueueMessageRequest::default_instance_ = NULL;
-
-EnqueueMessageRequest* EnqueueMessageRequest::New() const {
-  return new EnqueueMessageRequest;
-}
-
-void EnqueueMessageRequest::Clear() {
-  if (_has_bits_[0 / 32] & 3) {
-    if (has_header()) {
-      if (header_ != NULL) header_->::cockroach::proto::RequestHeader::Clear();
-    }
-    if (has_msg()) {
-      if (msg_ != NULL) msg_->::cockroach::proto::Value::Clear();
-    }
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool EnqueueMessageRequest::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.EnqueueMessageRequest)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.RequestHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(18)) goto parse_msg;
-        break;
-      }
-
-      // optional .cockroach.proto.Value msg = 2;
-      case 2: {
-        if (tag == 18) {
-         parse_msg:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_msg()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.EnqueueMessageRequest)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.EnqueueMessageRequest)
-  return false;
-#undef DO_
-}
-
-void EnqueueMessageRequest::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.EnqueueMessageRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  // optional .cockroach.proto.Value msg = 2;
-  if (has_msg()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      2, this->msg(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.EnqueueMessageRequest)
-}
-
-::google::protobuf::uint8* EnqueueMessageRequest::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EnqueueMessageRequest)
-  // optional .cockroach.proto.RequestHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  // optional .cockroach.proto.Value msg = 2;
-  if (has_msg()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        2, this->msg(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.EnqueueMessageRequest)
-  return target;
-}
-
-int EnqueueMessageRequest::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.RequestHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-    // optional .cockroach.proto.Value msg = 2;
-    if (has_msg()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->msg());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void EnqueueMessageRequest::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const EnqueueMessageRequest* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const EnqueueMessageRequest*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void EnqueueMessageRequest::MergeFrom(const EnqueueMessageRequest& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::RequestHeader::MergeFrom(from.header());
-    }
-    if (from.has_msg()) {
-      mutable_msg()->::cockroach::proto::Value::MergeFrom(from.msg());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void EnqueueMessageRequest::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void EnqueueMessageRequest::CopyFrom(const EnqueueMessageRequest& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool EnqueueMessageRequest::IsInitialized() const {
-
-  return true;
-}
-
-void EnqueueMessageRequest::Swap(EnqueueMessageRequest* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(msg_, other->msg_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata EnqueueMessageRequest::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = EnqueueMessageRequest_descriptor_;
-  metadata.reflection = EnqueueMessageRequest_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
-const int EnqueueMessageResponse::kHeaderFieldNumber;
-#endif  // !_MSC_VER
-
-EnqueueMessageResponse::EnqueueMessageResponse()
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.proto.EnqueueMessageResponse)
-}
-
-void EnqueueMessageResponse::InitAsDefaultInstance() {
-  header_ = const_cast< ::cockroach::proto::ResponseHeader*>(&::cockroach::proto::ResponseHeader::default_instance());
-}
-
-EnqueueMessageResponse::EnqueueMessageResponse(const EnqueueMessageResponse& from)
-  : ::google::protobuf::Message() {
-  SharedCtor();
-  MergeFrom(from);
-  // @@protoc_insertion_point(copy_constructor:cockroach.proto.EnqueueMessageResponse)
-}
-
-void EnqueueMessageResponse::SharedCtor() {
-  _cached_size_ = 0;
-  header_ = NULL;
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-}
-
-EnqueueMessageResponse::~EnqueueMessageResponse() {
-  // @@protoc_insertion_point(destructor:cockroach.proto.EnqueueMessageResponse)
-  SharedDtor();
-}
-
-void EnqueueMessageResponse::SharedDtor() {
-  if (this != default_instance_) {
-    delete header_;
-  }
-}
-
-void EnqueueMessageResponse::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-}
-const ::google::protobuf::Descriptor* EnqueueMessageResponse::descriptor() {
-  protobuf_AssignDescriptorsOnce();
-  return EnqueueMessageResponse_descriptor_;
-}
-
-const EnqueueMessageResponse& EnqueueMessageResponse::default_instance() {
-  if (default_instance_ == NULL) protobuf_AddDesc_cockroach_2fproto_2fapi_2eproto();
-  return *default_instance_;
-}
-
-EnqueueMessageResponse* EnqueueMessageResponse::default_instance_ = NULL;
-
-EnqueueMessageResponse* EnqueueMessageResponse::New() const {
-  return new EnqueueMessageResponse;
-}
-
-void EnqueueMessageResponse::Clear() {
-  if (has_header()) {
-    if (header_ != NULL) header_->::cockroach::proto::ResponseHeader::Clear();
-  }
-  ::memset(_has_bits_, 0, sizeof(_has_bits_));
-  mutable_unknown_fields()->Clear();
-}
-
-bool EnqueueMessageResponse::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  // @@protoc_insertion_point(parse_start:cockroach.proto.EnqueueMessageResponse)
-  for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoff(127);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional .cockroach.proto.ResponseHeader header = 1;
-      case 1: {
-        if (tag == 10) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_header()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectAtEnd()) goto success;
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormat::SkipField(
-              input, tag, mutable_unknown_fields()));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.proto.EnqueueMessageResponse)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.proto.EnqueueMessageResponse)
-  return false;
-#undef DO_
-}
-
-void EnqueueMessageResponse::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.proto.EnqueueMessageResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      1, this->header(), output);
-  }
-
-  if (!unknown_fields().empty()) {
-    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
-        unknown_fields(), output);
-  }
-  // @@protoc_insertion_point(serialize_end:cockroach.proto.EnqueueMessageResponse)
-}
-
-::google::protobuf::uint8* EnqueueMessageResponse::SerializeWithCachedSizesToArray(
-    ::google::protobuf::uint8* target) const {
-  // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.EnqueueMessageResponse)
-  // optional .cockroach.proto.ResponseHeader header = 1;
-  if (has_header()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        1, this->header(), target);
-  }
-
-  if (!unknown_fields().empty()) {
-    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
-        unknown_fields(), target);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:cockroach.proto.EnqueueMessageResponse)
-  return target;
-}
-
-int EnqueueMessageResponse::ByteSize() const {
-  int total_size = 0;
-
-  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional .cockroach.proto.ResponseHeader header = 1;
-    if (has_header()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->header());
-    }
-
-  }
-  if (!unknown_fields().empty()) {
-    total_size +=
-      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
-        unknown_fields());
-  }
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = total_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
-  return total_size;
-}
-
-void EnqueueMessageResponse::MergeFrom(const ::google::protobuf::Message& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  const EnqueueMessageResponse* source =
-    ::google::protobuf::internal::dynamic_cast_if_available<const EnqueueMessageResponse*>(
-      &from);
-  if (source == NULL) {
-    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
-  } else {
-    MergeFrom(*source);
-  }
-}
-
-void EnqueueMessageResponse::MergeFrom(const EnqueueMessageResponse& from) {
-  GOOGLE_CHECK_NE(&from, this);
-  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from.has_header()) {
-      mutable_header()->::cockroach::proto::ResponseHeader::MergeFrom(from.header());
-    }
-  }
-  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
-}
-
-void EnqueueMessageResponse::CopyFrom(const ::google::protobuf::Message& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-void EnqueueMessageResponse::CopyFrom(const EnqueueMessageResponse& from) {
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool EnqueueMessageResponse::IsInitialized() const {
-
-  return true;
-}
-
-void EnqueueMessageResponse::Swap(EnqueueMessageResponse* other) {
-  if (other != this) {
-    std::swap(header_, other->header_);
-    std::swap(_has_bits_[0], other->_has_bits_[0]);
-    _unknown_fields_.Swap(&other->_unknown_fields_);
-    std::swap(_cached_size_, other->_cached_size_);
-  }
-}
-
-::google::protobuf::Metadata EnqueueMessageResponse::GetMetadata() const {
-  protobuf_AssignDescriptorsOnce();
-  ::google::protobuf::Metadata metadata;
-  metadata.descriptor = EnqueueMessageResponse_descriptor_;
-  metadata.reflection = EnqueueMessageResponse_reflection_;
-  return metadata;
-}
-
-
-// ===================================================================
-
-#ifndef _MSC_VER
 const int RequestUnion::kContainsFieldNumber;
 const int RequestUnion::kGetFieldNumber;
 const int RequestUnion::kPutFieldNumber;
@@ -8609,9 +6937,6 @@ const int RequestUnion::kDeleteFieldNumber;
 const int RequestUnion::kDeleteRangeFieldNumber;
 const int RequestUnion::kScanFieldNumber;
 const int RequestUnion::kEndTransactionFieldNumber;
-const int RequestUnion::kReapQueueFieldNumber;
-const int RequestUnion::kEnqueueUpdateFieldNumber;
-const int RequestUnion::kEnqueueMessageFieldNumber;
 #endif  // !_MSC_VER
 
 RequestUnion::RequestUnion()
@@ -8630,9 +6955,6 @@ void RequestUnion::InitAsDefaultInstance() {
   RequestUnion_default_oneof_instance_->delete_range_ = const_cast< ::cockroach::proto::DeleteRangeRequest*>(&::cockroach::proto::DeleteRangeRequest::default_instance());
   RequestUnion_default_oneof_instance_->scan_ = const_cast< ::cockroach::proto::ScanRequest*>(&::cockroach::proto::ScanRequest::default_instance());
   RequestUnion_default_oneof_instance_->end_transaction_ = const_cast< ::cockroach::proto::EndTransactionRequest*>(&::cockroach::proto::EndTransactionRequest::default_instance());
-  RequestUnion_default_oneof_instance_->reap_queue_ = const_cast< ::cockroach::proto::ReapQueueRequest*>(&::cockroach::proto::ReapQueueRequest::default_instance());
-  RequestUnion_default_oneof_instance_->enqueue_update_ = const_cast< ::cockroach::proto::EnqueueUpdateRequest*>(&::cockroach::proto::EnqueueUpdateRequest::default_instance());
-  RequestUnion_default_oneof_instance_->enqueue_message_ = const_cast< ::cockroach::proto::EnqueueMessageRequest*>(&::cockroach::proto::EnqueueMessageRequest::default_instance());
 }
 
 RequestUnion::RequestUnion(const RequestUnion& from)
@@ -8718,18 +7040,6 @@ void RequestUnion::clear_value() {
     }
     case kEndTransaction: {
       delete value_.end_transaction_;
-      break;
-    }
-    case kReapQueue: {
-      delete value_.reap_queue_;
-      break;
-    }
-    case kEnqueueUpdate: {
-      delete value_.enqueue_update_;
-      break;
-    }
-    case kEnqueueMessage: {
-      delete value_.enqueue_message_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -8868,45 +7178,6 @@ bool RequestUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(82)) goto parse_reap_queue;
-        break;
-      }
-
-      // optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-      case 10: {
-        if (tag == 82) {
-         parse_reap_queue:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_reap_queue()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(90)) goto parse_enqueue_update;
-        break;
-      }
-
-      // optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-      case 11: {
-        if (tag == 90) {
-         parse_enqueue_update:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_enqueue_update()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(98)) goto parse_enqueue_message;
-        break;
-      }
-
-      // optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-      case 12: {
-        if (tag == 98) {
-         parse_enqueue_message:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_enqueue_message()));
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -8990,24 +7261,6 @@ void RequestUnion::SerializeWithCachedSizes(
       9, this->end_transaction(), output);
   }
 
-  // optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-  if (has_reap_queue()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, this->reap_queue(), output);
-  }
-
-  // optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-  if (has_enqueue_update()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, this->enqueue_update(), output);
-  }
-
-  // optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-  if (has_enqueue_message()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, this->enqueue_message(), output);
-  }
-
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -9079,27 +7332,6 @@ void RequestUnion::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         9, this->end_transaction(), target);
-  }
-
-  // optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-  if (has_reap_queue()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        10, this->reap_queue(), target);
-  }
-
-  // optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-  if (has_enqueue_update()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        11, this->enqueue_update(), target);
-  }
-
-  // optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-  if (has_enqueue_message()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        12, this->enqueue_message(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -9177,27 +7409,6 @@ int RequestUnion::ByteSize() const {
           this->end_transaction());
       break;
     }
-    // optional .cockroach.proto.ReapQueueRequest reap_queue = 10;
-    case kReapQueue: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->reap_queue());
-      break;
-    }
-    // optional .cockroach.proto.EnqueueUpdateRequest enqueue_update = 11;
-    case kEnqueueUpdate: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->enqueue_update());
-      break;
-    }
-    // optional .cockroach.proto.EnqueueMessageRequest enqueue_message = 12;
-    case kEnqueueMessage: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->enqueue_message());
-      break;
-    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -9264,18 +7475,6 @@ void RequestUnion::MergeFrom(const RequestUnion& from) {
       mutable_end_transaction()->::cockroach::proto::EndTransactionRequest::MergeFrom(from.end_transaction());
       break;
     }
-    case kReapQueue: {
-      mutable_reap_queue()->::cockroach::proto::ReapQueueRequest::MergeFrom(from.reap_queue());
-      break;
-    }
-    case kEnqueueUpdate: {
-      mutable_enqueue_update()->::cockroach::proto::EnqueueUpdateRequest::MergeFrom(from.enqueue_update());
-      break;
-    }
-    case kEnqueueMessage: {
-      mutable_enqueue_message()->::cockroach::proto::EnqueueMessageRequest::MergeFrom(from.enqueue_message());
-      break;
-    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -9331,9 +7530,6 @@ const int ResponseUnion::kDeleteFieldNumber;
 const int ResponseUnion::kDeleteRangeFieldNumber;
 const int ResponseUnion::kScanFieldNumber;
 const int ResponseUnion::kEndTransactionFieldNumber;
-const int ResponseUnion::kReapQueueFieldNumber;
-const int ResponseUnion::kEnqueueUpdateFieldNumber;
-const int ResponseUnion::kEnqueueMessageFieldNumber;
 #endif  // !_MSC_VER
 
 ResponseUnion::ResponseUnion()
@@ -9352,9 +7548,6 @@ void ResponseUnion::InitAsDefaultInstance() {
   ResponseUnion_default_oneof_instance_->delete_range_ = const_cast< ::cockroach::proto::DeleteRangeResponse*>(&::cockroach::proto::DeleteRangeResponse::default_instance());
   ResponseUnion_default_oneof_instance_->scan_ = const_cast< ::cockroach::proto::ScanResponse*>(&::cockroach::proto::ScanResponse::default_instance());
   ResponseUnion_default_oneof_instance_->end_transaction_ = const_cast< ::cockroach::proto::EndTransactionResponse*>(&::cockroach::proto::EndTransactionResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->reap_queue_ = const_cast< ::cockroach::proto::ReapQueueResponse*>(&::cockroach::proto::ReapQueueResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->enqueue_update_ = const_cast< ::cockroach::proto::EnqueueUpdateResponse*>(&::cockroach::proto::EnqueueUpdateResponse::default_instance());
-  ResponseUnion_default_oneof_instance_->enqueue_message_ = const_cast< ::cockroach::proto::EnqueueMessageResponse*>(&::cockroach::proto::EnqueueMessageResponse::default_instance());
 }
 
 ResponseUnion::ResponseUnion(const ResponseUnion& from)
@@ -9440,18 +7633,6 @@ void ResponseUnion::clear_value() {
     }
     case kEndTransaction: {
       delete value_.end_transaction_;
-      break;
-    }
-    case kReapQueue: {
-      delete value_.reap_queue_;
-      break;
-    }
-    case kEnqueueUpdate: {
-      delete value_.enqueue_update_;
-      break;
-    }
-    case kEnqueueMessage: {
-      delete value_.enqueue_message_;
       break;
     }
     case VALUE_NOT_SET: {
@@ -9590,45 +7771,6 @@ bool ResponseUnion::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(82)) goto parse_reap_queue;
-        break;
-      }
-
-      // optional .cockroach.proto.ReapQueueResponse reap_queue = 10;
-      case 10: {
-        if (tag == 82) {
-         parse_reap_queue:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_reap_queue()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(90)) goto parse_enqueue_update;
-        break;
-      }
-
-      // optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 11;
-      case 11: {
-        if (tag == 90) {
-         parse_enqueue_update:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_enqueue_update()));
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(98)) goto parse_enqueue_message;
-        break;
-      }
-
-      // optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 12;
-      case 12: {
-        if (tag == 98) {
-         parse_enqueue_message:
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
-               input, mutable_enqueue_message()));
-        } else {
-          goto handle_unusual;
-        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -9712,24 +7854,6 @@ void ResponseUnion::SerializeWithCachedSizes(
       9, this->end_transaction(), output);
   }
 
-  // optional .cockroach.proto.ReapQueueResponse reap_queue = 10;
-  if (has_reap_queue()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      10, this->reap_queue(), output);
-  }
-
-  // optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 11;
-  if (has_enqueue_update()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      11, this->enqueue_update(), output);
-  }
-
-  // optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 12;
-  if (has_enqueue_message()) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
-      12, this->enqueue_message(), output);
-  }
-
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -9801,27 +7925,6 @@ void ResponseUnion::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         9, this->end_transaction(), target);
-  }
-
-  // optional .cockroach.proto.ReapQueueResponse reap_queue = 10;
-  if (has_reap_queue()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        10, this->reap_queue(), target);
-  }
-
-  // optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 11;
-  if (has_enqueue_update()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        11, this->enqueue_update(), target);
-  }
-
-  // optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 12;
-  if (has_enqueue_message()) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      WriteMessageNoVirtualToArray(
-        12, this->enqueue_message(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -9899,27 +8002,6 @@ int ResponseUnion::ByteSize() const {
           this->end_transaction());
       break;
     }
-    // optional .cockroach.proto.ReapQueueResponse reap_queue = 10;
-    case kReapQueue: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->reap_queue());
-      break;
-    }
-    // optional .cockroach.proto.EnqueueUpdateResponse enqueue_update = 11;
-    case kEnqueueUpdate: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->enqueue_update());
-      break;
-    }
-    // optional .cockroach.proto.EnqueueMessageResponse enqueue_message = 12;
-    case kEnqueueMessage: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->enqueue_message());
-      break;
-    }
     case VALUE_NOT_SET: {
       break;
     }
@@ -9984,18 +8066,6 @@ void ResponseUnion::MergeFrom(const ResponseUnion& from) {
     }
     case kEndTransaction: {
       mutable_end_transaction()->::cockroach::proto::EndTransactionResponse::MergeFrom(from.end_transaction());
-      break;
-    }
-    case kReapQueue: {
-      mutable_reap_queue()->::cockroach::proto::ReapQueueResponse::MergeFrom(from.reap_queue());
-      break;
-    }
-    case kEnqueueUpdate: {
-      mutable_enqueue_update()->::cockroach::proto::EnqueueUpdateResponse::MergeFrom(from.enqueue_update());
-      break;
-    }
-    case kEnqueueMessage: {
-      mutable_enqueue_message()->::cockroach::proto::EnqueueMessageResponse::MergeFrom(from.enqueue_message());
       break;
     }
     case VALUE_NOT_SET: {

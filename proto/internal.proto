@@ -195,9 +195,6 @@ message ReadWriteCmdResponse {
     DeleteResponse delete = 4;
     DeleteRangeResponse delete_range = 5;
     EndTransactionResponse end_transaction = 6;
-    ReapQueueResponse reap_queue = 7;
-    EnqueueUpdateResponse enqueue_update = 8;
-    EnqueueMessageResponse enqueue_message = 9;
     InternalHeartbeatTxnResponse internal_heartbeat_txn = 10;
     InternalPushTxnResponse internal_push_txn = 11;
     InternalResolveIntentResponse internal_resolve_intent = 12;
@@ -222,9 +219,6 @@ message InternalRaftCommandUnion {
     DeleteRangeRequest delete_range = 7;
     ScanRequest scan = 8;
     EndTransactionRequest end_transaction = 9;
-    ReapQueueRequest reap_queue = 10;
-    EnqueueUpdateRequest enqueue_update = 11;
-    EnqueueMessageRequest enqueue_message = 12;
 
     // Other requests. Allow a gap in tag numbers so the previous list can
     // be copy/pasted from RequestUnion.

@@ -72,12 +72,6 @@ func createArgsAndReply(method string) (proto.Request, proto.Response) {
 		return &proto.ScanRequest{}, &proto.ScanResponse{}
 	case proto.EndTransaction:
 		return &proto.EndTransactionRequest{}, &proto.EndTransactionResponse{}
-	case proto.ReapQueue:
-		return &proto.ReapQueueRequest{}, &proto.ReapQueueResponse{}
-	case proto.EnqueueUpdate:
-		return &proto.EnqueueUpdateRequest{}, &proto.EnqueueUpdateResponse{}
-	case proto.EnqueueMessage:
-		return &proto.EnqueueMessageRequest{}, &proto.EnqueueMessageResponse{}
 	case proto.Batch:
 		return &proto.BatchRequest{}, &proto.BatchResponse{}
 	case proto.AdminSplit:

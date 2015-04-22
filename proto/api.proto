@@ -280,52 +280,6 @@ message EndTransactionResponse {
   repeated bytes resolved = 3 [(gogoproto.customtype) = "Key"];
 }
 
-// A ReapQueueRequest is arguments to the ReapQueue() method. It
-// specifies the recipient inbox key to which messages are waiting
-// to be reapted and also the maximum number of results to return.
-message ReapQueueRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Maximum results to return; must be > 0.
-  optional int64 max_results = 2 [(gogoproto.nullable) = false];
-}
-
-// A ReapQueueResponse is the return value from the ReapQueue() method.
-message ReapQueueResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated Value messages = 2 [(gogoproto.nullable) = false];
-}
-
-// An EnqueueUpdateRequest is arguments to the EnqueueUpdate() method.
-// It specifies the update to enqueue for asynchronous execution.
-// Update is an instance of one of the following messages: PutRequest,
-// IncrementRequest, DeleteRequest, DeleteRangeRequest, or
-// AccountingRequest.
-message EnqueueUpdateRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // TODO(spencer): add union type here.
-}
-
-// An EnqueueUpdateResponse is the return value from the
-// EnqueueUpdate() method.
-message EnqueueUpdateResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
-// An EnqueueMessageRequest is arguments to the EnqueueMessage() method.
-// It specifies the recipient inbox key and the message (an arbitrary
-// byte slice value).
-message EnqueueMessageRequest {
-  optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Message value to delivery to inbox.
-  optional Value msg = 2 [(gogoproto.nullable) = false];
-}
-
-// An EnqueueMessageResponse is the return value from the
-// EnqueueMessage() method.
-message EnqueueMessageResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-}
-
 // A RequestUnion contains exactly one of the optional requests.
 message RequestUnion {
   option (gogoproto.onlyone) = true;
@@ -339,9 +293,6 @@ message RequestUnion {
     DeleteRangeRequest delete_range = 7;
     ScanRequest scan = 8;
     EndTransactionRequest end_transaction = 9;
-    ReapQueueRequest reap_queue = 10;
-    EnqueueUpdateRequest enqueue_update = 11;
-    EnqueueMessageRequest enqueue_message = 12;
   }
 }
 
@@ -358,9 +309,6 @@ message ResponseUnion {
     DeleteRangeResponse delete_range = 7;
     ScanResponse scan = 8;
     EndTransactionResponse end_transaction = 9;
-    ReapQueueResponse reap_queue = 10;
-    EnqueueUpdateResponse enqueue_update = 11;
-    EnqueueMessageResponse enqueue_message = 12;
   }
 }
 
