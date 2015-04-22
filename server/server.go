@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/resource"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/structured"
 	"github.com/cockroachdb/cockroach/util"
@@ -82,11 +83,11 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
 	}
 
-	var tlsConfig *rpc.TLSConfig
+	var tlsConfig *security.TLSConfig
 	if ctx.Certs == "" {
-		tlsConfig = rpc.LoadInsecureTLSConfig()
+		tlsConfig = security.LoadInsecureTLSConfig()
 	} else {
-		if tlsConfig, err = rpc.LoadTLSConfigFromDir(ctx.Certs); err != nil {
+		if tlsConfig, err = security.LoadTLSConfigFromDir(ctx.Certs); err != nil {
 			return nil, util.Errorf("unable to load TLS config: %v", err)
 		}
 	}

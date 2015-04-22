@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 )
@@ -8,14 +9,14 @@ import (
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	localClock   *hlc.Clock
-	tlsConfig    *TLSConfig
+	tlsConfig    *security.TLSConfig
 	stopper      *util.Stopper
 	RemoteClocks *RemoteClockMonitor
 	DisableCache bool // Disable client cache when calling NewClient()
 }
 
 // NewContext creates an rpc Context with the supplied values.
-func NewContext(clock *hlc.Clock, config *TLSConfig, stopper *util.Stopper) *Context {
+func NewContext(clock *hlc.Clock, config *security.TLSConfig, stopper *util.Stopper) *Context {
 	return &Context{
 		localClock:   clock,
 		tlsConfig:    config,

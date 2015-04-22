@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
@@ -92,7 +93,7 @@ func (db *testSender) Send(call client.Call) {
 // upon completion.
 func createTestStore(t *testing.T) (*Store, *hlc.ManualClock, *util.Stopper) {
 	stopper := util.NewStopper()
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	ctx := TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	manual := hlc.NewManualClock(0)

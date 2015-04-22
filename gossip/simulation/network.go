@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -56,7 +57,7 @@ type Network struct {
 func NewNetwork(nodeCount int, networkType string,
 	gossipInterval time.Duration) *Network {
 
-	tlsConfig := rpc.LoadInsecureTLSConfig()
+	tlsConfig := security.LoadInsecureTLSConfig()
 	clock := hlc.NewClock(hlc.UnixNano)
 	rpcContext := rpc.NewContext(clock, tlsConfig, nil)
 

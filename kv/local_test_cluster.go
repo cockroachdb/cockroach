@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -112,7 +113,7 @@ func (ltc *LocalTestCluster) Start() error {
 	ltc.Manual = hlc.NewManualClock(0)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano)
 	ltc.Stopper = util.NewStopper()
-	rpcContext := rpc.NewContext(ltc.Clock, rpc.LoadInsecureTLSConfig(), ltc.Stopper)
+	rpcContext := rpc.NewContext(ltc.Clock, security.LoadInsecureTLSConfig(), ltc.Stopper)
 	ltc.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	ltc.Eng = engine.NewInMem(proto.Attributes{}, 50<<20)
 	ltc.lSender = newRetryableLocalSender(NewLocalSender())

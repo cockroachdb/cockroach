@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
+	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -61,7 +62,7 @@ func createTestStore(t *testing.T) (*storage.Store, *util.Stopper) {
 func createTestStoreWithEngine(t *testing.T, eng engine.Engine, clock *hlc.Clock,
 	bootstrap bool) (*storage.Store, *util.Stopper) {
 	stopper := util.NewStopper()
-	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), rpc.LoadInsecureTLSConfig(), stopper)
+	rpcContext := rpc.NewContext(hlc.NewClock(hlc.UnixNano), security.LoadInsecureTLSConfig(), stopper)
 	ctx := storage.TestStoreContext
 	ctx.Gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	lSender := kv.NewLocalSender()
@@ -125,7 +126,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		m.clock = hlc.NewClock(m.manualClock.UnixNano)
 	}
 	if m.gossip == nil {
-		rpcContext := rpc.NewContext(m.clock, rpc.LoadInsecureTLSConfig(), nil)
+		rpcContext := rpc.NewContext(m.clock, security.LoadInsecureTLSConfig(), nil)
 		m.gossip = gossip.New(rpcContext, gossip.TestInterval, gossip.TestBootstrap)
 	}
 	if m.transport == nil {
