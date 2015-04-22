@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -112,6 +113,8 @@ type Context struct {
 	// It should be accessed through Context.GetHTTPClient() which will
 	// initialize if needed.
 	httpClient *http.Client
+	// Protecs httpClient.
+	httpClientMu sync.Mutex
 }
 
 // NewContext returns a Context with default values.
@@ -213,9 +216,9 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 
 // GetHTTPClient returns the context http client, initializing it
 // if needed. It uses the context Certs.
-// TODO(marc): are there odd cases where may need a mutex?
-// In the worst case, we'll be creating more than one.
 func (ctx *Context) GetHTTPClient() (*http.Client, error) {
+	ctx.httpClientMu.Lock()
+	defer ctx.httpClientMu.Unlock()
 	var err error
 	if ctx.httpClient == nil {
 		ctx.httpClient, err = client.NewHTTPClient(ctx.Certs)
