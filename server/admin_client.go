@@ -22,14 +22,13 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/util"
 )
 
 // sendAdminRequest send an HTTP request and processes the response for
 // its body or error message if a non-200 response code.
 func sendAdminRequest(ctx *Context, req *http.Request) ([]byte, error) {
-	client, err := client.NewHTTPClient(ctx.Certs)
+	client, err := ctx.GetHTTPClient()
 	if err != nil {
 		return nil, util.Errorf("failed to initialized http client: %s", err)
 	}
