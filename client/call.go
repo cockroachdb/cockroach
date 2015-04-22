@@ -41,8 +41,8 @@ func (c *Call) resetClientCmdID(clock Clock) {
 	}
 }
 
-// Method returns the name of the database command for the call.
-func (c *Call) Method() string {
+// Method returns the method of the database command for the call.
+func (c *Call) Method() proto.Method {
 	return c.Args.Method()
 }
 

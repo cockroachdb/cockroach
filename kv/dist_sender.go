@@ -456,7 +456,8 @@ func (ds *DistSender) sendRPC(desc *proto.RangeDescriptor,
 		}
 		return gogoproto.Clone(reply)
 	}
-	_, err := ds.rpcSend(rpcOpts, "Node."+args.Method(), addrs, getArgs, getReply, ds.gossip.RPCContext)
+	_, err := ds.rpcSend(rpcOpts, "Node."+args.Method().String(),
+		addrs, getArgs, getReply, ds.gossip.RPCContext)
 	return err
 }
 
@@ -479,7 +480,7 @@ func (ds *DistSender) Send(call client.Call) {
 
 	// Retry logic for lookup of range by key and RPCs to range replicas.
 	retryOpts := ds.rpcRetryOptions
-	retryOpts.Tag = "routing " + call.Method() + " rpc"
+	retryOpts.Tag = "routing " + call.Method().String() + " rpc"
 
 	// responses and descNext are only used when executing across ranges.
 	var responses []proto.Response

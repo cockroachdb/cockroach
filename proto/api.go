@@ -24,46 +24,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-// TODO(spencer): change these string constants into a type.
-const (
-	// Contains determines whether the KV map contains the specified key.
-	Contains = "Contains"
-	// Get fetches the value for a key from the KV map, respecting a
-	// possibly historical timestamp. If the timestamp is 0, returns
-	// the most recent value.
-	Get = "Get"
-	// Put sets the value for a key at the specified timestamp. If the
-	// timestamp is 0, the value is set with the current time as timestamp.
-	Put = "Put"
-	// ConditionalPut sets the value for a key if the existing value
-	// matches the value specified in the request. Specifying a null value
-	// for existing means the value must not yet exist.
-	ConditionalPut = "ConditionalPut"
-	// Increment increments the value at the specified key. Once called
-	// for a key, Put & ConditionalPut will return errors; only
-	// Increment will continue to be a valid command. The value must be
-	// deleted before it can be reset using Put.
-	Increment = "Increment"
-	// Delete removes the value for the specified key.
-	Delete = "Delete"
-	// DeleteRange removes all values for keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
-	// the latter endpoint excluded.
-	DeleteRange = "DeleteRange"
-	// Scan fetches the values for all keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
-	// the latter endpoint excluded.
-	Scan = "Scan"
-	// EndTransaction either commits or aborts an ongoing transaction.
-	EndTransaction = "EndTransaction"
-	// Batch executes a set of commands in parallel.
-	Batch = "Batch"
-	// AdminSplit is called to coordinate a split of a range.
-	AdminSplit = "AdminSplit"
-	// AdminMerge is called to coordinate a merge of two adjacent ranges.
-	AdminMerge = "AdminMerge"
-)
-
 // A RaftID is a unique ID associated to a Raft consensus group.
 type RaftID int64
 
@@ -111,8 +71,8 @@ type Request interface {
 	gogoproto.Message
 	// Header returns the request header.
 	Header() *RequestHeader
-	// Method returns the request method name.
-	Method() string
+	// Method returns the request method.
+	Method() Method
 	// CreateReply creates a new response object.
 	CreateReply() Response
 	flags() int
@@ -320,64 +280,64 @@ func (sr *ScanResponse) Count() int64 {
 }
 
 // Method implements the Request interface.
-func (*ContainsRequest) Method() string { return Contains }
+func (*ContainsRequest) Method() Method { return Contains }
 
 // Method implements the Request interface.
-func (*GetRequest) Method() string { return Get }
+func (*GetRequest) Method() Method { return Get }
 
 // Method implements the Request interface.
-func (*PutRequest) Method() string { return Put }
+func (*PutRequest) Method() Method { return Put }
 
 // Method implements the Request interface.
-func (*ConditionalPutRequest) Method() string { return ConditionalPut }
+func (*ConditionalPutRequest) Method() Method { return ConditionalPut }
 
 // Method implements the Request interface.
-func (*IncrementRequest) Method() string { return Increment }
+func (*IncrementRequest) Method() Method { return Increment }
 
 // Method implements the Request interface.
-func (*DeleteRequest) Method() string { return Delete }
+func (*DeleteRequest) Method() Method { return Delete }
 
 // Method implements the Request interface.
-func (*DeleteRangeRequest) Method() string { return DeleteRange }
+func (*DeleteRangeRequest) Method() Method { return DeleteRange }
 
 // Method implements the Request interface.
-func (*ScanRequest) Method() string { return Scan }
+func (*ScanRequest) Method() Method { return Scan }
 
 // Method implements the Request interface.
-func (*EndTransactionRequest) Method() string { return EndTransaction }
+func (*EndTransactionRequest) Method() Method { return EndTransaction }
 
 // Method implements the Request interface.
-func (*BatchRequest) Method() string { return Batch }
+func (*BatchRequest) Method() Method { return Batch }
 
 // Method implements the Request interface.
-func (*AdminSplitRequest) Method() string { return AdminSplit }
+func (*AdminSplitRequest) Method() Method { return AdminSplit }
 
 // Method implements the Request interface.
-func (*AdminMergeRequest) Method() string { return AdminMerge }
+func (*AdminMergeRequest) Method() Method { return AdminMerge }
 
 // Method implements the Request interface.
-func (*InternalHeartbeatTxnRequest) Method() string { return InternalHeartbeatTxn }
+func (*InternalHeartbeatTxnRequest) Method() Method { return InternalHeartbeatTxn }
 
 // Method implements the Request interface.
-func (*InternalGCRequest) Method() string { return InternalGC }
+func (*InternalGCRequest) Method() Method { return InternalGC }
 
 // Method implements the Request interface.
-func (*InternalPushTxnRequest) Method() string { return InternalPushTxn }
+func (*InternalPushTxnRequest) Method() Method { return InternalPushTxn }
 
 // Method implements the Request interface.
-func (*InternalRangeLookupRequest) Method() string { return InternalRangeLookup }
+func (*InternalRangeLookupRequest) Method() Method { return InternalRangeLookup }
 
 // Method implements the Request interface.
-func (*InternalResolveIntentRequest) Method() string { return InternalResolveIntent }
+func (*InternalResolveIntentRequest) Method() Method { return InternalResolveIntent }
 
 // Method implements the Request interface.
-func (*InternalMergeRequest) Method() string { return InternalMerge }
+func (*InternalMergeRequest) Method() Method { return InternalMerge }
 
 // Method implements the Request interface.
-func (*InternalLeaderLeaseRequest) Method() string { return InternalLeaderLease }
+func (*InternalLeaderLeaseRequest) Method() Method { return InternalLeaderLease }
 
 // Method implements the Request interface.
-func (*InternalTruncateLogRequest) Method() string { return InternalTruncateLog }
+func (*InternalTruncateLogRequest) Method() Method { return InternalTruncateLog }
 
 // CreateReply implements the Request interface.
 func (*ContainsRequest) CreateReply() Response { return &ContainsResponse{} }

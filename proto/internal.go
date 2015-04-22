@@ -23,46 +23,6 @@ import (
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
-const (
-	// InternalRangeLookup looks up range descriptors, containing the
-	// locations of replicas for the range containing the specified key.
-	InternalRangeLookup = "InternalRangeLookup"
-	// InternalHeartbeatTxn sends a periodic heartbeat to extant
-	// transaction rows to indicate the client is still alive and
-	// the transaction should not be considered abandoned.
-	InternalHeartbeatTxn = "InternalHeartbeatTxn"
-	// InternalGC garbage collects values based on expired timestamps
-	// for a list of keys in a range. This method is called by the
-	// range leader after a snapshot scan. The call goes through Raft,
-	// so all range replicas GC the exact same values.
-	InternalGC = "InternalGC"
-	// InternalPushTxn attempts to resolve read or write conflicts between
-	// transactions. Both the pusher (args.Txn) and the pushee
-	// (args.PushTxn) are supplied. However, args.Key should be set to the
-	// transaction ID of the pushee, as it must be directed to the range
-	// containing the pushee's transaction record in order to consult the
-	// most up to date txn state. If the conflict resolution can be
-	// resolved in favor of the pusher, returns success; otherwise returns
-	// an error code either indicating the pusher must retry or abort and
-	// restart the transaction.
-	InternalPushTxn = "InternalPushTxn"
-	// InternalResolveIntent resolves existing write intents for a key or
-	// key range.
-	InternalResolveIntent = "InternalResolveIntent"
-	// InternalMerge merges a given value into the specified key. Merge is a
-	// high-performance operation provided by underlying data storage for values
-	// which are accumulated over several writes. Because it is not
-	// transactional, Merge is currently not made available to external clients.
-	//
-	// The logic used to merge values of different types is described in more
-	// detail by the "Merge" method of engine.Engine.
-	InternalMerge = "InternalMerge"
-	// InternalTruncateLog discards a prefix of the raft log.
-	InternalTruncateLog = "InternalTruncateLog"
-	// InternalLeaderLease requests a leader lease for a replica.
-	InternalLeaderLease = "InternalLeaderLease"
-)
-
 // ToValue generates a Value message which contains an encoded copy of this
 // TimeSeriesData in its "bytes" field. The returned Value will also have its
 // "tag" string set to the TIME_SERIES constant.

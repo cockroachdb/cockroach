@@ -78,7 +78,7 @@ func TestKVClientCommandID(t *testing.T) {
 // call without a batch and more than one prepared calls with a batch.
 func TestKVTransactionPrepareAndFlush(t *testing.T) {
 	for i := 1; i < 3; i++ {
-		var calls []string
+		var calls []proto.Method
 		client := NewKV(nil, newTestSender(func(call Call) {
 			calls = append(calls, call.Method())
 			if call.Args.Header().CmdID.WallTime == 0 {
@@ -95,9 +95,9 @@ func TestKVTransactionPrepareAndFlush(t *testing.T) {
 			}
 			return nil
 		})
-		expectedCalls := []string{"Batch", "EndTransaction"}
+		expectedCalls := []proto.Method{proto.Batch, proto.EndTransaction}
 		if i == 1 {
-			expectedCalls[0] = "Put"
+			expectedCalls[0] = proto.Put
 		}
 		if !reflect.DeepEqual(expectedCalls, calls) {
 			t.Errorf("expected %s, got %s", expectedCalls, calls)
@@ -130,7 +130,7 @@ func TestKVTransactionConfig(t *testing.T) {
 // committed but EndTransaction is not sent if only read-only
 // operations were performed.
 func TestKVCommitReadOnlyTransaction(t *testing.T) {
-	var calls []string
+	var calls []proto.Method
 	client := NewKV(nil, newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 	}))
@@ -140,7 +140,7 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-	expectedCalls := []string{"Get"}
+	expectedCalls := []proto.Method{proto.Get}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
@@ -149,7 +149,7 @@ func TestKVCommitReadOnlyTransaction(t *testing.T) {
 // TestKVCommitMutatingTransaction verifies that transaction is committed
 // upon successful invocation of the retryable func.
 func TestKVCommitMutatingTransaction(t *testing.T) {
-	var calls []string
+	var calls []proto.Method
 	client := NewKV(nil, newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && !et.Commit {
@@ -162,7 +162,7 @@ func TestKVCommitMutatingTransaction(t *testing.T) {
 	}); err != nil {
 		t.Errorf("unexpected error on commit: %s", err)
 	}
-	expectedCalls := []string{"Put", "EndTransaction"}
+	expectedCalls := []proto.Method{proto.Put, proto.EndTransaction}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}
@@ -211,7 +211,7 @@ func TestKVAbortReadOnlyTransaction(t *testing.T) {
 // TestKVAbortMutatingTransaction verifies that transaction is aborted
 // upon failed invocation of the retryable func.
 func TestKVAbortMutatingTransaction(t *testing.T) {
-	var calls []string
+	var calls []proto.Method
 	client := NewKV(nil, newTestSender(func(call Call) {
 		calls = append(calls, call.Method())
 		if et, ok := call.Args.(*proto.EndTransactionRequest); ok && et.Commit {
@@ -225,7 +225,7 @@ func TestKVAbortMutatingTransaction(t *testing.T) {
 	if err == nil {
 		t.Error("expected error on abort")
 	}
-	expectedCalls := []string{"Put", "EndTransaction"}
+	expectedCalls := []proto.Method{proto.Put, proto.EndTransaction}
 	if !reflect.DeepEqual(expectedCalls, calls) {
 		t.Errorf("expected %s, got %s", expectedCalls, calls)
 	}

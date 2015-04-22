@@ -167,7 +167,7 @@ func (s *HTTPSender) post(call Call) (*http.Response, error) {
 		return nil, err
 	}
 
-	url := KVDBScheme + "://" + s.server + KVDBEndpoint + call.Method()
+	url := KVDBScheme + "://" + s.server + KVDBEndpoint + call.Method().String()
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, util.Errorf("unable to create request: %s", err)
