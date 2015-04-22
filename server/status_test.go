@@ -99,7 +99,7 @@ func TestStatusJson(t *testing.T) {
 	for _, spec := range testCases {
 		contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
 		for _, contentType := range contentTypes {
-			req, err := http.NewRequest("GET", "https://"+s.Addr+spec.keyPrefix, nil)
+			req, err := http.NewRequest("GET", "https://"+s.ServingAddr()+spec.keyPrefix, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +166,7 @@ func TestStatusGossipJson(t *testing.T) {
 
 	contentTypes := []string{"application/json", "application/x-protobuf", "text/yaml"}
 	for _, contentType := range contentTypes {
-		req, err := http.NewRequest("GET", "https://"+s.Addr+statusGossipKeyPrefix, nil)
+		req, err := http.NewRequest("GET", "https://"+s.ServingAddr()+statusGossipKeyPrefix, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

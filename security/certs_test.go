@@ -92,8 +92,10 @@ func TestUseCerts(t *testing.T) {
 		t.Fatalf("Expected success, got %v", err)
 	}
 
-	// Start a test server with the just-generated certs.
-	s := &server.TestServer{CertDir: certsDir, Addr: "127.0.0.1:0"}
+	// Start a test server and override certs.
+	testCtx := server.NewTestContext()
+	testCtx.Certs = certsDir
+	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ func TestUseCerts(t *testing.T) {
 
 	// Try a client without certs and without InsecureSkipVerify.
 	httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: nil}}
-	req, err := http.NewRequest("GET", "https://"+s.Addr+"/_admin/health", nil)
+	req, err := http.NewRequest("GET", "https://"+s.ServingAddr()+"/_admin/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
@@ -116,7 +118,7 @@ func TestUseCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
-	req, err = http.NewRequest("GET", "https://"+s.Addr+"/_admin/health", nil)
+	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+"/_admin/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
 	}
