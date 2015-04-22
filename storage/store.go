@@ -1078,6 +1078,8 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, args proto.Request, rep
 
 // startGroup creates and starts the given Raft group.
 // Calls to existing groups are allowed, but have no effect.
+// TODO(tschottdorf) we shouldn't be calling this at all; MultiRaft should
+// lazily create groups as needed (and already does).
 func (s *Store) startGroup(raftID int64) error {
 	return s.multiraft.CreateGroup(uint64(raftID))
 }
@@ -1180,19 +1182,12 @@ func (s *Store) processRaft() {
 						log.Warning(err)
 						continue
 					}
-					// TODO(tschottdorf)
+					// TODO(tschottdorf): remove this once we have the whole
+					// range lazily start up and the response cache moved to
+					// the correct location to deduplicate multiraft
+					// reproposals (at the time of writing commands can be
+					// executed multiple times if issued during an election).
 					r.election <- struct{}{}
-					if e.NodeID != s.RaftNodeID() {
-						// TODO(tschottdorf): Fatalf if we think we have a leader
-						// lease for that group, during which we're not supposed to
-						// get a message like that.
-						// if r.HaveLeaderLease() {
-						//   log.Fatalf("have leader lease, but other node requests it")
-						// }
-						continue
-					}
-
-					r.requestLeaderLease(e.Term)
 
 					// Done with this event, go back to listening on the channel.
 					continue

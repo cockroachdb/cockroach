@@ -469,6 +469,10 @@ func (s *state) start(stopper *util.Stopper) {
 				case raftpb.MsgHeartbeatResp:
 					s.fanoutHeartbeatResponse(req)
 				default:
+					// We only want to lazily create the group if it's not heartbeat-related;
+					// our heartbeats are coalesced and contain a dummy GroupID.
+					// TODO(tschottdorf) still shouldn't hurt to move this part outside,
+					// but suddenly tests will start failing. Should investigate.
 					if _, ok := s.groups[req.GroupID]; !ok {
 						log.Infof("node %v: got message for unknown group %d; creating it", s.nodeID, req.GroupID)
 						if err := s.createGroup(req.GroupID); err != nil {
