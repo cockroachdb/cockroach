@@ -885,7 +885,7 @@ func (s *state) handleWriteResponse(response *writeResponse, readyGroups map[uin
 			err := s.Transport.Send(NodeID(msg.To), &RaftMessageRequest{groupID, msg})
 			snapStatus := raft.SnapshotFinish
 			if err != nil {
-				log.Warningf("node %v failed to send message to %v", s.nodeID, nodeID)
+				log.Warningf("node %v failed to send message to %v: %s", s.nodeID, nodeID, err)
 				s.multiNode.ReportUnreachable(msg.To, groupID)
 				snapStatus = raft.SnapshotFailure
 			}

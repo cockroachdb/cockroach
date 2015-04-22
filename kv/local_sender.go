@@ -78,6 +78,13 @@ func (ls *LocalSender) AddStore(s *storage.Store) {
 	ls.storeMap[s.Ident.StoreID] = s
 }
 
+// RemoveStore removes the specified store from the store map.
+func (ls *LocalSender) RemoveStore(s *storage.Store) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	delete(ls.storeMap, s.Ident.StoreID)
+}
+
 // VisitStores implements a visitor pattern over stores in the storeMap.
 // The specified function is invoked with each store in turn. Stores are
 // visited in a random order.

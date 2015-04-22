@@ -143,7 +143,10 @@ func (lt *localRPCTransport) Stop(id NodeID) {
 	defer lt.mu.Unlock()
 	lt.listeners[id].Close()
 	delete(lt.listeners, id)
-	delete(lt.clients, id)
+	if client, ok := lt.clients[id]; ok {
+		client.Close()
+		delete(lt.clients, id)
+	}
 }
 
 func (lt *localRPCTransport) getClient(id NodeID) (*rpc.Client, error) {
