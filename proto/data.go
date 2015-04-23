@@ -642,3 +642,20 @@ func (ts TimeSeriesData) ToInternal(keyDuration int64, sampleDuration int64) (
 
 	return result, nil
 }
+
+// Difference returns the difference between two MVCCStats structures.
+func (ms *MVCCStats) Difference(oms *MVCCStats) MVCCStats {
+	return MVCCStats{
+		LiveBytes:       ms.LiveBytes - oms.LiveBytes,
+		KeyBytes:        ms.KeyBytes - oms.KeyBytes,
+		ValBytes:        ms.ValBytes - oms.ValBytes,
+		IntentBytes:     ms.IntentBytes - oms.IntentBytes,
+		LiveCount:       ms.LiveCount - oms.LiveCount,
+		KeyCount:        ms.KeyCount - oms.KeyCount,
+		ValCount:        ms.ValCount - oms.ValCount,
+		IntentCount:     ms.IntentCount - oms.IntentCount,
+		IntentAge:       ms.IntentAge - oms.IntentAge,
+		GCBytesAge:      ms.GCBytesAge - oms.GCBytesAge,
+		LastUpdateNanos: ms.LastUpdateNanos - oms.LastUpdateNanos,
+	}
+}
