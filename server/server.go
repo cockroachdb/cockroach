@@ -119,6 +119,9 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 	s.stopper.AddCloser(s.raftTransport)
 
 	s.kvDB = kv.NewDBServer(sender)
+	if s.ctx.ExperimentalRPCServer {
+		s.kvDB.RegisterRPC(s.rpc)
+	}
 	s.kvREST = kv.NewRESTServer(s.kv)
 	// TODO(bdarnell): make StoreConfig configurable.
 	nCtx := storage.StoreContext{

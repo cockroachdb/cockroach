@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -145,4 +146,79 @@ func (s *DBServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Write(body)
+}
+
+// RegisterRPC registers the RPC endpoints.
+func (s *DBServer) RegisterRPC(rpcServer *rpc.Server) error {
+	return rpcServer.RegisterName("Server", (*rpcDBServer)(s))
+}
+
+// rpcDBServer is used to provide a separate method namespace for RPC
+// registration.
+type rpcDBServer DBServer
+
+// executeCmd creates a client.Call struct and sends if via our local sender.
+func (s *rpcDBServer) executeCmd(args proto.Request, reply proto.Response) error {
+	s.sender.Send(client.Call{Args: args, Reply: reply})
+	return nil
+}
+
+// Contains .
+func (s *rpcDBServer) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Get .
+func (s *rpcDBServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Put .
+func (s *rpcDBServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// ConditionalPut .
+func (s *rpcDBServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Increment .
+func (s *rpcDBServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Delete .
+func (s *rpcDBServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// DeleteRange .
+func (s *rpcDBServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Scan .
+func (s *rpcDBServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// EndTransaction .
+func (s *rpcDBServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// Batch .
+func (s *rpcDBServer) Batch(args *proto.BatchRequest, reply *proto.BatchResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// AdminSplit .
+func (s *rpcDBServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
+	return s.executeCmd(args, reply)
+}
+
+// AdminMerge .
+func (s *rpcDBServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
+	return s.executeCmd(args, reply)
 }
