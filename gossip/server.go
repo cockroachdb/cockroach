@@ -39,9 +39,10 @@ type clientInfo struct {
 // server maintains an array of connected peers to which it gossips
 // newly arrived information on a periodic basis.
 type server struct {
-	interval time.Duration         // Interval at which to gossip fresh info
-	mu       sync.Mutex            // Mutex protects is (infostore) & incoming
-	ready    *sync.Cond            // Broadcasts wakeup to waiting gossip requests
+	interval time.Duration // Interval at which to gossip fresh info
+	ready    *sync.Cond    // Broadcasts wakeup to waiting gossip requests
+
+	mu       sync.Mutex            // Protects the fields below
 	is       *infoStore            // The backing infostore
 	closed   bool                  // True if server was closed
 	incoming *nodeSet              // Incoming client node IDs
