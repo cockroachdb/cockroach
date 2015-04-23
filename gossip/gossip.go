@@ -485,7 +485,7 @@ func (g *Gossip) manage(stopper *util.Stopper) {
 			if g.outgoing.len()+g.incoming.len() == 0 {
 				g.stalled <- struct{}{}
 			} else if g.is.getInfo(KeySentinel) == nil {
-				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID, KeySentinel)
+				log.Warningf("missing sentinel gossip %s; assuming partition and reconnecting", g.is.NodeID)
 				g.stalled <- struct{}{}
 			}
 
