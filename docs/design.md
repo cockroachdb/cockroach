@@ -361,60 +361,24 @@ transaction is
 
 **Transaction Table**
 
-```
-enum Isolation {
-
-SNAPSHOT = 1;
-
-SERIALIZABLE = 2;
-
-}
-
-enum Status {
-
-PENDING = 1;
-
-COMMITTED = 2;
-
-ABORTED = 3;
-
-}
-
-uint64 tx_id
-
-uint64 candidate_timestamp
-
-uint64 heartbeat_timestamp
-
-uint32 priority
-
-Isolation isolation
-
-Status status
-```
+Please see [proto/data.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/data.proto) for the up-to-date structures, the best entry point being `message Transaction`.
 
 **Pros**
 
 - No requirement for reliable code execution to prevent stalled 2PC
   protocol.
-
 - Readers never block with SI semantics; with SSI semantics, they may
   abort.
-
 - Lower latency than traditional 2PC commit protocol (w/o contention)
   because second phase requires only a single write to the
   transaction table instead of a synchronous round to all
   transaction participants.
-
 - Priorities avoid starvation for arbitrarily long transactions and
   always pick a winner from between contending transactions (no
   mutual aborts).
-
 - Writes not buffered at client; writes fail fast.
-
 - No read-locking overhead required for *serializable* SI (in contrast
   to other SSI implementations).
-
 - Well-chosen (i.e. less random) priorities can flexibly give
   probabilistic guarantees on latency for arbitrary transactions
   (for example: make OLTP transactions 10x less likely to abort than
@@ -424,17 +388,14 @@ Status status
 
 - Reads from non-leader replicas still require a ping to the leader to
   update *latest-read-cache*.
-
 - Abandoned transactions may block contending writers for up to the
   heartbeat interval, though average wait is likely to be
   considerably shorter (see [graph in link](https://docs.google.com/document/d/1kBCu4sdGAnvLqpT-_2vaTbomNmX3_saayWEGYu1j7mQ/edit?usp=sharing)).
   This is likely considerably more performant than detecting and
   restarting 2PC in order to release read and write locks.
-
 - Behavior different than other SI implementations: no first writer
   wins, and shorter transactions do not always finish quickly.
   Element of surprise for OLTP systems may be a problematic factor.
-
 - Aborts can decrease throughput in a contended system compared with
   two phase locking. Aborts and retries increase read and write
   traffic, increase latency and decrease throughput.
@@ -1238,23 +1199,7 @@ configuration applies. Zone values specify a protobuf containing
 the datacenters from which replicas for ranges which fall under
 the zone must be chosen.
 
-```
-ZoneConfig {
- // Datacenter prefixes (e.g. va, mtv, jp), one per replica.
- repeated message {
- optional string datacenter = 1;
- enum DiskType {
- SSD = 1;
- HDD = 2;
- MEM = 3;
- };
- optional DiskType disk_type = 2;
- } replicas = 1;
- // Minimum and maximum range sizes to control splits / merges.
- optional uint32 range_min_size = 2;
- optional uint32 range_max_size = 3;
-}
-```
+Please see [proto/config.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
 
 If zones are modified in situ, each RoachNode verifies the
 existing zones for its ranges against the zone configuration. If
@@ -1269,15 +1214,8 @@ permissions keys is:
 
 `\0perm<key-prefix><user>`
 
-Permission values are a protobuf containing the permission details:
-
-```
-UserPermission {
- bool read = 1 [default = True];
- bool write = 2 [default = True];
- float priority = 3 [default = 1.0];
-}
-```
+Permission values are a protobuf containing the permission details;
+please see [proto/config.proto](https://github.com/cockroachdb/cockroach/blob/master/proto/config.proto) for up-to-date data structures used, the best entry point being `message PermConfig`.
 
 A default system root permission is assumed for the entire map
 with an empty key prefix and read/write as true.
