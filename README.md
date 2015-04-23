@@ -1,8 +1,9 @@
-# Cockroach [![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg)
+![logo](/resource/doc/cockroach_db.png?raw=true "Cockroach Labs logo")
+
+
+[![Circle CI](https://circleci.com/gh/cockroachdb/cockroach.svg?style=svg)](https://circleci.com/gh/cockroachdb/cockroach) [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.png)](https://godoc.org/github.com/cockroachdb/cockroach) ![Project Status](http://img.shields.io/badge/status-alpha-red.svg)
 
 ## A Scalable, Geo-Replicated, Transactional Datastore
-
-<img align="right" src="/resource/doc/color_cockroach.png?raw=true"/>
 
 **Table of Contents**
 
