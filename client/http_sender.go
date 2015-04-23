@@ -26,11 +26,8 @@ import (
 	"net/http"
 	"time"
 
-	"crypto/tls"
-
 	"code.google.com/p/snappy-go/snappy"
 
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -62,25 +59,6 @@ var HTTPRetryOptions = util.RetryOptions{
 	MaxAttempts: 0, // retry indefinitely
 }
 
-// NewHTTPClient initializes a new http client. If certsDir is not empty,
-// it initializes the TLS config from the certificates in the specified
-// directory.
-func NewHTTPClient(certsDir string) (*http.Client, error) {
-	var tlsConfig *tls.Config
-	if certsDir == "" {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		tlsConfig = security.LoadInsecureClientTLSConfig().Config()
-	} else {
-		log.V(1).Infof("setting up TLS from certificates directory: %s", certsDir)
-		cfg, err := security.LoadClientTLSConfigFromDir(certsDir)
-		if err != nil {
-			return nil, util.Errorf("error setting up client TLS config: %s", err)
-		}
-		tlsConfig = cfg.Config()
-	}
-	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}, nil
-}
-
 // HTTPSender is an implementation of KVSender which exposes the
 // Key-Value database provided by a Cockroach cluster by connecting
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
@@ -91,15 +69,11 @@ type HTTPSender struct {
 }
 
 // NewHTTPSender returns a new instance of HTTPSender.
-func NewHTTPSender(server string, certsDir string) (*HTTPSender, error) {
-	client, err := NewHTTPClient(certsDir)
-	if err != nil {
-		return nil, err
-	}
+func NewHTTPSender(server string, client *http.Client) *HTTPSender {
 	return &HTTPSender{
 		server: server,
 		client: client,
-	}, nil
+	}
 }
 
 // Send sends call to Cockroach via an HTTP post. HTTP response codes

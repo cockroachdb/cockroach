@@ -15,10 +15,13 @@
 //
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-// +build !release
+package structured
 
-// Package securitytest embeds the TLS test certificates.
-package securitytest
+import (
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
+)
 
-//go:generate go-bindata -tags=!release -pkg securitytest -mode 0644 -modtime 1400000000 -o ./embedded.go -prefix ../../resource ../../resource/test_certs/...
-//go:generate goimports -w embedded.go
+func init() {
+	security.SetReadFileFn(securitytest.Asset)
+}

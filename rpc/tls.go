@@ -28,39 +28,36 @@ import (
 	"net/http"
 	"net/rpc"
 
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
 // tlsListen wraps either net.Listen or crypto/tls.Listen, depending on the contents of
-// the passed TLSConfig.
-func tlsListen(network, address string, config *security.TLSConfig) (net.Listener, error) {
-	cfg := config.Config()
-	if cfg == nil {
+// the passed TLS Config.
+func tlsListen(network, address string, config *tls.Config) (net.Listener, error) {
+	if config == nil {
 		if network != "unix" {
 			log.Warningf("listening via %s to %s without TLS", network, address)
 		}
 		return net.Listen(network, address)
 	}
-	return tls.Listen(network, address, cfg)
+	return tls.Listen(network, address, config)
 }
 
 // tlsDial wraps either net.Dial or crypto/tls.Dial, depending on the contents of
-// the passed TLSConfig.
-func tlsDial(network, address string, config *security.TLSConfig) (net.Conn, error) {
-	cfg := config.Config()
-	if cfg == nil {
+// the passed TLS Config.
+func tlsDial(network, address string, config *tls.Config) (net.Conn, error) {
+	if config == nil {
 		if network != "unix" {
 			log.Warningf("connecting via %s to %s without TLS", network, address)
 		}
 		return net.Dial(network, address)
 	}
-	return tls.Dial(network, address, cfg)
+	return tls.Dial(network, address, config)
 }
 
 // tlsDialHTTP connects to an HTTP RPC server at the specified address.
-func tlsDialHTTP(network, address string, config *security.TLSConfig) (net.Conn, error) {
+func tlsDialHTTP(network, address string, config *tls.Config) (net.Conn, error) {
 	conn, err := tlsDial(network, address, config)
 	if err != nil {
 		return conn, err

@@ -15,26 +15,25 @@
 //
 // Author: Marc Berhault (marc@cockroachlabs.com)
 
-package client
+package testutils
 
 import (
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 )
 
-// CreateTestHTTPClient initialises a new http client with insecure TLS config.
-// TODO(marc): load test certs when enforced.
-func CreateTestHTTPClient() *http.Client {
-	tlsConfig := security.LoadInsecureClientTLSConfig().Config()
-	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+// NewTestBaseContext creates a base context for testing.
+// The certs file loader is overriden in individual main_test files.
+func NewTestBaseContext() *base.Context {
+	return &base.Context{
+		Certs: security.EmbeddedCertsDir,
+	}
 }
 
-// CreateTestHTTPSender initializes a new HTTPSender for 'addr'.
-// It uses an insecure TLS config.
-func CreateTestHTTPSender(addr string) *HTTPSender {
-	return &HTTPSender{
-		server: addr,
-		client: CreateTestHTTPClient(),
-	}
+// NewTestHTTPClient creates a HTTP client on the fly using a test context.
+// Useful when contexts don't need to be reused.
+func NewTestHTTPClient() (*http.Client, error) {
+	return NewTestBaseContext().GetHTTPClient()
 }

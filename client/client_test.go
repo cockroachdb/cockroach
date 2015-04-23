@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/encoding"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -78,7 +79,11 @@ func newNotifyingSender(wrapped client.KVSender) *notifyingSender {
 // an HTTP sender to the server at addr.
 // It contains a waitgroup to allow waiting.
 func createTestNotifyClient(addr string) *client.KV {
-	sender := newNotifyingSender(client.CreateTestHTTPSender(addr))
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	sender := newNotifyingSender(client.NewHTTPSender(addr, httpClient))
 	return client.NewKV(nil, sender)
 }
 
@@ -442,11 +447,13 @@ func ExampleKV_Run1() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), "")
+	httpClient, err := testutils.NewTestHTTPClient()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -485,11 +492,13 @@ func ExampleKV_RunMultiple() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), "")
+	httpClient, err := testutils.NewTestHTTPClient()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -552,11 +561,13 @@ func ExampleKV_RunTransaction() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	// Key Value Client initialization.
-	sender, err := client.NewHTTPSender(serv.ServingAddr(), "")
+	httpClient, err := testutils.NewTestHTTPClient()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Key Value Client initialization.
+	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 

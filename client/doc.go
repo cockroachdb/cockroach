@@ -29,7 +29,7 @@ The simplest way to use the client is through the Run method. Run
 synchronously invokes the call and fills in the the reply and returns
 an error. The example below shows a get and a put.
 
-  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", tlsConfig))
+  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", httpClient))
 
   getCall := client.GetCall(proto.Key("a"))
   getResp := getCall.Reply.(*proto.GetResponse)
@@ -49,7 +49,7 @@ used to guarantee atomicity. A simple example of using the API which
 does two scans in parallel and then sends a sequence of puts in
 parallel:
 
-  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", tlsConfig))
+  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", httpClient))
 
   acScanCall := client.ScanCall(proto.Key("a"), proto.Key("c\x00"), 1000)
   xzScanCall := client.ScanCall(proto.Key("x"), proto.Key("z\x00"), 1000)
@@ -88,7 +88,7 @@ given necessary transactional details, and conflicts are handled with
 backoff/retry loops and transaction restarts as necessary. An example
 of using transactions with parallel writes:
 
-  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", tlsConfig))
+  kv := client.NewKV(nil, client.NewHTTPSender("localhost:8080", httpClient))
 
   opts := &client.TransactionOptions{Name: "test", Isolation: proto.SERIALIZABLE}
   err := kv.RunTransaction(opts, func(txn *client.Txn) error {

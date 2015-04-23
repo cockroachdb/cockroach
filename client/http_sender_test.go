@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -72,7 +73,11 @@ func TestHTTPSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := CreateTestHTTPSender(addr)
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender := NewHTTPSender(addr, httpClient)
 	reply := &proto.PutResponse{}
 	sender.Send(Call{Args: testPutReq, Reply: reply})
 	if reply.GoError() != nil {
@@ -105,6 +110,10 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 		{http.StatusInternalServerError, false},
 		{http.StatusNotImplemented, false},
 	}
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, test := range testCases {
 		count := 0
 		server, addr := startTestHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +133,7 @@ func TestHTTPSenderRetryResponseCodes(t *testing.T) {
 			w.Write(body)
 		}))
 
-		sender := CreateTestHTTPSender(addr)
+		sender := NewHTTPSender(addr, httpClient)
 		reply := &proto.PutResponse{}
 		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if test.retry {
@@ -162,6 +171,10 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		},
 	}
 
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, testFunc := range testCases {
 		count := 0
 		var s *httptest.Server
@@ -182,7 +195,7 @@ func TestHTTPSenderRetryHTTPSendError(t *testing.T) {
 		}))
 
 		s = server
-		sender := CreateTestHTTPSender(addr)
+		sender := NewHTTPSender(addr, httpClient)
 		reply := &proto.PutResponse{}
 		sender.Send(Call{Args: testPutReq, Reply: reply})
 		if reply.GoError() != nil {

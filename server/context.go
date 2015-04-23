@@ -20,14 +20,12 @@ package server
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
@@ -38,7 +36,6 @@ import (
 // Context defaults.
 const (
 	defaultAddr           = ":8080"
-	defaultCertsDir       = "certs"
 	defaultMaxOffset      = 250 * time.Millisecond
 	defaultGossipInterval = 2 * time.Second
 	defaultCacheSize      = 1 << 30 // GB
@@ -51,11 +48,11 @@ const (
 // Calling "server/cli".InitFlags(ctx *Context) will initialize Context using
 // command flags. Keep in sync with "server/cli/flags.go".
 type Context struct {
+	// Embed the base context.
+	base.Context
+
 	// Addr is the host:port to bind for HTTP/RPC traffic.
 	Addr string
-
-	// Certs specifies a directory containing RSA key and x509 certs.
-	Certs string
 
 	// Stores is specified to enable durable key-value storage.
 	// Memory-backed key value stores may be optionally specified
@@ -114,25 +111,20 @@ type Context struct {
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner.
 	ScanInterval time.Duration
-
-	// httpClient is a lazily-initialized http client.
-	// It should be accessed through Context.GetHTTPClient() which will
-	// initialize if needed.
-	httpClient *http.Client
-	// Protecs httpClient.
-	httpClientMu sync.Mutex
 }
 
 // NewContext returns a Context with default values.
 func NewContext() *Context {
-	return &Context{
+	ctx := &Context{
 		Addr:           defaultAddr,
-		Certs:          defaultCertsDir,
 		MaxOffset:      defaultMaxOffset,
 		GossipInterval: defaultGossipInterval,
 		CacheSize:      defaultCacheSize,
 		ScanInterval:   defaultScanInterval,
 	}
+	// Initializes base context defaults.
+	ctx.InitDefaults()
+	return ctx
 }
 
 // Init interprets the stores parameter to initialize a slice of
@@ -218,18 +210,6 @@ func (ctx *Context) parseGossipBootstrapResolvers() ([]gossip.Resolver, error) {
 	}
 
 	return bootstrapResolvers, nil
-}
-
-// GetHTTPClient returns the context http client, initializing it
-// if needed. It uses the context Certs.
-func (ctx *Context) GetHTTPClient() (*http.Client, error) {
-	ctx.httpClientMu.Lock()
-	defer ctx.httpClientMu.Unlock()
-	var err error
-	if ctx.httpClient == nil {
-		ctx.httpClient, err = client.NewHTTPClient(ctx.Certs)
-	}
-	return ctx.httpClient, err
 }
 
 // parseAttributes parses a colon-separated list of strings,

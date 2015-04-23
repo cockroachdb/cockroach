@@ -26,13 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 
-func createTestClient(addr string) *client.KV {
-	return client.NewKV(nil, client.CreateTestHTTPSender(addr))
+func createTestClient(t *testing.T, addr string) *client.KV {
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client.NewKV(nil, client.NewHTTPSender(addr, httpClient))
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -41,7 +46,7 @@ func TestKVDBCoverage(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	key := proto.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -172,7 +177,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{&proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
 		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})
@@ -190,7 +195,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	txnOpts := &client.TransactionOptions{Name: "test"}
 	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Make an EndTransaction request which would fail if not
@@ -291,7 +296,7 @@ func TestKVDBTransaction(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")

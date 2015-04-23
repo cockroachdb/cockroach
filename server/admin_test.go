@@ -26,9 +26,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 )
@@ -60,7 +60,10 @@ func startAdminServer() (string, *util.Stopper) {
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(url string) ([]byte, error) {
-	client := client.CreateTestHTTPClient()
+	client, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		return nil, err
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err

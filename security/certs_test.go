@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
@@ -94,8 +93,10 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Start a test server and override certs.
-	testCtx := server.NewTestContext()
+	// We use a real context since we want generated certs.
+	testCtx := server.NewContext()
 	testCtx.Certs = certsDir
+	testCtx.Addr = ":0"
 	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -115,7 +116,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	httpClient, err = client.NewHTTPClient(certsDir /* with certs */)
+	httpClient, err = testCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

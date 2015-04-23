@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/multiraft"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -47,9 +46,8 @@ import (
 func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T) (
 	*rpc.Server, *hlc.Clock, *Node, *util.Stopper) {
 	// Load the TLS config from our test certs. They're embedded in the
-	// test binary and calls to the file system have been mocked out,
-	// see main_test.go.
-	tlsConfig, err := security.LoadTLSConfigFromDir("test_certs")
+	// test binary and calls to the file system have been mocked out.
+	tlsConfig, err := testContext.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
