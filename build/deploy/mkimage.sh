@@ -23,7 +23,7 @@ mkdir -p build
 docker run -v "${DIR}/build":/build "cockroachdb/cockroach-dev" shell "cd /cockroach && \
   rm -rf /build/* && \
   make testbuild && \
-  make STATIC=1 build && \
+  make STATIC=1 release && \
   cp -r cockroach *.test /build/"
 
 # Make sure the created binary is statically linked.

@@ -32,7 +32,8 @@ RUN := run
 
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
-PKG          := "./..."
+PKG          := ./...
+TAGS         :=
 TESTS        := ".*"
 TESTTIMEOUT  := 15s
 RACETIMEOUT  := 1m
@@ -43,28 +44,41 @@ STANDARDTESTFLAGS := -logtostderr
 TESTFLAGS         :=
 
 ifeq ($(STATIC),1)
+# The netgo build tag instructs the net package to try to build a
+# Go-only resolver.
+TAGS += netgo
 # The installsuffix makes sure we actually get the netgo build, see
 # https://github.com/golang/go/issues/9369#issuecomment-69864440
-GOFLAGS  += -a -tags netgo -installsuffix netgo
+GOFLAGS  += -installsuffix netgo
 LDFLAGS += -extldflags "-lm -lstdc++ -static"
+# rebuild everything.
+GOFLAGS += -a
 endif
 
 .PHONY: all
 all: build test
+
+# On a release build, rebuild everything (except stdlib)
+# to make sure that the 'release' build tag is taken
+# into account.
+.PHONY: release
+release: TAGS += release
+release: GOFLAGS += -a
+release: build
 
 .PHONY: build
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
 build:
-	$(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
+	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
 # Similar to "testrace", we want to cache the build before running the
 # tests.
 .PHONY: test
 test:
-	$(GO) test $(GOFLAGS) -i $(PKG)
-	$(GO) test $(GOFLAGS) -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 # "go test -i" builds dependencies and installs them into GOPATH/pkg, but does not run the
 # tests. Run it as a part of "testrace" since race-enabled builds are not covered by
@@ -72,12 +86,12 @@ test:
 # slow-to-compile cgo packages).
 .PHONY: testrace
 testrace:
-	$(GO) test $(GOFLAGS) -race -i $(PKG)
-	$(GO) test $(GOFLAGS) -race -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(RACETIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -i $(PKG)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -race -run $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(RACETIMEOUT) $(TESTFLAGS)
 
 .PHONY: bench
 bench:
-	$(GO) test $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -run $(TESTS) -bench $(TESTS) $(PKG) $(STANDARDTESTFLAGS) -timeout $(BENCHTIMEOUT) $(TESTFLAGS)
 
 # Build, but do not run the tests. This is used to verify the deployable
 # Docker image which comes without the build environment. See ./build/deploy
@@ -85,13 +99,13 @@ bench:
 .PHONY: testbuild
 testbuild:
 	for p in $(shell $(GO) list $(PKG)); do \
-	  $(GO) test $(GOFLAGS) -c -i $$p || exit $?; \
+	  $(GO) test -tags '$(TAGS)' $(GOFLAGS) -c -i $$p || exit $?; \
 	done
 
 
 .PHONY: coverage
 coverage: build
-	$(GO) test $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
+	$(GO) test -tags '$(TAGS)' $(GOFLAGS) -cover -run $(TESTS) $(PKG) $(TESTFLAGS)
 
 .PHONY: acceptance
 acceptance:
@@ -108,7 +122,7 @@ errcheck:
 
 .PHONY: clean
 clean:
-	$(GO) clean -i github.com/cockroachdb/...
+	$(GO) clean -tags '$(TAGS)' $(GOFLAGS) -i github.com/cockroachdb/...
 	find . -name '*.test' -type f -exec rm -f {} \;
 	rm -rf build/deploy/build
 # List all of the dependencies which are not part of the standard
