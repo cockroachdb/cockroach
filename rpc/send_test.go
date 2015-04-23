@@ -132,7 +132,7 @@ func TestUnretryableError(t *testing.T) {
 		N:               1,
 		Ordering:        OrderStable,
 		SendNextTimeout: 1 * time.Second,
-		Timeout:         1 * time.Second,
+		Timeout:         5 * time.Second,
 	}
 	getArgs := func(addr net.Addr) interface{} {
 		return &proto.PingRequest{}

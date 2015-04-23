@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
-	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
 
@@ -83,7 +82,8 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 		return util.RetryBreak, nil
 	})
 	if err != nil {
-		log.Fatalf("local sender did not succeed on two attempts: %s", err)
+		panic(fmt.Sprintf("local sender did not succeed on two attempts: %s",
+			err))
 	}
 }
 
