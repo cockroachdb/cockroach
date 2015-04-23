@@ -33,7 +33,7 @@ RUN := run
 # Variables to be overridden on the command line, e.g.
 #   make test PKG=./storage TESTFLAGS=--vmodule=multiraft=1
 PKG          := ./...
-TAGS         := netgo
+TAGS         :=
 TESTS        := ".*"
 TESTTIMEOUT  := 15s
 RACETIMEOUT  := 1m
@@ -43,11 +43,13 @@ BENCHTIMEOUT := 5m
 STANDARDTESTFLAGS := -logtostderr
 TESTFLAGS         :=
 
+ifeq ($(STATIC),1)
+# The netgo build tag instructs the net package to try to build a
+# Go-only resolver.
+TAGS += netgo
 # The installsuffix makes sure we actually get the netgo build, see
 # https://github.com/golang/go/issues/9369#issuecomment-69864440
 GOFLAGS  += -installsuffix netgo
-
-ifeq ($(STATIC),1)
 LDFLAGS += -extldflags "-lm -lstdc++ -static"
 # rebuild everything.
 GOFLAGS += -a
