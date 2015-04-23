@@ -121,7 +121,6 @@ var tsCacheMethods = [...]bool{
 	proto.Delete:                true,
 	proto.DeleteRange:           true,
 	proto.InternalResolveIntent: true,
-	proto.InternalMerge:         true,
 }
 
 // usesTimestampCache returns true if the request affects or is
