@@ -58,11 +58,18 @@ endif
 .PHONY: all
 all: build test
 
+# On a release build, rebuild everything (except stdlib)
+# to make sure that the 'release' build tag is taken
+# into account.
+.PHONY: release
+release: TAGS += release
+release: GOFLAGS += -a
+release: build
+
 .PHONY: build
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTag "$(shell git describe --dirty)"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildTime "$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 build: LDFLAGS += -X github.com/cockroachdb/cockroach/util.buildDeps "$(shell GOPATH=${GOPATH} build/depvers.sh)"
-build: TAGS += release
 build:
 	$(GO) build -tags '$(TAGS)' $(GOFLAGS) -ldflags '$(LDFLAGS)' -v -i -o cockroach
 
