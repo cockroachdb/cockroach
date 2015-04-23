@@ -464,7 +464,11 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	s.scanner.Start(s.ctx.Clock, s.stopper)
 
 	// Register callbacks for any changes to accounting and zone
-	// configurations; we split ranges along prefix boundaries.
+	// configurations; we split ranges along prefix boundaries to
+	// avoid having a range that has two different accounting/zone
+	// configs. (We don't need a callback for permissions since
+	// permissions don't have such a requirement.)
+	//
 	// Gossip is only ever nil for unittests.
 	if s.ctx.Gossip != nil {
 		s.ctx.Gossip.RegisterCallback(gossip.KeyConfigAccounting, s.configGossipUpdate)
