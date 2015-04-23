@@ -60,8 +60,8 @@ type SplitRangeEvent struct {
 }
 
 // MergeRangeEvent occurs whenever a range is merged into another. This Event
-// contains two component event: an UpdateRangeEvent for the range which
-// absorbed the other, and a RemoveRangeEvent for the range that was absorbed.
+// contains two component events: an UpdateRangeEvent for the range which
+// subsumed the other, and a RemoveRangeEvent for the range that was subsumed.
 type MergeRangeEvent struct {
 	Merged  UpdateRangeEvent
 	Removed RemoveRangeEvent
@@ -82,19 +82,14 @@ type EndScanRangesEvent struct{}
 // StoreEventFeed is a feed of events that occur on a Store. Most of these
 // events are specific to a single range within the store.
 type StoreEventFeed struct {
-	baseStoreEventPublisher
 	f *util.Feed
 }
 
 // NewStoreEventFeed creates a new StoreEventFeed. Events can immediately be
 // published and Subscribers can immediately subscribe to the feed.
-func NewStoreEventFeed(stopper *util.Stopper) StoreEventFeed {
-	feed := util.StartFeed(stopper)
+func NewStoreEventFeed() StoreEventFeed {
 	return StoreEventFeed{
-		f: feed,
-		baseStoreEventPublisher: baseStoreEventPublisher{
-			publish: feed.Publish,
-		},
+		f: &util.Feed{},
 	}
 }
 
@@ -115,104 +110,53 @@ func NewStoreEventFeed(stopper *util.Stopper) StoreEventFeed {
 //			// ... other interesting types
 //			}
 //		}
-func (sef *StoreEventFeed) Subscribe() *util.Subscription {
+func (sef StoreEventFeed) Subscribe() *util.Subscription {
 	return sef.f.Subscribe()
 }
 
-// newBatch returns a new storeEventBatch which accumulates potential store
-// events as part of a batch.
-func (sef *StoreEventFeed) newBatch() *storeEventBatch {
-	seb := &storeEventBatch{
-		f:                 sef.f,
-		accumulatedEvents: make([]interface{}, 0, 3),
-	}
-	seb.baseStoreEventPublisher.publish = seb.accumulate
-	return seb
-}
-
-// storeEventBatch is used to accumulate potential Store events without
-// immediately publishing them to a feed.  This is intended for use in
-// operations that produce events but may be rolled back by an error.
-// Accumulated events will not be published to the actual feed until the
-// commit() method is called.
-type storeEventBatch struct {
-	baseStoreEventPublisher
-	f                 *util.Feed
-	accumulatedEvents []interface{}
-}
-
-// accumulate accepts a single event.
-func (seb *storeEventBatch) accumulate(event interface{}) {
-	seb.accumulatedEvents = append(seb.accumulatedEvents, event)
-}
-
-// commit publishes any accumulated events to the associated feed.
-func (seb *storeEventBatch) commit() {
-	for _, e := range seb.accumulatedEvents {
-		seb.f.Publish(e)
-	}
-	seb.accumulatedEvents = nil
-}
-
-// storeEventPublisher provides a set of methods for publishing specific Store
-// events to a feed. It is implemented by both StoreEventFeed and
-// storeEventBatch.
-type storeEventPublisher interface {
-	newRange(rng *Range)
-	updateRange(rng *Range, diff *proto.MVCCStats)
-	removeRange(rng *Range)
-	splitRange(rngOrig, rngNew *Range, diffOrig *proto.MVCCStats)
-	mergeRange(rngMerged, rngRemoved *Range, diffMerged *proto.MVCCStats)
-	beginScanRanges()
-	endScanRanges()
-}
-
-// baseStoreEventPublisher is a helper structure which implements the methods of
-// storeEventPublisher. Upon creation, these events are passed to the
-// baseStoreEventPublisher's 'publish' method. This structure is intended to be
-// embedded inside of another structure.
-type baseStoreEventPublisher struct {
-	publish func(event interface{})
+// closeFeed closes the underlying events feed.
+func (sef StoreEventFeed) closeFeed() {
+	sef.f.Close()
 }
 
 // newRange publishes a NewRangeEvent to this feed which describes the addition
 // of the supplied Range.
-func (sep baseStoreEventPublisher) newRange(rng *Range) {
-	sep.publish(makeNewRangeEvent(rng))
+func (sef StoreEventFeed) newRange(rng *Range) {
+	sef.f.Publish(makeNewRangeEvent(rng))
 }
 
 // uewRange publishes an UpdateRangeEvent to this feed which describes a change
 // to the supplied Range.
-func (sep baseStoreEventPublisher) updateRange(rng *Range, diff *proto.MVCCStats) {
-	sep.publish(makeUpdateRangeEvent(rng, diff))
+func (sef StoreEventFeed) updateRange(rng *Range, diff *proto.MVCCStats) {
+	sef.f.Publish(makeUpdateRangeEvent(rng, diff))
 }
 
 // removeRange publishes a RemoveRangeEvent to this feed which describes the
 // removal of the supplied Range.
-func (sep baseStoreEventPublisher) removeRange(rng *Range) {
-	sep.publish(makeRemoveRangeEvent(rng))
+func (sef StoreEventFeed) removeRange(rng *Range) {
+	sef.f.Publish(makeRemoveRangeEvent(rng))
 }
 
 // splitRange publishes a SplitRangeEvent to this feed which describes a split
 // involving the supplied Ranges.
-func (sep baseStoreEventPublisher) splitRange(rngOrig, rngNew *Range, diffOrig *proto.MVCCStats) {
-	sep.publish(makeSplitRangeEvent(rngOrig, rngNew, diffOrig))
+func (sef StoreEventFeed) splitRange(rngOrig, rngNew *Range, diffOrig *proto.MVCCStats) {
+	sef.f.Publish(makeSplitRangeEvent(rngOrig, rngNew, diffOrig))
 }
 
 // mergeRange publishes a MergeRangeEvent to this feed which describes a merger
 // of the supplied Ranges.
-func (sep baseStoreEventPublisher) mergeRange(rngMerged, rngRemoved *Range, diffMerged *proto.MVCCStats) {
-	sep.publish(makeMergeRangeEvent(rngMerged, rngRemoved, diffMerged))
+func (sef StoreEventFeed) mergeRange(rngMerged, rngRemoved *Range, diffMerged *proto.MVCCStats) {
+	sef.f.Publish(makeMergeRangeEvent(rngMerged, rngRemoved, diffMerged))
 }
 
 // beginScanRanges publishes a BeginScanRangesEvent to this feed.
-func (sep baseStoreEventPublisher) beginScanRanges() {
-	sep.publish(&BeginScanRangesEvent{})
+func (sef StoreEventFeed) beginScanRanges() {
+	sef.f.Publish(&BeginScanRangesEvent{})
 }
 
 // endScanRanges publishes an EndScanRangesEvent to this feed.
-func (sep baseStoreEventPublisher) endScanRanges() {
-	sep.publish(&EndScanRangesEvent{})
+func (sef StoreEventFeed) endScanRanges() {
+	sef.f.Publish(&EndScanRangesEvent{})
 }
 
 func makeNewRangeEvent(rng *Range) *NewRangeEvent {

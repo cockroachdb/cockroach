@@ -30,14 +30,14 @@ type testSubscriber struct {
 }
 
 func (ts *testSubscriber) readAll() {
-	for e := range ts.sub.Events {
+	for e := range ts.sub.Events() {
 		ts.received = append(ts.received, e)
 	}
 	close(ts.done)
 }
 
 func (ts *testSubscriber) readN(n int) {
-	for e := range ts.sub.Events {
+	for e := range ts.sub.Events() {
 		ts.received = append(ts.received, e)
 		if len(ts.received) == n {
 			break
@@ -63,7 +63,7 @@ func TestFeed(t *testing.T) {
 		stopper  = NewStopper()
 	)
 
-	feed := StartFeed(stopper)
+	feed := &Feed{}
 
 	// Add a number of subscribers.
 	for i := 0; i < numSubs; i++ {
@@ -75,6 +75,7 @@ func TestFeed(t *testing.T) {
 	for _, e := range events {
 		feed.Publish(e)
 	}
+	feed.Close()
 	stopper.Stop()
 
 	// Wait for stopper to finish, meaning all publishers have ceased.
@@ -100,7 +101,7 @@ func TestFeedUnsubscription(t *testing.T) {
 		stopper  = NewStopper()
 	)
 
-	feed := StartFeed(stopper)
+	feed := &Feed{}
 
 	// The strategy is to Publish every event twice. In the first pass, a
 	// subscriber is added before each event is published. In the second pass, a
@@ -124,6 +125,7 @@ func TestFeedUnsubscription(t *testing.T) {
 		testSubs[i].sub.Unsubscribe()
 		feed.Publish(e)
 	}
+	feed.Close()
 	stopper.Stop()
 
 	// Wait for stopper to finish, meaning all publishers have ceased.
@@ -158,8 +160,8 @@ func TestMultipleFeed(t *testing.T) {
 		stopper      = NewStopper()
 	)
 
-	intFeed := StartFeed(stopper)
-	stringFeed := StartFeed(stopper)
+	intFeed := &Feed{}
+	stringFeed := &Feed{}
 
 	for i := 0; i < numSubs; i++ {
 		// int subscriber
@@ -177,6 +179,8 @@ func TestMultipleFeed(t *testing.T) {
 		intFeed.Publish(intEvents[i])
 		stringFeed.Publish(stringEvents[i])
 	}
+	intFeed.Close()
+	stringFeed.Close()
 	stopper.Stop()
 
 	// Wait for stopper to finish, meaning all publishers have ceased.

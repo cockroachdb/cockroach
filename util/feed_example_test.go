@@ -23,14 +23,14 @@ import (
 
 func ExampleFeed() {
 	stopper := NewStopper()
-	feed := StartFeed(stopper)
+	feed := Feed{}
 
 	output := make([][]string, 5)
 	for i := 0; i < len(output); i++ {
 		sub := feed.Subscribe()
 		index := i
 		stopper.RunWorker(func() {
-			for event := range sub.Events {
+			for event := range sub.Events() {
 				// events must be cast from interface{}
 				output[index] = append(output[index], event.(string))
 			}
@@ -40,6 +40,7 @@ func ExampleFeed() {
 	feed.Publish("Event 1")
 	feed.Publish("Event 2")
 	feed.Publish("Event 3")
+	feed.Close()
 	stopper.Stop()
 
 	<-stopper.IsStopped()
