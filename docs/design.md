@@ -814,7 +814,7 @@ the same distributed transaction. The total number of nodes involved in
 the update is bounded by 2 + log N (i.e. 2 updates for meta1 and
 meta2, and up to log N updates to balance the range-spanning tree).
 The range corresponding to the root node of the tree is stored in
-*\0tree\_root*.
+*\0tree_root*.
 
 As an example, consider the following set of nine ranges and their
 associated range-spanning tree:
@@ -930,7 +930,7 @@ source replica(s) deleted if applicable.
 
 ```
 if splitting
-  SplitRange(split\_key): splits happen locally on range replicas and
+  SplitRange(split_key): splits happen locally on range replicas and
   only after being completed locally, are moved to new target replicas.
 else if merging
   Choose new replicas on same servers as target range replicas;
@@ -1248,11 +1248,11 @@ ZoneConfig {
  HDD = 2;
  MEM = 3;
  };
- optional DiskType disk\_type = 2;
+ optional DiskType disk_type = 2;
  } replicas = 1;
  // Minimum and maximum range sizes to control splits / merges.
- optional uint32 range\_min\_size = 2;
- optional uint32 range\_max\_size = 3;
+ optional uint32 range_min_size = 2;
+ optional uint32 range_max_size = 3;
 }
 ```
 
