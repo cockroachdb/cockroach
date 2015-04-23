@@ -18,6 +18,7 @@
 package client
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -46,7 +47,7 @@ func NewRPCSender(server string, certsDir string) (*RPCSender, error) {
 		return nil, err
 	}
 
-	var tlsConfig *security.TLSConfig
+	var tlsConfig *tls.Config
 	if certsDir == "" {
 		log.V(1).Infof("no certificates directory specified: using insecure TLS")
 		tlsConfig = security.LoadInsecureClientTLSConfig()
