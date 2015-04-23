@@ -16,6 +16,7 @@
 // Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 // +build !release
+
 // Package securitytest embeds the TLS test certificates.
 package securitytest
 
