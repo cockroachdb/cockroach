@@ -91,6 +91,10 @@ type Context struct {
 	// node clocks have necessarily passed it.
 	Linearizable bool
 
+	// Enables the experimental RPC server for use by the experimental
+	// RPC client.
+	ExperimentalRPCServer bool
+
 	// CacheSize is the amount of memory in bytes to use for caching data.
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64

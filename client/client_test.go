@@ -724,6 +724,8 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	}
 
 	s := &server.TestServer{}
+	s.Ctx = server.NewTestContext()
+	// s.Ctx.ExperimentalRPCServer = true
 	s.SkipBootstrap = exists
 	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
 	if err := s.Start(); err != nil {
@@ -731,6 +733,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	}
 
 	kv := client.NewKV(nil, client.CreateTestHTTPSender(s.ServingAddr()))
+	// kv := client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr()))
 	kv.User = storage.UserRoot
 
 	if exists {
