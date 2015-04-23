@@ -13,24 +13,18 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Ben Darnell
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package security
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/leaktest"
-)
-
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
+import "github.com/cockroachdb/cockroach/security/securitytest"
 
 func init() {
-	security.SetReadFileFn(securitytest.Asset)
+	ResetTest()
 }
 
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
+// ResetTest sets up the test environment. In particular, it embeds the
+// test_certs folder and makes the tls package load from there.
+func ResetTest() {
+	SetReadFileFn(securitytest.Asset)
 }

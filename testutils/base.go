@@ -21,14 +21,11 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/base"
-	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
 )
 
 // NewTestBaseContext creates a base context for testing.
-// We are using the embedded certs, so override the loader.
+// The certs file loader is overriden in individual main_test files.
 func NewTestBaseContext() *base.Context {
-	security.SetReadFileFn(securitytest.Asset)
 	return &base.Context{
 		Certs: "test_certs",
 	}

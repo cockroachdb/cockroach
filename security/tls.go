@@ -25,7 +25,6 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"path"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -50,31 +49,13 @@ func ResetReadFileFn() {
 	readFileFn = ioutil.ReadFile
 }
 
-// TLSConfig contains the TLS settings for a Cockroach node. Currently it's
-// just a wrapper for tls.Config. If config is nil, we don't use TLS.
-type TLSConfig struct {
-	sync.Mutex
-	config *tls.Config
-}
-
-// Config returns a copy of the TLS configuration.
-func (c *TLSConfig) Config() *tls.Config {
-	c.Lock()
-	defer c.Unlock()
-	if c.config == nil {
-		return nil
-	}
-	cc := *c.config
-	return &cc
-}
-
 // LoadTLSConfigFromDir creates a TLSConfig by loading our keys and certs from the
 // specified directory. The directory must contain the following files:
 // - ca.crt   -- the certificate of the cluster CA
 // - node.crt -- the certificate of this node; should be signed by the CA
 // - node.key -- the private key of this node
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+func LoadTLSConfigFromDir(certDir string) (*tls.Config, error) {
 	certPEM, err := readFileFn(path.Join(certDir, "node.crt"))
 	if err != nil {
 		return nil, err
@@ -94,7 +75,7 @@ func LoadTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 // - the certificate of the cluster CA,
 // - the certificate of this node (should be signed by the CA),
 // - the private key of this node.
-func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
+func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
@@ -107,38 +88,34 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*TLSConfig, error) {
 		return nil, err
 	}
 
-	return &TLSConfig{
-		config: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			// TODO(marc): clients are bad about this. We should switch to
-			// tls.RequireAndVerifyClientCert once client certs are properly set.
-			ClientAuth: tls.VerifyClientCertIfGiven,
-			RootCAs:    certPool,
-			ClientCAs:  certPool,
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		// TODO(marc): clients are bad about this. We should switch to
+		// tls.RequireAndVerifyClientCert once client certs are properly set.
+		ClientAuth: tls.VerifyClientCertIfGiven,
+		RootCAs:    certPool,
+		ClientCAs:  certPool,
 
-			// Use the default cipher suite from golang (RC4 is going away in 1.5).
-			// Prefer the server-specified suite.
-			PreferServerCipherSuites: true,
+		// Use the default cipher suite from golang (RC4 is going away in 1.5).
+		// Prefer the server-specified suite.
+		PreferServerCipherSuites: true,
 
-			// Lots of things don't support 1.2. Let's try 1.1.
-			MinVersion: tls.VersionTLS11,
+		// Lots of things don't support 1.2. Let's try 1.1.
+		MinVersion: tls.VersionTLS11,
 
-			// Should we disable session resumption? This may break forward secrecy.
-			// SessionTicketsDisabled: true,
-		},
+		// Should we disable session resumption? This may break forward secrecy.
+		// SessionTicketsDisabled: true,
 	}, nil
 }
 
 // LoadInsecureTLSConfig creates a TLSConfig that disables TLS.
-func LoadInsecureTLSConfig() *TLSConfig {
-	return &TLSConfig{
-		config: nil,
-	}
+func LoadInsecureTLSConfig() *tls.Config {
+	return nil
 }
 
 // LoadClientTLSConfigFromDir creates a client TLSConfig by loading the root CA certs from the
 // specified directory. The directory must contain ca.crt.
-func LoadClientTLSConfigFromDir(certDir string) (*TLSConfig, error) {
+func LoadClientTLSConfigFromDir(certDir string) (*tls.Config, error) {
 	caPEM, err := readFileFn(path.Join(certDir, "ca.crt"))
 	if err != nil {
 		return nil, err
@@ -148,7 +125,7 @@ func LoadClientTLSConfigFromDir(certDir string) (*TLSConfig, error) {
 
 // LoadClientTLSConfig creates a client TLSConfig from the supplied byte strings containing
 // the certificate of the cluster CA.
-func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
+func LoadClientTLSConfig(caPEM []byte) (*tls.Config, error) {
 	certPool := x509.NewCertPool()
 
 	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
@@ -156,23 +133,19 @@ func LoadClientTLSConfig(caPEM []byte) (*TLSConfig, error) {
 		return nil, err
 	}
 
-	return &TLSConfig{
-		config: &tls.Config{
-			RootCAs: certPool,
-			// TODO(marc): remove once we have a certificate deployment story in place.
-			InsecureSkipVerify: true,
+	return &tls.Config{
+		RootCAs: certPool,
+		// TODO(marc): remove once we have a certificate deployment story in place.
+		InsecureSkipVerify: true,
 
-			// Use only TLS v1.2
-			MinVersion: tls.VersionTLS12,
-		},
+		// Use only TLS v1.2
+		MinVersion: tls.VersionTLS12,
 	}, nil
 }
 
 // LoadInsecureClientTLSConfig creates a TLSConfig that disables TLS.
-func LoadInsecureClientTLSConfig() *TLSConfig {
-	return &TLSConfig{
-		config: &tls.Config{
-			InsecureSkipVerify: true,
-		},
+func LoadInsecureClientTLSConfig() *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: true,
 	}
 }

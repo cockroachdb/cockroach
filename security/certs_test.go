@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -31,7 +30,7 @@ import (
 func TestGenerateCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.SetReadFileFn(securitytest.Asset)
+	defer security.ResetTest()
 
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
@@ -69,7 +68,7 @@ func TestGenerateCerts(t *testing.T) {
 func TestUseCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.SetReadFileFn(securitytest.Asset)
+	defer security.ResetTest()
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 

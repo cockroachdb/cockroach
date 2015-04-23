@@ -39,6 +39,13 @@ type Context struct {
 	// Certs specifies a directory containing RSA key and x509 certs.
 	Certs string
 
+	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
+	clientTLSConfig *tls.Config
+	// serverTLSConfig is the loaded server tlsConfig. It is initialized lazily.
+	serverTLSConfig *tls.Config
+	// Protects both clientTLSConfig and serverTLSConfig.
+	tlsConfigMu sync.Mutex
+
 	// httpClient is a lazily-initialized http client.
 	// It should be accessed through Context.GetHTTPClient() which will
 	// initialize if needed.
@@ -52,8 +59,60 @@ func (ctx *Context) InitDefaults() {
 	ctx.Certs = defaultCertsDir
 }
 
+// GetClientTLSConfig returns the context client TLS config, initializing it
+// if needed. It uses the context Certs field.
+// If Certs is empty, load insecure configs.
+func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
+	ctx.tlsConfigMu.Lock()
+	defer ctx.tlsConfigMu.Unlock()
+
+	if ctx.clientTLSConfig != nil {
+		return ctx.clientTLSConfig, nil
+	}
+
+	if ctx.Certs == "" {
+		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
+	} else {
+		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
+		if err != nil {
+			return nil, util.Errorf("error setting up client TLS config: %s", err)
+		}
+		ctx.clientTLSConfig = cfg
+	}
+
+	return ctx.clientTLSConfig, nil
+}
+
+// GetServerTLSConfig returns the context server TLS config, initializing it
+// if needed. It uses the context Certs field.
+// If Certs is empty, load insecure configs.
+func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
+	ctx.tlsConfigMu.Lock()
+	defer ctx.tlsConfigMu.Unlock()
+
+	if ctx.serverTLSConfig != nil {
+		return ctx.serverTLSConfig, nil
+	}
+
+	if ctx.Certs == "" {
+		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		ctx.serverTLSConfig = security.LoadInsecureTLSConfig()
+	} else {
+		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+		cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
+		if err != nil {
+			return nil, util.Errorf("error setting up server TLS config: %s", err)
+		}
+		ctx.serverTLSConfig = cfg
+	}
+
+	return ctx.serverTLSConfig, nil
+}
+
 // GetHTTPClient returns the context http client, initializing it
-// if needed. It uses the context Certs.
+// if needed. It uses the context client TLS config.
 func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 	ctx.httpClientMu.Lock()
 	defer ctx.httpClientMu.Unlock()
@@ -62,17 +121,9 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 		return ctx.httpClient, nil
 	}
 
-	var tlsConfig *tls.Config
-	if ctx.Certs == "" {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		tlsConfig = security.LoadInsecureClientTLSConfig().Config()
-	} else {
-		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
-		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
-		if err != nil {
-			return nil, util.Errorf("error setting up client TLS config: %s", err)
-		}
-		tlsConfig = cfg.Config()
+	tlsConfig, err := ctx.GetClientTLSConfig()
+	if err != nil {
+		return nil, err
 	}
 	ctx.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 

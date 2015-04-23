@@ -20,7 +20,6 @@ package kv_test
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"testing"
 
@@ -33,10 +32,10 @@ import (
 	yaml "gopkg.in/yaml.v1"
 )
 
-func createTestClient(addr string) *client.KV {
+func createTestClient(t *testing.T, addr string) *client.KV {
 	httpClient, err := testutils.NewTestHTTPClient()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 	return client.NewKV(nil, client.NewHTTPSender(addr, httpClient))
 }
@@ -47,7 +46,7 @@ func TestKVDBCoverage(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	key := proto.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -178,7 +177,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		{&proto.InternalTruncateLogRequest{}, &proto.InternalTruncateLogResponse{}},
 	}
 	// Verify non-public methods experience bad request errors.
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	for i, test := range testCases {
 		test.args.Header().Key = proto.Key("a")
 		err := kvClient.Run(client.Call{Args: test.args, Reply: test.reply})
@@ -196,7 +195,7 @@ func TestKVDBEndTransactionWithTriggers(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 	txnOpts := &client.TransactionOptions{Name: "test"}
 	err := kvClient.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Make an EndTransaction request which would fail if not
@@ -297,7 +296,7 @@ func TestKVDBTransaction(t *testing.T) {
 	addr, _, stopper := startServer(t)
 	defer stopper.Stop()
 
-	kvClient := createTestClient(addr)
+	kvClient := createTestClient(t, addr)
 
 	key := proto.Key("db-txn-test")
 	value := []byte("value")

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -49,7 +48,6 @@ func StartTestServer(t *testing.T) *TestServer {
 // Certs with the test certs directory.
 // We need to override the certs loader.
 func NewTestContext() *Context {
-	security.SetReadFileFn(securitytest.Asset)
 	ctx := NewContext()
 
 	// MaxOffset is the maximum offset for clocks in the cluster.

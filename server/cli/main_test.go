@@ -13,24 +13,15 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Ben Darnell
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
-package storage
+package cli
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
-	"github.com/cockroachdb/cockroach/util/leaktest"
 )
-
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
 
 func init() {
 	security.SetReadFileFn(securitytest.Asset)
-}
-
-func TestMain(m *testing.M) {
-	leaktest.TestMainWithLeakCheck(m)
 }

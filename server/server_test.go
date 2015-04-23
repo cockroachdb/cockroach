@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -181,7 +180,10 @@ func TestAcceptEncoding(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	// We can't use the standard test client. Create our own.
-	tlsConfig := security.LoadInsecureClientTLSConfig().Config()
+	tlsConfig, err := testContext.GetServerTLSConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig:    tlsConfig,

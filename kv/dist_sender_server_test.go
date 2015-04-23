@@ -45,7 +45,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stop()
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(t, s.ServingAddr())
 	db.User = storage.UserRoot
 
 	// Create an intent on the meta1 record by writing directly to the
@@ -89,7 +89,7 @@ func setupMultipleRanges(t *testing.T) (*server.TestServer, *client.KV) {
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
-	db := createTestClient(s.ServingAddr())
+	db := createTestClient(t, s.ServingAddr())
 	db.User = storage.UserRoot
 
 	// Split the keyspace at "b".
