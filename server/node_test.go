@@ -49,7 +49,7 @@ func createTestNode(addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t
 	// Load the TLS config from our test certs. They're embedded in the
 	// test binary and calls to the file system have been mocked out,
 	// see main_test.go.
-	tlsConfig, err := security.LoadTLSConfigFromDir("test_certs")
+	tlsConfig, err := security.LoadTLSConfigFromDir(security.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}

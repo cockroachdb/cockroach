@@ -30,6 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/util"
 )
 
+const (
+	// EmbeddedCertsDir is the certs directory inside embedded assets.
+	EmbeddedCertsDir = "test_certs"
+)
+
 // readFileFn is used to mock out file system access during tests.
 var readFileFn = ioutil.ReadFile
 

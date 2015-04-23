@@ -13,15 +13,29 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
+// Author: Marc Berhault (marc@cockroachlabs.com)
 
-package server
+package testutils
 
 import (
+	"net/http"
+
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/security/securitytest"
 )
 
-func init() {
+// NewTestBaseContext creates a base context for testing.
+// We are using the embedded certs, so override the loader.
+func NewTestBaseContext() *base.Context {
 	security.SetReadFileFn(securitytest.Asset)
+	return &base.Context{
+		Certs: "test_certs",
+	}
+}
+
+// NewTestHTTPClient creates a HTTP client on the fly using a test context.
+// Useful when contexts don't need to be reused.
+func NewTestHTTPClient() (*http.Client, error) {
+	return NewTestBaseContext().GetHTTPClient()
 }

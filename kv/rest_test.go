@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 )
@@ -521,7 +522,11 @@ func httpDo(addr, method, path string, body io.Reader) (*http.Response, error) {
 }
 
 func httpDoReq(req *http.Request) (*http.Response, error) {
-	return client.CreateTestHTTPClient().Do(req)
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	return httpClient.Do(req)
 }
 
 // statusText appends a new line because go's default http error writer adds a new line.

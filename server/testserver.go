@@ -22,6 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -45,8 +47,9 @@ func StartTestServer(t *testing.T) *TestServer {
 
 // NewTestContext returns a context for testing. It overrides the
 // Certs with the test certs directory.
-// TODO(marc): use embedded certs.
+// We need to override the certs loader.
 func NewTestContext() *Context {
+	security.SetReadFileFn(securitytest.Asset)
 	ctx := NewContext()
 
 	// MaxOffset is the maximum offset for clocks in the cluster.
@@ -59,7 +62,7 @@ func NewTestContext() *Context {
 	// in their init to mock out the file system calls for calls to AssetFS,
 	// which has the test certs compiled in. Typically this is done
 	// once per package, in main_test.go.
-	ctx.Certs = "test_certs"
+	ctx.Certs = security.EmbeddedCertsDir
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).

@@ -20,19 +20,25 @@ package kv_test
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/kv"
 	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v1"
 )
 
 func createTestClient(addr string) *client.KV {
-	return client.NewKV(nil, client.CreateTestHTTPSender(addr))
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return client.NewKV(nil, client.NewHTTPSender(addr, httpClient))
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the

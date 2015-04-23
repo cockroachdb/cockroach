@@ -38,14 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/util/log"
 )
 
-func newTestContext() *Context {
-	newContext := NewContext()
-	// The certs are compiled in, see main_test.go.
-	newContext.Certs = "test_certs"
-	return newContext
-}
-
-var testContext = newTestContext()
+var testContext = NewTestContext()
 
 // createTestConfigFile creates a temporary file and writes the
 // testConfig yaml data to it. The caller is responsible for
@@ -162,7 +155,11 @@ func TestHealth(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
 	url := "https://" + s.ServingAddr() + healthPath
-	resp, err := client.CreateTestHTTPClient().Get(url)
+	httpClient, err := testContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		t.Fatalf("error requesting health at %s: %s", url, err)
 	}

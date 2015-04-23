@@ -28,7 +28,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
+	"github.com/cockroachdb/cockroach/testutils"
 )
 
 var (
@@ -101,13 +101,17 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		{methodDelete, "/schema/foo", nil, http.StatusOK, nil},
 		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
 	}
+	httpClient, err := testutils.NewTestHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range testCases {
 		addr := "https://" + serverAddr + tc.path
 		req, err := http.NewRequest(tc.method, addr, tc.body)
 		if err != nil {
 			t.Fatalf("[%s] %s: error creating request: %v", tc.method, tc.path, err)
 		}
-		resp, err := client.CreateTestHTTPClient().Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			t.Fatalf("[%s] %s: error requesting %s: %s", tc.method, tc.path, addr, err)
 		}

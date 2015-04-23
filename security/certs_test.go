@@ -21,8 +21,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/server"
 	"github.com/cockroachdb/cockroach/util"
 )
@@ -31,7 +31,7 @@ import (
 func TestGenerateCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.ResetTest()
+	defer security.SetReadFileFn(securitytest.Asset)
 
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
@@ -69,7 +69,7 @@ func TestGenerateCerts(t *testing.T) {
 func TestUseCerts(t *testing.T) {
 	// Do not mock cert access for this test.
 	security.ResetReadFileFn()
-	defer security.ResetTest()
+	defer security.SetReadFileFn(securitytest.Asset)
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 
@@ -94,8 +94,10 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// Start a test server and override certs.
-	testCtx := server.NewTestContext()
+	// We use a real context since we want generated certs.
+	testCtx := server.NewContext()
 	testCtx.Certs = certsDir
+	testCtx.Addr = ":0"
 	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -115,7 +117,7 @@ func TestUseCerts(t *testing.T) {
 	}
 
 	// New client. With certs this time.
-	httpClient, err = client.NewHTTPClient(certsDir /* with certs */)
+	httpClient, err = testCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

@@ -15,20 +15,22 @@
 //
 // Author: jqmp (jaqueramaphan@gmail.com)
 
-package security
+package security_test
 
 import (
 	"crypto/x509"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/security"
 )
 
 func TestLoadTLSConfig(t *testing.T) {
-	wrapperConfig, err := LoadTLSConfigFromDir("test_certs")
+	wrapperConfig, err := security.LoadTLSConfigFromDir("test_certs")
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}
 
-	config := wrapperConfig.config
+	config := wrapperConfig.Config()
 	if config == nil {
 		t.Fatalf("TLS config unexpectedly nil")
 	}

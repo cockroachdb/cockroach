@@ -26,7 +26,7 @@ import (
 
 // NewTestContext returns a rpc.Context for testing.
 func NewTestContext(t *testing.T) *Context {
-	tlsConfig, err := security.LoadTLSConfigFromDir("test_certs")
+	tlsConfig, err := security.LoadTLSConfigFromDir(security.EmbeddedCertsDir)
 	if err != nil {
 		t.Fatal(err)
 	}
