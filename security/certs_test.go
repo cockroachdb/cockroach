@@ -29,6 +29,10 @@ import (
 
 // This is just the mechanics of certs generation.
 func TestGenerateCerts(t *testing.T) {
+	// Do not mock cert access for this test.
+	security.ResetReadFileFn()
+	defer security.ResetTest()
+
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 
@@ -63,6 +67,9 @@ func TestGenerateCerts(t *testing.T) {
 // This is a fairly high-level test of CA and node certificates.
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
+	// Do not mock cert access for this test.
+	security.ResetReadFileFn()
+	defer security.ResetTest()
 	certsDir := util.CreateTempDir(t, "certs_test")
 	defer util.CleanupDir(certsDir)
 

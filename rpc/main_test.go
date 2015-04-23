@@ -13,24 +13,15 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: marc@cockroachlabs.com
+// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
 
 package rpc
 
 import (
-	"testing"
-
 	"github.com/cockroachdb/cockroach/security"
-	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 )
 
-// NewTestContext returns a rpc.Context for testing.
-func NewTestContext(t *testing.T) *Context {
-	tlsConfig, err := security.LoadTLSConfigFromDir("test_certs")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	clock := hlc.NewClock(hlc.UnixNano)
-	return NewContext(clock, tlsConfig, nil)
+func init() {
+	security.SetReadFileFn(securitytest.Asset)
 }
