@@ -730,7 +730,7 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 		b.Fatalf("Could not start server: %v", err)
 	}
 
-	kv := createTestNotifyClient(s.ServingAddr())
+	kv := client.NewKV(nil, client.CreateTestHTTPSender(s.ServingAddr()))
 	kv.User = storage.UserRoot
 
 	if exists {
