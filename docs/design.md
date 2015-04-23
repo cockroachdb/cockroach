@@ -928,42 +928,34 @@ source replica(s) deleted if applicable.
 
 **Coordinator** (leader replica)
 
-> if splitting
->
-> SplitRange(split\_key): splits happen locally on range replicas and
-> only after being completed locally, are moved to new target replicas.
->
-> else if merging
->
-> Choose new replicas on same servers as target range replicas; add to
-> replica set.
->
-> else if rebalancing || recovering
->
-> Choose new replica(s) on least loaded servers; add to replica set.
+```
+if splitting
+  SplitRange(split\_key): splits happen locally on range replicas and
+  only after being completed locally, are moved to new target replicas.
+else if merging
+  Choose new replicas on same servers as target range replicas;
+  add to replica set.
+else if rebalancing || recovering
+  Choose new replica(s) on least loaded servers; add to replica set.
+```
 
 **New Replica**
 
-> *Bring replica up to date*:
->
-> if all info can be read from replicated log
->
-> copy replicated log
->
-> else
->
-> Snapshot source replica
->
-> Send successive ReadRange requests to source replica referencing
-> snapshot
->
-> if merging
->
-> combine ranges on all replicas
->
-> else if rebalancing || recovering
->
-> remove old range replica(s)
+*Bring replica up to date:*
+
+```
+if all info can be read from replicated log
+  copy replicated log
+else
+  snapshot source replica
+  send successive ReadRange requests to source replica
+  referencing snapshot
+
+if merging
+  combine ranges on all replicas
+else if rebalancing || recovering
+  remove old range replica(s)
+```
 
 RoachNodes split ranges when the total data in a range exceeds a
 configurable maximum threshold. Similarly, ranges are merged when the
