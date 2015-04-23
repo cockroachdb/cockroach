@@ -296,7 +296,7 @@ func (tc *TxnCoordSender) sendOne(call client.Call) {
 		tc.cleanupTxn(&t.Txn, nil)
 	case *proto.OpRequiresTxnError:
 		// Run a one-off transaction with that single command.
-		log.Infof("%s: auto-wrapping in txn and re-executing", call.Method())
+		log.V(1).Infof("%s: auto-wrapping in txn and re-executing", call.Method())
 		txnOpts := &client.TransactionOptions{
 			Name: "auto-wrap",
 		}
