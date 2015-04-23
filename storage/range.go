@@ -1995,10 +1995,10 @@ func (r *Range) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSpli
 		// Note that this put must go first in order to locate the
 		// transaction record on the correct range.
 		desc1Key := engine.RangeDescriptorKey(newDesc.StartKey)
-		txn.Prepare(client.PutProtoCall(desc1Key, newDesc))
+		txn.Prepare(updateRangeDescriptorCall(desc1Key, nil, newDesc))
 		// Update existing range descriptor for first half of split.
 		desc2Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		txn.Prepare(client.PutProtoCall(desc2Key, &updatedDesc))
+		txn.Prepare(updateRangeDescriptorCall(desc2Key, desc, &updatedDesc))
 		// Update range descriptor addressing record(s).
 		calls, err := SplitRangeAddressing(newDesc, &updatedDesc)
 		if err != nil {
@@ -2115,9 +2115,10 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 	if err := r.rm.DB().RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Update the range descriptor for the receiving range.
 		desc1Key := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		txn.Prepare(client.PutProtoCall(desc1Key, &updatedDesc))
+		txn.Prepare(updateRangeDescriptorCall(desc1Key, desc, &updatedDesc))
 
 		// Remove the range descriptor for the deleted range.
+		// TODO(bdarnell): need a conditional delete?
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
 		txn.Prepare(client.DeleteCall(desc2Key))
 
@@ -2198,7 +2199,8 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		// Important: the range descriptor must be the first thing touched in the transaction
 		// so the transaction record is co-located with the range being modified.
 		descKey := engine.RangeDescriptorKey(updatedDesc.StartKey)
-		txn.Prepare(client.PutProtoCall(descKey, &updatedDesc))
+
+		txn.Prepare(updateRangeDescriptorCall(descKey, desc, &updatedDesc))
 
 		// TODO(bdarnell): call UpdateRangeAddressing
 
@@ -2226,6 +2228,43 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 		return util.Errorf("change replicas of %d failed: %s", desc.RaftID, err)
 	}
 	return nil
+}
+
+// updateRangeDescriptorCall returns a client.Call to execute a ConditionalPut
+// on the range descriptor.
+// The conditional put verifies that changes to the range descriptor are made
+// in a well-defined order, preventing a scenario where a wayward replica which
+// is no longer part of the original Raft group comes back online to form a splinter
+// group with a node which was also a former replica, and hijacks the range
+// descriptor. This is a last line of defense; other mechanisms should prevent
+// rogue replicas from getting this far (see #768).
+func updateRangeDescriptorCall(descKey proto.Key, oldDesc, newDesc *proto.RangeDescriptor) client.Call {
+	var oldValue *proto.Value
+	if oldDesc != nil {
+		oldData, err := gogoproto.Marshal(oldDesc)
+		if err != nil {
+			return client.Call{Err: err}
+		}
+		oldValue = &proto.Value{Bytes: oldData}
+	}
+
+	newData, err := gogoproto.Marshal(newDesc)
+	if err != nil {
+		return client.Call{Err: err}
+	}
+	newValue := proto.Value{Bytes: newData}
+	newValue.InitChecksum(descKey)
+
+	return client.Call{
+		Args: &proto.ConditionalPutRequest{
+			RequestHeader: proto.RequestHeader{
+				Key: descKey,
+			},
+			Value:    newValue,
+			ExpValue: oldValue,
+		},
+		Reply: &proto.ConditionalPutResponse{},
+	}
 }
 
 // WaitForElection waits for an election event to reach this Range.
