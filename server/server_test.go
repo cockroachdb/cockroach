@@ -40,7 +40,8 @@ import (
 
 func newTestContext() *Context {
 	newContext := NewContext()
-	newContext.Certs = security.EmbeddedPrefix + "test_certs"
+	// The certs are compiled in, see main_test.go.
+	newContext.Certs = "test_certs"
 	return newContext
 }
 

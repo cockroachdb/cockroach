@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/storage"
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
@@ -55,8 +54,12 @@ func NewTestContext() *Context {
 	// uncertainty intervals.
 	ctx.MaxOffset = 0
 
-	// Load certs from embedded files.
-	ctx.Certs = security.EmbeddedPrefix + "test_certs"
+	// Load test certs. In addition, the tests requiring certs
+	// need to call security.SetReadFileFn(securitytest.Asset)
+	// in their init to mock out the file system calls for calls to AssetFS,
+	// which has the test certs compiled in. Typically this is done
+	// once per package, in main_test.go.
+	ctx.Certs = "test_certs"
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port.
 	// Call TestServer.ServingAddr() for the full address (including bound port).

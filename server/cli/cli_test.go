@@ -23,7 +23,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
 )
 
@@ -49,8 +48,8 @@ func (c cliTest) Run(line string) {
 	var args []string
 	args = append(args, a[0])
 	args = append(args, fmt.Sprintf("-addr=%s", c.ServingAddr()))
-	// Always load server certs. Not sure if this path is a good assumption though.
-	args = append(args, fmt.Sprintf("-certs=%s", security.EmbeddedPrefix+"test_certs"))
+	// Always load test certs.
+	args = append(args, fmt.Sprintf("-certs=%s", "test_certs"))
 	args = append(args, a[1:]...)
 
 	fmt.Printf("%s\n", line)

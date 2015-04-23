@@ -20,10 +20,16 @@ package storage
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/security/securitytest"
 	"github.com/cockroachdb/cockroach/util/leaktest"
 )
 
 //go:generate ../util/leaktest/add-leaktest.sh *_test.go
+
+func init() {
+	security.SetReadFileFn(securitytest.Asset)
+}
 
 func TestMain(m *testing.M) {
 	leaktest.TestMainWithLeakCheck(m)
