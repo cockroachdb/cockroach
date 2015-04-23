@@ -1268,8 +1268,33 @@ func raftEntryFormatter(data []byte) string {
 	return s
 }
 
+// GetStatus fetches the latest store status from the stored value on the cluster.
+// Returns nil if the scanner has not yet run.  The scanner runs once every
+// ctx.ScanInterval.
+func (s *Store) GetStatus() (*proto.StoreStatus, error) {
+	if s.scanner.Count() == 0 {
+		// The scanner hasn't completed a first run yet.
+		return nil, nil
+	}
+	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
+	call := client.GetCall(key)
+	reply := call.Reply.(*proto.GetResponse)
+	if err := s.ctx.DB.Run(call); err != nil {
+		return nil, err
+	}
+	if reply.Value == nil {
+		return nil, util.Errorf("unexpected empty status for store %v on node %v", s.Ident.StoreID, s.Ident.NodeID)
+	}
+	storeStatus := &proto.StoreStatus{}
+	if err := gogoproto.Unmarshal(reply.Value.GetBytes(), storeStatus); err != nil {
+		return nil, util.Errorf("could not unmarshal store status: %+v", reply.Value)
+	}
+	return storeStatus, nil
+}
+
 // WaitForRangeScanCompletion waits until the next range scan is complete and
-// returns the total number of scans completed so far.
+// returns the total number of scans completed so far.  This is exposed for use
+// in unit tests.
 func (s *Store) WaitForRangeScanCompletion() int64 {
 	return s.scanner.WaitForScanCompletion()
 }

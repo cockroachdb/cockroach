@@ -184,5 +184,5 @@ func TestStoreStatus(t *testing.T) {
 	}
 	store.WaitForRangeScanCompletion()
 	store.WaitForRangeScanCompletion()
-	oldstats = compareStoreStatus(t, store, expectedStoreStatus, 3)
+	compareStoreStatus(t, store, expectedStoreStatus, 3)
 }

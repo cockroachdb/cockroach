@@ -89,14 +89,25 @@ func (ls *LocalSender) RemoveStore(s *storage.Store) {
 // The specified function is invoked with each store in turn. Stores are
 // visited in a random order.
 func (ls *LocalSender) VisitStores(visitor func(s *storage.Store) error) error {
-	ls.mu.Lock()
-	defer ls.mu.Unlock()
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
 	for _, s := range ls.storeMap {
 		if err := visitor(s); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// GetStoreIDs returns all the current store ids in a random order.
+func (ls *LocalSender) GetStoreIDs() []proto.StoreID {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+	storeIDs := make([]proto.StoreID, 0, len(ls.storeMap))
+	for storeID := range ls.storeMap {
+		storeIDs = append(storeIDs, storeID)
+	}
+	return storeIDs
 }
 
 // Send implements the client.KVSender interface. The store is looked
