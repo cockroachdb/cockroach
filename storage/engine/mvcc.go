@@ -438,7 +438,7 @@ func MVCCGet(engine Engine, key proto.Key, timestamp proto.Timestamp, consistent
 		return nil, emptyKeyError()
 	}
 
-	// Create a function which scans for the first key between next and end keys.
+	// Create a function which scans for the first key between start and end keys.
 	getValue := func(engine Engine, start, end proto.EncodedKey,
 		msg gogoproto.Message) (proto.EncodedKey, error) {
 		iter := engine.NewIterator()
