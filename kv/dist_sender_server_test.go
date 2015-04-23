@@ -75,7 +75,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	select {
 	case <-success:
 		// Hurrah!
-	case <-time.After(1 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Errorf("get request did not succeed in face of range metadata intent")
 	}
 }
