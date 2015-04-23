@@ -252,6 +252,43 @@ func TestScannerTiming(t *testing.T) {
 	}
 }
 
+// errorNotCloseTo logs an error when the actual value is not close to the expected value
+func errorNotCloseTo(expected, actual time.Duration) {
+	delta := 1 * time.Millisecond
+	if actual < expected-delta || actual > expected+delta {
+		log.Errorf("Expected duration %s, got %s", expected, actual)
+	}
+}
+
+// TestPaceInterval tests that paceInterval returns the correct interval.
+func TestPaceInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	const count = 3
+	durations := []time.Duration{
+		30 * time.Millisecond,
+		60 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+	for _, duration := range durations {
+		startTime := time.Now()
+		iter := newTestIterator(count)
+		s := newRangeScanner(duration, iter)
+		interval := s.paceInterval(startTime)
+		errorNotCloseTo(duration/count, interval)
+		// The iterator is empty
+		iter = newTestIterator(0)
+		s = newRangeScanner(duration, iter)
+		interval = s.paceInterval(startTime)
+		errorNotCloseTo(duration, interval)
+		iter = newTestIterator(count)
+		s = newRangeScanner(duration, iter)
+		// Sleep and waste away all the time
+		time.Sleep(duration)
+		interval = s.paceInterval(startTime)
+		errorNotCloseTo(0, interval)
+	}
+}
+
 // TestScannerEmptyIterator verifies that an empty iterator doesn't busy loop.
 func TestScannerEmptyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)

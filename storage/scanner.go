@@ -138,7 +138,7 @@ func (rs *rangeScanner) paceInterval(start time.Time) time.Duration {
 		count = 1
 	}
 	interval := time.Duration(remainingNanos / int64(count))
-	log.V(6).Infof("next range scan iteration in %s", interval)
+	log.V(6).Infof("pace interval set to %s", interval)
 	return interval
 }
 
