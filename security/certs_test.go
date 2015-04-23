@@ -96,7 +96,7 @@ func TestUseCerts(t *testing.T) {
 	// We use a real context since we want generated certs.
 	testCtx := server.NewContext()
 	testCtx.Certs = certsDir
-	testCtx.Addr = ":0"
+	testCtx.Addr = "127.0.0.1:0"
 	s := &server.TestServer{Ctx: testCtx}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
