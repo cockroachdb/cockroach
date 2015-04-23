@@ -42,7 +42,9 @@ const (
 	defaultMaxOffset      = 250 * time.Millisecond
 	defaultGossipInterval = 2 * time.Second
 	defaultCacheSize      = 1 << 30 // GB
-	defaultScanInterval   = 10 * time.Minute
+	// defaultScanInterval is the default value for the scan interval.
+	// command line flag.
+	defaultScanInterval = 10 * time.Minute
 )
 
 // Context holds parameters needed to setup a server.
