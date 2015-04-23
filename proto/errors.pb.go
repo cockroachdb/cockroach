@@ -437,7 +437,7 @@ func (m *ErrorDetail) GetConditionFailed() *ConditionFailedError {
 	return nil
 }
 
-// Error is a generic represesentation including a string message
+// Error is a generic representation including a string message
 // and information about retryability.
 type Error struct {
 	// Message is a human-readable error message.
