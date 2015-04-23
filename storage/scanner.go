@@ -18,6 +18,7 @@
 package storage
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -75,9 +76,12 @@ type rangeScanner struct {
 	iter     rangeIterator  // Iterator to implement scan of ranges
 	queues   []rangeQueue   // Range queues managed by this scanner
 	removed  chan *Range    // Ranges to remove from queues
-	count    int64          // Count of times through the scanning loop
 	stats    unsafe.Pointer // Latest store stats object; updated atomically
 	scanFn   func()         // Function called at each complete scan iteration
+	// Count of times through the scanning loop but locked by the completedScan
+	// mutex.
+	count         int64
+	completedScan *sync.Cond
 }
 
 // newRangeScanner creates a new range scanner with the provided loop interval,
@@ -85,11 +89,12 @@ type rangeScanner struct {
 // loop that function will be called.
 func newRangeScanner(interval time.Duration, iter rangeIterator, scanFn func()) *rangeScanner {
 	return &rangeScanner{
-		interval: interval,
-		iter:     iter,
-		removed:  make(chan *Range, 10),
-		stats:    unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
-		scanFn:   scanFn,
+		interval:      interval,
+		iter:          iter,
+		removed:       make(chan *Range, 10),
+		stats:         unsafe.Pointer(&storeStats{RangeCount: iter.EstimatedCount()}),
+		scanFn:        scanFn,
+		completedScan: sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -118,7 +123,9 @@ func (rs *rangeScanner) Stats() storeStats {
 // Count returns the number of times the scanner has cycled through
 // all ranges.
 func (rs *rangeScanner) Count() int64 {
-	return atomic.LoadInt64(&rs.count)
+	rs.completedScan.L.Lock()
+	defer rs.completedScan.L.Unlock()
+	return rs.count
 }
 
 // RemoveRange removes a range from any range queues the scanner may
@@ -126,6 +133,18 @@ func (rs *rangeScanner) Count() int64 {
 // when a range is removed (e.g. rebalanced or merged).
 func (rs *rangeScanner) RemoveRange(rng *Range) {
 	rs.removed <- rng
+}
+
+// WaitForScanCompletion waits until the end of the next scan and returns the
+// total number of scans completed so far.
+func (rs *rangeScanner) WaitForScanCompletion() int64 {
+	rs.completedScan.L.Lock()
+	defer rs.completedScan.L.Unlock()
+	initalValue := rs.count
+	for rs.count == initalValue {
+		rs.completedScan.Wait()
+	}
+	return rs.count
 }
 
 // scanLoop loops endlessly, scanning through ranges available via
@@ -165,14 +184,17 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 					// Otherwise, we're done with the iteration. Reset iteration and start time.
 					rs.iter.Reset()
 					start = time.Now()
-					// Increment iteration counter.
-					atomic.AddInt64(&rs.count, 1)
 					// Store the most recent scan results in the scanner's stats.
 					atomic.StorePointer(&rs.stats, unsafe.Pointer(stats))
 					stats = &storeStats{}
 					if rs.scanFn != nil {
 						rs.scanFn()
 					}
+					// Increment iteration count.
+					rs.completedScan.L.Lock()
+					rs.count++
+					rs.completedScan.Broadcast()
+					rs.completedScan.L.Unlock()
 					log.V(6).Infof("reset range scan iteration")
 				}
 				stopper.FinishTask()

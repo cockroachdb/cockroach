@@ -1,0 +1,188 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+//
+// Author: Bram Gruneir (bram.gruneir@gmail.com)
+
+package storage_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/proto"
+	"github.com/cockroachdb/cockroach/storage"
+	"github.com/cockroachdb/cockroach/storage/engine"
+	"github.com/cockroachdb/cockroach/util/hlc"
+	"github.com/cockroachdb/cockroach/util/leaktest"
+	gogoproto "github.com/gogo/protobuf/proto"
+)
+
+// compareStoreStatus ensures that the actual store status for the passed in
+// store is updated correctly. It checks that the StoreID, NodeID and
+// RangeCount are exactly correct and that the bytes and counts for Live, Key
+// and Val are at least the expected value.  The latest actual stats are
+// returned.
+func compareStoreStatus(t *testing.T, store *storage.Store, expectedStoreStatus *proto.StoreStatus, testNumber int) *proto.StoreStatus {
+	storeStatusKey := engine.StoreStatusKey(int32(store.Ident.StoreID))
+	gArgs, gReply := getArgs(storeStatusKey, 1, store.Ident.StoreID)
+	if err := store.ExecuteCmd(gArgs, gReply); err != nil {
+		t.Fatalf("%v: failure getting store status: %s", testNumber, err)
+	}
+	if gReply.Value == nil {
+		t.Errorf("%v: could not find store status at: %s", testNumber, storeStatusKey)
+	}
+	storeStatus := &proto.StoreStatus{}
+	if err := gogoproto.Unmarshal(gReply.Value.GetBytes(), storeStatus); err != nil {
+		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, gReply)
+	}
+	if expectedStoreStatus.StoreID != storeStatus.StoreID {
+		t.Errorf("%v: actual store ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if expectedStoreStatus.NodeID != storeStatus.NodeID {
+		t.Errorf("%v: actual node ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if expectedStoreStatus.RangeCount != storeStatus.RangeCount {
+		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.LiveBytes < expectedStoreStatus.Stats.LiveBytes {
+		t.Errorf("%v: actual Live Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.KeyBytes < expectedStoreStatus.Stats.KeyBytes {
+		t.Errorf("%v: actual Key Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.ValBytes < expectedStoreStatus.Stats.ValBytes {
+		t.Errorf("%v: actual Val Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.LiveCount < expectedStoreStatus.Stats.LiveCount {
+		t.Errorf("%v: actual Live Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.KeyCount < expectedStoreStatus.Stats.KeyCount {
+		t.Errorf("%v: actual Key Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	if storeStatus.Stats.ValCount < expectedStoreStatus.Stats.ValCount {
+		t.Errorf("%v: actual Val Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedStoreStatus, storeStatus)
+	}
+	return storeStatus
+}
+
+// TestStoreStatus checks the store status after each range scan to ensure that
+// it is being updated correctly.
+func TestStoreStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	ctx := &storage.TestStoreContext
+	ctx.ScanInterval = time.Duration(10 * time.Millisecond)
+	store, stopper := createTestStoreWithEngine(t, engine.NewInMem(proto.Attributes{}, 10<<20), hlc.NewClock(hlc.NewManualClock(0).UnixNano), true, ctx)
+	defer stopper.Stop()
+	splitKey := proto.Key("b")
+	content := proto.Key("test content")
+
+	expectedStoreStatus := &proto.StoreStatus{
+		StoreID:    store.Ident.StoreID,
+		NodeID:     1,
+		RangeCount: 1,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: 1,
+			KeyCount:  1,
+			ValCount:  1,
+		},
+	}
+	// Always wait twice, to ensure a full scan has occurred.
+	store.WaitForRangeScanCompletion()
+	store.WaitForRangeScanCompletion()
+	oldstats := compareStoreStatus(t, store, expectedStoreStatus, 0)
+
+	// Write some values left and right of the proposed split key.
+	rng := store.LookupRange([]byte("a"), nil)
+	pArgs, pReply := putArgs([]byte("a"), content, rng.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+	pArgs, pReply = putArgs([]byte("c"), content, rng.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedStoreStatus = &proto.StoreStatus{
+		StoreID:    store.Ident.StoreID,
+		NodeID:     1,
+		RangeCount: 1,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldstats.Stats.LiveCount + 1,
+			KeyCount:  oldstats.Stats.KeyCount + 1,
+			ValCount:  oldstats.Stats.ValCount + 1,
+		},
+	}
+	store.WaitForRangeScanCompletion()
+	store.WaitForRangeScanCompletion()
+	oldstats = compareStoreStatus(t, store, expectedStoreStatus, 1)
+
+	// Split the range.
+	args, reply := adminSplitArgs(engine.KeyMin, splitKey, rng.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedStoreStatus = &proto.StoreStatus{
+		StoreID:    store.Ident.StoreID,
+		NodeID:     1,
+		RangeCount: 2,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldstats.Stats.LiveCount,
+			KeyCount:  oldstats.Stats.KeyCount,
+			ValCount:  oldstats.Stats.ValCount,
+		},
+	}
+	store.WaitForRangeScanCompletion()
+	store.WaitForRangeScanCompletion()
+	oldstats = compareStoreStatus(t, store, expectedStoreStatus, 2)
+
+	// Write some values left and right of the split key.
+	rng = store.LookupRange([]byte("aa"), nil)
+	pArgs, pReply = putArgs([]byte("aa"), content, rng.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+	rng2 := store.LookupRange([]byte("cc"), nil)
+	pArgs, pReply = putArgs([]byte("cc"), content, rng2.Desc().RaftID, store.StoreID())
+	if err := store.ExecuteCmd(pArgs, pReply); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedStoreStatus = &proto.StoreStatus{
+		StoreID:    store.Ident.StoreID,
+		NodeID:     1,
+		RangeCount: 2,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldstats.Stats.LiveCount + 1,
+			KeyCount:  oldstats.Stats.KeyCount + 1,
+			ValCount:  oldstats.Stats.ValCount + 1,
+		},
+	}
+	store.WaitForRangeScanCompletion()
+	store.WaitForRangeScanCompletion()
+	oldstats = compareStoreStatus(t, store, expectedStoreStatus, 3)
+}

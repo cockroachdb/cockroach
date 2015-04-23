@@ -258,7 +258,7 @@ type Store struct {
 	multiraft      *multiraft.MultiRaft
 	started        int32
 	stopper        *util.Stopper
-	status         *proto.StoreStatus
+	startedAt      int64
 
 	mu          sync.RWMutex     // Protects variables below...
 	ranges      map[int64]*Range // Map of ranges by Raft ID
@@ -339,12 +339,10 @@ func NewStore(ctx StoreContext, eng engine.Engine) *Store {
 		engine:      eng,
 		allocator:   newAllocator(sf.findStores),
 		ranges:      map[int64]*Range{},
-		status:      &proto.StoreStatus{},
 	}
 
 	// Add range scanner and configure with queues.
-	s.scanner = newRangeScanner(ctx.ScanInterval, newStoreRangeIterator(s), s.
-		updateStoreStatus)
+	s.scanner = newRangeScanner(ctx.ScanInterval, newStoreRangeIterator(s), s.updateStoreStatus)
 	s.gcQueue = newGCQueue()
 	s.splitQueue = newSplitQueue(s.ctx.DB, s.ctx.Gossip)
 	s.verifyQueue = newVerifyQueue(s.scanner.Stats)
@@ -352,7 +350,6 @@ func NewStore(ctx StoreContext, eng engine.Engine) *Store {
 	s.scanner.AddQueues(s.gcQueue, s.splitQueue, s.verifyQueue, s.replicateQueue)
 
 	return s
-
 }
 
 // String formats a store for debug output.
@@ -394,10 +391,12 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	}
 	s.raftIDAlloc = idAlloc
 
+	now := s.ctx.Clock.Now()
+	s.startedAt = now.WallTime
+
 	// GCTimeouts method is called each time an engine compaction is
 	// underway. It sets minimum timeouts for transaction records and
 	// response cache entries.
-	now := s.ctx.Clock.Now()
 	minTxnTS := int64(0) // disable GC of transactions until we know minimum write intent age
 	minRCacheTS := now.WallTime - GCResponseCacheExpiration.Nanoseconds()
 	s.engine.SetGCTimeouts(minTxnTS, minRCacheTS)
@@ -477,11 +476,6 @@ func (s *Store) Start(stopper *util.Stopper) error {
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
-
-	// Update the store status values.
-	s.status.StoreID = s.Ident.StoreID
-	s.status.NodeID = s.Ident.NodeID
-	s.status.StartedAt = now.WallTime
 
 	return nil
 }
@@ -1270,15 +1264,27 @@ func raftEntryFormatter(data []byte) string {
 	return s
 }
 
+// WaitForRangeScanCompletion waits until the next range scan is complete and
+// returns the total number of scans completed so far.
+func (s *Store) WaitForRangeScanCompletion() int64 {
+	return s.scanner.WaitForScanCompletion()
+}
+
 // updateStoreStatus updates the store's status proto.
 func (s *Store) updateStoreStatus() {
 	now := s.ctx.Clock.Now().WallTime
-	s.status.UpdatedAt = now
-	s.status.RangeCount = int32(len(s.ranges))
+	scannerStats := s.scanner.Stats()
+	status := &proto.StoreStatus{
+		StoreID:    s.Ident.StoreID,
+		NodeID:     s.Ident.NodeID,
+		UpdatedAt:  now,
+		StartedAt:  s.startedAt,
+		RangeCount: int32(scannerStats.RangeCount),
+		Stats:      proto.MVCCStats(scannerStats.MVCC),
+	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	s.status.Stats = proto.MVCCStats(s.scanner.Stats().MVCC)
-	if err := s.ctx.DB.Run(client.PutProtoCall(key, s.status)); err != nil {
-		util.Error(err)
+	if err := s.ctx.DB.Run(client.PutProtoCall(key, status)); err != nil {
+		log.Error(err)
 	}
 }
 

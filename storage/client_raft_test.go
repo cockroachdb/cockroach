@@ -67,7 +67,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// First, populate the store with data across two ranges. Each range contains commands
 	// that both predate and postdate the split.
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true)
+		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
 		defer stopper.Stop()
 
 		increment := func(raftID int64, key proto.Key, value int64) (*proto.IncrementResponse, error) {
@@ -102,7 +102,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Now create a new store with the same engine and make sure the expected data is present.
 	// We must use the same clock because a newly-created manual clock will be behind the one
 	// we wrote with and so will see stale MVCC data.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false)
+	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
 	defer stopper.Stop()
 
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
@@ -140,7 +140,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}()
 
 	func() {
-		store, stopper := createTestStoreWithEngine(t, eng, clock, true)
+		store, stopper := createTestStoreWithEngine(t, eng, clock, true, nil)
 		defer stopper.Stop()
 
 		// Write a bytes value so the increment will fail.
@@ -162,7 +162,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	}
 
 	// Recover from the engine.
-	store, stopper := createTestStoreWithEngine(t, eng, clock, false)
+	store, stopper := createTestStoreWithEngine(t, eng, clock, false, nil)
 	defer stopper.Stop()
 
 	// Issue a no-op write to lazily initialize raft on the range.
