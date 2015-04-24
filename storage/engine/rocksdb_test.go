@@ -187,6 +187,7 @@ func setupMVCCScanData(numVersions, numKeys int, b *testing.B) *RocksDB {
 		if err := batch.Commit(); err != nil {
 			b.Fatal(err)
 		}
+		batch.Close()
 	}
 	rocksdb.CompactRange(nil, nil)
 
@@ -411,6 +412,8 @@ func runMVCCBatchPut(valueSize, batchSize int, b *testing.B) {
 		if err := batch.Commit(); err != nil {
 			b.Fatal(err)
 		}
+
+		batch.Close()
 	}
 
 	b.StopTimer()

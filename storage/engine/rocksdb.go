@@ -249,37 +249,6 @@ func (r *RocksDB) iterateInternal(start, end proto.EncodedKey, f func(proto.RawK
 	return it.Error()
 }
 
-// WriteBatch applies the puts, merges and deletes atomically via
-// the RocksDB write batch facility. The list must only contain
-// elements of type Batch{Put,Merge,Delete}.
-func (r *RocksDB) WriteBatch(cmds []interface{}) error {
-	if len(cmds) == 0 {
-		return nil
-	}
-	batch := C.DBNewBatch()
-	defer C.DBBatchDestroy(batch)
-
-	for i, e := range cmds {
-		switch v := e.(type) {
-		case BatchDelete:
-			if len(v.Key) == 0 {
-				return emptyKeyError()
-			}
-			C.DBBatchDelete(batch, goToCSlice(v.Key))
-		case BatchPut:
-			// We write the batch before returning from this method, so we
-			// don't need to worry about the GC reclaiming the data stored.
-			C.DBBatchPut(batch, goToCSlice(v.Key), goToCSlice(v.Value))
-		case BatchMerge:
-			C.DBBatchMerge(batch, goToCSlice(v.Key), goToCSlice(v.Value))
-		default:
-			panic(fmt.Sprintf("illegal operation #%d passed to writeBatch: %T", i, v))
-		}
-	}
-
-	return statusToError(C.DBWrite(r.rdb, batch))
-}
-
 // Capacity queries the underlying file system for disk capacity
 // information.
 func (r *RocksDB) Capacity() (StoreCapacity, error) {
@@ -434,9 +403,9 @@ func (r *RocksDB) NewSnapshot() Engine {
 	}
 }
 
-// NewBatch returns a new Batch wrapping this rocksdb engine.
+// NewBatch returns a new batch wrapping this rocksdb engine.
 func (r *RocksDB) NewBatch() Engine {
-	return &Batch{engine: r}
+	return newRocksDBBatch(r)
 }
 
 // Commit is a noop for RocksDB engine.
@@ -492,11 +461,6 @@ func (r *rocksDBSnapshot) Clear(key proto.EncodedKey) error {
 	return util.Errorf("cannot Clear from a snapshot")
 }
 
-// WriteBatch is illegal for snapshot and returns an error.
-func (r *rocksDBSnapshot) WriteBatch([]interface{}) error {
-	return util.Errorf("cannot WriteBatch to a snapshot")
-}
-
 // Merge is illegal for snapshot and returns an error.
 func (r *rocksDBSnapshot) Merge(key proto.EncodedKey, value []byte) error {
 	return util.Errorf("cannot Merge to a snapshot")
@@ -528,12 +492,12 @@ func (r *rocksDBSnapshot) NewIterator() Iterator {
 	return newRocksDBIterator(r.parent.rdb, r.handle)
 }
 
-// NewSnapshot is illegal for snapshot and returns nil.
+// NewSnapshot is illegal for snapshot.
 func (r *rocksDBSnapshot) NewSnapshot() Engine {
 	panic("cannot create a NewSnapshot from a snapshot")
 }
 
-// NewBatch is illegal for snapshot and returns nil.
+// NewBatch is illegal for snapshot.
 func (r *rocksDBSnapshot) NewBatch() Engine {
 	panic("cannot create a NewBatch from a snapshot")
 }
@@ -541,6 +505,161 @@ func (r *rocksDBSnapshot) NewBatch() Engine {
 // Commit is illegal for snapshot and returns an error.
 func (r *rocksDBSnapshot) Commit() error {
 	return util.Errorf("cannot Commit to a snapshot")
+}
+
+type rocksDBBatch struct {
+	parent *RocksDB
+	batch  *C.DBBatch
+}
+
+func newRocksDBBatch(r *RocksDB) *rocksDBBatch {
+	return &rocksDBBatch{
+		parent: r,
+		batch:  C.DBNewBatch(),
+	}
+}
+
+func (r *rocksDBBatch) Open() error {
+	return util.Errorf("cannot open a batch")
+}
+
+func (r *rocksDBBatch) Close() {
+	if r.batch != nil {
+		C.DBBatchDestroy(r.batch)
+	}
+}
+
+// Attrs returns the engine/store attributes.
+func (r *rocksDBBatch) Attrs() proto.Attributes {
+	return r.parent.Attrs()
+}
+
+func (r *rocksDBBatch) Put(key proto.EncodedKey, value []byte) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	C.DBBatchPut(r.batch, goToCSlice(key), goToCSlice(value))
+	return nil
+}
+
+func (r *rocksDBBatch) Merge(key proto.EncodedKey, value []byte) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	C.DBBatchMerge(r.batch, goToCSlice(key), goToCSlice(value))
+	return nil
+}
+
+func (r *rocksDBBatch) Get(key proto.EncodedKey) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, emptyKeyError()
+	}
+	var result C.DBString
+	err := statusToError(C.DBBatchGet(r.parent.rdb, r.batch, goToCSlice(key), &result))
+	if err != nil {
+		return nil, err
+	}
+	return cStringToGoBytes(result), nil
+}
+
+func (r *rocksDBBatch) GetProto(key proto.EncodedKey, msg gogoproto.Message) (
+	ok bool, keyBytes, valBytes int64, err error) {
+	if len(key) == 0 {
+		err = emptyKeyError()
+		return
+	}
+	var result C.DBString
+	if err = statusToError(C.DBBatchGet(r.parent.rdb, r.batch, goToCSlice(key), &result)); err != nil {
+		return
+	}
+	if result.len <= 0 {
+		return
+	}
+	ok = true
+	if msg != nil {
+		// Make a byte slice that is backed by result.data. This slice
+		// cannot live past the lifetime of this method, but we're only
+		// using it to unmarshal the proto.
+		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
+		err = gogoproto.Unmarshal(data, msg)
+	}
+	C.free(unsafe.Pointer(result.data))
+	keyBytes = int64(len(key))
+	valBytes = int64(result.len)
+	return
+}
+
+func (r *rocksDBBatch) Iterate(start, end proto.EncodedKey, f func(proto.RawKeyValue) (bool, error)) error {
+	if bytes.Compare(start, end) >= 0 {
+		return nil
+	}
+	it := &rocksDBIterator{
+		iter: C.DBBatchNewIter(r.parent.rdb, r.batch),
+	}
+	defer it.Close()
+
+	it.Seek(start)
+	for ; it.Valid(); it.Next() {
+		k := it.Key()
+		if !it.Key().Less(end) {
+			break
+		}
+		if done, err := f(proto.RawKeyValue{Key: k, Value: it.Value()}); done || err != nil {
+			return err
+		}
+	}
+	// Check for any errors during iteration.
+	return it.Error()
+}
+
+func (r *rocksDBBatch) Clear(key proto.EncodedKey) error {
+	if len(key) == 0 {
+		return emptyKeyError()
+	}
+	C.DBBatchDelete(r.batch, goToCSlice(key))
+	return nil
+}
+
+func (r *rocksDBBatch) Capacity() (StoreCapacity, error) {
+	return r.parent.Capacity()
+}
+
+func (r *rocksDBBatch) SetGCTimeouts(minTxnTS, minRCacheTS int64) {
+	// no-op
+}
+
+func (r *rocksDBBatch) ApproximateSize(start, end proto.EncodedKey) (uint64, error) {
+	return r.parent.ApproximateSize(start, end)
+}
+
+func (r *rocksDBBatch) Flush() error {
+	return util.Errorf("cannot flush a batch")
+}
+
+func (r *rocksDBBatch) NewIterator() Iterator {
+	return &rocksDBIterator{
+		iter: C.DBBatchNewIter(r.parent.rdb, r.batch),
+	}
+}
+
+func (r *rocksDBBatch) NewSnapshot() Engine {
+	panic("cannot create a NewSnapshot from a batch")
+}
+
+func (r *rocksDBBatch) NewBatch() Engine {
+	return newRocksDBBatch(r.parent)
+}
+
+func (r *rocksDBBatch) Commit() error {
+	if r.batch == nil {
+		panic("this batch was already committed")
+	}
+	if err := statusToError(C.DBWrite(r.parent.rdb, r.batch)); err != nil {
+		return err
+	}
+	C.DBBatchDestroy(r.batch)
+	r.batch = nil
+	return nil
 }
 
 type rocksDBIterator struct {

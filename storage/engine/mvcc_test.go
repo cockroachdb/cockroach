@@ -55,11 +55,10 @@ var (
 	valueEmpty   = proto.Value{}
 )
 
-// createTestEngine returns a new Batch wrapping an in-memory engine
-// with 1MB of storage capacity.
+// createTestEngine returns a new in-memory engine with 1MB of storage
+// capacity.
 func createTestEngine() Engine {
-	engine := NewInMem(proto.Attributes{}, 1<<20)
-	return engine.NewBatch()
+	return NewInMem(proto.Attributes{}, 1<<20)
 }
 
 // makeTxn creates a new transaction using the specified base
@@ -115,6 +114,8 @@ func TestMVCCKeys(t *testing.T) {
 func TestMVCCEmptyKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	if _, err := MVCCGet(engine, proto.Key{}, makeTS(0, 1), true, nil); err == nil {
 		t.Error("expected empty key error")
 	}
@@ -135,6 +136,8 @@ func TestMVCCEmptyKey(t *testing.T) {
 func TestMVCCGetNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	value, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +150,8 @@ func TestMVCCGetNotExist(t *testing.T) {
 func TestMVCCPutWithBadValue(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	badValue := proto.Value{Bytes: []byte("a"), Integer: gogoproto.Int64(1)}
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), badValue, nil)
 	if err == nil {
@@ -157,6 +162,8 @@ func TestMVCCPutWithBadValue(t *testing.T) {
 func TestMVCCPutWithTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -177,6 +184,8 @@ func TestMVCCPutWithTxn(t *testing.T) {
 func TestMVCCPutWithoutTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -199,6 +208,8 @@ func TestMVCCPutWithoutTxn(t *testing.T) {
 func TestMVCCIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	newVal, err := MVCCIncrement(engine, nil, testKey1, makeTS(0, 1), nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -226,6 +237,8 @@ func TestMVCCIncrement(t *testing.T) {
 func TestMVCCUpdateExistingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -269,6 +282,8 @@ func TestMVCCUpdateExistingKey(t *testing.T) {
 func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 1), value1, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -288,6 +303,8 @@ func TestMVCCUpdateExistingKeyOldVersion(t *testing.T) {
 func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -302,6 +319,8 @@ func TestMVCCUpdateExistingKeyInTxn(t *testing.T) {
 func TestMVCCUpdateExistingKeyDiffTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -328,6 +347,8 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	// If we search for a<T=2>, the scan should not return "b".
 
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(3, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
 
@@ -346,6 +367,8 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 func TestMVCCGetUncertainty(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	txn := &proto.Transaction{ID: []byte("txn"), Timestamp: makeTS(5, 0), MaxTimestamp: makeTS(10, 0)}
 	// Put a value from the past.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil); err != nil {
@@ -409,6 +432,8 @@ func TestMVCCGetUncertainty(t *testing.T) {
 func TestMVCCGetAndDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	value, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, nil)
 	if err != nil {
@@ -461,6 +486,8 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, txn1)
 	value, err := MVCCGet(engine, testKey1, makeTS(2, 0), true, txn1)
 	if err != nil {
@@ -495,6 +522,8 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 func TestMVCCGetWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	if err != nil {
 		t.Fatal(err)
@@ -516,6 +545,7 @@ func TestMVCCGetWriteIntentError(t *testing.T) {
 func TestMVCCGetInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
 
 	// Put two values to key 1, the latest with a txn.
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
@@ -560,6 +590,8 @@ func TestMVCCGetInconsistent(t *testing.T) {
 func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value4, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
@@ -618,6 +650,8 @@ func TestMVCCScan(t *testing.T) {
 func TestMVCCScanMaxNum(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil)
@@ -637,6 +671,8 @@ func TestMVCCScanMaxNum(t *testing.T) {
 func TestMVCCScanWithKeyPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	// Let's say you have:
 	// a
 	// a<T=2>
@@ -670,6 +706,8 @@ func TestMVCCScanWithKeyPrefix(t *testing.T) {
 func TestMVCCScanInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, txn1)
@@ -698,6 +736,7 @@ func TestMVCCScanInTxn(t *testing.T) {
 func TestMVCCScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
 
 	// A scan with consistent=false should fail in a txn.
 	if _, err := MVCCScan(engine, KeyMin, KeyMax, 0, makeTS(1, 0), false, txn1); err == nil {
@@ -760,6 +799,8 @@ func TestMVCCScanInconsistent(t *testing.T) {
 func TestMVCCDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, nil)
@@ -811,6 +852,8 @@ func TestMVCCDeleteRange(t *testing.T) {
 func TestMVCCDeleteRangeFailed(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, txn1)
 	err = MVCCPut(engine, nil, testKey3, makeTS(1, 0), value3, txn1)
@@ -830,6 +873,8 @@ func TestMVCCDeleteRangeFailed(t *testing.T) {
 func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(1, 0), value1, nil)
 	err = MVCCPut(engine, nil, testKey2, makeTS(1, 0), value2, txn1)
 	err = MVCCPut(engine, nil, testKey3, makeTS(2, 0), value3, txn2)
@@ -844,6 +889,8 @@ func TestMVCCDeleteRangeConcurrentTxn(t *testing.T) {
 func TestMVCCConditionalPut(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCConditionalPut(engine, nil, testKey1, makeTS(0, 1), value1, &value2, nil)
 	if err == nil {
 		t.Fatal("expected error on key not exists")
@@ -928,6 +975,8 @@ func TestMVCCConditionalPut(t *testing.T) {
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	value, err := MVCCGet(engine, testKey1, makeTS(0, 1), true, txn1)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
@@ -951,6 +1000,8 @@ func TestMVCCResolveTxn(t *testing.T) {
 func TestMVCCAbortTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	err = MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Abort)
 	if err != nil {
@@ -976,6 +1027,8 @@ func TestMVCCAbortTxn(t *testing.T) {
 func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(1, 0), value2, nil)
 	err = MVCCPut(engine, nil, testKey1, makeTS(2, 0), value3, txn1)
@@ -1008,6 +1061,8 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	// Start with epoch 1.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
@@ -1061,6 +1116,8 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 func TestMVCCReadWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	// Write initial value wihtout a txn.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, nil); err != nil {
 		t.Fatal(err)
@@ -1107,6 +1164,8 @@ func TestMVCCReadWithDiffEpochs(t *testing.T) {
 func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	// Start with epoch 1.
 	if err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1); err != nil {
 		t.Fatal(err)
@@ -1125,6 +1184,8 @@ func TestMVCCReadWithPushedTimestamp(t *testing.T) {
 func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	err = MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, txn1e2)
 	num, err := MVCCResolveWriteIntentRange(engine, nil, testKey1, testKey2.Next(), 2, makeTS(0, 1), txn1e2Commit)
@@ -1150,6 +1211,8 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	value, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, txn1)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
@@ -1181,6 +1244,8 @@ func TestMVCCResolveWithUpdatedTimestamp(t *testing.T) {
 func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	value, err := MVCCGet(engine, testKey1, makeTS(1, 0), true, txn1)
 	if !bytes.Equal(value1.Bytes, value.Bytes) {
@@ -1213,6 +1278,7 @@ func TestMVCCResolveWithPushedTimestamp(t *testing.T) {
 func TestMVCCResolveTxnNoOps(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
 
 	// Resolve a non existent key; noop.
 	err := MVCCResolveWriteIntent(engine, nil, testKey1, makeTS(0, 1), txn1Commit)
@@ -1238,6 +1304,8 @@ func TestMVCCResolveTxnNoOps(t *testing.T) {
 func TestMVCCResolveTxnRange(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	err := MVCCPut(engine, nil, testKey1, makeTS(0, 1), value1, txn1)
 	err = MVCCPut(engine, nil, testKey2, makeTS(0, 1), value2, nil)
 	err = MVCCPut(engine, nil, testKey3, makeTS(0, 1), value3, txn2)
@@ -1591,6 +1659,8 @@ func verifyStats(debug string, ms *proto.MVCCStats, expMS *proto.MVCCStats, t *t
 func TestMVCCStatsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	ms := &proto.MVCCStats{}
 
 	// Verify size of mvccVersionTimestampSize.
@@ -1729,6 +1799,8 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 	rng, seed := util.NewPseudoRand()
 	log.Infof("using pseudo random number generator with seed %d", seed)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	ms := &proto.MVCCStats{}
 
 	// Now, generate a random sequence of puts, deletes and resolves.
@@ -1808,6 +1880,8 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 func TestMVCCGarbageCollect(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	ms := &proto.MVCCStats{}
 
 	bytes := []byte("value")
@@ -1906,6 +1980,8 @@ func TestMVCCGarbageCollect(t *testing.T) {
 func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)
@@ -1930,6 +2006,8 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 func TestMVCCGarbageCollectIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	engine := createTestEngine()
+	defer engine.Close()
+
 	bytes := []byte("value")
 	ts1 := makeTS(1E9, 0)
 	ts2 := makeTS(2E9, 0)

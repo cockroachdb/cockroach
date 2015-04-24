@@ -35,6 +35,8 @@ func TestBatchBasics(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	if err := b.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +102,8 @@ func TestBatchGet(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	// Write initial values, then write to batch.
 	if err := e.Put(proto.EncodedKey("b"), []byte("value")); err != nil {
 		t.Fatal(err)
@@ -143,7 +147,10 @@ func compareMergedValues(result, expected []byte) bool {
 
 func TestBatchMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)
-	b := NewInMem(proto.Attributes{}, 1<<20).NewBatch()
+	e := NewInMem(proto.Attributes{}, 1<<20)
+	defer e.Close()
+
+	b := e.NewBatch()
 	defer b.Close()
 
 	// Write batch put, delete & merge.
@@ -200,6 +207,8 @@ func TestBatchProto(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	kv := &proto.RawKeyValue{Key: proto.EncodedKey("a"), Value: []byte("value")}
 	PutProto(b, proto.EncodedKey("proto"), kv)
 	getKV := &proto.RawKeyValue{}
@@ -242,6 +251,8 @@ func TestBatchScan(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	existingVals := []proto.RawKeyValue{
 		{Key: proto.EncodedKey("a"), Value: []byte("1")},
 		{Key: proto.EncodedKey("b"), Value: []byte("2")},
@@ -332,6 +343,8 @@ func TestBatchScanWithDelete(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	// Write initial value, then delete via batch.
 	if err := e.Put(proto.EncodedKey("a"), []byte("value")); err != nil {
 		t.Fatal(err)
@@ -357,6 +370,8 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	// Write two values.
 	if err := e.Put(proto.EncodedKey("a"), []byte("value1")); err != nil {
 		t.Fatal(err)
@@ -388,6 +403,8 @@ func TestBatchConcurrency(t *testing.T) {
 	defer e.Close()
 
 	b := e.NewBatch()
+	defer b.Close()
+
 	// Write a merge to the batch.
 	if err := b.Merge(proto.EncodedKey("a"), appender("bar")); err != nil {
 		t.Fatal(err)
