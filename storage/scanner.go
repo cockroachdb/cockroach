@@ -127,8 +127,8 @@ func (rs *rangeScanner) RemoveRange(rng *Range) {
 
 // paceInterval returns a duration between iterations to allow us to pace
 // the scan.
-func (rs *rangeScanner) paceInterval(start time.Time) time.Duration {
-	elapsed := time.Now().Sub(start)
+func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
+	elapsed := now.Sub(start)
 	remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
 	if remainingNanos < 0 {
 		remainingNanos = 0
@@ -138,7 +138,6 @@ func (rs *rangeScanner) paceInterval(start time.Time) time.Duration {
 		count = 1
 	}
 	interval := time.Duration(remainingNanos / int64(count))
-	log.V(6).Infof("pace interval set to %s", interval)
 	return interval
 }
 
@@ -151,8 +150,10 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 		stats := &storeStats{}
 
 		for {
+			waitInterval := rs.paceInterval(start, time.Now())
+			log.V(6).Infof("Wait time interval set to %s", waitInterval)
 			select {
-			case <-time.After(rs.paceInterval(start)):
+			case <-time.After(waitInterval):
 				if !stopper.StartTask() {
 					continue
 				}

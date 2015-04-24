@@ -253,15 +253,15 @@ func TestScannerTiming(t *testing.T) {
 }
 
 // errorNotCloseTo logs an error when the actual value is not close to the expected value
-func errorNotCloseTo(expected, actual time.Duration) {
+func logErrorWhenNotCloseTo(expected, actual time.Duration) {
 	delta := 1 * time.Millisecond
 	if actual < expected-delta || actual > expected+delta {
 		log.Errorf("Expected duration %s, got %s", expected, actual)
 	}
 }
 
-// TestPaceInterval tests that paceInterval returns the correct interval.
-func TestPaceInterval(t *testing.T) {
+// TestScannerPaceInterval tests that paceInterval returns the correct interval.
+func TestScannerPaceInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	const count = 3
 	durations := []time.Duration{
@@ -273,19 +273,18 @@ func TestPaceInterval(t *testing.T) {
 		startTime := time.Now()
 		iter := newTestIterator(count)
 		s := newRangeScanner(duration, iter)
-		interval := s.paceInterval(startTime)
-		errorNotCloseTo(duration/count, interval)
+		interval := s.paceInterval(startTime, startTime)
+		logErrorWhenNotCloseTo(duration/count, interval)
 		// The iterator is empty
 		iter = newTestIterator(0)
 		s = newRangeScanner(duration, iter)
-		interval = s.paceInterval(startTime)
-		errorNotCloseTo(duration, interval)
+		interval = s.paceInterval(startTime, startTime)
+		logErrorWhenNotCloseTo(duration, interval)
 		iter = newTestIterator(count)
 		s = newRangeScanner(duration, iter)
-		// Sleep and waste away all the time
-		time.Sleep(duration)
-		interval = s.paceInterval(startTime)
-		errorNotCloseTo(0, interval)
+		// Move the present to duration time into the future
+		interval = s.paceInterval(startTime, startTime.Add(duration))
+		logErrorWhenNotCloseTo(0, interval)
 	}
 }
 
