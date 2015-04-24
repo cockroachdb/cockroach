@@ -53,7 +53,7 @@ func startServer(t *testing.T) (string, *client.KV, *util.Stopper) {
 	// Initialize engine, store, and localDB.
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
 	stopper := util.NewStopper()
-	db, err := server.BootstrapCluster("test-cluster", e, stopper)
+	db, err := server.BootstrapCluster("test-cluster", e, server.NewContext(), stopper)
 	if err != nil {
 		t.Fatalf("could not bootstrap test cluster: %s", err)
 	}

@@ -35,7 +35,7 @@ func TestPutGetDeleteSchema(t *testing.T) {
 	stopper := util.NewStopper()
 	defer stopper.Stop()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := server.BootstrapCluster("test-cluster", e, stopper)
+	localDB, err := server.BootstrapCluster("test-cluster", e, server.NewTestContext(), stopper)
 	if err != nil {
 		t.Fatalf("unable to boostrap cluster: %v", err)
 	}
