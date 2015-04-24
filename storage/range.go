@@ -1464,7 +1464,7 @@ func (r *Range) requestLeaderLease(term uint64) {
 	}
 
 	if !cmd.Cmd.SetValue(args) {
-		log.Fatal("leader lease request not a raft command")
+		log.Fatalf("%T is not a raft command", args)
 	}
 
 	// Propose the Raft command.

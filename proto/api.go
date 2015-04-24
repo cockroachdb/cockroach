@@ -238,7 +238,7 @@ func (br *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
 	if !union.SetValue(args) {
 		// TODO(tschottdorf) evaluate whether this should return an error.
-		log.Fatalf("batch request not in RequestUnion: %+v", args)
+		log.Fatalf("unable to add %T to batch request", args)
 	}
 	if br.Key == nil {
 		br.Key = args.Header().Key
