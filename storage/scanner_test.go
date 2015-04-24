@@ -271,16 +271,16 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := time.Now()
 		iter := newTestIterator(count)
-		s := newRangeScanner(duration, iter)
+		s := newRangeScanner(duration, iter, nil)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The iterator is empty
 		iter = newTestIterator(0)
-		s = newRangeScanner(duration, iter)
+		s = newRangeScanner(duration, iter, nil)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		iter = newTestIterator(count)
-		s = newRangeScanner(duration, iter)
+		s = newRangeScanner(duration, iter, nil)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
