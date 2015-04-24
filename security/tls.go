@@ -90,9 +90,10 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		// TODO(marc): clients are bad about this. We should switch to
+		// TODO(marc): no client certs for now. Even specifying VerifyClientCertIfGiven
+		// causes issues with various browsers. We should switch to
 		// tls.RequireAndVerifyClientCert once client certs are properly set.
-		ClientAuth: tls.VerifyClientCertIfGiven,
+		ClientAuth: tls.NoClientCert,
 		RootCAs:    certPool,
 		ClientCAs:  certPool,
 
@@ -100,8 +101,8 @@ func LoadTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 		// Prefer the server-specified suite.
 		PreferServerCipherSuites: true,
 
-		// Lots of things don't support 1.2. Let's try 1.1.
-		MinVersion: tls.VersionTLS11,
+		// TLS 1.1 and 1.2 support is crappy out there. Let's use 1.0.
+		MinVersion: tls.VersionTLS10,
 
 		// Should we disable session resumption? This may break forward secrecy.
 		// SessionTicketsDisabled: true,
