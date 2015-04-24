@@ -79,12 +79,7 @@ func TestRocksDBCompaction(t *testing.T) {
 		t.Fatalf("could not create new in-memory rocksdb db instance: %v", err)
 	}
 	rocksdb.SetGCTimeouts(1, 2)
-	defer func(t *testing.T) {
-		rocksdb.Close()
-		if err := rocksdb.Destroy(); err != nil {
-			t.Errorf("could not delete in-memory rocksdb db: %v", err)
-		}
-	}(t)
+	defer rocksdb.Close()
 
 	cmdID := &proto.ClientCmdID{WallTime: 1, Random: 1}
 
