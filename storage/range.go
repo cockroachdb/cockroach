@@ -1463,7 +1463,9 @@ func (r *Range) requestLeaderLease(term uint64) {
 		},
 	}
 
-	cmd.Cmd.SetValue(args)
+	if !cmd.Cmd.SetValue(args) {
+		log.Fatal("leader lease request not a raft command")
+	}
 
 	// Propose the Raft command.
 	errCh := r.rm.ProposeRaftCommand(idKey, cmd)

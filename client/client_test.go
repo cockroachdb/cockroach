@@ -691,7 +691,7 @@ func concurrentIncrements(kvClient *client.KV, t *testing.T) {
 			log.Fatal(err)
 		}
 		if gr.Value == nil || gr.Value.Integer == nil {
-			t.Fatalf("unexpected empty key: %v=%v", readKey, gr.Value)
+			t.Fatalf("unexpected empty key: %s=%v", readKey, gr.Value)
 		}
 		total += *gr.Value.Integer
 		results = append(results, *gr.Value.Integer)

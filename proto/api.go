@@ -236,7 +236,10 @@ func (sr *ScanResponse) Verify(req Request) error {
 //   representing the constituent requests.
 func (br *BatchRequest) Add(args Request) {
 	union := RequestUnion{}
-	union.SetValue(args)
+	if !union.SetValue(args) {
+		// TODO(tschottdorf) evaluate whether this should return an error.
+		log.Fatalf("batch request not in RequestUnion: %+v", args)
+	}
 	if br.Key == nil {
 		br.Key = args.Header().Key
 		br.EndKey = args.Header().EndKey
@@ -247,7 +250,10 @@ func (br *BatchRequest) Add(args Request) {
 // Add adds a response to the batch response.
 func (br *BatchResponse) Add(reply Response) {
 	union := ResponseUnion{}
-	union.SetValue(reply)
+	if !union.SetValue(reply) {
+		// TODO(tschottdorf) evaluate whether this should return an error.
+		log.Fatalf("unable to add %T to batch response", reply)
+	}
 	br.Responses = append(br.Responses, union)
 }
 

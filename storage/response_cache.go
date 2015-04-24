@@ -218,7 +218,10 @@ func (rc *ResponseCache) PutResponse(cmdID proto.ClientCmdID, reply proto.Respon
 	if rc.shouldCacheResponse(reply) {
 		key := engine.ResponseCacheKey(rc.raftID, &cmdID)
 		rwResp := &proto.ReadWriteCmdResponse{}
-		rwResp.SetValue(reply)
+		if !rwResp.SetValue(reply) {
+			log.Fatalf("attempt to add invalid item to response cache: %+v",
+				reply)
+		}
 		err = engine.MVCCPutProto(rc.engine, nil, key, proto.ZeroTimestamp, nil, rwResp)
 	}
 
