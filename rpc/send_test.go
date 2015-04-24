@@ -159,6 +159,7 @@ func TestUnretryableError(t *testing.T) {
 // does not become ready.
 func TestClientNotReady(t *testing.T) {
 	rpcContext := NewTestContext(t)
+	addr := util.CreateTestAddr("tcp")
 
 	opts := Options{
 		N:               1,
@@ -167,7 +168,7 @@ func TestClientNotReady(t *testing.T) {
 		Timeout:         1 * time.Nanosecond,
 	}
 	// Send RPC to an address where no server is running.
-	_, err := sendPing(opts, []net.Addr{util.CreateTestAddr("tcp")}, rpcContext)
+	_, err := sendPing(opts, []net.Addr{addr}, rpcContext)
 	if err == nil {
 		t.Fatalf("Unexpected success")
 	}
@@ -184,13 +185,23 @@ func TestClientNotReady(t *testing.T) {
 	opts.Timeout = 0 * time.Nanosecond
 	c := make(chan interface{})
 	go func() {
-		sendPing(opts, []net.Addr{util.CreateTestAddr("tcp")}, rpcContext)
+		sendPing(opts, []net.Addr{addr}, rpcContext)
 		close(c)
 	}()
 	select {
 	case <-c:
 		t.Fatalf("Unexpected end of rpc call")
 	case <-time.After(1 * time.Millisecond):
+	}
+
+	// Grab the client for our invalid address and close it. This will
+	// cause the blocked ping RPC to finish.
+	client := NewClient(addr, nil, rpcContext)
+	client.Close()
+	select {
+	case <-c:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("RPC call failed to return")
 	}
 }
 
