@@ -252,14 +252,6 @@ func TestScannerTiming(t *testing.T) {
 	}
 }
 
-// errorNotCloseTo logs an error when the actual value is not close to the expected value
-func logErrorWhenNotCloseTo(expected, actual time.Duration) {
-	delta := 1 * time.Millisecond
-	if actual < expected-delta || actual > expected+delta {
-		log.Errorf("Expected duration %s, got %s", expected, actual)
-	}
-}
-
 // TestScannerPaceInterval tests that paceInterval returns the correct interval.
 func TestScannerPaceInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)
@@ -268,6 +260,14 @@ func TestScannerPaceInterval(t *testing.T) {
 		30 * time.Millisecond,
 		60 * time.Millisecond,
 		500 * time.Millisecond,
+	}
+	// function logs an error when the actual value is not close
+	// to the expected value
+	logErrorWhenNotCloseTo := func(expected, actual time.Duration) {
+		delta := 1 * time.Millisecond
+		if actual < expected-delta || actual > expected+delta {
+			t.Errorf("Expected duration %s, got %s", expected, actual)
+		}
 	}
 	for _, duration := range durations {
 		startTime := time.Now()
