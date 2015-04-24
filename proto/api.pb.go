@@ -803,6 +803,9 @@ func (m *ResponseUnion) GetEndTransaction() *EndTransactionResponse {
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
+//
+// The RequestHeader should contain the Key of the first request
+// in the batch.
 type BatchRequest struct {
 	RequestHeader    `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Requests         []RequestUnion `protobuf:"bytes,2,rep,name=requests" json:"requests"`

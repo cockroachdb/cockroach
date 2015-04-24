@@ -315,6 +315,9 @@ message ResponseUnion {
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
+//
+// The RequestHeader should contain the Key of the first request
+// in the batch.
 message BatchRequest {
   optional RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
