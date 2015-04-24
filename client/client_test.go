@@ -736,20 +736,19 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 
 	s := &server.TestServer{}
 	s.Ctx = server.NewTestContext()
-	// s.Ctx.ExperimentalRPCServer = true
+	s.Ctx.ExperimentalRPCServer = true
 	s.SkipBootstrap = exists
 	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
 	if err := s.Start(); err != nil {
 		b.Fatalf("Could not start server: %v", err)
 	}
 
-	httpClient, err := testutils.NewTestHTTPClient()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	kv := client.NewKV(nil, client.NewHTTPSender(s.ServingAddr(), httpClient))
-	// kv := client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr()))
+	// httpClient, err := testutils.NewTestHTTPClient()
+	// if err != nil {
+	// 	b.Fatal(err)
+	// }
+	// kv := client.NewKV(nil, client.NewHTTPSender(s.ServingAddr(), httpClient))
+	kv := client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr()))
 	kv.User = storage.UserRoot
 
 	if exists {
@@ -806,12 +805,13 @@ func runClientScan(numRows, numVersions int, b *testing.B) {
 	b.ResetTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
-		keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-		endKey := []byte("key.")
+		startKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+		endKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 		for pb.Next() {
 			// Choose a random key to start scan.
 			keyIdx := rand.Int31n(int32(numKeys - numRows))
-			startKey := proto.Key(encoding.EncodeUvarint(keyBuf[0:4], uint64(keyIdx)))
+			startKey := proto.Key(encoding.EncodeUvarint(startKeyBuf, uint64(keyIdx)))
+			endKey := proto.Key(encoding.EncodeUvarint(endKeyBuf, uint64(keyIdx)+uint64(numRows)))
 			call := client.ScanCall(proto.Key(startKey), proto.Key(endKey), int64(numRows))
 			call.Args.Header().Timestamp = proto.Timestamp{WallTime: time.Now().UnixNano()}
 			resp := call.Reply.(*proto.ScanResponse)
