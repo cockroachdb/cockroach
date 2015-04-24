@@ -142,13 +142,28 @@ func (ls *LocalSender) Send(call client.Call) {
 // by consulting each store in turn via Store.LookupRange(key).
 // Returns RaftID and replica on success; RangeKeyMismatch error
 // if not found.
-func (ls *LocalSender) lookupReplica(start, end proto.Key) (int64, *proto.Replica, error) {
+// TODO(tschottdorf) with a very large number of stores, the LocalSender
+// may want to avoid scanning the whole map of stores on each invocation.
+func (ls *LocalSender) lookupReplica(start, end proto.Key) (raftID int64, replica *proto.Replica, err error) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
+	var rng *storage.Range
 	for _, store := range ls.storeMap {
-		if rng := store.LookupRange(start, end); rng != nil {
-			return rng.Desc().RaftID, rng.GetReplica(), nil
+		rng = store.LookupRange(start, end)
+		if rng == nil {
+			continue
 		}
+		if replica == nil {
+			raftID = rng.Desc().RaftID
+			replica = rng.GetReplica()
+			continue
+		}
+		// Should never happen outside of tests.
+		return 0, nil, util.Errorf(
+			"range %+v exists on additional store: %+v", rng, store)
 	}
-	return 0, nil, proto.NewRangeKeyMismatchError(start, end, nil)
+	if replica == nil {
+		err = proto.NewRangeKeyMismatchError(start, end, nil)
+	}
+	return raftID, replica, err
 }

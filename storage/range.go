@@ -2162,20 +2162,27 @@ func (r *Range) ChangeReplicas(changeType proto.ReplicaChangeType, replica proto
 	desc := r.Desc()
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]proto.Replica{}, desc.Replicas...)
-	found := -1
+	found := -1       // tracks NodeID && StoreID
+	nodeUsed := false // tracks NodeID only
 	for i, existingRep := range desc.Replicas {
-		if existingRep.NodeID == replica.NodeID && existingRep.StoreID == replica.StoreID {
+		nodeUsed = nodeUsed || existingRep.NodeID == replica.NodeID
+		if existingRep.NodeID == replica.NodeID &&
+			existingRep.StoreID == replica.StoreID {
 			found = i
 			break
 		}
 	}
 	if changeType == proto.ADD_REPLICA {
-		if found != -1 {
+		// If the replica exists on the remote node, no matter in which store,
+		// abort the replica add.
+		if nodeUsed {
 			return util.Errorf("adding replica %v which is already present in range %d",
 				replica, desc.RaftID)
 		}
 		updatedDesc.Replicas = append(updatedDesc.Replicas, replica)
 	} else if changeType == proto.REMOVE_REPLICA {
+		// If that exact node-store combination does not have the replica,
+		// abort the removal.
 		if found == -1 {
 			return util.Errorf("removing replica %v which is not present in range %d",
 				replica, desc.RaftID)

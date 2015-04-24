@@ -23,6 +23,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1865,5 +1866,23 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
 		appliedIndex = newAppliedIndex
+	}
+}
+
+// TestChangeReplicasDuplicateError tests that a replica change that would
+// use a NodeID twice in the replica configuration fails.
+func TestChangeReplicasDuplicateError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	if err := tc.rng.ChangeReplicas(proto.ADD_REPLICA, proto.Replica{
+		NodeID:  tc.store.Ident.NodeID,
+		StoreID: 9999,
+	}); err == nil || !strings.Contains(err.Error(),
+		"already present") {
+		t.Fatalf("must not be able to add second replica to same node (err=%s)",
+			err)
 	}
 }

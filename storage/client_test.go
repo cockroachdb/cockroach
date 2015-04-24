@@ -101,10 +101,10 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	gossip      *gossip.Gossip
-	sender      *kv.LocalSender
 	transport   multiraft.Transport
 	db          *client.KV
 	engines     []engine.Engine
+	senders     []*kv.LocalSender
 	stores      []*storage.Store
 	idents      []proto.StoreIdent
 	// We use multiple stoppers so we can restart different parts of the
@@ -139,14 +139,16 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.transport == nil {
 		m.transport = multiraft.NewLocalRPCTransport()
 	}
-	if m.sender == nil {
-		m.sender = kv.NewLocalSender()
-	}
+
 	if m.clientStopper == nil {
 		m.clientStopper = util.NewStopper()
 	}
+
+	// Always create the first sender.
+	m.senders = append(m.senders, kv.NewLocalSender())
+
 	if m.db == nil {
-		txnSender := kv.NewTxnCoordSender(m.sender, m.clock, false, m.clientStopper)
+		txnSender := kv.NewTxnCoordSender(m.senders[0], m.clock, false, m.clientStopper)
 		m.db = client.NewKV(nil, txnSender)
 		m.db.User = storage.UserRoot
 	}
@@ -223,7 +225,10 @@ func (m *multiTestContext) addStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.stores = append(m.stores, store)
-	m.sender.AddStore(store)
+	if len(m.senders) == idx {
+		m.senders = append(m.senders, kv.NewLocalSender())
+	}
+	m.senders[idx].AddStore(store)
 	// Save the store identities for later so we can use them in
 	// replication operations even while the store is stopped.
 	m.idents = append(m.idents, store.Ident)
@@ -233,7 +238,7 @@ func (m *multiTestContext) addStore(t *testing.T) {
 // StopStore stops a store but leaves the engine intact.
 // All stopped stores must be restarted before multiTestContext.Stop is called.
 func (m *multiTestContext) stopStore(i int) {
-	m.sender.RemoveStore(m.stores[i])
+	m.senders[i].RemoveStore(m.stores[i])
 	m.stoppers[i].Stop()
 	m.stoppers[i] = nil
 	m.stores[i] = nil
@@ -248,7 +253,8 @@ func (m *multiTestContext) restartStore(i int) {
 	if err := m.stores[i].Start(m.stoppers[i]); err != nil {
 		m.t.Fatal(err)
 	}
-	m.sender.AddStore(m.stores[i])
+	// The sender is assumed to still exist.
+	m.senders[i].AddStore(m.stores[i])
 }
 
 // restart stops and restarts all stores but leaves the engines intact,
