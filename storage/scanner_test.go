@@ -251,6 +251,42 @@ func TestScannerTiming(t *testing.T) {
 	}
 }
 
+// TestScannerPaceInterval tests that paceInterval returns the correct interval.
+func TestScannerPaceInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	const count = 3
+	durations := []time.Duration{
+		30 * time.Millisecond,
+		60 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+	// function logs an error when the actual value is not close
+	// to the expected value
+	logErrorWhenNotCloseTo := func(expected, actual time.Duration) {
+		delta := 1 * time.Millisecond
+		if actual < expected-delta || actual > expected+delta {
+			t.Errorf("Expected duration %s, got %s", expected, actual)
+		}
+	}
+	for _, duration := range durations {
+		startTime := time.Now()
+		iter := newTestIterator(count)
+		s := newRangeScanner(duration, iter)
+		interval := s.paceInterval(startTime, startTime)
+		logErrorWhenNotCloseTo(duration/count, interval)
+		// The iterator is empty
+		iter = newTestIterator(0)
+		s = newRangeScanner(duration, iter)
+		interval = s.paceInterval(startTime, startTime)
+		logErrorWhenNotCloseTo(duration, interval)
+		iter = newTestIterator(count)
+		s = newRangeScanner(duration, iter)
+		// Move the present to duration time into the future
+		interval = s.paceInterval(startTime, startTime.Add(duration))
+		logErrorWhenNotCloseTo(0, interval)
+	}
+}
+
 // TestScannerEmptyIterator verifies that an empty iterator doesn't busy loop.
 func TestScannerEmptyIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)

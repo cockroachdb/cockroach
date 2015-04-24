@@ -147,6 +147,22 @@ func (rs *rangeScanner) WaitForScanCompletion() int64 {
 	return rs.count
 }
 
+// paceInterval returns a duration between iterations to allow us to pace
+// the scan.
+func (rs *rangeScanner) paceInterval(start, now time.Time) time.Duration {
+	elapsed := now.Sub(start)
+	remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
+	if remainingNanos < 0 {
+		remainingNanos = 0
+	}
+	count := rs.iter.EstimatedCount()
+	if count < 1 {
+		count = 1
+	}
+	interval := time.Duration(remainingNanos / int64(count))
+	return interval
+}
+
 // scanLoop loops endlessly, scanning through ranges available via
 // the range iterator, or until the scanner is stopped. The iteration
 // is paced to complete a full scan in approximately the scan interval.
@@ -156,19 +172,10 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 		stats := &storeStats{}
 
 		for {
-			elapsed := time.Now().Sub(start)
-			remainingNanos := rs.interval.Nanoseconds() - elapsed.Nanoseconds()
-			if remainingNanos < 0 {
-				remainingNanos = 0
-			}
-			nextIteration := time.Duration(remainingNanos)
-			if count := rs.iter.EstimatedCount(); count > 0 {
-				nextIteration = time.Duration(remainingNanos / int64(count))
-			}
-			log.V(6).Infof("next range scan iteration in %s", nextIteration)
-
+			waitInterval := rs.paceInterval(start, time.Now())
+			log.V(6).Infof("Wait time interval set to %s", waitInterval)
 			select {
-			case <-time.After(nextIteration):
+			case <-time.After(waitInterval):
 				if !stopper.StartTask() {
 					continue
 				}
