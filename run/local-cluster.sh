@@ -105,7 +105,7 @@ for i in $(seq 1 $NODES); do
 done
 
 # Generate certs.
-docker run -d -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} create-ca-cert -certs=${CERTS_DIR} 2> /dev/null
+docker run -v ${CERTS_DIR} --name=${CERTS_NAME} ${COCKROACH_IMAGE} create-ca-cert -certs=${CERTS_DIR} 2> /dev/null
 docker run --rm --volumes-from=${CERTS_NAME} ${COCKROACH_IMAGE} create-node-cert -certs=${CERTS_DIR} ${NODE_ADDRESSES} 2> /dev/null
 
 # Start all nodes.
