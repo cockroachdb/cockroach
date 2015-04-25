@@ -1196,9 +1196,9 @@ func (s *Store) processRaft() {
 					log.Fatalf("e.GroupID (%d) should == cmd.RaftID (%d)", groupID, cmd.RaftID)
 				}
 
-				s.mu.Lock()
+				s.mu.RLock()
 				r, ok := s.ranges[groupID]
-				s.mu.Unlock()
+				s.mu.RUnlock()
 				var err error
 				if !ok {
 					err = util.Errorf("got committed raft command for %d but have no range with that ID: %+v",
@@ -1243,8 +1243,8 @@ func (s *Store) GroupStorage(groupID uint64) multiraft.WriteableGroupStorage {
 
 // AppliedIndex implements the multiraft.StateMachine interface.
 func (s *Store) AppliedIndex(groupID uint64) (uint64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	r, ok := s.ranges[int64(groupID)]
 	if !ok {
 		return 0, util.Errorf("range %d not found", groupID)
