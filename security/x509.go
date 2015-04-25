@@ -20,8 +20,8 @@ package security
 import (
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -39,12 +39,12 @@ import (
 const (
 	validFor      = time.Hour * 24 * 365
 	maxPathLength = 2
+	keyBits       = 2048
 )
 
-// generateKeyPair returns a random elliptic curve key pair.
-// For now, we pick P-256.
+// generateKeyPair returns a random 2048 bit RSA key pair key pair.
 func generateKeyPair() (crypto.PrivateKey, crypto.PublicKey, error) {
-	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	private, err := rsa.GenerateKey(rand.Reader, keyBits)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,17 +53,19 @@ func generateKeyPair() (crypto.PrivateKey, crypto.PublicKey, error) {
 }
 
 // privateKeyPEMBlock generates a PEM block from a private key.
-// For now, we assume elliptic curve.
 func privateKeyPEMBlock(key crypto.PrivateKey) (*pem.Block, error) {
-	ecKey, ok := key.(*ecdsa.PrivateKey)
-	if !ok {
-		return nil, util.Errorf("key is of type %T, expected ecdsa.PrivateKey", key)
+	switch k := key.(type) {
+	case *rsa.PrivateKey:
+		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}, nil
+	case *ecdsa.PrivateKey:
+		bytes, err := x509.MarshalECPrivateKey(k)
+		if err != nil {
+			return nil, util.Errorf("error marshalling ECDSA key: %s", err)
+		}
+		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: bytes}, nil
+	default:
+		return nil, util.Errorf("unknown key type: %v", k)
 	}
-	bytes, err := x509.MarshalECPrivateKey(ecKey)
-	if err != nil {
-		return nil, util.Errorf("error marshalling ECDSA key: %s", err)
-	}
-	return &pem.Block{Type: "EC PRIVATE KEY", Bytes: bytes}, nil
 }
 
 // certificatePEMBlock generates a PEM block from a certificate.
