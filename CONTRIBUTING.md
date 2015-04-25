@@ -47,6 +47,8 @@ We're following the [Google Go Code Review](https://code.google.com/p/go-wiki/wi
 
 `git commit -a -m 'update CONTRIBUTING.md'`
 
++ Run tests. It's usually enough to run `make test testrace`. You can also run `make acceptance` to have better test coverage. Running acceptance tests requires the Docker setup.
+
 + When you’re ready for review, create a remote branch from your local branch. You may want to `git fetch origin` and run `git rebase origin/master` on your local feature branch before.
 
 `git push -u origin $USER/update-readme`
