@@ -989,7 +989,7 @@ func (s *Store) ExecuteCmd(args proto.Request, reply proto.Response) error {
 			}
 			return util.RetryContinue, nil
 		}
-		return util.RetryBreak, nil
+		return util.RetryBreak, err
 	})
 
 	// By default, retries are indefinite. However, some unittests set a
