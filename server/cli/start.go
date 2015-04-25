@@ -70,11 +70,17 @@ func runInit(cmd *commander.Command, args []string) {
 		return
 	}
 
+	err := Context.Init()
+	if err != nil {
+		log.Errorf("failed to initialize context: %s", err)
+		return
+	}
+
 	// Generate a new UUID for cluster ID and bootstrap the cluster.
 	clusterID := uuid.New()
 	e := engine.NewRocksDB(proto.Attributes{}, args[0], 1<<20)
 	stopper := util.NewStopper()
-	if _, err := server.BootstrapCluster(clusterID, e, stopper); err != nil {
+	if _, err := server.BootstrapCluster(clusterID, e, Context, stopper); err != nil {
 		log.Errorf("unable to bootstrap cluster: %s", err)
 		return
 	}

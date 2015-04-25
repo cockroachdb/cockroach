@@ -103,24 +103,24 @@ func allocateStoreIDs(nodeID proto.NodeID, inc int64, db *client.KV) (proto.Stor
 //
 // Returns a KV client for unittest purposes. Caller should close
 // the returned client.
-func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper) (*client.KV, error) {
+func BootstrapCluster(clusterID string, eng engine.Engine, ctx *Context, stopper *util.Stopper) (*client.KV, error) {
 	sIdent := proto.StoreIdent{
 		ClusterID: clusterID,
 		NodeID:    1,
 		StoreID:   1,
 	}
-	ctx := storage.StoreContext{}
-	ctx.Context = context.Background()
-	ctx.ScanInterval = 10 * time.Minute
-	ctx.Clock = hlc.NewClock(hlc.UnixNano)
+	sCtx := storage.StoreContext{}
+	sCtx.Context = context.Background()
+	sCtx.ScanInterval = ctx.ScanInterval
+	sCtx.Clock = hlc.NewClock(hlc.UnixNano)
 	// Create a KV DB with a local sender.
 	lSender := kv.NewLocalSender()
-	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, ctx.Clock, false, stopper))
-	ctx.DB = localDB
-	ctx.Transport = multiraft.NewLocalRPCTransport()
+	localDB := client.NewKV(nil, kv.NewTxnCoordSender(lSender, sCtx.Clock, false, stopper))
+	sCtx.DB = localDB
+	sCtx.Transport = multiraft.NewLocalRPCTransport()
 	// The bootstrapping store will not connect to other nodes so its StoreConfig
 	// doesn't really matter.
-	s := storage.NewStore(ctx, eng)
+	s := storage.NewStore(sCtx, eng)
 
 	// Verify the store isn't already part of a cluster.
 	if len(s.Ident.ClusterID) > 0 {

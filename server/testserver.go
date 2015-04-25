@@ -126,7 +126,7 @@ func (ts *TestServer) Start() error {
 	ts.Ctx.Engines = []engine.Engine{ts.Engine}
 	if !ts.SkipBootstrap {
 		stopper := util.NewStopper()
-		_, err := BootstrapCluster("cluster-1", ts.Engine, stopper)
+		_, err := BootstrapCluster("cluster-1", ts.Engine, ts.Ctx, stopper)
 		if err != nil {
 			return util.Errorf("could not bootstrap cluster: %s", err)
 		}

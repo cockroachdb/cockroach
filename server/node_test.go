@@ -103,7 +103,7 @@ func formatKeys(keys []proto.Key) string {
 func TestBootstrapCluster(t *testing.T) {
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	localDB, err := BootstrapCluster("cluster-1", e, stopper)
+	localDB, err := BootstrapCluster("cluster-1", e, testContext, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", e, stopper)
+	_, err := BootstrapCluster("cluster-1", e, testContext, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestBootstrapNewStore(t *testing.T) {
 func TestNodeJoin(t *testing.T) {
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", e, stopper)
+	_, err := BootstrapCluster("cluster-1", e, testContext, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestNodeJoin(t *testing.T) {
 func TestCorruptedClusterID(t *testing.T) {
 	stopper := util.NewStopper()
 	e := engine.NewInMem(proto.Attributes{}, 1<<20)
-	_, err := BootstrapCluster("cluster-1", e, stopper)
+	_, err := BootstrapCluster("cluster-1", e, testContext, stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
