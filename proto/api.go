@@ -49,7 +49,7 @@ func IsRead(args Request) bool {
 	return (args.flags() & isRead) != 0
 }
 
-// IsWrite returns true if the request requires read permissions.
+// IsWrite returns true if the request requires write permissions.
 func IsWrite(args Request) bool {
 	return (args.flags() & isWrite) != 0
 }
