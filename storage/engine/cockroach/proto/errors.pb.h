@@ -48,6 +48,7 @@ class TransactionRetryError;
 class TransactionStatusError;
 class WriteIntentError;
 class WriteTooOldError;
+class ReadTooOldError;
 class OpRequiresTxnError;
 class ConditionFailedError;
 class ErrorDetail;
@@ -986,6 +987,87 @@ class WriteTooOldError : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static WriteTooOldError* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class ReadTooOldError : public ::google::protobuf::Message {
+ public:
+  ReadTooOldError();
+  virtual ~ReadTooOldError();
+
+  ReadTooOldError(const ReadTooOldError& from);
+
+  inline ReadTooOldError& operator=(const ReadTooOldError& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ReadTooOldError& default_instance();
+
+  void Swap(ReadTooOldError* other);
+
+  // implements Message ----------------------------------------------
+
+  ReadTooOldError* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ReadTooOldError& from);
+  void MergeFrom(const ReadTooOldError& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional .cockroach.proto.Timestamp timestamp = 1;
+  inline bool has_timestamp() const;
+  inline void clear_timestamp();
+  static const int kTimestampFieldNumber = 1;
+  inline const ::cockroach::proto::Timestamp& timestamp() const;
+  inline ::cockroach::proto::Timestamp* mutable_timestamp();
+  inline ::cockroach::proto::Timestamp* release_timestamp();
+  inline void set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp);
+
+  // @@protoc_insertion_point(class_scope:cockroach.proto.ReadTooOldError)
+ private:
+  inline void set_has_timestamp();
+  inline void clear_has_timestamp();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint32 _has_bits_[1];
+  mutable int _cached_size_;
+  ::cockroach::proto::Timestamp* timestamp_;
+  friend void  protobuf_AddDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_AssignDesc_cockroach_2fproto_2ferrors_2eproto();
+  friend void protobuf_ShutdownFile_cockroach_2fproto_2ferrors_2eproto();
+
+  void InitAsDefaultInstance();
+  static ReadTooOldError* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -2364,6 +2446,51 @@ inline void WriteTooOldError::set_allocated_existing_timestamp(::cockroach::prot
     clear_has_existing_timestamp();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.WriteTooOldError.existing_timestamp)
+}
+
+// -------------------------------------------------------------------
+
+// ReadTooOldError
+
+// optional .cockroach.proto.Timestamp timestamp = 1;
+inline bool ReadTooOldError::has_timestamp() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void ReadTooOldError::set_has_timestamp() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void ReadTooOldError::clear_has_timestamp() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void ReadTooOldError::clear_timestamp() {
+  if (timestamp_ != NULL) timestamp_->::cockroach::proto::Timestamp::Clear();
+  clear_has_timestamp();
+}
+inline const ::cockroach::proto::Timestamp& ReadTooOldError::timestamp() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.ReadTooOldError.timestamp)
+  return timestamp_ != NULL ? *timestamp_ : *default_instance_->timestamp_;
+}
+inline ::cockroach::proto::Timestamp* ReadTooOldError::mutable_timestamp() {
+  set_has_timestamp();
+  if (timestamp_ == NULL) timestamp_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.ReadTooOldError.timestamp)
+  return timestamp_;
+}
+inline ::cockroach::proto::Timestamp* ReadTooOldError::release_timestamp() {
+  clear_has_timestamp();
+  ::cockroach::proto::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline void ReadTooOldError::set_allocated_timestamp(::cockroach::proto::Timestamp* timestamp) {
+  delete timestamp_;
+  timestamp_ = timestamp;
+  if (timestamp) {
+    set_has_timestamp();
+  } else {
+    clear_has_timestamp();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.ReadTooOldError.timestamp)
 }
 
 // -------------------------------------------------------------------

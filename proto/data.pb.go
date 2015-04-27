@@ -668,8 +668,10 @@ type MVCCMetadata struct {
 	// and subsequent version rows. If timestamp == (0, 0), then there
 	// is only a single MVCC metadata row with value inlined, and with
 	// empty timestamp, key_bytes, and val_bytes.
-	Value            *Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Value *Value `protobuf:"bytes,6,opt,name=value" json:"value,omitempty"`
+	// The timestamp of the most recent evicted version of the key.
+	LastEvicted      Timestamp `protobuf:"bytes,7,opt,name=last_evicted" json:"last_evicted"`
+	XXX_unrecognized []byte    `json:"-"`
 }
 
 func (m *MVCCMetadata) Reset()         { *m = MVCCMetadata{} }
@@ -716,6 +718,13 @@ func (m *MVCCMetadata) GetValue() *Value {
 		return m.Value
 	}
 	return nil
+}
+
+func (m *MVCCMetadata) GetLastEvicted() Timestamp {
+	if m != nil {
+		return m.LastEvicted
+	}
+	return Timestamp{}
 }
 
 // GCMetadata holds information about the last complete key/value
@@ -2572,6 +2581,30 @@ func (m *MVCCMetadata) Unmarshal(data []byte) error {
 				return err
 			}
 			index = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastEvicted", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.LastEvicted.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
 		default:
 			var sizeOfWire int
 			for {
@@ -3316,6 +3349,8 @@ func (m *MVCCMetadata) Size() (n int) {
 		l = m.Value.Size()
 		n += 1 + l + sovData(uint64(l))
 	}
+	l = m.LastEvicted.Size()
+	n += 1 + l + sovData(uint64(l))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -4021,6 +4056,14 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		}
 		i += n22
 	}
+	data[i] = 0x3a
+	i++
+	i = encodeVarintData(data, i, uint64(m.LastEvicted.Size()))
+	n23, err := m.LastEvicted.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)
 	}
