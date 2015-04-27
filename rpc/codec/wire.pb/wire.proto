@@ -51,6 +51,7 @@ option (gogoproto.unmarshaler_all) = true;
 enum CompressionType {
   NONE = 0;
   SNAPPY = 1;
+  LZ4 = 2;
 }
 
 message RequestHeader {
@@ -58,6 +59,7 @@ message RequestHeader {
   optional string method = 2;
   optional int32 method_id = 3 [(gogoproto.nullable) = false];
   optional CompressionType compression = 4 [(gogoproto.nullable) = false];
+  optional uint32 uncompressed_size = 5 [(gogoproto.nullable) = false];
 }
 
 message ResponseHeader {
@@ -65,4 +67,5 @@ message ResponseHeader {
   optional string method = 2;
   optional string error = 3 [(gogoproto.nullable) = false];
   optional CompressionType compression = 4 [(gogoproto.nullable) = false];
+  optional uint32 uncompressed_size = 5 [(gogoproto.nullable) = false];
 }
