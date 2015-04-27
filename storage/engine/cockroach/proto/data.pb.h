@@ -1651,6 +1651,15 @@ class MVCCMetadata : public ::google::protobuf::Message {
   inline ::cockroach::proto::Value* release_value();
   inline void set_allocated_value(::cockroach::proto::Value* value);
 
+  // optional .cockroach.proto.Timestamp last_evicted = 7;
+  inline bool has_last_evicted() const;
+  inline void clear_last_evicted();
+  static const int kLastEvictedFieldNumber = 7;
+  inline const ::cockroach::proto::Timestamp& last_evicted() const;
+  inline ::cockroach::proto::Timestamp* mutable_last_evicted();
+  inline ::cockroach::proto::Timestamp* release_last_evicted();
+  inline void set_allocated_last_evicted(::cockroach::proto::Timestamp* last_evicted);
+
   // @@protoc_insertion_point(class_scope:cockroach.proto.MVCCMetadata)
  private:
   inline void set_has_txn();
@@ -1665,6 +1674,8 @@ class MVCCMetadata : public ::google::protobuf::Message {
   inline void clear_has_val_bytes();
   inline void set_has_value();
   inline void clear_has_value();
+  inline void set_has_last_evicted();
+  inline void clear_has_last_evicted();
 
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
 
@@ -1675,6 +1686,7 @@ class MVCCMetadata : public ::google::protobuf::Message {
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
   ::cockroach::proto::Value* value_;
+  ::cockroach::proto::Timestamp* last_evicted_;
   bool deleted_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
@@ -4245,6 +4257,47 @@ inline void MVCCMetadata::set_allocated_value(::cockroach::proto::Value* value) 
     clear_has_value();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.proto.MVCCMetadata.value)
+}
+
+// optional .cockroach.proto.Timestamp last_evicted = 7;
+inline bool MVCCMetadata::has_last_evicted() const {
+  return (_has_bits_[0] & 0x00000040u) != 0;
+}
+inline void MVCCMetadata::set_has_last_evicted() {
+  _has_bits_[0] |= 0x00000040u;
+}
+inline void MVCCMetadata::clear_has_last_evicted() {
+  _has_bits_[0] &= ~0x00000040u;
+}
+inline void MVCCMetadata::clear_last_evicted() {
+  if (last_evicted_ != NULL) last_evicted_->::cockroach::proto::Timestamp::Clear();
+  clear_has_last_evicted();
+}
+inline const ::cockroach::proto::Timestamp& MVCCMetadata::last_evicted() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.MVCCMetadata.last_evicted)
+  return last_evicted_ != NULL ? *last_evicted_ : *default_instance_->last_evicted_;
+}
+inline ::cockroach::proto::Timestamp* MVCCMetadata::mutable_last_evicted() {
+  set_has_last_evicted();
+  if (last_evicted_ == NULL) last_evicted_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.MVCCMetadata.last_evicted)
+  return last_evicted_;
+}
+inline ::cockroach::proto::Timestamp* MVCCMetadata::release_last_evicted() {
+  clear_has_last_evicted();
+  ::cockroach::proto::Timestamp* temp = last_evicted_;
+  last_evicted_ = NULL;
+  return temp;
+}
+inline void MVCCMetadata::set_allocated_last_evicted(::cockroach::proto::Timestamp* last_evicted) {
+  delete last_evicted_;
+  last_evicted_ = last_evicted;
+  if (last_evicted) {
+    set_has_last_evicted();
+  } else {
+    clear_has_last_evicted();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.MVCCMetadata.last_evicted)
 }
 
 // -------------------------------------------------------------------

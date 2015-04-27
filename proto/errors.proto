@@ -111,6 +111,13 @@ message WriteTooOldError {
   optional Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
+// A ReadTooOldError indicates that a read was issued for a version
+// of a key which has already been garbage collected.
+// The read should be retried with a higher timestamp.
+message ReadTooOldError {
+  optional Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+}
+
 // An OpRequiresTxnError indicates that a command required to be
 // carried out in a transactional context but was not.
 // For example, a Scan which spans ranges requires a transaction.

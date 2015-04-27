@@ -1613,7 +1613,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS := proto.MVCCStats{LiveBytes: 39, KeyBytes: 15, ValBytes: 24, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
+	expMS := proto.MVCCStats{LiveBytes: 45, KeyBytes: 15, ValBytes: 30, IntentBytes: 0, LiveCount: 1, KeyCount: 1, ValCount: 1, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Put a 2nd value transactionally.
@@ -1623,7 +1623,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 118, KeyBytes: 30, ValBytes: 88, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
+	expMS = proto.MVCCStats{LiveBytes: 130, KeyBytes: 30, ValBytes: 100, IntentBytes: 24, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 1}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Resolve the 2nd value.
@@ -1641,7 +1641,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(rArgs, rReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 78, KeyBytes: 30, ValBytes: 48, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
+	expMS = proto.MVCCStats{LiveBytes: 90, KeyBytes: 30, ValBytes: 60, IntentBytes: 0, LiveCount: 2, KeyCount: 2, ValCount: 2, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 
 	// Delete the 1st value.
@@ -1650,7 +1650,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	if err := tc.rng.AddCmd(dArgs, dReply, true); err != nil {
 		t.Fatal(err)
 	}
-	expMS = proto.MVCCStats{LiveBytes: 39, KeyBytes: 42, ValBytes: 50, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
+	expMS = proto.MVCCStats{LiveBytes: 45, KeyBytes: 42, ValBytes: 62, IntentBytes: 0, LiveCount: 1, KeyCount: 2, ValCount: 3, IntentCount: 0}
 	verifyRangeStats(tc.engine, tc.rng.Desc().RaftID, expMS, t)
 }
 

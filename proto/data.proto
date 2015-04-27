@@ -284,6 +284,9 @@ message MVCCMetadata {
   // is only a single MVCC metadata row with value inlined, and with
   // empty timestamp, key_bytes, and val_bytes.
   optional Value value = 6;
+  // The timestamp of the most recent evicted version of the key.
+  optional Timestamp last_evicted = 7 [(gogoproto.nullable) = false];
+
 }
 
 // GCMetadata holds information about the last complete key/value

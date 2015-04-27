@@ -1163,7 +1163,6 @@ func MVCCResolveWriteIntentRange(engine Engine, ms *proto.MVCCStats, key, endKey
 // key, clearing all values with timestamps <= to expiration.
 func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.InternalGCRequest_GCKey, timestamp proto.Timestamp) error {
 	iter := engine.NewIterator()
-
 	// Iterate through specified GC keys.
 	for _, gcKey := range keys {
 		encKey := MVCCEncodeKey(gcKey.Key)
@@ -1173,6 +1172,9 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 		}
 		// First, check whether all values of the key are being deleted.
 		meta := &proto.MVCCMetadata{}
+		metaKey := iter.Key()
+		origMetaKeySize := int64(len(metaKey))
+		origMetaValSize := int64(len(iter.Value()))
 		if err := gogoproto.Unmarshal(iter.Value(), meta); err != nil {
 			return util.Errorf("unable to marshal mvcc meta: %s", err)
 		}
@@ -1186,6 +1188,7 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 			ageSeconds := timestamp.WallTime/1E9 - meta.Timestamp.WallTime/1E9
 			updateStatsOnGC(ms, gcKey.Key, int64(len(iter.Key())), int64(len(iter.Value())), meta, ageSeconds)
 			engine.Clear(iter.Key())
+			metaKey = nil // mark as deleted for later use.
 		}
 
 		// Now, iterate through all values, GC'ing ones which have expired.
@@ -1198,9 +1201,24 @@ func MVCCGarbageCollect(engine Engine, ms *proto.MVCCStats, keys []proto.Interna
 			}
 			if !gcKey.Timestamp.Less(ts) {
 				ageSeconds := timestamp.WallTime/1E9 - ts.WallTime/1E9
-				updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize, int64(len(iter.Value())), nil, ageSeconds)
+				updateStatsOnGC(ms, gcKey.Key, mvccVersionTimestampSize,
+					int64(len(iter.Value())), nil, ageSeconds)
 				engine.Clear(iter.Key())
+				meta.LastEvicted.Forward(ts)
 			}
+		}
+
+		// If we didn't just GC the meta key, and the meta key is not
+		// deleted, update the stats.
+		// TODO(tschottdorf): is this the right kind of update?
+		if metaKey != nil && !meta.Deleted {
+			metaKeyBytes, metaValBytes, err := PutProto(engine, metaKey, meta)
+			if err != nil {
+				return util.Errorf("error updating meta key: %s", err)
+			}
+			decMetaKey, _, _ := MVCCDecodeKey(metaKey)
+			updateStatsForInline(ms, decMetaKey, origMetaKeySize,
+				origMetaValSize, metaKeyBytes, metaValBytes)
 		}
 	}
 

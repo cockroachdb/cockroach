@@ -316,13 +316,14 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Lease));
   MVCCMetadata_descriptor_ = file->message_type(13);
-  static const int MVCCMetadata_offsets_[6] = {
+  static const int MVCCMetadata_offsets_[7] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, txn_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, timestamp_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, deleted_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, key_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, val_bytes_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, value_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(MVCCMetadata, last_evicted_),
   };
   MVCCMetadata_reflection_ =
     new ::google::protobuf::internal::GeneratedMessageReflection(
@@ -564,33 +565,35 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "proto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"w\n\005Lease\022\030\n\ne"
     "xpiration\030\001 \001(\003B\004\310\336\037\000\022\026\n\010duration\030\002 \001(\003B"
     "\004\310\336\037\000\022\022\n\004term\030\003 \001(\004B\004\310\336\037\000\022(\n\014raft_node_i"
-    "d\030\004 \001(\004B\022\310\336\037\000\342\336\037\nRaftNodeID\"\336\001\n\014MVCCMeta"
+    "d\030\004 \001(\004B\022\310\336\037\000\342\336\037\nRaftNodeID\"\226\002\n\014MVCCMeta"
     "data\022)\n\003txn\030\001 \001(\0132\034.cockroach.proto.Tran"
     "saction\0223\n\ttimestamp\030\002 \001(\0132\032.cockroach.p"
     "roto.TimestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310"
     "\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_byte"
     "s\030\005 \001(\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach"
-    ".proto.Value\"H\n\nGCMetadata\022\035\n\017last_scan_"
-    "nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos"
-    "\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017timesta"
-    "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022"
-    "\023\n\013float_value\030\003 \001(\002\"t\n\016TimeSeriesData\022\022"
-    "\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\006source\030\002 \001(\tB\004\310\336\037\000"
-    "\0228\n\ndatapoints\030\003 \003(\0132$.cockroach.proto.T"
-    "imeSeriesDatapoint\"\300\002\n\tMVCCStats\022\030\n\nlive"
-    "_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310"
-    "\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_b"
-    "ytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336"
-    "\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count"
-    "\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000"
-    "\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_a"
-    "ge\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\037\n\021last_upd"
-    "ate_nanos\030\013 \001(\003B\004\310\336\037\000*>\n\021ReplicaChangeTy"
-    "pe\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032"
-    "\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000"
-    "\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatu"
-    "s\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED"
-    "\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3109);
+    ".proto.Value\0226\n\014last_evicted\030\007 \001(\0132\032.coc"
+    "kroach.proto.TimestampB\004\310\336\037\000\"H\n\nGCMetada"
+    "ta\022\035\n\017last_scan_nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023old"
+    "est_intent_nanos\030\002 \001(\003\"\\\n\023TimeSeriesData"
+    "point\022\035\n\017timestamp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\t"
+    "int_value\030\002 \001(\003\022\023\n\013float_value\030\003 \001(\002\"t\n\016"
+    "TimeSeriesData\022\022\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\006so"
+    "urce\030\002 \001(\tB\004\310\336\037\000\0228\n\ndatapoints\030\003 \003(\0132$.c"
+    "ockroach.proto.TimeSeriesDatapoint\"\300\002\n\tM"
+    "VCCStats\022\030\n\nlive_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tke"
+    "y_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004"
+    "\310\336\037\000\022\032\n\014intent_bytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive"
+    "_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310"
+    "\336\037\000\022\027\n\tval_count\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_c"
+    "ount\030\010 \001(\003B\004\310\336\037\000\022\030\n\nintent_age\030\t \001(\003B\004\310\336"
+    "\037\000\022(\n\014gc_bytes_age\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCByte"
+    "sAge\022\037\n\021last_update_nanos\030\013 \001(\003B\004\310\336\037\000*>\n"
+    "\021ReplicaChangeType\022\017\n\013ADD_REPLICA\020\000\022\022\n\016R"
+    "EMOVE_REPLICA\020\001\032\004\210\243\036\000*5\n\rIsolationType\022\020"
+    "\n\014SERIALIZABLE\020\000\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021"
+    "TransactionStatus\022\013\n\007PENDING\020\000\022\r\n\tCOMMIT"
+    "TED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036"
+    "\001\320\342\036\001", 3165);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -5128,6 +5131,7 @@ const int MVCCMetadata::kDeletedFieldNumber;
 const int MVCCMetadata::kKeyBytesFieldNumber;
 const int MVCCMetadata::kValBytesFieldNumber;
 const int MVCCMetadata::kValueFieldNumber;
+const int MVCCMetadata::kLastEvictedFieldNumber;
 #endif  // !_MSC_VER
 
 MVCCMetadata::MVCCMetadata()
@@ -5140,6 +5144,7 @@ void MVCCMetadata::InitAsDefaultInstance() {
   txn_ = const_cast< ::cockroach::proto::Transaction*>(&::cockroach::proto::Transaction::default_instance());
   timestamp_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
   value_ = const_cast< ::cockroach::proto::Value*>(&::cockroach::proto::Value::default_instance());
+  last_evicted_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
 }
 
 MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
@@ -5157,6 +5162,7 @@ void MVCCMetadata::SharedCtor() {
   key_bytes_ = GOOGLE_LONGLONG(0);
   val_bytes_ = GOOGLE_LONGLONG(0);
   value_ = NULL;
+  last_evicted_ = NULL;
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -5170,6 +5176,7 @@ void MVCCMetadata::SharedDtor() {
     delete txn_;
     delete timestamp_;
     delete value_;
+    delete last_evicted_;
   }
 }
 
@@ -5205,7 +5212,7 @@ void MVCCMetadata::Clear() {
     ::memset(&first, 0, n);                                \
   } while (0)
 
-  if (_has_bits_[0 / 32] & 63) {
+  if (_has_bits_[0 / 32] & 127) {
     ZR_(key_bytes_, val_bytes_);
     if (has_txn()) {
       if (txn_ != NULL) txn_->::cockroach::proto::Transaction::Clear();
@@ -5216,6 +5223,9 @@ void MVCCMetadata::Clear() {
     deleted_ = false;
     if (has_value()) {
       if (value_ != NULL) value_->::cockroach::proto::Value::Clear();
+    }
+    if (has_last_evicted()) {
+      if (last_evicted_ != NULL) last_evicted_->::cockroach::proto::Timestamp::Clear();
     }
   }
 
@@ -5315,6 +5325,19 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         } else {
           goto handle_unusual;
         }
+        if (input->ExpectTag(58)) goto parse_last_evicted;
+        break;
+      }
+
+      // optional .cockroach.proto.Timestamp last_evicted = 7;
+      case 7: {
+        if (tag == 58) {
+         parse_last_evicted:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_last_evicted()));
+        } else {
+          goto handle_unusual;
+        }
         if (input->ExpectAtEnd()) goto success;
         break;
       }
@@ -5377,6 +5400,12 @@ void MVCCMetadata::SerializeWithCachedSizes(
       6, this->value(), output);
   }
 
+  // optional .cockroach.proto.Timestamp last_evicted = 7;
+  if (has_last_evicted()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      7, this->last_evicted(), output);
+  }
+
   if (!unknown_fields().empty()) {
     ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
         unknown_fields(), output);
@@ -5421,6 +5450,13 @@ void MVCCMetadata::SerializeWithCachedSizes(
     target = ::google::protobuf::internal::WireFormatLite::
       WriteMessageNoVirtualToArray(
         6, this->value(), target);
+  }
+
+  // optional .cockroach.proto.Timestamp last_evicted = 7;
+  if (has_last_evicted()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        7, this->last_evicted(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -5475,6 +5511,13 @@ int MVCCMetadata::ByteSize() const {
           this->value());
     }
 
+    // optional .cockroach.proto.Timestamp last_evicted = 7;
+    if (has_last_evicted()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->last_evicted());
+    }
+
   }
   if (!unknown_fields().empty()) {
     total_size +=
@@ -5520,6 +5563,9 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
     if (from.has_value()) {
       mutable_value()->::cockroach::proto::Value::MergeFrom(from.value());
     }
+    if (from.has_last_evicted()) {
+      mutable_last_evicted()->::cockroach::proto::Timestamp::MergeFrom(from.last_evicted());
+    }
   }
   mutable_unknown_fields()->MergeFrom(from.unknown_fields());
 }
@@ -5549,6 +5595,7 @@ void MVCCMetadata::Swap(MVCCMetadata* other) {
     std::swap(key_bytes_, other->key_bytes_);
     std::swap(val_bytes_, other->val_bytes_);
     std::swap(value_, other->value_);
+    std::swap(last_evicted_, other->last_evicted_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);
     std::swap(_cached_size_, other->_cached_size_);
