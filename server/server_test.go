@@ -153,7 +153,7 @@ func TestSelfBootstrap(t *testing.T) {
 func TestHealth(t *testing.T) {
 	s := StartTestServer(t)
 	defer s.Stop()
-	url := "https://" + s.ServingAddr() + healthPath
+	url := testContext.RequestScheme() + "://" + s.ServingAddr() + healthPath
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +268,7 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", "https://"+s.ServingAddr()+healthPath, nil)
+		req, err := http.NewRequest("GET", testContext.RequestScheme()+"://"+s.ServingAddr()+healthPath, nil)
 		if err != nil {
 			t.Fatalf("could not create request: %s", err)
 		}
