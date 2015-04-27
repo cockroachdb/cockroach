@@ -841,11 +841,14 @@ func (r *Range) executeCmd(index uint64, args proto.Request,
 			if oldIndex := atomic.LoadUint64(&r.appliedIndex); oldIndex >= index {
 				log.Fatalf("applied index moved backwards: %d >= %d", oldIndex, index)
 			}
-			atomic.StoreUint64(&r.appliedIndex, index)
+			// TODO(tschottdorf) is this put really supposed to hit the stats?
+			// I suppose it's filtered out anyways, but still.
 			err := engine.MVCCPut(batch, &ms, engine.RaftAppliedIndexKey(r.Desc().RaftID),
 				proto.ZeroTimestamp, proto.Value{Bytes: encoding.EncodeUint64(nil, index)}, nil)
 			if err != nil {
 				reply.Header().SetGoError(err)
+			} else {
+				atomic.StoreUint64(&r.appliedIndex, index)
 			}
 		}
 
@@ -1401,8 +1404,8 @@ func (r *Range) InternalTruncateLog(batch engine.Engine, ms *proto.MVCCStats, ar
 		reply.SetGoError(err)
 		return
 	}
-	start := engine.RaftLogKey(r.Desc().RaftID, args.Index).Next()
-	end := engine.RaftLogKey(r.Desc().RaftID, 0)
+	start := engine.RaftLogKey(r.Desc().RaftID, 0)
+	end := engine.RaftLogKey(r.Desc().RaftID, args.Index)
 	err = batch.Iterate(engine.MVCCEncodeKey(start), engine.MVCCEncodeKey(end),
 		func(kv proto.RawKeyValue) (bool, error) {
 			err := batch.Clear(kv.Key)

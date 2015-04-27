@@ -68,36 +68,28 @@ func (r *Range) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 
 // loadLastIndex looks in the engine to find the last log index.
 func (r *Range) loadLastIndex() error {
-	logKey := engine.RaftLogPrefix(r.Desc().RaftID)
-	// The log keys are encoded in descending order, so the first log
-	// entry in the database is the last one that was written.
-	// TODO(tschottdorf) this all should go away and load from a fixed
-	// key.
-	kvs, err := engine.MVCCScan(r.rm.Engine(),
-		logKey, logKey.PrefixEnd(),
-		1, proto.ZeroTimestamp, true, nil)
+	lastIndex := uint64(0)
+	raftID := r.Desc().RaftID
+	eng := r.rm.Engine()
+	v, err := engine.MVCCGet(eng, engine.RaftLastIndexKey(raftID),
+		proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return err
 	}
-	if len(kvs) > 0 {
-		// The log is non-empty, so use the most recent entry's index.
-		// The index is encoded in both the key and the value.
-		var lastEnt raftpb.Entry
-		err := gogoproto.Unmarshal(kvs[0].Value.Bytes, &lastEnt)
-		if err != nil {
-			return err
-		}
-		atomic.StoreUint64(&r.lastIndex, lastEnt.Index)
-	} else if len(kvs) == 0 {
+	if v != nil {
+		_, lastIndex = encoding.DecodeUint64(v.Bytes)
+	} else {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away. raftTruncatedState
 		// handles both cases.
-		ts, err := r.raftTruncatedState()
+		lastEnt, err := r.raftTruncatedState()
 		if err != nil {
 			return err
 		}
-		atomic.StoreUint64(&r.lastIndex, ts.Index)
+		lastIndex = lastEnt.Index
 	}
+
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
 	return nil
 }
 
@@ -107,13 +99,11 @@ func (r *Range) loadLastIndex() error {
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
 func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	// Scan over the log (which is stored backwards) to find the
-	// requested entries. Reversing [lo, hi) gives us (hi, lo]; since
-	// MVCCScan is inclusive in the other direction we must increment both the
-	// start and end keys.
+	// Scan over the log to find the
+	// requested entries in the range [lo, hi).
 	kvs, err := engine.MVCCScan(r.rm.Engine(),
-		engine.RaftLogKey(r.Desc().RaftID, hi).Next(),
-		engine.RaftLogKey(r.Desc().RaftID, lo).Next(),
+		engine.RaftLogKey(r.Desc().RaftID, lo),
+		engine.RaftLogKey(r.Desc().RaftID, hi),
 		0, proto.ZeroTimestamp, true, nil)
 	if err != nil {
 		return nil, err
@@ -129,10 +119,6 @@ func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	}
 	if len(ents) != int(hi-lo) {
 		return nil, raft.ErrUnavailable
-	}
-	// Reverse the log to get it back into the proper order.
-	for i, j := 0, len(ents)-1; i < j; i, j = i+1, j-1 {
-		ents[i], ents[j] = ents[j], ents[i]
 	}
 
 	// TODO(bdarnell): apply the limit earlier instead of after loading everything.
@@ -234,9 +220,9 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 		return raftpb.Snapshot{}, err
 	}
 	var desc proto.RangeDescriptor
-	// We ignore intents on the range descriptor (consistent=false) because we know
-	// they cannot be committed yet. (operations that modify range descriptors resolve their
-	// own intents when they commit).
+	// We ignore intents on the range descriptor (consistent=false) because we
+	// know they cannot be committed yet - operations that modify range
+	// descriptors resolve their own intents when they commit).
 	ok, err := engine.MVCCGetProto(snap, engine.RangeDescriptorKey(r.Desc().StartKey),
 		r.rm.Clock().Now(), false, nil, &desc)
 	if err != nil {
@@ -280,6 +266,9 @@ func (r *Range) Snapshot() (raftpb.Snapshot, error) {
 
 // Append implements the multiraft.WriteableGroupStorage interface.
 func (r *Range) Append(entries []raftpb.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	batch := r.rm.Engine().NewBatch()
 	for _, ent := range entries {
 		err := engine.MVCCPutProto(batch, nil, engine.RaftLogKey(r.Desc().RaftID, ent.Index),
@@ -288,12 +277,28 @@ func (r *Range) Append(entries []raftpb.Entry) error {
 			return err
 		}
 	}
-	// TODO(bdarnell): if the last entry's index < lastIndex, delete any remaining old entries.
-	err := batch.Commit()
+	lastIndex := entries[len(entries)-1].Index
+	prevLastIndex := atomic.LoadUint64(&r.lastIndex)
+	// Delete any previously appended log entries which never committed.
+	for i := lastIndex + 1; i <= prevLastIndex; i++ {
+		err := engine.MVCCDelete(batch, nil,
+			engine.RaftLogKey(r.Desc().RaftID, i), proto.ZeroTimestamp, nil)
+		if err != nil {
+			return err
+		}
+	}
+	err := engine.MVCCPut(batch, nil, engine.RaftLastIndexKey(r.Desc().RaftID),
+		proto.ZeroTimestamp, proto.Value{
+			Bytes: encoding.EncodeUint64(nil, lastIndex),
+		}, nil)
+	if err == nil {
+		err = batch.Commit()
+	}
+
 	if err != nil {
 		return err
 	}
-	atomic.StoreUint64(&r.lastIndex, entries[len(entries)-1].Index)
+	atomic.StoreUint64(&r.lastIndex, lastIndex)
 	return nil
 }
 
