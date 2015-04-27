@@ -73,8 +73,7 @@ func MakeRangeIDKey(raftID int64, suffix, detail proto.Key) proto.Key {
 
 // RaftLogKey returns a system-local key for a Raft log entry.
 func RaftLogKey(raftID int64, logIndex uint64) proto.Key {
-	// The log is stored "backwards" so we can easily find the highest index stored.
-	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, encoding.EncodeUint64Decreasing(nil, logIndex))
+	return MakeRangeIDKey(raftID, KeyLocalRaftLogSuffix, encoding.EncodeUint64(nil, logIndex))
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all entries in a Raft log.
@@ -106,6 +105,11 @@ func RaftTruncatedStateKey(raftID int64) proto.Key {
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
 func RaftAppliedIndexKey(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRaftAppliedIndexSuffix, proto.Key{})
+}
+
+// RaftLastIndexKey returns a system-local key for a raft last index.
+func RaftLastIndexKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftLastIndexSuffix, proto.Key{})
 }
 
 // RangeStatKey returns the key for accessing the named stat
@@ -377,6 +381,8 @@ var (
 	KeyLocalRaftTruncatedStateSuffix = proto.Key("rftt")
 	// KeyLocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	KeyLocalRaftAppliedIndexSuffix = proto.Key("rfta")
+	// KeyLocalRaftLastIndexSuffix is the suffix for raft's last index.
+	KeyLocalRaftLastIndexSuffix = proto.Key("rfti")
 	// KeyLocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
 	KeyLocalRangeGCMetadataSuffix = proto.Key("rgcm")
 	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's
