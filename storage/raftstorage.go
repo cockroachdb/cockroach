@@ -95,39 +95,38 @@ func (r *Range) loadLastIndex() error {
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
-// maxBytes.
+// maxBytes. Passing maxBytes equal to zero disables size checking.
 // TODO(bdarnell): consider caching for recent entries, if rocksdb's builtin caching
 // is insufficient.
 func (r *Range) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	// Scan over the log to find the
-	// requested entries in the range [lo, hi).
-	kvs, err := engine.MVCCScan(r.rm.Engine(),
+	// Scan over the log to find the requested entries in the range [lo, hi),
+	// stopping once we have enough.
+	var ents []raftpb.Entry
+	size := uint64(0)
+	var ent raftpb.Entry
+	scanFunc := func(kv proto.KeyValue) (bool, error) {
+		err := gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
+		if err != nil {
+			return false, err
+		}
+		size += uint64(ent.Size())
+		ents = append(ents, ent)
+		return maxBytes > 0 && size > maxBytes, nil
+	}
+
+	err := engine.MVCCIterate(r.rm.Engine(),
 		engine.RaftLogKey(r.Desc().RaftID, lo),
 		engine.RaftLogKey(r.Desc().RaftID, hi),
-		0, proto.ZeroTimestamp, true, nil)
+		proto.ZeroTimestamp, true /* consistent */, nil /* txn */, scanFunc)
+
 	if err != nil {
 		return nil, err
 	}
-	ents := make([]raftpb.Entry, 0, len(kvs))
-	for _, kv := range kvs {
-		var ent raftpb.Entry
-		err = gogoproto.Unmarshal(kv.Value.GetBytes(), &ent)
-		if err != nil {
-			return nil, err
-		}
-		ents = append(ents, ent)
-	}
-	if len(ents) != int(hi-lo) {
-		return nil, raft.ErrUnavailable
-	}
 
-	// TODO(bdarnell): apply the limit earlier instead of after loading everything.
-	size := ents[0].Size()
-	for i := 1; i < len(ents); i++ {
-		size += ents[i].Size()
-		if uint64(size) > maxBytes {
-			return ents[:i], nil
-		}
+	// If neither the number of entries nor the size limitations had an
+	// effect, we weren't able to supply everything the client wanted.
+	if len(ents) != int(hi-lo) && (maxBytes == 0 || size < maxBytes) {
+		return nil, raft.ErrUnavailable
 	}
 
 	return ents, nil
