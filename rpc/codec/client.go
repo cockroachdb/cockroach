@@ -40,9 +40,10 @@ type clientCodec struct {
 	methods map[string]int32
 
 	// temporary work space
-	reqBuf     bytes.Buffer
-	reqHeader  wire.RequestHeader
-	respHeader wire.ResponseHeader
+	reqBodyBuf   bytes.Buffer
+	reqHeaderBuf bytes.Buffer
+	reqHeader    wire.RequestHeader
+	respHeader   wire.ResponseHeader
 }
 
 // NewClientCodec returns a new rpc.ClientCodec using Protobuf-RPC on conn.
@@ -101,7 +102,7 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 
 	err := c.readResponseBody(&c.respHeader, response)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	c.respHeader.Reset()
@@ -109,11 +110,18 @@ func (c *clientCodec) ReadResponseBody(x interface{}) error {
 }
 
 func (c *clientCodec) writeRequest(r *rpc.Request, request proto.Message) error {
+	// marshal request
+	pbRequest, err := marshal(&c.reqBodyBuf, request)
+	if err != nil {
+		return err
+	}
+
 	// generate header
 	header := &c.reqHeader
 	*header = wire.RequestHeader{
-		Id:          r.Seq,
-		Compression: wire.CompressionType_NONE,
+		Id:               r.Seq,
+		Compression:      compressionType,
+		UncompressedSize: uint32(len(pbRequest)),
 	}
 	if mid, ok := c.methods[r.ServiceMethod]; ok {
 		header.MethodId = mid
@@ -122,12 +130,9 @@ func (c *clientCodec) writeRequest(r *rpc.Request, request proto.Message) error 
 		header.MethodId = int32(len(c.methods))
 		c.methods[r.ServiceMethod] = header.MethodId
 	}
-	if enableSnappy {
-		header.Compression = wire.CompressionType_SNAPPY
-	}
 
 	// marshal header
-	pbHeader, err := marshal(&c.reqBuf, header)
+	pbHeader, err := marshal(&c.reqHeaderBuf, header)
 	if err != nil {
 		return err
 	}
@@ -137,26 +142,22 @@ func (c *clientCodec) writeRequest(r *rpc.Request, request proto.Message) error 
 		return err
 	}
 
-	// marshal request
-	pbRequest, err := marshal(&c.reqBuf, request)
-	if err != nil {
-		return err
-	}
-
 	// send body (end)
-	if enableSnappy {
+	if compressionType == wire.CompressionType_SNAPPY {
 		return snappyEncode(pbRequest, c.sendFrame)
+	} else if compressionType == wire.CompressionType_LZ4 {
+		return lz4Encode(pbRequest, c.sendFrame)
 	}
 	return c.sendFrame(pbRequest)
 }
 
 func (c *clientCodec) readResponseHeader(header *wire.ResponseHeader) error {
-	return c.recvProto(header, proto.Unmarshal)
+	return c.recvProto(header, 0, protoUnmarshal)
 }
 
 func (c *clientCodec) readResponseBody(header *wire.ResponseHeader,
 	response proto.Message) error {
-	return c.recvProto(response, decompressors[header.Compression])
+	return c.recvProto(response, header.UncompressedSize, decompressors[header.Compression])
 }
 
 // NewClient returns a new rpc.Client to handle requests to the

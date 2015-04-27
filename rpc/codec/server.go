@@ -38,9 +38,10 @@ type serverCodec struct {
 	methods []string
 
 	// temporary work space
-	respBuf    bytes.Buffer
-	respHeader wire.ResponseHeader
-	reqHeader  wire.RequestHeader
+	respBodyBuf   bytes.Buffer
+	respHeaderBuf bytes.Buffer
+	respHeader    wire.ResponseHeader
+	reqHeader     wire.RequestHeader
 }
 
 // NewServerCodec returns a serverCodec that communicates with the ClientCodec
@@ -92,7 +93,7 @@ func (c *serverCodec) ReadRequestBody(x interface{}) error {
 
 	err := c.readRequestBody(c.r, &c.reqHeader, request)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	c.reqHeader.Reset()
@@ -125,6 +126,16 @@ func (c *serverCodec) writeResponse(r *rpc.Response, response proto.Message) err
 		response = nil
 	}
 
+	// marshal response
+	var pbResponse []byte
+	if response != nil {
+		var err error
+		pbResponse, err = marshal(&c.respBodyBuf, response)
+		if err != nil {
+			return err
+		}
+	}
+
 	// generate header
 	header := &c.respHeader
 	*header = wire.ResponseHeader{
@@ -133,15 +144,13 @@ func (c *serverCodec) writeResponse(r *rpc.Response, response proto.Message) err
 		// returned from the server, but it is never used.
 		//
 		// Method: r.ServiceMethod,
-		Error:       r.Error,
-		Compression: wire.CompressionType_NONE,
-	}
-	if enableSnappy {
-		header.Compression = wire.CompressionType_SNAPPY
+		Error:            r.Error,
+		Compression:      compressionType,
+		UncompressedSize: uint32(len(pbResponse)),
 	}
 
 	// marshal header
-	pbHeader, err := marshal(&c.respBuf, header)
+	pbHeader, err := marshal(&c.respHeaderBuf, header)
 	if err != nil {
 		return err
 	}
@@ -151,26 +160,22 @@ func (c *serverCodec) writeResponse(r *rpc.Response, response proto.Message) err
 		return err
 	}
 
-	// marshal response
-	pbResponse, err := marshal(&c.respBuf, response)
-	if err != nil {
-		return err
-	}
-
 	// send body (end)
-	if enableSnappy {
+	if compressionType == wire.CompressionType_SNAPPY {
 		return snappyEncode(pbResponse, c.sendFrame)
+	} else if compressionType == wire.CompressionType_LZ4 {
+		return lz4Encode(pbResponse, c.sendFrame)
 	}
 	return c.sendFrame(pbResponse)
 }
 
 func (c *serverCodec) readRequestHeader(r *bufio.Reader, header *wire.RequestHeader) error {
-	return c.recvProto(header, proto.Unmarshal)
+	return c.recvProto(header, 0, protoUnmarshal)
 }
 
 func (c *serverCodec) readRequestBody(r *bufio.Reader, header *wire.RequestHeader,
 	request proto.Message) error {
-	return c.recvProto(request, decompressors[header.Compression])
+	return c.recvProto(request, header.UncompressedSize, decompressors[header.Compression])
 }
 
 // ServeConn runs the Protobuf-RPC server on a single connection.

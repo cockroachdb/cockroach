@@ -4,6 +4,7 @@ import (
 	// Link against the protobuf and rocksdb libaries. This is
 	// explicitly because these Go libraries do not export any Go
 	// symbols.
+	_ "github.com/cockroachdb/c-lz4"
 	_ "github.com/cockroachdb/c-protobuf"
 	_ "github.com/cockroachdb/c-rocksdb"
 	_ "github.com/cockroachdb/c-snappy"

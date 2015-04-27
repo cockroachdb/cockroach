@@ -31,13 +31,17 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const enableSnappy = true
+// LZ4 benchmarks slightly faster than Snappy for pure-RPC benchmarks,
+// but slightly slower than Snappy on higher level benchmarks like the
+// ones for the Cockroach client.
+const compressionType = wire.CompressionType_SNAPPY
 
-type decompressFunc func(src []byte, m proto.Message) error
+type decompressFunc func(src []byte, uncompressedSize uint32, m proto.Message) error
 
 var decompressors = [...]decompressFunc{
-	wire.CompressionType_NONE:   proto.Unmarshal,
+	wire.CompressionType_NONE:   protoUnmarshal,
 	wire.CompressionType_SNAPPY: snappyDecode,
+	wire.CompressionType_LZ4:    lz4Decode,
 }
 
 type baseConn struct {
@@ -82,7 +86,8 @@ func (c *baseConn) write(w io.Writer, data []byte) error {
 	return nil
 }
 
-func (c *baseConn) recvProto(m proto.Message, decompressor decompressFunc) error {
+func (c *baseConn) recvProto(m proto.Message,
+	uncompressedSize uint32, decompressor decompressFunc) error {
 	size, err := binary.ReadUvarint(c.r)
 	if err != nil {
 		return err
@@ -96,7 +101,7 @@ func (c *baseConn) recvProto(m proto.Message, decompressor decompressFunc) error
 		if err != nil {
 			return err
 		}
-		if err := decompressor(data, m); err != nil {
+		if err := decompressor(data, uncompressedSize, m); err != nil {
 			return err
 		}
 		// TODO(pmattis): This is a hack to advance the bufio pointer by
@@ -111,5 +116,9 @@ func (c *baseConn) recvProto(m proto.Message, decompressor decompressFunc) error
 	if _, err := io.ReadFull(c.r, data); err != nil {
 		return err
 	}
-	return decompressor(data, m)
+	return decompressor(data, uncompressedSize, m)
+}
+
+func protoUnmarshal(src []byte, uncompressedSize uint32, msg proto.Message) error {
+	return proto.Unmarshal(src, msg)
 }

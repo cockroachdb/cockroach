@@ -90,7 +90,7 @@ var (
 // data to w.
 func snappyEncode(src []byte, w func([]byte) error) error {
 	if len(src) == 0 {
-		return w([]byte(nil))
+		return w(nil)
 	}
 
 	var dLen C.size_t
@@ -109,9 +109,9 @@ func snappyEncode(src []byte, w func([]byte) error) error {
 
 // snappyDecode uncompresses the byte array src and unmarshals the
 // uncompressed data into m.
-func snappyDecode(src []byte, m proto.Message) error {
+func snappyDecode(src []byte, uncompressedSize uint32, m proto.Message) error {
 	if len(src) == 0 {
-		return proto.Unmarshal([]byte(nil), m)
+		return proto.Unmarshal(nil, m)
 	}
 
 	var dLen C.size_t
