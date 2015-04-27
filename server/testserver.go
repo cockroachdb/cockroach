@@ -77,15 +77,15 @@ func NewTestContext() *Context {
 //   }
 //   defer s.Stop()
 //
-// TODO(spencer): add support for multiple stores.
 type TestServer struct {
 	// Ctx is the context used by this server.
 	Ctx           *Context
 	SkipBootstrap bool
 	// server is the embedded Cockroach server struct.
 	*Server
-	// Engine underlying the test server.
-	Engine engine.Engine
+	StoresPerNode int
+	// Engines underlying the test server.
+	Engines []engine.Engine
 }
 
 // Gossip returns the gossip instance used by the TestServer.
@@ -120,15 +120,31 @@ func (ts *TestServer) Start() error {
 		return util.Errorf("could not init server: %s", err)
 	}
 
-	if ts.Engine == nil {
-		ts.Engine = engine.NewInMem(proto.Attributes{}, 100<<20)
+	// Ensure we have the correct number of engines. Add in in-memory ones where
+	// needed.  There must be at least one store/engine.
+	if ts.StoresPerNode < 1 {
+		ts.StoresPerNode = 1
 	}
-	ts.Ctx.Engines = []engine.Engine{ts.Engine}
+	if ts.Engines == nil {
+		ts.Engines = []engine.Engine{}
+	}
+	for i := 0; i < ts.StoresPerNode; i++ {
+		if len(ts.Engines) < i+1 {
+			ts.Engines = append(ts.Engines, nil)
+		}
+		if ts.Engines[i] == nil {
+			ts.Engines[i] = engine.NewInMem(proto.Attributes{}, 100<<20)
+		}
+	}
+	ts.Ctx.Engines = ts.Engines
+
 	if !ts.SkipBootstrap {
 		stopper := util.NewStopper()
-		_, err := BootstrapCluster("cluster-1", ts.Engine, stopper)
-		if err != nil {
-			return util.Errorf("could not bootstrap cluster: %s", err)
+		for _, eng := range ts.Ctx.Engines {
+			_, err := BootstrapCluster("cluster-1", eng, stopper)
+			if err != nil {
+				return util.Errorf("could not bootstrap cluster: %s", err)
+			}
 		}
 		stopper.Stop()
 	}
