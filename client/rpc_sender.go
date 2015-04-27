@@ -68,13 +68,16 @@ func NewRPCSender(server string, certsDir string) (*RPCSender, error) {
 
 // NewTestRPCSender initializes a new RPCSender using an insecure TLS
 // config.
-func NewTestRPCSender(server string) *RPCSender {
+func NewTestRPCSender(server string, sslEnabled bool) *RPCSender {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
 		return nil
 	}
 
-	tlsConfig := security.LoadInsecureClientTLSConfig()
+	var tlsConfig *tls.Config
+	if sslEnabled {
+		tlsConfig = security.LoadInsecureClientTLSConfig()
+	}
 	ctx := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
 	client := rpc.NewClient(addr, &HTTPRetryOptions, ctx)
 	return &RPCSender{client: client}
