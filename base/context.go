@@ -29,6 +29,7 @@ import (
 
 // Base context defaults.
 const (
+	defaultInsecure = false
 	defaultCertsDir = "certs"
 	plainScheme     = "http"
 	sslScheme       = "https"
@@ -38,7 +39,12 @@ const (
 // A base context is not meant to be used directly, but embedding
 // contexts should call ctx.InitDefaults().
 type Context struct {
+	// Insecure specifies whether to use SSL or not.
+	// This is really not recommended.
+	Insecure bool
+
 	// Certs specifies a directory containing RSA key and x509 certs.
+	// Only used if Insecure is false.
 	Certs string
 
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
@@ -58,13 +64,14 @@ type Context struct {
 
 // InitDefaults sets up the default values for a context.
 func (ctx *Context) InitDefaults() {
+	ctx.Insecure = defaultInsecure
 	ctx.Certs = defaultCertsDir
 }
 
 // SSLWanted returns whether or not SSL is wanted.
-// This is indicated by the -certs flags (wanted if not empty).
+// This is indicated by the -insecure flag.
 func (ctx *Context) SSLWanted() bool {
-	return ctx.Certs != ""
+	return !ctx.Insecure
 }
 
 // RequestScheme returns "http" or "https" based on the value of SSLWanted()
@@ -75,10 +82,16 @@ func (ctx *Context) RequestScheme() string {
 	return plainScheme
 }
 
-// GetClientTLSConfig returns the context client TLS config, initializing it
-// if needed. It uses the context Certs field.
-// If Certs is empty, load insecure configs.
+// GetClientTLSConfig returns the context client TLS config, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise load a config based
+// on the Certs directory. If Certs is empty, use a very permissive config.
+// TODO(marc): empty Certs dir should fail when client certificates are required.
 func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if !ctx.SSLWanted() {
+		return nil, nil
+	}
+
 	ctx.tlsConfigMu.Lock()
 	defer ctx.tlsConfigMu.Unlock()
 
@@ -86,7 +99,7 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		return ctx.clientTLSConfig, nil
 	}
 
-	if ctx.SSLWanted() {
+	if ctx.Certs != "" {
 		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
 		if err != nil {
@@ -101,10 +114,15 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	return ctx.clientTLSConfig, nil
 }
 
-// GetServerTLSConfig returns the context server TLS config, initializing it
-// if needed. It uses the context Certs field.
-// If Certs is empty, load insecure configs.
+// GetServerTLSConfig returns the context server TLS config, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise load a config based
+// on the Certs directory. If Certs is empty, return a nil config.
 func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if !ctx.SSLWanted() {
+		return nil, nil
+	}
+
 	ctx.tlsConfigMu.Lock()
 	defer ctx.tlsConfigMu.Unlock()
 
@@ -112,17 +130,16 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		return ctx.serverTLSConfig, nil
 	}
 
-	if ctx.SSLWanted() {
-		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
-		cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
-		if err != nil {
-			return nil, util.Errorf("error setting up server TLS config: %s", err)
-		}
-		ctx.serverTLSConfig = cfg
-	} else {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		ctx.serverTLSConfig = security.LoadInsecureTLSConfig()
+	if ctx.Certs == "" {
+		return nil, util.Errorf("-insecure=false, but -certs is empty. We need a certs directory")
 	}
+
+	log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
+	cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
+	if err != nil {
+		return nil, util.Errorf("error setting up server TLS config: %s", err)
+	}
+	ctx.serverTLSConfig = cfg
 
 	return ctx.serverTLSConfig, nil
 }

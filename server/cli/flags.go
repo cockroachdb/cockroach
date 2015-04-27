@@ -31,6 +31,9 @@ func initFlags(ctx *server.Context) {
 	flag.StringVar(&ctx.Addr, "addr", ctx.Addr, "when run as the server the host:port to bind for "+
 		"HTTP/RPC traffic; when run as the client the address for connection to the cockroach cluster.")
 
+	flag.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, "run over plain HTTP. WARNING: "+
+		"this is strongly discouraged.")
+
 	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs.")
 
 	flag.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+

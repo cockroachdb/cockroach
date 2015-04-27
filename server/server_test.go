@@ -179,7 +179,7 @@ func TestPlainHTTPServer(t *testing.T) {
 	// Create a custom context. The default one has a default -certs value.
 	ctx := NewContext()
 	ctx.Addr = "127.0.0.1:0"
-	ctx.Certs = ""
+	ctx.Insecure = true
 	// TestServer.Start does not override the context if set.
 	s := &TestServer{Ctx: ctx}
 	if err := s.Start(); err != nil {

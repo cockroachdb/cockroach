@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/server"
+	"github.com/cockroachdb/cockroach/testutils"
 	"github.com/cockroachdb/cockroach/util"
 )
 
@@ -103,8 +104,13 @@ func TestUseCerts(t *testing.T) {
 	}
 	defer s.Stop()
 
-	// Try a client without certs and without InsecureSkipVerify.
-	httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: nil}}
+	// Insecure mode.
+	clientContext := testutils.NewTestBaseContext()
+	clientContext.Insecure = true
+	httpClient, err := clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
 	req, err := http.NewRequest("GET", "https://"+s.ServingAddr()+"/_admin/health", nil)
 	if err != nil {
 		t.Fatalf("could not create request: %v", err)
@@ -115,8 +121,27 @@ func TestUseCerts(t *testing.T) {
 		t.Fatalf("Expected SSL error, got success")
 	}
 
+	// Secure mode but no Certs directory: permissive config.
+	clientContext = testutils.NewTestBaseContext()
+	clientContext.Certs = ""
+	httpClient, err = clientContext.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err = http.NewRequest("GET", "https://"+s.ServingAddr()+"/_admin/health", nil)
+	if err != nil {
+		t.Fatalf("could not create request: %v", err)
+	}
+	resp, err = httpClient.Do(req)
+	if err != nil {
+		resp.Body.Close()
+		t.Fatalf("Expected success, got %v", err)
+	}
+
 	// New client. With certs this time.
-	httpClient, err = testCtx.GetHTTPClient()
+	clientContext = testutils.NewTestBaseContext()
+	clientContext.Certs = certsDir
+	httpClient, err = clientContext.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
