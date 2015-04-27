@@ -1014,7 +1014,7 @@ func (r *Range) EndTransaction(batch engine.Engine, ms *proto.MVCCStats, args *p
 		} else if args.Txn.Epoch < existTxn.Epoch {
 			reply.SetGoError(proto.NewTransactionStatusError(existTxn, fmt.Sprintf("epoch regression: %d", args.Txn.Epoch)))
 			return
-		} else if existTxn.Timestamp.Less(args.Txn.OrigTimestamp) {
+		} else if args.Txn.Epoch == existTxn.Epoch && existTxn.Timestamp.Less(args.Txn.OrigTimestamp) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
 			// than the original transaction timestamp.
