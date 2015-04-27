@@ -47,7 +47,7 @@ func NewRPCSender(server string, context *base.Context) (*RPCSender, error) {
 	}
 
 	if context.Insecure {
-		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
+		log.Warning("running in insecure mode, this is strongly discouraged. See -insecure and -certs.")
 	}
 	tlsConfig, err := context.GetClientTLSConfig()
 	if err != nil {

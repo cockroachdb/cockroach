@@ -32,23 +32,19 @@ func TestClientSSLSettings(t *testing.T) {
 		insecure bool
 		certs    string
 		// output
-		sslWanted     bool
 		requestScheme string
 		configSuccess bool
 		nilConfig     bool
 		noCAs         bool
 	}{
-		{true, "foobar", false, "http", true, true, false},
-		{false, "", true, "https", true, false, true},
-		{false, certsDir, true, "https", true, false, false},
-		{false, "/dev/null", true, "https", false, false, false},
+		{true, "foobar", "http", true, true, false},
+		{false, "", "https", true, false, true},
+		{false, certsDir, "https", true, false, false},
+		{false, "/dev/null", "https", false, false, false},
 	}
 
 	for tcNum, tc := range testCases {
 		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs}
-		if ctx.SSLWanted() != tc.sslWanted {
-			t.Fatalf("#%d: expected SSLWanted=%t, got: %t", tcNum, tc.sslWanted, ctx.SSLWanted())
-		}
 		if ctx.RequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
 		}
@@ -79,22 +75,18 @@ func TestServerSSLSettings(t *testing.T) {
 		insecure bool
 		certs    string
 		// output
-		sslWanted     bool
 		requestScheme string
 		configSuccess bool
 		nilConfig     bool
 	}{
-		{true, "foobar", false, "http", true, true},
-		{false, "", true, "https", false, false},
-		{false, certsDir, true, "https", true, false},
-		{false, "/dev/null", true, "https", false, false},
+		{true, "foobar", "http", true, true},
+		{false, "", "https", false, false},
+		{false, certsDir, "https", true, false},
+		{false, "/dev/null", "https", false, false},
 	}
 
 	for tcNum, tc := range testCases {
 		ctx := &base.Context{Insecure: tc.insecure, Certs: tc.certs}
-		if ctx.SSLWanted() != tc.sslWanted {
-			t.Fatalf("#%d: expected SSLWanted=%t, got: %t", tcNum, tc.sslWanted, ctx.SSLWanted())
-		}
 		if ctx.RequestScheme() != tc.requestScheme {
 			t.Fatalf("#%d: expected RequestScheme=%s, got: %s", tcNum, tc.requestScheme, ctx.RequestScheme())
 		}

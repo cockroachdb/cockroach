@@ -44,7 +44,7 @@ type Context struct {
 	Insecure bool
 
 	// Certs specifies a directory containing RSA key and x509 certs.
-	// Only used if Insecure is false.
+	// Required unless Insecure is true.
 	Certs string
 
 	// clientTLSConfig is the loaded client tlsConfig. It is initialized lazily.
@@ -68,18 +68,12 @@ func (ctx *Context) InitDefaults() {
 	ctx.Certs = defaultCertsDir
 }
 
-// SSLWanted returns whether or not SSL is wanted.
-// This is indicated by the -insecure flag.
-func (ctx *Context) SSLWanted() bool {
-	return !ctx.Insecure
-}
-
-// RequestScheme returns "http" or "https" based on the value of SSLWanted()
+// RequestScheme returns "http" or "https" based on the value of Insecure.
 func (ctx *Context) RequestScheme() string {
-	if ctx.SSLWanted() {
-		return sslScheme
+	if ctx.Insecure {
+		return plainScheme
 	}
-	return plainScheme
+	return sslScheme
 }
 
 // GetClientTLSConfig returns the context client TLS config, initializing it if needed.
@@ -88,7 +82,7 @@ func (ctx *Context) RequestScheme() string {
 // TODO(marc): empty Certs dir should fail when client certificates are required.
 func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if !ctx.SSLWanted() {
+	if ctx.Insecure {
 		return nil, nil
 	}
 
@@ -116,10 +110,10 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 
 // GetServerTLSConfig returns the context server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise load a config based
-// on the Certs directory. If Certs is empty, return a nil config.
+// on the Certs directory. Fails if Insecure=false and Certs="".
 func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 	// Early out.
-	if !ctx.SSLWanted() {
+	if ctx.Insecure {
 		return nil, nil
 	}
 
@@ -154,8 +148,8 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 		return ctx.httpClient, nil
 	}
 
-	if !ctx.SSLWanted() {
-		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
+	if ctx.Insecure {
+		log.Warning("running in insecure mode, this is strongly discouraged. See -insecure and -certs.")
 	}
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
