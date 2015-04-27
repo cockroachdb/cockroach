@@ -733,7 +733,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 	s.Ctx.ExperimentalRPCServer = true
 	s.SkipBootstrap = exists
 	if !useSSL {
-		s.Ctx.Certs = ""
+		s.Ctx.Insecure = true
 	}
 	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
 	if err := s.Start(); err != nil {
@@ -742,7 +742,11 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 
 	var kv *client.KV
 	if useRPC {
-		kv = client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr(), useSSL))
+		sender, err := client.NewRPCSender(s.ServingAddr(), &s.Ctx.Context)
+		if err != nil {
+			b.Fatal(err)
+		}
+		kv = client.NewKV(nil, sender)
 	} else {
 		// The test context contains the security settings.
 		sender, err := client.NewHTTPSender(s.ServingAddr(), &s.Ctx.Context)

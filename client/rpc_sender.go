@@ -18,12 +18,11 @@
 package client
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/rpc"
-	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -41,46 +40,22 @@ type RPCSender struct {
 }
 
 // NewRPCSender returns a new instance of RPCSender.
-// TODO(marc): initialize using a base.Context.
-func NewRPCSender(server string, certsDir string) (*RPCSender, error) {
+func NewRPCSender(server string, context *base.Context) (*RPCSender, error) {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
 		return nil, err
 	}
 
-	var tlsConfig *tls.Config
-	if certsDir == "" {
-		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
-		tlsConfig = security.LoadInsecureClientTLSConfig()
-	} else {
-		log.V(1).Infof("setting up TLS from certificates directory: %s", certsDir)
-		var err error
-		tlsConfig, err = security.LoadClientTLSConfigFromDir(certsDir)
-		if err != nil {
-			return nil, util.Errorf("error setting up client TLS config: %s", err)
-		}
+	if context.Insecure {
+		log.Warning("running in insecure mode, this is strongly discouraged. See -insecure and -certs.")
 	}
-
+	tlsConfig, err := context.GetClientTLSConfig()
+	if err != nil {
+		return nil, err
+	}
 	ctx := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
 	client := rpc.NewClient(addr, &HTTPRetryOptions, ctx)
 	return &RPCSender{client: client}, nil
-}
-
-// NewTestRPCSender initializes a new RPCSender using an insecure TLS
-// config.
-func NewTestRPCSender(server string, sslEnabled bool) *RPCSender {
-	addr, err := net.ResolveTCPAddr("tcp", server)
-	if err != nil {
-		return nil
-	}
-
-	var tlsConfig *tls.Config
-	if sslEnabled {
-		tlsConfig = security.LoadInsecureClientTLSConfig()
-	}
-	ctx := rpc.NewContext(hlc.NewClock(hlc.UnixNano), tlsConfig, nil)
-	client := rpc.NewClient(addr, &HTTPRetryOptions, ctx)
-	return &RPCSender{client: client}
 }
 
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
