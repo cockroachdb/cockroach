@@ -271,11 +271,6 @@ func TestRangeReadConsistency(t *testing.T) {
 	tc.Start(t)
 	defer tc.Stop()
 
-	pArgs, pReply := putArgs([]byte("a"), []byte("value"), 1, tc.store.StoreID())
-	err := tc.rng.AddCmd(pArgs, pReply, true)
-	if err != nil {
-		t.Fatal(err)
-	}
 	gArgs, gReply := getArgs(proto.Key("a"), 1, tc.store.StoreID())
 	gArgs.Timestamp = tc.clock.Now()
 
@@ -303,7 +298,7 @@ func TestRangeReadConsistency(t *testing.T) {
 	})
 	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
-	err = tc.rng.AddCmd(gArgs, gReply, true)
+	err := tc.rng.AddCmd(gArgs, gReply, true)
 	if _, ok := err.(*proto.NotLeaderError); !ok {
 		t.Errorf("expected not leader error; got %s", err)
 	}

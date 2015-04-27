@@ -186,7 +186,7 @@ func TestGCQueueProcess(t *testing.T) {
 				dArgs.Txn.Timestamp = datum.ts
 			}
 			if err := tc.rng.AddCmd(dArgs, dReply, true); err != nil {
-				t.Fatalf("%d: could not delete data: %s", err)
+				t.Fatalf("%d: could not delete data: %s", i, err)
 			}
 		} else {
 			pArgs, pReply := putArgs(datum.key, []byte("value"), tc.rng.Desc().RaftID, tc.store.StoreID())

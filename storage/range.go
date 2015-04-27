@@ -245,11 +245,9 @@ func (r *Range) start() {
 	if r.IsFirstRange() {
 		r.startGossip(r.rm.Stopper())
 	}
-	if r.Desc().StartKey.Less(engine.KeySystemMax) {
-		r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
-			return r.ContainsKey(configPrefix)
-		})
-	}
+	r.maybeGossipConfigs(func(configPrefix proto.Key) bool {
+		return r.ContainsKey(configPrefix)
+	})
 }
 
 // Destroy cleans up all data associated with this range.
@@ -352,7 +350,7 @@ func (r *Range) redirectOnOrAcquireLeaderLease(args proto.Request) error {
 	} else if !held || expired {
 		// Otherwise, if not held by this replica or expired, request renewal.
 		if err := r.requestLeaderLease(timestamp); err != nil {
-			return util.Errorf("failed to acquire lease on read pressure: %s", err)
+			return util.Errorf("failed to acquire lease on read or write pressure: %s", err)
 		}
 	}
 	return nil
@@ -372,15 +370,7 @@ func (r *Range) verifyLeaderLease(originRaftNodeID multiraft.NodeID, timestamp p
 func (r *Range) HasLeaderLease(timestamp proto.Timestamp) (bool, bool) {
 	if l := r.getLease(); l.RaftNodeID != 0 {
 		held := l.RaftNodeID == uint64(r.rm.RaftNodeID())
-		var expired bool
-		if held {
-			// Held by us; compare to expiration.
-			expired = !timestamp.Less(l.Expiration)
-		} else {
-			// Held by another; compare to expiration + max clock offset.
-			otherExpiration := l.Expiration.Add(int64(r.rm.Clock().MaxOffset()), 0)
-			expired = !timestamp.Less(otherExpiration)
-		}
+		expired := !timestamp.Less(l.Expiration)
 		return held, expired
 	}
 	// The lease has never been held.
@@ -425,8 +415,8 @@ func (r *Range) GetReplica() *proto.Replica {
 	return replica
 }
 
-// GetMVCC returns a copy of the MVCC stats object for this range.
-func (r *Range) GetMVCC() proto.MVCCStats {
+// GetMVCCStats returns a copy of the MVCC stats object for this range.
+func (r *Range) GetMVCCStats() proto.MVCCStats {
 	return r.stats.GetMVCC()
 }
 
@@ -670,7 +660,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		// timestamp for successive writes to the same key or key range.
 		r.Lock()
 		if err == nil && usesTimestampCache(args) {
-			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false)
+			r.tsCache.Add(header.Key, header.EndKey, header.Timestamp, txnMD5, false /* !readOnly */)
 		}
 		r.cmdQ.Remove(cmdKey)
 		r.Unlock()
