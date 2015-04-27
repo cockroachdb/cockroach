@@ -150,11 +150,16 @@ Once you've built your image, you may want to run the tests:
 * `docker run "cockroachdb/cockroach-dev" test`
 * `make acceptance`
 
-Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node in the background:
+Assuming you've built `cockroachdb/cockroach`, let's run a simple Cockroach node:
 
 ```bash
-docker run -p 8080:8080 -v /data cockroachdb/cockroach init /data
-docker run -p 8080:8080 -d --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach start -stores ssd=/data -gossip self://
+docker run -v /data -v /certs cockroachdb/cockroach init /data
+docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
+  create-ca-cert -certs /certs
+docker run --volumes-from=$(docker ps -q -n 1) cockroachdb/cockroach \
+  create-node-cert -certs /certs 127.0.0.1 localhost roachnode
+docker run -p 8080:8080 -h roachnode --volumes-from=$(docker ps -q -n 1) \
+  cockroachdb/cockroach start -certs /certs -stores ssd=/data -gossip self://
 ```
 
 Run `docker run cockroachdb/cockroach help` to get an overview over the available commands and settings, and see [Running Cockroach](#running-cockroach) for first steps on interacting with your new node.
