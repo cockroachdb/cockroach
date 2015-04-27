@@ -53,12 +53,10 @@ func newRetryableLocalSender(lSender *LocalSender) *retryableLocalSender {
 
 // Send implements the client.Sender interface.
 func (rls *retryableLocalSender) Send(call client.Call) {
-	// Instant retry with max two attempts to handle the case of a
-	// range split, which is exposed here as a RangeKeyMismatchError.
-	// If we fail with two in a row, it's a fatal test error.
+	// Instant retry to handle the case of a range split, which is
+	// exposed here as a RangeKeyMismatchError.
 	retryOpts := util.RetryOptions{
-		Tag:         fmt.Sprintf("routing %s locally", call.Method()),
-		MaxAttempts: 2,
+		Tag: fmt.Sprintf("routing %s locally", call.Method()),
 	}
 	// In local tests, the RPCs are not actually sent over the wire. We
 	// need to clone the Txn in order to avoid unexpected sharing
@@ -82,8 +80,7 @@ func (rls *retryableLocalSender) Send(call client.Call) {
 		return util.RetryBreak, nil
 	})
 	if err != nil {
-		panic(fmt.Sprintf("local sender did not succeed on two attempts: %s",
-			err))
+		panic(fmt.Sprintf("local sender did not succeed: %s", err))
 	}
 }
 
