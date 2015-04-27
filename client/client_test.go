@@ -718,7 +718,8 @@ func TestConcurrentIncrements(t *testing.T) {
 
 const valueSize = 1 << 10
 
-func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestServer, *client.KV) {
+func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *testing.B) (
+	*server.TestServer, *client.KV) {
 	const cacheSize = 8 << 30 // 8 GB
 	loc := fmt.Sprintf("client_bench_%d_%d", numVersions, numKeys)
 
@@ -731,17 +732,25 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 	s.Ctx = server.NewTestContext()
 	s.Ctx.ExperimentalRPCServer = true
 	s.SkipBootstrap = exists
+	if !useSSL {
+		s.Ctx.Certs = ""
+	}
 	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
 	if err := s.Start(); err != nil {
 		b.Fatalf("Could not start server: %v", err)
 	}
 
-	// httpClient, err := testutils.NewTestHTTPClient()
-	// if err != nil {
-	// 	b.Fatal(err)
-	// }
-	// kv := client.NewKV(nil, client.NewHTTPSender(s.ServingAddr(), httpClient))
-	kv := client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr()))
+	var kv *client.KV
+	if useRPC {
+		kv = client.NewKV(nil, client.NewTestRPCSender(s.ServingAddr(), useSSL))
+	} else {
+		// The test context contains the security settings.
+		sender, err := client.NewHTTPSender(s.ServingAddr(), &s.Ctx.Context)
+		if err != nil {
+			b.Fatal(err)
+		}
+		kv = client.NewKV(nil, sender)
+	}
 	kv.User = storage.UserRoot
 
 	if exists {
@@ -788,10 +797,10 @@ func setupClientBenchData(numVersions, numKeys int, b *testing.B) (*server.TestS
 // timer). It then performs b.N client scans in increments of numRows
 // keys over all of the data, restarting at the beginning of the
 // keyspace, as many times as necessary.
-func runClientScan(numRows, numVersions int, b *testing.B) {
+func runClientScan(useRPC, useSSL bool, numRows, numVersions int, b *testing.B) {
 	const numKeys = 100000
 
-	s, kv := setupClientBenchData(numVersions, numKeys, b)
+	s, kv := setupClientBenchData(useRPC, useSSL, numVersions, numKeys, b)
 	defer s.Stop()
 
 	b.SetBytes(int64(numRows * valueSize))
@@ -820,18 +829,66 @@ func runClientScan(numRows, numVersions int, b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkClientScan1Version1Row(b *testing.B) {
-	runClientScan(1, 1, b)
+func BenchmarkRPCSSLClientScan1Version1Row(b *testing.B) {
+	runClientScan(true /* RPC */, true /* SSL */, 1, 1, b)
 }
 
-func BenchmarkClientScan1Version10Rows(b *testing.B) {
-	runClientScan(10, 1, b)
+func BenchmarkRPCSSLClientScan1Version10Rows(b *testing.B) {
+	runClientScan(true /* RPC */, true /* SSL */, 10, 1, b)
 }
 
-func BenchmarkClientScan1Version100Rows(b *testing.B) {
-	runClientScan(100, 1, b)
+func BenchmarkRPCSSLClientScan1Version100Rows(b *testing.B) {
+	runClientScan(true /* RPC */, true /* SSL */, 100, 1, b)
 }
 
-func BenchmarkClientScan1Version1000Rows(b *testing.B) {
-	runClientScan(1000, 1, b)
+func BenchmarkRPCSSLClientScan1Version1000Rows(b *testing.B) {
+	runClientScan(true /* RPC */, true /* SSL */, 1000, 1, b)
+}
+
+func BenchmarkHTTPSSLClientScan1Version1Row(b *testing.B) {
+	runClientScan(false /* HTTP */, true /* SSL */, 1, 1, b)
+}
+
+func BenchmarkHTTPSSLClientScan1Version10Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, true /* SSL */, 10, 1, b)
+}
+
+func BenchmarkHTTPSSLClientScan1Version100Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, true /* SSL */, 100, 1, b)
+}
+
+func BenchmarkHTTPSSLClientScan1Version1000Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, true /* SSL */, 1000, 1, b)
+}
+
+func BenchmarkRPCNoSSLClientScan1Version1Row(b *testing.B) {
+	runClientScan(true /* RPC */, false /* NoSSL */, 1, 1, b)
+}
+
+func BenchmarkRPCNoSSLClientScan1Version10Rows(b *testing.B) {
+	runClientScan(true /* RPC */, false /* NoSSL */, 10, 1, b)
+}
+
+func BenchmarkRPCNoSSLClientScan1Version100Rows(b *testing.B) {
+	runClientScan(true /* RPC */, false /* NoSSL */, 100, 1, b)
+}
+
+func BenchmarkRPCNoSSLClientScan1Version1000Rows(b *testing.B) {
+	runClientScan(true /* RPC */, false /* NoSSL */, 1000, 1, b)
+}
+
+func BenchmarkHTTPNoSSLClientScan1Version1Row(b *testing.B) {
+	runClientScan(false /* HTTP */, false /* NoSSL */, 1, 1, b)
+}
+
+func BenchmarkHTTPNoSSLClientScan1Version10Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, false /* NoSSL */, 10, 1, b)
+}
+
+func BenchmarkHTTPNoSSLClientScan1Version100Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, false /* NoSSL */, 100, 1, b)
+}
+
+func BenchmarkHTTPNoSSLClientScan1Version1000Rows(b *testing.B) {
+	runClientScan(false /* HTTP */, false /* NoSSL */, 1000, 1, b)
 }
