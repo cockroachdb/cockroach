@@ -101,7 +101,7 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		{methodDelete, "/schema/foo", nil, http.StatusOK, nil},
 		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
 	}
-	testContext := testutils.NewTestBaseContest()
+	testContext := testutils.NewTestBaseContext()
 	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
