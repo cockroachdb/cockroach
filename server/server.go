@@ -82,6 +82,9 @@ func NewServer(ctx *Context, stopper *util.Stopper) (*Server, error) {
 		return nil, util.Errorf("unable to resolve RPC address %q: %v", addr, err)
 	}
 
+	if !ctx.SSLWanted() {
+		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
+	}
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
 		return nil, err
