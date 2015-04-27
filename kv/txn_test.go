@@ -694,3 +694,68 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	// Wait for txnA to finish.
 	<-ch
 }
+
+// TestSSITxnRetryImmediately test if a SSI transaction's command was pushed by
+// latest read cache, transaction can retry immediately instead of retrying
+// until Endtransaction command was executed.
+func TestSSITxnRetryImmediately(t *testing.T) {
+	s := createTestDB(t)
+	defer s.Stop()
+
+	keyA := proto.Key("a")
+	keyB := proto.Key("b")
+
+	txnAOpts := &client.TransactionOptions{
+		Name:      "txnA",
+		Isolation: proto.SNAPSHOT,
+	}
+	txnBOpts := &client.TransactionOptions{
+		Name:      "txnB",
+		Isolation: proto.SERIALIZABLE,
+	}
+
+	ch := make(chan struct{})
+
+	go func() {
+		err := s.KV.RunTransaction(txnBOpts, func(txn *client.Txn) error {
+			call1 := client.GetCall(keyB)
+
+			//execute any command to get a timestamp for the transaction
+			if err := txn.Run(call1); err != nil {
+				t.Fatal(err)
+			}
+			//notify txnA
+			ch <- struct{}{}
+			//wait txnA execute
+			<-ch
+			//expect a TransactionRetryError
+			if err := txn.Run(client.PutCall(keyA, []byte("valueA"))); err != nil {
+				if _, ok := err.(*proto.TransactionRetryError); !ok {
+					t.Errorf("expect a TransactionRetryError")
+				}
+				return err
+			}
+			t.Errorf("expect a TransactionRetryError")
+			return nil
+		})
+
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+	// Wait until txnB's first command has executed
+	<-ch
+	err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
+		call1 := client.GetCall(keyA)
+		if err := txn.Run(call1); err != nil {
+			t.Fatal(err)
+		}
+		// Notify txnB can start write
+		ch <- struct{}{}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
