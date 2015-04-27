@@ -34,7 +34,8 @@ func initFlags(ctx *server.Context) {
 	flag.BoolVar(&ctx.Insecure, "insecure", ctx.Insecure, "run over plain HTTP. WARNING: "+
 		"this is strongly discouraged.")
 
-	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs.")
+	flag.StringVar(&ctx.Certs, "certs", ctx.Certs, "directory containing RSA key and x509 certs. "+
+		"This flag is required if -insecure=false.")
 
 	flag.StringVar(&ctx.Stores, "stores", ctx.Stores, "specify a comma-separated list of stores, "+
 		"specified by a colon-separated list of device attributes followed by '=' and "+
