@@ -20,7 +20,6 @@ package proto
 // Method is the enumerated type for methods.
 type Method int
 
-//go:generate stringer -type=Method
 const (
 	// Contains determines whether the KV map contains the specified key.
 	Contains Method = iota

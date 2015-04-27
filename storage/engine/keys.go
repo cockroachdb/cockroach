@@ -108,6 +108,11 @@ func RaftAppliedIndexKey(raftID int64) proto.Key {
 	return MakeRangeIDKey(raftID, KeyLocalRaftAppliedIndexSuffix, proto.Key{})
 }
 
+// RaftLeaderLeaseKey returns a system-local key for a raft leader lease.
+func RaftLeaderLeaseKey(raftID int64) proto.Key {
+	return MakeRangeIDKey(raftID, KeyLocalRaftLeaderLeaseSuffix, proto.Key{})
+}
+
 // RangeStatKey returns the key for accessing the named stat
 // for the specified Raft ID.
 func RangeStatKey(raftID int64, stat proto.Key) proto.Key {
@@ -369,14 +374,21 @@ var (
 	// NOTE: KeyLocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/db.cc.
 	KeyLocalRangeIDPrefix = MakeKey(KeyLocalPrefix, proto.Key("i"))
-	// KeyLocalRaftLogSuffix is the suffix for the raft log.
-	KeyLocalRaftLogSuffix = proto.Key("rftl")
+	// KeyLocalResponseCacheSuffix is the suffix for keys storing
+	// command responses used to guarantee idempotency (see ResponseCache).
+	// NOTE: if this value changes, it must be updated in C++
+	// (storage/engine/db.cc).
+	KeyLocalResponseCacheSuffix = proto.Key("res-")
+	// KeyLocalRaftLeaderLeaseSuffix is the suffix for the raft leader lease.
+	KeyLocalRaftLeaderLeaseSuffix = proto.Key("rfll")
 	// KeyLocalRaftHardStateSuffix is the Suffix for the raft HardState.
 	KeyLocalRaftHardStateSuffix = proto.Key("rfth")
-	// KeyLocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
-	KeyLocalRaftTruncatedStateSuffix = proto.Key("rftt")
 	// KeyLocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
 	KeyLocalRaftAppliedIndexSuffix = proto.Key("rfta")
+	// KeyLocalRaftLogSuffix is the suffix for the raft log.
+	KeyLocalRaftLogSuffix = proto.Key("rftl")
+	// KeyLocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
+	KeyLocalRaftTruncatedStateSuffix = proto.Key("rftt")
 	// KeyLocalRangeGCMetadataSuffix is the suffix for a range's GC metadata.
 	KeyLocalRangeGCMetadataSuffix = proto.Key("rgcm")
 	// KeyLocalRangeLastVerificationTimestampSuffix is the suffix for a range's
@@ -384,12 +396,6 @@ var (
 	KeyLocalRangeLastVerificationTimestampSuffix = proto.Key("rlvt")
 	// KeyLocalRangeStatSuffix is the suffix for range statistics.
 	KeyLocalRangeStatSuffix = proto.Key("rst-")
-	// KeyLocalResponseCacheSuffix is the suffix for keys storing
-	// command responses used to guarantee idempotency (see
-	// ResponseCache).
-	// NOTE: if this value changes, it must be updated in C++
-	// (storage/engine/db.cc).
-	KeyLocalResponseCacheSuffix = proto.Key("res-")
 
 	// KeyLocalRangeKeyPrefix is the prefix identifying per-range data
 	// indexed by range key (either start key, or some key in the

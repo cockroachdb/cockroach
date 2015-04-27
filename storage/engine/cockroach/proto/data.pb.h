@@ -1494,42 +1494,37 @@ class Lease : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int64 expiration = 1;
+  // optional .cockroach.proto.Timestamp start = 1;
+  inline bool has_start() const;
+  inline void clear_start();
+  static const int kStartFieldNumber = 1;
+  inline const ::cockroach::proto::Timestamp& start() const;
+  inline ::cockroach::proto::Timestamp* mutable_start();
+  inline ::cockroach::proto::Timestamp* release_start();
+  inline void set_allocated_start(::cockroach::proto::Timestamp* start);
+
+  // optional .cockroach.proto.Timestamp expiration = 2;
   inline bool has_expiration() const;
   inline void clear_expiration();
-  static const int kExpirationFieldNumber = 1;
-  inline ::google::protobuf::int64 expiration() const;
-  inline void set_expiration(::google::protobuf::int64 value);
+  static const int kExpirationFieldNumber = 2;
+  inline const ::cockroach::proto::Timestamp& expiration() const;
+  inline ::cockroach::proto::Timestamp* mutable_expiration();
+  inline ::cockroach::proto::Timestamp* release_expiration();
+  inline void set_allocated_expiration(::cockroach::proto::Timestamp* expiration);
 
-  // optional int64 duration = 2;
-  inline bool has_duration() const;
-  inline void clear_duration();
-  static const int kDurationFieldNumber = 2;
-  inline ::google::protobuf::int64 duration() const;
-  inline void set_duration(::google::protobuf::int64 value);
-
-  // optional uint64 term = 3;
-  inline bool has_term() const;
-  inline void clear_term();
-  static const int kTermFieldNumber = 3;
-  inline ::google::protobuf::uint64 term() const;
-  inline void set_term(::google::protobuf::uint64 value);
-
-  // optional uint64 raft_node_id = 4;
+  // optional uint64 raft_node_id = 3;
   inline bool has_raft_node_id() const;
   inline void clear_raft_node_id();
-  static const int kRaftNodeIdFieldNumber = 4;
+  static const int kRaftNodeIdFieldNumber = 3;
   inline ::google::protobuf::uint64 raft_node_id() const;
   inline void set_raft_node_id(::google::protobuf::uint64 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.proto.Lease)
  private:
+  inline void set_has_start();
+  inline void clear_has_start();
   inline void set_has_expiration();
   inline void clear_has_expiration();
-  inline void set_has_duration();
-  inline void clear_has_duration();
-  inline void set_has_term();
-  inline void clear_has_term();
   inline void set_has_raft_node_id();
   inline void clear_has_raft_node_id();
 
@@ -1537,9 +1532,8 @@ class Lease : public ::google::protobuf::Message {
 
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
-  ::google::protobuf::int64 expiration_;
-  ::google::protobuf::int64 duration_;
-  ::google::protobuf::uint64 term_;
+  ::cockroach::proto::Timestamp* start_;
+  ::cockroach::proto::Timestamp* expiration_;
   ::google::protobuf::uint64 raft_node_id_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto();
@@ -3952,87 +3946,97 @@ inline void Transaction::set_allocated_certain_nodes(::cockroach::proto::NodeLis
 
 // Lease
 
-// optional int64 expiration = 1;
-inline bool Lease::has_expiration() const {
+// optional .cockroach.proto.Timestamp start = 1;
+inline bool Lease::has_start() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void Lease::set_has_expiration() {
+inline void Lease::set_has_start() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void Lease::clear_has_expiration() {
+inline void Lease::clear_has_start() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void Lease::clear_expiration() {
-  expiration_ = GOOGLE_LONGLONG(0);
-  clear_has_expiration();
+inline void Lease::clear_start() {
+  if (start_ != NULL) start_->::cockroach::proto::Timestamp::Clear();
+  clear_has_start();
 }
-inline ::google::protobuf::int64 Lease::expiration() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.expiration)
-  return expiration_;
+inline const ::cockroach::proto::Timestamp& Lease::start() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.start)
+  return start_ != NULL ? *start_ : *default_instance_->start_;
 }
-inline void Lease::set_expiration(::google::protobuf::int64 value) {
-  set_has_expiration();
-  expiration_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.expiration)
+inline ::cockroach::proto::Timestamp* Lease::mutable_start() {
+  set_has_start();
+  if (start_ == NULL) start_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.start)
+  return start_;
+}
+inline ::cockroach::proto::Timestamp* Lease::release_start() {
+  clear_has_start();
+  ::cockroach::proto::Timestamp* temp = start_;
+  start_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_start(::cockroach::proto::Timestamp* start) {
+  delete start_;
+  start_ = start;
+  if (start) {
+    set_has_start();
+  } else {
+    clear_has_start();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.start)
 }
 
-// optional int64 duration = 2;
-inline bool Lease::has_duration() const {
+// optional .cockroach.proto.Timestamp expiration = 2;
+inline bool Lease::has_expiration() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Lease::set_has_duration() {
+inline void Lease::set_has_expiration() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Lease::clear_has_duration() {
+inline void Lease::clear_has_expiration() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void Lease::clear_duration() {
-  duration_ = GOOGLE_LONGLONG(0);
-  clear_has_duration();
+inline void Lease::clear_expiration() {
+  if (expiration_ != NULL) expiration_->::cockroach::proto::Timestamp::Clear();
+  clear_has_expiration();
 }
-inline ::google::protobuf::int64 Lease::duration() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.duration)
-  return duration_;
+inline const ::cockroach::proto::Timestamp& Lease::expiration() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.expiration)
+  return expiration_ != NULL ? *expiration_ : *default_instance_->expiration_;
 }
-inline void Lease::set_duration(::google::protobuf::int64 value) {
-  set_has_duration();
-  duration_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.duration)
+inline ::cockroach::proto::Timestamp* Lease::mutable_expiration() {
+  set_has_expiration();
+  if (expiration_ == NULL) expiration_ = new ::cockroach::proto::Timestamp;
+  // @@protoc_insertion_point(field_mutable:cockroach.proto.Lease.expiration)
+  return expiration_;
+}
+inline ::cockroach::proto::Timestamp* Lease::release_expiration() {
+  clear_has_expiration();
+  ::cockroach::proto::Timestamp* temp = expiration_;
+  expiration_ = NULL;
+  return temp;
+}
+inline void Lease::set_allocated_expiration(::cockroach::proto::Timestamp* expiration) {
+  delete expiration_;
+  expiration_ = expiration;
+  if (expiration) {
+    set_has_expiration();
+  } else {
+    clear_has_expiration();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.proto.Lease.expiration)
 }
 
-// optional uint64 term = 3;
-inline bool Lease::has_term() const {
+// optional uint64 raft_node_id = 3;
+inline bool Lease::has_raft_node_id() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-inline void Lease::set_has_term() {
+inline void Lease::set_has_raft_node_id() {
   _has_bits_[0] |= 0x00000004u;
 }
-inline void Lease::clear_has_term() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void Lease::clear_term() {
-  term_ = GOOGLE_ULONGLONG(0);
-  clear_has_term();
-}
-inline ::google::protobuf::uint64 Lease::term() const {
-  // @@protoc_insertion_point(field_get:cockroach.proto.Lease.term)
-  return term_;
-}
-inline void Lease::set_term(::google::protobuf::uint64 value) {
-  set_has_term();
-  term_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.proto.Lease.term)
-}
-
-// optional uint64 raft_node_id = 4;
-inline bool Lease::has_raft_node_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void Lease::set_has_raft_node_id() {
-  _has_bits_[0] |= 0x00000008u;
-}
 inline void Lease::clear_has_raft_node_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void Lease::clear_raft_node_id() {
   raft_node_id_ = GOOGLE_ULONGLONG(0);

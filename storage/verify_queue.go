@@ -51,6 +51,10 @@ func newVerifyQueue(stats storeStatsFn) *verifyQueue {
 	return vq
 }
 
+func (vq *verifyQueue) needsLeaderLease() bool {
+	return false
+}
+
 // shouldQueue determines whether a range should be queued for
 // verification scanning, and if so, at what priority. Returns true
 // for shouldQ in the event that it's been longer since the last scan

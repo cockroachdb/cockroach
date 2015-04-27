@@ -41,7 +41,6 @@ type replicateQueue struct {
 	gossip    *gossip.Gossip
 	allocator *allocator
 	clock     *hlc.Clock
-	disabled  bool
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
@@ -56,13 +55,12 @@ func newReplicateQueue(gossip *gossip.Gossip, allocator *allocator,
 	return rq
 }
 
+func (rq *replicateQueue) needsLeaderLease() bool {
+	return true
+}
+
 func (rq *replicateQueue) shouldQueue(now proto.Timestamp, rng *Range) (
 	shouldQ bool, priority float64) {
-	// Only queue for replication if this replica is the leader.
-	if !rng.IsLeader() {
-		return
-	}
-
 	// If the range spans multiple zones, ignore it until the split queue has processed it.
 	if len(computeSplitKeys(rq.gossip, rng)) > 0 {
 		return
@@ -83,6 +81,7 @@ func (rq *replicateQueue) needsReplication(zone proto.ZoneConfig, rng *Range) (b
 	need := len(zone.ReplicaAttrs)
 	have := len(rng.Desc().Replicas)
 	if need > have {
+		log.V(1).Infof("%s needs %d nodes; has %d", rng, need, have)
 		return true, float64(need - have)
 	}
 
@@ -106,17 +105,18 @@ func (rq *replicateQueue) process(now proto.Timestamp, rng *Range) error {
 		return err
 	}
 
-	err = rng.ChangeReplicas(proto.ADD_REPLICA,
-		proto.Replica{
-			NodeID:  newReplica.Node.NodeID,
-			StoreID: newReplica.StoreID,
-			Attrs:   newReplica.Attrs,
-		})
+	replica := proto.Replica{
+		NodeID:  newReplica.Node.NodeID,
+		StoreID: newReplica.StoreID,
+		Attrs:   newReplica.Attrs,
+	}
+	if err = rng.ChangeReplicas(proto.ADD_REPLICA, replica); err != nil {
+		return err
+	}
 
 	// Enqueue this range again to see if there are more changes to be made.
 	go rq.MaybeAdd(rng, rq.clock.Now())
-
-	return err
+	return nil
 }
 
 func (rq *replicateQueue) timer() time.Duration {

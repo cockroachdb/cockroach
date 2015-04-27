@@ -1633,6 +1633,7 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     kInternalMerge = 13,
     kInternalTruncateLog = 14,
     kInternalGc = 15,
+    kInternalLeaderLease = 16,
     VALUE_NOT_SET = 0,
   };
 
@@ -1774,6 +1775,15 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline ::cockroach::proto::InternalGCResponse* release_internal_gc();
   inline void set_allocated_internal_gc(::cockroach::proto::InternalGCResponse* internal_gc);
 
+  // optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 16;
+  inline bool has_internal_leader_lease() const;
+  inline void clear_internal_leader_lease();
+  static const int kInternalLeaderLeaseFieldNumber = 16;
+  inline const ::cockroach::proto::InternalLeaderLeaseResponse& internal_leader_lease() const;
+  inline ::cockroach::proto::InternalLeaderLeaseResponse* mutable_internal_leader_lease();
+  inline ::cockroach::proto::InternalLeaderLeaseResponse* release_internal_leader_lease();
+  inline void set_allocated_internal_leader_lease(::cockroach::proto::InternalLeaderLeaseResponse* internal_leader_lease);
+
   inline ValueCase value_case() const;
   // @@protoc_insertion_point(class_scope:cockroach.proto.ReadWriteCmdResponse)
  private:
@@ -1789,6 +1799,7 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
   inline void set_has_internal_merge();
   inline void set_has_internal_truncate_log();
   inline void set_has_internal_gc();
+  inline void set_has_internal_leader_lease();
 
   inline bool has_value();
   void clear_value();
@@ -1811,6 +1822,7 @@ class ReadWriteCmdResponse : public ::google::protobuf::Message {
     ::cockroach::proto::InternalMergeResponse* internal_merge_;
     ::cockroach::proto::InternalTruncateLogResponse* internal_truncate_log_;
     ::cockroach::proto::InternalGCResponse* internal_gc_;
+    ::cockroach::proto::InternalLeaderLeaseResponse* internal_leader_lease_;
   } value_;
   ::google::protobuf::uint32 _oneof_case_[1];
 
@@ -2174,12 +2186,19 @@ class InternalRaftCommand : public ::google::protobuf::Message {
 
   // accessors -------------------------------------------------------
 
-  // optional int64 raft_id = 2;
+  // optional int64 raft_id = 1;
   inline bool has_raft_id() const;
   inline void clear_raft_id();
-  static const int kRaftIdFieldNumber = 2;
+  static const int kRaftIdFieldNumber = 1;
   inline ::google::protobuf::int64 raft_id() const;
   inline void set_raft_id(::google::protobuf::int64 value);
+
+  // optional uint64 origin_node_id = 2;
+  inline bool has_origin_node_id() const;
+  inline void clear_origin_node_id();
+  static const int kOriginNodeIdFieldNumber = 2;
+  inline ::google::protobuf::uint64 origin_node_id() const;
+  inline void set_origin_node_id(::google::protobuf::uint64 value);
 
   // optional .cockroach.proto.InternalRaftCommandUnion cmd = 3;
   inline bool has_cmd() const;
@@ -2194,6 +2213,8 @@ class InternalRaftCommand : public ::google::protobuf::Message {
  private:
   inline void set_has_raft_id();
   inline void clear_has_raft_id();
+  inline void set_has_origin_node_id();
+  inline void clear_has_origin_node_id();
   inline void set_has_cmd();
   inline void clear_has_cmd();
 
@@ -2202,6 +2223,7 @@ class InternalRaftCommand : public ::google::protobuf::Message {
   ::google::protobuf::uint32 _has_bits_[1];
   mutable int _cached_size_;
   ::google::protobuf::int64 raft_id_;
+  ::google::protobuf::uint64 origin_node_id_;
   ::cockroach::proto::InternalRaftCommandUnion* cmd_;
   friend void  protobuf_AddDesc_cockroach_2fproto_2finternal_2eproto();
   friend void protobuf_AssignDesc_cockroach_2fproto_2finternal_2eproto();
@@ -4607,6 +4629,49 @@ inline void ReadWriteCmdResponse::set_allocated_internal_gc(::cockroach::proto::
   }
 }
 
+// optional .cockroach.proto.InternalLeaderLeaseResponse internal_leader_lease = 16;
+inline bool ReadWriteCmdResponse::has_internal_leader_lease() const {
+  return value_case() == kInternalLeaderLease;
+}
+inline void ReadWriteCmdResponse::set_has_internal_leader_lease() {
+  _oneof_case_[0] = kInternalLeaderLease;
+}
+inline void ReadWriteCmdResponse::clear_internal_leader_lease() {
+  if (has_internal_leader_lease()) {
+    delete value_.internal_leader_lease_;
+    clear_has_value();
+  }
+}
+inline const ::cockroach::proto::InternalLeaderLeaseResponse& ReadWriteCmdResponse::internal_leader_lease() const {
+  return has_internal_leader_lease() ? *value_.internal_leader_lease_
+                      : ::cockroach::proto::InternalLeaderLeaseResponse::default_instance();
+}
+inline ::cockroach::proto::InternalLeaderLeaseResponse* ReadWriteCmdResponse::mutable_internal_leader_lease() {
+  if (!has_internal_leader_lease()) {
+    clear_value();
+    set_has_internal_leader_lease();
+    value_.internal_leader_lease_ = new ::cockroach::proto::InternalLeaderLeaseResponse;
+  }
+  return value_.internal_leader_lease_;
+}
+inline ::cockroach::proto::InternalLeaderLeaseResponse* ReadWriteCmdResponse::release_internal_leader_lease() {
+  if (has_internal_leader_lease()) {
+    clear_has_value();
+    ::cockroach::proto::InternalLeaderLeaseResponse* temp = value_.internal_leader_lease_;
+    value_.internal_leader_lease_ = NULL;
+    return temp;
+  } else {
+    return NULL;
+  }
+}
+inline void ReadWriteCmdResponse::set_allocated_internal_leader_lease(::cockroach::proto::InternalLeaderLeaseResponse* internal_leader_lease) {
+  clear_value();
+  if (internal_leader_lease) {
+    set_has_internal_leader_lease();
+    value_.internal_leader_lease_ = internal_leader_lease;
+  }
+}
+
 inline bool ReadWriteCmdResponse::has_value() {
   return value_case() != VALUE_NOT_SET;
 }
@@ -5407,7 +5472,7 @@ inline InternalRaftCommandUnion::ValueCase InternalRaftCommandUnion::value_case(
 
 // InternalRaftCommand
 
-// optional int64 raft_id = 2;
+// optional int64 raft_id = 1;
 inline bool InternalRaftCommand::has_raft_id() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
@@ -5431,15 +5496,39 @@ inline void InternalRaftCommand::set_raft_id(::google::protobuf::int64 value) {
   // @@protoc_insertion_point(field_set:cockroach.proto.InternalRaftCommand.raft_id)
 }
 
-// optional .cockroach.proto.InternalRaftCommandUnion cmd = 3;
-inline bool InternalRaftCommand::has_cmd() const {
+// optional uint64 origin_node_id = 2;
+inline bool InternalRaftCommand::has_origin_node_id() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void InternalRaftCommand::set_has_cmd() {
+inline void InternalRaftCommand::set_has_origin_node_id() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void InternalRaftCommand::clear_has_cmd() {
+inline void InternalRaftCommand::clear_has_origin_node_id() {
   _has_bits_[0] &= ~0x00000002u;
+}
+inline void InternalRaftCommand::clear_origin_node_id() {
+  origin_node_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_origin_node_id();
+}
+inline ::google::protobuf::uint64 InternalRaftCommand::origin_node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.proto.InternalRaftCommand.origin_node_id)
+  return origin_node_id_;
+}
+inline void InternalRaftCommand::set_origin_node_id(::google::protobuf::uint64 value) {
+  set_has_origin_node_id();
+  origin_node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.proto.InternalRaftCommand.origin_node_id)
+}
+
+// optional .cockroach.proto.InternalRaftCommandUnion cmd = 3;
+inline bool InternalRaftCommand::has_cmd() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void InternalRaftCommand::set_has_cmd() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void InternalRaftCommand::clear_has_cmd() {
+  _has_bits_[0] &= ~0x00000004u;
 }
 inline void InternalRaftCommand::clear_cmd() {
   if (cmd_ != NULL) cmd_->::cockroach::proto::InternalRaftCommandUnion::Clear();

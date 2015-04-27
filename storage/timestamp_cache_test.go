@@ -68,7 +68,7 @@ func TestTimestampCache(t *testing.T) {
 
 	// Verify all permutations of direct and range access.
 	if rTS, _ := tc.GetMax(proto.Key("b"), nil, proto.NoTxnMD5); !rTS.Equal(ts) {
-		t.Errorf("expected current time for key \"b\"; got %+v", rTS)
+		t.Errorf("expected current time for key \"b\"; got %s", rTS)
 	}
 	if rTS, _ := tc.GetMax(proto.Key("bb"), nil, proto.NoTxnMD5); !rTS.Equal(ts) {
 		t.Error("expected current time for key \"bb\"")
@@ -102,6 +102,55 @@ func TestTimestampCache(t *testing.T) {
 	}
 }
 
+// TestTimestampCacheSetLowWater verifies that setting the low
+// water mark moves max timestamps forward as appropriate.
+func TestTimestampCacheSetLowWater(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	manual := hlc.NewManualClock(0)
+	clock := hlc.NewClock(manual.UnixNano)
+	clock.SetMaxOffset(maxClockOffset)
+	tc := NewTimestampCache(clock)
+
+	// Increment time to the maxClockOffset low water mark + 10.
+	manual.Set(maxClockOffset.Nanoseconds() + 10)
+	aTS := clock.Now()
+	tc.Add(proto.Key("a"), nil, aTS, proto.NoTxnMD5, true)
+
+	// Increment time by 10ns and add another key.
+	manual.Increment(10)
+	bTS := clock.Now()
+	tc.Add(proto.Key("b"), nil, bTS, proto.NoTxnMD5, true)
+
+	// Increment time by 10ns and add another key.
+	manual.Increment(10)
+	cTS := clock.Now()
+	tc.Add(proto.Key("c"), nil, cTS, proto.NoTxnMD5, true)
+
+	// Set low water mark.
+	tc.SetLowWater(bTS)
+
+	// Verify looking up key "a" returns the new low water mark ("a"'s timestamp).
+	for i, test := range []struct {
+		key   proto.Key
+		expTS proto.Timestamp
+	}{
+		{proto.Key("a"), bTS},
+		{proto.Key("b"), bTS},
+		{proto.Key("c"), cTS},
+		{proto.Key("d"), bTS},
+	} {
+		if rTS, _ := tc.GetMax(test.key, nil, proto.NoTxnMD5); !rTS.Equal(test.expTS) {
+			t.Errorf("%d: expected ts %s, got %s", i, test.expTS, rTS)
+		}
+	}
+
+	// Try setting a lower low water mark than the previous value.
+	tc.SetLowWater(aTS)
+	if rTS, _ := tc.GetMax(proto.Key("d"), nil, proto.NoTxnMD5); !rTS.Equal(bTS) {
+		t.Errorf("setting lower low water mark should not be allowed; expected %s; got %s", bTS, rTS)
+	}
+}
+
 // TestTimestampCacheEviction verifies the eviction of
 // timestamp cache entries after MinTSCacheWindow interval.
 func TestTimestampCacheEviction(t *testing.T) {
@@ -122,7 +171,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, _ := tc.GetMax(proto.Key("c"), nil, proto.NoTxnMD5); !rTS.Equal(aTS) {
-		t.Errorf("expected low water mark %+v, got %+v", aTS, rTS)
+		t.Errorf("expected low water mark %s, got %s", aTS, rTS)
 	}
 }
 

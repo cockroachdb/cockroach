@@ -36,9 +36,7 @@ import (
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) *LocalTestCluster {
 	s := &LocalTestCluster{}
-	if err := s.Start(); err != nil {
-		t.Fatal(err)
-	}
+	s.Start(t)
 	return s
 }
 

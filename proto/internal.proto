@@ -201,6 +201,7 @@ message ReadWriteCmdResponse {
     InternalMergeResponse internal_merge = 13;
     InternalTruncateLogResponse internal_truncate_log = 14;
     InternalGCResponse internal_gc = 15;
+    InternalLeaderLeaseResponse internal_leader_lease = 16;
   }
 }
 
@@ -237,7 +238,8 @@ message InternalRaftCommandUnion {
 // An InternalRaftCommand is a command which can be serialized and
 // sent via raft.
 message InternalRaftCommand {
-  optional int64 raft_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional int64 raft_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RaftID"];
+  optional uint64 origin_node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "OriginNodeID" ];
   optional InternalRaftCommandUnion cmd = 3 [(gogoproto.nullable) = false];
 }
 

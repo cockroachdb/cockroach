@@ -19,6 +19,7 @@ package proto
 
 import (
 	"log"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/util"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -95,6 +96,21 @@ type Response interface {
 // should be done by the caller instead.
 type Combinable interface {
 	Combine(Response)
+}
+
+// GetOrCreateCmdID returns the request header's command ID if available.
+// Otherwise, creates a new ClientCmdID, initialized with current time
+// and random salt.
+func (rh *RequestHeader) GetOrCreateCmdID(walltime int64) (cmdID ClientCmdID) {
+	if !rh.CmdID.IsEmpty() {
+		cmdID = rh.CmdID
+	} else {
+		cmdID = ClientCmdID{
+			WallTime: walltime,
+			Random:   rand.Int63(),
+		}
+	}
+	return
 }
 
 // Combine is used by range-spanning Response types (e.g. Scan or DeleteRange)

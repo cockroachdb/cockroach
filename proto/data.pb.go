@@ -603,20 +603,14 @@ func (m *Transaction) GetCertainNodes() NodeList {
 // Lease contains information about leader leases including the
 // expiration and lease holder.
 type Lease struct {
-	// The expiration is a unix nanos timestamp and is set when requesting the
-	// lease according to the wall clock plus the Duration below at the lease
-	// requestor / grantee, which is also the only node that uses it directly.
-	// Granters must always substitute their local walltime plus the Duration
-	// below instead.
-	Expiration int64 `protobuf:"varint,1,opt,name=expiration" json:"expiration"`
-	// The duration, specified in nanoseconds, is the duration for which lease
-	// granters guarantee not to participate in elections, beginning right after
-	// the command has been accepted.
-	Duration int64 `protobuf:"varint,2,opt,name=duration" json:"duration"`
-	// The leadership term for this lease.
-	Term uint64 `protobuf:"varint,3,opt,name=term" json:"term"`
+	// The start is a timestamp at which the lease begins. This value
+	// must be greater than the last lease expiration or this call will
+	// fail.
+	Start Timestamp `protobuf:"bytes,1,opt,name=start" json:"start"`
+	// The expiration is a timestamp at which the lease will expire.
+	Expiration Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration"`
 	// The Raft NodeID on which the would-be lease holder lives.
-	RaftNodeID       uint64 `protobuf:"varint,4,opt,name=raft_node_id" json:"raft_node_id"`
+	RaftNodeID       uint64 `protobuf:"varint,3,opt,name=raft_node_id" json:"raft_node_id"`
 	XXX_unrecognized []byte `json:"-"`
 }
 
@@ -624,25 +618,18 @@ func (m *Lease) Reset()         { *m = Lease{} }
 func (m *Lease) String() string { return proto1.CompactTextString(m) }
 func (*Lease) ProtoMessage()    {}
 
-func (m *Lease) GetExpiration() int64 {
+func (m *Lease) GetStart() Timestamp {
+	if m != nil {
+		return m.Start
+	}
+	return Timestamp{}
+}
+
+func (m *Lease) GetExpiration() Timestamp {
 	if m != nil {
 		return m.Expiration
 	}
-	return 0
-}
-
-func (m *Lease) GetDuration() int64 {
-	if m != nil {
-		return m.Duration
-	}
-	return 0
-}
-
-func (m *Lease) GetTerm() uint64 {
-	if m != nil {
-		return m.Term
-	}
-	return 0
+	return Timestamp{}
 }
 
 func (m *Lease) GetRaftNodeID() uint64 {
@@ -2346,51 +2333,54 @@ func (m *Lease) Unmarshal(data []byte) error {
 		wireType := int(wire & 0x7)
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Start", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if index >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[index]
+				index++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Start.Unmarshal(data[index:postIndex]); err != nil {
+				return err
+			}
+			index = postIndex
+		case 2:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Expiration", wireType)
 			}
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if index >= l {
 					return io.ErrUnexpectedEOF
 				}
 				b := data[index]
 				index++
-				m.Expiration |= (int64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Duration", wireType)
+			postIndex := index + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
 			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.Duration |= (int64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
+			if err := m.Expiration.Unmarshal(data[index:postIndex]); err != nil {
+				return err
 			}
+			index = postIndex
 		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Term", wireType)
-			}
-			for shift := uint(0); ; shift += 7 {
-				if index >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[index]
-				index++
-				m.Term |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RaftNodeID", wireType)
 			}
@@ -3290,9 +3280,10 @@ func (m *Transaction) Size() (n int) {
 func (m *Lease) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovData(uint64(m.Expiration))
-	n += 1 + sovData(uint64(m.Duration))
-	n += 1 + sovData(uint64(m.Term))
+	l = m.Start.Size()
+	n += 1 + l + sovData(uint64(l))
+	l = m.Expiration.Size()
+	n += 1 + l + sovData(uint64(l))
 	n += 1 + sovData(uint64(m.RaftNodeID))
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3946,16 +3937,23 @@ func (m *Lease) MarshalTo(data []byte) (n int, err error) {
 	_ = i
 	var l int
 	_ = l
-	data[i] = 0x8
+	data[i] = 0xa
 	i++
-	i = encodeVarintData(data, i, uint64(m.Expiration))
-	data[i] = 0x10
+	i = encodeVarintData(data, i, uint64(m.Start.Size()))
+	n20, err := m.Start.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n20
+	data[i] = 0x12
 	i++
-	i = encodeVarintData(data, i, uint64(m.Duration))
+	i = encodeVarintData(data, i, uint64(m.Expiration.Size()))
+	n21, err := m.Expiration.MarshalTo(data[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n21
 	data[i] = 0x18
-	i++
-	i = encodeVarintData(data, i, uint64(m.Term))
-	data[i] = 0x20
 	i++
 	i = encodeVarintData(data, i, uint64(m.RaftNodeID))
 	if m.XXX_unrecognized != nil {
@@ -3983,20 +3981,20 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintData(data, i, uint64(m.Txn.Size()))
-		n20, err := m.Txn.MarshalTo(data[i:])
+		n22, err := m.Txn.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n20
+		i += n22
 	}
 	data[i] = 0x12
 	i++
 	i = encodeVarintData(data, i, uint64(m.Timestamp.Size()))
-	n21, err := m.Timestamp.MarshalTo(data[i:])
+	n23, err := m.Timestamp.MarshalTo(data[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n23
 	data[i] = 0x18
 	i++
 	if m.Deleted {
@@ -4015,11 +4013,11 @@ func (m *MVCCMetadata) MarshalTo(data []byte) (n int, err error) {
 		data[i] = 0x32
 		i++
 		i = encodeVarintData(data, i, uint64(m.Value.Size()))
-		n22, err := m.Value.MarshalTo(data[i:])
+		n24, err := m.Value.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n24
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(data[i:], m.XXX_unrecognized)

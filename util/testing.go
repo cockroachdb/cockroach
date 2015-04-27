@@ -130,7 +130,7 @@ func IsTrueWithin(trueFunc func() bool, duration time.Duration) error {
 // function is invoked immediately at first and then successively with
 // an exponential backoff starting at 1ns and ending at the specified
 // duration.
-func SucceedsWithin(t *testing.T, duration time.Duration, fn func() error) {
+func SucceedsWithin(t testing.TB, duration time.Duration, fn func() error) {
 	total := time.Duration(0)
 	var lastErr error
 	for wait := time.Duration(1); total < duration; wait *= 2 {

@@ -82,12 +82,14 @@ func testRangeDescriptor() *proto.RangeDescriptor {
 type bootstrapMode int
 
 const (
-	// Use Store.BootstrapRange, which writes the range descriptor and other metadata.
-	// Most tests should use this mode because it more closely resembles the real world.
+	// Use Store.BootstrapRange, which writes the range descriptor and
+	// other metadata. Most tests should use this mode because it more
+	// closely resembles the real world.
 	bootstrapRangeWithMetadata bootstrapMode = iota
-	// Create a range with NewRange and Store.AddRange. The store's data will
-	// be persisted but metadata will not. This mode is provided for backwards compatiblity
-	// for tests that expect the store to initially be empty.
+	// Create a range with NewRange and Store.AddRange. The store's data
+	// will be persisted but metadata will not. This mode is provided
+	// for backwards compatibility for tests that expect the store to
+	// initially be empty.
 	bootstrapRangeOnly
 )
 
@@ -177,14 +179,6 @@ func (tc *testContext) Start(t *testing.T) {
 		}
 		tc.rangeID = tc.rng.Desc().RaftID
 	}
-
-	if !tc.dormantRaft {
-		// Make sure that the group is running.
-		// MultiRaft will automatically elect a leader if the group contains
-		// only one member.
-		tc.store.startGroup(1)
-		tc.rng.WaitForElection()
-	}
 }
 
 func (tc *testContext) Stop() {
@@ -260,7 +254,18 @@ func TestRangeContains(t *testing.T) {
 	}
 }
 
-func TestRangeCanService(t *testing.T) {
+func setLeaderLease(t *testing.T, r *Range, l *proto.Lease) {
+	req := &proto.InternalLeaderLeaseRequest{Lease: *l}
+	reply := &proto.InternalLeaderLeaseResponse{}
+	if err := r.AddCmd(req, reply, true); err != nil {
+		t.Errorf("failed to set lease: %s", err)
+	}
+}
+
+// TestRangeReadConsistency verifies behavior of the range under
+// different read consistencies. Note that this unittest plays
+// fast and loose with granting leader leases.
+func TestRangeReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)
 	tc := testContext{}
 	tc.Start(t)
@@ -282,15 +287,224 @@ func TestRangeCanService(t *testing.T) {
 		t.Errorf("expected error on inconsistent read within a txn")
 	}
 
-	// TODO(spencer): verify non-leader inconsistent read works.
-
-	// Verify range checking.
-	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
-	gArgs.Key = proto.Key("b")
+	// Lose the lease and verify CONSISTENT reads receive NotLeaderError
+	// and INCONSISTENT reads work as expected.
+	start := tc.rng.getLease().Expiration.Add(1, 0)
+	tc.manualClock.Set(start.WallTime)
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      start,
+		Expiration: start.Add(10, 0),
+		RaftNodeID: uint64(MakeRaftNodeID(2, 2)), // a different node
+	})
+	gArgs.ReadConsistency = proto.CONSISTENT
 	gArgs.Txn = nil
+	err := tc.rng.AddCmd(gArgs, gReply, true)
+	if _, ok := err.(*proto.NotLeaderError); !ok {
+		t.Errorf("expected not leader error; got %s", err)
+	}
+
+	gArgs.ReadConsistency = proto.INCONSISTENT
+	if err := tc.rng.AddCmd(gArgs, gReply, true); err != nil {
+		t.Errorf("expected success reading with inconsistent: %s", err)
+	}
+}
+
+func TestRangeRangeBoundsChecking(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	splitTestRange(tc.store, proto.Key("a"), proto.Key("a"), t)
+	gArgs, gReply := getArgs(proto.Key("b"), 1, tc.store.StoreID())
 	err := tc.rng.AddCmd(gArgs, gReply, true)
 	if _, ok := err.(*proto.RangeKeyMismatchError); !ok {
 		t.Errorf("expected range key mismatch error: %s", err)
+	}
+}
+
+func TestRangeHasLeaderLease(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	tc.clock.SetMaxOffset(maxClockOffset)
+
+	if held, _ := tc.rng.HasLeaderLease(tc.clock.Now()); held {
+		t.Errorf("expected no lease on range start")
+	}
+	now := tc.clock.Now()
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      now,
+		Expiration: now.Add(10, 0),
+		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+	})
+	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now()); held || expired {
+		t.Errorf("expected another replica to have leader lease")
+	}
+
+	// Advance clock past expiration and verify that another has
+	// leader lease will not be true.
+	tc.manualClock.Set(11) // time is 11ns
+	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now()); held || !expired {
+		t.Errorf("expected another replica to have expired lease")
+	}
+}
+
+func TestRangeNotLeaderError(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	now := tc.clock.Now()
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      now,
+		Expiration: now.Add(10, 0),
+		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+	})
+
+	header := proto.RequestHeader{
+		Key:       proto.Key("a"),
+		RaftID:    tc.rng.Desc().RaftID,
+		Replica:   proto.Replica{StoreID: tc.store.StoreID()},
+		Timestamp: now,
+	}
+	testCases := []struct {
+		args  proto.Request
+		reply proto.Response
+	}{
+		// Admin split covers admin commands.
+		{&proto.AdminSplitRequest{
+			RequestHeader: header,
+			SplitKey:      proto.Key("a"),
+		},
+			&proto.AdminSplitResponse{},
+		},
+		// Get covers read-only commands.
+		{&proto.GetRequest{
+			RequestHeader: header,
+		},
+			&proto.GetResponse{},
+		},
+		// Put covers read-write commands.
+		{&proto.PutRequest{
+			RequestHeader: header,
+			Value: proto.Value{
+				Bytes: []byte("value"),
+			},
+		},
+			&proto.PutResponse{},
+		},
+	}
+
+	for i, test := range testCases {
+		err := tc.rng.AddCmd(test.args, test.reply, true)
+		if _, ok := err.(*proto.NotLeaderError); !ok {
+			t.Errorf("%d: expected not leader error: %s", i, err)
+		}
+	}
+}
+
+// TestRangeGossipConfigsOnLease verifies that config info is gossiped
+// upon acquisition of the leader lease.
+func TestRangeGossipConfigsOnLease(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+
+	// Give lease to someone else to start.
+	now := tc.clock.Now()
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      now,
+		Expiration: now.Add(10, 0),
+		RaftNodeID: uint64(MakeRaftNodeID(2, 2)),
+	})
+
+	// Add a permission for a new key prefix.
+	db1Perm := proto.PermConfig{
+		Read:  []string{"spencer", "foo", "bar", "baz"},
+		Write: []string{"spencer"},
+	}
+	key := engine.MakeKey(engine.KeyConfigPermissionPrefix, proto.Key("/db1"))
+	if err := engine.MVCCPutProto(tc.engine, nil, key, proto.MinTimestamp, nil, &db1Perm); err != nil {
+		t.Fatal(err)
+	}
+
+	verifyPerm := func() bool {
+		info, err := tc.gossip.GetInfo(gossip.KeyConfigPermission)
+		if err != nil {
+			t.Fatal(err)
+		}
+		configMap := info.(PrefixConfigMap)
+		expConfigs := []*PrefixConfig{
+			{engine.KeyMin, nil, &testDefaultPermConfig},
+			{proto.Key("/db1"), nil, &db1Perm},
+			{proto.Key("/db2"), engine.KeyMin, &testDefaultPermConfig},
+		}
+		return reflect.DeepEqual([]*PrefixConfig(configMap), expConfigs)
+	}
+
+	if verifyPerm() {
+		t.Errorf("not expecting gossip of new config until lease is acquired")
+	}
+
+	// Give lease to this range.
+	tc.manualClock.Set(11 + int64(tc.clock.MaxOffset())) // advance time
+	setLeaderLease(t, tc.rng, &proto.Lease{
+		Start:      now.Add(11, 0),
+		Expiration: now.Add(20, 0),
+		RaftNodeID: uint64(tc.store.RaftNodeID()),
+	})
+	if !verifyPerm() {
+		t.Errorf("expected gossip of new config")
+	}
+}
+
+// TestRangeTSCacheLowWaterOnLease verifies that the low water mark is
+// set on the timestamp cache when the node is granted the leader
+// lease after not holding it and it is not set when the node is
+// granted the leader lease when it was the last holder.
+func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	tc := testContext{}
+	tc.Start(t)
+	defer tc.Stop()
+	tc.clock.SetMaxOffset(maxClockOffset)
+
+	now := proto.Timestamp{WallTime: maxClockOffset.Nanoseconds() + 10}
+	tc.manualClock.Set(now.WallTime)
+
+	testCases := []struct {
+		nodeID      multiraft.NodeID
+		start       proto.Timestamp
+		expiration  proto.Timestamp
+		expLowWater int64
+	}{
+		// Grant the lease fresh.
+		{tc.store.RaftNodeID(), now, now.Add(10, 0), maxClockOffset.Nanoseconds()},
+		// Renew the lease.
+		{tc.store.RaftNodeID(), now.Add(15, 0), now.Add(30, 0), maxClockOffset.Nanoseconds()},
+		// Renew the lease but shorten expiration.
+		{tc.store.RaftNodeID(), now.Add(16, 0), now.Add(25, 0), maxClockOffset.Nanoseconds()},
+		// Lease is held by another.
+		{MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), maxClockOffset.Nanoseconds()},
+		// Lease is regranted to this replica.
+		{tc.store.RaftNodeID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + maxClockOffset.Nanoseconds()},
+	}
+
+	for i, test := range testCases {
+		setLeaderLease(t, tc.rng, &proto.Lease{
+			Start:      test.start,
+			Expiration: test.expiration,
+			RaftNodeID: uint64(test.nodeID),
+		})
+		// Verify expected low water mark.
+		rTS, wTS := tc.rng.tsCache.GetMax(proto.Key("a"), nil, proto.NoTxnMD5)
+		if rTS.WallTime != test.expLowWater || wTS.WallTime != test.expLowWater {
+			t.Errorf("%d: expected low water %d; got %d, %d", i, test.expLowWater, rTS.WallTime, wTS.WallTime)
+		}
 	}
 }
 
@@ -377,7 +591,7 @@ func TestRangeGossipConfigWithMultipleKeyPrefixes(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(0, req, reply); err != nil {
+	if err := tc.rng.AddCmd(req, reply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -419,7 +633,7 @@ func TestRangeGossipConfigUpdates(t *testing.T) {
 	}
 	reply := &proto.PutResponse{}
 
-	if err := tc.rng.executeCmd(0, req, reply); err != nil {
+	if err := tc.rng.AddCmd(req, reply, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -630,6 +844,44 @@ func verifyErrorMatches(err error, regexpStr string, t *testing.T) {
 		if matched, regexpErr := regexp.MatchString(regexpStr, err.Error()); !matched || regexpErr != nil {
 			t.Errorf("expected error to match %q (%s): %s", regexpStr, regexpErr, err.Error())
 		}
+	}
+}
+
+// TestAcquireLeaderLease verifies that the leader lease is acquired
+// for read and write methods.
+func TestAcquireLeaderLease(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	gArgs, gReply := getArgs([]byte("a"), 1, 0)
+	pArgs, pReply := putArgs([]byte("b"), []byte("1"), 1, 0)
+
+	testCases := []struct {
+		args  proto.Request
+		reply proto.Response
+	}{
+		{gArgs, gReply},
+		{pArgs, pReply},
+	}
+	for i, test := range testCases {
+		tc := testContext{}
+		tc.Start(t)
+		tc.manualClock.Set(time.Second.Nanoseconds())
+
+		test.args.Header().Timestamp = tc.clock.Now()
+		if err := tc.rng.AddCmd(test.args, test.reply, true); err != nil {
+			t.Fatal(err)
+		}
+		lease := tc.rng.getLease()
+		if lease == nil {
+			t.Fatalf("%d: expected lease acquisition", i)
+		}
+		expStart := test.args.Header().Timestamp
+		expExpiration := expStart.Add(int64(defaultLeaderLeaseDuration), 0)
+		if !lease.Start.Equal(expStart) || !lease.Expiration.Equal(expExpiration) {
+			t.Errorf("%d: unexpected lease timing %d, %d; expected %s, %s",
+				i, lease.Start, lease.Expiration, expStart, expExpiration)
+		}
+		tc.Stop()
 	}
 }
 
@@ -1784,7 +2036,7 @@ func TestConditionFailedError(t *testing.T) {
 	key := []byte("k")
 	value := []byte("quack")
 	pArgs, pReply := putArgs(key, value, 1, tc.store.StoreID())
-	if err := tc.rng.executeCmd(0, pArgs, pReply); err != nil {
+	if err := tc.rng.AddCmd(pArgs, pReply, true); err != nil {
 		t.Fatal(err)
 	}
 	args := &proto.ConditionalPutRequest{
@@ -1802,7 +2054,7 @@ func TestConditionFailedError(t *testing.T) {
 		},
 	}
 	reply := &proto.ConditionalPutResponse{}
-	err := tc.rng.executeCmd(0, args, reply)
+	err := tc.rng.AddCmd(args, reply, true)
 	if cErr, ok := err.(*proto.ConditionFailedError); err == nil || !ok {
 		t.Fatalf("expected ConditionFailedError, got %T with content %+v",
 			err, err)

@@ -298,10 +298,9 @@ void protobuf_AssignDesc_cockroach_2fproto_2fdata_2eproto() {
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(Transaction));
   Lease_descriptor_ = file->message_type(12);
-  static const int Lease_offsets_[4] = {
+  static const int Lease_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, start_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, expiration_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, duration_),
-    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, term_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(Lease, raft_node_id_),
   };
   Lease_reflection_ =
@@ -561,36 +560,37 @@ void protobuf_AddDesc_cockroach_2fproto_2fdata_2eproto() {
     "roach.proto.TimestampB\004\310\336\037\000\0227\n\rmax_times"
     "tamp\030\013 \001(\0132\032.cockroach.proto.TimestampB\004"
     "\310\336\037\000\0226\n\rcertain_nodes\030\014 \001(\0132\031.cockroach."
-    "proto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"w\n\005Lease\022\030\n\ne"
-    "xpiration\030\001 \001(\003B\004\310\336\037\000\022\026\n\010duration\030\002 \001(\003B"
-    "\004\310\336\037\000\022\022\n\004term\030\003 \001(\004B\004\310\336\037\000\022(\n\014raft_node_i"
-    "d\030\004 \001(\004B\022\310\336\037\000\342\336\037\nRaftNodeID\"\336\001\n\014MVCCMeta"
-    "data\022)\n\003txn\030\001 \001(\0132\034.cockroach.proto.Tran"
-    "saction\0223\n\ttimestamp\030\002 \001(\0132\032.cockroach.p"
-    "roto.TimestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310"
-    "\336\037\000\022\027\n\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_byte"
-    "s\030\005 \001(\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach"
-    ".proto.Value\"H\n\nGCMetadata\022\035\n\017last_scan_"
-    "nanos\030\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos"
-    "\030\002 \001(\003\"\\\n\023TimeSeriesDatapoint\022\035\n\017timesta"
-    "mp_nanos\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022"
-    "\023\n\013float_value\030\003 \001(\002\"t\n\016TimeSeriesData\022\022"
-    "\n\004name\030\001 \001(\tB\004\310\336\037\000\022\024\n\006source\030\002 \001(\tB\004\310\336\037\000"
-    "\0228\n\ndatapoints\030\003 \003(\0132$.cockroach.proto.T"
-    "imeSeriesDatapoint\"\300\002\n\tMVCCStats\022\030\n\nlive"
-    "_bytes\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310"
-    "\336\037\000\022\027\n\tval_bytes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_b"
-    "ytes\030\004 \001(\003B\004\310\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336"
-    "\037\000\022\027\n\tkey_count\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count"
-    "\030\007 \001(\003B\004\310\336\037\000\022\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000"
-    "\022\030\n\nintent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_a"
-    "ge\030\n \001(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\037\n\021last_upd"
-    "ate_nanos\030\013 \001(\003B\004\310\336\037\000*>\n\021ReplicaChangeTy"
-    "pe\022\017\n\013ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032"
-    "\004\210\243\036\000*5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000"
-    "\022\014\n\010SNAPSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatu"
-    "s\022\013\n\007PENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED"
-    "\020\002\032\004\210\243\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3109);
+    "proto.NodeListB\004\310\336\037\000:\004\230\240\037\000\"\230\001\n\005Lease\022/\n\005"
+    "start\030\001 \001(\0132\032.cockroach.proto.TimestampB"
+    "\004\310\336\037\000\0224\n\nexpiration\030\002 \001(\0132\032.cockroach.pr"
+    "oto.TimestampB\004\310\336\037\000\022(\n\014raft_node_id\030\003 \001("
+    "\004B\022\310\336\037\000\342\336\037\nRaftNodeID\"\336\001\n\014MVCCMetadata\022)"
+    "\n\003txn\030\001 \001(\0132\034.cockroach.proto.Transactio"
+    "n\0223\n\ttimestamp\030\002 \001(\0132\032.cockroach.proto.T"
+    "imestampB\004\310\336\037\000\022\025\n\007deleted\030\003 \001(\010B\004\310\336\037\000\022\027\n"
+    "\tkey_bytes\030\004 \001(\003B\004\310\336\037\000\022\027\n\tval_bytes\030\005 \001("
+    "\003B\004\310\336\037\000\022%\n\005value\030\006 \001(\0132\026.cockroach.proto"
+    ".Value\"H\n\nGCMetadata\022\035\n\017last_scan_nanos\030"
+    "\001 \001(\003B\004\310\336\037\000\022\033\n\023oldest_intent_nanos\030\002 \001(\003"
+    "\"\\\n\023TimeSeriesDatapoint\022\035\n\017timestamp_nan"
+    "os\030\001 \001(\003B\004\310\336\037\000\022\021\n\tint_value\030\002 \001(\003\022\023\n\013flo"
+    "at_value\030\003 \001(\002\"t\n\016TimeSeriesData\022\022\n\004name"
+    "\030\001 \001(\tB\004\310\336\037\000\022\024\n\006source\030\002 \001(\tB\004\310\336\037\000\0228\n\nda"
+    "tapoints\030\003 \003(\0132$.cockroach.proto.TimeSer"
+    "iesDatapoint\"\300\002\n\tMVCCStats\022\030\n\nlive_bytes"
+    "\030\001 \001(\003B\004\310\336\037\000\022\027\n\tkey_bytes\030\002 \001(\003B\004\310\336\037\000\022\027\n"
+    "\tval_bytes\030\003 \001(\003B\004\310\336\037\000\022\032\n\014intent_bytes\030\004"
+    " \001(\003B\004\310\336\037\000\022\030\n\nlive_count\030\005 \001(\003B\004\310\336\037\000\022\027\n\t"
+    "key_count\030\006 \001(\003B\004\310\336\037\000\022\027\n\tval_count\030\007 \001(\003"
+    "B\004\310\336\037\000\022\032\n\014intent_count\030\010 \001(\003B\004\310\336\037\000\022\030\n\nin"
+    "tent_age\030\t \001(\003B\004\310\336\037\000\022(\n\014gc_bytes_age\030\n \001"
+    "(\003B\022\310\336\037\000\342\336\037\nGCBytesAge\022\037\n\021last_update_na"
+    "nos\030\013 \001(\003B\004\310\336\037\000*>\n\021ReplicaChangeType\022\017\n\013"
+    "ADD_REPLICA\020\000\022\022\n\016REMOVE_REPLICA\020\001\032\004\210\243\036\000*"
+    "5\n\rIsolationType\022\020\n\014SERIALIZABLE\020\000\022\014\n\010SN"
+    "APSHOT\020\001\032\004\210\243\036\000*B\n\021TransactionStatus\022\013\n\007P"
+    "ENDING\020\000\022\r\n\tCOMMITTED\020\001\022\013\n\007ABORTED\020\002\032\004\210\243"
+    "\036\000B\023Z\005proto\340\342\036\001\310\342\036\001\320\342\036\001", 3143);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "cockroach/proto/data.proto", &protobuf_RegisterTypes);
   Timestamp::default_instance_ = new Timestamp();
@@ -4772,9 +4772,8 @@ void Transaction::Swap(Transaction* other) {
 // ===================================================================
 
 #ifndef _MSC_VER
+const int Lease::kStartFieldNumber;
 const int Lease::kExpirationFieldNumber;
-const int Lease::kDurationFieldNumber;
-const int Lease::kTermFieldNumber;
 const int Lease::kRaftNodeIdFieldNumber;
 #endif  // !_MSC_VER
 
@@ -4785,6 +4784,8 @@ Lease::Lease()
 }
 
 void Lease::InitAsDefaultInstance() {
+  start_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
+  expiration_ = const_cast< ::cockroach::proto::Timestamp*>(&::cockroach::proto::Timestamp::default_instance());
 }
 
 Lease::Lease(const Lease& from)
@@ -4796,9 +4797,8 @@ Lease::Lease(const Lease& from)
 
 void Lease::SharedCtor() {
   _cached_size_ = 0;
-  expiration_ = GOOGLE_LONGLONG(0);
-  duration_ = GOOGLE_LONGLONG(0);
-  term_ = GOOGLE_ULONGLONG(0);
+  start_ = NULL;
+  expiration_ = NULL;
   raft_node_id_ = GOOGLE_ULONGLONG(0);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
@@ -4810,6 +4810,8 @@ Lease::~Lease() {
 
 void Lease::SharedDtor() {
   if (this != default_instance_) {
+    delete start_;
+    delete expiration_;
   }
 }
 
@@ -4835,21 +4837,15 @@ Lease* Lease::New() const {
 }
 
 void Lease::Clear() {
-#define OFFSET_OF_FIELD_(f) (reinterpret_cast<char*>(      \
-  &reinterpret_cast<Lease*>(16)->f) - \
-   reinterpret_cast<char*>(16))
-
-#define ZR_(first, last) do {                              \
-    size_t f = OFFSET_OF_FIELD_(first);                    \
-    size_t n = OFFSET_OF_FIELD_(last) - f + sizeof(last);  \
-    ::memset(&first, 0, n);                                \
-  } while (0)
-
-  ZR_(expiration_, raft_node_id_);
-
-#undef OFFSET_OF_FIELD_
-#undef ZR_
-
+  if (_has_bits_[0 / 32] & 7) {
+    if (has_start()) {
+      if (start_ != NULL) start_->::cockroach::proto::Timestamp::Clear();
+    }
+    if (has_expiration()) {
+      if (expiration_ != NULL) expiration_->::cockroach::proto::Timestamp::Clear();
+    }
+    raft_node_id_ = GOOGLE_ULONGLONG(0);
+  }
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
   mutable_unknown_fields()->Clear();
 }
@@ -4864,53 +4860,34 @@ bool Lease::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // optional int64 expiration = 1;
+      // optional .cockroach.proto.Timestamp start = 1;
       case 1: {
-        if (tag == 8) {
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &expiration_)));
-          set_has_expiration();
+        if (tag == 10) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_start()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(16)) goto parse_duration;
+        if (input->ExpectTag(18)) goto parse_expiration;
         break;
       }
 
-      // optional int64 duration = 2;
+      // optional .cockroach.proto.Timestamp expiration = 2;
       case 2: {
-        if (tag == 16) {
-         parse_duration:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
-                 input, &duration_)));
-          set_has_duration();
+        if (tag == 18) {
+         parse_expiration:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_expiration()));
         } else {
           goto handle_unusual;
         }
-        if (input->ExpectTag(24)) goto parse_term;
+        if (input->ExpectTag(24)) goto parse_raft_node_id;
         break;
       }
 
-      // optional uint64 term = 3;
+      // optional uint64 raft_node_id = 3;
       case 3: {
         if (tag == 24) {
-         parse_term:
-          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
-                 input, &term_)));
-          set_has_term();
-        } else {
-          goto handle_unusual;
-        }
-        if (input->ExpectTag(32)) goto parse_raft_node_id;
-        break;
-      }
-
-      // optional uint64 raft_node_id = 4;
-      case 4: {
-        if (tag == 32) {
          parse_raft_node_id:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
@@ -4948,24 +4925,21 @@ failure:
 void Lease::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
   // @@protoc_insertion_point(serialize_start:cockroach.proto.Lease)
-  // optional int64 expiration = 1;
+  // optional .cockroach.proto.Timestamp start = 1;
+  if (has_start()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      1, this->start(), output);
+  }
+
+  // optional .cockroach.proto.Timestamp expiration = 2;
   if (has_expiration()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->expiration(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteMessageMaybeToArray(
+      2, this->expiration(), output);
   }
 
-  // optional int64 duration = 2;
-  if (has_duration()) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->duration(), output);
-  }
-
-  // optional uint64 term = 3;
-  if (has_term()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(3, this->term(), output);
-  }
-
-  // optional uint64 raft_node_id = 4;
+  // optional uint64 raft_node_id = 3;
   if (has_raft_node_id()) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt64(4, this->raft_node_id(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(3, this->raft_node_id(), output);
   }
 
   if (!unknown_fields().empty()) {
@@ -4978,24 +4952,23 @@ void Lease::SerializeWithCachedSizes(
 ::google::protobuf::uint8* Lease::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // @@protoc_insertion_point(serialize_to_array_start:cockroach.proto.Lease)
-  // optional int64 expiration = 1;
+  // optional .cockroach.proto.Timestamp start = 1;
+  if (has_start()) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        1, this->start(), target);
+  }
+
+  // optional .cockroach.proto.Timestamp expiration = 2;
   if (has_expiration()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(1, this->expiration(), target);
+    target = ::google::protobuf::internal::WireFormatLite::
+      WriteMessageNoVirtualToArray(
+        2, this->expiration(), target);
   }
 
-  // optional int64 duration = 2;
-  if (has_duration()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt64ToArray(2, this->duration(), target);
-  }
-
-  // optional uint64 term = 3;
-  if (has_term()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(3, this->term(), target);
-  }
-
-  // optional uint64 raft_node_id = 4;
+  // optional uint64 raft_node_id = 3;
   if (has_raft_node_id()) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(4, this->raft_node_id(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(3, this->raft_node_id(), target);
   }
 
   if (!unknown_fields().empty()) {
@@ -5010,28 +4983,21 @@ int Lease::ByteSize() const {
   int total_size = 0;
 
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    // optional int64 expiration = 1;
+    // optional .cockroach.proto.Timestamp start = 1;
+    if (has_start()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          this->start());
+    }
+
+    // optional .cockroach.proto.Timestamp expiration = 2;
     if (has_expiration()) {
       total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           this->expiration());
     }
 
-    // optional int64 duration = 2;
-    if (has_duration()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::Int64Size(
-          this->duration());
-    }
-
-    // optional uint64 term = 3;
-    if (has_term()) {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::UInt64Size(
-          this->term());
-    }
-
-    // optional uint64 raft_node_id = 4;
+    // optional uint64 raft_node_id = 3;
     if (has_raft_node_id()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::UInt64Size(
@@ -5065,14 +5031,11 @@ void Lease::MergeFrom(const ::google::protobuf::Message& from) {
 void Lease::MergeFrom(const Lease& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_start()) {
+      mutable_start()->::cockroach::proto::Timestamp::MergeFrom(from.start());
+    }
     if (from.has_expiration()) {
-      set_expiration(from.expiration());
-    }
-    if (from.has_duration()) {
-      set_duration(from.duration());
-    }
-    if (from.has_term()) {
-      set_term(from.term());
+      mutable_expiration()->::cockroach::proto::Timestamp::MergeFrom(from.expiration());
     }
     if (from.has_raft_node_id()) {
       set_raft_node_id(from.raft_node_id());
@@ -5100,9 +5063,8 @@ bool Lease::IsInitialized() const {
 
 void Lease::Swap(Lease* other) {
   if (other != this) {
+    std::swap(start_, other->start_);
     std::swap(expiration_, other->expiration_);
-    std::swap(duration_, other->duration_);
-    std::swap(term_, other->term_);
     std::swap(raft_node_id_, other->raft_node_id_);
     std::swap(_has_bits_[0], other->_has_bits_[0]);
     _unknown_fields_.Swap(&other->_unknown_fields_);

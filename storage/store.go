@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -532,18 +533,17 @@ func (s *Store) maybeSplitRangesByConfigs(configMap PrefixConfigMap) {
 		n := sort.Search(len(s.rangesByKey), func(i int) bool {
 			return config.Prefix.Less(s.rangesByKey[i].Desc().EndKey)
 		})
-		// If the config doesn't split the range or the range isn't the
-		// leader of its consensus group, continue.
-		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) || !s.rangesByKey[n].IsLeader() {
+		// If the config doesn't split the range, continue.
+		if n >= len(s.rangesByKey) || !s.rangesByKey[n].Desc().ContainsKey(config.Prefix) {
 			continue
 		}
 		s.splitQueue.MaybeAdd(s.rangesByKey[n], s.ctx.Clock.Now())
 	}
 }
 
-// ForceReplicationScan iterates over all ranges and enqueues any that need to be
-// replicated. Exposed only for testing.
-func (s *Store) ForceReplicationScan() {
+// ForceReplicationScan iterates over all ranges and enqueues any that
+// need to be replicated. Exposed only for testing.
+func (s *Store) ForceReplicationScan(t testing.TB) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -612,7 +612,6 @@ func (s *Store) GetRange(raftID int64) (*Range, error) {
 	if rng, ok := s.ranges[raftID]; ok {
 		return rng, nil
 	}
-	log.Infof("couldn't find range %d in %s", raftID, s.ranges)
 	return nil, proto.NewRangeNotFoundError(raftID)
 }
 
@@ -757,6 +756,9 @@ func (s *Store) Gossip() *gossip.Gossip { return s.ctx.Gossip }
 // SplitQueue accessor.
 func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
 
+// Stopper accessor.
+func (s *Store) Stopper() *util.Stopper { return s.stopper }
+
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
 // and range IDs to fill out the supplied replicas.
@@ -784,12 +786,9 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	copy.EndKey = append([]byte(nil), newRng.Desc().StartKey...)
 	origRng.SetDesc(&copy)
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	err := s.addRangeInternal(newRng, true)
-	s.mu.Unlock()
 	if err != nil {
-		return err
-	}
-	if err := s.startGroup(newRng.Desc().RaftID); err != nil {
 		return err
 	}
 	return nil
@@ -797,26 +796,26 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 
 // MergeRange expands the subsuming range to absorb the subsumed range.
 // This merge operation will fail if the two ranges are not collocated
-// on the same store. Returns the subsumed range.
-func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) (*Range, error) {
+// on the same store.
+func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsumedRaftID int64) error {
 	if !subsumingRng.Desc().EndKey.Less(updatedEndKey) {
-		return nil, util.Errorf("the new end key is not greater than the current one: %+v < %+v",
+		return util.Errorf("the new end key is not greater than the current one: %+v < %+v",
 			updatedEndKey, subsumingRng.Desc().EndKey)
 	}
 
 	subsumedRng, err := s.GetRange(subsumedRaftID)
 	if err != nil {
-		return nil, util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
+		return util.Errorf("Could not find the subsumed range: %d", subsumedRaftID)
 	}
 
 	if !ReplicaSetsEqual(subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas()) {
-		return nil, util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
+		return util.Errorf("Ranges are not on the same replicas sets: %+v=%+v",
 			subsumedRng.Desc().GetReplicas(), subsumingRng.Desc().GetReplicas())
 	}
 
 	// Remove and destroy the subsumed range.
 	if err = s.RemoveRange(subsumedRng); err != nil {
-		return nil, util.Errorf("cannot remove range %s", err)
+		return util.Errorf("cannot remove range %s", err)
 	}
 
 	// TODO(bram): The removed range needs to have all of its metadata removed.
@@ -826,20 +825,16 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	copy.EndKey = updatedEndKey
 	subsumingRng.SetDesc(&copy)
 
-	return subsumedRng, nil
+	return nil
 }
 
 // AddRange adds the range to the store's range map and to the sorted
 // rangesByKey slice.
 func (s *Store) AddRange(rng *Range) error {
-	log.Errorf("adding range")
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	err := s.addRangeInternal(rng, true)
-	s.mu.Unlock()
 	if err != nil {
-		return err
-	}
-	if err := s.startGroup(rng.Desc().RaftID); err != nil {
 		return err
 	}
 	return nil
@@ -852,7 +847,7 @@ func (s *Store) AddRange(rng *Range) error {
 // is held. Returns a rangeAlreadyExists error if a range with the
 // same Raft ID has already been added to this store.
 func (s *Store) addRangeInternal(rng *Range, resort bool) error {
-	rng.start(s.stopper)
+	rng.start()
 	// TODO(spencer); will need to determine which range is
 	// newer, and keep that one.
 	if exRng, ok := s.ranges[rng.Desc().RaftID]; ok {
@@ -1072,14 +1067,6 @@ func (s *Store) maybeResolveWriteIntentError(rng *Range, args proto.Request, rep
 	return wiErr
 }
 
-// startGroup creates and starts the given Raft group.
-// Calls to existing groups are allowed, but have no effect.
-// TODO(tschottdorf) we shouldn't be calling this at all; MultiRaft should
-// lazily create groups as needed (and already does).
-func (s *Store) startGroup(raftID int64) error {
-	return s.multiraft.CreateGroup(uint64(raftID))
-}
-
 // ProposeRaftCommand submits a command to raft. The command is processed
 // asynchronously and an error or nil will be written to the returned
 // channel when it is committed or aborted (but note that committed does
@@ -1090,7 +1077,7 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 		panic("proposed a nil command")
 	}
 	// Lazily create group. TODO(bdarnell): make this non-lazy
-	err := s.startGroup(cmd.RaftID)
+	err := s.multiraft.CreateGroup(uint64(cmd.RaftID))
 	if err != nil {
 		ch := make(chan error, 1)
 		ch <- err
@@ -1119,21 +1106,6 @@ func (s *Store) ProposeRaftCommand(idKey cmdIDKey, cmd proto.InternalRaftCommand
 // by the raft consensus algorithm, dispatching them to the
 // appropriate range. This method starts a goroutine to process Raft
 // commands indefinitely or until the stopper signals.
-//
-// TODO(bdarnell): when Raft elects this node as the leader for any
-//   of its ranges, we need to be careful to do the following before
-//   the range is allowed to believe it's the leader and begin to accept
-//   writes and reads:
-//     - Apply all committed log entries to the state machine.
-//     - Signal the range to clear its read timestamp, response caches
-//       and pending read queue.
-//     - Signal the range that it's now the leader with the duration
-//       of its leader lease.
-//   If we don't do this, then a read which was previously gated on
-//   the former leader waiting for overlapping writes to commit to
-//   the underlying state machine, might transit to the new leader
-//   and be able to access the new leader's state machine BEFORE
-//   the overlapping writes are applied.
 func (s *Store) processRaft() {
 	s.stopper.RunWorker(func() {
 		for {
@@ -1164,29 +1136,6 @@ func (s *Store) processRaft() {
 					if err != nil {
 						log.Fatal(err)
 					}
-
-				case *multiraft.EventLeaderElection:
-					if e.NodeID == 0 {
-						// Election in progress.
-						continue
-					}
-					// Only the store housing the election winner gets to
-					// proceed.
-					groupID = int64(e.GroupID)
-					r, err := s.GetRange(groupID)
-					if err != nil {
-						log.Warning(err)
-						continue
-					}
-					// TODO(tschottdorf): remove this once we have the whole
-					// range lazily start up and the response cache moved to
-					// the correct location to deduplicate multiraft
-					// reproposals (at the time of writing commands can be
-					// executed multiple times if issued during an election).
-					r.election <- struct{}{}
-
-					// Done with this event, go back to listening on the channel.
-					continue
 
 				default:
 					continue
