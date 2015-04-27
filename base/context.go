@@ -137,6 +137,9 @@ func (ctx *Context) GetHTTPClient() (*http.Client, error) {
 		return ctx.httpClient, nil
 	}
 
+	if !ctx.SSLWanted() {
+		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
+	}
 	tlsConfig, err := ctx.GetClientTLSConfig()
 	if err != nil {
 		return nil, err
