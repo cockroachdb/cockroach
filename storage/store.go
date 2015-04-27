@@ -256,6 +256,7 @@ type Store struct {
 	verifyQueue    *verifyQueue    // Checksum verification queue
 	replicateQueue *replicateQueue // Replication queue
 	scanner        *rangeScanner   // Range scanner
+	feed           StoreEventFeed  // Event Feed
 	multiraft      *multiraft.MultiRaft
 	started        int32
 	stopper        *util.Stopper
@@ -298,6 +299,9 @@ type StoreContext struct {
 
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
+
+	// EventFeed is a feed to which this store will publish events.
+	EventFeed *util.Feed
 }
 
 // Valid returns true if the StoreContext is populated correctly.
@@ -385,6 +389,10 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		}
 	}
 
+	// Start store event feed.
+	s.feed = NewStoreEventFeed(s.Ident.StoreID, s.ctx.EventFeed)
+	s.feed.startStore()
+
 	// Create ID allocators.
 	idAlloc, err := NewIDAllocator(engine.KeyRaftIDGenerator, s.ctx.DB, 2 /* min ID */, raftIDAllocCount, s.stopper)
 	if err != nil {
@@ -422,6 +430,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
+	s.feed.beginScanRanges()
 	if err := engine.MVCCIterate(s.engine, start, end, now, false, nil, func(kv proto.KeyValue) (bool, error) {
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _ := engine.DecodeRangeKey(kv.Key)
@@ -442,6 +451,7 @@ func (s *Store) Start(stopper *util.Stopper) error {
 		if err != nil {
 			return false, err
 		}
+		s.feed.addRange(rng)
 		// Note that we do not create raft groups at this time; they will be created
 		// on-demand the first time they are needed. This helps reduce the amount of
 		// election-related traffic in a cold start.
@@ -454,6 +464,8 @@ func (s *Store) Start(stopper *util.Stopper) error {
 	}); err != nil {
 		return err
 	}
+	s.feed.endScanRanges()
+
 	// Sort the rangesByKey slice after they've all been added.
 	sort.Sort(s.rangesByKey)
 
@@ -759,6 +771,9 @@ func (s *Store) SplitQueue() *splitQueue { return s.splitQueue }
 // Stopper accessor.
 func (s *Store) Stopper() *util.Stopper { return s.stopper }
 
+// EventFeed accessor.
+func (s *Store) EventFeed() StoreEventFeed { return s.feed }
+
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied proto.Replicas slice. It allocates new Raft
 // and range IDs to fill out the supplied replicas.
@@ -791,6 +806,7 @@ func (s *Store) SplitRange(origRng, newRng *Range) error {
 	if err != nil {
 		return err
 	}
+	s.feed.splitRange(origRng, newRng)
 	return nil
 }
 
@@ -825,6 +841,7 @@ func (s *Store) MergeRange(subsumingRng *Range, updatedEndKey proto.Key, subsume
 	copy.EndKey = updatedEndKey
 	subsumingRng.SetDesc(&copy)
 
+	s.feed.mergeRange(subsumingRng, subsumedRng)
 	return nil
 }
 
@@ -837,6 +854,7 @@ func (s *Store) AddRange(rng *Range) error {
 	if err != nil {
 		return err
 	}
+	s.feed.addRange(rng)
 	return nil
 }
 
