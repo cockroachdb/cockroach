@@ -344,14 +344,10 @@ func TestRangeHasLeaderLease(t *testing.T) {
 	}
 
 	// Advance clock past expiration and verify that another has
-	// leader lease will still be true up to the grace period.
+	// leader lease will not be true.
 	tc.manualClock.Set(11) // time is 11ns
-	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now()); held || expired {
-		t.Errorf("expected another replica to still have leader lease due to grace period")
-	}
-	tc.manualClock.Set(11 + int64(tc.clock.MaxOffset()))
 	if held, expired := tc.rng.HasLeaderLease(tc.clock.Now()); held || !expired {
-		t.Errorf("expected expiration of other replica's leader lease")
+		t.Errorf("expected another replica to have expired lease")
 	}
 }
 
@@ -490,8 +486,10 @@ func TestRangeTSCacheLowWaterOnLease(t *testing.T) {
 		{tc.store.RaftNodeID(), now, now.Add(10, 0), maxClockOffset.Nanoseconds()},
 		// Renew the lease.
 		{tc.store.RaftNodeID(), now.Add(15, 0), now.Add(30, 0), maxClockOffset.Nanoseconds()},
+		// Renew the lease but shorten expiration.
+		{tc.store.RaftNodeID(), now.Add(16, 0), now.Add(25, 0), maxClockOffset.Nanoseconds()},
 		// Lease is held by another.
-		{MakeRaftNodeID(2, 2), now.Add(35, 0), now.Add(50, 0), maxClockOffset.Nanoseconds()},
+		{MakeRaftNodeID(2, 2), now.Add(29, 0), now.Add(50, 0), maxClockOffset.Nanoseconds()},
 		// Lease is regranted to this replica.
 		{tc.store.RaftNodeID(), now.Add(60, 0), now.Add(70, 0), now.Add(50, 0).WallTime + maxClockOffset.Nanoseconds()},
 	}

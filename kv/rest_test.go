@@ -454,7 +454,7 @@ func TestKeysAndBodyArePreserved(t *testing.T) {
 	}
 	// Lookup results direclty from the underlying engine.
 	key := proto.Key("\x00some/key that encodes世界")
-	val, err := engine.MVCCGet(s.Engine, key, s.Clock().Now(), false, nil)
+	val, err := engine.MVCCGet(s.Engines[0], key, s.Clock().Now(), false, nil)
 	if err != nil {
 		t.Errorf("unable to fetch value for key %s: %s", key, err)
 	}

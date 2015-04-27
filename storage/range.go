@@ -1533,6 +1533,8 @@ func (r *Range) InternalLeaderLease(batch engine.Engine, ms *proto.MVCCStats, ar
 				args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
 			return
 		}
+		// Note that the lease expiration can be shortened by the holder.
+		// This could be used to effect a faster lease handoff.
 	} else if args.Lease.Start.Less(oldLease.Expiration) {
 		reply.SetGoError(util.Errorf("lease %s - %s invalid; prior lease %s - %s",
 			args.Lease.Start, args.Lease.Expiration, oldLease.Start, oldLease.Expiration))
