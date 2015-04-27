@@ -735,7 +735,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 	if !useSSL {
 		s.Ctx.Insecure = true
 	}
-	s.Engine = engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)
+	s.Engines = []engine.Engine{engine.NewRocksDB(proto.Attributes{Attrs: []string{"ssd"}}, loc, cacheSize)}
 	if err := s.Start(); err != nil {
 		b.Fatalf("Could not start server: %v", err)
 	}
@@ -790,7 +790,7 @@ func setupClientBenchData(useRPC, useSSL bool, numVersions, numKeys int, b *test
 		}
 	}
 
-	if r, ok := s.Engine.(*engine.RocksDB); ok {
+	if r, ok := s.Engines[0].(*engine.RocksDB); ok {
 		r.CompactRange(nil, nil)
 	}
 
