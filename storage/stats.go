@@ -95,7 +95,7 @@ func (rs *rangeStats) SetMVCCStats(e engine.Engine, ms proto.MVCCStats) {
 func (rs *rangeStats) Update(ms proto.MVCCStats) {
 	rs.Lock()
 	defer rs.Unlock()
-	engine.Accumulate(&rs.MVCCStats, ms)
+	rs.MVCCStats.Accumulate(ms)
 }
 
 // GetAvgIntentAge returns the average age of outstanding intents,

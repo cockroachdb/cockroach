@@ -55,6 +55,12 @@ func StoreStatusKey(storeID int32) proto.Key {
 	return MakeKey(KeyStatusStorePrefix, encoding.EncodeUvarint(nil, uint64(storeID)))
 }
 
+// NodeStatusKey returns the key for accessing the node status for the
+// specified node ID.
+func NodeStatusKey(nodeID int32) proto.Key {
+	return MakeKey(KeyStatusNodePrefix, encoding.EncodeUvarint(nil, uint64(nodeID)))
+}
+
 // MakeRangeIDKey creates a range-local key based on the range's
 // Raft ID, metadata key suffix, and optional detail (e.g. the
 // encoded command ID for a response cache entry, etc.).
@@ -454,4 +460,6 @@ var (
 	KeyStatusPrefix = MakeKey(KeySystemPrefix, proto.Key("status-"))
 	// KeyStatusStorePrefix stores all status info for stores.
 	KeyStatusStorePrefix = MakeKey(KeyStatusPrefix, proto.Key("store-"))
+	// KeyStatusNodePrefix stores all status info for nodes.
+	KeyStatusNodePrefix = MakeKey(KeyStatusPrefix, proto.Key("node-"))
 )

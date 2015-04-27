@@ -68,21 +68,6 @@ func SetStats(ms *proto.MVCCStats, engine Engine, raftID int64) {
 	MVCCSetRangeStat(engine, raftID, StatLastUpdateNanos, ms.LastUpdateNanos)
 }
 
-// Accumulate adds values from oms to ms.
-func Accumulate(ms *proto.MVCCStats, oms proto.MVCCStats) {
-	ms.LiveBytes += oms.LiveBytes
-	ms.KeyBytes += oms.KeyBytes
-	ms.ValBytes += oms.ValBytes
-	ms.IntentBytes += oms.IntentBytes
-	ms.LiveCount += oms.LiveCount
-	ms.KeyCount += oms.KeyCount
-	ms.ValCount += oms.ValCount
-	ms.IntentCount += oms.IntentCount
-	ms.IntentAge += oms.IntentAge
-	ms.GCBytesAge += oms.GCBytesAge
-	ms.LastUpdateNanos += oms.LastUpdateNanos
-}
-
 // updateStatsForKey returns whether or not the bytes and counts for
 // the specified key should be tracked. Local keys are excluded.
 func updateStatsForKey(ms *proto.MVCCStats, key proto.Key) bool {

@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/proto"
-	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
 	"github.com/cockroachdb/cockroach/util/log"
@@ -80,8 +79,8 @@ type rangeScanner struct {
 	scanFn   func()         // Function called at each complete scan iteration
 	// Count of times through the scanning loop but locked by the completedScan
 	// mutex.
-	count         int64
 	completedScan *sync.Cond
+	count         int64
 }
 
 // newRangeScanner creates a new range scanner with the provided loop interval,
@@ -186,7 +185,7 @@ func (rs *rangeScanner) scanLoop(clock *hlc.Clock, stopper *util.Stopper) {
 						q.MaybeAdd(rng, clock.Now())
 					}
 					stats.RangeCount++
-					engine.Accumulate(&stats.MVCC, rng.stats.GetMVCC())
+					stats.MVCC.Accumulate(rng.stats.GetMVCC())
 				} else {
 					// Otherwise, we're done with the iteration. Reset iteration and start time.
 					rs.iter.Reset()

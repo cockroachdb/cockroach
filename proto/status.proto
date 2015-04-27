@@ -32,10 +32,18 @@ message StoreStatus {
   optional int32 store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID", (gogoproto.customtype) = "StoreID"];
   optional int32 node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
-  // The last time this store was started.
   optional int64 started_at = 4 [(gogoproto.nullable) = false];
-  // The last time this status was updated.
   optional int64 updated_at = 5 [(gogoproto.nullable) = false];
-  // All current aggregated stats are contained in MVCCStats.
+  optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
+}
+
+// NodeStatus contains the stats needed to calculate the current status of a 
+// node.
+message NodeStatus {
+  optional int32 node_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.customtype) = "NodeID"];
+  repeated int32 store_ids = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreIDs"];
+  optional int32 range_count = 3 [(gogoproto.nullable) = false];
+  optional int64 started_at = 4 [(gogoproto.nullable) = false];
+  optional int64 updated_at = 5 [(gogoproto.nullable) = false];
   optional MVCCStats stats = 6 [(gogoproto.nullable) = false];
 }

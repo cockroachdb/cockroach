@@ -659,3 +659,18 @@ func (ms *MVCCStats) Difference(oms *MVCCStats) MVCCStats {
 		LastUpdateNanos: ms.LastUpdateNanos - oms.LastUpdateNanos,
 	}
 }
+
+// Accumulate adds values from oms to ms.
+func (ms *MVCCStats) Accumulate(oms MVCCStats) {
+	ms.LiveBytes += oms.LiveBytes
+	ms.KeyBytes += oms.KeyBytes
+	ms.ValBytes += oms.ValBytes
+	ms.IntentBytes += oms.IntentBytes
+	ms.LiveCount += oms.LiveCount
+	ms.KeyCount += oms.KeyCount
+	ms.ValCount += oms.ValCount
+	ms.IntentCount += oms.IntentCount
+	ms.IntentAge += oms.IntentAge
+	ms.GCBytesAge += oms.GCBytesAge
+	ms.LastUpdateNanos += oms.LastUpdateNanos
+}

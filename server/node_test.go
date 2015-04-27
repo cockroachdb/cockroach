@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/storage/engine"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/hlc"
+	gogoproto "github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 )
 
@@ -260,4 +261,166 @@ func TestCorruptedClusterID(t *testing.T) {
 		t.Errorf("unexpected success")
 	}
 	stopper.Stop()
+}
+
+// compareNodeStatus ensures that the actual node status for the passed in
+// node is updated correctly. It checks that the NodeID, StoreIDs and
+// RangeCount are exactly correct and that the bytes and counts for Live, Key
+// and Val are at least the expected value.  The latest actual stats are
+// returned.
+// TODO(Bram): Add store id list checking.
+func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.NodeStatus, testNumber int) *proto.NodeStatus {
+	nodeStatusKey := engine.NodeStatusKey(int32(node.Descriptor.NodeID))
+	request := &proto.GetRequest{
+		RequestHeader: proto.RequestHeader{
+			Key: nodeStatusKey,
+		},
+	}
+	response := &proto.GetResponse{}
+	if err := node.Get(request, response); err != nil {
+		t.Fatalf("%v: failure getting node status: %s", testNumber, err)
+	}
+	if response.Value == nil {
+		t.Errorf("%v: could not find node status at: %s", testNumber, nodeStatusKey)
+	}
+	nodeStatus := &proto.NodeStatus{}
+	if err := gogoproto.Unmarshal(response.Value.GetBytes(), nodeStatus); err != nil {
+		t.Fatalf("%v: could not unmarshal store status: %+v", testNumber, response)
+	}
+	if expectedNodeStatus.NodeID != nodeStatus.NodeID {
+		t.Errorf("%v: actual node ID does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if expectedNodeStatus.RangeCount != nodeStatus.RangeCount {
+		t.Errorf("%v: actual RangeCount does not match expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.LiveBytes < expectedNodeStatus.Stats.LiveBytes {
+		t.Errorf("%v: actual Live Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.KeyBytes < expectedNodeStatus.Stats.KeyBytes {
+		t.Errorf("%v: actual Key Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.ValBytes < expectedNodeStatus.Stats.ValBytes {
+		t.Errorf("%v: actual Val Bytes is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.LiveCount < expectedNodeStatus.Stats.LiveCount {
+		t.Errorf("%v: actual Live Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.KeyCount < expectedNodeStatus.Stats.KeyCount {
+		t.Errorf("%v: actual Key Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	if nodeStatus.Stats.ValCount < expectedNodeStatus.Stats.ValCount {
+		t.Errorf("%v: actual Val Count is not greater or equal to expected\nexpected: %+v\nactual: %v\n", testNumber, expectedNodeStatus, nodeStatus)
+	}
+	return nodeStatus
+}
+
+// TestNodeStatus verifies that the store scanner correctly updates the node's
+// status.
+// TODO(Bram): Add tests with more than one store.
+func TestNodeStatus(t *testing.T) {
+	ts := &TestServer{}
+	ts.Ctx = NewTestContext()
+	ts.Ctx.ScanInterval = time.Duration(50 * time.Millisecond)
+	if err := ts.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Stop()
+	splitKey := proto.Key("b")
+	content := proto.Key("test content")
+
+	expectedNodeStatus := &proto.NodeStatus{
+		NodeID:     1,
+		RangeCount: 1,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: 1,
+			KeyCount:  1,
+			ValCount:  1,
+		},
+	}
+
+	// Always wait twice, to ensure a full scan has occurred.
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+	oldStats := compareStoreStatus(t, ts.node, expectedNodeStatus, 0)
+
+	// Write some values left and right of the proposed split key.
+	if err := ts.kv.Run(client.PutCall([]byte("a"), content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.kv.Run(client.PutCall([]byte("c"), content)); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedNodeStatus = &proto.NodeStatus{
+		NodeID:     1,
+		RangeCount: 1,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStats.Stats.LiveCount + 1,
+			KeyCount:  oldStats.Stats.KeyCount + 1,
+			ValCount:  oldStats.Stats.ValCount + 1,
+		},
+	}
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 1)
+
+	// Split the range.
+	args := &proto.AdminSplitRequest{
+		RequestHeader: proto.RequestHeader{
+			Key:     engine.KeyMin,
+			RaftID:  1,
+			Replica: proto.Replica{StoreID: proto.StoreID(oldStats.StoreIDs[0])},
+		},
+		SplitKey: splitKey,
+	}
+	reply := &proto.AdminSplitResponse{}
+	if err := ts.node.AdminSplit(args, reply); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedNodeStatus = &proto.NodeStatus{
+		NodeID:     1,
+		RangeCount: 2,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStats.Stats.LiveCount,
+			KeyCount:  oldStats.Stats.KeyCount,
+			ValCount:  oldStats.Stats.ValCount,
+		},
+	}
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 2)
+
+	// Write some values left and right of the proposed split key.
+	if err := ts.kv.Run(client.PutCall([]byte("aa"), content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.kv.Run(client.PutCall([]byte("cc"), content)); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedNodeStatus = &proto.NodeStatus{
+		NodeID:     1,
+		RangeCount: 2,
+		Stats: proto.MVCCStats{
+			LiveBytes: 1,
+			KeyBytes:  1,
+			ValBytes:  1,
+			LiveCount: oldStats.Stats.LiveCount + 1,
+			KeyCount:  oldStats.Stats.KeyCount + 1,
+			ValCount:  oldStats.Stats.ValCount + 1,
+		},
+	}
+	ts.node.waitForScanCompletion()
+	ts.node.waitForScanCompletion()
+	compareStoreStatus(t, ts.node, expectedNodeStatus, 3)
 }

@@ -20,6 +20,7 @@ package server
 import (
 	"container/list"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/client"
@@ -44,6 +45,8 @@ const (
 	gossipInterval = 1 * time.Minute
 )
 
+// TODO(Bram): Add a type alias for NodeServer to expose RPC methods.
+
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -58,6 +61,11 @@ type Node struct {
 	Descriptor gossip.NodeDescriptor // Node ID, network/physical topology
 	ctx        storage.StoreContext  // Context to use and pass to stores
 	lSender    *kv.LocalSender       // Local KV sender for access to node-local stores
+	startedAt  int64
+	// ScanCount is the number of times through the store scanning loop locked
+	// by the completedScan mutex.
+	completedScan *sync.Cond
+	scanCount     int64
 }
 
 // allocateNodeID increments the node id generator key to allocate
@@ -158,8 +166,9 @@ func BootstrapCluster(clusterID string, eng engine.Engine, stopper *util.Stopper
 // NewNode returns a new instance of Node.
 func NewNode(ctx storage.StoreContext) *Node {
 	return &Node{
-		ctx:     ctx,
-		lSender: kv.NewLocalSender(),
+		ctx:           ctx,
+		lSender:       kv.NewLocalSender(),
+		completedScan: sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -221,6 +230,9 @@ func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	if err := n.initStores(engines, stopper); err != nil {
 		return err
 	}
+
+	n.startedAt = n.ctx.Clock.Now().WallTime
+	n.startStoresScanner(stopper)
 	n.startGossip(stopper)
 	log.Infof("Started node with %v engine(s) and attributes %v", engines, attrs.Attrs)
 	return nil
@@ -388,6 +400,78 @@ func (n *Node) gossipCapacities() {
 		s.GossipCapacity(&n.Descriptor)
 		return nil
 	})
+}
+
+// startStoresScanner will walk through all the stores in the node every
+// ctx.ScanInterval and store the status in the db.
+func (n *Node) startStoresScanner(stopper *util.Stopper) {
+	stopper.RunWorker(func() {
+		for {
+			select {
+			case <-time.After(n.ctx.ScanInterval):
+				if !stopper.StartTask() {
+					continue
+				}
+				// Walk through all the stores on this node.
+				rangeCount := 0
+				stats := &proto.MVCCStats{}
+				accessedStoreIDs := []int32{}
+				n.lSender.VisitStores(func(store *storage.Store) error {
+					storeStatus, err := store.GetStatus()
+					if err != nil {
+						log.Error(err)
+						return nil
+					}
+					if storeStatus == nil {
+						// The store scanner hasn't run on this node yet.
+						return nil
+					}
+					accessedStoreIDs = append(accessedStoreIDs, int32(store.Ident.StoreID))
+					rangeCount += int(storeStatus.RangeCount)
+					stats.Accumulate(storeStatus.Stats)
+					return nil
+				})
+
+				// Store the combined stats in the db.
+				now := n.ctx.Clock.Now().WallTime
+				status := &proto.NodeStatus{
+					NodeID:     n.Descriptor.NodeID,
+					StoreIDs:   accessedStoreIDs,
+					UpdatedAt:  now,
+					StartedAt:  n.startedAt,
+					RangeCount: int32(rangeCount),
+					Stats:      *stats,
+				}
+				key := engine.NodeStatusKey(int32(n.Descriptor.NodeID))
+				if err := n.ctx.DB.Run(client.PutProtoCall(key, status)); err != nil {
+					log.Error(err)
+				}
+				// Increment iteration count.
+				n.completedScan.L.Lock()
+				n.scanCount++
+				n.completedScan.Broadcast()
+				n.completedScan.L.Unlock()
+				log.V(6).Infof("store scan iteration completed")
+				stopper.FinishTask()
+			case <-stopper.ShouldStop():
+				// Exit the loop.
+				return
+			}
+		}
+	})
+}
+
+// waitForScanCompletion waits until the end of the next store scan and returns
+// the total number of scans completed so far.  This is exposed for use in unit
+// tests only.
+func (n *Node) waitForScanCompletion() int64 {
+	n.completedScan.L.Lock()
+	defer n.completedScan.L.Unlock()
+	initalValue := n.scanCount
+	for n.scanCount == initalValue {
+		n.completedScan.Wait()
+	}
+	return n.scanCount
 }
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
