@@ -158,7 +158,7 @@ func (s *Server) Start(selfBootstrap bool) error {
 		return err
 	}
 
-	log.Infof("starting https server at %s", s.rpc.Addr())
+	log.Infof("starting %s server at %s", s.ctx.RequestScheme(), s.rpc.Addr())
 	// TODO(spencer): go1.5 is supposed to allow shutdown of running http server.
 	s.initHTTP()
 	s.rpc.Serve(s)

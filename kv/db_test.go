@@ -33,11 +33,11 @@ import (
 )
 
 func createTestClient(t *testing.T, addr string) *client.KV {
-	httpClient, err := testutils.NewTestHTTPClient()
+	httpSender, err := client.NewHTTPSender(addr, testutils.NewTestBaseContext())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewKV(nil, client.NewHTTPSender(addr, httpClient))
+	return client.NewKV(nil, httpSender)
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the

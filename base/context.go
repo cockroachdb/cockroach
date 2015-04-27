@@ -30,6 +30,8 @@ import (
 // Base context defaults.
 const (
 	defaultCertsDir = "certs"
+	plainScheme     = "http"
+	sslScheme       = "https"
 )
 
 // Context is embedded by client.Context and server.Context.
@@ -59,6 +61,20 @@ func (ctx *Context) InitDefaults() {
 	ctx.Certs = defaultCertsDir
 }
 
+// SSLWanted returns whether or not SSL is wanted.
+// This is indicated by the -certs flags (wanted if not empty).
+func (ctx *Context) SSLWanted() bool {
+	return ctx.Certs != ""
+}
+
+// RequestScheme returns "http" or "https" based on the value of SSLWanted()
+func (ctx *Context) RequestScheme() string {
+	if ctx.SSLWanted() {
+		return sslScheme
+	}
+	return plainScheme
+}
+
 // GetClientTLSConfig returns the context client TLS config, initializing it
 // if needed. It uses the context Certs field.
 // If Certs is empty, load insecure configs.
@@ -70,16 +86,16 @@ func (ctx *Context) GetClientTLSConfig() (*tls.Config, error) {
 		return ctx.clientTLSConfig, nil
 	}
 
-	if ctx.Certs == "" {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
-	} else {
+	if ctx.SSLWanted() {
 		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 		cfg, err := security.LoadClientTLSConfigFromDir(ctx.Certs)
 		if err != nil {
 			return nil, util.Errorf("error setting up client TLS config: %s", err)
 		}
 		ctx.clientTLSConfig = cfg
+	} else {
+		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		ctx.clientTLSConfig = security.LoadInsecureClientTLSConfig()
 	}
 
 	return ctx.clientTLSConfig, nil
@@ -96,16 +112,16 @@ func (ctx *Context) GetServerTLSConfig() (*tls.Config, error) {
 		return ctx.serverTLSConfig, nil
 	}
 
-	if ctx.Certs == "" {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
-		ctx.serverTLSConfig = security.LoadInsecureTLSConfig()
-	} else {
+	if ctx.SSLWanted() {
 		log.V(1).Infof("setting up TLS from certificates directory: %s", ctx.Certs)
 		cfg, err := security.LoadTLSConfigFromDir(ctx.Certs)
 		if err != nil {
 			return nil, util.Errorf("error setting up server TLS config: %s", err)
 		}
 		ctx.serverTLSConfig = cfg
+	} else {
+		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		ctx.serverTLSConfig = security.LoadInsecureTLSConfig()
 	}
 
 	return ctx.serverTLSConfig, nil

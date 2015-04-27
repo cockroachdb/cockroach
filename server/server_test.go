@@ -173,6 +173,57 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+// TestPlainHTTPServer verifies that we can serve plain http and talk to it.
+// This is controlled by -cert=""
+func TestPlainHTTPServer(t *testing.T) {
+	// Create a custom context. The default one has a default -certs value.
+	ctx := NewContext()
+	ctx.Certs = ""
+	// TestServer.Start does not override the context if set.
+	s := &TestServer{Ctx: ctx}
+	if err := s.Start(); err != nil {
+		t.Fatalf("could not start plain http server: %v", err)
+	}
+	defer s.Stop()
+
+	// Get a plain http client using the same context.
+	if ctx.RequestScheme() != "http" {
+		t.Fatalf("expected context.RequestScheme == \"http\", got: %s", ctx.RequestScheme())
+	}
+	url := ctx.RequestScheme() + "://" + s.ServingAddr() + healthPath
+	httpClient, err := ctx.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		t.Fatalf("error requesting health at %s: %s", url, err)
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("could not read response body: %s", err)
+	}
+	expected := "ok"
+	if !strings.Contains(string(b), expected) {
+		t.Errorf("expected body to contain %q, got %q", expected, string(b))
+	}
+
+	// Try again with a https client (testContext is one)
+	if testContext.RequestScheme() != "https" {
+		t.Fatalf("expected context.RequestScheme == \"http\", got: %s", testContext.RequestScheme())
+	}
+	url = testContext.RequestScheme() + "://" + s.ServingAddr() + healthPath
+	httpClient, err = ctx.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = httpClient.Get(url)
+	if err == nil {
+		t.Fatalf("unexpected success fetching %s", url)
+	}
+}
+
 // TestAcceptEncoding hits the health endpoint while explicitly
 // disabling decompression on a custom client's Transport and setting
 // it conditionally via the request's Accept-Encoding headers.

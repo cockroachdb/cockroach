@@ -224,13 +224,15 @@ func ExamplePermContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, permPathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
+			permPathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, permPathPrefix, key), nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
+			permPathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
@@ -291,7 +293,8 @@ func TestPermEmptyKey(t *testing.T) {
 	}
 	keys := []string{"key0", "key1"}
 	for _, key := range keys {
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", adminScheme, testContext.Addr, permPathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", testContext.RequestScheme(), testContext.Addr,
+			permPathPrefix, key), bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			t.Fatal(err)
@@ -318,7 +321,8 @@ func TestPermEmptyKey(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, testContext.Addr, permPathPrefix), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", testContext.RequestScheme(), testContext.Addr,
+			permPathPrefix), nil)
 		req.Header.Set("Accept", test.accept)
 		body, err = sendAdminRequest(testContext, req)
 		if err != nil {

@@ -49,7 +49,7 @@ func sendAdminRequest(ctx *Context, req *http.Request) ([]byte, error) {
 
 // SendQuit requests the admin quit path to drain and shutdown the server.
 func SendQuit(ctx *Context) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, ctx.Addr, quitPath), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", ctx.RequestScheme(), ctx.Addr, quitPath), nil)
 	if err != nil {
 		return util.Errorf("unable to create request to admin REST endpoint: %s", err)
 	}

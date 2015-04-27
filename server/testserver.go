@@ -40,7 +40,7 @@ func StartTestServer(t *testing.T) *TestServer {
 			log.Fatalf("Could not start server: %v", err)
 		}
 	}
-	log.Infof("Test server listening on https: %s", s.ServingAddr())
+	log.Infof("Test server listening on %s: %s", s.Ctx.RequestScheme(), s.ServingAddr())
 	return s
 }
 

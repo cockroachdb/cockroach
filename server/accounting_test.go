@@ -187,6 +187,7 @@ func ExampleAcctContentTypes() {
 		{"application/json", "text/yaml"},
 		{"text/yaml", "text/yaml"},
 	}
+
 	for i, test := range testCases {
 		key := fmt.Sprintf("/test%d", i)
 
@@ -200,13 +201,15 @@ func ExampleAcctContentTypes() {
 				fmt.Println(err)
 			}
 		}
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, acctPathPrefix, key), bytes.NewReader(body))
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
+			acctPathPrefix, key), bytes.NewReader(body))
 		req.Header.Add("Content-Type", test.contentType)
 		if _, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
 		}
 
-		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", adminScheme, testContext.Addr, acctPathPrefix, key), nil)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s://%s%s%s", testContext.RequestScheme(), testContext.Addr,
+			acctPathPrefix, key), nil)
 		req.Header.Add("Accept", test.accept)
 		if body, err = sendAdminRequest(testContext, req); err != nil {
 			fmt.Println(err)
