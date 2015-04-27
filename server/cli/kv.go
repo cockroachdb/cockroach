@@ -39,11 +39,10 @@ var osExit = os.Exit
 var osStderr = os.Stderr
 
 func makeKVClient() (*client.KV, error) {
-	httpClient, err := Context.GetHTTPClient()
+	httpSender, err := client.NewHTTPSender(util.EnsureHost(Context.Addr), &Context.Context)
 	if err != nil {
 		return nil, err
 	}
-	httpSender := client.NewHTTPSender(util.EnsureHost(Context.Addr), httpClient)
 	kv := client.NewKV(nil, httpSender)
 	// TODO(pmattis): Initialize this to something more reasonable
 	kv.User = "root"

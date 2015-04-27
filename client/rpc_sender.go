@@ -41,6 +41,7 @@ type RPCSender struct {
 }
 
 // NewRPCSender returns a new instance of RPCSender.
+// TODO(marc): initialize using a base.Context.
 func NewRPCSender(server string, certsDir string) (*RPCSender, error) {
 	addr, err := net.ResolveTCPAddr("tcp", server)
 	if err != nil {
@@ -49,7 +50,7 @@ func NewRPCSender(server string, certsDir string) (*RPCSender, error) {
 
 	var tlsConfig *tls.Config
 	if certsDir == "" {
-		log.V(1).Infof("no certificates directory specified: using insecure TLS")
+		log.Warning("SSL disabled, this is strongly discouraged. See the -certs flag")
 		tlsConfig = security.LoadInsecureClientTLSConfig()
 	} else {
 		log.V(1).Infof("setting up TLS from certificates directory: %s", certsDir)

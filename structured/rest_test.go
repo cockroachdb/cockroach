@@ -101,12 +101,13 @@ func TestGetPutDeleteSchema(t *testing.T) {
 		{methodDelete, "/schema/foo", nil, http.StatusOK, nil},
 		{methodGet, "/schema/foo", nil, http.StatusNotFound, nil},
 	}
-	httpClient, err := testutils.NewTestHTTPClient()
+	testContext := testutils.NewTestBaseContext()
+	httpClient, err := testContext.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range testCases {
-		addr := "https://" + serverAddr + tc.path
+		addr := testContext.RequestScheme() + "://" + serverAddr + tc.path
 		req, err := http.NewRequest(tc.method, addr, tc.body)
 		if err != nil {
 			t.Fatalf("[%s] %s: error creating request: %v", tc.method, tc.path, err)

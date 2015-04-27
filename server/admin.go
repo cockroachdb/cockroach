@@ -38,8 +38,6 @@ import (
 const (
 	maxGetResults = 0 // TODO(spencer): maybe we need paged query support
 
-	// adminScheme is the scheme for connecting to the admin endpoint.
-	adminScheme = "https"
 	// adminEndpoint is the prefix for RESTful endpoints used to
 	// provide an administrative interface to the cockroach cluster.
 	adminEndpoint = "/_admin/"

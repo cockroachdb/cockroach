@@ -33,11 +33,11 @@ import (
 )
 
 func createTestClient(t *testing.T, addr string) *client.KV {
-	httpClient, err := testutils.NewTestHTTPClient()
+	httpSender, err := client.NewHTTPSender(addr, testutils.NewTestBaseContext())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return client.NewKV(nil, client.NewHTTPSender(addr, httpClient))
+	return client.NewKV(nil, httpSender)
 }
 
 // TestKVDBCoverage verifies that all methods may be invoked on the
@@ -264,7 +264,8 @@ func TestKVDBContentType(t *testing.T) {
 			t.Fatalf("%d: %s", i, err)
 		}
 		// Send a Put request but with non-canonical capitalization.
-		httpReq, err := http.NewRequest("POST", "https://"+addr+kv.DBPrefix+"Put", bytes.NewReader(body))
+		httpReq, err := http.NewRequest("POST", testContext.RequestScheme()+"://"+addr+kv.DBPrefix+"Put",
+			bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
@@ -272,7 +273,7 @@ func TestKVDBContentType(t *testing.T) {
 		if test.accept != "" {
 			httpReq.Header.Add(util.AcceptHeader, test.accept)
 		}
-		resp, err := httpDoReq(httpReq)
+		resp, err := httpDoReq(testContext, httpReq)
 		if err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}

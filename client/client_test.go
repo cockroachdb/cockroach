@@ -79,12 +79,11 @@ func newNotifyingSender(wrapped client.KVSender) *notifyingSender {
 // an HTTP sender to the server at addr.
 // It contains a waitgroup to allow waiting.
 func createTestNotifyClient(addr string) *client.KV {
-	httpClient, err := testutils.NewTestHTTPClient()
+	sender, err := client.NewHTTPSender(addr, testutils.NewTestBaseContext())
 	if err != nil {
 		log.Fatal(err)
 	}
-	sender := newNotifyingSender(client.NewHTTPSender(addr, httpClient))
-	return client.NewKV(nil, sender)
+	return client.NewKV(nil, newNotifyingSender(sender))
 }
 
 // TestKVClientRetryNonTxn verifies that non-transactional client will
@@ -447,13 +446,11 @@ func ExampleKV_Run1() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	httpClient, err := testutils.NewTestHTTPClient()
+	// Key Value Client initialization.
+	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -492,13 +489,11 @@ func ExampleKV_RunMultiple() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	httpClient, err := testutils.NewTestHTTPClient()
+	// Key Value Client initialization.
+	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 
@@ -561,13 +556,11 @@ func ExampleKV_RunTransaction() {
 	serv := server.StartTestServer(nil)
 	defer serv.Stop()
 
-	httpClient, err := testutils.NewTestHTTPClient()
+	// Key Value Client initialization.
+	sender, err := client.NewHTTPSender(serv.ServingAddr(), testutils.NewTestBaseContext())
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Key Value Client initialization.
-	sender := client.NewHTTPSender(serv.ServingAddr(), httpClient)
 	kvClient := client.NewKV(nil, sender)
 	kvClient.User = storage.UserRoot
 

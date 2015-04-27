@@ -53,7 +53,7 @@ func getFriendlyNameFromPrefix(prefix string) string {
 // runGetConfig invokes the REST API with GET action and key prefix as path.
 func runGetConfig(ctx *Context, prefix, keyPrefix string) {
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s/%s", adminScheme, ctx.Addr, prefix, keyPrefix), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, prefix, keyPrefix), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -89,7 +89,7 @@ func RunGetZone(ctx *Context, keyPrefix string) {
 // displayed.
 func runLsConfigs(ctx *Context, prefix, pattern string) {
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", adminScheme, ctx.Addr, prefix), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s%s", ctx.RequestScheme(), ctx.Addr, prefix), nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -144,7 +144,8 @@ func RunLsZone(ctx *Context, pattern string) {
 // The type of config that is removed is based on the passed in prefix.
 func runRmConfig(ctx *Context, prefix, keyPrefix string) {
 	friendlyName := getFriendlyNameFromPrefix(prefix)
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s://%s%s/%s", adminScheme, ctx.Addr, prefix, keyPrefix), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, prefix, keyPrefix),
+		nil)
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return
@@ -185,7 +186,8 @@ func runSetConfig(ctx *Context, prefix, keyPrefix, configFileName string) {
 		return
 	}
 	// Send to admin REST API.
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", adminScheme, ctx.Addr, prefix, keyPrefix), bytes.NewReader(body))
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s://%s%s/%s", ctx.RequestScheme(), ctx.Addr, prefix, keyPrefix),
+		bytes.NewReader(body))
 	if err != nil {
 		log.Errorf("unable to create request to admin REST endpoint: %s", err)
 		return

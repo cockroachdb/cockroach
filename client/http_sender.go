@@ -28,6 +28,7 @@ import (
 
 	"code.google.com/p/snappy-go/snappy"
 
+	"github.com/cockroachdb/cockroach/base"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -37,8 +38,6 @@ const (
 	// KVDBEndpoint is the URL path prefix which accepts incoming
 	// HTTP requests for the KV API.
 	KVDBEndpoint = "/kv/db/"
-	// KVDBScheme is the scheme for connecting to the kvdb endpoint.
-	KVDBScheme = "https"
 	// StatusTooManyRequests indicates client should retry due to
 	// server having too many requests.
 	StatusTooManyRequests = 429
@@ -64,16 +63,23 @@ var HTTPRetryOptions = util.RetryOptions{
 // via HTTP to a Cockroach node. Overly-busy nodes will redirect
 // this client to other nodes.
 type HTTPSender struct {
-	server string       // The host:port address of the Cockroach gateway node
-	client *http.Client // The HTTP client
+	server  string        // The host:port address of the Cockroach gateway node
+	client  *http.Client  // The HTTP client
+	context *base.Context // The base context: needed for client setup.
 }
 
 // NewHTTPSender returns a new instance of HTTPSender.
-func NewHTTPSender(server string, client *http.Client) *HTTPSender {
-	return &HTTPSender{
-		server: server,
-		client: client,
+func NewHTTPSender(server string, ctx *base.Context) (*HTTPSender, error) {
+	sender := &HTTPSender{
+		server:  server,
+		context: ctx,
 	}
+	var err error
+	sender.client, err = ctx.GetHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	return sender, nil
 }
 
 // Send sends call to Cockroach via an HTTP post. HTTP response codes
@@ -86,7 +92,7 @@ func NewHTTPSender(server string, client *http.Client) *HTTPSender {
 // response.
 func (s *HTTPSender) Send(call Call) {
 	retryOpts := HTTPRetryOptions
-	retryOpts.Tag = fmt.Sprintf("https %s", call.Method())
+	retryOpts.Tag = fmt.Sprintf("%s %s", s.context.RequestScheme(), call.Method())
 
 	if err := util.RetryWithBackoff(retryOpts, func() (util.RetryStatus, error) {
 		resp, err := s.post(call)
@@ -141,7 +147,7 @@ func (s *HTTPSender) post(call Call) (*http.Response, error) {
 		return nil, err
 	}
 
-	url := KVDBScheme + "://" + s.server + KVDBEndpoint + call.Method().String()
+	url := s.context.RequestScheme() + "://" + s.server + KVDBEndpoint + call.Method().String()
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, util.Errorf("unable to create request: %s", err)
