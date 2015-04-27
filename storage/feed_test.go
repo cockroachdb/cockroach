@@ -40,7 +40,7 @@ func newConsumer(feed StoreEventFeed) *storeEventConsumer {
 }
 
 func (sec *storeEventConsumer) process() {
-	for e := range sec.sub.Events {
+	for e := range sec.sub.Events() {
 		sec.received = append(sec.received, e)
 	}
 }
@@ -49,7 +49,7 @@ func (sec *storeEventConsumer) process() {
 // consumers.
 func startConsumerSet(count int) (*util.Stopper, StoreEventFeed, []*storeEventConsumer) {
 	stopper := util.NewStopper()
-	feed := NewStoreEventFeed(stopper)
+	feed := NewStoreEventFeed()
 	consumers := make([]*storeEventConsumer, count)
 	for i := range consumers {
 		consumers[i] = newConsumer(feed)
@@ -117,13 +117,13 @@ func TestStoreEventFeed(t *testing.T) {
 	// event.
 	testCases := []struct {
 		name      string
-		publishTo func(storeEventPublisher)
+		publishTo func(StoreEventFeed)
 		expected  interface{}
 	}{
 		{
 			"NewRange",
-			func(pub storeEventPublisher) {
-				pub.newRange(rng1)
+			func(feed StoreEventFeed) {
+				feed.newRange(rng1)
 			},
 			&NewRangeEvent{
 				Desc: &proto.RangeDescriptor{
@@ -141,8 +141,8 @@ func TestStoreEventFeed(t *testing.T) {
 		},
 		{
 			"UpdateRange",
-			func(pub storeEventPublisher) {
-				pub.updateRange(rng1, diffStats)
+			func(feed StoreEventFeed) {
+				feed.updateRange(rng1, diffStats)
 			},
 			&UpdateRangeEvent{
 				Desc: &proto.RangeDescriptor{
@@ -164,8 +164,8 @@ func TestStoreEventFeed(t *testing.T) {
 		},
 		{
 			"RemoveRange",
-			func(pub storeEventPublisher) {
-				pub.removeRange(rng2)
+			func(feed StoreEventFeed) {
+				feed.removeRange(rng2)
 			},
 			&RemoveRangeEvent{
 				Desc: &proto.RangeDescriptor{
@@ -183,8 +183,8 @@ func TestStoreEventFeed(t *testing.T) {
 		},
 		{
 			"SplitRange",
-			func(pub storeEventPublisher) {
-				pub.splitRange(rng1, rng2, diffStats)
+			func(feed StoreEventFeed) {
+				feed.splitRange(rng1, rng2, diffStats)
 			},
 			&SplitRangeEvent{
 				Original: UpdateRangeEvent{
@@ -221,8 +221,8 @@ func TestStoreEventFeed(t *testing.T) {
 		},
 		{
 			"MergeRange",
-			func(pub storeEventPublisher) {
-				pub.mergeRange(rng1, rng2, diffStats)
+			func(feed StoreEventFeed) {
+				feed.mergeRange(rng1, rng2, diffStats)
 			},
 			&MergeRangeEvent{
 				Merged: UpdateRangeEvent{
@@ -259,15 +259,15 @@ func TestStoreEventFeed(t *testing.T) {
 		},
 		{
 			"BeginScanRanges",
-			func(pub storeEventPublisher) {
-				pub.beginScanRanges()
+			func(feed StoreEventFeed) {
+				feed.beginScanRanges()
 			},
 			&BeginScanRangesEvent{},
 		},
 		{
 			"EndScanRanges",
-			func(pub storeEventPublisher) {
-				pub.endScanRanges()
+			func(feed StoreEventFeed) {
+				feed.endScanRanges()
 			},
 			&EndScanRangesEvent{},
 		},
@@ -294,44 +294,14 @@ func TestStoreEventFeed(t *testing.T) {
 		}
 	}
 
-	// TEST SET 1: Run test cases directly through a feed.
+	// Run test cases directly through a feed.
 	stopper, feed, consumers := startConsumerSet(3)
 	for _, tc := range testCases {
 		tc.publishTo(feed)
 	}
+	feed.closeFeed()
 	waitForStopper(t, stopper)
 	for i, c := range consumers {
 		verifyEventSlice(fmt.Sprintf("feed direct consumer %d", i), c.received)
-	}
-
-	// TEST SET 2: Run test cases through a batch, but don't commit batch.
-	stopper, feed, consumers = startConsumerSet(3)
-	batch := feed.newBatch()
-	for _, tc := range testCases {
-		tc.publishTo(batch)
-	}
-	waitForStopper(t, stopper)
-
-	verifyEventSlice("feed batch internal accumulation", batch.accumulatedEvents)
-	for _, c := range consumers {
-		if len(c.received) != 0 {
-			t.Errorf("feed batch no commit, consumer %d expected no events, received %v", c.received)
-		}
-	}
-
-	// TEST SET 3: Run test cases through a batch and commit it.
-	stopper, feed, consumers = startConsumerSet(3)
-	batch = feed.newBatch()
-	for _, tc := range testCases {
-		tc.publishTo(batch)
-	}
-	batch.commit()
-	waitForStopper(t, stopper)
-
-	if len(batch.accumulatedEvents) != 0 {
-		t.Errorf("expected batch to have empty accumulated events, had %v", batch.accumulatedEvents)
-	}
-	for i, c := range consumers {
-		verifyEventSlice(fmt.Sprintf("feed batch consumer %d", i), c.received)
 	}
 }
