@@ -276,8 +276,9 @@ func compareStoreStatus(t *testing.T, node *Node, expectedNodeStatus *proto.Node
 			Key: nodeStatusKey,
 		},
 	}
+	ns := (*nodeServer)(node)
 	response := &proto.GetResponse{}
-	if err := node.Get(request, response); err != nil {
+	if err := ns.Get(request, response); err != nil {
 		t.Fatalf("%v: failure getting node status: %s", testNumber, err)
 	}
 	if response.Value == nil {
@@ -379,8 +380,9 @@ func TestNodeStatus(t *testing.T) {
 		},
 		SplitKey: splitKey,
 	}
+	ns := (*nodeServer)(ts.node)
 	reply := &proto.AdminSplitResponse{}
-	if err := ts.node.AdminSplit(args, reply); err != nil {
+	if err := ns.AdminSplit(args, reply); err != nil {
 		t.Fatal(err)
 	}
 

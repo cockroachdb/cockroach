@@ -45,8 +45,6 @@ const (
 	gossipInterval = 1 * time.Minute
 )
 
-// TODO(Bram): Add a type alias for NodeServer to expose RPC methods.
-
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -67,6 +65,10 @@ type Node struct {
 	completedScan *sync.Cond
 	scanCount     int64
 }
+
+// nodeServer is a type alias to separate RPC methods
+// (which net/rpc finds via reflection) from others.
+type nodeServer Node
 
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
@@ -222,7 +224,7 @@ func (n *Node) initNodeID(id proto.NodeID) {
 func (n *Node) start(rpcServer *rpc.Server, engines []engine.Engine,
 	attrs proto.Attributes, stopper *util.Stopper) error {
 	n.initDescriptor(rpcServer.Addr(), attrs)
-	if err := rpcServer.RegisterName("Node", n); err != nil {
+	if err := rpcServer.RegisterName("Node", (*nodeServer)(n)); err != nil {
 		log.Fatalf("unable to register node service with RPC server: %s", err)
 	}
 
@@ -475,7 +477,7 @@ func (n *Node) waitForScanCompletion() int64 {
 }
 
 // executeCmd creates a client.Call struct and sends if via our local sender.
-func (n *Node) executeCmd(args proto.Request, reply proto.Response) error {
+func (n *nodeServer) executeCmd(args proto.Request, reply proto.Response) error {
 	n.lSender.Send(client.Call{Args: args, Reply: reply})
 	return nil
 }
@@ -483,97 +485,97 @@ func (n *Node) executeCmd(args proto.Request, reply proto.Response) error {
 // TODO(spencer): fill in method comments below.
 
 // Contains .
-func (n *Node) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
+func (n *nodeServer) Contains(args *proto.ContainsRequest, reply *proto.ContainsResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // Get .
-func (n *Node) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
+func (n *nodeServer) Get(args *proto.GetRequest, reply *proto.GetResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // Put .
-func (n *Node) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
+func (n *nodeServer) Put(args *proto.PutRequest, reply *proto.PutResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // ConditionalPut .
-func (n *Node) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
+func (n *nodeServer) ConditionalPut(args *proto.ConditionalPutRequest, reply *proto.ConditionalPutResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // Increment .
-func (n *Node) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
+func (n *nodeServer) Increment(args *proto.IncrementRequest, reply *proto.IncrementResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // Delete .
-func (n *Node) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
+func (n *nodeServer) Delete(args *proto.DeleteRequest, reply *proto.DeleteResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // DeleteRange .
-func (n *Node) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
+func (n *nodeServer) DeleteRange(args *proto.DeleteRangeRequest, reply *proto.DeleteRangeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // Scan .
-func (n *Node) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
+func (n *nodeServer) Scan(args *proto.ScanRequest, reply *proto.ScanResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // EndTransaction .
-func (n *Node) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
+func (n *nodeServer) EndTransaction(args *proto.EndTransactionRequest, reply *proto.EndTransactionResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // AdminSplit .
-func (n *Node) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
+func (n *nodeServer) AdminSplit(args *proto.AdminSplitRequest, reply *proto.AdminSplitResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // AdminMerge .
-func (n *Node) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
+func (n *nodeServer) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMergeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalRangeLookup .
-func (n *Node) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
+func (n *nodeServer) InternalRangeLookup(args *proto.InternalRangeLookupRequest, reply *proto.InternalRangeLookupResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalHeartbeatTxn .
-func (n *Node) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
+func (n *nodeServer) InternalHeartbeatTxn(args *proto.InternalHeartbeatTxnRequest, reply *proto.InternalHeartbeatTxnResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalGC .
-func (n *Node) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
+func (n *nodeServer) InternalGC(args *proto.InternalGCRequest, reply *proto.InternalGCResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalPushTxn .
-func (n *Node) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
+func (n *nodeServer) InternalPushTxn(args *proto.InternalPushTxnRequest, reply *proto.InternalPushTxnResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalResolveIntent .
-func (n *Node) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
+func (n *nodeServer) InternalResolveIntent(args *proto.InternalResolveIntentRequest, reply *proto.InternalResolveIntentResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalMerge .
-func (n *Node) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
+func (n *nodeServer) InternalMerge(args *proto.InternalMergeRequest, reply *proto.InternalMergeResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalTruncateLog .
-func (n *Node) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
+func (n *nodeServer) InternalTruncateLog(args *proto.InternalTruncateLogRequest, reply *proto.InternalTruncateLogResponse) error {
 	return n.executeCmd(args, reply)
 }
 
 // InternalLeaderLease .
-func (n *Node) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
+func (n *nodeServer) InternalLeaderLease(args *proto.InternalLeaderLeaseRequest,
 	reply *proto.InternalLeaderLeaseResponse) error {
 	return n.executeCmd(args, reply)
 }
