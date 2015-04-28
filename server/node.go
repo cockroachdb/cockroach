@@ -445,7 +445,7 @@ func (n *Node) startStoresScanner(stopper *util.Stopper) {
 					Stats:      *stats,
 				}
 				key := engine.NodeStatusKey(int32(n.Descriptor.NodeID))
-				if err := n.ctx.DB.Run(client.PutProtoCall(key, status)); err != nil {
+				if err := n.ctx.DB.Run(client.PutProto(key, status)); err != nil {
 					log.Error(err)
 				}
 				// Increment iteration count.

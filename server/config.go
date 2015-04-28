@@ -236,7 +236,7 @@ func putConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		}
 	}
 	key := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-	if err := db.Run(client.PutProtoCall(key, config)); err != nil {
+	if err := db.Run(client.PutProto(key, config)); err != nil {
 		return err
 	}
 	return nil
@@ -279,7 +279,7 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		configkey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-		call := client.GetCall(configkey)
+		call := client.Get(configkey)
 		if err = db.Run(call); err != nil {
 			return
 		}

@@ -1863,7 +1863,7 @@ func (r *Range) AdminMerge(args *proto.AdminMergeRequest, reply *proto.AdminMerg
 		// Remove the range descriptor for the deleted range.
 		// TODO(bdarnell): need a conditional delete?
 		desc2Key := engine.RangeDescriptorKey(subsumedDesc.StartKey)
-		txn.Prepare(client.DeleteCall(desc2Key))
+		txn.Prepare(client.Delete(desc2Key))
 
 		calls, err := MergeRangeAddressing(desc, &updatedDesc)
 		if err != nil {

@@ -68,7 +68,7 @@ func startTestWriter(db *client.KV, i int64, valBytes int32, wg *sync.WaitGroup,
 				for j := 0; j <= int(src.Int31n(10)); j++ {
 					key := util.RandBytes(src, 10)
 					val := util.RandBytes(src, int(src.Int31n(valBytes)))
-					if err := txn.Run(client.PutCall(key, val)); err != nil {
+					if err := txn.Run(client.Put(key, val)); err != nil {
 						log.Infof("experienced an error in routine %d: %s", i, err)
 						return err
 					}
@@ -148,7 +148,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 		RangeMinBytes: 1 << 8,
 		RangeMaxBytes: 1 << 18,
 	}
-	call := client.PutProtoCall(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
+	call := client.PutProto(engine.MakeKey(engine.KeyConfigZonePrefix, engine.KeyMin), zoneConfig)
 	if err := s.KV.Run(call); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// Check that we split 5 times in allotted time.
 	if err := util.IsTrueWithin(func() bool {
 		// Scan the txn records.
-		call := client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+		call := client.Scan(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
 		resp := call.Reply.(*proto.ScanResponse)
 		if err := s.KV.Run(call); err != nil {
 			t.Fatalf("failed to scan meta2 keys: %s", err)

@@ -1226,7 +1226,7 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		return nil, nil
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	call := client.GetCall(key)
+	call := client.Get(key)
 	reply := call.Reply.(*proto.GetResponse)
 	if err := s.ctx.DB.Run(call); err != nil {
 		return nil, err
@@ -1261,7 +1261,7 @@ func (s *Store) updateStoreStatus() {
 		Stats:      proto.MVCCStats(scannerStats.MVCC),
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	if err := s.ctx.DB.Run(client.PutProtoCall(key, status)); err != nil {
+	if err := s.ctx.DB.Run(client.PutProto(key, status)); err != nil {
 		log.Error(err)
 	}
 }

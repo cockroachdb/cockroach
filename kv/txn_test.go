@@ -55,12 +55,12 @@ func TestTxnDBBasics(t *testing.T) {
 		}
 		err := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 			// Put transactional value.
-			if err := txn.Run(client.PutCall(key, value)); err != nil {
+			if err := txn.Run(client.Put(key, value)); err != nil {
 				return err
 			}
 
 			// Attempt to read outside of txn.
-			call := client.GetCall(key)
+			call := client.Get(key)
 			gr := call.Reply.(*proto.GetResponse)
 			if err := s.KV.Run(call); err != nil {
 				return err
@@ -70,7 +70,7 @@ func TestTxnDBBasics(t *testing.T) {
 			}
 
 			// Read within the transaction.
-			call = client.GetCall(key)
+			call = client.Get(key)
 			gr = call.Reply.(*proto.GetResponse)
 			if err := txn.Run(call); err != nil {
 				return err
@@ -92,7 +92,7 @@ func TestTxnDBBasics(t *testing.T) {
 		}
 
 		// Verify the value is now visible on commit == true, and not visible otherwise.
-		call := client.GetCall(key)
+		call := client.Get(key)
 		gr := call.Reply.(*proto.GetResponse)
 		err = s.KV.Run(call)
 		if commit {
@@ -120,7 +120,7 @@ func BenchmarkTxnWrites(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		s.Manual.Increment(1)
 		if tErr := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
-			if err := txn.Run(client.PutCall(key, []byte(fmt.Sprintf("value-%d", i)))); err != nil {
+			if err := txn.Run(client.Put(key, []byte(fmt.Sprintf("value-%d", i)))); err != nil {
 				b.Fatal(err)
 			}
 			return nil
@@ -317,7 +317,7 @@ func TestUncertaintyRestarts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		call := client.GetCall(key)
+		call := client.Get(key)
 		gr := call.Reply.(*proto.GetResponse)
 		if err := txn.Run(call); err != nil {
 			return err
@@ -380,7 +380,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		i++
 		// The first command serves to start a Txn, fixing the timestamps.
 		// There will be a restart, but this is idempotent.
-		call := client.ScanCall(proto.Key("t"), proto.Key("t"), 0)
+		call := client.Scan(proto.Key("t"), proto.Key("t"), 0)
 		if err = txn.Run(call); err != nil {
 			t.Fatal(err)
 		}
@@ -393,7 +393,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 		// node clock (which is ahead of keyFast as well). If the last part does
 		// not happen, the read of keyFast should fail (i.e. read nothing).
 		// There will be exactly one restart here.
-		call = client.GetCall(keySlow)
+		call = client.Get(keySlow)
 		gr := call.Reply.(*proto.GetResponse)
 		if err = txn.Run(call); err != nil {
 			if i != 1 {
@@ -405,7 +405,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 			t.Errorf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
 		}
 
-		call = client.GetCall(keyFast)
+		call = client.Get(keyFast)
 		gr = call.Reply.(*proto.GetResponse)
 		// The node should already be certain, so we expect no restart here
 		// and to read the correct key.
@@ -439,22 +439,22 @@ func TestTxnTimestampRegression(t *testing.T) {
 	}
 	err := s.KV.RunTransaction(txnOpts, func(txn *client.Txn) error {
 		// Put transactional value.
-		if err := txn.Run(client.PutCall(keyA, []byte("value1"))); err != nil {
+		if err := txn.Run(client.Put(keyA, []byte("value1"))); err != nil {
 			return err
 		}
 
 		// Attempt to read outside of txn (this will push timestamp of transaction).
-		if err := s.KV.Run(client.GetCall(keyA)); err != nil {
+		if err := s.KV.Run(client.Get(keyA)); err != nil {
 			return err
 		}
 
 		// Now, read again outside of txn to warmup timestamp cache with higher timestamp.
-		if err := s.KV.Run(client.GetCall(keyB)); err != nil {
+		if err := s.KV.Run(client.Get(keyB)); err != nil {
 			return err
 		}
 
 		// Write now to keyB, which will get a higher timestamp than keyB was written at.
-		if err := txn.Run(client.PutCall(keyB, []byte("value2"))); err != nil {
+		if err := txn.Run(client.Put(keyB, []byte("value2"))); err != nil {
 			return err
 		}
 		return nil
@@ -487,7 +487,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	go func() {
 		err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
 			// Put transactional value.
-			if err := txn.Run(client.PutCall(keyA, []byte("value1"))); err != nil {
+			if err := txn.Run(client.Put(keyA, []byte("value1"))); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(b).
@@ -495,7 +495,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 			// Wait for txnB notify us to put(b).
 			<-ch
 			// Write now to keyB.
-			if err := txn.Run(client.PutCall(keyB, []byte("value2"))); err != nil {
+			if err := txn.Run(client.Put(keyB, []byte("value2"))); err != nil {
 				return err
 			}
 			return nil
@@ -512,7 +512,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	// Delay for longer than the cache window.
 	s.Manual.Set((storage.MinTSCacheWindow + time.Second).Nanoseconds())
 	err := s.KV.RunTransaction(txnBOpts, func(txn *client.Txn) error {
-		call1 := client.GetCall(keyB)
+		call1 := client.Get(keyB)
 		gr1 := call1.Reply.(*proto.GetResponse)
 
 		// Attempt to get first keyB.
@@ -524,7 +524,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 		// Wait for txnA finish commit.
 		<-ch
 		// get(b) again.
-		call2 := client.GetCall(keyB)
+		call2 := client.Get(keyB)
 		gr2 := call2.Reply.(*proto.GetResponse)
 		if err := txn.Run(call2); err != nil {
 			return err
@@ -565,7 +565,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	go func() {
 		err := s.KV.RunTransaction(txnAOpts, func(txn *client.Txn) error {
 			// Put transactional value.
-			if err := txn.Run(client.PutCall(keyA, []byte("value1"))); err != nil {
+			if err := txn.Run(client.Put(keyA, []byte("value1"))); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(c).
@@ -573,7 +573,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 			// Wait for txnB notify us to put(c).
 			<-ch
 			// Write now to keyC, which will keep timestamp.
-			if err := txn.Run(client.PutCall(keyC, []byte("value2"))); err != nil {
+			if err := txn.Run(client.Put(keyC, []byte("value2"))); err != nil {
 				return err
 			}
 			return nil
@@ -589,7 +589,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	<-ch
 
 	err := s.KV.RunTransaction(txnBOpts, func(txn *client.Txn) error {
-		call1 := client.GetCall(keyC)
+		call1 := client.Get(keyC)
 		gr1 := call1.Reply.(*proto.GetResponse)
 
 		// First get keyC, value will be nil.
@@ -607,7 +607,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Check that we split 1 times in allotted time.
 		if err := util.IsTrueWithin(func() bool {
 			// Scan the txn records.
-			call := client.ScanCall(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
+			call := client.Scan(engine.KeyMeta2Prefix, engine.KeyMetaMax, 0)
 			resp := call.Reply.(*proto.ScanResponse)
 			if err := s.KV.Run(call); err != nil {
 				t.Fatalf("failed to scan meta2 keys: %s", err)
@@ -621,7 +621,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		// Wait for txnA finish commit.
 		<-ch
 		// Get(c) again.
-		call2 := client.GetCall(keyC)
+		call2 := client.Get(keyC)
 		gr2 := call2.Reply.(*proto.GetResponse)
 		if err := txn.Run(call2); err != nil {
 			return err

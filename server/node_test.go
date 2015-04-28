@@ -348,10 +348,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats := compareStoreStatus(t, ts.node, expectedNodeStatus, 0)
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.kv.Run(client.PutCall([]byte("a"), content)); err != nil {
+	if err := ts.kv.Run(client.Put([]byte("a"), content)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.kv.Run(client.PutCall([]byte("c"), content)); err != nil {
+	if err := ts.kv.Run(client.Put([]byte("c"), content)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -403,10 +403,10 @@ func TestNodeStatus(t *testing.T) {
 	oldStats = compareStoreStatus(t, ts.node, expectedNodeStatus, 2)
 
 	// Write some values left and right of the proposed split key.
-	if err := ts.kv.Run(client.PutCall([]byte("aa"), content)); err != nil {
+	if err := ts.kv.Run(client.Put([]byte("aa"), content)); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.kv.Run(client.PutCall([]byte("cc"), content)); err != nil {
+	if err := ts.kv.Run(client.Put([]byte("cc"), content)); err != nil {
 		t.Fatal(err)
 	}
 

@@ -77,7 +77,7 @@ func nodesEqual(key proto.Key, expected, actual proto.RangeTreeNode) error {
 }
 
 func getProto(kv *client.KV, key proto.Key, msg gogoproto.Message) error {
-	call := client.GetCall(key)
+	call := client.Get(key)
 	if err := kv.Run(call); err != nil {
 		return err
 	}

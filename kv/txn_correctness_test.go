@@ -141,7 +141,7 @@ func (c *cmd) String() string {
 
 // readCmd reads a value from the db and stores it in the env.
 func readCmd(c *cmd, db runner, t *testing.T) error {
-	call := client.GetCall(c.getKey())
+	call := client.Get(c.getKey())
 	r := call.Reply.(*proto.GetResponse)
 	if err := db.Run(call); err != nil {
 		return err
@@ -155,12 +155,12 @@ func readCmd(c *cmd, db runner, t *testing.T) error {
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).
 func deleteRngCmd(c *cmd, db runner, t *testing.T) error {
-	return db.Run(client.DeleteRangeCall(c.getKey(), c.getEndKey()))
+	return db.Run(client.DeleteRange(c.getKey(), c.getEndKey()))
 }
 
 // scanCmd reads the values from the db from [key, endKey).
 func scanCmd(c *cmd, db runner, t *testing.T) error {
-	call := client.ScanCall(c.getKey(), c.getEndKey(), 0)
+	call := client.Scan(c.getKey(), c.getEndKey(), 0)
 	r := call.Reply.(*proto.ScanResponse)
 	if err := db.Run(call); err != nil {
 		return err
@@ -179,7 +179,7 @@ func scanCmd(c *cmd, db runner, t *testing.T) error {
 // incCmd adds one to the value of c.key in the env and writes
 // it to the db. If c.key isn't in the db, writes 1.
 func incCmd(c *cmd, db runner, t *testing.T) error {
-	call := client.IncrementCall(c.getKey(), 1)
+	call := client.Increment(c.getKey(), 1)
 	r := call.Reply.(*proto.IncrementResponse)
 	if err := db.Run(call); err != nil {
 		return err
