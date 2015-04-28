@@ -313,7 +313,16 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 			RaftNodeID: uint64(r.rm.RaftNodeID()),
 		},
 	}
-	return r.AddCmd(args, &proto.InternalLeaderLeaseResponse{}, true)
+	// Send lease request directly to raft in order to skip unnecessary
+	// checks entanglements with normal request machinery, (e.g. the
+	// command queue).
+	errChan, pendingCmd := r.proposeRaftCommand(args, &proto.InternalLeaderLeaseResponse{})
+	var err error
+	if err = <-errChan; err == nil {
+		// Next if the command was commited, wait for the range to apply it.
+		err = <-pendingCmd.done
+	}
+	return err
 }
 
 // redirectOnOrAcquireLeaderLease checks whether this replica has the
@@ -333,10 +342,6 @@ func (r *Range) requestLeaderLease(timestamp proto.Timestamp) error {
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
 func (r *Range) redirectOnOrAcquireLeaderLease(args proto.Request) error {
-	// Skip check for a lease acquisition request.
-	if _, ok := args.(*proto.InternalLeaderLeaseRequest); ok {
-		return nil
-	}
 	r.llMu.Lock()
 	defer r.llMu.Unlock()
 	// If lease is currently held by another, redirect to holder.
@@ -481,14 +486,28 @@ func (r *Range) AddCmd(args proto.Request, reply proto.Response, wait bool) erro
 // there are any overlapping commands already in the queue. Returns
 // the command queue insertion key, to be supplied to subsequent
 // invocation of cmdQ.Remove().
-func (r *Range) beginCmd(start, end proto.Key, readOnly bool) interface{} {
+func (r *Range) beginCmd(header *proto.RequestHeader, readOnly bool) interface{} {
 	r.Lock()
 	var wg sync.WaitGroup
-	r.cmdQ.GetWait(start, end, readOnly, &wg)
-	cmdKey := r.cmdQ.Add(start, end, readOnly)
+	r.cmdQ.GetWait(header.Key, header.EndKey, readOnly, &wg)
+	cmdKey := r.cmdQ.Add(header.Key, header.EndKey, readOnly)
 	r.Unlock()
 	wg.Wait()
+	// Update the incoming timestamp if unset. Wait until after any
+	// preceding command(s) for key range are complete so that the node
+	// clock has been updated to the high water mark of any commands
+	// which might overlap this one in effect.
+	if header.Timestamp.Equal(proto.ZeroTimestamp) {
+		header.Timestamp = r.rm.Clock().Now()
+	}
 	return cmdKey
+}
+
+// endCmd removes a pending command from the command queue.
+func (r *Range) endCmd(cmdKey interface{}) {
+	r.Lock()
+	r.cmdQ.Remove(cmdKey)
+	r.Unlock()
 }
 
 // addAdminCmd executes the command directly. There is no interaction
@@ -526,21 +545,25 @@ func (r *Range) addReadOnlyCmd(args proto.Request, reply proto.Response) error {
 			reply.Header().SetGoError(util.Errorf("cannot allow inconsistent reads within a transaction"))
 			return reply.Header().GoError()
 		}
+		if header.Timestamp.Equal(proto.ZeroTimestamp) {
+			header.Timestamp = r.rm.Clock().Now()
+		}
 		return r.executeCmd(r.rm.Engine(), nil, args, reply)
 	} else if header.ReadConsistency == proto.CONSENSUS {
 		reply.Header().SetGoError(util.Errorf("consensus reads not implemented"))
 		return reply.Header().GoError()
 	}
 
+	// Add the read to the command queue to gate subsequent
+	// overlapping commands until this command completes.
+	cmdKey := r.beginCmd(header, true)
+
 	// This replica must have leader lease to process a consistent read.
 	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+		r.endCmd(cmdKey)
 		reply.Header().SetGoError(err)
 		return err
 	}
-
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	cmdKey := r.beginCmd(header.Key, header.EndKey, true)
 
 	// Execute read-only command.
 	err := r.executeCmd(r.rm.Engine(), nil, args, reply)
@@ -572,18 +595,19 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	header := args.Header()
 	txnMD5 := header.Txn.MD5()
 
-	// This replica must have leader lease to process a write.
-	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
-		reply.Header().SetGoError(err)
-		return err
-	}
-
 	// Add the write to the command queue to gate subsequent overlapping
 	// Commands until this command completes. Note that this must be
 	// done before getting the max timestamp for the key(s), as
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
-	cmdKey := r.beginCmd(header.Key, header.EndKey, false)
+	cmdKey := r.beginCmd(header, false)
+
+	// This replica must have leader lease to process a write.
+	if err := r.redirectOnOrAcquireLeaderLease(args); err != nil {
+		r.endCmd(cmdKey)
+		reply.Header().SetGoError(err)
+		return err
+	}
 
 	// Two important invariants of Cockroach: 1) encountering a more
 	// recently written value means transaction restart. 2) values must
@@ -619,28 +643,7 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 		}
 	}
 
-	// Create command and enqueue for Raft.
-	pendingCmd := &pendingCmd{
-		Reply: reply,
-		done:  make(chan error, 1),
-	}
-	raftCmd := proto.InternalRaftCommand{
-		RaftID:       r.Desc().RaftID,
-		OriginNodeID: uint64(r.rm.RaftNodeID()),
-	}
-	cmdID := header.GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
-	ok := raftCmd.Cmd.SetValue(args)
-	if !ok {
-		log.Fatalf("unknown command type %T", args)
-	}
-	idKey := makeCmdIDKey(cmdID)
-	r.Lock()
-	r.pendingCmds[idKey] = pendingCmd
-	r.Unlock()
-	// TODO(bdarnell): In certain raft failover scenarios, proposed
-	// commands may be abandoned. We need to re-propose the command
-	// if too much time passes with no response on the done channel.
-	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
+	errChan, pendingCmd := r.proposeRaftCommand(args, reply)
 
 	// Create a completion func for mandatory cleanups which we either
 	// run synchronously if we're waiting or in a goroutine otherwise.
@@ -675,6 +678,36 @@ func (r *Range) addReadWriteCmd(args proto.Request, reply proto.Response, wait b
 	}
 	go completionFunc()
 	return nil
+}
+
+// proposeRaftCommand prepares necessary pending command struct and
+// initializes a client command ID if one hasn't been. It then
+// proposes the command to Raft and returns the error channel and
+// pending command struct for receiving.
+func (r *Range) proposeRaftCommand(args proto.Request, reply proto.Response) (<-chan error, *pendingCmd) {
+	pendingCmd := &pendingCmd{
+		Reply: reply,
+		done:  make(chan error, 1),
+	}
+	raftCmd := proto.InternalRaftCommand{
+		RaftID:       r.Desc().RaftID,
+		OriginNodeID: uint64(r.rm.RaftNodeID()),
+	}
+	cmdID := args.Header().GetOrCreateCmdID(r.rm.Clock().PhysicalNow())
+	ok := raftCmd.Cmd.SetValue(args)
+	if !ok {
+		log.Fatalf("unknown command type %T", args)
+	}
+	idKey := makeCmdIDKey(cmdID)
+	r.Lock()
+	r.pendingCmds[idKey] = pendingCmd
+	r.Unlock()
+	// TODO(bdarnell): In certain raft failover scenarios, proposed
+	// commands may be abandoned. We need to re-propose the command
+	// if too much time passes with no response on the done channel.
+	errChan := r.rm.ProposeRaftCommand(idKey, raftCmd)
+
+	return errChan, pendingCmd
 }
 
 // processRaftCommand processes a raft command by unpacking the command
@@ -975,8 +1008,17 @@ func (r *Range) executeCmd(batch engine.Engine, ms *proto.MVCCStats, args proto.
 
 	log.V(1).Infof("executed %s command %+v: %+v", args.Method(), args, reply)
 
+	// Update the node clock with the serviced request. This maintains a
+	// high water mark for all ops serviced, so that received ops
+	// without a timestamp specified are guaranteed one higher than any
+	// op already executed for overlapping keys.
+	_, err := r.rm.Clock().Update(header.Timestamp)
+	if err != nil {
+		log.Errorf("executed a command with excessive future clock offset: %s", err)
+	}
+
 	// Propagate the request timestamp (which may have changed).
-	reply.Header().Timestamp = args.Header().Timestamp
+	reply.Header().Timestamp = header.Timestamp
 
 	// A ReadUncertaintyIntervalError contains the timestamp of the value
 	// that provoked the conflict. However, we forward the timestamp to the
