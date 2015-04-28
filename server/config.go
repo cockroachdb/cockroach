@@ -279,20 +279,7 @@ func getConfig(db *client.KV, configPrefix proto.Key, config gogoproto.Message,
 		body, contentType, err = util.MarshalResponse(r, prefixes, util.AllEncodings)
 	} else {
 		configkey := engine.MakeKey(configPrefix, proto.Key(path[1:]))
-		call := client.Get(configkey)
-		if err = db.Run(call); err != nil {
-			return
-		}
-		reply := call.Reply.(*proto.GetResponse)
-		if reply.Value == nil {
-			err = util.Errorf("%s: no value present", configkey)
-			return
-		}
-		if reply.Value.Integer != nil {
-			err = util.Errorf("%s: unexpected integer value: %+v", configkey, reply.Value)
-			return
-		}
-		if err = gogoproto.Unmarshal(reply.Value.Bytes, config); err != nil {
+		if err = db.Run(client.GetProto(configkey, config)); err != nil {
 			return
 		}
 		body, contentType, err = util.MarshalResponse(r, config, util.AllEncodings)

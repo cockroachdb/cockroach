@@ -1248,17 +1248,9 @@ func (s *Store) GetStatus() (*proto.StoreStatus, error) {
 		return nil, nil
 	}
 	key := engine.StoreStatusKey(int32(s.Ident.StoreID))
-	call := client.Get(key)
-	reply := call.Reply.(*proto.GetResponse)
-	if err := s.ctx.DB.Run(call); err != nil {
-		return nil, err
-	}
-	if reply.Value == nil {
-		return nil, util.Errorf("unexpected empty status for store %v on node %v", s.Ident.StoreID, s.Ident.NodeID)
-	}
 	storeStatus := &proto.StoreStatus{}
-	if err := gogoproto.Unmarshal(reply.Value.GetBytes(), storeStatus); err != nil {
-		return nil, util.Errorf("could not unmarshal store status: %+v", reply.Value)
+	if err := s.ctx.DB.Run(client.GetProto(key, storeStatus)); err != nil {
+		return nil, err
 	}
 	return storeStatus, nil
 }

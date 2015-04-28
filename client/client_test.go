@@ -298,20 +298,14 @@ func TestKVClientGetAndPutProto(t *testing.T) {
 		t.Fatalf("unable to put proto: %s", err)
 	}
 
-	call := client.Get(key)
+	readZoneConfig := &proto.ZoneConfig{}
+	call := client.GetProto(key, readZoneConfig)
 	if err := kvClient.Run(call); err != nil {
 		t.Fatalf("unable to get proto: %v", err)
 	}
 	reply := call.Reply.(*proto.GetResponse)
 	if reply.Timestamp.Equal(proto.ZeroTimestamp) {
 		t.Error("expected non-zero timestamp")
-	}
-	readZoneConfig := &proto.ZoneConfig{}
-	if err := gogoproto.Unmarshal(reply.Value.Bytes, readZoneConfig); err != nil {
-		t.Fatalf("unable to unmarshal proto: %v", err)
-	}
-	if !gogoproto.Equal(zoneConfig, readZoneConfig) {
-		t.Errorf("expected zone configs equal; %+v != %+v", zoneConfig, readZoneConfig)
 	}
 }
 

@@ -117,15 +117,15 @@ func (kv *KV) Run(calls ...Call) (err error) {
 		err = c.Reply.Header().GoError()
 		if err != nil {
 			log.Infof("failed %s: %s", c.Method(), err)
+		} else if c.Post != nil {
+			err = c.Post()
 		}
 		return
 	}
 
-	replies := make([]proto.Response, 0, len(calls))
 	bArgs, bReply := &proto.BatchRequest{}, &proto.BatchResponse{}
 	for _, call := range calls {
 		bArgs.Add(call.Args)
-		replies = append(replies, call.Reply)
 	}
 	err = kv.Run(Call{Args: bArgs, Reply: bReply})
 
@@ -144,8 +144,13 @@ func (kv *KV) Run(calls ...Call) (err error) {
 
 	// Transfer individual responses from batch response to prepared replies.
 	for i, reply := range bReply.Responses {
-		replies[i].Reset()
-		gogoproto.Merge(replies[i], reply.GetValue().(gogoproto.Message))
+		c := calls[i]
+		gogoproto.Merge(c.Reply, reply.GetValue().(gogoproto.Message))
+		if c.Post != nil {
+			if e := c.Post(); e != nil && err != nil {
+				err = e
+			}
+		}
 	}
 	return
 }
