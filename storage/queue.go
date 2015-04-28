@@ -208,38 +208,12 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 				}
 			// Process ranges as the timer expires.
 			case <-time.After(nextTime.Sub(time.Now())):
-				if !stopper.StartTask() {
-					continue
-				}
-				start := time.Now()
-				nextTime = start.Add(bq.impl.timer())
-				bq.Lock()
-				rng := bq.pop()
-				bq.Unlock()
-				if rng != nil {
-					now := clock.Now()
-					log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
-					// If the queue requires the leader lease to process the
-					// range, check whether this replica has leader lease and
-					// renew or acquire if necessary.
-					if bq.impl.needsLeaderLease() {
-						// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
-						args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
-						if err := rng.redirectOnOrAcquireLeaderLease(args); err != nil {
-							log.V(1).Infof("this replica of %s could not acquire leader lease; skipping...", rng)
-							continue
-						}
-					}
-					if err := bq.impl.process(now, rng); err != nil {
-						log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
-					}
-					log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
-				}
+				nextTime = time.Now().Add(bq.impl.timer())
+				bq.processOne(clock, stopper)
 				if bq.Length() == 0 {
 					emptyQueue = true
 					nextTime = time.Now().Add(24 * time.Hour)
 				}
-				stopper.FinishTask()
 
 			// Exit on stopper.
 			case <-stopper.ShouldStop():
@@ -251,6 +225,37 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *util.Stopper) {
 			}
 		}
 	})
+}
+
+func (bq *baseQueue) processOne(clock *hlc.Clock, stopper *util.Stopper) {
+	if !stopper.StartTask() {
+		return
+	}
+	defer stopper.FinishTask()
+
+	start := time.Now()
+	bq.Lock()
+	rng := bq.pop()
+	bq.Unlock()
+	if rng != nil {
+		now := clock.Now()
+		log.V(1).Infof("processing range %s from %s queue...", rng, bq.name)
+		// If the queue requires the leader lease to process the
+		// range, check whether this replica has leader lease and
+		// renew or acquire if necessary.
+		if bq.impl.needsLeaderLease() {
+			// Create a "fake" get request in order to invoke redirectOnOrAcquireLease.
+			args := &proto.GetRequest{RequestHeader: proto.RequestHeader{Timestamp: now}}
+			if err := rng.redirectOnOrAcquireLeaderLease(args); err != nil {
+				log.V(1).Infof("this replica of %s could not acquire leader lease; skipping...", rng)
+				return
+			}
+		}
+		if err := bq.impl.process(now, rng); err != nil {
+			log.Errorf("failure processing range %s from %s queue: %s", rng, bq.name, err)
+		}
+		log.V(1).Infof("processed range %s from %s queue in %s", rng, bq.name, time.Now().Sub(start))
+	}
 }
 
 // pop dequeues the highest priority range in the queue. Returns the
