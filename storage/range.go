@@ -1434,8 +1434,8 @@ func (r *Range) InternalPushTxn(batch engine.Engine, args *proto.InternalPushTxn
 	} else {
 		// Make sure we have a deterministic random number when generating
 		// a priority for this txn-less request, so all replicas see same priority.
-		rNG := rand.New(rand.NewSource(int64(reply.PusheeTxn.Priority)))
-		priority = proto.MakePriority(rNG, args.GetUserPriority())
+		randGen := rand.New(rand.NewSource(int64(reply.PusheeTxn.Priority) ^ args.Timestamp.WallTime))
+		priority = proto.MakePriority(randGen, args.GetUserPriority())
 	}
 
 	// Check for txn timeout.
